@@ -51,6 +51,13 @@ POSTGRES_USER=gc_bridge_4
 POSTGRES_PASSWORD=gc_bridge_4_dev
 POSTGRES_HOST=localhost
 POSTGRES_PORT=5432
+
+SHOPWARE6_ADMIN_API_URL=https://your-shopware.example/api
+SHOPWARE6_ID=your-client-id
+SHOPWARE6_SECRET=your-client-secret
+SHOPWARE6_GRANT_TYPE=client_credentials
+SHOPWARE6_USER=
+SHOPWARE6_PASSWORD=
 ```
 
 Django reads `.env` on startup and uses PostgreSQL by default. Update `POSTGRES_HOST` to `db` when running Django inside Docker on the server.
