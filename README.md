@@ -2,14 +2,28 @@
 
 Django-based integration bridge project.
 
-## Quickstart
+## Base Classes (Abstract)
 
-1. Ensure Python 3.12+ is available.
-2. Install dependencies: `uv sync` or `python -m pip install -r requirements.txt`.
-3. Start DB services: `docker compose up -d`.
-4. Run migrations: `python manage.py migrate`.
-5. Create admin user: `python manage.py createsuperuser`.
-6. Start the dev server: `python manage.py runserver`.
+Use these as the default foundation across the project:
+
+- `BaseModel` (`core/models/base.py`) provides `created_at`/`updated_at` fields.
+- `BaseAdmin` (`core/admin.py`) provides Unfold-based admin defaults.
+- `BaseService` (`core/services/base.py`) provides basic CRUD helpers.
+
+## Installation (Local Dev)
+
+1. Install Python 3.12+ and Git.
+2. Install Docker + Docker Compose (needed for PostgreSQL/Adminer).
+3. Create a virtual environment (optional but recommended).
+4. Install dependencies:
+   - `uv sync` (recommended), or
+   - `python -m pip install -r requirements.txt`
+5. Create `.env` in project root (see example below).
+6. Start database services: `docker compose up -d`.
+7. Run migrations: `python manage.py migrate`.
+8. Create admin user: `python manage.py createsuperuser`.
+9. Start the dev server: `python manage.py runserver`.
+10. Open Adminer at `http://localhost:8082`.
 
 ## Docker (PostgreSQL + Adminer)
 
