@@ -13,7 +13,7 @@ from shopware.services.config import ConfShopware6ApiBase
 class Shopware6Service(ShopwareBaseService):
     def __init__(self) -> None:
         super().__init__()
-        self.client = Shopware6AdminAPIClientBase(config=ConfShopware6ApiBase)
+        self.client = Shopware6AdminAPIClientBase(config=ConfShopware6ApiBase())
 
     def authenticate(self) -> str:
         if not self.client_id or not self.client_secret:
