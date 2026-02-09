@@ -9,4 +9,5 @@ dependencies = [
     "psycopg[binary]",
     "lib-shopware6-api-base",
     "loguru",
+    "pywin32; platform_system == 'Windows'",
 ]
