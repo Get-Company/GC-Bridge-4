@@ -61,10 +61,18 @@ class Command(BaseCommand):
         include_inactive = options.get("include_inactive", False)
         limit = options.get("limit")
 
+        logger.info(
+            "Starting Microtech sync. all={}, include_inactive={}, limit={}",
+            sync_all,
+            include_inactive,
+            limit,
+        )
+
         if not erp_nrs and not sync_all:
             raise CommandError("Bitte ERP-Nummern angeben oder --all verwenden.")
 
         with microtech_connection() as erp:
+            logger.info("ERP connection established. Preparing batch.")
             artikel_service = MicrotechArtikelService(erp=erp)
             lager_service = MicrotechLagerService(erp=erp)
 
@@ -87,11 +95,15 @@ class Command(BaseCommand):
                 logger.warning("Keine Artikel zum Synchronisieren gefunden.")
                 return
 
+            logger.info("Syncing {} products.", len(erp_nrs))
+
             success_count = 0
             error_count = 0
 
-            for erp_nr in erp_nrs:
+            for index, erp_nr in enumerate(erp_nrs, start=1):
                 try:
+                    if index == 1 or index % 100 == 0:
+                        logger.info("Progress: {}/{}", index, len(erp_nrs))
                     if not artikel_service.find(erp_nr):
                         logger.warning("Artikel {} nicht gefunden.", erp_nr)
                         continue
