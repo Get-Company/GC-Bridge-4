@@ -3,13 +3,13 @@ from __future__ import annotations
 from decimal import Decimal, InvalidOperation
 
 from django.core.management.base import BaseCommand, CommandError
-from django.contrib.admin.models import CHANGE, LogEntry
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 
 from microtech.services.artikel import MicrotechArtikelService
 from microtech.services.connection import microtech_connection
 from microtech.services.lager import MicrotechLagerService
+from core.admin_utils import log_admin_change
 from products.models import Image, Price, Product, Storage
 
 
@@ -46,13 +46,12 @@ def _log_admin_error(
 ) -> None:
     if not admin_user_id or not content_type_id:
         return
-    LogEntry.objects.log_action(
+    log_admin_change(
         user_id=admin_user_id,
         content_type_id=content_type_id,
         object_id=object_id,
         object_repr=object_repr[:200],
-        action_flag=CHANGE,
-        change_message=message,
+        message=message,
     )
 
 
