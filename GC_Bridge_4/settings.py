@@ -26,6 +26,8 @@ if ENV_FILE.exists():
         key, value = line.split("=", 1)
         os.environ.setdefault(key, value.strip().strip('"').strip("'"))
 
+CDN_PREFIX = os.getenv("CDN_PREFIX", "")
+
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/

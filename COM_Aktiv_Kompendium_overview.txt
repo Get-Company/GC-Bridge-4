@@ -1,0 +1,158 @@
+COM-Aktiv-Kompendium (microtech GmbH)
+Stand: 20.01.2022
+Quelle: COM_Aktiv_Kompendium.pdf
+
+Inhaltsbeschreibung
+- Offizielle Referenz zur microtech COM-Aktiv-Schnittstelle (BpNT).
+- Enthält Lizenz- und Einstiegshinweise, vollständige Interface-Dokumentation der BpNT-Bibliothek,
+  Strukturen/Enumerationen, mDL-Dokumentation, BpRefLink und umfangreiche Praxisbeispiele.
+- Schwerpunkt ist das Arbeiten mit DataSets (CreateDataSet, FindKey, SetRange, Fields, NestedDataSets)
+  sowie Spezialobjekten und Druck-/Banking-/Lager-/Vorgangs-APIs.
+
+Nav Tree (aus dem Inhaltsverzeichnis)
+1 Generelles zur Dokumentation
+
+2 Erste Schritte
+- 2.1 COM Lizenzierung
+- 2.2 Solution Partner Lizenz
+- 2.3 Anfragen an den Support
+- 2.4 Einstieg
+
+3 BpNT Bibliothek
+- 3.1 Interfaces
+  - 3.1.1 IAutoBase Interface
+  - 3.1.2 IAutoApplication Interface
+  - 3.1.18 IAutoDataSetInfos Interface
+  - 3.1.19 IAutoDataSetInfo Interface
+  - 3.1.23 IAutoFieldInfos Interface
+  - 3.1.24 IAutoFieldInfo Interface
+  - 3.1.26 IAutoDataSet Interface
+  - 3.1.40 IAutoFields Interface
+  - 3.1.41 IAutoField Interface
+  - 3.1.46 IAutoIndices Interface
+  - 3.1.47 IAutoIndexFields Interface
+  - 3.1.48 IAutoIndexInfos Interface
+  - 3.1.49 IAutoIndexInfo Interface
+  - 3.1.50 IAutoIndexFieldInfos Interface
+  - 3.1.51 IAutoIndex Interface
+  - 3.1.52 IAutoNestedDataSetInfos Interface
+  - 3.1.53 IAutoNestedDataSets Interface
+  - 3.1.54 IAutoLayoutGroup Interface
+  - 3.1.55 IAutoLayout Interface
+  - 3.1.56 IAutoPreparedLayout Interface
+  - 3.1.59 IAutoProtokoll Interface
+  - 3.1.61 IAutoBetragGrp Interface
+  - 3.1.62 IAutoRichText Interface
+  - 3.1.63 IAutoStrings Interface
+  - 3.1.64 IAutoImage Interface
+  - 3.1.65 IAutoLager Interface
+  - 3.1.66 IAutoLager2 Interface
+  - 3.1.67 IAutoLagerEinbuchen Interface
+  - 3.1.69 IAutoLagerUmbuchen Interface
+  - 3.1.70 IAutoLagerAbgang Interface
+  - 3.1.71 IAutoSeriennummern Interface
+  - 3.1.72 IAutoVorgang Interface
+  - 3.1.80 IAutoVorgangPositionen Interface
+  - 3.1.84 IAutoDokument Interface
+  - 3.1.87 IAutoSpecialKontenAnalyse Interface
+  - 3.1.88 IAutoAppObject Interface
+  - 3.1.97 IAutoWandeln Interface
+  - 3.1.99 IAutoDoublette Interface
+  - 3.1.100 IAutoSpecialEvents Interface
+  - 3.1.101 IAutoNotificationsEvents Interface
+  - 3.1.102 IAutoSpecialNachricht Interface
+  - 3.1.103 IAutoSpecialVariablen Interface
+  - 3.1.104 IAutoSpecialEBaySync Interface
+  - 3.1.105 IAutoSpecialWebShopSync Interface
+  - 3.1.106 IAutoDrucken Interface
+  - 3.1.107 IAutoDruckenLayoutGroup Interface
+  - 3.1.108 IAutoDruckLayout Interface
+  - 3.1.112 IAutoSpecialDruckOptions Interface
+  - 3.1.113 IAutoSpecialPrinterArea Interface
+  - 3.1.114 IAutoSpecialBanking Interface
+  - 3.1.115 IAutoSpecialAusgabeVerzeichnis Interface
+  - 3.1.116 IAutoSpecialTableDefinition Interface
+  - 3.1.117 IAutoSpecialZahlungsverkehr Interface
+  - 3.1.118 IAutoSpecialZahlungsverkehr2 Interface
+  - 3.1.119 IAutoSpecialOffenePosten Interface
+  - 3.1.120 IAutoSpecialAdrSpezPr Interface
+  - 3.1.121 IAutoModificationMonitor Interface
+  - 3.1.122 IAutoSpecialProjekte Interface
+  - 3.1.123 IAutoLagerUmbuchen2 Interface
+  - 3.1.124 IAutoModificationMonitor2 Interface
+- 3.2 Strukturen, Rekords, Aufzaehlungen
+  - 3.2.1 DataSetState Aufzaehlung
+  - 3.2.2 MsgTyp Aufzaehlung
+  - 3.2.3 FeldDefArt Aufzaehlung
+  - 3.2.4 EditTyp Aufzaehlung
+  - 3.2.5 RichTextInputFormat Aufzaehlung
+  - 3.2.6 RichTextOutputFormat Aufzaehlung
+  - 3.2.7 ImageType Aufzaehlung
+  - 3.2.8 SpecialObjects Aufzaehlung
+  - 3.2.9 DokumentImportArt Aufzaehlung
+  - 3.2.10 LieferMengeSchluessel Aufzaehlung
+  - 3.2.11 VgbLager Aufzaehlung
+  - 3.2.12 dbLockType Aufzaehlung
+  - 3.2.13 naNachrichtArt Aufzaehlung
+  - 3.2.14 LieferbarStatus Aufzaehlung
+  - 3.2.15 AppVariablen Aufzaehlung
+  - 3.2.16 BuchungenZiel Aufzaehlung
+  - 3.2.17 PropPropertys Aufzaehlung
+  - 3.2.18 PrintKind Aufzaehlung
+  - 3.2.19 IndexFlags Structure
+  - 3.2.20 EncodingType Aufzaehlung
+
+4 mDL Dokumentation
+- 4.1 Allgemeines
+- 4.2 Abfragen
+  - 4.2.1 Optionale Felder
+  - 4.2.2 Spezial Funktionen
+- 4.3 ITypedList .NET Data Provider
+  - 4.3.1 Allgemeines
+  - 4.3.2 Verwendung
+  - 4.3.3 .Net C# Listing
+
+5 BpRefLink
+- 5.1 BpRefLink's
+
+6 Tipps, Tricks, Beispiele
+- 6.1 Beispiele fuer COM Anbindungen
+  - 6.1.1 Fundamentales zur COM Verbindung
+  - 6.1.2 Namen und Datentypen von Datenbankfeldern
+  - 6.1.3 ... und wie es richtig geht.
+  - 6.1.4 Funktionen/Typen/Enumeratoren
+  - 6.1.5 Weiterfuehrende Informationen
+- 6.2 Mandanten auflisten
+- 6.3 Kundendaten auslesen
+- 6.4 Versionsnummer
+  - 6.4.1 Versionsnummer abfragen
+  - 6.4.2 Versionsnummer ohne COM Instanz erhalten
+- 6.5 Konfigurationsdaten speichern und lesen
+- 6.6 Nachtraeglich eine defekte Instanz loeschen
+- 6.7 Adressen
+  - 6.7.1 Adressen/Anschrift anlegen
+  - 6.7.2 Adressen/Anschrift/Ansprechpartner anlegen
+  - 6.7.3 Bankverbindungen in Adressen
+  - 6.7.4 Kreditor / Debitor einer Adresse
+- 6.8 Vorgaenge
+  - 6.8.1 Belegnummer eines neuen Vorgangs auslesen
+  - 6.8.2 Vorgangspositionen
+  - 6.8.3 Infoblaetter im Vorgang benutzen
+- 6.9 Artikel
+  - 6.9.1 Artikel Varianten
+- 6.10 Umsaetze auslesen
+- 6.11 Verknuepfte Datentabellen
+- 6.12 Datensatzaenderungen werden nicht angezeigt
+- 6.13 Erstellungs- Aenderungsdatum/Benutzer setzen
+- 6.14 .Net Sprachen in unmanaged Code
+- 6.15 Bankverbindung wird nicht angezeigt
+- 6.16 Gueltige Zeichen
+- 6.17 Interface IUnknown? was muss getan werden
+- 6.18 COM Instanzen in Services
+- 6.19 NestedDataSet
+- 6.20 Ranges wie geht das?
+- 6.21 Filter
+- 6.22 Funktionen zum schnellen Feldzugriff
+
+7 Changelog
+Index
