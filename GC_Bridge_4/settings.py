@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     'core.apps.CoreConfig',
     'products.apps.ProductsConfig',
     'shopware.apps.ShopwareConfig',
+    'microtech.apps.MicrotechConfig',
 ]
 
 MIDDLEWARE = [
