@@ -26,3 +26,11 @@ class MicrotechLagerService(MicrotechDatasetService):
         if not self.find([art_nr, lager_nr]):
             return None
         return self.get_field("Pos")
+
+    def get_stock_and_location(self, art_nr: str, *, lager_nr: int | None = None):
+        lager_nr = self.lager_nr if lager_nr is None else lager_nr
+        if not art_nr:
+            return None, None
+        if not self.find([art_nr, lager_nr]):
+            return None, None
+        return self.get_field("Mge"), self.get_field("Pos")
