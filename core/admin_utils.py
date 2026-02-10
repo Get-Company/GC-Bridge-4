@@ -20,16 +20,11 @@ def log_admin_change(
         )
         return
 
-    LogEntry.objects.log_actions(
-        user_id,
-        [
-            {
-                "content_type_id": content_type_id,
-                "object_id": object_id,
-                "object_repr": object_repr,
-                "action_flag": CHANGE,
-                "change_message": message,
-            }
-        ],
-        single_object=True,
+    LogEntry.objects.create(
+        user_id=user_id,
+        content_type_id=content_type_id,
+        object_id=object_id,
+        object_repr=object_repr,
+        action_flag=CHANGE,
+        change_message=message,
     )
