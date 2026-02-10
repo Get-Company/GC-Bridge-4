@@ -3,7 +3,9 @@ from __future__ import annotations
 from decimal import Decimal, InvalidOperation
 
 from django.core.management.base import BaseCommand, CommandError
-from loguru import logger
+from django.contrib.admin.models import CHANGE, LogEntry
+from django.contrib.auth import get_user_model
+from django.contrib.contenttypes.models import ContentType
 
 from microtech.services.artikel import MicrotechArtikelService
 from microtech.services.connection import microtech_connection
@@ -27,6 +29,31 @@ def _to_int(value):
         return int(value)
     except (TypeError, ValueError):
         return None
+
+
+def _get_admin_user_id() -> int | None:
+    user = get_user_model().objects.filter(is_superuser=True).order_by("id").first()
+    return user.id if user else None
+
+
+def _log_admin_error(
+    *,
+    admin_user_id: int | None,
+    content_type_id: int | None,
+    message: str,
+    object_id: str | None = None,
+    object_repr: str = "Microtech Sync",
+) -> None:
+    if not admin_user_id or not content_type_id:
+        return
+    LogEntry.objects.log_action(
+        user_id=admin_user_id,
+        content_type_id=content_type_id,
+        object_id=object_id,
+        object_repr=object_repr[:200],
+        action_flag=CHANGE,
+        change_message=message,
+    )
 
 
 class Command(BaseCommand):
@@ -61,18 +88,15 @@ class Command(BaseCommand):
         include_inactive = options.get("include_inactive", False)
         limit = options.get("limit")
 
-        logger.info(
-            "Starting Microtech sync. all={}, include_inactive={}, limit={}",
-            sync_all,
-            include_inactive,
-            limit,
-        )
-
         if not erp_nrs and not sync_all:
             raise CommandError("Bitte ERP-Nummern angeben oder --all verwenden.")
 
+        admin_user_id = _get_admin_user_id()
+        content_type_id = None
+        if admin_user_id:
+            content_type_id = ContentType.objects.get_for_model(Product).id
+
         with microtech_connection() as erp:
-            logger.info("ERP connection established. Preparing batch.")
             artikel_service = MicrotechArtikelService(erp=erp)
             lager_service = MicrotechLagerService(erp=erp)
 
@@ -80,8 +104,6 @@ class Command(BaseCommand):
                 artikel_service.set_range(from_range="000000", to_range="99999999ZZ", field=artikel_service.index_field)
                 if not include_inactive:
                     artikel_service.set_filter({"WShopKz": 1})
-                total = artikel_service.range_count()
-                logger.info("Syncing up to {} products (range).", total)
 
                 success_count = 0
                 error_count = 0
@@ -91,54 +113,52 @@ class Command(BaseCommand):
                     if limit and index >= limit:
                         break
                     index += 1
-                    if index == 1 or index % 100 == 0:
-                        logger.info("Progress: {}", index)
                     try:
                         self._sync_current_record(artikel_service, lager_service)
                         success_count += 1
                     except Exception as exc:
                         error_count += 1
-                        logger.exception("Sync fehlgeschlagen: {}", exc)
+                        _log_admin_error(
+                            admin_user_id=admin_user_id,
+                            content_type_id=content_type_id,
+                            message=f"Microtech sync error: {exc}",
+                            object_repr="Microtech Sync (batch)",
+                        )
                     artikel_service.range_next()
 
-                logger.success(
-                    "Sync abgeschlossen. Erfolg: {}, Fehler: {}.",
-                    success_count,
-                    error_count,
-                )
                 return
 
             if limit:
                 erp_nrs = erp_nrs[:limit]
 
             if not erp_nrs:
-                logger.warning("Keine Artikel zum Synchronisieren gefunden.")
                 return
-
-            logger.info("Syncing {} products.", len(erp_nrs))
 
             success_count = 0
             error_count = 0
 
             for index, erp_nr in enumerate(erp_nrs, start=1):
                 try:
-                    if index == 1 or index % 100 == 0:
-                        logger.info("Progress: {}/{}", index, len(erp_nrs))
                     if not artikel_service.find(erp_nr):
-                        logger.warning("Artikel {} nicht gefunden.", erp_nr)
+                        error_count += 1
+                        _log_admin_error(
+                            admin_user_id=admin_user_id,
+                            content_type_id=content_type_id,
+                            message=f"Microtech sync error: Artikel {erp_nr} nicht gefunden.",
+                            object_repr=f"Microtech Sync {erp_nr}",
+                        )
                         continue
 
                     self._sync_current_record(artikel_service, lager_service)
                     success_count += 1
                 except Exception as exc:
                     error_count += 1
-                    logger.exception("Sync fehlgeschlagen für {}: {}", erp_nr, exc)
-
-            logger.success(
-                "Sync abgeschlossen. Erfolg: {}, Fehler: {}.",
-                success_count,
-                error_count,
-            )
+                    _log_admin_error(
+                        admin_user_id=admin_user_id,
+                        content_type_id=content_type_id,
+                        message=f"Microtech sync error for {erp_nr}: {exc}",
+                        object_repr=f"Microtech Sync {erp_nr}",
+                    )
 
     def _sync_current_record(self, artikel_service, lager_service) -> None:
         erp_key = artikel_service.get_erp_nr()
