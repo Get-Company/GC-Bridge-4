@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_UP
 
 from django.core.management.base import BaseCommand, CommandError
 from django.contrib.auth import get_user_model
@@ -35,7 +35,10 @@ def _to_int(value):
 def _apply_factor(value: Decimal | None, factor: Decimal) -> Decimal | None:
     if value is None:
         return None
-    return (value * factor).quantize(Decimal("0.01"))
+    step = Decimal("0.05")
+    scaled = value * factor
+    rounded = (scaled / step).to_integral_value(rounding=ROUND_UP) * step
+    return rounded.quantize(Decimal("0.01"))
 
 
 def _get_admin_user_id() -> int | None:
