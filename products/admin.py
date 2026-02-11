@@ -1,5 +1,6 @@
 from django.contrib import admin, messages
 from django.contrib.contenttypes.models import ContentType
+from django.core.management import call_command
 
 from unfold.decorators import action
 from unfold.enums import ActionVariant
@@ -31,8 +32,8 @@ class ProductAdmin(BaseAdmin):
     search_fields = ("sku", "name")
     list_filter = ("is_active",)
     inlines = (PriceInline,)
-    actions = ("sync_to_shopware",)
-    actions_detail = ("sync_to_shopware_detail",)
+    actions = ("sync_from_microtech", "sync_to_shopware")
+    actions_detail = ("sync_from_microtech_detail", "sync_to_shopware_detail")
 
     def _log_admin_error(self, request, message: str, *, obj: Product | None = None) -> None:
         log_admin_change(
@@ -111,6 +112,47 @@ class ProductAdmin(BaseAdmin):
                         )
 
         return success_count, error_count
+
+    @action(
+        description="Sync from Microtech",
+        icon="sync",
+        variant=ActionVariant.PRIMARY,
+    )
+    def sync_from_microtech(self, request, queryset):
+        erp_nrs = list(queryset.values_list("erp_nr", flat=True))
+        if not erp_nrs:
+            self.message_user(request, "Keine Produkte ausgewaehlt.", level=messages.WARNING)
+            return
+        try:
+            call_command("microtech_sync_products", *erp_nrs)
+            self.message_user(request, f"{len(erp_nrs)} Produkt(e) aus Microtech synchronisiert.")
+        except Exception as exc:
+            self._log_admin_error(
+                request,
+                f"Microtech sync failed: {exc}",
+            )
+            self.message_user(request, f"Microtech Sync fehlgeschlagen: {exc}", level=messages.ERROR)
+
+    @action(
+        description="Sync from Microtech",
+        icon="sync",
+        variant=ActionVariant.PRIMARY,
+    )
+    def sync_from_microtech_detail(self, request, object_id: str):
+        product = self.get_object(request, object_id)
+        if not product:
+            self.message_user(request, "Produkt nicht gefunden.", level=messages.ERROR)
+            return
+        try:
+            call_command("microtech_sync_products", product.erp_nr)
+            self.message_user(request, f"Produkt {product.erp_nr} aus Microtech synchronisiert.")
+        except Exception as exc:
+            self._log_admin_error(
+                request,
+                f"Microtech sync failed for {product.erp_nr}: {exc}",
+                obj=product,
+            )
+            self.message_user(request, f"Microtech Sync fehlgeschlagen: {exc}", level=messages.ERROR)
 
     @action(
         description="Sync to Shopware6",
