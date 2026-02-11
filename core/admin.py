@@ -9,13 +9,8 @@ from unfold.admin import TabularInline as UnfoldTabularInline
 from unfold.forms import AdminPasswordChangeForm, UserChangeForm, UserCreationForm
 from unfold.widgets import UnfoldAdminSelectWidget, UnfoldAdminTextInputWidget
 
-from django_celery_beat.admin import (
-    ClockedScheduleAdmin as BaseClockedScheduleAdmin,
-    CrontabScheduleAdmin as BaseCrontabScheduleAdmin,
-    PeriodicTaskAdmin as BasePeriodicTaskAdmin,
-    PeriodicTaskForm,
-    TaskSelectWidget,
-)
+from django_celery_beat import admin as celery_admin
+from django_celery_beat.admin import PeriodicTaskForm, TaskSelectWidget
 from django_celery_beat.models import (
     ClockedSchedule,
     CrontabSchedule,
@@ -62,6 +57,12 @@ admin.site.unregister(CrontabSchedule)
 admin.site.unregister(SolarSchedule)
 admin.site.unregister(ClockedSchedule)
 
+BasePeriodicTaskAdmin = getattr(celery_admin, "PeriodicTaskAdmin", admin.ModelAdmin)
+BaseIntervalScheduleAdmin = getattr(celery_admin, "IntervalScheduleAdmin", admin.ModelAdmin)
+BaseCrontabScheduleAdmin = getattr(celery_admin, "CrontabScheduleAdmin", admin.ModelAdmin)
+BaseSolarScheduleAdmin = getattr(celery_admin, "SolarScheduleAdmin", admin.ModelAdmin)
+BaseClockedScheduleAdmin = getattr(celery_admin, "ClockedScheduleAdmin", admin.ModelAdmin)
+
 
 class UnfoldTaskSelectWidget(UnfoldAdminSelectWidget, TaskSelectWidget):
     pass
@@ -80,7 +81,7 @@ class PeriodicTaskAdmin(BasePeriodicTaskAdmin, UnfoldModelAdmin):
 
 
 @admin.register(IntervalSchedule)
-class IntervalScheduleAdmin(UnfoldModelAdmin):
+class IntervalScheduleAdmin(BaseIntervalScheduleAdmin, UnfoldModelAdmin):
     pass
 
 
@@ -90,7 +91,7 @@ class CrontabScheduleAdmin(BaseCrontabScheduleAdmin, UnfoldModelAdmin):
 
 
 @admin.register(SolarSchedule)
-class SolarScheduleAdmin(UnfoldModelAdmin):
+class SolarScheduleAdmin(BaseSolarScheduleAdmin, UnfoldModelAdmin):
     pass
 
 
