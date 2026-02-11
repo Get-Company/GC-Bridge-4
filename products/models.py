@@ -1,6 +1,10 @@
+from decimal import Decimal
+
 from django.db import models
+from django.utils import timezone
 
 from core.models import BaseModel
+from shopware.models import ShopwareSettings
 
 
 class Tax(BaseModel):
@@ -72,6 +76,13 @@ class Product(BaseModel):
 
 class Price(BaseModel):
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="prices")
+    sales_channel = models.ForeignKey(
+        ShopwareSettings,
+        on_delete=models.CASCADE,
+        related_name="prices",
+        null=True,
+        blank=True,
+    )
     price = models.DecimalField(max_digits=10, decimal_places=2)
     rebate_quantity = models.IntegerField(null=True, blank=True)
     rebate_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
@@ -80,10 +91,68 @@ class Price(BaseModel):
     special_end_date = models.DateTimeField(null=True, blank=True)
 
     class Meta:
-        ordering = ("product", "price")
+        ordering = ("product", "sales_channel", "price")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("product", "sales_channel"),
+                name="unique_price_per_sales_channel",
+            )
+        ]
+
+    @property
+    def is_special_active(self) -> bool:
+        now = timezone.now()
+        if self.special_price and self.special_start_date and self.special_end_date:
+            return self.special_start_date <= now <= self.special_end_date
+        return False
+
+    def get_current_price(self, *, as_float: bool = False):
+        price = self.special_price if self.is_special_active else self.price
+        return self._format_price(price, as_float)
+
+    def get_current_brutto_price(self, *, as_float: bool = False):
+        price = self.get_current_price(as_float=False)
+        return self._format_price(price * self._tax_factor(), as_float)
+
+    def get_standard_price(self, *, as_float: bool = False):
+        return self._format_price(self.price, as_float)
+
+    def get_standard_brutto_price(self, *, as_float: bool = False):
+        return self._format_price(self.price * self._tax_factor(), as_float)
+
+    def get_special_price(self, *, as_float: bool = False):
+        if not self.is_special_active:
+            return None
+        return self._format_price(self.special_price, as_float)
+
+    def get_special_brutto_price(self, *, as_float: bool = False):
+        if not self.is_special_active:
+            return None
+        return self._format_price(self.special_price * self._tax_factor(), as_float)
+
+    def get_rebate_price(self, *, as_float: bool = False):
+        return self._format_price(self.rebate_price, as_float)
+
+    def get_rebate_brutto_price(self, *, as_float: bool = False):
+        if self.rebate_price is None:
+            return None
+        return self._format_price(self.rebate_price * self._tax_factor(), as_float)
+
+    def _tax_factor(self) -> Decimal:
+        if self.product.tax:
+            return self.product.tax.rate / Decimal("100") + Decimal("1")
+        return Decimal("1")
+
+    @staticmethod
+    def _format_price(value, as_float: bool):
+        if value is None:
+            return None
+        rounded_value = Decimal(value).quantize(Decimal("0.01"))
+        return float(rounded_value) if as_float else rounded_value
 
     def __str__(self) -> str:
-        return f"{self.product.erp_nr} {self.price}"
+        channel_name = self.sales_channel.name if self.sales_channel else "default"
+        return f"{self.product.erp_nr} | {channel_name}: {self.price}"
 
 
 class Storage(BaseModel):

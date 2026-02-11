@@ -11,6 +11,7 @@ from microtech.services.connection import microtech_connection
 from microtech.services.lager import MicrotechLagerService
 from core.admin_utils import log_admin_change
 from products.models import Image, Price, Product, Storage
+from shopware.models import ShopwareSettings
 
 
 def _to_decimal(value):
@@ -29,6 +30,12 @@ def _to_int(value):
         return int(value)
     except (TypeError, ValueError):
         return None
+
+
+def _apply_factor(value: Decimal | None, factor: Decimal) -> Decimal | None:
+    if value is None:
+        return None
+    return (value * factor).quantize(Decimal("0.01"))
 
 
 def _get_admin_user_id() -> int | None:
@@ -113,7 +120,12 @@ class Command(BaseCommand):
                         break
                     index += 1
                     try:
-                        self._sync_current_record(artikel_service, lager_service)
+                        self._sync_current_record(
+                            artikel_service,
+                            lager_service,
+                            admin_user_id=admin_user_id,
+                            content_type_id=content_type_id,
+                        )
                         success_count += 1
                     except Exception as exc:
                         error_count += 1
@@ -148,7 +160,12 @@ class Command(BaseCommand):
                         )
                         continue
 
-                    self._sync_current_record(artikel_service, lager_service)
+                    self._sync_current_record(
+                        artikel_service,
+                        lager_service,
+                        admin_user_id=admin_user_id,
+                        content_type_id=content_type_id,
+                    )
                     success_count += 1
                 except Exception as exc:
                     error_count += 1
@@ -159,7 +176,7 @@ class Command(BaseCommand):
                         object_repr=f"Microtech Sync {erp_nr}",
                     )
 
-    def _sync_current_record(self, artikel_service, lager_service) -> None:
+    def _sync_current_record(self, artikel_service, lager_service, *, admin_user_id=None, content_type_id=None) -> None:
         erp_key = artikel_service.get_erp_nr()
         if not erp_key:
             raise ValueError("Artikel ohne ArtNr gefunden.")
@@ -189,17 +206,46 @@ class Command(BaseCommand):
 
         price_value = _to_decimal(artikel_service.get_price())
         if price_value is not None:
-            Price.objects.update_or_create(
-                product=product,
-                defaults={
-                    "price": price_value,
-                    "rebate_quantity": _to_int(artikel_service.get_rebate_quantity()),
-                    "rebate_price": _to_decimal(artikel_service.get_rebate_price()),
-                    "special_price": _to_decimal(artikel_service.get_special_price()),
-                    "special_start_date": artikel_service.get_special_start_date(),
-                    "special_end_date": artikel_service.get_special_end_date(),
-                },
-            )
+            channels = list(ShopwareSettings.objects.filter(is_active=True))
+            default_channel = next((ch for ch in channels if ch.is_default), None)
+            if not default_channel:
+                _log_admin_error(
+                    admin_user_id=admin_user_id,
+                    content_type_id=content_type_id,
+                    message="Kein aktiver Default-Sales-Channel gefunden. Preise wurden nicht aktualisiert.",
+                    object_id=str(product.pk),
+                    object_repr=f"Product {product.erp_nr}",
+                )
+            else:
+                base_price, _ = Price.objects.update_or_create(
+                    product=product,
+                    sales_channel=default_channel,
+                    defaults={
+                        "price": price_value,
+                        "rebate_quantity": _to_int(artikel_service.get_rebate_quantity()),
+                        "rebate_price": _to_decimal(artikel_service.get_rebate_price()),
+                        "special_price": _to_decimal(artikel_service.get_special_price()),
+                        "special_start_date": artikel_service.get_special_start_date(),
+                        "special_end_date": artikel_service.get_special_end_date(),
+                    },
+                )
+
+                for channel in channels:
+                    if channel.pk == default_channel.pk:
+                        continue
+                    factor = channel.price_factor or Decimal("1.0")
+                    Price.objects.update_or_create(
+                        product=product,
+                        sales_channel=channel,
+                        defaults={
+                            "price": _apply_factor(base_price.price, factor),
+                            "rebate_quantity": base_price.rebate_quantity,
+                            "rebate_price": _apply_factor(base_price.rebate_price, factor),
+                            "special_price": _apply_factor(base_price.special_price, factor),
+                            "special_start_date": base_price.special_start_date,
+                            "special_end_date": base_price.special_end_date,
+                        },
+                    )
 
         image_names = artikel_service.get_image_list()
         if image_names:
