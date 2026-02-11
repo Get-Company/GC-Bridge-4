@@ -21,5 +21,15 @@ services:
     ports:
       - "8082:8080"
 
+  redis:
+    image: redis:7-alpine
+    container_name: gc_bridge_4_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+
 volumes:
   pgdata:
+  redisdata:
