@@ -1,5 +1,7 @@
 django>=6.0.2
 django-unfold
+django-celery-beat
+celery
 psycopg[binary]
 lib-shopware6-api-base
 loguru
