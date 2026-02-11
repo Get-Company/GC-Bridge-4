@@ -8,6 +8,7 @@ dependencies = [
     "django-unfold",
     "django-celery-beat",
     "celery",
+    "redis",
     "psycopg[binary]",
     "lib-shopware6-api-base",
     "loguru",
