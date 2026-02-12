@@ -52,6 +52,8 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'core.apps.CoreConfig',
+    'customer.apps.CustomerConfig',
+    'orders.apps.OrdersConfig',
     'products.apps.ProductsConfig',
     'shopware.apps.ShopwareConfig',
     'microtech.apps.MicrotechConfig',

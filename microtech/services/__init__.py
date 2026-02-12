@@ -4,6 +4,8 @@ from .artikel import MicrotechArtikelService
 from .lager import MicrotechLagerService
 from .vorgang import MicrotechVorgangService
 from .adresse import MicrotechAdresseService
+from .anschrift import MicrotechAnschriftService
+from .ansprechpartner import MicrotechAnsprechpartnerService
 
 __all__ = [
     "MicrotechConnectionConfig",
@@ -14,4 +16,6 @@ __all__ = [
     "MicrotechLagerService",
     "MicrotechVorgangService",
     "MicrotechAdresseService",
+    "MicrotechAnschriftService",
+    "MicrotechAnsprechpartnerService",
 ]
