@@ -151,7 +151,7 @@ class OrderAdmin(BaseAdmin):
             options_html,
         )
 
-    def shopware_state_options_view(self, request, object_id: str):
+    def shopware_state_options_view(self, request, object_id: str, **kwargs):
         order = self.get_object(request, object_id)
         if not order:
             return JsonResponse({"ok": False, "error": "Order not found."}, status=404)
@@ -172,7 +172,7 @@ class OrderAdmin(BaseAdmin):
         actions = OrderService().get_available_transition_actions(scope=scope, entity_id=entity_id)
         return JsonResponse({"ok": True, "scope": scope, "actions": actions})
 
-    def shopware_set_state_view(self, request, object_id: str):
+    def shopware_set_state_view(self, request, object_id: str, **kwargs):
         if request.method != "POST":
             return JsonResponse({"ok": False, "error": "POST required."}, status=405)
 
