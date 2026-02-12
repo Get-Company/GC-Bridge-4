@@ -25,7 +25,7 @@ class Order(BaseModel):
     customer = models.ForeignKey(
         Customer,
         related_name="orders",
-        on_delete=models.SET_NULL,
+        on_delete=models.CASCADE,
         null=True,
         blank=True,
     )
