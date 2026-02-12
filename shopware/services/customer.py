@@ -28,5 +28,17 @@ class CustomerService(Shopware6Service):
         criteria.filter.append(EqualsFilter(field="customerNumber", value=customer_number))
         return self.request_post(self.search_path, payload=criteria)
 
+    def update_customer(self, customer_id: str, payload: dict[str, Any]) -> Any:
+        customer_id = str(customer_id).strip()
+        if not customer_id:
+            raise ValueError("customer_id is required.")
+        return self.request_patch(f"/customer/{customer_id}", payload=payload)
+
+    def update_customer_number(self, customer_id: str, customer_number: str) -> Any:
+        customer_number = str(customer_number).strip()
+        if not customer_number:
+            raise ValueError("customer_number is required.")
+        return self.update_customer(customer_id=customer_id, payload={"customerNumber": customer_number})
+
 
 __all__ = ["CustomerService"]

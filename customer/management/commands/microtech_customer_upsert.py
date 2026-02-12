@@ -50,5 +50,7 @@ class Command(BaseCommand):
             "erp_nr": result.erp_nr,
             "shipping_ans_nr": result.shipping_ans_nr,
             "billing_ans_nr": result.billing_ans_nr,
+            "is_new_customer": result.is_new_customer,
+            "shopware_updated": result.shopware_updated,
         }
         logger.info("{}", json.dumps(payload, ensure_ascii=True, indent=2, sort_keys=True))

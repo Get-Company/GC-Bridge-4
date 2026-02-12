@@ -5,12 +5,14 @@ from typing import Any
 
 from core.services import BaseService
 from customer.models import Address, Customer
+from loguru import logger
 from microtech.services import (
     MicrotechAdresseService,
     MicrotechAnschriftService,
     MicrotechAnsprechpartnerService,
     microtech_connection,
 )
+from shopware.services import CustomerService
 
 
 EU_COUNTRY_CODES = {
@@ -108,6 +110,8 @@ class UpsertResult:
     erp_nr: str
     shipping_ans_nr: int
     billing_ans_nr: int
+    is_new_customer: bool = False
+    shopware_updated: bool = False
 
 
 class CustomerUpsertMicrotechService(BaseService):
@@ -128,7 +132,7 @@ class CustomerUpsertMicrotechService(BaseService):
             anschrift_service = MicrotechAnschriftService(erp=erp)
             ansprechpartner_service = MicrotechAnsprechpartnerService(erp=erp)
 
-            erp_nr = self._upsert_adresse_record(
+            erp_nr, is_new_customer = self._upsert_adresse_record(
                 customer=customer,
                 shipping=shipping,
                 adresse_service=adresse_service,
@@ -152,11 +156,17 @@ class CustomerUpsertMicrotechService(BaseService):
             adresse_service.set_field("ReAnsNr", billing_ans_nr)
             adresse_service.post()
 
+        shopware_updated = False
+        if is_new_customer:
+            shopware_updated = self._sync_new_customer_number_to_shopware(customer=customer, erp_nr=erp_nr)
+
         return UpsertResult(
             customer=customer,
             erp_nr=erp_nr,
             shipping_ans_nr=shipping_ans_nr,
             billing_ans_nr=billing_ans_nr,
+            is_new_customer=is_new_customer,
+            shopware_updated=shopware_updated,
         )
 
     def _upsert_adresse_record(
@@ -165,9 +175,10 @@ class CustomerUpsertMicrotechService(BaseService):
         customer: Customer,
         shipping: Address,
         adresse_service: MicrotechAdresseService,
-    ) -> str:
+    ) -> tuple[str, bool]:
         existing_erp_nr = _to_str(customer.erp_nr)
         exists_in_erp = bool(existing_erp_nr and adresse_service.find(existing_erp_nr))
+        is_new_customer = not exists_in_erp
 
         if exists_in_erp:
             adresse_service.edit()
@@ -192,7 +203,39 @@ class CustomerUpsertMicrotechService(BaseService):
             customer.erp_nr = erp_nr
             customer.save(update_fields=["erp_nr", "updated_at"])
 
-        return erp_nr
+        return erp_nr, is_new_customer
+
+    def _sync_new_customer_number_to_shopware(self, *, customer: Customer, erp_nr: str) -> bool:
+        customer_id = _to_str(customer.api_id)
+        if not customer_id:
+            logger.warning(
+                "Shopware customer update skipped for ERP {}: missing customer.api_id (customer_id={}).",
+                erp_nr,
+                customer.id,
+            )
+            return False
+
+        service = CustomerService()
+        existing = service.get_by_customer_number(erp_nr)
+        existing_data = (existing or {}).get("data", []) or []
+
+        for item in existing_data:
+            item_id = _to_str((item or {}).get("id"))
+            if not item_id:
+                item_id = _to_str(((item or {}).get("attributes") or {}).get("id"))
+            if item_id and item_id != customer_id:
+                raise ValueError(
+                    f"Shopware customerNumber '{erp_nr}' is already used by customer '{item_id}'."
+                )
+
+        service.update_customer_number(customer_id=customer_id, customer_number=erp_nr)
+        logger.info(
+            "Shopware customer {} updated with new customerNumber {} (local customer_id={}).",
+            customer_id,
+            erp_nr,
+            customer.id,
+        )
+        return True
 
     @staticmethod
     def _resolve_ustkat(country_code: str, vat_id: str) -> int:
