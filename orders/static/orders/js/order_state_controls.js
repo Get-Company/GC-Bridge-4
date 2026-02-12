@@ -33,6 +33,18 @@
     }
   }
 
+  function setBusy(control, isBusy) {
+    control.dataset.busy = isBusy ? "1" : "0";
+    const select = control.querySelector(".js-sw-state-select");
+    if (select) {
+      select.disabled = !!isBusy;
+    }
+  }
+
+  function isBusy(control) {
+    return control.dataset.busy === "1";
+  }
+
   function appendOption(select, value, label) {
     const option = document.createElement("option");
     option.value = value;
@@ -41,6 +53,9 @@
   }
 
   async function loadOptions(control, select) {
+    if (isBusy(control)) {
+      return;
+    }
     if (control.dataset.loaded === "1") {
       return;
     }
@@ -56,7 +71,7 @@
 
     try {
       setLoading(control, true, "Optionen laden...");
-      select.disabled = true;
+      setBusy(control, true);
       const response = await fetch(url.toString(), {
         headers: { "X-Requested-With": "XMLHttpRequest" },
       });
@@ -75,7 +90,7 @@
       console.error("Could not load Shopware state transitions", error);
     } finally {
       setLoading(control, false);
-      select.disabled = false;
+      setBusy(control, false);
     }
   }
 
@@ -105,6 +120,9 @@
   }
 
   async function setState(control, select) {
+    if (isBusy(control)) {
+      return;
+    }
     const setUrl = control.dataset.setUrl;
     const scope = control.dataset.scope;
     const action = select.value;
@@ -112,7 +130,7 @@
       return;
     }
 
-    select.disabled = true;
+    setBusy(control, true);
     setLoading(control, true, "Speichern...");
     try {
       const response = await fetch(setUrl, {
@@ -141,7 +159,7 @@
       window.alert("Status konnte nicht gesetzt werden.");
     } finally {
       setLoading(control, false);
-      select.disabled = false;
+      setBusy(control, false);
     }
   }
 
@@ -158,6 +176,9 @@
     select.addEventListener("focus", load);
     select.addEventListener("mousedown", load);
     select.addEventListener("change", function () {
+      if (isBusy(control)) {
+        return;
+      }
       setState(control, select);
     });
   }
