@@ -1,4 +1,6 @@
 from django.contrib import admin, messages
+from django.http import HttpResponseRedirect
+from django.urls import reverse
 
 from unfold.decorators import action
 from unfold.enums import ActionVariant
@@ -38,7 +40,11 @@ class OrderAdmin(BaseAdmin):
     search_fields = ("order_number", "api_id", "customer__erp_nr", "customer__email")
     list_filter = ("order_state", "payment_state", "shipping_state", "created_at")
     inlines = (OrderDetailInline,)
+    actions_list = ("sync_open_orders_from_shopware_list",)
     actions = ("sync_open_orders_from_shopware",)
+
+    def _redirect_to_changelist(self) -> HttpResponseRedirect:
+        return HttpResponseRedirect(reverse("admin:orders_order_changelist"))
 
     def _run_open_order_sync(self, request) -> None:
         try:
@@ -55,6 +61,15 @@ class OrderAdmin(BaseAdmin):
                 f"Fehler: {summary['orders_failed']}"
             ),
         )
+
+    @action(
+        description="Sync Open Orders From Shopware",
+        icon="sync",
+        variant=ActionVariant.PRIMARY,
+    )
+    def sync_open_orders_from_shopware_list(self, request):
+        self._run_open_order_sync(request)
+        return self._redirect_to_changelist()
 
     @action(
         description="Sync Open Orders From Shopware",
