@@ -1,6 +1,8 @@
 from django.contrib import admin, messages
 from django.contrib.contenttypes.models import ContentType
 from django.core.management import call_command
+from django.http import HttpResponseRedirect
+from django.urls import reverse
 
 from unfold.decorators import action
 from unfold.enums import ActionVariant
@@ -34,6 +36,10 @@ class ProductAdmin(BaseAdmin):
     inlines = (PriceInline,)
     actions = ("sync_from_microtech", "sync_to_shopware")
     actions_detail = ("sync_from_microtech_detail", "sync_to_shopware_detail")
+
+    def _redirect_to_change_page(self, object_id: str) -> HttpResponseRedirect:
+        change_url = reverse("admin:products_product_change", args=(object_id,))
+        return HttpResponseRedirect(change_url)
 
     def _log_admin_error(self, request, message: str, *, obj: Product | None = None) -> None:
         log_admin_change(
@@ -142,7 +148,7 @@ class ProductAdmin(BaseAdmin):
         product = self.get_object(request, object_id)
         if not product:
             self.message_user(request, "Produkt nicht gefunden.", level=messages.ERROR)
-            return
+            return self._redirect_to_change_page(object_id)
         try:
             call_command("microtech_sync_products", product.erp_nr)
             self.message_user(request, f"Produkt {product.erp_nr} aus Microtech synchronisiert.")
@@ -153,6 +159,7 @@ class ProductAdmin(BaseAdmin):
                 obj=product,
             )
             self.message_user(request, f"Microtech Sync fehlgeschlagen: {exc}", level=messages.ERROR)
+        return self._redirect_to_change_page(object_id)
 
     @action(
         description="Sync to Shopware6",
@@ -176,7 +183,7 @@ class ProductAdmin(BaseAdmin):
         product = self.get_object(request, object_id)
         if not product:
             self.message_user(request, "Produkt nicht gefunden.", level=messages.ERROR)
-            return
+            return self._redirect_to_change_page(object_id)
         try:
             success_count, error_count = self._sync_products_bulk([product], ProductService(), request=request)
             if success_count:
@@ -190,6 +197,7 @@ class ProductAdmin(BaseAdmin):
                 obj=product,
             )
             self.message_user(request, f"Sync fehlgeschlagen: {exc}", level=messages.ERROR)
+        return self._redirect_to_change_page(object_id)
 
 
 @admin.register(Price)
