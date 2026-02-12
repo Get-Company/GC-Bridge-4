@@ -19,6 +19,20 @@
     }
   }
 
+  function setLoading(control, isLoading, message) {
+    const loadingEl = control.querySelector(".js-sw-state-loading");
+    if (!loadingEl) {
+      return;
+    }
+    if (isLoading) {
+      loadingEl.style.display = "inline";
+      loadingEl.textContent = message || "Wird geladen...";
+    } else {
+      loadingEl.style.display = "none";
+      loadingEl.textContent = "";
+    }
+  }
+
   function appendOption(select, value, label) {
     const option = document.createElement("option");
     option.value = value;
@@ -41,6 +55,8 @@
     url.searchParams.set("scope", scope);
 
     try {
+      setLoading(control, true, "Optionen laden...");
+      select.disabled = true;
       const response = await fetch(url.toString(), {
         headers: { "X-Requested-With": "XMLHttpRequest" },
       });
@@ -57,6 +73,9 @@
       control.dataset.loaded = "1";
     } catch (error) {
       console.error("Could not load Shopware state transitions", error);
+    } finally {
+      setLoading(control, false);
+      select.disabled = false;
     }
   }
 
@@ -94,6 +113,7 @@
     }
 
     select.disabled = true;
+    setLoading(control, true, "Speichern...");
     try {
       const response = await fetch(setUrl, {
         method: "POST",
@@ -120,6 +140,7 @@
       console.error("Could not set Shopware state", error);
       window.alert("Status konnte nicht gesetzt werden.");
     } finally {
+      setLoading(control, false);
       select.disabled = false;
     }
   }

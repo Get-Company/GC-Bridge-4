@@ -139,6 +139,8 @@ class OrderAdmin(BaseAdmin):
             (
                 '<div class="js-sw-state-control" data-scope="{}" data-options-url="{}" data-set-url="{}">'
                 '<span class="js-sw-state-current">{}</span><br>'
+                '<span class="js-sw-state-loading" style="display:none; font-size:11px; color:#6b7280;"></span>'
+                "<br>"
                 '<select class="js-sw-state-select" data-scope="{}" {}>{}</select>'
                 "</div>"
             ),
