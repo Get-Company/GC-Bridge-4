@@ -1,6 +1,22 @@
 (function () {
   "use strict";
 
+  function ensureStyles() {
+    if (document.getElementById("sw-state-control-styles")) {
+      return;
+    }
+
+    const style = document.createElement("style");
+    style.id = "sw-state-control-styles";
+    style.textContent = [
+      ".js-sw-state-select{transition:background-color .18s ease,color .18s ease,opacity .18s ease;}",
+      ".js-sw-state-select.js-sw-state-disabled{background:#f3f4f6 !important;color:#6b7280 !important;opacity:.9;cursor:not-allowed;}",
+      ".js-sw-state-progress-bar{animation:swStateBar 1.1s linear infinite;}",
+      "@keyframes swStateBar{0%{transform:translateX(-130%);}100%{transform:translateX(360%);}}",
+    ].join("");
+    document.head.appendChild(style);
+  }
+
   function getCsrfToken() {
     const name = "csrftoken=";
     const cookies = document.cookie ? document.cookie.split(";") : [];
@@ -19,18 +35,29 @@
     }
   }
 
-  function setLoading(control, isLoading, message) {
+  function setFeedback(control, message, kind) {
     const loadingEl = control.querySelector(".js-sw-state-loading");
     if (!loadingEl) {
       return;
     }
-    if (isLoading) {
-      loadingEl.style.display = "inline";
-      loadingEl.textContent = message || "Wird geladen...";
-    } else {
-      loadingEl.style.display = "none";
-      loadingEl.textContent = "";
+
+    const colorByKind = {
+      info: "#6b7280",
+      success: "#166534",
+      error: "#b91c1c",
+    };
+
+    loadingEl.style.display = "inline";
+    loadingEl.style.color = colorByKind[kind] || colorByKind.info;
+    loadingEl.textContent = message || "";
+  }
+
+  function setProgress(control, isVisible) {
+    const progressEl = control.querySelector(".js-sw-state-progress");
+    if (!progressEl) {
+      return;
     }
+    progressEl.style.display = isVisible ? "block" : "none";
   }
 
   function setBusy(control, isBusy) {
@@ -38,11 +65,33 @@
     const select = control.querySelector(".js-sw-state-select");
     if (select) {
       select.disabled = !!isBusy;
+      if (isBusy) {
+        select.classList.add("js-sw-state-disabled");
+      } else {
+        select.classList.remove("js-sw-state-disabled");
+      }
     }
   }
 
   function isBusy(control) {
     return control.dataset.busy === "1";
+  }
+
+  function startProgressMessages(control, messages) {
+    const handles = [];
+    messages.forEach(function (entry) {
+      const handle = window.setTimeout(function () {
+        setFeedback(control, entry.text, "info");
+      }, entry.delayMs);
+      handles.push(handle);
+    });
+    return handles;
+  }
+
+  function clearProgressMessages(handles) {
+    (handles || []).forEach(function (handle) {
+      window.clearTimeout(handle);
+    });
   }
 
   function appendOption(select, value, label) {
@@ -68,15 +117,23 @@
 
     const url = new URL(baseUrl, window.location.origin);
     url.searchParams.set("scope", scope);
+    let messageHandles = [];
 
     try {
-      setLoading(control, true, "Optionen laden...");
+      setFeedback(control, "Anfrage gestartet...", "info");
+      setProgress(control, true);
       setBusy(control, true);
+      messageHandles = startProgressMessages(control, [
+        { delayMs: 250, text: "Optionen werden bei Shopware angefordert..." },
+        { delayMs: 900, text: "Auf Antwort von Shopware warten..." },
+      ]);
+
       const response = await fetch(url.toString(), {
         headers: { "X-Requested-With": "XMLHttpRequest" },
       });
       const data = await response.json();
       if (!response.ok || !data.ok) {
+        setFeedback(control, "Optionen konnten nicht geladen werden.", "error");
         return;
       }
 
@@ -86,10 +143,13 @@
         appendOption(select, item.action || "", item.label || item.action || "");
       });
       control.dataset.loaded = "1";
+      setFeedback(control, "Optionen geladen. Bitte neuen Status waehlen.", "success");
     } catch (error) {
       console.error("Could not load Shopware state transitions", error);
+      setFeedback(control, "Netzwerkfehler beim Laden der Optionen.", "error");
     } finally {
-      setLoading(control, false);
+      clearProgressMessages(messageHandles);
+      setProgress(control, false);
       setBusy(control, false);
     }
   }
@@ -130,8 +190,16 @@
       return;
     }
 
+    let messageHandles = [];
     setBusy(control, true);
-    setLoading(control, true, "Speichern...");
+    setFeedback(control, "Speichern gestartet...", "info");
+    setProgress(control, true);
+    messageHandles = startProgressMessages(control, [
+      { delayMs: 250, text: "Status wird an Shopware gesendet..." },
+      { delayMs: 900, text: "Auf Antwort von Shopware warten..." },
+      { delayMs: 1700, text: "Lokalen Status aktualisieren..." },
+    ]);
+
     try {
       const response = await fetch(setUrl, {
         method: "POST",
@@ -148,17 +216,19 @@
       const payload = await response.json();
       if (!response.ok || !payload.ok) {
         const message = (payload && payload.error) || "Status konnte nicht gesetzt werden.";
-        window.alert(message);
+        setFeedback(control, message, "error");
         return;
       }
 
       updateCurrentStates(control, payload);
       select.value = "";
+      setFeedback(control, "Status erfolgreich gespeichert.", "success");
     } catch (error) {
       console.error("Could not set Shopware state", error);
-      window.alert("Status konnte nicht gesetzt werden.");
+      setFeedback(control, "Netzwerkfehler beim Speichern.", "error");
     } finally {
-      setLoading(control, false);
+      clearProgressMessages(messageHandles);
+      setProgress(control, false);
       setBusy(control, false);
     }
   }
@@ -167,6 +237,12 @@
     const select = control.querySelector(".js-sw-state-select");
     if (!select) {
       return;
+    }
+
+    if (select.disabled) {
+      setFeedback(control, "Keine API-ID vorhanden.", "error");
+    } else {
+      setFeedback(control, "Bereit. Status waehlen oder Optionen laden.", "info");
     }
 
     const load = function () {
@@ -184,6 +260,7 @@
   }
 
   document.addEventListener("DOMContentLoaded", function () {
+    ensureStyles();
     document.querySelectorAll(".js-sw-state-control").forEach(function (control) {
       bindControl(control);
     });

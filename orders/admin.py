@@ -139,9 +139,12 @@ class OrderAdmin(BaseAdmin):
             (
                 '<div class="js-sw-state-control" data-scope="{}" data-options-url="{}" data-set-url="{}">'
                 '<span class="js-sw-state-current">{}</span><br>'
-                '<span class="js-sw-state-loading" style="display:none; font-size:11px; color:#6b7280;"></span>'
+                '<span class="js-sw-state-loading" style="display:none; font-size:11px; color:#6b7280;" aria-live="polite"></span>'
                 "<br>"
                 '<select class="js-sw-state-select" data-scope="{}" {}>{}</select>'
+                '<div class="js-sw-state-progress" style="display:none; margin-top:6px; height:4px; width:100%; background:#e5e7eb; border-radius:999px; overflow:hidden;">'
+                '<div class="js-sw-state-progress-bar" style="height:100%; width:30%; background:linear-gradient(90deg,#2563eb,#60a5fa); border-radius:999px;"></div>'
+                "</div>"
                 "</div>"
             ),
             scope,
