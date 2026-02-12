@@ -5,4 +5,4 @@ from .base import MicrotechDatasetService
 
 class MicrotechAnschriftService(MicrotechDatasetService):
     dataset_name = "Anschriften"
-    index_field = "Nr"
+    index_field = "AdrNrAnsNr"
