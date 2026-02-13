@@ -67,13 +67,9 @@ class OrderUpsertMicrotechService(BaseService):
         if not customer:
             raise ValueError("Order has no customer assigned.")
 
-        if not customer.erp_nr:
-            logger.info(
-                "Customer {} has no erp_nr, syncing to Microtech first.",
-                customer.pk,
-            )
-            CustomerUpsertMicrotechService().upsert_customer(customer)
-            customer.refresh_from_db()
+        logger.info("Syncing customer {} to Microtech before order upsert.", customer.pk)
+        CustomerUpsertMicrotechService().upsert_customer(customer)
+        customer.refresh_from_db()
 
         if not customer.erp_nr:
             raise ValueError("Customer ERP number could not be determined after upsert.")
