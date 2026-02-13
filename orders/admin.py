@@ -12,7 +12,7 @@ from unfold.enums import ActionVariant
 
 from core.admin import BaseAdmin, BaseTabularInline
 from orders.models import Order, OrderDetail
-from orders.services import OrderSyncService
+from orders.services import OrderSyncService, OrderUpsertMicrotechService
 from shopware.services import OrderService
 from shopware.services.order import DEFAULT_TRANSITION_ACTIONS
 
@@ -55,6 +55,7 @@ class OrderAdmin(BaseAdmin):
     inlines = (OrderDetailInline,)
     actions_list = ("sync_open_orders_from_shopware_list",)
     actions = ("sync_open_orders_from_shopware",)
+    actions_detail = ("upsert_to_microtech_detail",)
     list_fullwidth = True
 
     class Media:
@@ -62,6 +63,9 @@ class OrderAdmin(BaseAdmin):
 
     def _redirect_to_changelist(self) -> HttpResponseRedirect:
         return HttpResponseRedirect(reverse("admin:orders_order_changelist"))
+
+    def _redirect_to_change_page(self, object_id: str) -> HttpResponseRedirect:
+        return HttpResponseRedirect(reverse("admin:orders_order_change", args=(object_id,)))
 
     def get_custom_urls(self):
         urls = super().get_custom_urls()
@@ -78,6 +82,34 @@ class OrderAdmin(BaseAdmin):
                 self.shopware_set_state_view,
             ),
         )
+
+    @action(
+        description="Bestellung in Microtech anlegen",
+        icon="upload",
+        variant=ActionVariant.PRIMARY,
+    )
+    def upsert_to_microtech_detail(self, request, object_id: str):
+        order = self.get_object(request, object_id)
+        if not order:
+            self.message_user(request, "Bestellung nicht gefunden.", level=messages.ERROR)
+            return self._redirect_to_change_page(object_id)
+
+        try:
+            result = OrderUpsertMicrotechService().upsert_order(order)
+        except Exception as exc:
+            self.message_user(
+                request,
+                f"Microtech-Upsert fehlgeschlagen: {exc}",
+                level=messages.ERROR,
+            )
+            return self._redirect_to_change_page(object_id)
+
+        action_label = "angelegt" if result.is_new else "aktualisiert"
+        self.message_user(
+            request,
+            f"Bestellung {order.order_number} in Microtech {action_label} (BelegNr: {result.erp_order_id}).",
+        )
+        return self._redirect_to_change_page(object_id)
 
     def _run_open_order_sync(self, request) -> None:
         try:

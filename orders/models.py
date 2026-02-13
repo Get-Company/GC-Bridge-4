@@ -12,6 +12,7 @@ class Order(BaseModel):
     api_transaction_id = models.CharField(max_length=64, blank=True, default="")
     sales_channel_id = models.CharField(max_length=255, blank=True, default="")
     order_number = models.CharField(max_length=255, blank=True, default="", db_index=True)
+    erp_order_id = models.CharField(max_length=255, blank=True, default="")
     description = models.TextField(blank=True, default="")
     total_price = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
     total_tax = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
