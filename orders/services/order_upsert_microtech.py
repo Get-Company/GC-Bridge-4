@@ -7,7 +7,11 @@ from loguru import logger
 
 from core.services import BaseService
 from customer.services import CustomerUpsertMicrotechService
-from microtech.services import MicrotechVorgangService, microtech_connection
+from microtech.services import (
+    MicrotechArtikelService,
+    MicrotechVorgangService,
+    microtech_connection,
+)
 from orders.models import Order, OrderDetail
 from orders.services.constants import (
     DEFAULT_ORDER_TYPE_NUMBER,
@@ -45,7 +49,7 @@ class OrderUpsertMicrotechService(BaseService):
             )
 
             self._set_header_fields(order=order, so_vorgang=so_vorgang)
-            self._add_positions(order=order, so_vorgang=so_vorgang)
+            self._add_positions(order=order, so_vorgang=so_vorgang, erp=erp)
             self._add_shipping_position(order=order, so_vorgang=so_vorgang)
 
             so_vorgang.Post()
@@ -202,8 +206,10 @@ class OrderUpsertMicrotechService(BaseService):
         description = order.description or f"Shopware Bestellung {order.order_number}"
         self._set_vorgang_field(so_vorgang=so_vorgang, field_name="Bez", value=description)
 
-    def _add_positions(self, *, order: Order, so_vorgang) -> None:
+    def _add_positions(self, *, order: Order, so_vorgang, erp) -> None:
         details: list[OrderDetail] = list(order.details.all())
+        artikel_service = MicrotechArtikelService(erp=erp)
+        article_name_cache: dict[str, str] = {}
 
         for detail in details:
             erp_nr = (detail.erp_nr or "").strip()
@@ -216,12 +222,19 @@ class OrderUpsertMicrotechService(BaseService):
 
             unit = detail.unit or DEFAULT_UNIT
             quantity = detail.quantity or 1
+            position_name = self._resolve_position_name(
+                detail=detail,
+                erp_nr=erp_nr,
+                artikel_service=artikel_service,
+                article_name_cache=article_name_cache,
+            )
 
             so_vorgang.Positionen.Add(quantity, unit, erp_nr)
             self._set_position_price(
                 so_vorgang=so_vorgang,
                 price=detail.unit_price,
                 is_gross=order.customer.is_gross,
+                position_name=position_name,
             )
 
     def _add_shipping_position(self, *, order: Order, so_vorgang) -> None:
@@ -236,15 +249,84 @@ class OrderUpsertMicrotechService(BaseService):
         )
 
     @staticmethod
-    def _set_position_price(*, so_vorgang, price: Decimal, is_gross: bool) -> None:
-        so_vorgang.Positionen.DataSet.Edit()
-        epr = so_vorgang.Positionen.DataSet.Fields("EPr").GetEditObject(2)
+    def _set_position_price(
+        *,
+        so_vorgang,
+        price: Decimal,
+        is_gross: bool,
+        position_name: str = "",
+    ) -> None:
+        position_dataset = so_vorgang.Positionen.DataSet
+        position_dataset.Edit()
+
+        if position_name:
+            name_written = (
+                OrderUpsertMicrotechService._set_position_field(
+                    dataset=position_dataset,
+                    field_name="Bez",
+                    value=position_name,
+                )
+                or OrderUpsertMicrotechService._set_position_field(
+                    dataset=position_dataset,
+                    field_name="KuBez",
+                    value=position_name,
+                )
+            )
+            if not name_written:
+                logger.debug("Position name could not be written (fields Bez/KuBez unavailable).")
+
+        epr = position_dataset.Fields("EPr").GetEditObject(2)
         if is_gross:
             epr.GesBrutto = float(price)
         else:
             epr.GesNetto = float(price)
         epr.Save()
-        so_vorgang.Positionen.DataSet.Post()
+        position_dataset.Post()
+
+    @staticmethod
+    def _set_position_field(*, dataset, field_name: str, value: str) -> bool:
+        try:
+            field = dataset.Fields.Item(field_name)
+        except Exception:
+            return False
+
+        for attr in ("AsString", "Text"):
+            try:
+                setattr(field, attr, str(value))
+                return True
+            except Exception:
+                continue
+        return False
+
+    @staticmethod
+    def _resolve_position_name(
+        *,
+        detail: OrderDetail,
+        erp_nr: str,
+        artikel_service: MicrotechArtikelService,
+        article_name_cache: dict[str, str],
+    ) -> str:
+        detail_name = (detail.name or "").strip()
+        if detail_name:
+            return detail_name
+
+        cached_name = article_name_cache.get(erp_nr)
+        if cached_name is not None:
+            return cached_name
+
+        article_name = ""
+        try:
+            found = artikel_service.find(erp_nr, index_field="ArtNr") or artikel_service.find(erp_nr)
+            if found:
+                article_name = str(artikel_service.get_name() or "").strip()
+        except Exception:
+            logger.exception(
+                "Failed to load article name (KuBez5) for erp_nr {} while building order positions.",
+                erp_nr,
+            )
+
+        article_name_cache[erp_nr] = article_name
+        return article_name
 
     @staticmethod
     def _set_vorgang_field(*, so_vorgang, field_name: str, value: str) -> None:
