@@ -45,6 +45,7 @@ ALLOWED_HOSTS = []
 
 INSTALLED_APPS = [
     'unfold',
+    'modeltranslation',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -126,7 +127,19 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/6.0/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = 'de'
+LANGUAGES = [
+    ('de', 'Deutsch'),
+    ('en', 'Englisch'),
+]
+
+MODELTRANSLATION_DEFAULT_LANGUAGE = 'de'
+MODELTRANSLATION_LANGUAGES = ('de', 'en')
+MODELTRANSLATION_FALLBACK_LANGUAGES = {
+    'default': ('de',),
+    'de': ('en',),
+    'en': ('de',),
+}
 
 TIME_ZONE = 'Europe/Berlin'
 
@@ -143,4 +156,12 @@ STATIC_URL = 'static/'
 
 UNFOLD = {
     "DASHBOARD_CALLBACK": "core.dashboard.dashboard_callback",
+    "EXTENSIONS": {
+        "modeltranslation": {
+            "flags": {
+                "de": "DE",
+                "en": "GB",
+            },
+        },
+    },
 }

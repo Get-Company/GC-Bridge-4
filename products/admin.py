@@ -3,6 +3,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.core.management import call_command
 from django.http import HttpResponseRedirect
 from django.urls import reverse
+from modeltranslation.admin import TabbedTranslationAdmin
 
 from unfold.decorators import action
 from unfold.enums import ActionVariant
@@ -29,7 +30,7 @@ class PriceInline(BaseTabularInline):
 
 
 @admin.register(Product)
-class ProductAdmin(BaseAdmin):
+class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
     list_display = ("sku", "name", "is_active", "created_at")
     search_fields = ("sku", "name")
     list_filter = ("is_active",)
