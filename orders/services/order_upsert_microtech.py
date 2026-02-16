@@ -115,8 +115,17 @@ class OrderUpsertMicrotechService(BaseService):
         vorgang_service: MicrotechVorgangService,
     ) -> str:
         existing_id = (order.erp_order_id or "").strip()
-        if existing_id and vorgang_service.find(existing_id):
-            return existing_id
+        if existing_id:
+            if vorgang_service.find(existing_id):
+                return existing_id
+            logger.warning(
+                "Stored erp_order_id {} for order {} not found in Microtech. "
+                "Creating a new Vorgang and replacing obsolete id.",
+                existing_id,
+                order.order_number,
+            )
+            self._clear_erp_order_id(order=order)
+            return ""
 
         # Primary business key for fallback search should be order_number.
         # Keep api_id only as backward-compatible fallback for records created before this change.
@@ -257,6 +266,13 @@ class OrderUpsertMicrotechService(BaseService):
         if not erp_order_id or order.erp_order_id == erp_order_id:
             return
         order.erp_order_id = erp_order_id
+        order.save(update_fields=["erp_order_id", "updated_at"])
+
+    @staticmethod
+    def _clear_erp_order_id(*, order: Order) -> None:
+        if not order.erp_order_id:
+            return
+        order.erp_order_id = ""
         order.save(update_fields=["erp_order_id", "updated_at"])
 
 
