@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandError
 from loguru import logger
@@ -24,31 +25,69 @@ class Command(BaseCommand):
             default=None,
             help="Django Order ID.",
         )
+        parser.add_argument(
+            "--log-file",
+            type=str,
+            default="tmp/logs/microtech_order_upsert.log",
+            help="Pfad fuer den detaillierten Vorgangs-Log.",
+        )
+
+    @staticmethod
+    def _add_file_sink(log_file: str) -> tuple[int, Path]:
+        path = Path(log_file)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        sink_id = logger.add(
+            str(path),
+            level="DEBUG",
+            enqueue=False,
+            backtrace=True,
+            diagnose=True,
+            rotation="10 MB",
+            encoding="utf-8",
+        )
+        return sink_id, path
 
     def handle(self, *args, **options):
         order_number = (options.get("order_number") or "").strip()
         order_id = options.get("id")
+        log_file = (options.get("log_file") or "").strip() or "tmp/logs/microtech_order_upsert.log"
+        sink_id, log_path = self._add_file_sink(log_file)
 
-        if order_id:
-            order = Order.objects.filter(pk=order_id).first()
-        elif order_number:
-            order = Order.objects.filter(order_number=order_number).first()
-        else:
-            raise CommandError("Bitte order_number oder --id angeben.")
-
-        if not order:
-            raise CommandError("Order nicht gefunden.")
-
+        logger.info("Starting Microtech order upsert run. log_file={}", log_path)
         try:
-            result = OrderUpsertMicrotechService().upsert_order(order)
-        except Exception as exc:
-            logger.exception("Microtech order upsert failed.")
-            raise CommandError(str(exc)) from exc
+            if order_id:
+                order = Order.objects.filter(pk=order_id).first()
+            elif order_number:
+                order = Order.objects.filter(order_number=order_number).first()
+            else:
+                raise CommandError("Bitte order_number oder --id angeben.")
 
-        payload = {
-            "order_id": order.id,
-            "order_number": order.order_number,
-            "erp_order_id": result.erp_order_id,
-            "is_new": result.is_new,
-        }
-        logger.info("{}", json.dumps(payload, ensure_ascii=True, indent=2, sort_keys=True))
+            if not order:
+                raise CommandError("Order nicht gefunden.")
+
+            logger.info(
+                "Selected order: id={}, order_number='{}', api_id='{}', erp_order_id='{}'.",
+                order.id,
+                order.order_number,
+                order.api_id,
+                order.erp_order_id,
+            )
+
+            try:
+                result = OrderUpsertMicrotechService().upsert_order(order)
+            except Exception as exc:
+                logger.exception("Microtech order upsert failed.")
+                raise CommandError(str(exc)) from exc
+
+            payload = {
+                "order_id": order.id,
+                "order_number": order.order_number,
+                "erp_order_id": result.erp_order_id,
+                "is_new": result.is_new,
+                "log_file": str(log_path),
+            }
+            logger.info("{}", json.dumps(payload, ensure_ascii=True, indent=2, sort_keys=True))
+            self.stdout.write(self.style.SUCCESS(json.dumps(payload, ensure_ascii=True)))
+        finally:
+            logger.info("Finished Microtech order upsert run. log_file={}", log_path)
+            logger.remove(sink_id)
