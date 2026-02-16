@@ -50,7 +50,9 @@ class OrderUpsertMicrotechService(BaseService):
 
             so_vorgang.Post()
 
-            erp_order_id = self._get_vorgang_field(so_vorgang=so_vorgang, field_name="BelegNr")
+            erp_order_id = (known_beleg_nr or "").strip()
+            if is_new and not erp_order_id:
+                erp_order_id = self._get_vorgang_field(so_vorgang=so_vorgang, field_name="BelegNr")
             if not erp_order_id:
                 erp_order_id = known_beleg_nr or self._find_existing_beleg_nr(
                     order=order,
