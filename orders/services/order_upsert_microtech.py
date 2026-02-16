@@ -63,9 +63,7 @@ class OrderUpsertMicrotechService(BaseService):
                 is_new,
             )
 
-        if order.erp_order_id != erp_order_id:
-            order.erp_order_id = erp_order_id
-            order.save(update_fields=["erp_order_id", "updated_at"])
+        self._persist_erp_order_id(order=order, erp_order_id=erp_order_id)
 
         return OrderUpsertResult(order=order, erp_order_id=erp_order_id, is_new=is_new)
 
@@ -100,7 +98,15 @@ class OrderUpsertMicrotechService(BaseService):
             return False, existing_beleg_nr
 
         so_vorgang.Append(DEFAULT_ORDER_TYPE_NUMBER, order.customer.erp_nr)
-        return True, ""
+        new_beleg_nr = self._get_vorgang_field(so_vorgang=so_vorgang, field_name="BelegNr")
+        if new_beleg_nr:
+            self._persist_erp_order_id(order=order, erp_order_id=new_beleg_nr)
+            logger.info(
+                "Captured Microtech BelegNr {} directly after Append for order {}.",
+                new_beleg_nr,
+                order.order_number,
+            )
+        return True, new_beleg_nr
 
     def _find_existing_beleg_nr(
         self,
@@ -112,18 +118,24 @@ class OrderUpsertMicrotechService(BaseService):
         if existing_id and vorgang_service.find(existing_id):
             return existing_id
 
-        auftr_nr = (order.api_id or "").strip()
-        if not auftr_nr:
-            return ""
+        # Primary business key for fallback search should be order_number.
+        # Keep api_id only as backward-compatible fallback for records created before this change.
+        auftr_nr_candidates: list[str] = []
+        order_number = (order.order_number or "").strip()
+        api_id = (order.api_id or "").strip()
+        if order_number:
+            auftr_nr_candidates.append(order_number)
+        if api_id and api_id not in auftr_nr_candidates:
+            auftr_nr_candidates.append(api_id)
 
-        if not vorgang_service.set_filter({"AuftrNr": auftr_nr}):
-            return ""
+        customer_erp_nr = (order.customer.erp_nr or "").strip() if order.customer else ""
 
-        try:
-            if vorgang_service.dataset.RecordCount < 1:
-                return ""
-            vorgang_service.dataset.First()
-            beleg_nr = str(vorgang_service.get_field("BelegNr") or "").strip()
+        for auftr_nr in auftr_nr_candidates:
+            beleg_nr = self._find_beleg_nr_by_auftr_nr(
+                vorgang_service=vorgang_service,
+                auftr_nr=auftr_nr,
+                customer_erp_nr=customer_erp_nr,
+            )
             if beleg_nr:
                 logger.info(
                     "Found existing Vorgang by AuftrNr for order {} (AuftrNr={}, BelegNr={}).",
@@ -131,7 +143,38 @@ class OrderUpsertMicrotechService(BaseService):
                     auftr_nr,
                     beleg_nr,
                 )
-            return beleg_nr
+                return beleg_nr
+
+        return ""
+
+    @staticmethod
+    def _find_beleg_nr_by_auftr_nr(
+        *,
+        vorgang_service: MicrotechVorgangService,
+        auftr_nr: str,
+        customer_erp_nr: str,
+    ) -> str:
+        if not auftr_nr:
+            return ""
+        if not vorgang_service.set_filter({"AuftrNr": auftr_nr}):
+            return ""
+
+        try:
+            dataset = vorgang_service.dataset
+            if dataset.RecordCount < 1:
+                return ""
+
+            dataset.First()
+            first_beleg_nr = ""
+            while not dataset.Eof:
+                beleg_nr = str(vorgang_service.get_field("BelegNr") or "").strip()
+                adr_nr = str(vorgang_service.get_field("AdrNr") or "").strip()
+                if beleg_nr and not first_beleg_nr:
+                    first_beleg_nr = beleg_nr
+                if beleg_nr and customer_erp_nr and adr_nr == customer_erp_nr:
+                    return beleg_nr
+                dataset.Next()
+            return first_beleg_nr
         finally:
             vorgang_service.clear_filter()
 
@@ -143,7 +186,8 @@ class OrderUpsertMicrotechService(BaseService):
             positionen.DataSet.Delete()
 
     def _set_header_fields(self, *, order: Order, so_vorgang) -> None:
-        self._set_vorgang_field(so_vorgang=so_vorgang, field_name="AuftrNr", value=order.api_id)
+        auftr_nr = (order.order_number or "").strip() or (order.api_id or "").strip()
+        self._set_vorgang_field(so_vorgang=so_vorgang, field_name="AuftrNr", value=auftr_nr)
         description = order.description or f"Shopware Bestellung {order.order_number}"
         self._set_vorgang_field(so_vorgang=so_vorgang, field_name="Bez", value=description)
 
@@ -206,6 +250,14 @@ class OrderUpsertMicrotechService(BaseService):
         except Exception:
             logger.exception("Konnte Feld '{}' aus soVorgang nicht lesen.", field_name)
             return ""
+
+    @staticmethod
+    def _persist_erp_order_id(*, order: Order, erp_order_id: str) -> None:
+        erp_order_id = (erp_order_id or "").strip()
+        if not erp_order_id or order.erp_order_id == erp_order_id:
+            return
+        order.erp_order_id = erp_order_id
+        order.save(update_fields=["erp_order_id", "updated_at"])
 
 
 __all__ = ["OrderUpsertMicrotechService", "OrderUpsertResult"]
