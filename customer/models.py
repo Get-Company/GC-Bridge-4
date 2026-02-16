@@ -1,19 +1,22 @@
 from django.db import models
 from django.db.models import Q
+from django.utils.translation import gettext_lazy as _
 
 from core.models import BaseModel
 
 
 class Customer(BaseModel):
-    erp_nr = models.CharField(max_length=64, unique=True)
-    erp_id = models.IntegerField(null=True, blank=True, unique=True)
-    name = models.CharField(max_length=255, blank=True, default="")
-    email = models.EmailField(max_length=255, blank=True, default="")
-    api_id = models.CharField(max_length=255, blank=True, default="")
-    vat_id = models.CharField(max_length=255, blank=True, default="")
-    is_gross = models.BooleanField(default=True)
+    erp_nr = models.CharField(max_length=64, unique=True, verbose_name=_("ERP-Nummer"))
+    erp_id = models.IntegerField(null=True, blank=True, unique=True, verbose_name=_("ERP-ID"))
+    name = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Name"))
+    email = models.EmailField(max_length=255, blank=True, default="", verbose_name=_("E-Mail"))
+    api_id = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Shopware Kunden-ID"))
+    vat_id = models.CharField(max_length=255, blank=True, default="", verbose_name=_("USt-IdNr"))
+    is_gross = models.BooleanField(default=True, verbose_name=_("Bruttopreise"))
 
     class Meta:
+        verbose_name = _("Kunde")
+        verbose_name_plural = _("Kunden")
         ordering = ("erp_nr",)
 
     @property
@@ -43,31 +46,48 @@ class Address(BaseModel):
         Customer,
         related_name="addresses",
         on_delete=models.CASCADE,
+        verbose_name=_("Kunde"),
     )
-    erp_combined_id = models.CharField(max_length=255, null=True, blank=True, unique=True)
-    api_id = models.CharField(max_length=255, blank=True, default="")
-    erp_nr = models.IntegerField(null=True, blank=True)
-    erp_ans_id = models.IntegerField(null=True, blank=True)
-    erp_ans_nr = models.IntegerField(null=True, blank=True)
-    erp_asp_id = models.IntegerField(null=True, blank=True)
-    erp_asp_nr = models.IntegerField(null=True, blank=True)
-    name1 = models.CharField(max_length=255, blank=True, default="")
-    name2 = models.CharField(max_length=255, blank=True, default="")
-    name3 = models.CharField(max_length=255, blank=True, default="")
-    department = models.CharField(max_length=255, blank=True, default="")
-    street = models.CharField(max_length=255, blank=True, default="")
-    postal_code = models.CharField(max_length=255, blank=True, default="")
-    city = models.CharField(max_length=255, blank=True, default="")
-    country_code = models.CharField(max_length=8, blank=True, default="")
-    email = models.EmailField(max_length=255, blank=True, default="")
-    title = models.CharField(max_length=255, blank=True, default="")
-    first_name = models.CharField(max_length=255, blank=True, default="")
-    last_name = models.CharField(max_length=255, blank=True, default="")
-    phone = models.CharField(max_length=255, blank=True, default="")
-    is_shipping = models.BooleanField(default=False)
-    is_invoice = models.BooleanField(default=False)
+    erp_combined_id = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        unique=True,
+        verbose_name=_("ERP Kombi-ID"),
+    )
+    api_id = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Shopware Adress-ID"))
+    erp_nr = models.IntegerField(null=True, blank=True, verbose_name=_("ERP-Nummer"))
+    erp_ans_id = models.IntegerField(null=True, blank=True, verbose_name=_("Anschrift-ID"))
+    erp_ans_nr = models.IntegerField(null=True, blank=True, verbose_name=_("Anschrift-Nummer"))
+    erp_asp_id = models.IntegerField(
+        null=True,
+        blank=True,
+        verbose_name=_("Ansprechpartner-ID"),
+    )
+    erp_asp_nr = models.IntegerField(
+        null=True,
+        blank=True,
+        verbose_name=_("Ansprechpartner-Nummer"),
+    )
+    name1 = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Name 1"))
+    name2 = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Name 2"))
+    name3 = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Name 3"))
+    department = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Abteilung"))
+    street = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Strasse"))
+    postal_code = models.CharField(max_length=255, blank=True, default="", verbose_name=_("PLZ"))
+    city = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Ort"))
+    country_code = models.CharField(max_length=8, blank=True, default="", verbose_name=_("Laendercode"))
+    email = models.EmailField(max_length=255, blank=True, default="", verbose_name=_("E-Mail"))
+    title = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Titel"))
+    first_name = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Vorname"))
+    last_name = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Nachname"))
+    phone = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Telefon"))
+    is_shipping = models.BooleanField(default=False, verbose_name=_("Lieferanschrift"))
+    is_invoice = models.BooleanField(default=False, verbose_name=_("Rechnungsanschrift"))
 
     class Meta:
+        verbose_name = _("Adresse")
+        verbose_name_plural = _("Adressen")
         ordering = ("customer", "erp_ans_id", "erp_asp_id")
         constraints = [
             models.UniqueConstraint(

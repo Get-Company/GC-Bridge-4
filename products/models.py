@@ -2,16 +2,19 @@ from decimal import Decimal
 
 from django.db import models
 from django.utils import timezone
+from django.utils.translation import gettext_lazy as _
 
 from core.models import BaseModel
 from shopware.models import ShopwareSettings
 
 
 class Tax(BaseModel):
-    name = models.CharField(max_length=64)
-    rate = models.DecimalField(max_digits=5, decimal_places=2)
+    name = models.CharField(max_length=64, verbose_name=_("Steuerbezeichnung"))
+    rate = models.DecimalField(max_digits=5, decimal_places=2, verbose_name=_("Steuersatz (%)"))
 
     class Meta:
+        verbose_name = _("Steuer")
+        verbose_name_plural = _("Steuern")
         ordering = ("name",)
 
     def __str__(self) -> str:
@@ -19,11 +22,19 @@ class Tax(BaseModel):
 
 
 class Category(BaseModel):
-    name = models.CharField(max_length=128)
-    slug = models.SlugField(max_length=160, unique=True)
-    parent = models.ForeignKey("self", on_delete=models.PROTECT, null=True, blank=True)
+    name = models.CharField(max_length=128, verbose_name=_("Name"))
+    slug = models.SlugField(max_length=160, unique=True, verbose_name=_("Slug"))
+    parent = models.ForeignKey(
+        "self",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        verbose_name=_("Oberkategorie"),
+    )
 
     class Meta:
+        verbose_name = _("Kategorie")
+        verbose_name_plural = _("Kategorien")
         ordering = ("name",)
 
     def __str__(self) -> str:
@@ -31,10 +42,12 @@ class Category(BaseModel):
 
 
 class Image(BaseModel):
-    path = models.CharField(max_length=255)
-    alt_text = models.CharField(max_length=255, blank=True)
+    path = models.CharField(max_length=255, verbose_name=_("Bildpfad"))
+    alt_text = models.CharField(max_length=255, blank=True, verbose_name=_("Alternativtext"))
 
     class Meta:
+        verbose_name = _("Bild")
+        verbose_name_plural = _("Bilder")
         ordering = ("id",)
 
     @property
@@ -51,23 +64,41 @@ class Image(BaseModel):
 
 
 class Product(BaseModel):
-    sku = models.CharField(max_length=64, unique=True, blank=True, null=True)
-    erp_nr = models.CharField(max_length=64, unique=True)
-    gtin = models.CharField(max_length=32, blank=True)
-    name = models.CharField(max_length=255, null=True, blank=True)
-    sort_order = models.PositiveIntegerField(default=1000)
-    description = models.TextField(null=True, blank=True)
-    description_short = models.TextField(null=True, blank=True)
-    is_active = models.BooleanField(default=True)
-    factor = models.IntegerField(null=True, blank=True)
-    unit = models.CharField(max_length=255, null=True, blank=True)
-    min_purchase = models.IntegerField(null=True, blank=True)
-    purchase_unit = models.IntegerField(null=True, blank=True)
-    tax = models.ForeignKey(Tax, on_delete=models.PROTECT, null=True, blank=True)
-    categories = models.ManyToManyField(Category, blank=True)
-    images = models.ManyToManyField(Image, blank=True)
+    sku = models.CharField(
+        max_length=64,
+        unique=True,
+        blank=True,
+        null=True,
+        verbose_name=_("Artikelnummer (SKU)"),
+    )
+    erp_nr = models.CharField(max_length=64, unique=True, verbose_name=_("ERP-Nummer"))
+    gtin = models.CharField(max_length=32, blank=True, verbose_name=_("GTIN"))
+    name = models.CharField(max_length=255, null=True, blank=True, verbose_name=_("Name"))
+    sort_order = models.PositiveIntegerField(default=1000, verbose_name=_("Sortierung"))
+    description = models.TextField(null=True, blank=True, verbose_name=_("Beschreibung"))
+    description_short = models.TextField(
+        null=True,
+        blank=True,
+        verbose_name=_("Kurzbeschreibung"),
+    )
+    is_active = models.BooleanField(default=True, verbose_name=_("Aktiv"))
+    factor = models.IntegerField(null=True, blank=True, verbose_name=_("Faktor"))
+    unit = models.CharField(max_length=255, null=True, blank=True, verbose_name=_("Einheit"))
+    min_purchase = models.IntegerField(null=True, blank=True, verbose_name=_("Mindestabnahme"))
+    purchase_unit = models.IntegerField(null=True, blank=True, verbose_name=_("Kaufeinheit"))
+    tax = models.ForeignKey(
+        Tax,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        verbose_name=_("Steuer"),
+    )
+    categories = models.ManyToManyField(Category, blank=True, verbose_name=_("Kategorien"))
+    images = models.ManyToManyField(Image, blank=True, verbose_name=_("Bilder"))
 
     class Meta:
+        verbose_name = _("Produkt")
+        verbose_name_plural = _("Produkte")
         ordering = ("erp_nr", "name")
 
     def __str__(self) -> str:
@@ -75,22 +106,50 @@ class Product(BaseModel):
 
 
 class Price(BaseModel):
-    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="prices")
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE,
+        related_name="prices",
+        verbose_name=_("Produkt"),
+    )
     sales_channel = models.ForeignKey(
         ShopwareSettings,
         on_delete=models.CASCADE,
         related_name="prices",
         null=True,
         blank=True,
+        verbose_name=_("Verkaufskanal"),
     )
-    price = models.DecimalField(max_digits=10, decimal_places=2)
-    rebate_quantity = models.IntegerField(null=True, blank=True)
-    rebate_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-    special_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-    special_start_date = models.DateTimeField(null=True, blank=True)
-    special_end_date = models.DateTimeField(null=True, blank=True)
+    price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name=_("Preis"))
+    rebate_quantity = models.IntegerField(null=True, blank=True, verbose_name=_("Staffelmenge"))
+    rebate_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name=_("Staffelpreis"),
+    )
+    special_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name=_("Sonderpreis"),
+    )
+    special_start_date = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name=_("Sonderpreis ab"),
+    )
+    special_end_date = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name=_("Sonderpreis bis"),
+    )
 
     class Meta:
+        verbose_name = _("Preis")
+        verbose_name_plural = _("Preise")
         ordering = ("product", "sales_channel", "price")
         constraints = [
             models.UniqueConstraint(
@@ -162,14 +221,17 @@ class Storage(BaseModel):
         blank=True,
         on_delete=models.CASCADE,
         related_name="storage",
+        verbose_name=_("Produkt"),
     )
-    stock = models.IntegerField(null=True, blank=True)
-    location = models.CharField(max_length=255, null=True, blank=True)
-    virtual_stock = models.PositiveIntegerField(default=0)
+    stock = models.IntegerField(null=True, blank=True, verbose_name=_("Bestand"))
+    location = models.CharField(max_length=255, null=True, blank=True, verbose_name=_("Lagerort"))
+    virtual_stock = models.PositiveIntegerField(default=0, verbose_name=_("Virtueller Bestand"))
 
     @property
     def get_stock(self) -> int:
         return self.virtual_stock if self.virtual_stock > 0 else (self.stock or 0)
 
     class Meta:
+        verbose_name = _("Lagerbestand")
+        verbose_name_plural = _("Lagerbestaende")
         ordering = ("product",)
