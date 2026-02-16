@@ -1,51 +1,63 @@
 # GC-Bridge-4
 
-Django-based integration bridge project.
+Django integration bridge between Microtech and Shopware 6.
 
-## Base Classes (Abstract)
+## Inhaltsverzeichnis
 
-Use these as the default foundation across the project:
+- [Projektueberblick](#projektueberblick)
+- [Grundregeln im Projekt](#grundregeln-im-projekt)
+- [Lokales Setup](#lokales-setup)
+- [Umgebungsvariablen (.env)](#umgebungsvariablen-env)
+- [Sync-Commands](#sync-commands)
+  - [Produkte: Microtech -> Django -> Shopware](#produkte-microtech---django---shopware)
+  - [Bestellungen: Shopware -> Django -> Microtech](#bestellungen-shopware---django---microtech)
+- [Adminer / Datenbank](#adminer--datenbank)
 
-- `BaseModel` (`core/models/base.py`) provides `created_at`/`updated_at` fields.
-- `BaseAdmin` (`core/admin.py`) provides Unfold-based admin defaults.
-- `BaseService` (`core/services/base.py`) provides basic CRUD helpers.
+## Projektueberblick
 
-## Installation (Local Dev)
+Wichtige Basisklassen:
 
-1. Install Python 3.12+ and Git.
-2. Install Docker + Docker Compose (needed for PostgreSQL/Adminer).
-3. Create a virtual environment (optional but recommended).
-4. Install dependencies:
-   - `uv sync` (recommended), or
-   - `python -m pip install -r requirements.txt`
-5. Create `.env` in project root (see example below).
-6. Start database services: `docker compose up -d`.
-7. Run migrations: `python manage.py migrate`.
-8. Create admin user: `python manage.py createsuperuser`.
-9. Start the dev server: `python manage.py runserver`.
-10. Open Adminer at `http://localhost:8082`.
+- `BaseModel` (`core/models/base.py`) mit `created_at` und `updated_at`
+- `BaseAdmin` (`core/admin.py`) auf Basis von Unfold
+- `BaseService` (`core/services/base.py`) als Service-Grundlage
 
-## Docker (PostgreSQL + Adminer)
+## Grundregeln im Projekt
 
-This repo ships a local Docker setup for PostgreSQL plus Adminer.
+- Secrets nie committen, nur in lokale `.env`.
+- Fuer neue Modelle `BaseModel` verwenden.
+- Fuer neue Admin-Klassen `BaseAdmin` verwenden.
+- Fuer neue Services `BaseService` verwenden.
+- Lokale Python-Commands immer mit `.venv/bin/python` ausfuehren.
 
-1. Ensure Docker + Docker Compose are installed.
-2. Start services: `docker compose up -d`.
-3. Adminer UI: `http://localhost:8082`.
+## Lokales Setup
 
-Connection parameters (Adminer):
-
-- System: PostgreSQL
-- Server: `localhost` (use `db` if Django runs inside Docker)
-- Username: from `.env` (`POSTGRES_USER`)
-- Password: from `.env` (`POSTGRES_PASSWORD`)
-- Database: from `.env` (`POSTGRES_DB`)
-
-## Environment
-
-Create or update `.env` (not committed) for DB access:
-
+1. Abhaengigkeiten installieren:
+```bash
+uv sync
 ```
+2. `.env` im Projektroot anlegen (siehe unten).
+3. Datenbank starten:
+```bash
+docker compose up -d
+```
+4. Migrationen ausfuehren:
+```bash
+.venv/bin/python manage.py migrate
+```
+5. Superuser anlegen:
+```bash
+.venv/bin/python manage.py createsuperuser
+```
+6. Dev-Server starten:
+```bash
+.venv/bin/python manage.py runserver
+```
+
+## Umgebungsvariablen (.env)
+
+Beispiel:
+
+```dotenv
 POSTGRES_DB=gc_bridge_4
 POSTGRES_USER=gc_bridge_4
 POSTGRES_PASSWORD=gc_bridge_4_dev
@@ -58,10 +70,61 @@ SHOPWARE6_SECRET=your-client-secret
 SHOPWARE6_GRANT_TYPE=client_credentials
 SHOPWARE6_USER=
 SHOPWARE6_PASSWORD=
+
+MICROTECH_MANDANT=
+MICROTECH_FIRMA=
+MICROTECH_BENUTZER=
+MICROTECH_PASSWORT=
 ```
 
-Django reads `.env` on startup and uses PostgreSQL by default. Update `POSTGRES_HOST` to `db` when running Django inside Docker on the server.
+## Sync-Commands
 
-## Notes
+### Produkte: Microtech -> Django -> Shopware
 
-- Configuration and secrets should live in a local `.env` file (not committed).
+Gesamtlauf:
+
+```bash
+.venv/bin/python manage.py microtech_sync_products --all
+.venv/bin/python manage.py shopware_sync_products --all
+```
+
+Nur bestimmte Artikel:
+
+```bash
+.venv/bin/python manage.py microtech_sync_products 204113 123456
+.venv/bin/python manage.py shopware_sync_products 204113 123456
+```
+
+Mit Limit/Batch:
+
+```bash
+.venv/bin/python manage.py microtech_sync_products --all --limit 100
+.venv/bin/python manage.py shopware_sync_products --all --limit 100 --batch-size 50
+```
+
+### Bestellungen: Shopware -> Django -> Microtech
+
+Offene Shopware-Bestellungen nach Django:
+
+```bash
+.venv/bin/python manage.py shopware_sync_open_orders
+```
+
+Eine Bestellung nach Microtech upserten:
+
+```bash
+.venv/bin/python manage.py microtech_order_upsert <BESTELLNUMMER>
+```
+
+Alternativ per Django-ID:
+
+```bash
+.venv/bin/python manage.py microtech_order_upsert --id <ORDER_ID>
+```
+
+## Adminer / Datenbank
+
+- Adminer URL: `http://localhost:8082`
+- System: `PostgreSQL`
+- Server: `localhost` (oder `db`, falls Django im Docker-Container laeuft)
+- Username/Password/Database: aus `.env`
