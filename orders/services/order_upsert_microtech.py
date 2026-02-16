@@ -38,7 +38,7 @@ class OrderUpsertMicrotechService(BaseService):
             if so_vorgang is None:
                 raise ValueError("SpecialObject 'soVorgang' konnte nicht geladen werden.")
 
-            is_new = self._open_or_create_vorgang(
+            is_new, known_beleg_nr = self._open_or_create_vorgang(
                 order=order,
                 vorgang_service=vorgang_service,
                 so_vorgang=so_vorgang,
@@ -51,6 +51,11 @@ class OrderUpsertMicrotechService(BaseService):
             so_vorgang.Post()
 
             erp_order_id = self._get_vorgang_field(so_vorgang=so_vorgang, field_name="BelegNr")
+            if not erp_order_id:
+                erp_order_id = known_beleg_nr or self._find_existing_beleg_nr(
+                    order=order,
+                    vorgang_service=vorgang_service,
+                )
             logger.info(
                 "Order {} posted as Vorgang BelegNr={} (new={}).",
                 order.order_number,
@@ -82,16 +87,53 @@ class OrderUpsertMicrotechService(BaseService):
         order: Order,
         vorgang_service: MicrotechVorgangService,
         so_vorgang,
-    ) -> bool:
-        existing_id = (order.erp_order_id or "").strip()
-
-        if existing_id and vorgang_service.find(existing_id):
-            so_vorgang.Edit(existing_id)
+    ) -> tuple[bool, str]:
+        existing_beleg_nr = self._find_existing_beleg_nr(order=order, vorgang_service=vorgang_service)
+        if existing_beleg_nr:
+            so_vorgang.Edit(existing_beleg_nr)
             self._delete_all_positions(so_vorgang)
-            return False
+            logger.info(
+                "Reusing existing Vorgang for order {} (BelegNr={}).",
+                order.order_number,
+                existing_beleg_nr,
+            )
+            return False, existing_beleg_nr
 
         so_vorgang.Append(DEFAULT_ORDER_TYPE_NUMBER, order.customer.erp_nr)
-        return True
+        return True, ""
+
+    def _find_existing_beleg_nr(
+        self,
+        *,
+        order: Order,
+        vorgang_service: MicrotechVorgangService,
+    ) -> str:
+        existing_id = (order.erp_order_id or "").strip()
+        if existing_id and vorgang_service.find(existing_id):
+            return existing_id
+
+        auftr_nr = (order.api_id or "").strip()
+        if not auftr_nr:
+            return ""
+
+        if not vorgang_service.set_filter({"AuftrNr": auftr_nr}):
+            return ""
+
+        try:
+            if vorgang_service.dataset.RecordCount < 1:
+                return ""
+            vorgang_service.dataset.First()
+            beleg_nr = str(vorgang_service.get_field("BelegNr") or "").strip()
+            if beleg_nr:
+                logger.info(
+                    "Found existing Vorgang by AuftrNr for order {} (AuftrNr={}, BelegNr={}).",
+                    order.order_number,
+                    auftr_nr,
+                    beleg_nr,
+                )
+            return beleg_nr
+        finally:
+            vorgang_service.clear_filter()
 
     @staticmethod
     def _delete_all_positions(so_vorgang) -> None:
