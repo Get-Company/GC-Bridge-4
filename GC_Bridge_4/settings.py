@@ -48,6 +48,7 @@ ALLOWED_HOSTS = []
 
 INSTALLED_APPS = [
     'unfold',
+    'unfold.contrib.forms',
     'modeltranslation',
     'django.contrib.admin',
     'django.contrib.auth',

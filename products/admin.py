@@ -31,6 +31,15 @@ class PriceInline(BaseTabularInline):
 
 @admin.register(Product)
 class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
+    formfield_overrides = {
+        **getattr(TabbedTranslationAdmin, "formfield_overrides", {}),
+        **BaseAdmin.formfield_overrides,
+    }
+    compressed_fields = BaseAdmin.compressed_fields
+    warn_unsaved_form = BaseAdmin.warn_unsaved_form
+    change_form_show_cancel_button = BaseAdmin.change_form_show_cancel_button
+    list_filter_sheet = BaseAdmin.list_filter_sheet
+    list_horizontal_scrollbar_top = BaseAdmin.list_horizontal_scrollbar_top
     list_display = ("erp_nr", "name", "is_active", "created_at")
     search_fields = ("erp_nr", "sku", "name")
     list_filter = ("is_active",)
