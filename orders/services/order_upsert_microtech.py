@@ -35,6 +35,8 @@ class OrderUpsertMicrotechService(BaseService):
         with microtech_connection() as erp:
             vorgang_service = MicrotechVorgangService(erp=erp)
             so_vorgang = vorgang_service.get_special_object("soVorgang")
+            if so_vorgang is None:
+                raise ValueError("SpecialObject 'soVorgang' konnte nicht geladen werden.")
 
             is_new = self._open_or_create_vorgang(
                 order=order,
@@ -42,13 +44,13 @@ class OrderUpsertMicrotechService(BaseService):
                 so_vorgang=so_vorgang,
             )
 
-            self._set_header_fields(order=order, vorgang_service=vorgang_service)
-            self._add_positions(order=order, vorgang_service=vorgang_service)
-            self._add_shipping_position(order=order, vorgang_service=vorgang_service)
+            self._set_header_fields(order=order, so_vorgang=so_vorgang)
+            self._add_positions(order=order, so_vorgang=so_vorgang)
+            self._add_shipping_position(order=order, so_vorgang=so_vorgang)
 
-            vorgang_service.post()
+            so_vorgang.Post()
 
-            erp_order_id = str(vorgang_service.get_field("BelegNr") or "")
+            erp_order_id = self._get_vorgang_field(so_vorgang=so_vorgang, field_name="BelegNr")
             logger.info(
                 "Order {} posted as Vorgang BelegNr={} (new={}).",
                 order.order_number,
@@ -84,7 +86,7 @@ class OrderUpsertMicrotechService(BaseService):
         existing_id = (order.erp_order_id or "").strip()
 
         if existing_id and vorgang_service.find(existing_id):
-            vorgang_service.edit()
+            so_vorgang.Edit(existing_id)
             self._delete_all_positions(so_vorgang)
             return False
 
@@ -96,15 +98,14 @@ class OrderUpsertMicrotechService(BaseService):
         positionen = so_vorgang.Positionen
         while positionen.DataSet.RecordCount > 0:
             positionen.DataSet.First()
-            positionen.Delete()
+            positionen.DataSet.Delete()
 
-    def _set_header_fields(self, *, order: Order, vorgang_service: MicrotechVorgangService) -> None:
-        vorgang_service.set_field("AuftrNr", order.api_id)
+    def _set_header_fields(self, *, order: Order, so_vorgang) -> None:
+        self._set_vorgang_field(so_vorgang=so_vorgang, field_name="AuftrNr", value=order.api_id)
         description = order.description or f"Shopware Bestellung {order.order_number}"
-        vorgang_service.set_field("Bez", description)
+        self._set_vorgang_field(so_vorgang=so_vorgang, field_name="Bez", value=description)
 
-    def _add_positions(self, *, order: Order, vorgang_service: MicrotechVorgangService) -> None:
-        so_vorgang = vorgang_service.get_special_object("soVorgang")
+    def _add_positions(self, *, order: Order, so_vorgang) -> None:
         details: list[OrderDetail] = list(order.details.all())
 
         for detail in details:
@@ -126,11 +127,10 @@ class OrderUpsertMicrotechService(BaseService):
                 is_gross=order.customer.is_gross,
             )
 
-    def _add_shipping_position(self, *, order: Order, vorgang_service: MicrotechVorgangService) -> None:
+    def _add_shipping_position(self, *, order: Order, so_vorgang) -> None:
         if not order.shipping_costs or order.shipping_costs <= Decimal("0"):
             return
 
-        so_vorgang = vorgang_service.get_special_object("soVorgang")
         so_vorgang.Positionen.Add(1, DEFAULT_UNIT, DEFAULT_SHIPPING_ERP_NR)
         self._set_position_price(
             so_vorgang=so_vorgang,
@@ -140,12 +140,30 @@ class OrderUpsertMicrotechService(BaseService):
 
     @staticmethod
     def _set_position_price(*, so_vorgang, price: Decimal, is_gross: bool) -> None:
-        epr = so_vorgang.Positionen.EPr.GetEditObject(2)
+        so_vorgang.Positionen.DataSet.Edit()
+        epr = so_vorgang.Positionen.DataSet.Fields("EPr").GetEditObject(2)
         if is_gross:
             epr.GesBrutto = float(price)
         else:
             epr.GesNetto = float(price)
         epr.Save()
+        so_vorgang.Positionen.DataSet.Post()
+
+    @staticmethod
+    def _set_vorgang_field(*, so_vorgang, field_name: str, value: str) -> None:
+        if value is None:
+            return
+        field = so_vorgang.DataSet.Fields.Item(field_name)
+        field.AsString = str(value)
+
+    @staticmethod
+    def _get_vorgang_field(*, so_vorgang, field_name: str) -> str:
+        try:
+            field = so_vorgang.DataSet.Fields.Item(field_name)
+            return str(field.AsString or "")
+        except Exception:
+            logger.exception("Konnte Feld '{}' aus soVorgang nicht lesen.", field_name)
+            return ""
 
 
 __all__ = ["OrderUpsertMicrotechService", "OrderUpsertResult"]
