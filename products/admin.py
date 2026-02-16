@@ -11,7 +11,7 @@ from unfold.enums import ActionVariant
 from core.admin import BaseAdmin, BaseTabularInline
 from core.admin_utils import log_admin_change
 from shopware.services import ProductService
-from .models import Price, Product, Storage
+from .models import Category, Price, Product, Storage, Tax
 
 
 class PriceInline(BaseTabularInline):
@@ -210,3 +210,24 @@ class PriceAdmin(BaseAdmin):
     @admin.display(boolean=True, description="Sonderpreis aktiv")
     def special_active(self, obj: Price) -> bool:
         return obj.is_special_active
+
+
+@admin.register(Storage)
+class StorageAdmin(BaseAdmin):
+    list_display = ("product", "stock", "virtual_stock", "location", "created_at")
+    search_fields = ("product__erp_nr", "product__name", "location")
+    list_filter = ("created_at", "updated_at")
+
+
+@admin.register(Category)
+class CategoryAdmin(BaseAdmin):
+    list_display = ("name", "slug", "parent", "created_at")
+    search_fields = ("name", "slug", "parent__name")
+    list_filter = ("created_at", "updated_at")
+
+
+@admin.register(Tax)
+class TaxAdmin(BaseAdmin):
+    list_display = ("name", "rate", "created_at")
+    search_fields = ("name",)
+    list_filter = ("created_at", "updated_at")
