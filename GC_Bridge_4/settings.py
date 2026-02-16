@@ -13,6 +13,9 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 import os
 from pathlib import Path
 
+from django.urls import reverse_lazy
+from django.utils.translation import gettext_lazy as _
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -155,13 +158,131 @@ STATIC_URL = 'static/'
 
 
 UNFOLD = {
+    "SITE_TITLE": "GC-Bridge Admin",
+    "SITE_HEADER": "GC-Bridge",
+    "SITE_SUBHEADER": "Shopware <-> microtech",
+    "SITE_SYMBOL": "hub",
+    "SITE_URL": "/",
+    "SHOW_HISTORY": True,
+    "SHOW_VIEW_ON_SITE": False,
+    "SHOW_BACK_BUTTON": False,
+    "ENVIRONMENT": "core.unfold.environment_callback",
     "DASHBOARD_CALLBACK": "core.dashboard.dashboard_callback",
     "EXTENSIONS": {
         "modeltranslation": {
             "flags": {
                 "de": "DE",
-                "en": "GB",
+                "en": "EN",
             },
         },
+    },
+    "SIDEBAR": {
+        "show_search": True,
+        "command_search": False,
+        "show_all_applications": False,
+        "navigation": [
+            {
+                "title": _("Allgemein"),
+                "separator": True,
+                "collapsible": True,
+                "items": [
+                    {
+                        "title": _("Dashboard"),
+                        "icon": "dashboard",
+                        "link": reverse_lazy("admin:index"),
+                    },
+                ],
+            },
+            {
+                "title": _("Auftraege"),
+                "separator": True,
+                "collapsible": True,
+                "items": [
+                    {
+                        "title": _("Bestellungen"),
+                        "icon": "shopping_cart",
+                        "link": reverse_lazy("admin:orders_order_changelist"),
+                    },
+                    {
+                        "title": _("Bestellpositionen"),
+                        "icon": "receipt_long",
+                        "link": reverse_lazy("admin:orders_orderdetail_changelist"),
+                    },
+                ],
+            },
+            {
+                "title": _("Kunden"),
+                "separator": True,
+                "collapsible": True,
+                "items": [
+                    {
+                        "title": _("Kunden"),
+                        "icon": "people",
+                        "link": reverse_lazy("admin:customer_customer_changelist"),
+                    },
+                    {
+                        "title": _("Adressen"),
+                        "icon": "home",
+                        "link": reverse_lazy("admin:customer_address_changelist"),
+                    },
+                ],
+            },
+            {
+                "title": _("Produkte"),
+                "separator": True,
+                "collapsible": True,
+                "items": [
+                    {
+                        "title": _("Produkte"),
+                        "icon": "inventory_2",
+                        "link": reverse_lazy("admin:products_product_changelist"),
+                    },
+                    {
+                        "title": _("Preise"),
+                        "icon": "sell",
+                        "link": reverse_lazy("admin:products_price_changelist"),
+                    },
+                    {
+                        "title": _("Lager"),
+                        "icon": "warehouse",
+                        "link": reverse_lazy("admin:products_storage_changelist"),
+                    },
+                    {
+                        "title": _("Kategorien"),
+                        "icon": "category",
+                        "link": reverse_lazy("admin:products_category_changelist"),
+                    },
+                    {
+                        "title": _("Steuern"),
+                        "icon": "percent",
+                        "link": reverse_lazy("admin:products_tax_changelist"),
+                    },
+                ],
+            },
+            {
+                "title": _("Konfiguration"),
+                "separator": True,
+                "collapsible": True,
+                "items": [
+                    {
+                        "title": _("Shopware"),
+                        "icon": "settings",
+                        "link": reverse_lazy("admin:shopware_shopwaresettings_changelist"),
+                    },
+                    {
+                        "title": _("Benutzer"),
+                        "icon": "person",
+                        "link": reverse_lazy("admin:auth_user_changelist"),
+                        "permission": "core.unfold.superuser_only",
+                    },
+                    {
+                        "title": _("Gruppen"),
+                        "icon": "groups",
+                        "link": reverse_lazy("admin:auth_group_changelist"),
+                        "permission": "core.unfold.superuser_only",
+                    },
+                ],
+            },
+        ],
     },
 }
