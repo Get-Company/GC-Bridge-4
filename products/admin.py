@@ -31,8 +31,8 @@ class PriceInline(BaseTabularInline):
 
 @admin.register(Product)
 class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
-    list_display = ("sku", "name", "is_active", "created_at")
-    search_fields = ("sku", "name")
+    list_display = ("erp_nr", "name", "is_active", "created_at")
+    search_fields = ("erp_nr", "sku", "name")
     list_filter = ("is_active",)
     inlines = (PriceInline,)
     actions = ("sync_from_microtech", "sync_to_shopware")

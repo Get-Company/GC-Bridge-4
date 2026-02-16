@@ -41,7 +41,6 @@ class OrderDetailInline(BaseTabularInline):
 class OrderAdmin(BaseAdmin):
     list_display = (
         "order_number",
-        "api_id",
         "customer",
         "order_state_dropdown",
         "payment_state_dropdown",

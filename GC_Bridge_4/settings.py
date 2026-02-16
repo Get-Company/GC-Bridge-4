@@ -160,7 +160,7 @@ STATIC_URL = 'static/'
 UNFOLD = {
     "SITE_TITLE": "GC-Bridge Admin",
     "SITE_HEADER": "GC-Bridge",
-    "SITE_SUBHEADER": "Shopware <-> microtech",
+    "SITE_SUBHEADER": "Shopware <-> Microtech",
     "SITE_SYMBOL": "hub",
     "SITE_URL": "/",
     "SHOW_HISTORY": True,
@@ -177,7 +177,7 @@ UNFOLD = {
         },
     },
     "SIDEBAR": {
-        "show_search": True,
+        "show_search": False,
         "command_search": False,
         "show_all_applications": False,
         "navigation": [
@@ -194,7 +194,7 @@ UNFOLD = {
                 ],
             },
             {
-                "title": _("Auftraege"),
+                "title": _("Bestellungen"),
                 "separator": True,
                 "collapsible": True,
                 "items": [
