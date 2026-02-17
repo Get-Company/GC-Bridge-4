@@ -21,6 +21,7 @@ class PriceInline(BaseTabularInline):
         "price",
         "rebate_quantity",
         "rebate_price",
+        "special_percentage",
         "special_price",
         "special_start_date",
         "special_end_date",
@@ -212,7 +213,7 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
 
 @admin.register(Price)
 class PriceAdmin(BaseAdmin):
-    list_display = ("product", "sales_channel", "price", "special_price", "special_active", "rebate_price", "created_at")
+    list_display = ("product", "sales_channel", "price", "special_percentage", "special_price", "special_active", "rebate_price", "created_at")
     search_fields = ("product__erp_nr", "product__name", "sales_channel__name")
     list_filter = ("sales_channel", "created_at")
 

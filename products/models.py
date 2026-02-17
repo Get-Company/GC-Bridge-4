@@ -1,4 +1,5 @@
-from decimal import Decimal
+import calendar
+from decimal import Decimal, ROUND_UP
 
 from django.db import models
 from django.utils import timezone
@@ -129,6 +130,13 @@ class Price(BaseModel):
         blank=True,
         verbose_name=_("Staffelpreis"),
     )
+    special_percentage = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name=_("Sonderpreis (%)"),
+    )
     special_price = models.DecimalField(
         max_digits=10,
         decimal_places=2,
@@ -157,6 +165,33 @@ class Price(BaseModel):
                 name="unique_price_per_sales_channel",
             )
         ]
+
+    @staticmethod
+    def _round_up_5ct(value: Decimal) -> Decimal:
+        step = Decimal("0.05")
+        return (value / step).to_integral_value(rounding=ROUND_UP) * step
+
+    def save(self, *args, **kwargs):
+        if self.special_percentage and self.price:
+            self.special_price = self._round_up_5ct(
+                self.price * (Decimal("100") - self.special_percentage) / Decimal("100")
+            )
+            now = timezone.now()
+            if not self.special_start_date:
+                self.special_start_date = now
+            if not self.special_end_date:
+                next_month = (now.month % 12) + 1
+                year = now.year + (1 if next_month == 1 else 0)
+                last_day = calendar.monthrange(year, next_month)[1]
+                self.special_end_date = now.replace(
+                    year=year, month=next_month, day=last_day,
+                    hour=23, minute=59, second=59, microsecond=0,
+                )
+        elif not self.special_percentage:
+            self.special_price = None
+            self.special_start_date = None
+            self.special_end_date = None
+        super().save(*args, **kwargs)
 
     @property
     def is_special_active(self) -> bool:
