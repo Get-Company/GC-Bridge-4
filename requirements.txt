@@ -5,3 +5,4 @@ lib-shopware6-api-base
 loguru
 pywin32; platform_system == "Windows"
 django-modeltranslation>=0.19.19
+uvicorn>=0.41.0

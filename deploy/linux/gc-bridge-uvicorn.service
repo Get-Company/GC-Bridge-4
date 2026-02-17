@@ -1,0 +1,18 @@
+[Unit]
+Description=GC-Bridge Uvicorn
+After=network.target
+
+[Service]
+Type=simple
+User=gcbridge
+Group=gcbridge
+WorkingDirectory=/opt/GC-Bridge-4
+Environment="DJANGO_SETTINGS_MODULE=GC_Bridge_4.settings"
+Environment="DJANGO_DEBUG=0"
+Environment="DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1"
+ExecStart=/opt/GC-Bridge-4/.venv/bin/uvicorn GC_Bridge_4.asgi:application --host 127.0.0.1 --port 8000 --workers 2
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
