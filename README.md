@@ -129,17 +129,17 @@ http://10.0.0.5:8080, http://localhost:8080, http://127.0.0.1:8080 {
 ```
 5. Caddy als Service registrieren (PowerShell als Administrator):
 ```powershell
-sc.exe create Caddy binPath= "\"C:\caddy\caddy.exe\" run --config \"C:\caddy\Caddyfile\"" start= auto
+$bin = '"C:\caddy\caddy.exe" run --config "C:\caddy\Caddyfile" --adapter caddyfile'
+sc.exe create Caddy binPath= $bin start= auto
 sc.exe start Caddy
 ```
-6. Uvicorn als Service registrieren (mit NSSM, PowerShell als Administrator):
-   - NSSM herunterladen und z. B. nach `C:\nssm\nssm.exe` legen.
+6. Uvicorn als Service registrieren (ohne Zusatztools, PowerShell als Administrator):
 ```powershell
-C:\nssm\nssm.exe install GC-Bridge-Uvicorn cmd.exe "/c C:\Apps\GC-Bridge-4\deploy\windows\start-uvicorn.cmd"
-C:\nssm\nssm.exe set GC-Bridge-Uvicorn AppDirectory C:\Apps\GC-Bridge-4
-C:\nssm\nssm.exe set GC-Bridge-Uvicorn Start SERVICE_AUTO_START
-C:\nssm\nssm.exe set GC-Bridge-Uvicorn AppStdout C:\Apps\GC-Bridge-4\tmp\logs\uvicorn.out.log
-C:\nssm\nssm.exe set GC-Bridge-Uvicorn AppStderr C:\Apps\GC-Bridge-4\tmp\logs\uvicorn.err.log
+$bin = '"C:\Windows\System32\cmd.exe" /c "C:\Apps\GC-Bridge-4\deploy\windows\start-uvicorn.cmd"'
+sc.exe create GC-Bridge-Uvicorn binPath= $bin start= auto
+sc.exe description GC-Bridge-Uvicorn "GC-Bridge Django/Uvicorn Service"
+sc.exe failure GC-Bridge-Uvicorn reset= 86400 actions= restart/5000/restart/5000/restart/5000
+sc.exe start GC-Bridge-Uvicorn
 ```
 7. Windows-Firewall fuer LAN-Zugriff oeffnen:
 ```powershell
@@ -147,13 +147,21 @@ netsh advfirewall firewall add rule name="GC-Bridge Caddy 8080" dir=in action=al
 ```
 8. Services starten und pruefen:
 ```powershell
-nssm start GC-Bridge-Uvicorn
 sc.exe query Caddy
 sc.exe query GC-Bridge-Uvicorn
+sc.exe qc Caddy
+sc.exe qc GC-Bridge-Uvicorn
 ```
 9. Von einem anderen Rechner im gleichen Netz testen:
 ```powershell
 Test-NetConnection 10.0.0.5 -Port 8080
+```
+10. Falls ein Dienst bereits existiert und neu angelegt werden soll:
+```powershell
+sc.exe stop Caddy
+sc.exe stop GC-Bridge-Uvicorn
+sc.exe delete Caddy
+sc.exe delete GC-Bridge-Uvicorn
 ```
 
 Aufruf danach:
