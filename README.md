@@ -92,83 +92,98 @@ sudo systemctl status gc-bridge-uvicorn
 sudo systemctl status caddy
 ```
 
-### Windows Server 2019
+### Windows Server 2019 (CLSRV01)
 
-1. Projekt nach `C:\Apps\GC-Bridge-4` deployen, `.env` anlegen, dann Dependencies installieren:
-```powershell
-cd C:\Apps\GC-Bridge-4
+Projektpfad: `D:\GC-Bridge-4`, LAN-IP: `10.0.0.5`, Port: `4711`
+
+Uvicorn und Caddy laufen als **Scheduled Tasks** (nicht sc.exe-Services, da diese den SCM-Protokoll nicht unterstuetzen).
+
+#### Ersteinrichtung
+
+1. Dependencies installieren:
+```cmd
+cd /d D:\GC-Bridge-4
 uv sync
 ```
-2. Migrationen ausfuehren:
-```powershell
+2. `.env` im Projektroot anlegen (siehe [Umgebungsvariablen](#umgebungsvariablen-env)).
+3. Migrationen ausfuehren:
+```cmd
 .venv\Scripts\python.exe manage.py migrate
 ```
-3. Django fuer LAN-Zugriff auf `10.0.0.5` konfigurieren (`C:\Apps\GC-Bridge-4\.env`):
-```dotenv
-DJANGO_SECRET_KEY=change-me
-DJANGO_DEBUG=0
-DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,10.0.0.5
-DJANGO_CSRF_TRUSTED_ORIGINS=http://localhost:8080,http://127.0.0.1:8080,http://10.0.0.5:8080
-DJANGO_SECURE_SSL_REDIRECT=0
-DJANGO_SESSION_COOKIE_SECURE=0
-DJANGO_CSRF_COOKIE_SECURE=0
-DJANGO_USE_X_FORWARDED_HOST=1
-DJANGO_USE_X_FORWARDED_PROTO=0
+4. Static Files sammeln:
+```cmd
+.venv\Scripts\python.exe manage.py collectstatic --noinput
 ```
-4. Caddy installieren:
-   - Caddy fuer Windows herunterladen und `caddy.exe` nach `C:\caddy\caddy.exe` legen.
-   - `C:\caddy\Caddyfile` mit folgendem Inhalt anlegen:
-```caddy
-{
-    auto_https off
-}
-
-http://10.0.0.5:8080, http://localhost:8080, http://127.0.0.1:8080 {
-    reverse_proxy 127.0.0.1:8000
-}
+5. Superuser anlegen (falls noch nicht vorhanden):
+```cmd
+.venv\Scripts\python.exe manage.py createsuperuser
 ```
-5. Caddy als Service registrieren (PowerShell als Administrator):
-```powershell
-$bin = '"C:\caddy\caddy.exe" run --config "C:\caddy\Caddyfile" --adapter caddyfile'
-sc.exe create Caddy binPath= $bin start= auto
-sc.exe start Caddy
+6. Scheduled Tasks anlegen (Admin CMD):
+```cmd
+schtasks /Create /TN "GC-Bridge-Uvicorn" /SC ONSTART /RU SYSTEM /RL HIGHEST /TR "\"D:\GC-Bridge-4\deploy\windows\start-uvicorn.cmd\"" /F
+schtasks /Create /TN "GC-Bridge-Caddy" /SC ONSTART /DELAY 0000:10 /RU SYSTEM /RL HIGHEST /TR "\"D:\GC-Bridge-4\deploy\windows\start-caddy.cmd\"" /F
 ```
-6. Uvicorn als Service registrieren (ohne Zusatztools, PowerShell als Administrator):
-```powershell
-$bin = '"C:\Windows\System32\cmd.exe" /c "C:\Apps\GC-Bridge-4\deploy\windows\start-uvicorn.cmd"'
-sc.exe create GC-Bridge-Uvicorn binPath= $bin start= auto
-sc.exe description GC-Bridge-Uvicorn "GC-Bridge Django/Uvicorn Service"
-sc.exe failure GC-Bridge-Uvicorn reset= 86400 actions= restart/5000/restart/5000/restart/5000
-sc.exe start GC-Bridge-Uvicorn
+7. Firewall oeffnen (Admin CMD):
+```cmd
+netsh advfirewall firewall add rule name="GC-Bridge Caddy 4711" dir=in action=allow protocol=TCP localport=4711
 ```
-7. Windows-Firewall fuer LAN-Zugriff oeffnen:
-```powershell
-netsh advfirewall firewall add rule name="GC-Bridge Caddy 8080" dir=in action=allow protocol=TCP localport=8080
-```
-8. Services starten und pruefen:
-```powershell
-sc.exe query Caddy
-sc.exe query GC-Bridge-Uvicorn
-sc.exe qc Caddy
-sc.exe qc GC-Bridge-Uvicorn
-```
-9. Von einem anderen Rechner im gleichen Netz testen:
-```powershell
-Test-NetConnection 10.0.0.5 -Port 8080
-```
-10. Falls ein Dienst bereits existiert und neu angelegt werden soll:
-```powershell
-sc.exe stop Caddy
-sc.exe stop GC-Bridge-Uvicorn
-sc.exe delete Caddy
-sc.exe delete GC-Bridge-Uvicorn
+8. Tasks starten:
+```cmd
+schtasks /Run /TN "GC-Bridge-Uvicorn"
+timeout /t 5 /nobreak
+schtasks /Run /TN "GC-Bridge-Caddy"
 ```
 
-Aufruf danach:
+#### Nach einem git pull neu starten
 
-- `http://localhost:8080/admin/`
-- `http://127.0.0.1:8080/admin/`
-- `http://10.0.0.5:8080/admin/`
+In einer **Admin CMD** (`cd /d D:\GC-Bridge-4`):
+
+```cmd
+:: 1. Laufende Prozesse stoppen
+taskkill /F /FI "IMAGENAME eq caddy.exe"
+taskkill /F /FI "IMAGENAME eq python.exe" /FI "WINDOWTITLE eq *uvicorn*"
+
+:: 2. Dependencies aktualisieren (falls sich pyproject.toml geaendert hat)
+uv sync
+
+:: 3. Migrationen ausfuehren (falls neue dazugekommen sind)
+.venv\Scripts\python.exe manage.py migrate
+
+:: 4. Static Files neu sammeln (falls sich CSS/JS geaendert hat)
+.venv\Scripts\python.exe manage.py collectstatic --noinput
+
+:: 5. Uvicorn und Caddy neu starten
+schtasks /Run /TN "GC-Bridge-Uvicorn"
+timeout /t 5 /nobreak
+schtasks /Run /TN "GC-Bridge-Caddy"
+timeout /t 5 /nobreak
+
+:: 6. Pruefen
+netstat -ano | findstr /C:":8000 " /C:":4711 "
+```
+
+#### Pruefen ob alles laeuft
+
+```cmd
+:: Ports pruefen
+netstat -ano | findstr /C:":8000 " /C:":4711 "
+
+:: HTTP-Test
+powershell -Command "(Invoke-WebRequest -Uri http://127.0.0.1:8000/admin/ -UseBasicParsing -TimeoutSec 5).StatusCode"
+powershell -Command "(Invoke-WebRequest -Uri http://127.0.0.1:4711/admin/ -UseBasicParsing -TimeoutSec 5).StatusCode"
+```
+
+#### Logdateien
+
+- `tmp/logs/uvicorn.out.log` -- Uvicorn stdout
+- `tmp/logs/uvicorn.err.log` -- Uvicorn Fehler + Start/Stop-Zeitstempel
+- `tmp/logs/caddy.err.log` -- Caddy Fehler + Start/Stop-Zeitstempel
+
+Aufruf:
+
+- `http://localhost:4711/admin/`
+- `http://127.0.0.1:4711/admin/`
+- `http://10.0.0.5:4711/admin/`
 
 ## Umgebungsvariablen (.env)
 
