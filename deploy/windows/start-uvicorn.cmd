@@ -1,6 +1,12 @@
 @echo off
 setlocal
 
+:: ============================================================
+::  GC-Bridge Uvicorn Starter
+::  Wird von Scheduled Task "GC-Bridge-Uvicorn" aufgerufen.
+::  Loggt stdout/stderr in separate Dateien.
+:: ============================================================
+
 cd /d %~dp0\..\.. || exit /b 1
 if not exist tmp\logs mkdir tmp\logs
 
@@ -14,7 +20,15 @@ if "%DJANGO_CSRF_TRUSTED_ORIGINS%"=="" set DJANGO_CSRF_TRUSTED_ORIGINS=http://lo
 if "%DJANGO_USE_X_FORWARDED_HOST%"=="" set DJANGO_USE_X_FORWARDED_HOST=1
 if "%DJANGO_USE_X_FORWARDED_PROTO%"=="" set DJANGO_USE_X_FORWARDED_PROTO=0
 
-if not exist .venv\Scripts\python.exe exit /b 2
+if not exist .venv\Scripts\python.exe (
+    echo [%date% %time%] python.exe nicht gefunden >> tmp\logs\uvicorn.err.log
+    exit /b 2
+)
+
+echo [%date% %time%] Uvicorn startet... >> tmp\logs\uvicorn.err.log
 .venv\Scripts\python.exe -m uvicorn GC_Bridge_4.asgi:application --host 127.0.0.1 --port 8000 --workers 1 >> tmp\logs\uvicorn.out.log 2>> tmp\logs\uvicorn.err.log
 
-endlocal
+set "RC=%ERRORLEVEL%"
+echo [%date% %time%] Uvicorn beendet mit Code %RC% >> tmp\logs\uvicorn.err.log
+
+endlocal & exit /b %RC%
