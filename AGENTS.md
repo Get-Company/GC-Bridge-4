@@ -7,4 +7,5 @@ These rules are mandatory for all contributors and tools.
 - Keep settings and dependencies in sync across `pyproject.toml`, `requirements.txt`, and `uv.lock`.
 - Prefer `uv sync` for dependency updates and keep changes minimal.
 - Do not introduce new tools or frameworks without explicit approval.
-- When a PDF is added for reference, create a brief Inhaltsbeschreibung and a Nav Tree as a `.txt` file, then use that index to locate relevant sections before answering questions. Read the specific PDF section that maps to the question before responding.
+- Always use the .venv directory
+- Always let django makemigartions create the migration files. Do not wrcodexite the migrations by yourself.
