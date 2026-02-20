@@ -189,7 +189,7 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 UNFOLD = {
     "SITE_TITLE": "GC-Bridge Admin",
     "SITE_HEADER": "GC-Bridge",
-    "SITE_SUBHEADER": "Shopware <-> Microtech",
+    "SITE_SUBHEADER": "core.version.site_subheader_callback",
     "SITE_SYMBOL": "hub",
     "SITE_URL": "/",
     "SHOW_HISTORY": True,

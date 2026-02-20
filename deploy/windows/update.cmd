@@ -40,6 +40,7 @@ if errorlevel 1 (
     echo [%DATE% %TIME%] ERROR: git checkout failed >> "%LOG_FILE%"
     exit /b 1
 )
+echo %DEPLOY_TAG%> "%APP_DIR%\VERSION"
 
 :: --- Dependencies installieren ---
 echo [%DATE% %TIME%] uv pip install -r requirements.txt >> "%LOG_FILE%"

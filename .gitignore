@@ -12,3 +12,4 @@ __pycache__/
 deploy/caddy/caddy.exe
 /staticfiles/
 /tmp/
+/VERSION
