@@ -7,12 +7,26 @@ Django integration bridge between Microtech and Shopware 6.
 - [Projektueberblick](#projektueberblick)
 - [Grundregeln im Projekt](#grundregeln-im-projekt)
 - [Lokales Setup](#lokales-setup)
-- [Server Setup (ohne SSL, lokal/LAN)](#server-setup-ohne-ssl-lokallan)
+- [Server Setup](#server-setup)
+  - [Linux Server](#linux-server)
+  - [Windows Server 2019 (CLSRV01)](#windows-server-2019-clsrv01)
+    - [Architektur](#architektur)
+    - [Scheduled Tasks](#scheduled-tasks)
+    - [Ersteinrichtung](#ersteinrichtung)
+    - [Server starten](#server-starten)
+    - [Server stoppen](#server-stoppen)
+    - [Server neustarten](#server-neustarten)
+    - [Status pruefen](#status-pruefen)
+    - [Vollstaendige Diagnose](#vollstaendige-diagnose)
+    - [Logdateien](#logdateien)
+- [Deployment Pipeline (GitHub Actions)](#deployment-pipeline-github-actions)
 - [Umgebungsvariablen (.env)](#umgebungsvariablen-env)
 - [Sync-Commands](#sync-commands)
   - [Produkte: Microtech -> Django -> Shopware](#produkte-microtech---django---shopware)
   - [Bestellungen: Shopware -> Django -> Microtech](#bestellungen-shopware---django---microtech)
 - [Adminer / Datenbank](#adminer--datenbank)
+
+---
 
 ## Projektueberblick
 
@@ -22,6 +36,8 @@ Wichtige Basisklassen:
 - `BaseAdmin` (`core/admin.py`) auf Basis von Unfold
 - `BaseService` (`core/services/base.py`) als Service-Grundlage
 
+---
+
 ## Grundregeln im Projekt
 
 - Secrets nie committen, nur in lokale `.env`.
@@ -30,13 +46,15 @@ Wichtige Basisklassen:
 - Fuer neue Services `BaseService` verwenden.
 - Lokale Python-Commands immer mit `.venv/bin/python` ausfuehren.
 
+---
+
 ## Lokales Setup
 
 1. Abhaengigkeiten installieren:
 ```bash
 uv sync
 ```
-2. `.env` im Projektroot anlegen (siehe unten).
+2. `.env` im Projektroot anlegen (siehe [Umgebungsvariablen](#umgebungsvariablen-env)).
 3. Datenbank starten:
 ```bash
 docker compose up -d
@@ -54,9 +72,9 @@ docker compose up -d
 .venv/bin/python manage.py runserver
 ```
 
-## Server Setup (ohne SSL, lokal/LAN)
+---
 
-Dieses Setup nutzt `uvicorn` (App-Server) plus `caddy` (Reverse Proxy) auf Port `8080`.
+## Server Setup
 
 ### Linux Server
 
@@ -92,18 +110,69 @@ sudo systemctl status gc-bridge-uvicorn
 sudo systemctl status caddy
 ```
 
+---
+
 ### Windows Server 2019 (CLSRV01)
 
-Projektpfad: `D:\GC-Bridge-4`, LAN-IP: `10.0.0.5`, Port: `4711`
+| | |
+|---|---|
+| **Projektpfad** | `D:\GC-Bridge-4` |
+| **LAN-IP** | `10.0.0.5` |
+| **Port (extern)** | `4711` |
+| **Hostname** | `CLSRV01` |
 
-Uvicorn und Caddy laufen als **Scheduled Tasks** (nicht sc.exe-Services, da diese den SCM-Protokoll nicht unterstuetzen).
+#### Architektur
+
+```
+Browser / Client im LAN
+         |
+         | http://10.0.0.5:4711
+         v
++------------------+
+|  Caddy v2        |  Reverse Proxy, hoert auf :4711
+|  (Scheduled Task)|  deploy\caddy\Caddyfile
++------------------+
+         |
+         | http://127.0.0.1:8000  (nur localhost)
+         v
++------------------+
+|  Uvicorn         |  ASGI-Server, 1 Worker
+|  (Scheduled Task)|  GC_Bridge_4.asgi:application
++------------------+
+         |
+         v
++------------------+
+|  Django App      |
+|  GC-Bridge-4     |
++------------------+
+```
+
+Uvicorn und Caddy laufen als **Windows Scheduled Tasks** (nicht als sc.exe-Services, da
+Uvicorn und Caddy das Windows SCM-Protokoll nicht implementieren und nach ~30 Sekunden
+vom Service Controller beendet wuerden).
+
+---
+
+#### Scheduled Tasks
+
+| Task-Name | Trigger | Verzoegerung | Skript | Funktion |
+|-----------|---------|--------------|--------|----------|
+| `GC-Bridge-Uvicorn` | `ONSTART` | 0 s | `deploy\windows\start-uvicorn.cmd` | Startet Uvicorn ASGI-Server auf `127.0.0.1:8000` |
+| `GC-Bridge-Caddy` | `ONSTART` | 10 s | `deploy\windows\start-caddy.cmd` | Startet Caddy Reverse Proxy auf `:4711` |
+
+Beide Tasks laufen unter dem Konto `SYSTEM` mit hoechsten Rechten (`/RL HIGHEST`).
+Die 10-Sekunden-Verzoegerung bei Caddy stellt sicher, dass Uvicorn bereits laeuft,
+bevor Caddy Verbindungen annimmt.
+
+---
 
 #### Ersteinrichtung
 
+Alle Befehle in einer **Admin CMD** (`cd /d D:\GC-Bridge-4`):
+
 1. Dependencies installieren:
 ```cmd
-cd /d D:\GC-Bridge-4
-uv sync
+uv pip install -r requirements.txt
 ```
 2. `.env` im Projektroot anlegen (siehe [Umgebungsvariablen](#umgebungsvariablen-env)).
 3. Migrationen ausfuehren:
@@ -118,72 +187,211 @@ uv sync
 ```cmd
 .venv\Scripts\python.exe manage.py createsuperuser
 ```
-6. Scheduled Tasks anlegen (Admin CMD):
+6. Scheduled Tasks anlegen:
 ```cmd
 schtasks /Create /TN "GC-Bridge-Uvicorn" /SC ONSTART /RU SYSTEM /RL HIGHEST /TR "\"D:\GC-Bridge-4\deploy\windows\start-uvicorn.cmd\"" /F
 schtasks /Create /TN "GC-Bridge-Caddy" /SC ONSTART /DELAY 0000:10 /RU SYSTEM /RL HIGHEST /TR "\"D:\GC-Bridge-4\deploy\windows\start-caddy.cmd\"" /F
 ```
-7. Firewall oeffnen (Admin CMD):
+7. Firewall-Regel fuer Port 4711 oeffnen:
 ```cmd
 netsh advfirewall firewall add rule name="GC-Bridge Caddy 4711" dir=in action=allow protocol=TCP localport=4711
 ```
-8. Tasks starten:
+8. Tasks sofort starten:
 ```cmd
 schtasks /Run /TN "GC-Bridge-Uvicorn"
 timeout /t 5 /nobreak
 schtasks /Run /TN "GC-Bridge-Caddy"
 ```
 
-#### Nach einem git pull neu starten
+---
 
-In einer **Admin CMD** (`cd /d D:\GC-Bridge-4`):
+#### Server starten
+
+Admin CMD:
 
 ```cmd
-:: 1. Laufende Prozesse stoppen
+schtasks /Run /TN "GC-Bridge-Uvicorn"
+timeout /t 5 /nobreak
+schtasks /Run /TN "GC-Bridge-Caddy"
+```
+
+---
+
+#### Server stoppen
+
+Admin CMD:
+
+```cmd
+:: Caddy stoppen
 taskkill /F /FI "IMAGENAME eq caddy.exe"
-taskkill /F /FI "IMAGENAME eq python.exe" /FI "WINDOWTITLE eq *uvicorn*"
 
-:: 2. Dependencies aktualisieren (falls sich pyproject.toml geaendert hat)
-uv sync
+:: Uvicorn stoppen (findet den Python-Prozess auf Port 8000)
+powershell -Command "Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }"
+```
 
-:: 3. Migrationen ausfuehren (falls neue dazugekommen sind)
-.venv\Scripts\python.exe manage.py migrate
+---
 
-:: 4. Static Files neu sammeln (falls sich CSS/JS geaendert hat)
-.venv\Scripts\python.exe manage.py collectstatic --noinput
+#### Server neustarten
 
-:: 5. Uvicorn und Caddy neu starten
+Admin CMD:
+
+```cmd
+:: 1. Stoppen
+taskkill /F /FI "IMAGENAME eq caddy.exe"
+powershell -Command "Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }"
+timeout /t 3 /nobreak
+
+:: 2. Starten
 schtasks /Run /TN "GC-Bridge-Uvicorn"
 timeout /t 5 /nobreak
 schtasks /Run /TN "GC-Bridge-Caddy"
-timeout /t 5 /nobreak
-
-:: 6. Pruefen
-netstat -ano | findstr /C:":8000 " /C:":4711 "
 ```
 
-#### Pruefen ob alles laeuft
+---
+
+#### Status pruefen
 
 ```cmd
-:: Ports pruefen
+:: Tasks abfragen
+schtasks /Query /TN "GC-Bridge-Uvicorn" /FO LIST
+schtasks /Query /TN "GC-Bridge-Caddy" /FO LIST
+
+:: Ports pruefen (8000 = Uvicorn, 4711 = Caddy)
 netstat -ano | findstr /C:":8000 " /C:":4711 "
 
-:: HTTP-Test
+:: HTTP-Test Uvicorn direkt
 powershell -Command "(Invoke-WebRequest -Uri http://127.0.0.1:8000/admin/ -UseBasicParsing -TimeoutSec 5).StatusCode"
+
+:: HTTP-Test ueber Caddy
 powershell -Command "(Invoke-WebRequest -Uri http://127.0.0.1:4711/admin/ -UseBasicParsing -TimeoutSec 5).StatusCode"
 ```
 
+Erwarteter Rueckgabewert: `200`
+
+Aufruf im Browser:
+- `http://localhost:4711/admin/`
+- `http://10.0.0.5:4711/admin/`
+
+---
+
+#### Vollstaendige Diagnose
+
+Das Skript `deploy\windows\check_server.bat` prueft automatisch alles auf einmal:
+Dateien, Python/Uvicorn/Caddy-Version, Scheduled Tasks, Ports, Firewall-Regeln,
+die letzten 20 Zeilen jeder Logdatei sowie einen Uvicorn-Schnelltest mit HTTP-Antwort.
+
+```cmd
+:: Diagnose in der Konsole
+deploy\windows\check_server.bat
+
+:: Diagnose in eine Datei schreiben (zum Weiterleiten)
+deploy\windows\check_server.bat > diagnose.txt 2>&1
+```
+
+---
+
 #### Logdateien
 
-- `tmp/logs/uvicorn.out.log` -- Uvicorn stdout
-- `tmp/logs/uvicorn.err.log` -- Uvicorn Fehler + Start/Stop-Zeitstempel
-- `tmp/logs/caddy.err.log` -- Caddy Fehler + Start/Stop-Zeitstempel
+Alle Logs liegen in `tmp\logs\` (wird beim ersten Start automatisch angelegt):
 
-Aufruf:
+| Datei | Inhalt |
+|-------|--------|
+| `tmp\logs\uvicorn.out.log` | Uvicorn stdout (Request-Logs) |
+| `tmp\logs\uvicorn.err.log` | Uvicorn Fehler + Start/Stop-Zeitstempel |
+| `tmp\logs\caddy.err.log` | Caddy Fehler + Start/Stop-Zeitstempel |
+| `tmp\logs\caddy-runtime.log` | Caddy internes Log |
+| `tmp\logs\caddy-access.log` | Caddy Access-Log |
+| `tmp\logs\deploy.log` | Deployment-Log (GitHub Actions) |
 
-- `http://localhost:4711/admin/`
-- `http://127.0.0.1:4711/admin/`
-- `http://10.0.0.5:4711/admin/`
+Letzte 50 Zeilen eines Logs anzeigen (PowerShell):
+
+```powershell
+Get-Content D:\GC-Bridge-4\tmp\logs\uvicorn.err.log -Tail 50
+Get-Content D:\GC-Bridge-4\tmp\logs\deploy.log -Tail 50
+```
+
+---
+
+## Deployment Pipeline (GitHub Actions)
+
+Neue Versionen werden automatisch auf CLSRV01 deployed, sobald ein Git-Tag gepusht wird.
+
+### Ablauf
+
+```
+git tag v1.2.3 && git push origin v1.2.3
+        |
+        v
+GitHub erkennt Tag --> startet Workflow (.github/workflows/deploy.yml)
+        |
+        v
+Self-Hosted Runner auf CLSRV01 fuehrt aus:
+  1. git fetch --tags origin
+  2. git checkout -f v1.2.3
+  3. uv pip install -r requirements.txt
+  4. manage.py migrate --noinput
+  5. manage.py collectstatic --noinput
+  6. Uvicorn neustarten (Port 8000 + schtasks /Run)
+        |
+        v
+Ergebnis in tmp\logs\deploy.log + GitHub Actions UI
+```
+
+### Deployment ausloesen (von Linux-Dev-Rechner)
+
+```bash
+git tag v1.2.3
+git push origin v1.2.3
+```
+
+### Deployment manuell testen (Admin CMD auf CLSRV01)
+
+```cmd
+cd /d D:\GC-Bridge-4
+set DEPLOY_TAG=v1.2.3
+deploy\windows\update.cmd
+```
+
+### Self-Hosted Runner einrichten (einmalig, Admin PowerShell auf CLSRV01)
+
+1. GitHub oeffnen: Repo → **Settings** → **Actions** → **Runners** → **New self-hosted runner**
+2. Windows / x64 auswaehlen → die angezeigten Download- und Konfigurationsbefehle kopieren
+3. Runner-Verzeichnis anlegen und konfigurieren:
+
+```powershell
+mkdir D:\GC-Bridge-runner
+cd D:\GC-Bridge-runner
+
+# Download-Befehl aus GitHub-UI einfuegen (aktuellste Version)
+# Dann konfigurieren (Token aus GitHub-UI, ist zeitlich begrenzt):
+.\config.cmd --url https://github.com/OWNER/REPO --token GITHUB_TOKEN --name CLSRV01 --labels Windows,x64 --runasservice
+```
+
+4. Als Windows-Dienst installieren und starten:
+
+```powershell
+.\svc.cmd install
+.\svc.cmd start
+```
+
+Der Runner-Dienst laeuft als `SYSTEM` und hat damit die noetigen Rechte fuer
+`schtasks /Run`. Ggf. Bitdefender-Ausnahme fuer `D:\GC-Bridge-runner\` eintragen.
+
+### Runner-Dienst verwalten
+
+```powershell
+# Status
+.\svc.cmd status
+
+# Stoppen / Starten
+.\svc.cmd stop
+.\svc.cmd start
+
+# Deinstallieren
+.\svc.cmd uninstall
+```
+
+---
 
 ## Umgebungsvariablen (.env)
 
@@ -211,8 +419,10 @@ MICROTECH_PASSWORT=
 DJANGO_SECRET_KEY=change-me
 DJANGO_DEBUG=0
 DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,10.0.0.5
-DJANGO_CSRF_TRUSTED_ORIGINS=http://localhost:8080,http://127.0.0.1:8080,http://10.0.0.5:8080
+DJANGO_CSRF_TRUSTED_ORIGINS=http://localhost:4711,http://127.0.0.1:4711,http://10.0.0.5:4711
 ```
+
+---
 
 ## Sync-Commands
 
@@ -258,6 +468,8 @@ Alternativ per Django-ID:
 ```bash
 .venv/bin/python manage.py microtech_order_upsert --id <ORDER_ID>
 ```
+
+---
 
 ## Adminer / Datenbank
 
