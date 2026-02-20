@@ -66,3 +66,49 @@ powershell -Command "Invoke-WebRequest -Uri http://127.0.0.1:4711/admin/ -UseBas
 
 ### Important note
 - `deploy/windows/setup_server.bat` (renamed to `setup.cmd`) is blocked by Bitdefender GravityZone on the server. The file is stuck with NTFS locks. Ignore it — use manual commands instead.
+
+---
+
+## Deployment Pipeline: GitHub Actions + Self-Hosted Runner
+
+### Konzept
+Push eines Version-Tags (z.B. `v1.2.3`) → GitHub Actions triggert Workflow → Self-Hosted Runner auf CLSRV01 führt `deploy/windows/update.cmd` aus → git checkout, uv pip install, migrate, collectstatic, Uvicorn-Neustart.
+
+### Deploy-Log
+`tmp/logs/deploy.log` — vollständiger Log jedes Deployments
+
+### Einmalig: Self-Hosted Runner auf CLSRV01 einrichten (Admin PowerShell)
+
+```powershell
+# 1. Runner-Verzeichnis anlegen
+mkdir D:\GC-Bridge-runner
+cd D:\GC-Bridge-runner
+
+# 2. Runner herunterladen (aktuellste Version von GitHub holen)
+#    GitHub → Repo → Settings → Actions → Runners → New self-hosted runner
+#    → Windows x64 → die angezeigten Befehle ausführen (Token ist zeitlich begrenzt!)
+
+# 3. Runner konfigurieren (Token aus GitHub-UI kopieren)
+.\config.cmd --url https://github.com/OWNER/REPO --token TOKEN --name CLSRV01 --labels Windows,x64 --runasservice
+
+# 4. Runner als Windows-Dienst installieren und starten
+.\svc.cmd install
+.\svc.cmd start
+```
+
+**Hinweis:** Der Runner-Dienst läuft als `SYSTEM` und hat damit Rechte für `schtasks /Run`.
+Bitdefender-Ausnahme für `D:\GC-Bridge-runner\` ggf. eintragen.
+
+### Deployment auslösen (von Linux-Dev-Rechner)
+
+```bash
+git tag v1.2.3
+git push origin v1.2.3
+```
+
+### Update-Skript manuell testen (Admin CMD auf CLSRV01)
+
+```batch
+set DEPLOY_TAG=v1.2.3
+D:\GC-Bridge-4\deploy\windows\update.cmd
+```
