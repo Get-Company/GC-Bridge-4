@@ -61,9 +61,10 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
             message=message,
         )
 
-    def _sync_products_bulk(self, products, service: ProductService, request=None) -> tuple[int, int]:
+    def _sync_products_bulk(self, products, service: ProductService, request=None) -> tuple[int, int, list[str]]:
         success_count = 0
         error_count = 0
+        error_messages: list[str] = []
         batch_size = 50
         products = list(products)
 
@@ -82,12 +83,10 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
                     if product.sku:
                         continue
                     error_count += 1
+                    msg = f"SKU nicht gefunden fuer Artikelnr. {product.erp_nr}"
+                    error_messages.append(msg)
                     if request:
-                        self._log_admin_error(
-                            request,
-                            f"Shopware SKU not found for productNumber {product.erp_nr}.",
-                            obj=product,
-                        )
+                        self._log_admin_error(request, msg, obj=product)
 
             payloads = []
             for product in batch:
@@ -120,15 +119,17 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
                 success_count += len(payloads)
             except Exception as exc:
                 error_count += len(payloads)
+                msg = str(exc)
+                error_messages.append(msg)
                 if request:
                     for product in batch:
                         self._log_admin_error(
                             request,
-                            f"Shopware bulk sync failed for {product.erp_nr}: {exc}",
+                            f"Shopware bulk sync fehlgeschlagen fuer {product.erp_nr}: {exc}",
                             obj=product,
                         )
 
-        return success_count, error_count
+        return success_count, error_count, error_messages
 
     @action(
         description="Sync from Microtech",
@@ -179,11 +180,16 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
     )
     def sync_to_shopware(self, request, queryset):
         service = ProductService()
-        success_count, error_count = self._sync_products_bulk(queryset, service, request=request)
+        success_count, error_count, error_messages = self._sync_products_bulk(queryset, service, request=request)
         if success_count:
             self.message_user(request, f"{success_count} Produkt(e) synchronisiert.")
         if error_count:
-            self.message_user(request, f"{error_count} Produkt(e) mit Fehlern.", level=messages.ERROR)
+            detail = f": {error_messages[0]}" if error_messages else ""
+            self.message_user(
+                request,
+                f"{error_count} Produkt(e) mit Fehlern{detail} — Details im Produkt-Verlauf (History).",
+                level=messages.ERROR,
+            )
 
     @action(
         description="Sync to Shopware6",
@@ -196,18 +202,27 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
             self.message_user(request, "Produkt nicht gefunden.", level=messages.ERROR)
             return self._redirect_to_change_page(object_id)
         try:
-            success_count, error_count = self._sync_products_bulk([product], ProductService(), request=request)
+            success_count, error_count, error_messages = self._sync_products_bulk([product], ProductService(), request=request)
             if success_count:
                 self.message_user(request, f"Produkt {product.erp_nr} synchronisiert.")
             if error_count:
-                self.message_user(request, "Sync fehlgeschlagen.", level=messages.ERROR)
+                detail = error_messages[0] if error_messages else "Unbekannter Fehler"
+                self.message_user(
+                    request,
+                    f"Sync fehlgeschlagen: {detail} — Details im Produkt-Verlauf (History).",
+                    level=messages.ERROR,
+                )
         except Exception as exc:
             self._log_admin_error(
                 request,
-                f"Shopware sync failed for {product.erp_nr}: {exc}",
+                f"Shopware sync fehlgeschlagen fuer {product.erp_nr}: {exc}",
                 obj=product,
             )
-            self.message_user(request, f"Sync fehlgeschlagen: {exc}", level=messages.ERROR)
+            self.message_user(
+                request,
+                f"Sync fehlgeschlagen: {exc} — Details im Produkt-Verlauf (History).",
+                level=messages.ERROR,
+            )
         return self._redirect_to_change_page(object_id)
 
 
