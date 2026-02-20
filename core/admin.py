@@ -34,6 +34,7 @@ class BaseTabularInline(UnfoldTabularInline):
 class BaseStackedInline(UnfoldStackedInline):
     readonly_fields = ("created_at", "updated_at")
     extra = 0
+    tab = True
     formfield_overrides = BaseAdmin.formfield_overrides
 
 

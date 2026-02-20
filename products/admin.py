@@ -8,13 +8,13 @@ from modeltranslation.admin import TabbedTranslationAdmin
 from unfold.decorators import action
 from unfold.enums import ActionVariant
 
-from core.admin import BaseAdmin, BaseTabularInline
+from core.admin import BaseAdmin, BaseStackedInline, BaseTabularInline
 from core.admin_utils import log_admin_change
 from shopware.services import ProductService
 from .models import Category, Price, Product, Storage, Tax
 
 
-class PriceInline(BaseTabularInline):
+class PriceInline(BaseStackedInline):
     model = Price
     fields = (
         "sales_channel",
