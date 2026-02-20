@@ -20,6 +20,11 @@ Django integration bridge between Microtech and Shopware 6.
     - [Vollstaendige Diagnose](#vollstaendige-diagnose)
     - [Logdateien](#logdateien)
 - [Deployment Pipeline (GitHub Actions)](#deployment-pipeline-github-actions)
+- [Health Check](#health-check)
+  - [Schnellcheck](#schnellcheck)
+  - [Vollstaendiger Health Check](#vollstaendiger-health-check)
+  - [Was wird geprueft](#was-wird-geprueft)
+  - [Health-Check-Log](#health-check-log)
 - [Umgebungsvariablen (.env)](#umgebungsvariablen-env)
 - [Sync-Commands](#sync-commands)
   - [Produkte: Microtech -> Django -> Shopware](#produkte-microtech---django---shopware)
@@ -389,6 +394,137 @@ Der Runner-Dienst laeuft als `SYSTEM` und hat damit die noetigen Rechte fuer
 
 # Deinstallieren
 .\svc.cmd uninstall
+```
+
+---
+
+---
+
+## Health Check
+
+### Schnellcheck
+
+Vier Befehle fuer eine sofortige Uebersicht — in **Admin CMD** auf CLSRV01:
+
+```cmd
+:: Ports
+netstat -ano | findstr /C:":8000 " /C:":4711 "
+
+:: HTTP-Status
+powershell -Command "(Invoke-WebRequest -Uri http://127.0.0.1:8000/admin/ -UseBasicParsing -TimeoutSec 5).StatusCode"
+powershell -Command "(Invoke-WebRequest -Uri http://127.0.0.1:4711/admin/ -UseBasicParsing -TimeoutSec 5).StatusCode"
+
+:: Aktuelle Version
+type D:\GC-Bridge-4\VERSION
+```
+
+Erwartete Ausgabe: Ports LISTENING, HTTP-Status `200`, Versionsstring wie `v1.2.3`.
+
+---
+
+### Vollstaendiger Health Check
+
+Das Skript `deploy\windows\health_check.cmd` prueft alle kritischen Komponenten
+automatisch, gibt ein klares `[OK]` / `[WARN]` / `[ERROR]` pro Pruefpunkt aus
+und schreibt alles in `tmp\logs\health_check.log`.
+
+**Aufruf in Admin CMD:**
+
+```cmd
+cd /d D:\GC-Bridge-4
+deploy\windows\health_check.cmd
+```
+
+**Ergebnis in Datei speichern** (zum Weiterleiten):
+
+```cmd
+deploy\windows\health_check.cmd > health_check_output.txt 2>&1
+```
+
+**Exitcode:**
+- `0` — alles OK (kein einziger ERROR)
+- `1` — mindestens ein Fehler vorhanden
+
+---
+
+### Was wird geprueft
+
+| # | Bereich | Pruefpunkt | OK-Kriterium |
+|---|---------|------------|--------------|
+| 1 | **Version** | `VERSION`-Datei | Datei vorhanden und nicht leer |
+| 2 | **Ports** | Port 8000 (Uvicorn) | LISTENING |
+| 2 | **Ports** | Port 4711 (Caddy) | LISTENING |
+| 3 | **HTTP** | `http://127.0.0.1:8000/admin/` | HTTP 200 |
+| 3 | **HTTP** | `http://127.0.0.1:4711/admin/` | HTTP 200 |
+| 4 | **Django** | `manage.py check` | Kein Fehler |
+| 4 | **Django** | `manage.py migrate --check` | Keine offenen Migrationen |
+| 5 | **Scheduled Tasks** | `GC-Bridge-Uvicorn` | Task registriert |
+| 5 | **Scheduled Tasks** | `GC-Bridge-Caddy` | Task registriert |
+| 5 | **Scheduled Tasks** | `GC-Bridge-Runner` | Task registriert |
+| 6 | **Runner** | GitHub Actions Runner Dienst | Status RUNNING |
+| 7 | **Disk** | Freier Speicher auf `D:\` | Mehr als 2 GB frei |
+| 8 | **Logs** | `uvicorn.err.log` (letzte 200 Zeilen) | Keine ERROR-Eintraege |
+| 8 | **Logs** | `caddy.err.log` (letzte 200 Zeilen) | Keine ERROR-Eintraege |
+| 8 | **Logs** | `deploy.log` (letzte 200 Zeilen) | Keine ERROR-Eintraege |
+
+**Ausgabe-Beispiel:**
+
+```
+================================================================
+ GC-Bridge Health Check  20.02.2026 12:00:00
+================================================================
+
+--- VERSION ---
+[OK]    Deployed Version: v1.2.3
+
+--- PORTS ---
+[OK]    Port 8000 - Uvicorn aktiv
+[OK]    Port 4711 - Caddy aktiv
+
+--- HTTP CHECKS ---
+[OK]    http://127.0.0.1:8000/admin/ - HTTP 200
+[OK]    http://127.0.0.1:4711/admin/ - HTTP 200
+
+--- DJANGO ---
+[OK]    manage.py check - OK
+[OK]    Migrationen - aktuell
+
+--- SCHEDULED TASKS ---
+[OK]    Task GC-Bridge-Uvicorn - registriert
+[OK]    Task GC-Bridge-Caddy - registriert
+[OK]    Task GC-Bridge-Runner - registriert
+
+--- GITHUB ACTIONS RUNNER ---
+[OK]    GitHub Actions Runner - RUNNING
+
+--- DISK SPACE ---
+[OK]    D:\ freier Speicher: 45.3 GB
+
+--- LOGS (letzte 200 Zeilen) ---
+[OK]    uvicorn.err.log - keine Fehler
+[OK]    caddy.err.log - keine Fehler
+[OK]    deploy.log - keine Fehler
+
+================================================================
+ ERGEBNIS: 0 Fehler  /  0 Warnungen
+================================================================
+```
+
+---
+
+### Health-Check-Log
+
+Das Skript schreibt bei jedem Aufruf ein vollstaendiges Protokoll nach:
+
+```
+tmp\logs\health_check.log
+```
+
+Der Log wird bei jedem Aufruf **neu ueberschrieben** (kein Anhaengen), damit er
+immer den aktuellen Zustand repraesentiert. Letzten Check anzeigen:
+
+```powershell
+Get-Content D:\GC-Bridge-4\tmp\logs\health_check.log
 ```
 
 ---
