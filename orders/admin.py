@@ -4,11 +4,13 @@ from typing import Any
 from django.contrib import admin, messages
 from django.http import HttpResponseRedirect
 from django.http import JsonResponse
+from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils.html import format_html, format_html_join
 
 from unfold.decorators import action
 from unfold.enums import ActionVariant
+from unfold.sections import TemplateSection
 
 from core.admin import BaseAdmin, BaseTabularInline
 from orders.models import Order, OrderDetail
@@ -21,6 +23,64 @@ def _to_str(value: Any) -> str:
     if value is None:
         return ""
     return str(value).strip()
+
+
+def _state_entity_id(*, order: Order, scope: str) -> str:
+    if scope == "order":
+        return _to_str(order.api_id)
+    if scope == "delivery":
+        return _to_str(order.api_delivery_id)
+    return _to_str(order.api_transaction_id)
+
+
+def _render_state_dropdown(*, obj: Order, scope: str, current_state: str) -> str:
+    options_url = reverse("admin:orders_order_state_options", args=(obj.pk,))
+    set_url = reverse("admin:orders_order_set_state", args=(obj.pk,))
+    has_entity_id = bool(_state_entity_id(order=obj, scope=scope))
+
+    fallback = DEFAULT_TRANSITION_ACTIONS.get(scope, [])
+    options = [("", "Status waehlen..."), *((action, action.replace("_", " ")) for action in fallback)]
+    if not has_entity_id:
+        options = [("", "Keine API-ID vorhanden")]
+    options_html = format_html_join("", '<option value="{}">{}</option>', options)
+
+    return format_html(
+        (
+            '<div class="js-sw-state-control" data-scope="{}" data-options-url="{}" data-set-url="{}">'
+            '<span class="js-sw-state-current">{}</span><br>'
+            '<span class="js-sw-state-loading" style="display:none; font-size:11px; color:#6b7280;" aria-live="polite"></span>'
+            "<br>"
+            '<select class="js-sw-state-select" data-scope="{}" {}>{}</select>'
+            '<div class="js-sw-state-progress" style="display:none; margin-top:6px; height:4px; width:100%; background:#e5e7eb; border-radius:999px; overflow:hidden;">'
+            '<div class="js-sw-state-progress-bar" style="height:100%; width:30%; background:linear-gradient(90deg,#2563eb,#60a5fa); border-radius:999px;"></div>'
+            "</div>"
+            "</div>"
+        ),
+        scope,
+        options_url,
+        set_url,
+        current_state or "-",
+        scope,
+        "disabled" if not has_entity_id else "",
+        options_html,
+    )
+
+
+class OrderExpandSection(TemplateSection):
+    template_name = "orders/admin/order_expand_section.html"
+
+    def render(self) -> str:
+        obj = self.instance
+        return render_to_string(
+            self.template_name,
+            context={
+                "request": self.request,
+                "instance": obj,
+                "order_state_html": _render_state_dropdown(obj=obj, scope="order", current_state=obj.order_state),
+                "payment_state_html": _render_state_dropdown(obj=obj, scope="payment", current_state=obj.payment_state),
+                "shipping_state_html": _render_state_dropdown(obj=obj, scope="delivery", current_state=obj.shipping_state),
+            },
+        )
 
 
 class OrderDetailInline(BaseTabularInline):
@@ -42,13 +102,12 @@ class OrderAdmin(BaseAdmin):
     list_display = (
         "order_number",
         "customer",
-        "order_state_dropdown",
-        "payment_state_dropdown",
-        "shipping_state_dropdown",
         "total_price",
         "purchase_date",
         "created_at",
     )
+    list_sections = [OrderExpandSection]
+    list_sections_classes = "grid-cols-1"
     search_fields = ("order_number", "api_id", "customer__erp_nr", "customer__email")
     list_filter = ("order_state", "payment_state", "shipping_state", "created_at")
     inlines = (OrderDetailInline,)
@@ -56,6 +115,11 @@ class OrderAdmin(BaseAdmin):
     actions = ("sync_open_orders_from_shopware",)
     actions_detail = ("upsert_to_microtech_detail",)
     list_fullwidth = True
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related(
+            "customer", "billing_address", "shipping_address"
+        )
 
     class Media:
         js = ("orders/js/order_state_controls.js",)
@@ -143,50 +207,6 @@ class OrderAdmin(BaseAdmin):
     def sync_open_orders_from_shopware(self, request, queryset):
         self._run_open_order_sync(request)
 
-    @admin.display(description="Order Status")
-    def order_state_dropdown(self, obj: Order) -> str:
-        return self._render_state_dropdown(obj=obj, scope="order", current_state=obj.order_state)
-
-    @admin.display(description="Payment Status")
-    def payment_state_dropdown(self, obj: Order) -> str:
-        return self._render_state_dropdown(obj=obj, scope="payment", current_state=obj.payment_state)
-
-    @admin.display(description="Delivery Status")
-    def shipping_state_dropdown(self, obj: Order) -> str:
-        return self._render_state_dropdown(obj=obj, scope="delivery", current_state=obj.shipping_state)
-
-    def _render_state_dropdown(self, *, obj: Order, scope: str, current_state: str) -> str:
-        options_url = reverse("admin:orders_order_state_options", args=(obj.pk,))
-        set_url = reverse("admin:orders_order_set_state", args=(obj.pk,))
-        has_entity_id = bool(self._state_entity_id(order=obj, scope=scope))
-
-        fallback = DEFAULT_TRANSITION_ACTIONS.get(scope, [])
-        options = [("", "Status waehlen..."), *((action, action.replace("_", " ")) for action in fallback)]
-        if not has_entity_id:
-            options = [("", "Keine API-ID vorhanden")]
-        options_html = format_html_join("", '<option value="{}">{}</option>', options)
-
-        return format_html(
-            (
-                '<div class="js-sw-state-control" data-scope="{}" data-options-url="{}" data-set-url="{}">'
-                '<span class="js-sw-state-current">{}</span><br>'
-                '<span class="js-sw-state-loading" style="display:none; font-size:11px; color:#6b7280;" aria-live="polite"></span>'
-                "<br>"
-                '<select class="js-sw-state-select" data-scope="{}" {}>{}</select>'
-                '<div class="js-sw-state-progress" style="display:none; margin-top:6px; height:4px; width:100%; background:#e5e7eb; border-radius:999px; overflow:hidden;">'
-                '<div class="js-sw-state-progress-bar" style="height:100%; width:30%; background:linear-gradient(90deg,#2563eb,#60a5fa); border-radius:999px;"></div>'
-                "</div>"
-                "</div>"
-            ),
-            scope,
-            options_url,
-            set_url,
-            current_state or "-",
-            scope,
-            "disabled" if not has_entity_id else "",
-            options_html,
-        )
-
     def shopware_state_options_view(self, request, object_id: str, **kwargs):
         order = self.get_object(request, object_id)
         if not order:
@@ -198,7 +218,7 @@ class OrderAdmin(BaseAdmin):
         if scope not in {"order", "payment", "delivery"}:
             return JsonResponse({"ok": False, "error": "Invalid scope."}, status=400)
 
-        entity_id = self._state_entity_id(order=order, scope=scope)
+        entity_id = _state_entity_id(order=order, scope=scope)
         if not entity_id:
             return JsonResponse(
                 {"ok": False, "error": f"Order has no API id for scope '{scope}'."},
@@ -257,14 +277,6 @@ class OrderAdmin(BaseAdmin):
                 "shipping_state": order.shipping_state,
             }
         )
-
-    @staticmethod
-    def _state_entity_id(*, order: Order, scope: str) -> str:
-        if scope == "order":
-            return _to_str(order.api_id)
-        if scope == "delivery":
-            return _to_str(order.api_delivery_id)
-        return _to_str(order.api_transaction_id)
 
     def _refresh_local_states(self, *, order: Order, service: OrderService) -> None:
         response = service.get_by_id(order.api_id)

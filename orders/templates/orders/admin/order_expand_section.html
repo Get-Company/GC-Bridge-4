@@ -1,0 +1,68 @@
+<div class="flex flex-wrap gap-8 text-sm p-1">
+
+    {# ── States ─────────────────────────────────────────────────────────── #}
+    <div class="flex-shrink-0">
+        <div class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-3">Status</div>
+        <div class="flex flex-wrap gap-6">
+            <div>
+                <div class="text-xs text-gray-400 dark:text-gray-500 mb-1">Bestellung</div>
+                {{ order_state_html }}
+            </div>
+            <div>
+                <div class="text-xs text-gray-400 dark:text-gray-500 mb-1">Zahlung</div>
+                {{ payment_state_html }}
+            </div>
+            <div>
+                <div class="text-xs text-gray-400 dark:text-gray-500 mb-1">Lieferung</div>
+                {{ shipping_state_html }}
+            </div>
+        </div>
+    </div>
+
+    {# ── Divider ─────────────────────────────────────────────────────────── #}
+    <div class="hidden lg:block w-px bg-gray-200 dark:bg-gray-700 self-stretch"></div>
+
+    {# ── Addresses ───────────────────────────────────────────────────────── #}
+    <div class="flex flex-wrap gap-8 flex-1">
+
+        {% if instance.billing_address %}
+        <div>
+            <div class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-3">Rechnungsanschrift</div>
+            <address class="not-italic leading-relaxed text-gray-700 dark:text-gray-300">
+                {% if instance.billing_address.name1 %}{{ instance.billing_address.name1 }}<br>{% endif %}
+                {% if instance.billing_address.name2 %}{{ instance.billing_address.name2 }}<br>{% endif %}
+                {% if instance.billing_address.name3 %}{{ instance.billing_address.name3 }}<br>{% endif %}
+                {% if instance.billing_address.department %}{{ instance.billing_address.department }}<br>{% endif %}
+                {% if instance.billing_address.street %}{{ instance.billing_address.street }}<br>{% endif %}
+                {% if instance.billing_address.postal_code or instance.billing_address.city %}{{ instance.billing_address.postal_code }} {{ instance.billing_address.city }}<br>{% endif %}
+                {% if instance.billing_address.country_code %}{{ instance.billing_address.country_code }}{% endif %}
+                {% if instance.billing_address.phone %}<br>{{ instance.billing_address.phone }}{% endif %}
+                {% if instance.billing_address.email %}<br><a href="mailto:{{ instance.billing_address.email }}" class="text-primary-600 hover:underline dark:text-primary-400">{{ instance.billing_address.email }}</a>{% endif %}
+            </address>
+        </div>
+        {% endif %}
+
+        {% if instance.shipping_address %}
+        <div>
+            <div class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-3">Lieferanschrift</div>
+            <address class="not-italic leading-relaxed text-gray-700 dark:text-gray-300">
+                {% if instance.shipping_address.name1 %}{{ instance.shipping_address.name1 }}<br>{% endif %}
+                {% if instance.shipping_address.name2 %}{{ instance.shipping_address.name2 }}<br>{% endif %}
+                {% if instance.shipping_address.name3 %}{{ instance.shipping_address.name3 }}<br>{% endif %}
+                {% if instance.shipping_address.department %}{{ instance.shipping_address.department }}<br>{% endif %}
+                {% if instance.shipping_address.street %}{{ instance.shipping_address.street }}<br>{% endif %}
+                {% if instance.shipping_address.postal_code or instance.shipping_address.city %}{{ instance.shipping_address.postal_code }} {{ instance.shipping_address.city }}<br>{% endif %}
+                {% if instance.shipping_address.country_code %}{{ instance.shipping_address.country_code }}{% endif %}
+                {% if instance.shipping_address.phone %}<br>{{ instance.shipping_address.phone }}{% endif %}
+                {% if instance.shipping_address.email %}<br><a href="mailto:{{ instance.shipping_address.email }}" class="text-primary-600 hover:underline dark:text-primary-400">{{ instance.shipping_address.email }}</a>{% endif %}
+            </address>
+        </div>
+        {% endif %}
+
+        {% if not instance.billing_address and not instance.shipping_address %}
+        <div class="text-gray-400 dark:text-gray-500 italic">Keine Adressen hinterlegt.</div>
+        {% endif %}
+
+    </div>
+
+</div>
