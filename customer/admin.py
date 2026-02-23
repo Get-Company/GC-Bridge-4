@@ -41,7 +41,7 @@ class CustomerAdmin(BaseAdmin):
         return HttpResponseRedirect(reverse("admin:customer_customer_change", args=(object_id,)))
 
     @action(
-        description="Sync from Microtech",
+        description="Von Microtech synchronisieren",
         icon="sync",
         variant=ActionVariant.PRIMARY,
     )
@@ -71,7 +71,7 @@ class CustomerAdmin(BaseAdmin):
             self.message_user(request, f"{error_count} Kunde(n) mit Fehlern.", level=messages.ERROR)
 
     @action(
-        description="Sync to Microtech",
+        description="Nach Microtech übertragen",
         icon="sync",
         variant=ActionVariant.PRIMARY,
     )
@@ -98,7 +98,7 @@ class CustomerAdmin(BaseAdmin):
             self.message_user(request, f"{error_count} Kunde(n) mit Fehlern.", level=messages.ERROR)
 
     @action(
-        description="Sync from Microtech",
+        description="Von Microtech synchronisieren",
         icon="sync",
         variant=ActionVariant.PRIMARY,
     )
@@ -124,7 +124,7 @@ class CustomerAdmin(BaseAdmin):
         return self._redirect_to_change_page(object_id)
 
     @action(
-        description="Sync to Microtech",
+        description="Nach Microtech übertragen",
         icon="sync",
         variant=ActionVariant.PRIMARY,
     )

@@ -1,0 +1,9 @@
+# German translations for GC-Bridge-4
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: de\n"
+
+msgid "Type to search"
+msgstr "Zum Suchen tippen"

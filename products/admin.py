@@ -132,7 +132,7 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
         return success_count, error_count, error_messages
 
     @action(
-        description="Sync from Microtech",
+        description="Von Microtech synchronisieren",
         icon="sync",
         variant=ActionVariant.PRIMARY,
     )
@@ -152,7 +152,7 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
             self.message_user(request, f"Microtech Sync fehlgeschlagen: {exc}", level=messages.ERROR)
 
     @action(
-        description="Sync from Microtech",
+        description="Von Microtech synchronisieren",
         icon="sync",
         variant=ActionVariant.PRIMARY,
     )
@@ -174,7 +174,7 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
         return self._redirect_to_change_page(object_id)
 
     @action(
-        description="Sync to Shopware6",
+        description="Nach Shopware synchronisieren",
         icon="sync",
         variant=ActionVariant.PRIMARY,
     )
@@ -192,7 +192,7 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
             )
 
     @action(
-        description="Sync to Shopware6",
+        description="Nach Shopware synchronisieren",
         icon="sync",
         variant=ActionVariant.PRIMARY,
     )

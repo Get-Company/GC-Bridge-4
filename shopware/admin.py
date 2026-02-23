@@ -10,9 +10,9 @@ class ShopwareSettingsAdmin(BaseAdmin):
     search_fields = ("name", "sales_channel_id")
     list_filter = ("is_default", "is_active")
     fieldsets = (
-        ("General", {"fields": ("name", "sales_channel_id", "is_default", "is_active")}),
+        ("Allgemein", {"fields": ("name", "sales_channel_id", "is_default", "is_active")}),
         (
-            "Pricing",
+            "Preisgestaltung",
             {
                 "fields": (
                     "price_factor",
@@ -22,7 +22,7 @@ class ShopwareSettingsAdmin(BaseAdmin):
             },
         ),
         (
-            "Defaults",
+            "Standardwerte",
             {
                 "fields": (
                     "tax_high_id",

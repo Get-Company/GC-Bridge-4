@@ -35,6 +35,49 @@
     },
   };
 
+  // ---------------------------------------------------------------------------
+  // German labels — shared for state names and action names.
+  // Actions are named after their resulting state (short & intuitive).
+  // ---------------------------------------------------------------------------
+  var LABELS = {
+    // states / actions
+    open:               "Offen",
+    in_progress:        "In Bearbeitung",
+    completed:          "Abgeschlossen",
+    cancelled:          "Storniert",
+    shipped:            "Versendet",
+    shipped_partially:  "Teilw. versendet",
+    returned:           "Retourniert",
+    returned_partially: "Teilw. retourniert",
+    paid:               "Bezahlt",
+    paid_partially:     "Teilzahlung",
+    authorized:         "Autorisiert",
+    refunded:           "Erstattet",
+    refunded_partially: "Teilerstattung",
+    failed:             "Fehlgeschlagen",
+    reminded:           "Gemahnt",
+    chargeback:         "Rückbuchung",
+    // action-only names (no matching state)
+    process:            "In Bearbeitung",
+    complete:           "Abschließen",
+    cancel:             "Stornieren",
+    reopen:             "Wieder öffnen",
+    ship:               "Versenden",
+    ship_partially:     "Teilversand",
+    retour:             "Retoure",
+    retour_partially:   "Teilretoure",
+    do_pay:             "Bezahlen",
+    authorize:          "Autorisieren",
+    remind:             "Mahnen",
+    refund:             "Erstatten",
+    refund_partially:   "Teilerstattung",
+    fail:               "Fehlgeschlagen",
+  };
+
+  function label(key) {
+    return LABELS[key] || key.replace(/_/g, " ");
+  }
+
   var LS_KEY = "sw_transitions_v1";
 
   // Active transition graph (static fallback or localStorage/API override).
@@ -179,7 +222,7 @@
     } else {
       appendOption(select, "", "Status wählen…");
       actions.forEach(function (a) {
-        appendOption(select, a, a.replace(/_/g, " "));
+        appendOption(select, a, label(a));
       });
     }
   }
@@ -266,7 +309,7 @@
 
       // Update display text.
       var currentEl = targetControl.querySelector(".js-sw-state-current");
-      if (currentEl) currentEl.textContent = state;
+      if (currentEl) currentEl.textContent = label(state);
 
       // Update data-current-state and repopulate options.
       targetControl.dataset.currentState = state;

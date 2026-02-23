@@ -217,7 +217,7 @@ class OrderAdmin(BaseAdmin):
     def shopware_transitions_meta_view(self, request, **kwargs):
         """Returns the complete Shopware state machine transition graph as JSON."""
         if not self.has_view_permission(request):
-            return JsonResponse({"ok": False, "error": "Permission denied."}, status=403)
+            return JsonResponse({"ok": False, "error": "Zugriff verweigert."}, status=403)
         try:
             graph = OrderService().fetch_transition_graph()
         except Exception as exc:
@@ -227,18 +227,18 @@ class OrderAdmin(BaseAdmin):
     def shopware_state_options_view(self, request, object_id: str, **kwargs):
         order = self.get_object(request, object_id)
         if not order:
-            return JsonResponse({"ok": False, "error": "Order not found."}, status=404)
+            return JsonResponse({"ok": False, "error": "Bestellung nicht gefunden."}, status=404)
         if not self.has_change_permission(request, order):
-            return JsonResponse({"ok": False, "error": "Permission denied."}, status=403)
+            return JsonResponse({"ok": False, "error": "Zugriff verweigert."}, status=403)
 
         scope = _to_str(request.GET.get("scope") or request.GET.get("kind")).lower()
         if scope not in {"order", "payment", "delivery"}:
-            return JsonResponse({"ok": False, "error": "Invalid scope."}, status=400)
+            return JsonResponse({"ok": False, "error": "Ungültiger Bereich."}, status=400)
 
         entity_id = _state_entity_id(order=order, scope=scope)
         if not entity_id:
             return JsonResponse(
-                {"ok": False, "error": f"Order has no API id for scope '{scope}'."},
+                {"ok": False, "error": f"Bestellung hat keine API-ID für Bereich '{scope}'."},
                 status=400,
             )
 
@@ -247,13 +247,13 @@ class OrderAdmin(BaseAdmin):
 
     def shopware_set_state_view(self, request, object_id: str, **kwargs):
         if request.method != "POST":
-            return JsonResponse({"ok": False, "error": "POST required."}, status=405)
+            return JsonResponse({"ok": False, "error": "POST erforderlich."}, status=405)
 
         order = self.get_object(request, object_id)
         if not order:
-            return JsonResponse({"ok": False, "error": "Order not found."}, status=404)
+            return JsonResponse({"ok": False, "error": "Bestellung nicht gefunden."}, status=404)
         if not self.has_change_permission(request, order):
-            return JsonResponse({"ok": False, "error": "Permission denied."}, status=403)
+            return JsonResponse({"ok": False, "error": "Zugriff verweigert."}, status=403)
 
         try:
             payload = json.loads(request.body.decode("utf-8") or "{}")
@@ -264,9 +264,9 @@ class OrderAdmin(BaseAdmin):
         action_name = _to_str(payload.get("action"))
 
         if scope not in {"order", "payment", "delivery"}:
-            return JsonResponse({"ok": False, "error": "Invalid scope."}, status=400)
+            return JsonResponse({"ok": False, "error": "Ungültiger Bereich."}, status=400)
         if not action_name:
-            return JsonResponse({"ok": False, "error": "Action is required."}, status=400)
+            return JsonResponse({"ok": False, "error": "Aktion ist erforderlich."}, status=400)
 
         service = OrderService()
 
