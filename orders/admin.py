@@ -46,7 +46,7 @@ def _render_state_dropdown(*, obj: Order, scope: str, current_state: str) -> str
 
     return format_html(
         (
-            '<div class="js-sw-state-control" data-scope="{}" data-options-url="{}" data-set-url="{}">'
+            '<div class="js-sw-state-control" data-scope="{}" data-current-state="{}" data-options-url="{}" data-set-url="{}">'
             '<span class="js-sw-state-current">{}</span><br>'
             '<span class="js-sw-state-loading" style="display:none; font-size:11px; color:#6b7280;" aria-live="polite"></span>'
             "<br>"
@@ -57,6 +57,7 @@ def _render_state_dropdown(*, obj: Order, scope: str, current_state: str) -> str
             "</div>"
         ),
         scope,
+        current_state or "",
         options_url,
         set_url,
         current_state or "-",
@@ -79,6 +80,7 @@ class OrderExpandSection(TemplateSection):
                 "order_state_html": _render_state_dropdown(obj=obj, scope="order", current_state=obj.order_state),
                 "payment_state_html": _render_state_dropdown(obj=obj, scope="payment", current_state=obj.payment_state),
                 "shipping_state_html": _render_state_dropdown(obj=obj, scope="delivery", current_state=obj.shipping_state),
+                "transitions_meta_url": reverse("admin:orders_order_transitions_meta"),
             },
         )
 
@@ -134,6 +136,11 @@ class OrderAdmin(BaseAdmin):
         urls = super().get_custom_urls()
         return (
             *urls,
+            (
+                "shopware-transitions-meta/",
+                "orders_order_transitions_meta",
+                self.shopware_transitions_meta_view,
+            ),
             (
                 "<path:object_id>/shopware-state-options/",
                 "orders_order_state_options",
@@ -191,7 +198,7 @@ class OrderAdmin(BaseAdmin):
         )
 
     @action(
-        description="Sync Open Orders From Shopware",
+        description="Offene Bestellungen von Shopware synchronisieren",
         icon="sync",
         variant=ActionVariant.PRIMARY,
     )
@@ -200,12 +207,22 @@ class OrderAdmin(BaseAdmin):
         return self._redirect_to_changelist()
 
     @action(
-        description="Sync Open Orders From Shopware",
+        description="Offene Bestellungen von Shopware synchronisieren",
         icon="sync",
         variant=ActionVariant.PRIMARY,
     )
     def sync_open_orders_from_shopware(self, request, queryset):
         self._run_open_order_sync(request)
+
+    def shopware_transitions_meta_view(self, request, **kwargs):
+        """Returns the complete Shopware state machine transition graph as JSON."""
+        if not self.has_view_permission(request):
+            return JsonResponse({"ok": False, "error": "Permission denied."}, status=403)
+        try:
+            graph = OrderService().fetch_transition_graph()
+        except Exception as exc:
+            return JsonResponse({"ok": False, "error": str(exc)}, status=500)
+        return JsonResponse({"ok": True, "transitions": graph})
 
     def shopware_state_options_view(self, request, object_id: str, **kwargs):
         order = self.get_object(request, object_id)

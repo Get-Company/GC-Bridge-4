@@ -195,6 +195,120 @@ class OrderService(Shopware6Service):
             f"/_action/state-machine/order_transaction/{entity_id}/state",
         ]
 
+    # Maps Shopware state machine technicalName → scope key used in this app.
+    _MACHINE_TO_SCOPE: dict[str, str] = {
+        "order.state": "order",
+        "order_delivery.state": "delivery",
+        "order_transaction.state": "payment",
+    }
+
+    def fetch_transition_graph(self) -> dict[str, dict[str, list[str]]]:
+        """
+        Fetches the complete state machine transition graph for all three
+        order-related state machines from Shopware in a single request.
+
+        Returns a nested dict:
+          { "order": { "open": ["process", "cancel"], ... },
+            "delivery": { ... },
+            "payment": { ... } }
+        """
+        payload = {
+            "limit": 500,
+            "associations": {
+                "fromStateMachineState": {},
+                "stateMachine": {},
+            },
+            "filter": [
+                {
+                    "type": "equalsAny",
+                    "field": "stateMachine.technicalName",
+                    "value": list(self._MACHINE_TO_SCOPE.keys()),
+                }
+            ],
+        }
+        response = self.request_post("/api/search/state-machine-transition", payload=payload)
+        return self._parse_transition_graph(response)
+
+    def _parse_transition_graph(self, response: Any) -> dict[str, dict[str, list[str]]]:
+        graph: dict[str, dict[str, list[str]]] = {"order": {}, "delivery": {}, "payment": {}}
+        if not isinstance(response, dict):
+            return graph
+
+        # Build a lookup from id → object for JSON:API "included" arrays.
+        included_by_id: dict[str, dict] = {}
+        for item in response.get("included") or []:
+            if isinstance(item, dict) and item.get("id"):
+                included_by_id[item["id"]] = item
+
+        raw_data = response.get("data") or []
+        if isinstance(raw_data, dict):
+            raw_data = list(raw_data.values())
+
+        for item in raw_data:
+            if not isinstance(item, dict):
+                continue
+
+            attrs = item.get("attributes") or {}
+            action_name = _to_str(item.get("actionName") or attrs.get("actionName"))
+            if not action_name:
+                continue
+
+            # --- resolve stateMachine technicalName ---
+            machine_name = self._resolve_technical_name(
+                embedded=item.get("stateMachine"),
+                rel_id=self._rel_id(item, "stateMachine"),
+                included_by_id=included_by_id,
+            )
+            scope = self._MACHINE_TO_SCOPE.get(machine_name)
+            if not scope:
+                continue
+
+            # --- resolve fromStateMachineState technicalName ---
+            from_state = self._resolve_technical_name(
+                embedded=item.get("fromStateMachineState"),
+                rel_id=self._rel_id(item, "fromStateMachineState"),
+                included_by_id=included_by_id,
+            )
+            if not from_state:
+                continue
+
+            graph[scope].setdefault(from_state, [])
+            if action_name not in graph[scope][from_state]:
+                graph[scope][from_state].append(action_name)
+
+        return graph
+
+    @staticmethod
+    def _rel_id(item: dict, rel_name: str) -> str:
+        """Return the relationship id for *rel_name* from a JSON:API item."""
+        rel = (item.get("relationships") or {}).get(rel_name) or {}
+        data = rel.get("data") or {}
+        return _to_str(data.get("id") if isinstance(data, dict) else None)
+
+    @staticmethod
+    def _resolve_technical_name(
+        embedded: Any,
+        rel_id: str,
+        included_by_id: dict[str, dict],
+    ) -> str:
+        """Extract technicalName from an embedded object or the included lookup."""
+        if isinstance(embedded, dict):
+            name = _to_str(
+                embedded.get("technicalName")
+                or (embedded.get("attributes") or {}).get("technicalName")
+            )
+            if name:
+                return name
+        if rel_id and rel_id in included_by_id:
+            obj = included_by_id[rel_id]
+            name = _to_str(
+                obj.get("technicalName")
+                or (obj.get("attributes") or {}).get("technicalName")
+            )
+            if name:
+                return name
+        return ""
+
     @staticmethod
     def _extract_transition_actions(payload: Any) -> list[dict[str, str]]:
         if payload is None:

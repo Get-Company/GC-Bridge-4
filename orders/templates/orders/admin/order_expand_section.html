@@ -1,8 +1,15 @@
 <div class="flex flex-wrap gap-8 text-sm p-1">
 
     {# ── States ─────────────────────────────────────────────────────────── #}
-    <div class="flex-shrink-0">
-        <div class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-3">Status</div>
+    <div class="flex-shrink-0" data-transitions-meta-url="{{ transitions_meta_url }}">
+        <div class="flex items-center gap-3 mb-3">
+            <div class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Status</div>
+            <button type="button"
+                    onclick="swRefreshTransitions(this)"
+                    class="text-xs text-primary-600 hover:text-primary-800 dark:text-primary-400 dark:hover:text-primary-200 underline underline-offset-2">
+                Übergänge aktualisieren
+            </button>
+        </div>
         <div class="flex flex-wrap gap-6">
             <div>
                 <div class="text-xs text-gray-400 dark:text-gray-500 mb-1">Bestellung</div>
