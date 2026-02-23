@@ -23,14 +23,34 @@ class ShopwareBaseService(BaseService, ABC):
     timeout_seconds = 30
 
     def __init__(self) -> None:
-        self.base_url = self._get_env(self.api_base_url_env).rstrip("/")
-        self.client_id = self._get_env(self.client_id_env)
-        self.client_secret = self._get_env(self.client_secret_env)
+        db = self._load_db_config()
+        self.base_url = (db.get("api_url") or self._get_env(self.api_base_url_env)).rstrip("/")
+        self.client_id = db.get("client_id") or self._get_env(self.client_id_env)
+        self.client_secret = db.get("client_secret") or self._get_env(self.client_secret_env)
         self.access_token = self._get_env(self.access_token_env)
-        self.grant_type = self._get_env(self.grant_type_env) or "resource_owner"
-        self.username = self._get_env(self.username_env)
-        self.password = self._get_env(self.password_env)
+        self.grant_type = db.get("grant_type") or self._get_env(self.grant_type_env) or "resource_owner"
+        self.username = db.get("username") or self._get_env(self.username_env)
+        self.password = db.get("password") or self._get_env(self.password_env)
         self.logger = logger
+
+    @staticmethod
+    def _load_db_config() -> dict:
+        """Load Shopware connection settings from the database (if configured)."""
+        try:
+            from shopware.models import ShopwareConnection
+            cfg = ShopwareConnection.objects.filter(pk=1).first()
+            if cfg and cfg.api_url:
+                return {
+                    "api_url": cfg.api_url,
+                    "client_id": cfg.client_id,
+                    "client_secret": cfg.client_secret,
+                    "grant_type": cfg.grant_type,
+                    "username": cfg.username,
+                    "password": cfg.password,
+                }
+        except Exception:
+            pass
+        return {}
 
     @abstractmethod
     def authenticate(self) -> str:

@@ -28,6 +28,19 @@ class MicrotechConnectionConfig:
 
     @classmethod
     def from_env(cls) -> "MicrotechConnectionConfig":
+        # Try database configuration first, fall back to environment variables.
+        try:
+            from microtech.models import MicrotechSettings
+            cfg = MicrotechSettings.objects.filter(pk=1).first()
+            if cfg and cfg.mandant:
+                return cls(
+                    mandant=cfg.mandant,
+                    firma=cfg.firma,
+                    user=cfg.benutzer,
+                    manual_user=cfg.manual_benutzer,
+                )
+        except Exception:
+            pass
         return cls(
             mandant=os.getenv("MICROTECH_MANDANT", ""),
             firma=os.getenv("MICROTECH_FIRMA", ""),

@@ -291,15 +291,39 @@ UNFOLD = {
                 ],
             },
             {
-                "title": _("Konfiguration"),
+                "title": _("Shopware"),
                 "separator": True,
                 "collapsible": True,
                 "items": [
                     {
-                        "title": _("Shopware"),
-                        "icon": "settings",
+                        "title": _("Verbindung"),
+                        "icon": "cable",
+                        "link": reverse_lazy("admin:shopware_shopwareconnection_changelist"),
+                    },
+                    {
+                        "title": _("Verkaufskanäle"),
+                        "icon": "storefront",
                         "link": reverse_lazy("admin:shopware_shopwaresettings_changelist"),
                     },
+                ],
+            },
+            {
+                "title": _("Microtech"),
+                "separator": True,
+                "collapsible": True,
+                "items": [
+                    {
+                        "title": _("Verbindung"),
+                        "icon": "cable",
+                        "link": reverse_lazy("admin:microtech_microtechsettings_changelist"),
+                    },
+                ],
+            },
+            {
+                "title": _("Verwaltung"),
+                "separator": True,
+                "collapsible": True,
+                "items": [
                     {
                         "title": _("Benutzer"),
                         "icon": "person",
