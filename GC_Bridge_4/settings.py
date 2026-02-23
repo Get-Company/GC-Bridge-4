@@ -273,21 +273,6 @@ UNFOLD = {
                         "icon": "sell",
                         "link": reverse_lazy("admin:products_price_changelist"),
                     },
-                    {
-                        "title": _("Lager"),
-                        "icon": "warehouse",
-                        "link": reverse_lazy("admin:products_storage_changelist"),
-                    },
-                    {
-                        "title": _("Kategorien"),
-                        "icon": "category",
-                        "link": reverse_lazy("admin:products_category_changelist"),
-                    },
-                    {
-                        "title": _("Steuern"),
-                        "icon": "percent",
-                        "link": reverse_lazy("admin:products_tax_changelist"),
-                    },
                 ],
             },
             {

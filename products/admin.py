@@ -14,6 +14,12 @@ from shopware.services import ProductService
 from .models import Category, Price, Product, Storage, Tax
 
 
+class StorageInline(BaseStackedInline):
+    model = Storage
+    fields = ("stock", "virtual_stock", "location")
+    extra = 0
+
+
 class PriceInline(BaseStackedInline):
     model = Price
     fields = (
@@ -44,7 +50,8 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
     list_display = ("erp_nr", "name", "is_active", "created_at")
     search_fields = ("erp_nr", "sku", "name")
     list_filter = ("is_active",)
-    inlines = (PriceInline,)
+    inlines = (StorageInline, PriceInline)
+    filter_horizontal = ("categories",)
     actions = ("sync_from_microtech", "sync_to_shopware")
     actions_detail = ("sync_from_microtech_detail", "sync_to_shopware_detail")
 
