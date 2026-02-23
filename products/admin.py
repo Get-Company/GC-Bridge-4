@@ -5,6 +5,12 @@ from django.http import HttpResponseRedirect
 from django.urls import reverse
 from modeltranslation.admin import TabbedTranslationAdmin
 
+from unfold.contrib.filters.admin import (
+    BooleanRadioFilter,
+    RangeDateTimeFilter,
+    RangeNumericFilter,
+    RelatedDropdownFilter,
+)
 from unfold.decorators import action
 from unfold.enums import ActionVariant
 
@@ -49,7 +55,12 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
     list_horizontal_scrollbar_top = BaseAdmin.list_horizontal_scrollbar_top
     list_display = ("erp_nr", "name", "is_active", "created_at")
     search_fields = ("erp_nr", "sku", "name")
-    list_filter = ("is_active",)
+    list_filter = [
+        ("is_active", BooleanRadioFilter),
+        ("tax", RelatedDropdownFilter),
+        ("categories", RelatedDropdownFilter),
+        ("created_at", RangeDateTimeFilter),
+    ]
     inlines = (StorageInline, PriceInline)
     filter_horizontal = ("categories",)
     actions = ("sync_from_microtech", "sync_to_shopware")
@@ -237,7 +248,11 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
 class PriceAdmin(BaseAdmin):
     list_display = ("product", "sales_channel", "price", "special_percentage", "special_price", "special_active", "rebate_price", "created_at")
     search_fields = ("product__erp_nr", "product__name", "sales_channel__name")
-    list_filter = ("sales_channel", "created_at")
+    list_filter = [
+        ("sales_channel", RelatedDropdownFilter),
+        ("price", RangeNumericFilter),
+        ("created_at", RangeDateTimeFilter),
+    ]
 
     @admin.display(boolean=True, description="Sonderpreis aktiv")
     def special_active(self, obj: Price) -> bool:
@@ -248,18 +263,27 @@ class PriceAdmin(BaseAdmin):
 class StorageAdmin(BaseAdmin):
     list_display = ("product", "stock", "virtual_stock", "location", "created_at")
     search_fields = ("product__erp_nr", "product__name", "location")
-    list_filter = ("created_at", "updated_at")
+    list_filter = [
+        ("stock", RangeNumericFilter),
+        ("created_at", RangeDateTimeFilter),
+    ]
 
 
 @admin.register(Category)
 class CategoryAdmin(BaseAdmin):
     list_display = ("name", "slug", "parent", "created_at")
     search_fields = ("name", "slug", "parent__name")
-    list_filter = ("created_at", "updated_at")
+    list_filter = [
+        ("parent", RelatedDropdownFilter),
+        ("created_at", RangeDateTimeFilter),
+    ]
 
 
 @admin.register(Tax)
 class TaxAdmin(BaseAdmin):
     list_display = ("name", "rate", "created_at")
     search_fields = ("name",)
-    list_filter = ("created_at", "updated_at")
+    list_filter = [
+        ("rate", RangeNumericFilter),
+        ("created_at", RangeDateTimeFilter),
+    ]

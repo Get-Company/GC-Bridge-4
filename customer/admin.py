@@ -2,6 +2,11 @@ from django.contrib import admin, messages
 from django.http import HttpResponseRedirect
 from django.urls import reverse
 
+from unfold.contrib.filters.admin import (
+    BooleanRadioFilter,
+    FieldTextFilter,
+    RangeDateTimeFilter,
+)
 from unfold.decorators import action
 from unfold.enums import ActionVariant
 
@@ -32,7 +37,10 @@ class AddressInline(BaseTabularInline):
 class CustomerAdmin(BaseAdmin):
     list_display = ("erp_nr", "name", "email", "is_gross", "created_at")
     search_fields = ("erp_nr", "name", "email")
-    list_filter = ("is_gross", "created_at")
+    list_filter = [
+        ("is_gross", BooleanRadioFilter),
+        ("created_at", RangeDateTimeFilter),
+    ]
     inlines = (AddressInline,)
     actions = ("sync_from_microtech", "sync_to_microtech")
     actions_detail = ("sync_from_microtech_detail", "sync_to_microtech_detail")
@@ -154,4 +162,9 @@ class CustomerAdmin(BaseAdmin):
 class AddressAdmin(BaseAdmin):
     list_display = ("customer", "erp_ans_id", "name1", "city", "is_invoice", "is_shipping", "created_at")
     search_fields = ("customer__erp_nr", "name1", "name2", "street", "postal_code", "city")
-    list_filter = ("is_invoice", "is_shipping", "created_at")
+    list_filter = [
+        ("is_invoice", BooleanRadioFilter),
+        ("is_shipping", BooleanRadioFilter),
+        ("country_code", FieldTextFilter),
+        ("created_at", RangeDateTimeFilter),
+    ]

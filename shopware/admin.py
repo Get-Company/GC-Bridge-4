@@ -3,6 +3,8 @@ from django.forms import PasswordInput
 from django.http import HttpResponseRedirect
 from django.urls import reverse
 
+from unfold.contrib.filters.admin import BooleanRadioFilter
+
 from core.admin import BaseAdmin
 from .models import ShopwareConnection, ShopwareSettings
 
@@ -52,7 +54,10 @@ class ShopwareConnectionAdmin(SingletonAdmin):
 class ShopwareSettingsAdmin(BaseAdmin):
     list_display = ("name", "sales_channel_id", "is_default", "price_factor", "is_active")
     search_fields = ("name", "sales_channel_id")
-    list_filter = ("is_default", "is_active")
+    list_filter = [
+        ("is_default", BooleanRadioFilter),
+        ("is_active", BooleanRadioFilter),
+    ]
     fieldsets = (
         ("Allgemein", {"fields": ("name", "sales_channel_id", "is_default", "is_active")}),
         (

@@ -8,6 +8,10 @@ from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils.html import format_html, format_html_join
 
+from unfold.contrib.filters.admin import (
+    FieldTextFilter,
+    RangeDateTimeFilter,
+)
 from unfold.decorators import action
 from unfold.enums import ActionVariant
 from unfold.sections import TemplateSection
@@ -111,7 +115,13 @@ class OrderAdmin(BaseAdmin):
     list_sections = [OrderExpandSection]
     list_sections_classes = "grid-cols-1"
     search_fields = ("order_number", "api_id", "customer__erp_nr", "customer__email")
-    list_filter = ("order_state", "payment_state", "shipping_state", "created_at")
+    list_filter = [
+        ("order_state", FieldTextFilter),
+        ("payment_state", FieldTextFilter),
+        ("shipping_state", FieldTextFilter),
+        ("purchase_date", RangeDateTimeFilter),
+        ("created_at", RangeDateTimeFilter),
+    ]
     inlines = (OrderDetailInline,)
     actions_list = ("sync_open_orders_from_shopware_list",)
     actions = ("sync_open_orders_from_shopware",)
@@ -361,4 +371,6 @@ class OrderAdmin(BaseAdmin):
 class OrderDetailAdmin(BaseAdmin):
     list_display = ("order", "erp_nr", "name", "quantity", "unit_price", "total_price", "created_at")
     search_fields = ("order__order_number", "order__api_id", "erp_nr", "name")
-    list_filter = ("created_at",)
+    list_filter = [
+        ("created_at", RangeDateTimeFilter),
+    ]

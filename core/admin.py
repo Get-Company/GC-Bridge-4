@@ -17,7 +17,8 @@ class BaseAdmin(UnfoldModelAdmin):
     compressed_fields = True
     warn_unsaved_form = True
     change_form_show_cancel_button = True
-    list_filter_sheet = False
+    list_filter_sheet = True
+    list_filter_submit = True
     list_horizontal_scrollbar_top = True
     formfield_overrides = {
         models.TextField: {"widget": WysiwygWidget},

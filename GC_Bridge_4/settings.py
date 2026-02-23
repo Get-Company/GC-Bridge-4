@@ -66,6 +66,7 @@ CSRF_TRUSTED_ORIGINS = env_list(
 
 INSTALLED_APPS = [
     'unfold',
+    'unfold.contrib.filters',
     'unfold.contrib.forms',
     'modeltranslation',
     'django.contrib.admin',
