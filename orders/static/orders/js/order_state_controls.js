@@ -363,7 +363,7 @@
           var currentState = control.dataset.currentState || "";
           var validActions = ((freshGraph[scope] || {})[currentState] || []);
           var validStr = validActions.length
-            ? validActions.join(", ")
+            ? validActions.map(function (a) { return label(a); }).join(", ")
             : "keine";
           setFeedback(
             control,
@@ -397,6 +397,13 @@
   function bindControl(control) {
     var select = control.querySelector(".js-sw-state-select");
     if (!select) return;
+
+    // Translate the server-rendered current state text to German.
+    var currentEl = control.querySelector(".js-sw-state-current");
+    if (currentEl) {
+      var raw = (currentEl.textContent || "").trim();
+      if (raw && raw !== "-") currentEl.textContent = label(raw);
+    }
 
     // Populate immediately from local graph.
     if (!select.disabled) {
