@@ -244,12 +244,18 @@ class OrderUpsertMicrotechService(BaseService):
             )
 
             so_vorgang.Positionen.Add(quantity, unit, erp_nr)
-            self._set_position_price(
-                so_vorgang=so_vorgang,
-                price=detail.unit_price,
-                is_gross=order.customer.is_gross,
-                position_name=position_name,
-            )
+            if self._requires_microtech_base_price(unit):
+                self._set_position_name(
+                    so_vorgang=so_vorgang,
+                    position_name=position_name,
+                )
+            else:
+                self._set_position_price(
+                    so_vorgang=so_vorgang,
+                    price=detail.unit_price,
+                    is_gross=order.customer.is_gross,
+                    position_name=position_name,
+                )
 
     @staticmethod
     def _build_product_unit_map(details: list[OrderDetail]) -> dict[str, str]:
@@ -292,6 +298,11 @@ class OrderUpsertMicrotechService(BaseService):
 
         return raw_unit or product_unit_map.get(erp_nr) or (detail.unit or "").strip() or DEFAULT_UNIT
 
+    @staticmethod
+    def _requires_microtech_base_price(unit: str) -> bool:
+        normalized = (unit or "").strip().replace(" ", "")
+        return normalized.startswith("%")
+
     def _add_shipping_position(self, *, order: Order, so_vorgang) -> None:
         if not order.shipping_costs or order.shipping_costs <= Decimal("0"):
             return
@@ -313,22 +324,10 @@ class OrderUpsertMicrotechService(BaseService):
     ) -> None:
         position_dataset = so_vorgang.Positionen.DataSet
         position_dataset.Edit()
-
-        if position_name:
-            name_written = (
-                OrderUpsertMicrotechService._set_position_field(
-                    dataset=position_dataset,
-                    field_name="Bez",
-                    value=position_name,
-                )
-                or OrderUpsertMicrotechService._set_position_field(
-                    dataset=position_dataset,
-                    field_name="KuBez",
-                    value=position_name,
-                )
-            )
-            if not name_written:
-                logger.debug("Position name could not be written (fields Bez/KuBez unavailable).")
+        OrderUpsertMicrotechService._write_position_name(
+            dataset=position_dataset,
+            position_name=position_name,
+        )
 
         epr = position_dataset.Fields("EPr").GetEditObject(2)
         if is_gross:
@@ -337,6 +336,41 @@ class OrderUpsertMicrotechService(BaseService):
             epr.GesNetto = float(price)
         epr.Save()
         position_dataset.Post()
+
+    @staticmethod
+    def _set_position_name(
+        *,
+        so_vorgang,
+        position_name: str,
+    ) -> None:
+        if not position_name:
+            return
+        position_dataset = so_vorgang.Positionen.DataSet
+        position_dataset.Edit()
+        OrderUpsertMicrotechService._write_position_name(
+            dataset=position_dataset,
+            position_name=position_name,
+        )
+        position_dataset.Post()
+
+    @staticmethod
+    def _write_position_name(*, dataset, position_name: str) -> None:
+        if not position_name:
+            return
+        name_written = (
+            OrderUpsertMicrotechService._set_position_field(
+                dataset=dataset,
+                field_name="Bez",
+                value=position_name,
+            )
+            or OrderUpsertMicrotechService._set_position_field(
+                dataset=dataset,
+                field_name="KuBez",
+                value=position_name,
+            )
+        )
+        if not name_written:
+            logger.debug("Position name could not be written (fields Bez/KuBez unavailable).")
 
     @staticmethod
     def _set_position_field(*, dataset, field_name: str, value: str) -> bool:
