@@ -89,32 +89,28 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
         for offset in range(0, len(products), batch_size):
             batch = products[offset : offset + batch_size]
             missing = [p.erp_nr for p in batch if not p.sku]
-            if missing:
-                sku_map = service.get_sku_map(missing)
-                for product in batch:
-                    if product.sku or product.erp_nr not in sku_map:
-                        continue
-                    product.sku = sku_map[product.erp_nr]
-                    product.save(update_fields=["sku"])
-
-                for product in batch:
-                    if product.sku:
-                        continue
-                    error_count += 1
-                    msg = f"SKU nicht gefunden fuer Artikelnr. {product.erp_nr}"
-                    error_messages.append(msg)
-                    if request:
-                        self._log_admin_error(request, msg, obj=product)
+            sku_map = service.get_sku_map(missing) if missing else {}
 
             payloads = []
+            payload_products: list[Product] = []
+            fallback_products: list[Product] = []
             for product in batch:
-                if not product.sku:
-                    continue
+                effective_sku = product.sku
+                if not effective_sku:
+                    resolved_sku = sku_map.get(product.erp_nr)
+                    if resolved_sku:
+                        effective_sku = resolved_sku
+                        product.sku = resolved_sku
+                        product.save(update_fields=["sku"])
+
                 payload = {
-                    "id": product.sku,
                     "productNumber": product.erp_nr,
                     "active": product.is_active,
                 }
+                if effective_sku:
+                    payload["id"] = effective_sku
+                else:
+                    fallback_products.append(product)
                 if product.name:
                     payload["name"] = product.name
                 if product.description is not None:
@@ -128,19 +124,34 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
                     payload["stock"] = storage.get_stock
 
                 payloads.append(payload)
+                payload_products.append(product)
 
             if not payloads:
                 continue
 
             try:
                 service.bulk_upsert(payloads)
-                success_count += len(payloads)
+                success_count += len(payload_products)
+
+                if fallback_products:
+                    refreshed_map = service.get_sku_map([product.erp_nr for product in fallback_products])
+                    for product in fallback_products:
+                        resolved_sku = refreshed_map.get(product.erp_nr)
+                        if resolved_sku:
+                            product.sku = resolved_sku
+                            product.save(update_fields=["sku"])
+                            continue
+                        error_count += 1
+                        msg = f"SKU konnte nach Fallback-Upsert nicht aufgeloest werden fuer Artikelnr. {product.erp_nr}"
+                        error_messages.append(msg)
+                        if request:
+                            self._log_admin_error(request, msg, obj=product)
             except Exception as exc:
-                error_count += len(payloads)
+                error_count += len(payload_products)
                 msg = str(exc)
                 error_messages.append(msg)
                 if request:
-                    for product in batch:
+                    for product in payload_products:
                         self._log_admin_error(
                             request,
                             f"Shopware bulk sync fehlgeschlagen fuer {product.erp_nr}: {exc}",

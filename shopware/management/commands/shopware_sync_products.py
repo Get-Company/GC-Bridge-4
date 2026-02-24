@@ -198,39 +198,33 @@ class Command(BaseCommand):
         for offset in range(0, len(products), batch_size):
             batch = products[offset : offset + batch_size]
             missing = [p.erp_nr for p in batch if not p.sku]
-            if missing:
-                sku_map = service.get_sku_map(missing)
-                for product in batch:
-                    if product.sku or product.erp_nr not in sku_map:
-                        continue
-                    product.sku = sku_map[product.erp_nr]
-                    product.save(update_fields=["sku"])
-
-                for product in batch:
-                    if product.sku:
-                        continue
-                    _log_admin_error(
-                        admin_user_id=admin_user_id,
-                        content_type_id=content_type_id,
-                        message=f"Shopware SKU not found for productNumber {product.erp_nr}.",
-                        object_id=str(product.pk),
-                        object_repr=f"Product {product.erp_nr}",
-                    )
+            sku_map = service.get_sku_map(missing) if missing else {}
 
             payloads = []
+            payload_products: list[Product] = []
+            fallback_products: list[Product] = []
             for product in batch:
-                if not product.sku:
-                    continue
+                effective_sku = product.sku
+                if not effective_sku:
+                    resolved_sku = sku_map.get(product.erp_nr)
+                    if resolved_sku:
+                        effective_sku = resolved_sku
+                        product.sku = resolved_sku
+                        product.save(update_fields=["sku"])
+
                 prices_by_channel = {
                     price.sales_channel_id: price
                     for price in product.prices.select_related("sales_channel").all()
                     if price.sales_channel_id
                 }
                 payload = {
-                    "id": product.sku,
                     "productNumber": product.erp_nr,
                     "active": product.is_active,
                 }
+                if effective_sku:
+                    payload["id"] = effective_sku
+                else:
+                    fallback_products.append(product)
                 if product.name:
                     payload["name"] = product.name
                 if product.description is not None:
@@ -272,39 +266,70 @@ class Command(BaseCommand):
                         )
 
                 prices_payload = []
-                for channel in channels:
-                    price = prices_by_channel.get(channel.id)
-                    if not price:
-                        _log_admin_error(
-                            admin_user_id=admin_user_id,
-                            content_type_id=content_type_id,
-                            message=f"Kein Preis für Sales-Channel {channel.name} bei Produkt {product.erp_nr}.",
-                            object_id=str(product.pk),
-                            object_repr=f"Product {product.erp_nr}",
-                        )
-                        continue
-                    if not channel.rule_id_price or not channel.currency_id:
-                        _log_admin_error(
-                            admin_user_id=admin_user_id,
-                            content_type_id=content_type_id,
-                            message=f"Sales-Channel {channel.name} fehlt rule_id_price oder currency_id.",
-                            object_id=str(product.pk),
-                            object_repr=f"Product {product.erp_nr}",
-                        )
-                        continue
-                    prices_payload.extend(_build_prices_for_channel(product, channel, price))
+                if effective_sku:
+                    for channel in channels:
+                        price = prices_by_channel.get(channel.id)
+                        if not price:
+                            _log_admin_error(
+                                admin_user_id=admin_user_id,
+                                content_type_id=content_type_id,
+                                message=f"Kein Preis für Sales-Channel {channel.name} bei Produkt {product.erp_nr}.",
+                                object_id=str(product.pk),
+                                object_repr=f"Product {product.erp_nr}",
+                            )
+                            continue
+                        if not channel.rule_id_price or not channel.currency_id:
+                            _log_admin_error(
+                                admin_user_id=admin_user_id,
+                                content_type_id=content_type_id,
+                                message=f"Sales-Channel {channel.name} fehlt rule_id_price oder currency_id.",
+                                object_id=str(product.pk),
+                                object_repr=f"Product {product.erp_nr}",
+                            )
+                            continue
+                        prices_payload.extend(_build_prices_for_channel(product, channel, price))
+                elif channels:
+                    _log_admin_error(
+                        admin_user_id=admin_user_id,
+                        content_type_id=content_type_id,
+                        message=(
+                            f"Advanced prices for product {product.erp_nr} übersprungen, "
+                            "da SKU im Fallback-Upsert noch nicht vorhanden war."
+                        ),
+                        object_id=str(product.pk),
+                        object_repr=f"Product {product.erp_nr}",
+                    )
 
                 if prices_payload:
                     payload["prices"] = prices_payload
                 payloads.append(payload)
+                payload_products.append(product)
 
             if not payloads:
                 continue
 
             try:
                 service.bulk_upsert(payloads)
+                if fallback_products:
+                    refreshed_map = service.get_sku_map([product.erp_nr for product in fallback_products])
+                    for product in fallback_products:
+                        resolved_sku = refreshed_map.get(product.erp_nr)
+                        if resolved_sku:
+                            product.sku = resolved_sku
+                            product.save(update_fields=["sku"])
+                            continue
+                        _log_admin_error(
+                            admin_user_id=admin_user_id,
+                            content_type_id=content_type_id,
+                            message=(
+                                f"Shopware SKU konnte nach Fallback-Upsert nicht aufgeloest werden "
+                                f"fuer productNumber {product.erp_nr}."
+                            ),
+                            object_id=str(product.pk),
+                            object_repr=f"Product {product.erp_nr}",
+                        )
             except Exception as exc:
-                for product in batch:
+                for product in payload_products:
                     _log_admin_error(
                         admin_user_id=admin_user_id,
                         content_type_id=content_type_id,
