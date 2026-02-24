@@ -215,6 +215,7 @@ class OrderUpsertMicrotechService(BaseService):
         details: list[OrderDetail] = list(order.details.all())
         artikel_service = MicrotechArtikelService(erp=erp)
         article_name_cache: dict[str, str] = {}
+        article_raw_unit_cache: dict[str, str] = {}
         product_unit_map = self._build_product_unit_map(details)
 
         for detail in details:
@@ -226,10 +227,13 @@ class OrderUpsertMicrotechService(BaseService):
                 )
                 continue
 
-            unit = (
-                product_unit_map.get(erp_nr)
-                or (detail.unit or "").strip()
-                or DEFAULT_UNIT
+            unit = self._resolve_position_unit(
+                detail=detail,
+                erp_nr=erp_nr,
+                artikel_service=artikel_service,
+                product_unit_map=product_unit_map,
+                article_name_cache=article_name_cache,
+                article_raw_unit_cache=article_raw_unit_cache,
             )
             quantity = detail.quantity or 1
             position_name = self._resolve_position_name(
@@ -260,6 +264,33 @@ class OrderUpsertMicrotechService(BaseService):
             .values_list("erp_nr", "unit")
         )
         return {str(erp_nr).strip(): str(unit).strip() for erp_nr, unit in rows if erp_nr and unit}
+
+    @staticmethod
+    def _resolve_position_unit(
+        *,
+        detail: OrderDetail,
+        erp_nr: str,
+        artikel_service: MicrotechArtikelService,
+        product_unit_map: dict[str, str],
+        article_name_cache: dict[str, str],
+        article_raw_unit_cache: dict[str, str],
+    ) -> str:
+        raw_unit = article_raw_unit_cache.get(erp_nr)
+        if raw_unit is None:
+            raw_unit = ""
+            try:
+                found = artikel_service.find(erp_nr, index_field="ArtNr") or artikel_service.find(erp_nr)
+                if found:
+                    raw_unit = str(artikel_service.get_unit(raw=True) or "").strip()
+                    article_name_cache.setdefault(erp_nr, str(artikel_service.get_name() or "").strip())
+            except Exception:
+                logger.exception(
+                    "Failed to load raw article unit (Einh) for erp_nr {} while building order positions.",
+                    erp_nr,
+                )
+            article_raw_unit_cache[erp_nr] = raw_unit
+
+        return raw_unit or product_unit_map.get(erp_nr) or (detail.unit or "").strip() or DEFAULT_UNIT
 
     def _add_shipping_position(self, *, order: Order, so_vorgang) -> None:
         if not order.shipping_costs or order.shipping_costs <= Decimal("0"):
