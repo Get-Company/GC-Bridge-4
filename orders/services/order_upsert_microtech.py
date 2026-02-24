@@ -79,7 +79,11 @@ class OrderUpsertMicrotechService(BaseService):
             raise ValueError("Order has no customer assigned.")
 
         logger.info("Syncing customer {} to Microtech before order upsert.", customer.pk)
-        CustomerUpsertMicrotechService().upsert_customer(customer)
+        CustomerUpsertMicrotechService().upsert_customer(
+            customer,
+            shipping_address=order.shipping_address,
+            billing_address=order.billing_address,
+        )
         customer.refresh_from_db()
 
         if not customer.erp_nr:

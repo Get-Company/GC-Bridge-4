@@ -117,15 +117,26 @@ class UpsertResult:
 class CustomerUpsertMicrotechService(BaseService):
     model = Customer
 
-    def upsert_customer(self, customer: Customer) -> UpsertResult:
+    def upsert_customer(
+        self,
+        customer: Customer,
+        *,
+        shipping_address: Address | None = None,
+        billing_address: Address | None = None,
+    ) -> UpsertResult:
         if not isinstance(customer, Customer):
             raise TypeError("customer must be an instance of Customer.")
 
-        shipping = customer.shipping_address or customer.addresses.first()
+        if shipping_address and shipping_address.customer_id != customer.id:
+            raise ValueError("shipping_address does not belong to the customer.")
+        if billing_address and billing_address.customer_id != customer.id:
+            raise ValueError("billing_address does not belong to the customer.")
+
+        shipping = shipping_address or customer.shipping_address or customer.addresses.first()
         if not shipping:
             raise ValueError("Customer has no address to sync.")
 
-        billing = customer.billing_address or shipping
+        billing = billing_address or customer.billing_address or shipping
 
         with microtech_connection() as erp:
             adresse_service = MicrotechAdresseService(erp=erp)
