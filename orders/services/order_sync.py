@@ -11,7 +11,7 @@ from core.services import BaseService
 from customer.models import Address, Customer
 from orders.models import Order, OrderDetail
 from shopware.models import ShopwareSettings
-from shopware.services import OrderService
+from shopware.services import CustomerService, OrderService
 
 
 def _normalize_entity(data: Any) -> Any:
@@ -194,8 +194,14 @@ class OrderSyncService(BaseService):
     ) -> tuple[Customer, Address | None, Address | None, int]:
         order_data = _normalize_entity(order_data)
         order_customer = _normalize_entity(order_customer)
-        customer_id = _to_str(order_customer.get("customerId"))
+        customer_id = _to_str(order_customer.get("customerId")) or _to_str((order_customer.get("customer") or {}).get("id"))
+        customer_payload = self._load_shopware_customer(customer_id=customer_id)
+        if not customer_id:
+            customer_id = _to_str(customer_payload.get("id"))
+
         customer_number = _to_str(order_customer.get("customerNumber"))
+        if not customer_number:
+            customer_number = _to_str(customer_payload.get("customerNumber"))
         if not customer_number and customer_id:
             customer_number = f"sw6-{customer_id[:12]}"
         if not customer_number:
@@ -207,10 +213,10 @@ class OrderSyncService(BaseService):
         if not customer:
             customer = Customer(erp_nr=customer_number)
 
-        nested_customer = _normalize_entity(order_customer.get("customer") or {})
+        nested_customer = customer_payload or _normalize_entity(order_customer.get("customer") or {})
         vat_ids = nested_customer.get("vatIds") or []
         customer.name = _to_str(nested_customer.get("firstName") or order_customer.get("firstName") or customer.name)
-        customer.email = _to_str(order_customer.get("email")) or customer.email
+        customer.email = _to_str(order_customer.get("email") or nested_customer.get("email")) or customer.email
         customer.api_id = customer_id or customer.api_id
         customer.is_gross = bool((nested_customer.get("group") or {}).get("displayGross", True))
         customer.vat_id = _to_str(vat_ids[0]) if vat_ids else customer.vat_id
@@ -235,6 +241,16 @@ class OrderSyncService(BaseService):
             is_shipping=True,
         ) if shipping_data else None
 
+        (
+            default_billing_address,
+            default_shipping_address,
+            default_address_pks,
+        ) = self._upsert_default_customer_addresses(
+            customer=customer,
+            customer_payload=customer_payload,
+            fallback_email=customer.email,
+        )
+
         if shipping_address and not billing_address:
             shipping_address.is_invoice = True
             shipping_address.save(update_fields=["is_invoice", "updated_at"])
@@ -245,15 +261,131 @@ class OrderSyncService(BaseService):
             billing_address.save(update_fields=["is_shipping", "updated_at"])
             shipping_address = billing_address
 
-        addresses_count = 0
-        if billing_address:
+        if not billing_address and default_billing_address:
+            billing_address = default_billing_address
+        if not shipping_address and default_shipping_address:
+            shipping_address = default_shipping_address
+
+        if not default_billing_address and billing_address:
             customer.set_billing_address(billing_address)
-            addresses_count += 1
-        if shipping_address:
+        if not default_shipping_address and shipping_address:
             customer.set_shipping_address(shipping_address)
-            addresses_count += 1
+
+        synced_address_ids = set(default_address_pks)
+        if billing_address and billing_address.pk:
+            synced_address_ids.add(billing_address.pk)
+        if shipping_address and shipping_address.pk:
+            synced_address_ids.add(shipping_address.pk)
+        addresses_count = len(synced_address_ids)
 
         return customer, billing_address, shipping_address, addresses_count
+
+    def _load_shopware_customer(self, *, customer_id: str) -> dict[str, Any]:
+        customer_id = _to_str(customer_id)
+        if not customer_id:
+            return {}
+
+        cache = getattr(self, "_shopware_customer_cache", None)
+        if cache is None:
+            cache = {}
+            self._shopware_customer_cache = cache
+
+        if customer_id in cache:
+            return cache[customer_id]
+
+        try:
+            response = CustomerService().get_by_id(customer_id)
+            rows = (response or {}).get("data", []) or []
+            payload = _normalize_entity(rows[0]) if rows else {}
+            if not payload:
+                logger.warning("Shopware customer {} konnte nicht geladen werden.", customer_id)
+        except Exception as exc:  # pragma: no cover - network/runtime errors
+            logger.warning("Shopware customer {} lookup failed: {}", customer_id, exc)
+            payload = {}
+
+        cache[customer_id] = payload
+        return payload
+
+    def _upsert_default_customer_addresses(
+        self,
+        *,
+        customer: Customer,
+        customer_payload: dict[str, Any],
+        fallback_email: str,
+    ) -> tuple[Address | None, Address | None, set[int]]:
+        if not customer_payload:
+            return None, None, set()
+
+        default_billing_id = _to_str(customer_payload.get("defaultBillingAddressId"))
+        default_shipping_id = _to_str(customer_payload.get("defaultShippingAddressId"))
+        if not default_billing_id and not default_shipping_id:
+            return None, None, set()
+
+        addresses = self._extract_customer_addresses(customer_payload)
+        if not addresses:
+            return None, None, set()
+
+        by_id = {
+            _to_str(address.get("id")): address
+            for address in addresses
+            if _to_str(address.get("id"))
+        }
+        billing_data = by_id.get(default_billing_id)
+        shipping_data = by_id.get(default_shipping_id)
+
+        default_billing_address = None
+        default_shipping_address = None
+        upserted_ids: set[int] = set()
+
+        if billing_data and shipping_data and default_billing_id == default_shipping_id:
+            default_billing_address = self._upsert_address(
+                customer=customer,
+                address_data=billing_data,
+                fallback_email=fallback_email,
+                is_invoice=True,
+                is_shipping=True,
+            )
+            default_shipping_address = default_billing_address
+            if default_billing_address.pk:
+                upserted_ids.add(default_billing_address.pk)
+        else:
+            if billing_data:
+                default_billing_address = self._upsert_address(
+                    customer=customer,
+                    address_data=billing_data,
+                    fallback_email=fallback_email,
+                    is_invoice=True,
+                    is_shipping=False,
+                )
+                if default_billing_address.pk:
+                    upserted_ids.add(default_billing_address.pk)
+            if shipping_data:
+                default_shipping_address = self._upsert_address(
+                    customer=customer,
+                    address_data=shipping_data,
+                    fallback_email=fallback_email,
+                    is_invoice=False,
+                    is_shipping=True,
+                )
+                if default_shipping_address.pk:
+                    upserted_ids.add(default_shipping_address.pk)
+
+        if default_billing_address:
+            customer.set_billing_address(default_billing_address)
+        if default_shipping_address:
+            customer.set_shipping_address(default_shipping_address)
+
+        return default_billing_address, default_shipping_address, upserted_ids
+
+    @staticmethod
+    def _extract_customer_addresses(customer_payload: dict[str, Any]) -> list[dict[str, Any]]:
+        addresses = customer_payload.get("addresses") or []
+        if isinstance(addresses, dict):
+            addresses = addresses.get("data") or []
+        if not isinstance(addresses, list):
+            return []
+        normalized = _normalize_entity(addresses)
+        return [item for item in normalized if isinstance(item, dict)]
 
     def _upsert_address(
         self,
