@@ -319,15 +319,14 @@ class CustomerUpsertMicrotechService(BaseService):
         reserved: set[int] | None = None,
     ) -> int:
         reserved = reserved or set()
+        _, resolved_ans_nr = self._hydrate_anschrift_index_from_erp(
+            erp_nr=erp_nr,
+            address=address,
+            anschrift_service=anschrift_service,
+        )
 
-        if address.erp_ans_nr and address.erp_ans_nr not in reserved:
-            return int(address.erp_ans_nr)
-
-        # Reuse existing AnsNr from ERP record by stable ID if available.
-        if address.erp_ans_id and anschrift_service.find(address.erp_ans_id, index_field="ID"):
-            existing_ans_nr = _to_int(anschrift_service.get_field("AnsNr"))
-            if existing_ans_nr and existing_ans_nr not in reserved:
-                return existing_ans_nr
+        if resolved_ans_nr and resolved_ans_nr not in reserved:
+            return resolved_ans_nr
 
         # Compute next free AnsNr.
         highest = 0
@@ -351,6 +350,11 @@ class CustomerUpsertMicrotechService(BaseService):
         anschrift_service: MicrotechAnschriftService,
         ansprechpartner_service: MicrotechAnsprechpartnerService,
     ) -> None:
+        self._hydrate_anschrift_index_from_erp(
+            erp_nr=erp_nr,
+            address=address,
+            anschrift_service=anschrift_service,
+        )
         found = False
 
         if address.erp_ans_id and anschrift_service.find(address.erp_ans_id, index_field="ID"):
@@ -373,17 +377,73 @@ class CustomerUpsertMicrotechService(BaseService):
         )
         anschrift_service.post()
 
-        address.erp_nr = _to_int(erp_nr)
-        address.erp_ans_id = _to_int(anschrift_service.get_field("ID"))
-        address.erp_ans_nr = _to_int(anschrift_service.get_field("AnsNr")) or ans_nr
-        address.save(update_fields=["erp_nr", "erp_ans_id", "erp_ans_nr", "updated_at"])
+        self._persist_anschrift_identity(
+            erp_nr=erp_nr,
+            address=address,
+            ans_id=_to_int(anschrift_service.get_field("ID")),
+            ans_nr=_to_int(anschrift_service.get_field("AnsNr")) or ans_nr,
+        )
 
         self._upsert_ansprechpartner(
             erp_nr=erp_nr,
-            ans_nr=address.erp_ans_nr,
+            ans_nr=_to_int(address.erp_ans_nr) or ans_nr,
             address=address,
             ansprechpartner_service=ansprechpartner_service,
         )
+
+    def _hydrate_anschrift_index_from_erp(
+        self,
+        *,
+        erp_nr: str,
+        address: Address,
+        anschrift_service: MicrotechAnschriftService,
+    ) -> tuple[int | None, int | None]:
+        if address.erp_ans_id and anschrift_service.find(address.erp_ans_id, index_field="ID"):
+            resolved_ans_id = _to_int(anschrift_service.get_field("ID")) or _to_int(address.erp_ans_id)
+            resolved_ans_nr = _to_int(anschrift_service.get_field("AnsNr"))
+            self._persist_anschrift_identity(
+                erp_nr=erp_nr,
+                address=address,
+                ans_id=resolved_ans_id,
+                ans_nr=resolved_ans_nr,
+            )
+            return resolved_ans_id, resolved_ans_nr
+
+        known_ans_nr = _to_int(address.erp_ans_nr)
+        if known_ans_nr and anschrift_service.find([erp_nr, known_ans_nr]):
+            resolved_ans_id = _to_int(anschrift_service.get_field("ID"))
+            resolved_ans_nr = _to_int(anschrift_service.get_field("AnsNr")) or known_ans_nr
+            self._persist_anschrift_identity(
+                erp_nr=erp_nr,
+                address=address,
+                ans_id=resolved_ans_id,
+                ans_nr=resolved_ans_nr,
+            )
+            return resolved_ans_id, resolved_ans_nr
+
+        return _to_int(address.erp_ans_id), known_ans_nr
+
+    def _persist_anschrift_identity(
+        self,
+        *,
+        erp_nr: str,
+        address: Address,
+        ans_id: int | None,
+        ans_nr: int | None,
+    ) -> None:
+        update_fields: list[str] = []
+        erp_nr_int = _to_int(erp_nr)
+        if erp_nr_int is not None and address.erp_nr != erp_nr_int:
+            address.erp_nr = erp_nr_int
+            update_fields.append("erp_nr")
+        if ans_id is not None and address.erp_ans_id != ans_id:
+            address.erp_ans_id = ans_id
+            update_fields.append("erp_ans_id")
+        if ans_nr is not None and address.erp_ans_nr != ans_nr:
+            address.erp_ans_nr = ans_nr
+            update_fields.append("erp_ans_nr")
+        if update_fields:
+            address.save(update_fields=[*update_fields, "updated_at"])
 
     def _map_anschrift_fields(
         self,
@@ -434,6 +494,12 @@ class CustomerUpsertMicrotechService(BaseService):
             address=address,
             ansprechpartner_service=ansprechpartner_service,
         )
+        self._hydrate_ansprechpartner_index_from_erp(
+            erp_nr=erp_nr,
+            ans_nr=ans_nr,
+            address=address,
+            ansprechpartner_service=ansprechpartner_service,
+        )
 
         found = False
         if address.erp_asp_id and ansprechpartner_service.find(address.erp_asp_id, index_field="ID"):
@@ -456,9 +522,11 @@ class CustomerUpsertMicrotechService(BaseService):
         ansprechpartner_service.set_field("StdKz", True)
         ansprechpartner_service.post()
 
-        address.erp_asp_id = _to_int(ansprechpartner_service.get_field("ID"))
-        address.erp_asp_nr = _to_int(ansprechpartner_service.get_field("AspNr")) or asp_nr
-        address.save(update_fields=["erp_asp_id", "erp_asp_nr", "updated_at"])
+        self._persist_ansprechpartner_identity(
+            address=address,
+            asp_id=_to_int(ansprechpartner_service.get_field("ID")),
+            asp_nr=_to_int(ansprechpartner_service.get_field("AspNr")) or asp_nr,
+        )
 
     def _reset_ansprechpartner_standard_flags(
         self,
@@ -486,13 +554,14 @@ class CustomerUpsertMicrotechService(BaseService):
         address: Address,
         ansprechpartner_service: MicrotechAnsprechpartnerService,
     ) -> int:
-        if address.erp_asp_nr:
-            return int(address.erp_asp_nr)
-
-        if address.erp_asp_id and ansprechpartner_service.find(address.erp_asp_id, index_field="ID"):
-            existing_asp_nr = _to_int(ansprechpartner_service.get_field("AspNr"))
-            if existing_asp_nr:
-                return existing_asp_nr
+        _, resolved_asp_nr = self._hydrate_ansprechpartner_index_from_erp(
+            erp_nr=erp_nr,
+            ans_nr=ans_nr,
+            address=address,
+            ansprechpartner_service=ansprechpartner_service,
+        )
+        if resolved_asp_nr:
+            return resolved_asp_nr
 
         highest = 0
         if ansprechpartner_service.set_range(
@@ -503,6 +572,54 @@ class CustomerUpsertMicrotechService(BaseService):
             highest = _to_int(ansprechpartner_service.get_field("AspNr")) or 0
 
         return max(1, highest + 1)
+
+    def _hydrate_ansprechpartner_index_from_erp(
+        self,
+        *,
+        erp_nr: str,
+        ans_nr: int,
+        address: Address,
+        ansprechpartner_service: MicrotechAnsprechpartnerService,
+    ) -> tuple[int | None, int | None]:
+        if address.erp_asp_id and ansprechpartner_service.find(address.erp_asp_id, index_field="ID"):
+            resolved_asp_id = _to_int(ansprechpartner_service.get_field("ID")) or _to_int(address.erp_asp_id)
+            resolved_asp_nr = _to_int(ansprechpartner_service.get_field("AspNr"))
+            self._persist_ansprechpartner_identity(
+                address=address,
+                asp_id=resolved_asp_id,
+                asp_nr=resolved_asp_nr,
+            )
+            return resolved_asp_id, resolved_asp_nr
+
+        known_asp_nr = _to_int(address.erp_asp_nr)
+        if known_asp_nr and ansprechpartner_service.find([erp_nr, ans_nr, known_asp_nr]):
+            resolved_asp_id = _to_int(ansprechpartner_service.get_field("ID"))
+            resolved_asp_nr = _to_int(ansprechpartner_service.get_field("AspNr")) or known_asp_nr
+            self._persist_ansprechpartner_identity(
+                address=address,
+                asp_id=resolved_asp_id,
+                asp_nr=resolved_asp_nr,
+            )
+            return resolved_asp_id, resolved_asp_nr
+
+        return _to_int(address.erp_asp_id), known_asp_nr
+
+    def _persist_ansprechpartner_identity(
+        self,
+        *,
+        address: Address,
+        asp_id: int | None,
+        asp_nr: int | None,
+    ) -> None:
+        update_fields: list[str] = []
+        if asp_id is not None and address.erp_asp_id != asp_id:
+            address.erp_asp_id = asp_id
+            update_fields.append("erp_asp_id")
+        if asp_nr is not None and address.erp_asp_nr != asp_nr:
+            address.erp_asp_nr = asp_nr
+            update_fields.append("erp_asp_nr")
+        if update_fields:
+            address.save(update_fields=[*update_fields, "updated_at"])
 
     def _map_ansprechpartner_fields(
         self,

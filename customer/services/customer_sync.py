@@ -52,19 +52,19 @@ class CustomerSyncService(BaseService):
             anschrift_service = MicrotechAnschriftService(erp=erp)
             ansprechpartner_service = MicrotechAnsprechpartnerService(erp=erp)
 
-            seen_address_numbers: list[int] = []
+            seen_local_address_ids: list[int] = []
             has_range = anschrift_service.set_range(
                 from_range=[customer_erp_nr, 0],
                 to_range=[customer_erp_nr, 999],
             )
             if has_range:
                 while not anschrift_service.range_eof():
+                    ans_id = _to_int(anschrift_service.get_field("ID"))
                     ans_nr = _to_int(anschrift_service.get_field("AnsNr"))
                     if ans_nr is None:
                         anschrift_service.range_next()
                         continue
 
-                    seen_address_numbers.append(ans_nr)
                     contact_data = self._load_first_contact(
                         ansprechpartner_service=ansprechpartner_service,
                         customer_erp_nr=customer_erp_nr,
@@ -74,9 +74,9 @@ class CustomerSyncService(BaseService):
                     address_email = _to_str(anschrift_service.get_field("EMail1")) or contact_data["email"]
                     address_defaults = {
                         "erp_nr": _to_int(customer_erp_nr),
-                        "erp_ans_id": ans_nr,
+                        "erp_ans_id": ans_id,
                         "erp_ans_nr": ans_nr,
-                        "erp_asp_id": contact_data["asp_nr"],
+                        "erp_asp_id": contact_data["asp_id"],
                         "erp_asp_nr": contact_data["asp_nr"],
                         "name1": _to_str(anschrift_service.get_field("Na1")),
                         "name2": _to_str(anschrift_service.get_field("Na2")),
@@ -94,19 +94,41 @@ class CustomerSyncService(BaseService):
                         "is_shipping": ans_nr == standard_shipping_nr,
                         "is_invoice": ans_nr == standard_invoice_nr,
                     }
-                    Address.objects.update_or_create(
+                    address = self._upsert_local_address(
                         customer=customer,
-                        erp_ans_id=ans_nr,
+                        ans_id=ans_id,
+                        ans_nr=ans_nr,
                         defaults=address_defaults,
                     )
+                    seen_local_address_ids.append(address.pk)
                     anschrift_service.range_next()
 
-            if seen_address_numbers:
-                customer.addresses.exclude(erp_ans_id__in=seen_address_numbers).delete()
+            if seen_local_address_ids:
+                customer.addresses.exclude(pk__in=seen_local_address_ids).delete()
             else:
                 logger.warning("Kunde {} hat keine Anschriften in Microtech.", customer_erp_nr)
 
             return customer
+
+    def _upsert_local_address(
+        self,
+        *,
+        customer: Customer,
+        ans_id: int | None,
+        ans_nr: int,
+        defaults: dict[str, Any],
+    ) -> Address:
+        qs = Address.objects.filter(customer=customer)
+        address = qs.filter(erp_ans_id=ans_id).first() if ans_id is not None else None
+        if not address:
+            address = qs.filter(erp_ans_nr=ans_nr).first()
+        if not address:
+            address = Address(customer=customer)
+
+        for field_name, field_value in defaults.items():
+            setattr(address, field_name, field_value)
+        address.save()
+        return address
 
     def _load_first_contact(
         self,
@@ -121,6 +143,7 @@ class CustomerSyncService(BaseService):
         )
         if not has_contacts:
             return {
+                "asp_id": None,
                 "asp_nr": None,
                 "title": "",
                 "first_name": "",
@@ -131,6 +154,7 @@ class CustomerSyncService(BaseService):
             }
 
         return {
+            "asp_id": _to_int(ansprechpartner_service.get_field("ID")),
             "asp_nr": _to_int(ansprechpartner_service.get_field("AspNr")),
             "title": _to_str(ansprechpartner_service.get_field("Anr")),
             "first_name": _to_str(ansprechpartner_service.get_field("VNa")),

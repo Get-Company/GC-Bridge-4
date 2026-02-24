@@ -267,13 +267,20 @@ class OrderSyncService(BaseService):
         address_data = _normalize_entity(address_data)
         api_id = _to_str(address_data.get("id"))
         qs = Address.objects.filter(customer=customer)
-        if api_id:
-            address = qs.filter(api_id=api_id).first()
-        else:
-            address = None
+        address = qs.filter(api_id=api_id).first() if api_id else None
 
         if not address:
-            address = Address(customer=customer, api_id=api_id)
+            address = self._find_role_address(
+                customer=customer,
+                is_invoice=is_invoice,
+                is_shipping=is_shipping,
+            )
+
+        if not address:
+            address = Address(customer=customer)
+
+        if api_id and address.api_id != api_id:
+            address.api_id = api_id
 
         country = address_data.get("country") or {}
         salutation = address_data.get("salutation") or {}
@@ -297,6 +304,42 @@ class OrderSyncService(BaseService):
         address.is_shipping = is_shipping
         address.save()
         return address
+
+    @staticmethod
+    def _find_role_address(
+        *,
+        customer: Customer,
+        is_invoice: bool,
+        is_shipping: bool,
+    ) -> Address | None:
+        candidates = customer.addresses.all()
+        if is_shipping:
+            shipping_indexed = (
+                candidates
+                .filter(is_shipping=True)
+                .exclude(erp_ans_id__isnull=True, erp_ans_nr__isnull=True)
+                .order_by("-updated_at")
+                .first()
+            )
+            if shipping_indexed:
+                return shipping_indexed
+            shipping_any = candidates.filter(is_shipping=True).order_by("-updated_at").first()
+            if shipping_any:
+                return shipping_any
+
+        if is_invoice:
+            invoice_indexed = (
+                candidates
+                .filter(is_invoice=True)
+                .exclude(erp_ans_id__isnull=True, erp_ans_nr__isnull=True)
+                .order_by("-updated_at")
+                .first()
+            )
+            if invoice_indexed:
+                return invoice_indexed
+            return candidates.filter(is_invoice=True).order_by("-updated_at").first()
+
+        return None
 
     def _replace_order_details(self, *, order: Order, line_items: list[dict[str, Any]]) -> int:
         order.details.all().delete()
