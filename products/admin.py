@@ -16,6 +16,7 @@ from unfold.enums import ActionVariant
 
 from core.admin import BaseAdmin, BaseStackedInline, BaseTabularInline
 from core.admin_utils import log_admin_change
+from shopware.models import ShopwareSettings
 from shopware.services import ProductService
 from .models import Category, Price, Product, Storage, Tax
 
@@ -40,6 +41,15 @@ class PriceInline(BaseStackedInline):
         "created_at",
         "updated_at",
     )
+
+    def get_queryset(self, request):
+        queryset = super().get_queryset(request)
+        return queryset.exclude(sales_channel__isnull=True).exclude(sales_channel__is_default=True)
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "sales_channel":
+            kwargs["queryset"] = ShopwareSettings.objects.filter(is_active=True, is_default=False)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
 @admin.register(Product)
