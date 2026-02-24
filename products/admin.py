@@ -84,6 +84,8 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
         error_count = 0
         error_messages: list[str] = []
         batch_size = 50
+        if hasattr(products, "only"):
+            products = products.only("id", "erp_nr", "sku", "name", "description", "is_active")
         products = list(products)
 
         for offset in range(0, len(products), batch_size):

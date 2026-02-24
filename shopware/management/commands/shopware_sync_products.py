@@ -185,6 +185,7 @@ class Command(BaseCommand):
             raise CommandError("Bitte ERP-Nummern angeben oder --all verwenden.")
 
         qs = Product.objects.all() if sync_all else Product.objects.filter(erp_nr__in=erp_nrs)
+        qs = qs.only("id", "erp_nr", "sku", "name", "description", "is_active")
         if limit:
             qs = qs[:limit]
 
