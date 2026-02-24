@@ -12,6 +12,12 @@ from shopware.models import ShopwareSettings
 class Tax(BaseModel):
     name = models.CharField(max_length=64, verbose_name=_("Steuerbezeichnung"))
     rate = models.DecimalField(max_digits=5, decimal_places=2, verbose_name=_("Steuersatz (%)"))
+    shopware_id = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        verbose_name=_("Shopware Steuer-ID"),
+    )
 
     class Meta:
         verbose_name = _("Steuer")

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
@@ -9,6 +10,9 @@ from core.admin_utils import log_admin_change
 from products.models import Price, Product, Storage
 from shopware.models import ShopwareSettings
 from shopware.services import ProductService
+
+DEFAULT_TAX_ID = "d391e13bdd95404a885f4ad28ea218e0"
+REDUCED_TAX_ID = "be66a53eae3a49829f4a8c5959535501"
 
 
 def _get_admin_user_id() -> int | None:
@@ -148,6 +152,15 @@ def _build_prices_for_channel(product: Product, channel: ShopwareSettings, price
     ]
 
 
+def _resolve_tax_id(product: Product) -> str:
+    tax = getattr(product, "tax", None)
+    if tax and tax.shopware_id:
+        return str(tax.shopware_id).strip()
+    if tax and tax.rate is not None and Decimal(tax.rate).quantize(Decimal("0.01")) == Decimal("7.00"):
+        return REDUCED_TAX_ID
+    return DEFAULT_TAX_ID
+
+
 class Command(BaseCommand):
     help = "Sync products from Django to Shopware6 (updates only)."
 
@@ -184,8 +197,8 @@ class Command(BaseCommand):
         if not erp_nrs and not sync_all:
             raise CommandError("Bitte ERP-Nummern angeben oder --all verwenden.")
 
-        qs = Product.objects.all() if sync_all else Product.objects.filter(erp_nr__in=erp_nrs)
-        qs = qs.only("id", "erp_nr", "sku", "name", "description", "is_active")
+        qs = Product.objects.select_related("tax").all() if sync_all else Product.objects.select_related("tax").filter(erp_nr__in=erp_nrs)
+        qs = qs.only("id", "erp_nr", "sku", "name", "description", "is_active", "tax_id", "tax__shopware_id")
         if limit:
             qs = qs[:limit]
 
@@ -221,6 +234,7 @@ class Command(BaseCommand):
                 payload = {
                     "productNumber": product.erp_nr,
                     "active": product.is_active,
+                    "taxId": _resolve_tax_id(product),
                 }
                 if effective_sku:
                     payload["id"] = effective_sku

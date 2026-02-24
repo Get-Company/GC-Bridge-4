@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.contrib import admin, messages
 from django.contrib.contenttypes.models import ContentType
 from django.core.management import call_command
@@ -19,6 +21,9 @@ from core.admin_utils import log_admin_change
 from shopware.models import ShopwareSettings
 from shopware.services import ProductService
 from .models import Category, Price, Product, Storage, Tax
+
+DEFAULT_TAX_ID = "d391e13bdd95404a885f4ad28ea218e0"
+REDUCED_TAX_ID = "be66a53eae3a49829f4a8c5959535501"
 
 
 class StorageInline(BaseStackedInline):
@@ -94,8 +99,10 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
         error_count = 0
         error_messages: list[str] = []
         batch_size = 50
+        if hasattr(products, "select_related"):
+            products = products.select_related("tax")
         if hasattr(products, "only"):
-            products = products.only("id", "erp_nr", "sku", "name", "description", "is_active")
+            products = products.only("id", "erp_nr", "sku", "name", "description", "is_active", "tax_id", "tax__shopware_id")
         products = list(products)
 
         for offset in range(0, len(products), batch_size):
@@ -118,6 +125,7 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
                 payload = {
                     "productNumber": product.erp_nr,
                     "active": product.is_active,
+                    "taxId": self._resolve_tax_id(product),
                 }
                 if effective_sku:
                     payload["id"] = effective_sku
@@ -171,6 +179,15 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
                         )
 
         return success_count, error_count, error_messages
+
+    @staticmethod
+    def _resolve_tax_id(product: Product) -> str:
+        tax = getattr(product, "tax", None)
+        if tax and tax.shopware_id:
+            return str(tax.shopware_id).strip()
+        if tax and tax.rate is not None and Decimal(tax.rate).quantize(Decimal("0.01")) == Decimal("7.00"):
+            return REDUCED_TAX_ID
+        return DEFAULT_TAX_ID
 
     @action(
         description="Von Microtech synchronisieren",
@@ -304,8 +321,8 @@ class CategoryAdmin(BaseAdmin):
 
 @admin.register(Tax)
 class TaxAdmin(BaseAdmin):
-    list_display = ("name", "rate", "created_at")
-    search_fields = ("name",)
+    list_display = ("name", "rate", "shopware_id", "created_at")
+    search_fields = ("name", "shopware_id")
     list_filter = [
         ("rate", RangeNumericFilter),
         ("created_at", RangeDateTimeFilter),

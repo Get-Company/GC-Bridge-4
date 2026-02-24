@@ -10,8 +10,13 @@ from microtech.services.artikel import MicrotechArtikelService
 from microtech.services.connection import microtech_connection
 from microtech.services.lager import MicrotechLagerService
 from core.admin_utils import log_admin_change
-from products.models import Image, Price, Product, Storage
+from products.models import Image, Price, Product, Storage, Tax
 from shopware.models import ShopwareSettings
+
+TAX_19_RATE = Decimal("19.00")
+TAX_7_RATE = Decimal("7.00")
+TAX_19_SHOPWARE_ID = "d391e13bdd95404a885f4ad28ea218e0"
+TAX_7_SHOPWARE_ID = "be66a53eae3a49829f4a8c5959535501"
 
 
 def _to_decimal(value):
@@ -108,6 +113,7 @@ class Command(BaseCommand):
         with microtech_connection() as erp:
             artikel_service = MicrotechArtikelService(erp=erp)
             lager_service = MicrotechLagerService(erp=erp)
+            tax_map = self._ensure_taxes()
 
             if sync_all:
                 artikel_service.set_range(from_range="000000", to_range="99999999ZZ", field=artikel_service.index_field)
@@ -126,6 +132,7 @@ class Command(BaseCommand):
                         self._sync_current_record(
                             artikel_service,
                             lager_service,
+                            tax_map=tax_map,
                             admin_user_id=admin_user_id,
                             content_type_id=content_type_id,
                         )
@@ -166,6 +173,7 @@ class Command(BaseCommand):
                     self._sync_current_record(
                         artikel_service,
                         lager_service,
+                        tax_map=tax_map,
                         admin_user_id=admin_user_id,
                         content_type_id=content_type_id,
                     )
@@ -179,7 +187,48 @@ class Command(BaseCommand):
                         object_repr=f"Microtech Sync {erp_nr}",
                     )
 
-    def _sync_current_record(self, artikel_service, lager_service, *, admin_user_id=None, content_type_id=None) -> None:
+    @staticmethod
+    def _ensure_taxes() -> dict[Decimal, Tax]:
+        taxes = {
+            TAX_19_RATE: {
+                "name": "Mehrwertsteuer 19%",
+                "shopware_id": TAX_19_SHOPWARE_ID,
+            },
+            TAX_7_RATE: {
+                "name": "Mehrwertsteuer 7%",
+                "shopware_id": TAX_7_SHOPWARE_ID,
+            },
+        }
+        result: dict[Decimal, Tax] = {}
+        for rate, defaults in taxes.items():
+            tax, _ = Tax.objects.update_or_create(
+                rate=rate,
+                defaults=defaults,
+            )
+            result[rate] = tax
+        return result
+
+    @staticmethod
+    def _resolve_product_tax(*, artikel_service: MicrotechArtikelService, tax_map: dict[Decimal, Tax]) -> Tax:
+        tax_rate = artikel_service.get_tax_rate()
+        if tax_rate is None:
+            erp_nr = str(artikel_service.get_erp_nr() or "").strip()
+            tax_rate = TAX_7_RATE if erp_nr == "950000" else TAX_19_RATE
+
+        normalized_rate = tax_rate.quantize(Decimal("0.01"))
+        if normalized_rate == TAX_7_RATE:
+            return tax_map[TAX_7_RATE]
+        return tax_map[TAX_19_RATE]
+
+    def _sync_current_record(
+        self,
+        artikel_service,
+        lager_service,
+        *,
+        tax_map: dict[Decimal, Tax],
+        admin_user_id=None,
+        content_type_id=None,
+    ) -> None:
         erp_key = artikel_service.get_erp_nr()
         if not erp_key:
             raise ValueError("Artikel ohne ArtNr gefunden.")
@@ -199,6 +248,10 @@ class Command(BaseCommand):
         product.description = artikel_service.get_description()
         product.description_short = artikel_service.get_description_short()
         product.sort_order = _to_int(artikel_service.get_sort_order()) or product.sort_order
+        product.tax = self._resolve_product_tax(
+            artikel_service=artikel_service,
+            tax_map=tax_map,
+        )
         product.save()
 
         storage, _ = Storage.objects.get_or_create(product=product)
