@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>GC-Bridge</title>
+    <style>
+        :root {
+            --bg-1: #0f172a;
+            --bg-2: #164e63;
+            --card: rgba(255, 255, 255, 0.09);
+            --line: rgba(255, 255, 255, 0.24);
+            --text-main: #f8fafc;
+            --text-muted: #cbd5e1;
+            --accent: #f59e0b;
+            --accent-hover: #fbbf24;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: grid;
+            place-items: center;
+            font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+            color: var(--text-main);
+            background:
+                radial-gradient(90rem 40rem at 110% -10%, rgba(245, 158, 11, 0.35), transparent),
+                radial-gradient(70rem 30rem at -10% 110%, rgba(56, 189, 248, 0.24), transparent),
+                linear-gradient(135deg, var(--bg-1), var(--bg-2));
+            padding: 1.25rem;
+        }
+
+        .panel {
+            width: min(720px, 100%);
+            border: 1px solid var(--line);
+            border-radius: 20px;
+            padding: 2.5rem 2rem;
+            background: var(--card);
+            backdrop-filter: blur(8px);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+        }
+
+        h1 {
+            margin: 0 0 0.75rem;
+            font-size: clamp(2rem, 6vw, 3.4rem);
+            letter-spacing: 0.02em;
+            line-height: 1.05;
+        }
+
+        p {
+            margin: 0;
+            color: var(--text-muted);
+            font-size: clamp(1rem, 2.8vw, 1.2rem);
+            line-height: 1.5;
+            max-width: 56ch;
+        }
+
+        .actions {
+            margin-top: 1.8rem;
+            display: flex;
+            gap: 0.8rem;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            border-radius: 999px;
+            padding: 0.85rem 1.35rem;
+            font-weight: 700;
+            text-decoration: none;
+            transition: transform 0.2s ease, background-color 0.2s ease;
+        }
+
+        .btn-primary {
+            color: #111827;
+            background: var(--accent);
+        }
+
+        .btn-primary:hover {
+            background: var(--accent-hover);
+            transform: translateY(-2px);
+        }
+
+        .egg {
+            margin-top: 1rem;
+            min-height: 1.4rem;
+            color: #fde68a;
+            font-size: 0.95rem;
+            opacity: 0;
+            transition: opacity 0.25s ease;
+        }
+
+        .egg.show {
+            opacity: 1;
+        }
+
+        .egg-trigger {
+            cursor: pointer;
+        }
+
+        @media (max-width: 640px) {
+            .panel {
+                padding: 1.5rem 1.2rem;
+                border-radius: 16px;
+            }
+        }
+    </style>
+</head>
+<body>
+<main class="panel">
+    <h1 class="egg-trigger" id="egg-trigger">GC-Bridge</h1>
+    <p>
+        Willkommen im GC-Bridge Backend. Schoen, dass ihr da seid.
+        Wenn ihr den Admin bereits als Lesezeichen gespeichert habt, seid ihr perfekt aufgestellt.
+        Fuer alle anderen fuehrt der Button direkt zum Ziel.
+    </p>
+    <div class="actions">
+        <a class="btn btn-primary" href="{% url 'admin:index' %}">Zum Admin</a>
+    </div>
+    <p class="egg" id="egg-text">Easter Egg freigeschaltet: <b>Hätten wir uns doch eher getroffen ;-)</b></p>
+</main>
+<script>
+    (function () {
+        const trigger = document.getElementById("egg-trigger");
+        const egg = document.getElementById("egg-text");
+        let clicks = 0;
+
+        trigger.addEventListener("click", function () {
+            clicks += 1;
+            if (clicks >= 5) {
+                egg.classList.add("show");
+            }
+        });
+    })();
+</script>
+</body>
+</html>
