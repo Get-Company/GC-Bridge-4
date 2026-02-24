@@ -18,6 +18,7 @@ from orders.services.constants import (
     DEFAULT_SHIPPING_ERP_NR,
     DEFAULT_UNIT,
 )
+from products.models import Product
 
 
 @dataclass(slots=True)
@@ -214,6 +215,7 @@ class OrderUpsertMicrotechService(BaseService):
         details: list[OrderDetail] = list(order.details.all())
         artikel_service = MicrotechArtikelService(erp=erp)
         article_name_cache: dict[str, str] = {}
+        product_unit_map = self._build_product_unit_map(details)
 
         for detail in details:
             erp_nr = (detail.erp_nr or "").strip()
@@ -224,7 +226,11 @@ class OrderUpsertMicrotechService(BaseService):
                 )
                 continue
 
-            unit = detail.unit or DEFAULT_UNIT
+            unit = (
+                product_unit_map.get(erp_nr)
+                or (detail.unit or "").strip()
+                or DEFAULT_UNIT
+            )
             quantity = detail.quantity or 1
             position_name = self._resolve_position_name(
                 detail=detail,
@@ -240,6 +246,20 @@ class OrderUpsertMicrotechService(BaseService):
                 is_gross=order.customer.is_gross,
                 position_name=position_name,
             )
+
+    @staticmethod
+    def _build_product_unit_map(details: list[OrderDetail]) -> dict[str, str]:
+        erp_nrs = {(detail.erp_nr or "").strip() for detail in details if (detail.erp_nr or "").strip()}
+        if not erp_nrs:
+            return {}
+        rows = (
+            Product.objects
+            .filter(erp_nr__in=erp_nrs)
+            .exclude(unit__isnull=True)
+            .exclude(unit="")
+            .values_list("erp_nr", "unit")
+        )
+        return {str(erp_nr).strip(): str(unit).strip() for erp_nr, unit in rows if erp_nr and unit}
 
     def _add_shipping_position(self, *, order: Order, so_vorgang) -> None:
         if not order.shipping_costs or order.shipping_costs <= Decimal("0"):
