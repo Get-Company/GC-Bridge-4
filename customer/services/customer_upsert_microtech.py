@@ -45,6 +45,32 @@ EU_COUNTRY_CODES = {
     "SK",
 }
 
+# Normalized salutation values that map to german outputs for Na1.
+_SALUTATION_FEMALE_VALUES = {
+    "frau",
+    "fr",
+    "mrs",
+    "ms",
+    "miss",
+    "madam",
+    "madame",
+    "weiblich",
+    "female",
+    "w",
+    "f",
+}
+_SALUTATION_MALE_VALUES = {
+    "herr",
+    "hr",
+    "mr",
+    "mister",
+    "mann",
+    "male",
+    "monsieur",
+    "m",
+    "h",
+}
+
 # ISO-3166 numeric (only commonly used values in this integration context)
 ISO2_TO_NUMERIC = {
     "DE": 276,
@@ -102,6 +128,15 @@ def _country_numeric(country_code: str) -> int | None:
     if code.isdigit():
         return int(code)
     return ISO2_TO_NUMERIC.get(code)
+
+
+def _normalize_salutation(value: Any) -> str:
+    text = _to_str(value).lower()
+    if not text:
+        return ""
+    for char in (".", ",", ";", ":", "-", "_", "/", "\\", "(", ")", "[", "]", "{", "}"):
+        text = text.replace(char, " ")
+    return " ".join(text.split())
 
 
 @dataclass(slots=True)
@@ -466,9 +501,10 @@ class CustomerUpsertMicrotechService(BaseService):
         anschrift_service: MicrotechAnschriftService,
     ) -> None:
         land_numeric = _country_numeric(address.country_code)
+        na1_value = self._resolve_na1_for_anschrift(address=address)
 
         anschrift_service.set_field("AdrNr", erp_nr)
-        anschrift_service.set_field("Na1", address.title or address.name1)
+        anschrift_service.set_field("Na1", na1_value)
         anschrift_service.set_field("Na2", address.name1 or address.name2)
         anschrift_service.set_field("Na3", address.name2 or address.name3)
         anschrift_service.set_field("Str", address.street)
@@ -481,6 +517,31 @@ class CustomerUpsertMicrotechService(BaseService):
             anschrift_service.set_field("Land", land_numeric)
         anschrift_service.set_field("StdLiKz", bool(is_shipping))
         anschrift_service.set_field("StdReKz", bool(is_invoice))
+
+    @staticmethod
+    def _translate_salutation_to_de(value: Any) -> str:
+        normalized = _normalize_salutation(value)
+        if not normalized:
+            return ""
+        if normalized in _SALUTATION_FEMALE_VALUES:
+            return "Frau"
+        if normalized in _SALUTATION_MALE_VALUES:
+            return "Mann"
+        return ""
+
+    def _resolve_na1_for_anschrift(self, *, address: Address) -> str:
+        company_candidate = _to_str(address.name1)
+        is_company = bool(
+            company_candidate
+            and not self._translate_salutation_to_de(company_candidate)
+        )
+        if is_company:
+            return company_candidate
+
+        translated_salutation = self._translate_salutation_to_de(address.title or address.name1)
+        if translated_salutation:
+            return translated_salutation
+        return _to_str(address.title) or company_candidate
 
     def _upsert_ansprechpartner(
         self,
