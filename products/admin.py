@@ -351,6 +351,13 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
                 continue
 
             try:
+                cleanup_product_ids = [str(payload.get("id")).strip() for payload in payloads if payload.get("id")]
+                cleanup_rule_ids = [str(ch.rule_id_price).strip() for ch in channels if ch.rule_id_price]
+                if cleanup_product_ids and cleanup_rule_ids:
+                    service.purge_product_prices_by_product_and_rule(
+                        product_ids=cleanup_product_ids,
+                        rule_ids=cleanup_rule_ids,
+                    )
                 service.bulk_upsert(payloads)
                 success_count += len(payload_products)
 
