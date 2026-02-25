@@ -40,4 +40,11 @@ class MicrotechSettingsAdmin(SingletonAdmin):
                 "description": "Benutzer für automatische und manuelle Sync-Vorgänge.",
             },
         ),
+        (
+            "Vorgang-Standardwerte",
+            {
+                "fields": ("default_vorgangsart_id", "default_zahlungsart_id", "default_versandart_id"),
+                "description": "Standard-IDs für neue Microtech-Bestellungen (Vorgänge).",
+            },
+        ),
     )

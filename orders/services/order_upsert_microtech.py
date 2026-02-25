@@ -7,6 +7,7 @@ from loguru import logger
 
 from core.services import BaseService
 from customer.services import CustomerUpsertMicrotechService
+from microtech.models import MicrotechSettings
 from microtech.services import (
     MicrotechArtikelService,
     MicrotechVorgangService,
@@ -15,7 +16,9 @@ from microtech.services import (
 from orders.models import Order, OrderDetail
 from orders.services.constants import (
     DEFAULT_ORDER_TYPE_NUMBER,
+    DEFAULT_PAYMENT_TYPE_NUMBER,
     DEFAULT_SHIPPING_ERP_NR,
+    DEFAULT_SHIPPING_TYPE_NUMBER,
     DEFAULT_UNIT,
 )
 from products.models import Product
@@ -28,6 +31,13 @@ class OrderUpsertResult:
     is_new: bool
 
 
+@dataclass(frozen=True, slots=True)
+class MicrotechOrderDefaults:
+    order_type_number: int
+    payment_type_number: int
+    shipping_type_number: int
+
+
 class OrderUpsertMicrotechService(BaseService):
     model = Order
 
@@ -36,6 +46,7 @@ class OrderUpsertMicrotechService(BaseService):
             raise TypeError("order must be an instance of Order.")
 
         self._ensure_customer_synced(order)
+        order_defaults = self._load_order_defaults()
 
         with microtech_connection() as erp:
             vorgang_service = MicrotechVorgangService(erp=erp)
@@ -47,9 +58,15 @@ class OrderUpsertMicrotechService(BaseService):
                 order=order,
                 vorgang_service=vorgang_service,
                 so_vorgang=so_vorgang,
+                order_type_number=order_defaults.order_type_number,
             )
 
-            self._set_header_fields(order=order, so_vorgang=so_vorgang)
+            self._set_header_fields(
+                order=order,
+                so_vorgang=so_vorgang,
+                payment_type_number=order_defaults.payment_type_number,
+                shipping_type_number=order_defaults.shipping_type_number,
+            )
             self._add_positions(order=order, so_vorgang=so_vorgang, erp=erp)
             self._add_shipping_position(order=order, so_vorgang=so_vorgang)
 
@@ -96,6 +113,7 @@ class OrderUpsertMicrotechService(BaseService):
         order: Order,
         vorgang_service: MicrotechVorgangService,
         so_vorgang,
+        order_type_number: int,
     ) -> tuple[bool, str]:
         existing_beleg_nr = self._find_existing_beleg_nr(order=order, vorgang_service=vorgang_service)
         if existing_beleg_nr:
@@ -108,7 +126,7 @@ class OrderUpsertMicrotechService(BaseService):
             )
             return False, existing_beleg_nr
 
-        so_vorgang.Append(DEFAULT_ORDER_TYPE_NUMBER, order.customer.erp_nr)
+        so_vorgang.Append(order_type_number, order.customer.erp_nr)
         new_beleg_nr = self._get_vorgang_field(so_vorgang=so_vorgang, field_name="BelegNr")
         if new_beleg_nr:
             self._persist_erp_order_id(order=order, erp_order_id=new_beleg_nr)
@@ -205,11 +223,28 @@ class OrderUpsertMicrotechService(BaseService):
             positionen.DataSet.First()
             positionen.DataSet.Delete()
 
-    def _set_header_fields(self, *, order: Order, so_vorgang) -> None:
+    def _set_header_fields(
+        self,
+        *,
+        order: Order,
+        so_vorgang,
+        payment_type_number: int,
+        shipping_type_number: int,
+    ) -> None:
         auftr_nr = (order.order_number or "").strip() or (order.api_id or "").strip()
         self._set_vorgang_field(so_vorgang=so_vorgang, field_name="AuftrNr", value=auftr_nr)
         description = order.description or f"Shopware Bestellung {order.order_number}"
         self._set_vorgang_field(so_vorgang=so_vorgang, field_name="Bez", value=description)
+        self._set_optional_vorgang_field(
+            so_vorgang=so_vorgang,
+            field_name="ZahlArt",
+            value=payment_type_number,
+        )
+        self._set_optional_vorgang_field(
+            so_vorgang=so_vorgang,
+            field_name="VsdArt",
+            value=shipping_type_number,
+        )
 
     def _add_positions(self, *, order: Order, so_vorgang, erp) -> None:
         details: list[OrderDetail] = list(order.details.all())
@@ -418,11 +453,36 @@ class OrderUpsertMicrotechService(BaseService):
         return article_name
 
     @staticmethod
-    def _set_vorgang_field(*, so_vorgang, field_name: str, value: str) -> None:
+    def _set_vorgang_field(*, so_vorgang, field_name: str, value: str | int) -> None:
         if value is None:
             return
         field = so_vorgang.DataSet.Fields.Item(field_name)
+        field_type = getattr(field, "FieldType", "")
+        if field_type in {"Integer", "Byte", "AutoInc", "Boolean"}:
+            field.AsInteger = int(value)
+            return
+        if field_type in {"Float", "Double"}:
+            field.AsFloat = float(value)
+            return
+        if field_type in {"Blob", "Info"}:
+            field.Text = str(value)
+            return
         field.AsString = str(value)
+
+    @staticmethod
+    def _set_optional_vorgang_field(*, so_vorgang, field_name: str, value: str | int) -> None:
+        try:
+            OrderUpsertMicrotechService._set_vorgang_field(
+                so_vorgang=so_vorgang,
+                field_name=field_name,
+                value=value,
+            )
+        except Exception:
+            logger.warning(
+                "Konnte optionales Feld '{}' nicht setzen (Wert='{}').",
+                field_name,
+                value,
+            )
 
     @staticmethod
     def _get_vorgang_field(*, so_vorgang, field_name: str) -> str:
@@ -447,6 +507,44 @@ class OrderUpsertMicrotechService(BaseService):
             return
         order.erp_order_id = ""
         order.save(update_fields=["erp_order_id", "updated_at"])
+
+    @staticmethod
+    def _load_order_defaults() -> MicrotechOrderDefaults:
+        fallback = MicrotechOrderDefaults(
+            order_type_number=DEFAULT_ORDER_TYPE_NUMBER,
+            payment_type_number=DEFAULT_PAYMENT_TYPE_NUMBER,
+            shipping_type_number=DEFAULT_SHIPPING_TYPE_NUMBER,
+        )
+        try:
+            cfg = MicrotechSettings.load()
+        except Exception:
+            logger.exception("Konnte MicrotechSettings nicht laden. Nutze Fallback-Standardwerte.")
+            return fallback
+
+        return MicrotechOrderDefaults(
+            order_type_number=OrderUpsertMicrotechService._coerce_positive_int(
+                getattr(cfg, "default_vorgangsart_id", None),
+                fallback.order_type_number,
+            ),
+            payment_type_number=OrderUpsertMicrotechService._coerce_positive_int(
+                getattr(cfg, "default_zahlungsart_id", None),
+                fallback.payment_type_number,
+            ),
+            shipping_type_number=OrderUpsertMicrotechService._coerce_positive_int(
+                getattr(cfg, "default_versandart_id", None),
+                fallback.shipping_type_number,
+            ),
+        )
+
+    @staticmethod
+    def _coerce_positive_int(value: object, default: int) -> int:
+        try:
+            parsed = int(str(value).strip())
+        except (TypeError, ValueError):
+            return default
+        if parsed <= 0:
+            return default
+        return parsed
 
 
 __all__ = ["OrderUpsertMicrotechService", "OrderUpsertResult"]

@@ -9,6 +9,9 @@ class MicrotechSettings(BaseModel):
     firma = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Firma"))
     benutzer = models.CharField(max_length=100, blank=True, default="", verbose_name=_("Benutzer (Autosync)"))
     manual_benutzer = models.CharField(max_length=100, blank=True, default="", verbose_name=_("Benutzer (Manuell)"))
+    default_zahlungsart_id = models.PositiveIntegerField(default=22, verbose_name=_("Standard Zahlungsart-ID"))
+    default_versandart_id = models.PositiveIntegerField(default=10, verbose_name=_("Standard Versandart-ID"))
+    default_vorgangsart_id = models.PositiveIntegerField(default=111, verbose_name=_("Standard Vorgangsart-ID"))
 
     class Meta:
         verbose_name = _("Microtech Konfiguration")
