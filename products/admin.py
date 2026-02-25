@@ -3,6 +3,7 @@ from decimal import Decimal
 from django.contrib import admin, messages
 from django.contrib.contenttypes.models import ContentType
 from django.core.management import call_command
+from django.db.models import Case, IntegerField, Value, When
 from django.http import HttpResponseRedirect
 from django.urls import reverse
 from modeltranslation.admin import TabbedTranslationAdmin
@@ -49,11 +50,31 @@ class PriceInline(BaseStackedInline):
 
     def get_queryset(self, request):
         queryset = super().get_queryset(request)
-        return queryset.exclude(sales_channel__isnull=True).exclude(sales_channel__is_default=True)
+        return (
+            queryset.exclude(sales_channel__isnull=True)
+            .select_related("sales_channel")
+            .order_by(
+                Case(
+                    When(sales_channel__is_default=True, then=Value(0)),
+                    default=Value(1),
+                    output_field=IntegerField(),
+                ),
+                "sales_channel__name",
+                "pk",
+            )
+        )
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "sales_channel":
-            kwargs["queryset"] = ShopwareSettings.objects.filter(is_active=True, is_default=False)
+            kwargs["queryset"] = ShopwareSettings.objects.filter(is_active=True).order_by(
+                Case(
+                    When(is_default=True, then=Value(0)),
+                    default=Value(1),
+                    output_field=IntegerField(),
+                ),
+                "name",
+                "pk",
+            )
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
