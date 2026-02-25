@@ -1,3 +1,4 @@
+import hashlib
 from decimal import Decimal
 
 from django.contrib import admin, messages
@@ -25,6 +26,119 @@ from .models import Category, Price, Product, Storage, Tax
 
 DEFAULT_TAX_ID = "d391e13bdd95404a885f4ad28ea218e0"
 REDUCED_TAX_ID = "be66a53eae3a49829f4a8c5959535501"
+
+
+def _price_id(product_id: str, rule_id: str, suffix: str) -> str:
+    return hashlib.md5(f"{product_id}-{rule_id}-{suffix}".encode("utf-8")).hexdigest()
+
+
+def _build_standard_price(price: Price, currency_id: str) -> dict:
+    return {
+        "currencyId": currency_id,
+        "gross": price.get_standard_brutto_price(as_float=True),
+        "net": price.get_standard_price(as_float=True),
+        "linked": True,
+    }
+
+
+def _build_base_price(price: Price, currency_id: str, rule_id: str) -> list[dict]:
+    price_payload = {
+        "currencyId": currency_id,
+        "gross": price.get_current_brutto_price(as_float=True),
+        "net": price.get_current_price(as_float=True),
+        "linked": True,
+        "isSpecialActive": price.is_special_active,
+        "ruleId": rule_id,
+    }
+    if price.is_special_active:
+        price_payload["listPrice"] = _build_standard_price(price, currency_id)
+    return [price_payload]
+
+
+def _build_prices_for_channel(product: Product, channel: ShopwareSettings, price: Price) -> list[dict]:
+    rule_id = channel.rule_id_price
+    currency_id = channel.currency_id
+    if not rule_id or not currency_id:
+        return []
+
+    standard_price = _build_standard_price(price, currency_id)
+
+    if price.is_special_active:
+        return [
+            {
+                "id": _price_id(product.sku, rule_id, "special"),
+                "productId": product.sku,
+                "ruleId": rule_id,
+                "quantityStart": 1,
+                "quantityEnd": None,
+                "price": [
+                    {
+                        "currencyId": currency_id,
+                        "gross": price.get_special_brutto_price(as_float=True),
+                        "net": price.get_special_price(as_float=True),
+                        "linked": True,
+                        "listPrice": standard_price,
+                    }
+                ],
+            }
+        ]
+
+    if price.rebate_price and price.rebate_quantity:
+        if price.rebate_quantity <= 1:
+            return [
+                {
+                    "id": _price_id(product.sku, rule_id, "rebate"),
+                    "productId": product.sku,
+                    "ruleId": rule_id,
+                    "quantityStart": 1,
+                    "quantityEnd": None,
+                    "price": [
+                        {
+                            "currencyId": currency_id,
+                            "gross": price.get_rebate_brutto_price(as_float=True),
+                            "net": price.get_rebate_price(as_float=True),
+                            "linked": True,
+                        }
+                    ],
+                }
+            ]
+
+        return [
+            {
+                "id": _price_id(product.sku, rule_id, "standard"),
+                "productId": product.sku,
+                "ruleId": rule_id,
+                "quantityStart": 1,
+                "quantityEnd": price.rebate_quantity - 1,
+                "price": [standard_price],
+            },
+            {
+                "id": _price_id(product.sku, rule_id, f"rebate-{price.rebate_quantity}"),
+                "productId": product.sku,
+                "ruleId": rule_id,
+                "quantityStart": price.rebate_quantity,
+                "quantityEnd": None,
+                "price": [
+                    {
+                        "currencyId": currency_id,
+                        "gross": price.get_rebate_brutto_price(as_float=True),
+                        "net": price.get_rebate_price(as_float=True),
+                        "linked": True,
+                    }
+                ],
+            },
+        ]
+
+    return [
+        {
+            "id": _price_id(product.sku, rule_id, "standard"),
+            "productId": product.sku,
+            "ruleId": rule_id,
+            "quantityStart": 1,
+            "quantityEnd": None,
+            "price": [standard_price],
+        }
+    ]
 
 
 class StorageInline(BaseStackedInline):
@@ -120,6 +234,8 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
         error_count = 0
         error_messages: list[str] = []
         batch_size = 50
+        channels = list(ShopwareSettings.objects.filter(is_active=True))
+        default_channel = next((ch for ch in channels if ch.is_default), None)
         if hasattr(products, "select_related"):
             products = products.select_related("tax")
         if hasattr(products, "only"):
@@ -143,6 +259,11 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
                         product.sku = resolved_sku
                         product.save(update_fields=["sku"])
 
+                prices_by_channel = {
+                    price.sales_channel_id: price
+                    for price in product.prices.select_related("sales_channel").all()
+                    if price.sales_channel_id
+                }
                 payload = {
                     "productNumber": product.erp_nr,
                     "active": product.is_active,
@@ -163,6 +284,65 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
                     storage = None
                 if storage:
                     payload["stock"] = storage.get_stock
+
+                if default_channel:
+                    default_price = prices_by_channel.get(default_channel.id)
+                    if default_price:
+                        if default_channel.currency_id and default_channel.rule_id_price:
+                            payload["price"] = _build_base_price(
+                                default_price,
+                                default_channel.currency_id,
+                                default_channel.rule_id_price,
+                            )
+                        elif request:
+                            self._log_admin_error(
+                                request,
+                                (
+                                    f"Sales-Channel {default_channel.name} fehlt currency_id oder rule_id_price. "
+                                    "Preis-Update übersprungen."
+                                ),
+                                obj=product,
+                            )
+                    elif request:
+                        self._log_admin_error(
+                            request,
+                            f"Kein Preis für Default-Sales-Channel bei Produkt {product.erp_nr}.",
+                            obj=product,
+                        )
+
+                prices_payload = []
+                if effective_sku:
+                    for channel in channels:
+                        price = prices_by_channel.get(channel.id)
+                        if not price:
+                            if request:
+                                self._log_admin_error(
+                                    request,
+                                    f"Kein Preis für Sales-Channel {channel.name} bei Produkt {product.erp_nr}.",
+                                    obj=product,
+                                )
+                            continue
+                        if not channel.rule_id_price or not channel.currency_id:
+                            if request:
+                                self._log_admin_error(
+                                    request,
+                                    f"Sales-Channel {channel.name} fehlt rule_id_price oder currency_id.",
+                                    obj=product,
+                                )
+                            continue
+                        prices_payload.extend(_build_prices_for_channel(product, channel, price))
+                elif channels and request:
+                    self._log_admin_error(
+                        request,
+                        (
+                            f"Advanced prices für Produkt {product.erp_nr} übersprungen, "
+                            "da SKU im Fallback-Upsert noch nicht vorhanden war."
+                        ),
+                        obj=product,
+                    )
+
+                if prices_payload:
+                    payload["prices"] = prices_payload
 
                 payloads.append(payload)
                 payload_products.append(product)
