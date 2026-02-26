@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 from loguru import logger
 
@@ -21,6 +21,7 @@ from orders.services.constants import (
     DEFAULT_SHIPPING_TYPE_NUMBER,
     DEFAULT_UNIT,
 )
+from orders.services.order_rule_resolver import OrderRuleResolverService, ResolvedOrderRule
 from products.models import Product
 
 
@@ -45,8 +46,25 @@ class OrderUpsertMicrotechService(BaseService):
         if not isinstance(order, Order):
             raise TypeError("order must be an instance of Order.")
 
-        self._ensure_customer_synced(order)
+        resolved_rule = OrderRuleResolverService().resolve_for_order(order=order)
+        self._ensure_customer_synced(
+            order,
+            na1_mode=resolved_rule.na1_mode,
+            na1_static_value=resolved_rule.na1_static_value,
+        )
         order_defaults = self._load_order_defaults()
+        order_type_number = self._coerce_positive_int(
+            resolved_rule.vorgangsart_id,
+            order_defaults.order_type_number,
+        )
+        payment_type_number = self._coerce_positive_int(
+            resolved_rule.zahlungsart_id,
+            order_defaults.payment_type_number,
+        )
+        shipping_type_number = self._coerce_positive_int(
+            resolved_rule.versandart_id,
+            order_defaults.shipping_type_number,
+        )
 
         with microtech_connection() as erp:
             vorgang_service = MicrotechVorgangService(erp=erp)
@@ -58,17 +76,23 @@ class OrderUpsertMicrotechService(BaseService):
                 order=order,
                 vorgang_service=vorgang_service,
                 so_vorgang=so_vorgang,
-                order_type_number=order_defaults.order_type_number,
+                order_type_number=order_type_number,
             )
 
             self._set_header_fields(
                 order=order,
                 so_vorgang=so_vorgang,
-                payment_type_number=order_defaults.payment_type_number,
-                shipping_type_number=order_defaults.shipping_type_number,
+                payment_type_number=payment_type_number,
+                shipping_type_number=shipping_type_number,
+                payment_terms_text=resolved_rule.zahlungsbedingung,
             )
             self._add_positions(order=order, so_vorgang=so_vorgang, erp=erp)
             self._add_shipping_position(order=order, so_vorgang=so_vorgang)
+            self._add_payment_position(
+                order=order,
+                so_vorgang=so_vorgang,
+                resolved_rule=resolved_rule,
+            )
 
             so_vorgang.Post()
 
@@ -91,7 +115,13 @@ class OrderUpsertMicrotechService(BaseService):
 
         return OrderUpsertResult(order=order, erp_order_id=erp_order_id, is_new=is_new)
 
-    def _ensure_customer_synced(self, order: Order) -> None:
+    def _ensure_customer_synced(
+        self,
+        order: Order,
+        *,
+        na1_mode: str = "auto",
+        na1_static_value: str = "",
+    ) -> None:
         customer = order.customer
         if not customer:
             raise ValueError("Order has no customer assigned.")
@@ -101,6 +131,8 @@ class OrderUpsertMicrotechService(BaseService):
             customer,
             shipping_address=order.shipping_address,
             billing_address=order.billing_address,
+            na1_mode=na1_mode,
+            na1_static_value=na1_static_value,
         )
         customer.refresh_from_db()
 
@@ -230,6 +262,7 @@ class OrderUpsertMicrotechService(BaseService):
         so_vorgang,
         payment_type_number: int,
         shipping_type_number: int,
+        payment_terms_text: str = "",
     ) -> None:
         auftr_nr = (order.order_number or "").strip() or (order.api_id or "").strip()
         self._set_vorgang_field(so_vorgang=so_vorgang, field_name="AuftrNr", value=auftr_nr)
@@ -245,6 +278,12 @@ class OrderUpsertMicrotechService(BaseService):
             field_name="VsdArt",
             value=shipping_type_number,
         )
+        if (payment_terms_text or "").strip():
+            self._set_optional_vorgang_field(
+                so_vorgang=so_vorgang,
+                field_name="ZahlBed",
+                value=payment_terms_text,
+            )
 
     def _add_positions(self, *, order: Order, so_vorgang, erp) -> None:
         details: list[OrderDetail] = list(order.details.all())
@@ -348,6 +387,54 @@ class OrderUpsertMicrotechService(BaseService):
             price=order.shipping_costs,
             is_gross=order.customer.is_gross,
         )
+
+    def _add_payment_position(
+        self,
+        *,
+        order: Order,
+        so_vorgang,
+        resolved_rule: ResolvedOrderRule,
+    ) -> None:
+        if not resolved_rule.add_payment_position:
+            return
+
+        erp_nr = (resolved_rule.payment_position_erp_nr or "").strip()
+        if not erp_nr:
+            logger.warning(
+                "Rule {} requests payment surcharge position, but payment_position_erp_nr is empty.",
+                resolved_rule.rule_name or resolved_rule.rule_id,
+            )
+            return
+
+        amount = self._resolve_payment_position_amount(order=order, resolved_rule=resolved_rule)
+        if amount is None or amount == Decimal("0.00"):
+            return
+
+        so_vorgang.Positionen.Add(1, DEFAULT_UNIT, erp_nr)
+        self._set_position_price(
+            so_vorgang=so_vorgang,
+            price=amount,
+            is_gross=order.customer.is_gross,
+            position_name=(resolved_rule.payment_position_name or "").strip(),
+        )
+
+    @staticmethod
+    def _resolve_payment_position_amount(
+        *,
+        order: Order,
+        resolved_rule: ResolvedOrderRule,
+    ) -> Decimal | None:
+        value = resolved_rule.payment_position_value
+        if value is None:
+            return None
+
+        if resolved_rule.payment_position_mode == "percent_total":
+            base_total = order.total_price or Decimal("0.00")
+            amount = (base_total * value) / Decimal("100")
+        else:
+            amount = value
+
+        return amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
     @staticmethod
     def _set_position_price(

@@ -158,6 +158,8 @@ class CustomerUpsertMicrotechService(BaseService):
         *,
         shipping_address: Address | None = None,
         billing_address: Address | None = None,
+        na1_mode: str = "auto",
+        na1_static_value: str = "",
     ) -> UpsertResult:
         if not isinstance(customer, Customer):
             raise TypeError("customer must be an instance of Customer.")
@@ -194,6 +196,8 @@ class CustomerUpsertMicrotechService(BaseService):
                 billing=billing,
                 anschrift_service=anschrift_service,
                 ansprechpartner_service=ansprechpartner_service,
+                na1_mode=na1_mode,
+                na1_static_value=na1_static_value,
             )
 
             # Save default address numbers on top-level address record.
@@ -303,6 +307,8 @@ class CustomerUpsertMicrotechService(BaseService):
         billing: Address,
         anschrift_service: MicrotechAnschriftService,
         ansprechpartner_service: MicrotechAnsprechpartnerService,
+        na1_mode: str,
+        na1_static_value: str,
     ) -> tuple[int, int]:
         self._reset_anschrift_standard_flags(erp_nr=erp_nr, anschrift_service=anschrift_service)
 
@@ -326,6 +332,8 @@ class CustomerUpsertMicrotechService(BaseService):
             is_invoice=billing.pk == shipping.pk,
             anschrift_service=anschrift_service,
             ansprechpartner_service=ansprechpartner_service,
+            na1_mode=na1_mode,
+            na1_static_value=na1_static_value,
         )
 
         if billing.pk != shipping.pk:
@@ -337,6 +345,8 @@ class CustomerUpsertMicrotechService(BaseService):
                 is_invoice=True,
                 anschrift_service=anschrift_service,
                 ansprechpartner_service=ansprechpartner_service,
+                na1_mode=na1_mode,
+                na1_static_value=na1_static_value,
             )
 
         return shipping_ans_nr, billing_ans_nr
@@ -395,6 +405,8 @@ class CustomerUpsertMicrotechService(BaseService):
         is_invoice: bool,
         anschrift_service: MicrotechAnschriftService,
         ansprechpartner_service: MicrotechAnsprechpartnerService,
+        na1_mode: str,
+        na1_static_value: str,
     ) -> None:
         self._hydrate_anschrift_index_from_erp(
             erp_nr=erp_nr,
@@ -420,6 +432,8 @@ class CustomerUpsertMicrotechService(BaseService):
             is_shipping=is_shipping,
             is_invoice=is_invoice,
             anschrift_service=anschrift_service,
+            na1_mode=na1_mode,
+            na1_static_value=na1_static_value,
         )
         anschrift_service.post()
 
@@ -499,9 +513,15 @@ class CustomerUpsertMicrotechService(BaseService):
         is_shipping: bool,
         is_invoice: bool,
         anschrift_service: MicrotechAnschriftService,
+        na1_mode: str,
+        na1_static_value: str,
     ) -> None:
         land_numeric = _country_numeric(address.country_code)
-        na1_value = self._resolve_na1_for_anschrift(address=address)
+        na1_value = self._resolve_na1_for_anschrift(
+            address=address,
+            na1_mode=na1_mode,
+            na1_static_value=na1_static_value,
+        )
 
         anschrift_service.set_field("AdrNr", erp_nr)
         anschrift_service.set_field("Na1", na1_value)
@@ -526,19 +546,47 @@ class CustomerUpsertMicrotechService(BaseService):
         if normalized in _SALUTATION_FEMALE_VALUES:
             return "Frau"
         if normalized in _SALUTATION_MALE_VALUES:
-            return "Mann"
+            return "Herr"
         return ""
 
-    def _resolve_na1_for_anschrift(self, *, address: Address) -> str:
+    @staticmethod
+    def _looks_like_company(*, address: Address) -> bool:
+        company_candidate = _to_str(address.name1)
+        if not company_candidate:
+            return False
+        if _to_str(address.name2) and _to_str(address.name2) == company_candidate:
+            return True
+        if _to_str(address.first_name) or _to_str(address.last_name):
+            return False
+        return True
+
+    def _resolve_na1_for_anschrift(
+        self,
+        *,
+        address: Address,
+        na1_mode: str = "auto",
+        na1_static_value: str = "",
+    ) -> str:
         company_candidate = _to_str(address.name1)
         is_company = bool(
-            company_candidate
+            self._looks_like_company(address=address)
             and not self._translate_salutation_to_de(company_candidate)
         )
+        mode = _to_str(na1_mode).lower() or "auto"
+        translated_salutation = self._translate_salutation_to_de(address.title or address.name1)
+
+        if mode == "static":
+            return _to_str(na1_static_value) or _to_str(address.title) or company_candidate
+        if mode == "salutation_only":
+            return translated_salutation or _to_str(address.title) or company_candidate
+        if mode == "firma_or_salutation":
+            if is_company:
+                return "Firma"
+            return translated_salutation or _to_str(address.title) or company_candidate
+
         if is_company:
             return company_candidate
 
-        translated_salutation = self._translate_salutation_to_de(address.title or address.name1)
         if translated_salutation:
             return translated_salutation
         return _to_str(address.title) or company_candidate

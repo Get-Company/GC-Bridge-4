@@ -299,6 +299,11 @@ UNFOLD = {
                 "collapsible": True,
                 "items": [
                     {
+                        "title": _("Einstellungen"),
+                        "icon": "settings",
+                        "link": reverse_lazy("admin:microtech_microtechorderrule_changelist"),
+                    },
+                    {
                         "title": _("Verbindung"),
                         "icon": "cable",
                         "link": reverse_lazy("admin:microtech_microtechsettings_changelist"),
