@@ -110,7 +110,7 @@ class OrderAdmin(BaseAdmin):
         "customer",
         "total_price",
         "purchase_date",
-        "created_at",
+        "order_state",
     )
     list_sections = [OrderExpandSection]
     list_sections_classes = "grid-cols-1"
@@ -125,6 +125,7 @@ class OrderAdmin(BaseAdmin):
     inlines = (OrderDetailInline,)
     actions_list = ("sync_open_orders_from_shopware_list",)
     actions = ("sync_open_orders_from_shopware",)
+    actions_row = ("upsert_to_microtech_row",)
     actions_detail = ("upsert_to_microtech_detail",)
     list_fullwidth = True
 
@@ -141,6 +142,28 @@ class OrderAdmin(BaseAdmin):
 
     def _redirect_to_change_page(self, object_id: str) -> HttpResponseRedirect:
         return HttpResponseRedirect(reverse("admin:orders_order_change", args=(object_id,)))
+
+    def _run_microtech_upsert(self, request, object_id: str) -> None:
+        order = self.get_object(request, object_id)
+        if not order:
+            self.message_user(request, "Bestellung nicht gefunden.", level=messages.ERROR)
+            return
+
+        try:
+            result = OrderUpsertMicrotechService().upsert_order(order)
+        except Exception as exc:
+            self.message_user(
+                request,
+                f"Microtech-Upsert fehlgeschlagen: {exc}",
+                level=messages.ERROR,
+            )
+            return
+
+        action_label = "angelegt" if result.is_new else "aktualisiert"
+        self.message_user(
+            request,
+            f"Bestellung {order.order_number} in Microtech {action_label} (BelegNr: {result.erp_order_id}).",
+        )
 
     def get_custom_urls(self):
         urls = super().get_custom_urls()
@@ -169,27 +192,17 @@ class OrderAdmin(BaseAdmin):
         variant=ActionVariant.PRIMARY,
     )
     def upsert_to_microtech_detail(self, request, object_id: str):
-        order = self.get_object(request, object_id)
-        if not order:
-            self.message_user(request, "Bestellung nicht gefunden.", level=messages.ERROR)
-            return self._redirect_to_change_page(object_id)
-
-        try:
-            result = OrderUpsertMicrotechService().upsert_order(order)
-        except Exception as exc:
-            self.message_user(
-                request,
-                f"Microtech-Upsert fehlgeschlagen: {exc}",
-                level=messages.ERROR,
-            )
-            return self._redirect_to_change_page(object_id)
-
-        action_label = "angelegt" if result.is_new else "aktualisiert"
-        self.message_user(
-            request,
-            f"Bestellung {order.order_number} in Microtech {action_label} (BelegNr: {result.erp_order_id}).",
-        )
+        self._run_microtech_upsert(request, object_id)
         return self._redirect_to_change_page(object_id)
+
+    @action(
+        description="In Microtech anlegen",
+        icon="upload",
+        variant=ActionVariant.PRIMARY,
+    )
+    def upsert_to_microtech_row(self, request, object_id: str):
+        self._run_microtech_upsert(request, object_id)
+        return self._redirect_to_changelist()
 
     def _run_open_order_sync(self, request) -> None:
         try:
