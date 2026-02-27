@@ -1,12 +1,15 @@
 import hashlib
 from decimal import Decimal
 
+from django import forms
 from django.contrib import admin, messages
+from django.contrib.admin.helpers import ActionForm
 from django.contrib.contenttypes.models import ContentType
 from django.core.management import call_command
 from django.db.models import Case, IntegerField, Value, When
 from django.http import HttpResponseRedirect
 from django.urls import reverse
+from django.utils import timezone
 from modeltranslation.admin import TabbedTranslationAdmin
 
 from unfold.contrib.filters.admin import (
@@ -190,6 +193,34 @@ class PriceInline(BaseStackedInline):
                 "pk",
             )
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+
+class PriceActionForm(ActionForm):
+    special_percentage = forms.DecimalField(
+        label="Sonderpreis (%)",
+        required=False,
+        min_value=Decimal("0.01"),
+        max_value=Decimal("99.99"),
+        decimal_places=2,
+    )
+    special_start_date = forms.DateTimeField(
+        label="Sonderpreis ab",
+        required=False,
+        input_formats=["%Y-%m-%dT%H:%M", "%Y-%m-%dT%H:%M:%S"],
+        widget=forms.DateTimeInput(
+            format="%Y-%m-%dT%H:%M",
+            attrs={"type": "datetime-local"},
+        ),
+    )
+    special_end_date = forms.DateTimeField(
+        label="Sonderpreis bis",
+        required=False,
+        input_formats=["%Y-%m-%dT%H:%M", "%Y-%m-%dT%H:%M:%S"],
+        widget=forms.DateTimeInput(
+            format="%Y-%m-%dT%H:%M",
+            attrs={"type": "datetime-local"},
+        ),
+    )
 
 
 @admin.register(Product)
@@ -496,11 +527,60 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
 class PriceAdmin(BaseAdmin):
     list_display = ("product", "sales_channel", "price", "special_percentage", "special_price", "special_active", "rebate_price", "created_at")
     search_fields = ("product__erp_nr", "product__name", "sales_channel__name")
+    action_form = PriceActionForm
+    actions = ("set_special_price_bulk", "clear_special_price_bulk")
     list_filter = [
         ("sales_channel", RelatedDropdownFilter),
         ("price", RangeNumericFilter),
         ("created_at", RangeDateTimeFilter),
     ]
+
+    @staticmethod
+    def _to_aware_datetime(value):
+        if value and timezone.is_naive(value):
+            return timezone.make_aware(value, timezone.get_current_timezone())
+        return value
+
+    @admin.action(description="Sonderpreis setzen (%)")
+    def set_special_price_bulk(self, request, queryset):
+        form = self.action_form(request.POST)
+        if not form.is_valid():
+            self.message_user(request, "Bitte gueltige Werte fuer Prozent, Start und Ende eingeben.", level=messages.ERROR)
+            return
+
+        special_percentage = form.cleaned_data.get("special_percentage")
+        special_start_date = self._to_aware_datetime(form.cleaned_data.get("special_start_date"))
+        special_end_date = self._to_aware_datetime(form.cleaned_data.get("special_end_date"))
+
+        if special_percentage is None:
+            self.message_user(request, "Bitte fuer diese Aktion einen Prozentwert eingeben.", level=messages.ERROR)
+            return
+
+        if special_start_date and special_end_date and special_end_date < special_start_date:
+            self.message_user(request, "Sonderpreis bis muss nach Sonderpreis ab liegen.", level=messages.ERROR)
+            return
+
+        updated = 0
+        for price in queryset:
+            price.special_percentage = special_percentage
+            price.special_start_date = special_start_date
+            price.special_end_date = special_end_date
+            price.save()
+            updated += 1
+
+        self.message_user(request, f"Sonderpreis fuer {updated} Preis(e) gesetzt.")
+
+    @admin.action(description="Sonderpreis aufheben")
+    def clear_special_price_bulk(self, request, queryset):
+        updated = 0
+        for price in queryset:
+            price.special_percentage = None
+            price.special_start_date = None
+            price.special_end_date = None
+            price.save()
+            updated += 1
+
+        self.message_user(request, f"Sonderpreis fuer {updated} Preis(e) aufgehoben.")
 
     @admin.display(boolean=True, description="Sonderpreis aktiv")
     def special_active(self, obj: Price) -> bool:
