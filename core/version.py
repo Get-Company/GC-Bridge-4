@@ -21,4 +21,4 @@ def get_version() -> str:
 
 
 def site_subheader_callback(request):
-    return f"Shopware \u2194 Microtech \u00b7 {get_version()}"
+    return f"SW6 \u2194 Büro+ \u00b7 {get_version()}"
