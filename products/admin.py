@@ -3,7 +3,6 @@ from decimal import Decimal
 
 from django import forms
 from django.contrib import admin, messages
-from django.contrib.admin.helpers import ActionForm
 from django.contrib.contenttypes.models import ContentType
 from django.core.management import call_command
 from django.db.models import Case, IntegerField, Value, When
@@ -20,6 +19,7 @@ from unfold.contrib.filters.admin import (
 )
 from unfold.decorators import action
 from unfold.enums import ActionVariant
+from unfold.forms import ActionForm as UnfoldActionForm
 
 from core.admin import BaseAdmin, BaseStackedInline, BaseTabularInline
 from core.admin_utils import log_admin_change
@@ -150,20 +150,20 @@ class StorageInline(BaseStackedInline):
     extra = 0
 
 
-class PriceInline(BaseStackedInline):
+class PriceInline(BaseTabularInline):
     model = Price
     fields = (
         "sales_channel",
         "price",
-        "rebate_quantity",
-        "rebate_price",
         "special_percentage",
-        "special_price",
         "special_start_date",
         "special_end_date",
-        "created_at",
-        "updated_at",
+        "special_price",
+        "special_active",
+        "rebate_quantity",
+        "rebate_price",
     )
+    readonly_fields = BaseTabularInline.readonly_fields + ("special_price", "special_active")
 
     def get_queryset(self, request):
         queryset = super().get_queryset(request)
@@ -181,6 +181,10 @@ class PriceInline(BaseStackedInline):
             )
         )
 
+    @admin.display(boolean=True, description="Sonderpreis aktiv")
+    def special_active(self, obj: Price) -> bool:
+        return obj.is_special_active
+
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "sales_channel":
             kwargs["queryset"] = ShopwareSettings.objects.filter(is_active=True).order_by(
@@ -195,7 +199,52 @@ class PriceInline(BaseStackedInline):
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
-class PriceActionForm(ActionForm):
+class ProductSpecialPriceActionForm(UnfoldActionForm):
+    sales_channel = forms.ModelChoiceField(
+        label="Sales-Channel",
+        required=False,
+        queryset=ShopwareSettings.objects.none(),
+    )
+    special_percentage = forms.DecimalField(
+        label="Sonderpreis Prozent",
+        required=False,
+        min_value=Decimal("0.01"),
+        max_value=Decimal("99.99"),
+        decimal_places=2,
+    )
+    special_start_date = forms.DateTimeField(
+        label="Sonderpreis ab",
+        required=False,
+        input_formats=["%Y-%m-%dT%H:%M", "%Y-%m-%dT%H:%M:%S"],
+        widget=forms.DateTimeInput(
+            format="%Y-%m-%dT%H:%M",
+            attrs={"type": "datetime-local"},
+        ),
+    )
+    special_end_date = forms.DateTimeField(
+        label="Sonderpreis bis",
+        required=False,
+        input_formats=["%Y-%m-%dT%H:%M", "%Y-%m-%dT%H:%M:%S"],
+        widget=forms.DateTimeInput(
+            format="%Y-%m-%dT%H:%M",
+            attrs={"type": "datetime-local"},
+        ),
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["sales_channel"].queryset = ShopwareSettings.objects.filter(is_active=True).order_by(
+            Case(
+                When(is_default=True, then=Value(0)),
+                default=Value(1),
+                output_field=IntegerField(),
+            ),
+            "name",
+            "pk",
+        )
+
+
+class PriceActionForm(UnfoldActionForm):
     special_percentage = forms.DecimalField(
         label="Sonderpreis (%)",
         required=False,
@@ -244,7 +293,13 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
     ]
     inlines = (StorageInline, PriceInline)
     filter_horizontal = ("categories",)
-    actions = ("sync_from_microtech", "sync_to_shopware")
+    action_form = ProductSpecialPriceActionForm
+    actions = (
+        "sync_from_microtech",
+        "sync_to_shopware",
+        "set_special_price_for_channel",
+        "clear_special_price_for_channel",
+    )
     actions_detail = ("sync_from_microtech_detail", "sync_to_shopware_detail")
 
     def _redirect_to_change_page(self, object_id: str) -> HttpResponseRedirect:
@@ -259,6 +314,17 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
             object_repr=str(obj) if obj else "Shopware Sync",
             message=message,
         )
+
+    def _build_action_form(self, request):
+        form = self.action_form(request.POST)
+        form.fields["action"].choices = self.get_action_choices(request)
+        return form
+
+    @staticmethod
+    def _to_aware_datetime(value):
+        if value and timezone.is_naive(value):
+            return timezone.make_aware(value, timezone.get_current_timezone())
+        return value
 
     def _sync_products_bulk(self, products, service: ProductService, request=None) -> tuple[int, int, list[str]]:
         success_count = 0
@@ -522,6 +588,84 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
             )
         return self._redirect_to_change_page(object_id)
 
+    @admin.action(description="Sonderpreis fuer Sales-Channel setzen")
+    def set_special_price_for_channel(self, request, queryset):
+        form = self._build_action_form(request)
+        if not form.is_valid():
+            self.message_user(
+                request,
+                "Bitte gueltige Werte fuer Sales-Channel, Prozent, Start und Ende eingeben.",
+                level=messages.ERROR,
+            )
+            return
+
+        sales_channel = form.cleaned_data.get("sales_channel")
+        special_percentage = form.cleaned_data.get("special_percentage")
+        special_start_date = self._to_aware_datetime(form.cleaned_data.get("special_start_date"))
+        special_end_date = self._to_aware_datetime(form.cleaned_data.get("special_end_date"))
+
+        if sales_channel is None:
+            self.message_user(request, "Bitte einen Sales-Channel auswaehlen.", level=messages.ERROR)
+            return
+        if special_percentage is None:
+            self.message_user(request, "Bitte einen Prozentwert eingeben.", level=messages.ERROR)
+            return
+        if special_start_date and special_end_date and special_end_date < special_start_date:
+            self.message_user(request, "Sonderpreis bis muss nach Sonderpreis ab liegen.", level=messages.ERROR)
+            return
+
+        prices = Price.objects.filter(product__in=queryset, sales_channel=sales_channel).select_related("product")
+        updated = 0
+        for price in prices:
+            price.special_percentage = special_percentage
+            price.special_start_date = special_start_date
+            price.special_end_date = special_end_date
+            price.save()
+            updated += 1
+
+        total_products = queryset.count()
+        missing = total_products - updated
+        self.message_user(
+            request,
+            f"Sonderpreis fuer {updated} Preis(e) in {sales_channel.name} gesetzt.",
+        )
+        if missing > 0:
+            self.message_user(
+                request,
+                (
+                    f"{missing} Produkt(e) ohne Preis in {sales_channel.name} uebersprungen. "
+                    "Preis bitte im Produkt-Inline anlegen."
+                ),
+                level=messages.WARNING,
+            )
+
+    @admin.action(description="Sonderpreis fuer Sales-Channel aufheben")
+    def clear_special_price_for_channel(self, request, queryset):
+        form = self._build_action_form(request)
+        if not form.is_valid():
+            self.message_user(
+                request,
+                "Bitte gueltige Werte fuer den Sales-Channel eingeben.",
+                level=messages.ERROR,
+            )
+            return
+
+        sales_channel = form.cleaned_data.get("sales_channel")
+        if sales_channel is None:
+            self.message_user(request, "Bitte einen Sales-Channel auswaehlen.", level=messages.ERROR)
+            return
+
+        updated = Price.objects.filter(product__in=queryset, sales_channel=sales_channel).update(
+            special_percentage=None,
+            special_price=None,
+            special_start_date=None,
+            special_end_date=None,
+        )
+        self.message_user(
+            request,
+            f"Sonderpreis fuer {updated} Preis(e) in {sales_channel.name} aufgehoben.",
+        )
+
 
 @admin.register(Price)
 class PriceAdmin(BaseAdmin):
@@ -541,9 +685,14 @@ class PriceAdmin(BaseAdmin):
             return timezone.make_aware(value, timezone.get_current_timezone())
         return value
 
+    def _build_action_form(self, request):
+        form = self.action_form(request.POST)
+        form.fields["action"].choices = self.get_action_choices(request)
+        return form
+
     @admin.action(description="Sonderpreis setzen (%%)")
     def set_special_price_bulk(self, request, queryset):
-        form = self.action_form(request.POST)
+        form = self._build_action_form(request)
         if not form.is_valid():
             self.message_user(request, "Bitte gueltige Werte fuer Prozent, Start und Ende eingeben.", level=messages.ERROR)
             return
