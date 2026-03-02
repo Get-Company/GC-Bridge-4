@@ -95,12 +95,18 @@ class Command(BaseCommand):
             default=None,
             help="Maximale Anzahl zu synchronisierender Artikel.",
         )
+        parser.add_argument(
+            "--preserve-is-active",
+            action="store_true",
+            help="Bestehendes Product.is_active in Django nicht mit Microtech-Werten überschreiben.",
+        )
 
     def handle(self, *args, **options):
         erp_nrs = [nr.strip() for nr in options.get("erp_nrs") or [] if nr.strip()]
         sync_all = options.get("all", False)
         include_inactive = options.get("include_inactive", False)
         limit = options.get("limit")
+        preserve_is_active = options.get("preserve_is_active", False)
 
         if not erp_nrs and not sync_all:
             raise CommandError("Bitte ERP-Nummern angeben oder --all verwenden.")
@@ -135,6 +141,7 @@ class Command(BaseCommand):
                             tax_map=tax_map,
                             admin_user_id=admin_user_id,
                             content_type_id=content_type_id,
+                            preserve_is_active=preserve_is_active,
                         )
                         success_count += 1
                     except Exception as exc:
@@ -176,6 +183,7 @@ class Command(BaseCommand):
                         tax_map=tax_map,
                         admin_user_id=admin_user_id,
                         content_type_id=content_type_id,
+                        preserve_is_active=preserve_is_active,
                     )
                     success_count += 1
                 except Exception as exc:
@@ -228,19 +236,21 @@ class Command(BaseCommand):
         tax_map: dict[Decimal, Tax],
         admin_user_id=None,
         content_type_id=None,
+        preserve_is_active: bool = False,
     ) -> None:
         erp_key = artikel_service.get_erp_nr()
         if not erp_key:
             raise ValueError("Artikel ohne ArtNr gefunden.")
 
         name = artikel_service.get_name() or ""
-        product, _ = Product.objects.get_or_create(
+        product, created = Product.objects.get_or_create(
             erp_nr=erp_key,
             defaults={"name": name},
         )
 
         product.factor = _to_int(artikel_service.get_factor())
-        product.is_active = bool(artikel_service.get_is_active())
+        if not (preserve_is_active and not created):
+            product.is_active = bool(artikel_service.get_is_active())
         product.unit = artikel_service.get_unit()
         product.min_purchase = _to_int(artikel_service.get_min_purchase())
         product.purchase_unit = _to_int(artikel_service.get_purchase_unit())

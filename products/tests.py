@@ -1,4 +1,6 @@
+from datetime import timedelta
 from decimal import Decimal
+from unittest.mock import call, patch
 
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth import get_user_model
@@ -6,6 +8,7 @@ from django.test import RequestFactory, TestCase
 from django.utils import timezone
 
 from products.admin import PriceActionForm, PriceAdmin, ProductAdmin
+from products.management.commands.scheduled_product_sync import Command as ScheduledProductSyncCommand
 from products.models import Price, Product
 from shopware.models import ShopwareSettings
 
@@ -122,3 +125,73 @@ class ProductAdminSpecialPriceActionTest(TestCase):
         self.assertIsNone(self.price.special_price)
         self.assertIsNone(self.price.special_start_date)
         self.assertIsNone(self.price.special_end_date)
+
+
+class ScheduledProductSyncCommandTest(TestCase):
+    def setUp(self):
+        self.channel = ShopwareSettings.objects.create(
+            name="Default",
+            is_active=True,
+            is_default=True,
+        )
+
+    def test_clear_expired_specials_resets_only_expired_rows(self):
+        now = timezone.now()
+        product_a = Product.objects.create(erp_nr="A-3000", name="Artikel C")
+        product_b = Product.objects.create(erp_nr="A-3001", name="Artikel D")
+
+        expired = Price.objects.create(
+            product=product_a,
+            sales_channel=self.channel,
+            price=Decimal("100.00"),
+            special_percentage=Decimal("10.00"),
+            special_start_date=now - timedelta(days=10),
+            special_end_date=now - timedelta(days=1),
+        )
+        active = Price.objects.create(
+            product=product_b,
+            sales_channel=self.channel,
+            price=Decimal("200.00"),
+            special_percentage=Decimal("5.00"),
+            special_start_date=now - timedelta(days=1),
+            special_end_date=now + timedelta(days=1),
+        )
+
+        updated, product_ids = ScheduledProductSyncCommand._clear_expired_specials(now=now)
+
+        self.assertEqual(updated, 1)
+        self.assertSetEqual(product_ids, {product_a.id})
+        expired.refresh_from_db()
+        active.refresh_from_db()
+        self.assertIsNone(expired.special_percentage)
+        self.assertIsNone(expired.special_price)
+        self.assertIsNone(expired.special_start_date)
+        self.assertIsNone(expired.special_end_date)
+        self.assertEqual(active.special_percentage, Decimal("5.00"))
+
+    @patch("products.management.commands.scheduled_product_sync.call_command")
+    def test_handle_runs_microtech_with_preserve_and_then_shopware(self, mock_call_command):
+        cmd = ScheduledProductSyncCommand()
+        with (
+            patch.object(cmd, "_clear_expired_specials", return_value=(0, set())),
+            patch.object(cmd, "_sync_expired_specials_to_microtech", return_value=0),
+        ):
+            cmd.handle(limit=50, exclude_inactive=False)
+
+        self.assertEqual(mock_call_command.call_count, 2)
+        mock_call_command.assert_has_calls(
+            [
+                call(
+                    "microtech_sync_products",
+                    all=True,
+                    include_inactive=True,
+                    preserve_is_active=True,
+                    limit=50,
+                ),
+                call(
+                    "shopware_sync_products",
+                    all=True,
+                    limit=50,
+                ),
+            ]
+        )
