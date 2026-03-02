@@ -68,7 +68,7 @@ if errorlevel 1 (
 :: --- Uvicorn neustarten ---
 echo [%DATE% %TIME%] Restarting Uvicorn... >> "%LOG_FILE%"
 powershell -Command "Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }"  >> "%LOG_FILE%" 2>&1
-timeout /t 3 /nobreak > nul
+ping 127.0.0.1 -n 4 >nul
 schtasks /Run /TN "GC-Bridge-Uvicorn" >> "%LOG_FILE%" 2>&1
 
 :: --- Scheduled Product Sync Task neu starten (falls vorhanden) ---
@@ -78,7 +78,7 @@ if errorlevel 1 (
     echo [%DATE% %TIME%] WARNING: Scheduled task "GC-Bridge Scheduled Product Sync" not found. >> "%LOG_FILE%"
 ) else (
     schtasks /End /TN "GC-Bridge Scheduled Product Sync" >> "%LOG_FILE%" 2>&1
-    timeout /t 2 /nobreak > nul
+    ping 127.0.0.1 -n 3 >nul
     schtasks /Run /TN "GC-Bridge Scheduled Product Sync" >> "%LOG_FILE%" 2>&1
 )
 
