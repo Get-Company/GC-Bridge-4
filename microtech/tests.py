@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 from django.test import TestCase
 
 from microtech.management.commands.microtech_sync_products import Command as MicrotechSyncProductsCommand
+from microtech.services.artikel import MicrotechArtikelService
 from products.models import Product, Tax
 from shopware.models import ShopwareSettings
 
@@ -75,3 +76,14 @@ class MicrotechSyncProductsCommandTest(TestCase):
         product.refresh_from_db()
         self.assertFalse(product.is_active)
 
+
+class MicrotechArtikelServiceTaxTest(TestCase):
+    def test_get_tax_rate_uses_optional_field_and_falls_back_to_tax_key(self):
+        service = MicrotechArtikelService.__new__(MicrotechArtikelService)
+        service.get_field = MagicMock(return_value=None)
+        service.get_tax_key = MagicMock(return_value="M19")
+
+        rate = MicrotechArtikelService.get_tax_rate(service)
+
+        self.assertEqual(rate, Decimal("19.00"))
+        service.get_field.assert_called_once_with("StSchlSz", silent=True)

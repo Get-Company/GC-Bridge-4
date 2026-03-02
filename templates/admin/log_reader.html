@@ -1,0 +1,40 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+    <div id="content-main">
+        <h1>Log Reader</h1>
+
+        <form method="get" class="mb-4">
+            <div style="display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap;">
+                <div>
+                    <label for="id_file">Datei</label><br>
+                    <select id="id_file" name="file">
+                        {% for option in file_options %}
+                            <option value="{{ option.index }}"{% if option.index == selected_file_index %} selected{% endif %}>{{ option.path }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label for="id_lines">Zeilen</label><br>
+                    <input id="id_lines" name="lines" type="number" min="10" max="500" value="{{ line_count }}">
+                </div>
+                <div>
+                    <button type="submit">Aktualisieren</button>
+                </div>
+            </div>
+        </form>
+
+        {% if not file_options %}
+            <p>Keine Log-Dateien konfiguriert.</p>
+        {% elif not file_exists %}
+            <p>Datei nicht gefunden: <code>{{ selected_path }}</code></p>
+        {% else %}
+            <p><strong>Datei:</strong> <code>{{ selected_path }}</code></p>
+            <p><strong>Auszug:</strong> letzte {{ line_count }} Zeilen</p>
+            <pre style="white-space: pre-wrap; max-height: 70vh; overflow: auto; border: 1px solid #d1d5db; padding: 12px;">{% for line in log_lines %}{{ line }}
+{% empty %}(leer)
+{% endfor %}</pre>
+        {% endif %}
+    </div>
+{% endblock %}

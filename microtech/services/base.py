@@ -100,13 +100,16 @@ class MicrotechDatasetService(BaseService):
             logger.error("Error while casting field: {}", exc)
             return None
 
-    def get_field(self, field_name: str) -> Any:
+    def get_field(self, field_name: str, *, silent: bool = False) -> Any:
         self._require_dataset()
         try:
             field = self.dataset.Fields(field_name)
             return self._read_field(field)
         except COM_ERROR as exc:
-            logger.error("Error reading field '{}': {}", field_name, exc)
+            if silent:
+                return None
+            else:
+                logger.error("Error reading field '{}': {}", field_name, exc)
             return None
 
     def set_field(self, field_name: str, value: Any) -> bool:

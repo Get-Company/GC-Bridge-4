@@ -84,7 +84,7 @@ class MicrotechArtikelService(MicrotechDatasetService):
         return str(self.get_field("StSchl") or "").strip()
 
     def get_tax_rate(self) -> Decimal | None:
-        direct_rate = self._parse_tax_rate(self.get_field("StSchlSz"))
+        direct_rate = self._parse_tax_rate(self.get_field("StSchlSz", silent=True))
         if direct_rate is not None:
             return direct_rate
 

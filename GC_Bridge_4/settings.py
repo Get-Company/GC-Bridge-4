@@ -43,6 +43,12 @@ def env_list(name: str, default: str = "") -> list[str]:
     return [item.strip() for item in os.getenv(name, default).split(",") if item.strip()]
 
 
+ADMIN_LOG_READER_FILES = env_list(
+    "ADMIN_LOG_READER_FILES",
+    f"{BASE_DIR / 'logs' / 'scheduled_product_sync.log'},{BASE_DIR / 'logs' / 'django.log'}",
+)
+
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
@@ -325,6 +331,12 @@ UNFOLD = {
                         "title": _("Gruppen"),
                         "icon": "groups",
                         "link": reverse_lazy("admin:auth_group_changelist"),
+                        "permission": "core.unfold.superuser_only",
+                    },
+                    {
+                        "title": _("Logs"),
+                        "icon": "article",
+                        "link": reverse_lazy("admin:core_log_reader"),
                         "permission": "core.unfold.superuser_only",
                     },
                 ],
