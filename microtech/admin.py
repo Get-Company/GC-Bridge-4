@@ -2,8 +2,13 @@ from django.contrib import admin
 from django.http import HttpResponseRedirect
 from django.urls import reverse
 
-from core.admin import BaseAdmin
-from microtech.models import MicrotechOrderRule, MicrotechSettings
+from core.admin import BaseAdmin, BaseTabularInline
+from microtech.models import (
+    MicrotechOrderRule,
+    MicrotechOrderRuleAction,
+    MicrotechOrderRuleCondition,
+    MicrotechSettings,
+)
 
 
 class SingletonAdmin(BaseAdmin):
@@ -52,10 +57,32 @@ class MicrotechSettingsAdmin(SingletonAdmin):
 
 @admin.register(MicrotechOrderRule)
 class MicrotechOrderRuleAdmin(BaseAdmin):
+    class ConditionInline(BaseTabularInline):
+        model = MicrotechOrderRuleCondition
+        fields = (
+            "is_active",
+            "priority",
+            "source_field",
+            "operator",
+            "expected_value",
+        )
+        extra = 0
+
+    class ActionInline(BaseTabularInline):
+        model = MicrotechOrderRuleAction
+        fields = (
+            "is_active",
+            "priority",
+            "target_field",
+            "target_value",
+        )
+        extra = 0
+
     list_display = (
         "priority",
         "name",
         "is_active",
+        "condition_logic",
         "customer_type",
         "billing_country_code",
         "shipping_country_code",
@@ -76,18 +103,20 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
     )
     list_filter = (
         "is_active",
+        "condition_logic",
         "customer_type",
         "country_match_mode",
         "na1_mode",
         "add_payment_position",
     )
     ordering = ("priority", "id")
+    inlines = (ConditionInline, ActionInline)
 
     fieldsets = (
         (
             "Regel",
             {
-                "fields": ("name", "is_active", "priority"),
+                "fields": ("name", "is_active", "priority", "condition_logic"),
             },
         ),
         (
@@ -103,7 +132,8 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
                 ),
                 "description": (
                     "Leere Felder gelten als Wildcard. "
-                    "payment/shipping pattern pruefen case-insensitive auf 'enthaelt'."
+                    "payment/shipping pattern pruefen case-insensitive auf 'enthaelt'. "
+                    "Wenn Inline-Bedingungen gepflegt sind, werden diese dynamisch mit UND/ODER ausgewertet."
                 ),
             },
         ),
