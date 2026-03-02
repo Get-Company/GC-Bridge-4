@@ -337,6 +337,7 @@ Self-Hosted Runner auf CLSRV01 fuehrt aus:
   4. manage.py migrate --noinput
   5. manage.py collectstatic --noinput
   6. Uvicorn neustarten (Port 8000 + schtasks /Run)
+  7. Scheduled Task "GC-Bridge Scheduled Product Sync" neu starten (falls vorhanden)
         |
         v
 Ergebnis in tmp\logs\deploy.log + GitHub Actions UI

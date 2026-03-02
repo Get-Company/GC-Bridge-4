@@ -71,5 +71,16 @@ powershell -Command "Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAc
 timeout /t 3 /nobreak > nul
 schtasks /Run /TN "GC-Bridge-Uvicorn" >> "%LOG_FILE%" 2>&1
 
+:: --- Scheduled Product Sync Task neu starten (falls vorhanden) ---
+echo [%DATE% %TIME%] Refreshing scheduled task "GC-Bridge Scheduled Product Sync"... >> "%LOG_FILE%"
+schtasks /Query /TN "GC-Bridge Scheduled Product Sync" >nul 2>&1
+if errorlevel 1 (
+    echo [%DATE% %TIME%] WARNING: Scheduled task "GC-Bridge Scheduled Product Sync" not found. >> "%LOG_FILE%"
+) else (
+    schtasks /End /TN "GC-Bridge Scheduled Product Sync" >> "%LOG_FILE%" 2>&1
+    timeout /t 2 /nobreak > nul
+    schtasks /Run /TN "GC-Bridge Scheduled Product Sync" >> "%LOG_FILE%" 2>&1
+)
+
 echo [%DATE% %TIME%] Deployment %DEPLOY_TAG% abgeschlossen >> "%LOG_FILE%"
 exit /b 0
