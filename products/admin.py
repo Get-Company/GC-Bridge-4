@@ -541,7 +541,7 @@ class PriceAdmin(BaseAdmin):
             return timezone.make_aware(value, timezone.get_current_timezone())
         return value
 
-    @admin.action(description="Sonderpreis setzen (%)")
+    @admin.action(description="Sonderpreis setzen (%%)")
     def set_special_price_bulk(self, request, queryset):
         form = self.action_form(request.POST)
         if not form.is_valid():
