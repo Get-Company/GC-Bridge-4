@@ -205,7 +205,7 @@ UNFOLD = {
         {
             "title": _("Handbuch"),
             "icon": "menu_book",
-            "link": "https://github.com/Get-Company/GC-Bridge-4/tree/main/docs",
+            "link": "/docs/html/index.html",
             "attrs": {
                 "target": "_blank",
                 "rel": "noopener noreferrer",
