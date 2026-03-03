@@ -87,3 +87,15 @@ class MicrotechArtikelServiceTaxTest(TestCase):
 
         self.assertEqual(rate, Decimal("19.00"))
         service.get_field.assert_called_once_with("StSchlSz", silent=True)
+
+
+class MicrotechPriceFactorGuardTest(TestCase):
+    def test_normalize_price_factor_accepts_expected_value(self):
+        factor, suspicious = MicrotechSyncProductsCommand._normalize_price_factor(Decimal("1.25"))
+        self.assertEqual(factor, Decimal("1.25"))
+        self.assertFalse(suspicious)
+
+    def test_normalize_price_factor_rejects_factor_100(self):
+        factor, suspicious = MicrotechSyncProductsCommand._normalize_price_factor(Decimal("100"))
+        self.assertEqual(factor, Decimal("1.0"))
+        self.assertTrue(suspicious)

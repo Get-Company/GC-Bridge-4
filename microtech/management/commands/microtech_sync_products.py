@@ -17,6 +17,8 @@ TAX_19_RATE = Decimal("19.00")
 TAX_7_RATE = Decimal("7.00")
 TAX_19_SHOPWARE_ID = "d391e13bdd95404a885f4ad28ea218e0"
 TAX_7_SHOPWARE_ID = "be66a53eae3a49829f4a8c5959535501"
+MIN_PRICE_FACTOR = Decimal("0.01")
+MAX_PRICE_FACTOR = Decimal("10.00")
 
 
 def _to_decimal(value):
@@ -228,6 +230,18 @@ class Command(BaseCommand):
             return tax_map[TAX_7_RATE]
         return tax_map[TAX_19_RATE]
 
+    @staticmethod
+    def _normalize_price_factor(value) -> tuple[Decimal, bool]:
+        if value in (None, ""):
+            return Decimal("1.0"), False
+        try:
+            factor = Decimal(str(value))
+        except Exception:
+            return Decimal("1.0"), True
+        if factor < MIN_PRICE_FACTOR or factor > MAX_PRICE_FACTOR:
+            return Decimal("1.0"), True
+        return factor, False
+
     def _sync_current_record(
         self,
         artikel_service,
@@ -299,7 +313,18 @@ class Command(BaseCommand):
                 for channel in channels:
                     if channel.pk == default_channel.pk:
                         continue
-                    factor = channel.price_factor or Decimal("1.0")
+                    factor, suspicious_factor = self._normalize_price_factor(channel.price_factor)
+                    if suspicious_factor:
+                        _log_admin_error(
+                            admin_user_id=admin_user_id,
+                            content_type_id=content_type_id,
+                            message=(
+                                f"Ungueltiger Preisfaktor '{channel.price_factor}' fuer Sales-Channel "
+                                f"{channel.name}. Fallback auf 1.0 angewendet."
+                            ),
+                            object_id=str(product.pk),
+                            object_repr=f"Product {product.erp_nr}",
+                        )
                     Price.objects.update_or_create(
                         product=product,
                         sales_channel=channel,

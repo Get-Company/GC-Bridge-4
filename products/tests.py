@@ -174,10 +174,11 @@ class ScheduledProductSyncCommandTest(TestCase):
         cmd = ScheduledProductSyncCommand()
         with (
             patch.object(cmd, "_clear_expired_specials", return_value=(0, set())),
-            patch.object(cmd, "_sync_expired_specials_to_microtech", return_value=0),
+            patch.object(cmd, "_sync_expired_specials_to_microtech", return_value=(0, 0)) as mock_sync_microtech,
         ):
             cmd.handle(limit=50, exclude_inactive=False)
 
+        mock_sync_microtech.assert_called_once_with(set(), write_base_price_back=False)
         self.assertEqual(mock_call_command.call_count, 2)
         mock_call_command.assert_has_calls(
             [
@@ -194,4 +195,32 @@ class ScheduledProductSyncCommandTest(TestCase):
                     limit=50,
                 ),
             ]
+        )
+
+    @patch("products.management.commands.scheduled_product_sync.call_command")
+    def test_handle_passes_write_base_price_flag_when_enabled(self, mock_call_command):
+        cmd = ScheduledProductSyncCommand()
+        with (
+            patch.object(cmd, "_clear_expired_specials", return_value=(0, set())),
+            patch.object(cmd, "_sync_expired_specials_to_microtech", return_value=(0, 0)) as mock_sync_microtech,
+        ):
+            cmd.handle(limit=10, exclude_inactive=True, write_base_price_back=True)
+
+        mock_sync_microtech.assert_called_once_with(set(), write_base_price_back=True)
+        self.assertEqual(mock_call_command.call_count, 2)
+
+    def test_is_suspicious_price_ratio_detects_factor_100(self):
+        self.assertTrue(
+            ScheduledProductSyncCommand._is_suspicious_price_ratio(
+                django_price=Decimal("100.00"),
+                microtech_price=Decimal("1.00"),
+            )
+        )
+
+    def test_is_suspicious_price_ratio_ignores_small_delta(self):
+        self.assertFalse(
+            ScheduledProductSyncCommand._is_suspicious_price_ratio(
+                django_price=Decimal("10.00"),
+                microtech_price=Decimal("10.50"),
+            )
         )

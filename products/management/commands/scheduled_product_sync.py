@@ -30,10 +30,19 @@ class Command(BaseCommand):
             action="store_true",
             help="Inaktive Microtech-Artikel beim Import ausschliessen.",
         )
+        parser.add_argument(
+            "--write-base-price-back",
+            action="store_true",
+            help=(
+                "Schreibt den Django-Basispreis nach Microtech (Vk0.Preis) zurueck. "
+                "Standard ist AUS, um versehentliche Preisfaktor-Fehler zu vermeiden."
+            ),
+        )
 
     def handle(self, *args, **options):
         limit = options.get("limit")
         include_inactive = not options.get("exclude_inactive", False)
+        write_base_price_back = options.get("write_base_price_back", False)
 
         self.stdout.write("1/4 Microtech -> Django import starten")
         call_command(
@@ -52,8 +61,21 @@ class Command(BaseCommand):
         )
 
         self.stdout.write("3/4 Microtech fuer abgelaufene Sonderpreise aktualisieren")
-        updated_microtech = self._sync_expired_specials_to_microtech(affected_product_ids)
-        self.stdout.write(f"Microtech aktualisiert: {updated_microtech} Produkt(e).")
+        updated_microtech, skipped_price_writes = self._sync_expired_specials_to_microtech(
+            affected_product_ids,
+            write_base_price_back=write_base_price_back,
+        )
+        if write_base_price_back:
+            self.stdout.write(
+                "Microtech aktualisiert: "
+                f"{updated_microtech} Produkt(e), "
+                f"{skipped_price_writes} Preis-Writeback(s) wegen Plausibilitaetspruefung uebersprungen."
+            )
+        else:
+            self.stdout.write(
+                f"Microtech aktualisiert: {updated_microtech} Produkt(e) "
+                "(nur Sonderpreisfelder, kein Basispreis-Writeback)."
+            )
 
         self.stdout.write("4/4 Django -> Shopware sync starten")
         call_command(
@@ -76,9 +98,14 @@ class Command(BaseCommand):
         )
         return updated, affected_product_ids
 
-    def _sync_expired_specials_to_microtech(self, affected_product_ids: set[int]) -> int:
+    def _sync_expired_specials_to_microtech(
+        self,
+        affected_product_ids: set[int],
+        *,
+        write_base_price_back: bool = False,
+    ) -> tuple[int, int]:
         if not affected_product_ids:
-            return 0
+            return 0, 0
 
         default_prices = (
             Price.objects.select_related("product")
@@ -89,9 +116,10 @@ class Command(BaseCommand):
             .order_by("product_id")
         )
         if not default_prices.exists():
-            return 0
+            return 0, 0
 
         updated = 0
+        skipped_price_writes = 0
         with microtech_connection() as erp:
             artikel_service = MicrotechArtikelService(erp=erp)
             for price in default_prices:
@@ -102,14 +130,22 @@ class Command(BaseCommand):
                     continue
 
                 artikel_service.edit()
-                artikel_service.set_field("Vk0.Preis", self._format_decimal(price.price))
+                if write_base_price_back:
+                    current_microtech_price = self._to_decimal(artikel_service.get_price())
+                    if self._is_suspicious_price_ratio(
+                        django_price=price.price,
+                        microtech_price=current_microtech_price,
+                    ):
+                        skipped_price_writes += 1
+                    else:
+                        artikel_service.set_field("Vk0.Preis", self._format_decimal(price.price))
                 artikel_service.set_field("Vk0.SPr", "")
                 artikel_service.set_field("Vk0.SVonDat", "")
                 artikel_service.set_field("Vk0.SBisDat", "")
                 artikel_service.post()
                 updated += 1
 
-        return updated
+        return updated, skipped_price_writes
 
     @staticmethod
     def _format_decimal(value: Decimal | None) -> str:
@@ -117,3 +153,28 @@ class Command(BaseCommand):
             return ""
         return format(value.quantize(Decimal("0.01")), "f")
 
+    @staticmethod
+    def _to_decimal(value) -> Decimal | None:
+        if value in (None, ""):
+            return None
+        try:
+            return Decimal(str(value))
+        except Exception:
+            return None
+
+    @staticmethod
+    def _is_suspicious_price_ratio(
+        *,
+        django_price: Decimal | None,
+        microtech_price: Decimal | None,
+        ratio_threshold: Decimal = Decimal("10"),
+    ) -> bool:
+        if django_price in (None, Decimal("0")) or microtech_price in (None, Decimal("0")):
+            return False
+        source = abs(Decimal(django_price))
+        target = abs(Decimal(microtech_price))
+        lower = min(source, target)
+        if lower == 0:
+            return False
+        higher = max(source, target)
+        return (higher / lower) >= ratio_threshold

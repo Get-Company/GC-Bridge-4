@@ -7,6 +7,7 @@ Django integration bridge between Microtech and Shopware 6.
 - [Projektueberblick](#projektueberblick)
 - [Grundregeln im Projekt](#grundregeln-im-projekt)
 - [Lokales Setup](#lokales-setup)
+- [Sphinx Handbuch](#sphinx-handbuch)
 - [Server Setup](#server-setup)
   - [Linux Server](#linux-server)
   - [Windows Server 2019 (CLSRV01)](#windows-server-2019-clsrv01)
@@ -75,6 +76,30 @@ docker compose up -d
 6. Dev-Server starten:
 ```bash
 .venv/bin/python manage.py runserver
+```
+
+---
+
+## Sphinx Handbuch
+
+Die projektspezifische Dokumentation liegt unter `docs/` und wird mit Sphinx gebaut.
+
+1. Model/Admin-Referenz erzeugen:
+```bash
+make -C docs inventory
+```
+2. HTML-Doku bauen:
+```bash
+make -C docs html
+```
+3. Ergebnis oeffnen:
+`docs/build/html/index.html`
+
+Windows:
+```cmd
+cd docs
+make.bat inventory
+make.bat html
 ```
 
 ---
@@ -220,6 +245,12 @@ timeout /t 5 /nobreak
 schtasks /Run /TN "GC-Bridge-Caddy"
 ```
 
+Oder per Doppelklick:
+
+```cmd
+deploy\windows\start-server.cmd
+```
+
 ---
 
 #### Server stoppen
@@ -285,9 +316,15 @@ Das Skript `deploy\windows\check_server.bat` prueft automatisch alles auf einmal
 Dateien, Python/Uvicorn/Caddy-Version, Scheduled Tasks, Ports, Firewall-Regeln,
 die letzten 20 Zeilen jeder Logdatei sowie einen Uvicorn-Schnelltest mit HTTP-Antwort.
 
+Fuer eine sequenzielle Erreichbarkeitsanalyse mit Ursachen-Hinweisen:
+`deploy\windows\diagnose_reachability.cmd`
+
 ```cmd
 :: Diagnose in der Konsole
 deploy\windows\check_server.bat
+
+:: Erreichbarkeitsdiagnose mit Hints
+deploy\windows\diagnose_reachability.cmd
 
 :: Diagnose in eine Datei schreiben (zum Weiterleiten)
 deploy\windows\check_server.bat > diagnose.txt 2>&1
@@ -307,6 +344,7 @@ Alle Logs liegen in `tmp\logs\` (wird beim ersten Start automatisch angelegt):
 | `tmp\logs\caddy-runtime.log` | Caddy internes Log |
 | `tmp\logs\caddy-access.log` | Caddy Access-Log |
 | `tmp\logs\deploy.log` | Deployment-Log (GitHub Actions) |
+| `tmp\logs\diagnose_reachability.log` | Sequenzielle Erreichbarkeitsdiagnose mit Hints |
 
 Letzte 50 Zeilen eines Logs anzeigen (PowerShell):
 
@@ -585,6 +623,16 @@ Mit Limit/Batch:
 .venv/bin/python manage.py microtech_sync_products --all --limit 100
 .venv/bin/python manage.py shopware_sync_products --all --limit 100 --batch-size 50
 ```
+
+Scheduler-Komplettlauf (inkl. Sonderpreis-Bereinigung):
+
+```bash
+.venv/bin/python manage.py scheduled_product_sync --limit 100
+```
+
+Hinweis:
+- `scheduled_product_sync` schreibt standardmaessig **keinen** Basispreis (`Vk0.Preis`) nach Microtech zurueck.
+- Falls explizit gewuenscht: `--write-base-price-back` (mit Plausibilitaetspruefung gegen grosse Preisabweichungen, z. B. Faktor 100).
 
 ### Bestellungen: Shopware -> Django -> Microtech
 

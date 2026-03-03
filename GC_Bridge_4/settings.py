@@ -201,6 +201,17 @@ UNFOLD = {
     "SITE_SUBHEADER": "core.version.site_subheader_callback",
     "SITE_SYMBOL": "hub",
     "SITE_URL": "/",
+    "SITE_DROPDOWN": [
+        {
+            "title": _("Handbuch"),
+            "icon": "menu_book",
+            "link": "https://github.com/Get-Company/GC-Bridge-4/tree/main/docs",
+            "attrs": {
+                "target": "_blank",
+                "rel": "noopener noreferrer",
+            },
+        },
+    ],
     "SHOW_HISTORY": True,
     "SHOW_VIEW_ON_SITE": False,
     "SHOW_BACK_BUTTON": False,
