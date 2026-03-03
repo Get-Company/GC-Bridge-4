@@ -83,31 +83,13 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
         "name",
         "is_active",
         "condition_logic",
-        "customer_type",
-        "billing_country_code",
-        "shipping_country_code",
-        "country_match_mode",
-        "zahlungsart_id",
-        "versandart_id",
         "updated_at",
     )
     list_editable = ("is_active",)
-    search_fields = (
-        "name",
-        "payment_method_pattern",
-        "shipping_method_pattern",
-        "billing_country_code",
-        "shipping_country_code",
-        "payment_position_erp_nr",
-        "payment_position_name",
-    )
+    search_fields = ("name",)
     list_filter = (
         "is_active",
         "condition_logic",
-        "customer_type",
-        "country_match_mode",
-        "na1_mode",
-        "add_payment_position",
     )
     ordering = ("priority", "id")
     inlines = (ConditionInline, ActionInline)
@@ -122,43 +104,10 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
         (
             "Bedingungen",
             {
-                "fields": (
-                    "customer_type",
-                    "billing_country_code",
-                    "shipping_country_code",
-                    "country_match_mode",
-                    "payment_method_pattern",
-                    "shipping_method_pattern",
-                ),
+                "fields": (),
                 "description": (
-                    "Leere Felder gelten als Wildcard. "
-                    "payment/shipping pattern pruefen case-insensitive auf 'enthaelt'. "
-                    "Wenn Inline-Bedingungen gepflegt sind, werden diese dynamisch mit UND/ODER ausgewertet."
-                ),
-            },
-        ),
-        (
-            "Ergebnis: Kopf",
-            {
-                "fields": (
-                    "na1_mode",
-                    "na1_static_value",
-                    "vorgangsart_id",
-                    "zahlungsart_id",
-                    "versandart_id",
-                    "zahlungsbedingung",
-                ),
-            },
-        ),
-        (
-            "Ergebnis: Zusatzposition Zahlungsart",
-            {
-                "fields": (
-                    "add_payment_position",
-                    "payment_position_erp_nr",
-                    "payment_position_name",
-                    "payment_position_mode",
-                    "payment_position_value",
+                    "Bedingungen werden ausschliesslich ueber die Inline-Tabelle gepflegt. "
+                    "Ohne aktive Bedingungen gilt die Regel als globaler Fallback."
                 ),
             },
         ),

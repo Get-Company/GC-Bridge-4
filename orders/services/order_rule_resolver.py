@@ -84,17 +84,6 @@ class ResolvedOrderRule:
             rule_id=rule.pk,
             rule_name=_to_str(rule.name),
             customer_type=customer_type,
-            na1_mode=rule.na1_mode,
-            na1_static_value=_to_str(rule.na1_static_value),
-            vorgangsart_id=rule.vorgangsart_id,
-            zahlungsart_id=rule.zahlungsart_id,
-            versandart_id=rule.versandart_id,
-            zahlungsbedingung=_to_str(rule.zahlungsbedingung),
-            add_payment_position=bool(rule.add_payment_position),
-            payment_position_erp_nr=_to_str(rule.payment_position_erp_nr),
-            payment_position_name=_to_str(rule.payment_position_name),
-            payment_position_mode=rule.payment_position_mode,
-            payment_position_value=rule.payment_position_value,
         )
 
 
@@ -134,15 +123,7 @@ class OrderRuleResolverService(BaseService):
         )
 
         for rule in rules:
-            if not self._matches_rule(
-                rule=rule,
-                customer_type=customer_type,
-                billing_country=billing_country,
-                shipping_country=shipping_country,
-                payment_method=payment_method,
-                shipping_method=shipping_method,
-                context=context,
-            ):
+            if not self._matches_rule(rule=rule, context=context):
                 continue
             resolved = ResolvedOrderRule.from_rule(rule=rule, customer_type=customer_type)
             return self._apply_dynamic_actions(rule=rule, resolved=resolved)
@@ -153,29 +134,16 @@ class OrderRuleResolverService(BaseService):
         self,
         *,
         rule: MicrotechOrderRule,
-        customer_type: str,
-        billing_country: str,
-        shipping_country: str,
-        payment_method: str,
-        shipping_method: str,
         context: dict[str, object],
     ) -> bool:
         active_conditions = [condition for condition in rule.conditions.all() if condition.is_active]
-        if active_conditions:
-            return self._matches_dynamic_conditions(
-                rule=rule,
-                active_conditions=active_conditions,
-                context=context,
-            )
-        return (
-            self._matches_customer_type(rule=rule, customer_type=customer_type)
-            and self._matches_country(
-                rule=rule,
-                billing_country=billing_country,
-                shipping_country=shipping_country,
-            )
-            and self._matches_contains(rule.payment_method_pattern, payment_method)
-            and self._matches_contains(rule.shipping_method_pattern, shipping_method)
+        if not active_conditions:
+            # Dynamic-only mode: a rule without conditions is a global fallback.
+            return True
+        return self._matches_dynamic_conditions(
+            rule=rule,
+            active_conditions=active_conditions,
+            context=context,
         )
 
     def _matches_dynamic_conditions(
@@ -317,58 +285,6 @@ class OrderRuleResolverService(BaseService):
 
         logger.warning("Rule {} action ignored: unknown target field '{}'.", rule_id, target)
         return resolved
-
-    @staticmethod
-    def _matches_customer_type(*, rule: MicrotechOrderRule, customer_type: str) -> bool:
-        if rule.customer_type == MicrotechOrderRule.CustomerType.ANY:
-            return True
-        return rule.customer_type == customer_type
-
-    @classmethod
-    def _matches_country(
-        cls,
-        *,
-        rule: MicrotechOrderRule,
-        billing_country: str,
-        shipping_country: str,
-    ) -> bool:
-        rule_billing = cls._country_code(rule.billing_country_code)
-        rule_shipping = cls._country_code(rule.shipping_country_code)
-        has_billing = bool(rule_billing)
-        has_shipping = bool(rule_shipping)
-
-        if not has_billing and not has_shipping:
-            return True
-
-        billing_match = has_billing and billing_country == rule_billing
-        shipping_match = has_shipping and shipping_country == rule_shipping
-
-        if rule.country_match_mode == MicrotechOrderRule.CountryMatchMode.BILLING_ONLY:
-            return billing_match if has_billing else True
-        if rule.country_match_mode == MicrotechOrderRule.CountryMatchMode.SHIPPING_ONLY:
-            return shipping_match if has_shipping else True
-        if rule.country_match_mode == MicrotechOrderRule.CountryMatchMode.BOTH:
-            if has_billing and not billing_match:
-                return False
-            if has_shipping and not shipping_match:
-                return False
-            return True
-
-        # either
-        if has_billing and has_shipping:
-            return billing_match or shipping_match
-        if has_billing:
-            return billing_match
-        if has_shipping:
-            return shipping_match
-        return True
-
-    @staticmethod
-    def _matches_contains(pattern: str, value: str) -> bool:
-        pattern = _to_str(pattern).lower()
-        if not pattern:
-            return True
-        return pattern in value
 
     @staticmethod
     def _country_code(value: str) -> str:

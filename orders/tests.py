@@ -133,7 +133,7 @@ class OrderRuleResolverDynamicRulesTest(TestCase):
         self.assertEqual(resolved.zahlungsart_id, 22)
         self.assertEqual(resolved.zahlungsbedingung, "Sofort ohne Abzug")
 
-    def test_dynamic_and_condition_must_match_all_or_fallback_to_next_rule(self):
+    def test_dynamic_and_condition_must_match_all_or_fallback_to_global_rule(self):
         order = self._create_order(
             api_id="A3",
             payment_method="Rechnung",
@@ -166,12 +166,12 @@ class OrderRuleResolverDynamicRulesTest(TestCase):
             priority=1,
         )
 
-        fallback_rule = MicrotechOrderRule.objects.create(
-            name="Fallback Legacy",
-            priority=2,
-            is_active=True,
-            customer_type=MicrotechOrderRule.CustomerType.ANY,
-            zahlungsart_id=55,
+        fallback_rule = MicrotechOrderRule.objects.create(name="Fallback Global", priority=2, is_active=True)
+        MicrotechOrderRuleAction.objects.create(
+            rule=fallback_rule,
+            target_field=MicrotechOrderRuleAction.TargetField.ZAHLUNGSART_ID,
+            target_value="55",
+            priority=1,
         )
         self.assertIsNotNone(fallback_rule.pk)
 
