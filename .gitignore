@@ -14,3 +14,7 @@ deploy/caddy/caddy.exe
 /tmp/
 /VERSION
 /docs/build/
+COM_Aktiv_Kompendium.pdf
+FELD_25.LST
+codex_log.md
+database.sql
