@@ -345,6 +345,12 @@ UNFOLD = {
                         "permission": "core.unfold.superuser_only",
                     },
                     {
+                        "title": _("System-Status"),
+                        "icon": "monitor_heart",
+                        "link": reverse_lazy("admin:core_system_status"),
+                        "permission": "core.unfold.superuser_only",
+                    },
+                    {
                         "title": _("Logs"),
                         "icon": "article",
                         "link": reverse_lazy("admin:core_log_reader"),

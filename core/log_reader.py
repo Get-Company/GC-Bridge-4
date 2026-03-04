@@ -12,10 +12,11 @@ def get_allowed_log_files() -> list[Path]:
         settings.BASE_DIR / "logs" / "scheduled_product_sync.log",
         settings.BASE_DIR / "logs" / "django.log",
     ]
+    # Auto-discover *.log in logs/ and tmp/logs/
     discovered: list[Path] = []
-    logs_dir = settings.BASE_DIR / "logs"
-    if logs_dir.exists():
-        discovered = sorted(path for path in logs_dir.glob("*.log") if path.is_file())
+    for logs_dir in [settings.BASE_DIR / "logs", settings.BASE_DIR / "tmp" / "logs"]:
+        if logs_dir.exists():
+            discovered.extend(sorted(path for path in logs_dir.glob("*.log") if path.is_file()))
 
     unique_paths: list[Path] = []
     seen: set[str] = set()

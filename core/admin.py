@@ -15,6 +15,7 @@ from unfold.forms import AdminPasswordChangeForm, UserChangeForm, UserCreationFo
 
 from core.log_reader import get_allowed_log_files, tail_log_file
 from core.services import CommandRuntimeService
+from core.system_status_view import system_status_api, system_status_run, system_status_view
 
 
 class BaseAdmin(UnfoldModelAdmin):
@@ -112,6 +113,9 @@ _default_admin_get_urls = admin.site.get_urls
 def _admin_get_urls():
     custom_urls = [
         path("logs/", admin.site.admin_view(admin_log_reader_view), name="core_log_reader"),
+        path("system/", admin.site.admin_view(system_status_view), name="core_system_status"),
+        path("system/api/", admin.site.admin_view(system_status_api), name="core_system_status_api"),
+        path("system/run/", admin.site.admin_view(system_status_run), name="core_system_status_run"),
     ]
     return custom_urls + _default_admin_get_urls()
 

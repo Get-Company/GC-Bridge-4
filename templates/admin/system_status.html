@@ -1,0 +1,412 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+<div class="flex flex-col gap-6">
+
+  {# ── Kopfzeile ──────────────────────────────────────────── #}
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <h1 class="text-xl font-semibold">System-Status</h1>
+    <div class="flex items-center gap-4 text-sm">
+      <span id="refresh-status" class="flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
+        <span id="refresh-dot" class="inline-block w-2 h-2 rounded-full bg-green-500"></span>
+        Auto-Refresh (5 s)
+      </span>
+      <span id="last-updated" class="text-gray-400 dark:text-gray-500 text-xs"></span>
+    </div>
+  </div>
+
+  {# ── Hauptgitter: links Steuerung / rechts Log ─────────── #}
+  <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
+
+    {# ══ LINKE SPALTE ══════════════════════════════════════ #}
+    <div class="flex flex-col gap-6">
+
+      {# ── Laufende Jobs ──────────────────────────────────── #}
+      <div class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+        <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+          <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300">
+            Laufende Jobs
+          </h2>
+        </div>
+        <div id="running-jobs" class="p-4 min-h-[60px]">
+          {% if runtime_entries %}
+            {% for entry in runtime_entries %}
+            <div class="flex items-start gap-3 mb-2 last:mb-0 p-2 rounded bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
+              <span class="mt-1.5 w-2 h-2 rounded-full bg-green-500 flex-shrink-0 animate-pulse"></span>
+              <div class="min-w-0">
+                <div class="font-medium text-sm truncate">{{ entry.command_name }}</div>
+                <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  PID {{ entry.pid }} &bull; {{ entry.hostname }} &bull; {{ entry.duration }}
+                </div>
+                {% if entry.metadata.stage %}
+                <div class="text-xs text-blue-600 dark:text-blue-400 mt-0.5">Stage: {{ entry.metadata.stage }}</div>
+                {% endif %}
+                {% if entry.metadata.count %}
+                <div class="text-xs text-gray-500 dark:text-gray-400">{{ entry.metadata.count }}</div>
+                {% endif %}
+              </div>
+            </div>
+            {% endfor %}
+          {% else %}
+            <p class="text-sm text-gray-400 dark:text-gray-500 italic">Keine laufenden Jobs</p>
+          {% endif %}
+        </div>
+      </div>
+
+      {# ── Jobs starten ───────────────────────────────────── #}
+      <div class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+        <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+          <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300">
+            Jobs starten
+          </h2>
+        </div>
+        <div class="p-4 flex flex-col gap-2">
+          {% for job in triggerable_jobs %}
+          <div class="flex items-center justify-between gap-3 p-3 rounded border border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+            <div class="min-w-0">
+              <div class="font-medium text-sm">{{ job.label }}</div>
+              <div class="text-xs text-gray-400 dark:text-gray-500">{{ job.description }}</div>
+            </div>
+            <button
+              type="button"
+              class="job-trigger-btn flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded border border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              data-command="{{ job.command }}"
+              onclick="triggerJob(this)"
+            >
+              <span class="material-symbols-outlined" style="font-size:14px">{{ job.icon }}</span>
+              Starten
+            </button>
+          </div>
+          {% endfor %}
+
+          {# Toast-Notification #}
+          <div id="job-toast" class="hidden mt-2 p-3 rounded text-sm font-medium"></div>
+        </div>
+      </div>
+
+      {# ── Windows Scheduled Tasks (nur Windows) ──────────── #}
+      {% if scheduled_tasks is not None %}
+      <div class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+        <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+          <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300">
+            Geplante Aufgaben (Windows)
+          </h2>
+        </div>
+        <div id="scheduled-tasks" class="divide-y divide-gray-100 dark:divide-gray-700">
+          {% for task in scheduled_tasks %}
+          <div class="flex items-start gap-3 px-4 py-3">
+            <span class="mt-1 w-2 h-2 rounded-full flex-shrink-0 {% if task.ok %}bg-green-500{% else %}bg-red-400{% endif %}"></span>
+            <div class="min-w-0 flex-1">
+              <div class="font-medium text-sm">{{ task.name }}</div>
+              <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                Status: {{ task.status }}
+                {% if task.last_run %}&bull; Zuletzt: {{ task.last_run }}{% endif %}
+                {% if task.next_run %}&bull; Nächste: {{ task.next_run }}{% endif %}
+              </div>
+            </div>
+          </div>
+          {% empty %}
+          <p class="px-4 py-3 text-sm text-gray-400 italic">Keine Tasks abgefragt</p>
+          {% endfor %}
+        </div>
+      </div>
+      {% else %}
+      <div class="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+        <p class="text-sm text-gray-400 dark:text-gray-500">
+          <span class="font-medium text-gray-600 dark:text-gray-300">Geplante Aufgaben</span>
+          &ndash; nur auf Windows-Server verfügbar.
+        </p>
+      </div>
+      {% endif %}
+
+    </div>{# Ende linke Spalte #}
+
+    {# ══ RECHTE SPALTE: Log-Viewer ═══════════════════════ #}
+    <div class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden flex flex-col" style="min-height: 520px;">
+      <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+        <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300 mb-3">
+          Log-Viewer
+        </h2>
+        <div class="flex flex-wrap gap-2 items-end">
+          <div class="flex flex-col gap-1">
+            <label class="text-xs text-gray-500 dark:text-gray-400">Datei</label>
+            <select
+              id="log-file-select"
+              class="text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 max-w-xs"
+              onchange="changeLogFile(this.value)"
+            >
+              {% for option in file_options %}
+              <option value="{{ option.index }}"{% if option.index == selected_file_index %} selected{% endif %}>
+                {{ option.name }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="flex flex-col gap-1">
+            <label class="text-xs text-gray-500 dark:text-gray-400">Zeilen</label>
+            <select
+              id="log-lines-select"
+              class="text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
+              onchange="changeLineCount(this.value)"
+            >
+              <option value="50"{% if line_count == 50 %} selected{% endif %}>50 Zeilen</option>
+              <option value="100"{% if line_count == 100 %} selected{% endif %}>100 Zeilen</option>
+              <option value="200"{% if line_count == 200 %} selected{% endif %}>200 Zeilen</option>
+              <option value="500"{% if line_count == 500 %} selected{% endif %}>500 Zeilen</option>
+            </select>
+          </div>
+          <div class="flex flex-col gap-1">
+            <label class="text-xs text-transparent">.</label>
+            <button
+              type="button"
+              onclick="scrollToBottom()"
+              class="inline-flex items-center gap-1 px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-600 dark:text-gray-300"
+              title="Zum Ende springen"
+            >
+              <span class="material-symbols-outlined" style="font-size:14px">arrow_downward</span>
+              Ende
+            </button>
+          </div>
+          <div id="autoscroll-indicator" class="flex items-center gap-1.5 text-xs text-gray-400 pb-1 ml-auto">
+            <span id="autoscroll-dot" class="w-1.5 h-1.5 rounded-full bg-green-400"></span>
+            Auto-Scroll
+          </div>
+        </div>
+      </div>
+
+      {# Log-Inhalt #}
+      <pre
+        id="log-content"
+        class="flex-1 overflow-auto p-4 text-xs font-mono leading-relaxed text-gray-800 dark:text-gray-200 bg-white dark:bg-gray-900"
+        style="max-height: 65vh; white-space: pre-wrap; word-break: break-all;"
+      >{% if not file_options %}Keine Log-Dateien konfiguriert.{% elif not file_exists %}Datei nicht gefunden: {{ selected_path }}{% else %}{% for line in log_lines %}{{ line }}
+{% empty %}(leer){% endfor %}{% endif %}</pre>
+    </div>
+
+  </div>{# Ende Gitter #}
+</div>
+
+{# ── JavaScript ─────────────────────────────────────────── #}
+<script>
+(function () {
+  "use strict";
+
+  const REFRESH_MS = 5000;
+  let fileIndex = {{ selected_file_index }};
+  let lineCount = {{ line_count }};
+  let autoScroll = true;
+  let timer = null;
+
+  // ── Auto-Scroll-Erkennung ──────────────────────────────
+  const logEl = document.getElementById("log-content");
+  const autoscrollDot = document.getElementById("autoscroll-dot");
+
+  if (logEl) {
+    logEl.addEventListener("scroll", () => {
+      const dist = logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight;
+      autoScroll = dist < 40;
+      if (autoscrollDot) {
+        autoscrollDot.style.backgroundColor = autoScroll ? "#4ade80" : "#94a3b8";
+      }
+    });
+    // Erstmaliges Scrollen nach unten
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  window.scrollToBottom = function () {
+    if (logEl) {
+      logEl.scrollTop = logEl.scrollHeight;
+      autoScroll = true;
+      if (autoscrollDot) autoscrollDot.style.backgroundColor = "#4ade80";
+    }
+  };
+
+  // ── Kontroll-Funktionen ────────────────────────────────
+  window.changeLogFile = function (val) {
+    fileIndex = parseInt(val, 10) || 0;
+    fetchStatus();
+  };
+
+  window.changeLineCount = function (val) {
+    lineCount = parseInt(val, 10) || 100;
+    fetchStatus();
+  };
+
+  // ── Laufende Jobs rendern ──────────────────────────────
+  function renderJobs(entries) {
+    const container = document.getElementById("running-jobs");
+    if (!container) return;
+
+    if (!entries || !entries.length) {
+      container.innerHTML = '<p class="text-sm text-gray-400 dark:text-gray-500 italic">Keine laufenden Jobs</p>';
+      return;
+    }
+
+    let html = "";
+    for (const e of entries) {
+      const stage = e.metadata && e.metadata.stage
+        ? `<div class="text-xs text-blue-600 dark:text-blue-400 mt-0.5">Stage: ${escHtml(e.metadata.stage)}</div>`
+        : "";
+      const count = e.metadata && e.metadata.count
+        ? `<div class="text-xs text-gray-500 dark:text-gray-400">${escHtml(String(e.metadata.count))}</div>`
+        : "";
+      html += `
+        <div class="flex items-start gap-3 mb-2 last:mb-0 p-2 rounded bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
+          <span class="mt-1.5 w-2 h-2 rounded-full bg-green-500 flex-shrink-0 animate-pulse"></span>
+          <div class="min-w-0">
+            <div class="font-medium text-sm truncate">${escHtml(e.command_name)}</div>
+            <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+              PID ${e.pid} &bull; ${escHtml(e.hostname)} &bull; ${escHtml(e.duration)}
+            </div>
+            ${stage}${count}
+          </div>
+        </div>`;
+    }
+    container.innerHTML = html;
+  }
+
+  // ── Log rendern ────────────────────────────────────────
+  function renderLog(lines) {
+    if (!logEl) return;
+    const text = lines && lines.length ? lines.join("\n") : "(leer)";
+    if (logEl.textContent === text) return;
+    logEl.textContent = text;
+    if (autoScroll) logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  // ── Scheduled Tasks rendern ───────────────────────────
+  function renderScheduledTasks(tasks) {
+    const container = document.getElementById("scheduled-tasks");
+    if (!container || tasks === null || tasks === undefined) return;
+
+    if (!tasks.length) {
+      container.innerHTML = '<p class="px-4 py-3 text-sm text-gray-400 italic">Keine Tasks abgefragt</p>';
+      return;
+    }
+
+    let html = "";
+    for (const t of tasks) {
+      const dot = t.ok
+        ? "bg-green-500"
+        : "bg-red-400";
+      const last = t.last_run ? ` &bull; Zuletzt: ${escHtml(t.last_run)}` : "";
+      const next = t.next_run ? ` &bull; Nächste: ${escHtml(t.next_run)}` : "";
+      html += `
+        <div class="flex items-start gap-3 px-4 py-3 border-b border-gray-100 dark:border-gray-700 last:border-0">
+          <span class="mt-1 w-2 h-2 rounded-full flex-shrink-0 ${dot}"></span>
+          <div class="min-w-0 flex-1">
+            <div class="font-medium text-sm">${escHtml(t.name)}</div>
+            <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+              Status: ${escHtml(t.status)}${last}${next}
+            </div>
+          </div>
+        </div>`;
+    }
+    container.innerHTML = html;
+  }
+
+  // ── API-Fetch ──────────────────────────────────────────
+  async function fetchStatus() {
+    const dot = document.getElementById("refresh-dot");
+    try {
+      const resp = await fetch(
+        `/admin/system/api/?file=${fileIndex}&lines=${lineCount}`,
+        { headers: { "X-Requested-With": "XMLHttpRequest" } }
+      );
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+
+      renderJobs(data.runtime_entries);
+      renderLog(data.log_lines);
+      renderScheduledTasks(data.scheduled_tasks);
+
+      const el = document.getElementById("last-updated");
+      if (el) el.textContent = "Stand: " + new Date().toLocaleTimeString("de-DE");
+      if (dot) dot.style.backgroundColor = "#4ade80";
+    } catch (err) {
+      console.warn("Status-Fetch fehlgeschlagen:", err);
+      if (dot) dot.style.backgroundColor = "#f87171";
+    }
+  }
+
+  // ── Job-Trigger ────────────────────────────────────────
+  function getCsrfToken() {
+    const match = document.cookie.match(/csrftoken=([^;]+)/);
+    return match ? decodeURIComponent(match[1]) : "";
+  }
+
+  window.triggerJob = async function (btn) {
+    const command = btn.dataset.command;
+    if (!command) return;
+
+    btn.disabled = true;
+    const originalHtml = btn.innerHTML;
+    btn.innerHTML = '<span class="material-symbols-outlined" style="font-size:14px">hourglass_empty</span> Starte…';
+
+    const toast = document.getElementById("job-toast");
+
+    try {
+      const resp = await fetch("/admin/system/run/", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": getCsrfToken(),
+        },
+        body: JSON.stringify({ command }),
+      });
+      const result = await resp.json();
+
+      if (toast) {
+        if (result.success) {
+          toast.className = "mt-2 p-3 rounded text-sm font-medium bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-800 dark:text-green-300";
+          toast.textContent = `✓ Job gestartet (PID ${result.pid})`;
+        } else {
+          toast.className = "mt-2 p-3 rounded text-sm font-medium bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-300";
+          toast.textContent = `✗ Fehler: ${result.error}`;
+        }
+        toast.classList.remove("hidden");
+        setTimeout(() => toast.classList.add("hidden"), 6000);
+      }
+    } catch (err) {
+      if (toast) {
+        toast.className = "mt-2 p-3 rounded text-sm font-medium bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-300";
+        toast.textContent = "✗ Verbindungsfehler";
+        toast.classList.remove("hidden");
+        setTimeout(() => toast.classList.add("hidden"), 6000);
+      }
+    } finally {
+      setTimeout(() => {
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+      }, 2000);
+      // Sofort Statusupdate holen
+      setTimeout(fetchStatus, 1500);
+    }
+  };
+
+  // ── Hilfsfunktion ──────────────────────────────────────
+  function escHtml(s) {
+    return String(s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  // ── Start ──────────────────────────────────────────────
+  fetchStatus();
+  timer = setInterval(fetchStatus, REFRESH_MS);
+
+  // Refresh bei Sichtbarkeit der Seite
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      clearInterval(timer);
+    } else {
+      fetchStatus();
+      timer = setInterval(fetchStatus, REFRESH_MS);
+    }
+  });
+})();
+</script>
+{% endblock %}
