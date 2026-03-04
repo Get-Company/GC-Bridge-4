@@ -75,10 +75,14 @@ class MicrotechWorkerService(BaseService):
         except Exception as exc:
             logger.exception("MicrotechJob #{} ({}) failed: {}", job.id, job.job_type, exc)
             self.queue.mark_failed(job, error=str(exc))
-            # Be conservative: reopen COM connection after failed job.
+            # Be conservative: reopen COM connection after a failed job.
             self.connection_service.close()
             sleep(0.2)
-            self.connection_service.connect()
+            try:
+                self.connection_service.connect()
+            except Exception:
+                logger.error("Reconnect to Microtech ERP failed after job error; worker will exit.")
+                raise
 
     def _dispatch_job(self, *, job: MicrotechJob, erp: Any) -> dict[str, Any]:
         payload = job.payload or {}

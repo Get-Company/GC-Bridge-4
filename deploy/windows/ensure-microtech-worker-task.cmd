@@ -5,7 +5,7 @@ setlocal EnableExtensions EnableDelayedExpansion
 ::  Ensure + Start GC-Bridge-Microtech-Worker
 ::  - erstellt/aktualisiert den Task idempotent
 ::  - startet den Task mit Retry
-::  - verifiziert, dass ein microtech_worker-Prozess laeuft
+::  - verifiziert anhand der Runtime-JSON, dass der Worker laeuft
 :: ============================================================
 
 for %%I in ("%~dp0..\..") do set "APP_DIR=%%~fI"
@@ -15,6 +15,7 @@ set "TASK_NAME=GC-Bridge-Microtech-Worker"
 set "PYTHON_EXE=%APP_DIR%\.venv\Scripts\python.exe"
 set "MANAGE_PY=%APP_DIR%\manage.py"
 set "TASK_COMMAND=%PYTHON_EXE% %MANAGE_PY% microtech_worker"
+set "RUNTIME_DIR=%APP_DIR%\tmp\runtime"
 
 if not exist "%PYTHON_EXE%" (
     echo [ERROR] %PYTHON_EXE% nicht gefunden.
@@ -38,26 +39,31 @@ set "START_OK=0"
 for /L %%R in (1,1,3) do (
     echo [INFO] Starte "%TASK_NAME%" - Versuch %%R/3...
     schtasks /Run /TN "%TASK_NAME%" >nul 2>&1
-    ping 127.0.0.1 -n 3 >nul
 
-    call :task_running "%TASK_NAME%"
+    :: Django-Startup + COM-Connect braucht 10-15 Sekunden – laenger warten.
+    echo [INFO] Warte 15 Sekunden auf Worker-Startup...
+    ping 127.0.0.1 -n 16 >nul
+
+    call :worker_runtime_running
     if not errorlevel 1 (
         set "START_OK=1"
         goto :done
     )
+    echo [WARN] Runtime-JSON noch nicht vorhanden, Versuch %%R/3 gescheitert.
 )
 
 :done
 if "%START_OK%"=="1" (
-    echo [OK]    Task "%TASK_NAME%" laeuft.
+    echo [OK]    microtech_worker laeuft (Runtime-JSON gefunden).
     endlocal & exit /b 0
 )
 
-echo [ERROR] Task "%TASK_NAME%" wurde angestossen, aber microtech_worker laeuft nicht.
+echo [ERROR] microtech_worker laeuft nicht nach 3 Versuchen.
+echo [HINT]  Log pruefen: %APP_DIR%\tmp\logs\microtech_worker.log
 schtasks /Query /TN "%TASK_NAME%" /V /FO LIST
 endlocal & exit /b 1
 
-:task_running
-schtasks /Query /TN "%~1" /V /FO LIST | findstr /I /C:"Running" /C:"Wird ausgef" >nul 2>&1
-if not errorlevel 1 exit /b 0
-exit /b 1
+:: Pruefen ob eine microtech_worker Runtime-JSON existiert
+:worker_runtime_running
+if not exist "%RUNTIME_DIR%\microtech_worker__*.json" exit /b 1
+exit /b 0
