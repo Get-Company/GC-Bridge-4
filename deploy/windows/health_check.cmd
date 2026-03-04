@@ -179,7 +179,7 @@ call :log "================================================================"
 goto :eof
 
 :task_running
-schtasks /Query /TN "%~1" /V /FO LIST | findstr /I /C:"Status: Running" /C:"Status: Wird ausgef" > nul 2>&1
+schtasks /Query /TN "%~1" /V /FO LIST | findstr /I /C:"Running" /C:"Wird ausgef" > nul 2>&1
 if not errorlevel 1 exit /b 0
 exit /b 1
 
