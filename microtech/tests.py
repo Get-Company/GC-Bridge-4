@@ -143,3 +143,31 @@ class MicrotechQueueServiceTest(TestCase):
         queue.mark_failed(claimed, error="second error")
         claimed.refresh_from_db()
         self.assertEqual(claimed.status, MicrotechJob.Status.FAILED)
+
+    def test_delete_jobs_skips_running_by_default(self):
+        queue = MicrotechQueueService()
+        first = queue.enqueue(job_type=MicrotechJob.JobType.SYNC_PRODUCTS)
+        second = queue.enqueue(job_type=MicrotechJob.JobType.SYNC_CUSTOMER)
+
+        running = queue.claim_next_job(worker_id="worker-a")
+        self.assertIsNotNone(running)
+        remaining_id = second.id if running.id == first.id else first.id
+
+        result = queue.delete_jobs(job_ids=[first.id, second.id], include_running=False)
+
+        self.assertIn(running.id, result["protected_running_ids"])
+        self.assertIn(remaining_id, result["deleted_ids"])
+        self.assertTrue(MicrotechJob.objects.filter(id=running.id).exists())
+        self.assertFalse(MicrotechJob.objects.filter(id=remaining_id).exists())
+
+    def test_delete_jobs_include_running_deletes_running_job(self):
+        queue = MicrotechQueueService()
+        job = queue.enqueue(job_type=MicrotechJob.JobType.SYNC_PRODUCTS)
+        running = queue.claim_next_job(worker_id="worker-a")
+        self.assertIsNotNone(running)
+
+        result = queue.delete_jobs(job_ids=[job.id], include_running=True)
+
+        self.assertEqual(result["deleted_count"], 1)
+        self.assertEqual(result["protected_running_ids"], [])
+        self.assertFalse(MicrotechJob.objects.filter(id=job.id).exists())

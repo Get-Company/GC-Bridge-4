@@ -152,6 +152,41 @@ class MicrotechQueueService(BaseService):
             "running_job_type": running_job.job_type if running_job else "",
         }
 
+    def delete_jobs(
+        self,
+        *,
+        job_ids: list[int],
+        include_running: bool = False,
+    ) -> dict[str, Any]:
+        unique_ids = sorted({int(job_id) for job_id in (job_ids or []) if int(job_id) > 0})
+        if not unique_ids:
+            return {
+                "requested_ids": [],
+                "existing_ids": [],
+                "deleted_ids": [],
+                "protected_running_ids": [],
+                "deleted_count": 0,
+            }
+
+        queryset = MicrotechJob.objects.filter(id__in=unique_ids)
+        existing_ids = list(queryset.values_list("id", flat=True))
+        protected_running_ids = []
+        if not include_running:
+            protected_running_ids = list(
+                queryset.filter(status=MicrotechJob.Status.RUNNING).values_list("id", flat=True)
+            )
+            queryset = queryset.exclude(status=MicrotechJob.Status.RUNNING)
+
+        deleted_ids = list(queryset.values_list("id", flat=True))
+        queryset.delete()
+        return {
+            "requested_ids": unique_ids,
+            "existing_ids": existing_ids,
+            "deleted_ids": deleted_ids,
+            "protected_running_ids": protected_running_ids,
+            "deleted_count": len(deleted_ids),
+        }
+
     @staticmethod
     def _has_running_worker() -> bool:
         entries = CommandRuntimeService().list_runs(include_stale=False, cleanup_stale=True)

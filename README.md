@@ -672,6 +672,8 @@ Microtech Queue/Worker:
 
 ```bash
 .venv/bin/python manage.py microtech_queue_status
+.venv/bin/python manage.py microtech_queue_status --all-statuses --limit 50
+.venv/bin/python manage.py microtech_queue_delete 123
 .venv/bin/python manage.py microtech_worker
 ```
 
@@ -679,6 +681,8 @@ Hinweis:
 - Microtech-bezogene Commands werden in die Queue eingereiht.
 - Standard ist: einreihen **und** auf Abschluss warten.
 - Fuer reines Einreihen ohne Warten: `--no-wait`
+- Einzelne Queue-Jobs koennen im Admin unter `Microtech > Microtech Jobs` markiert und mit
+  `Ausgewaehlte Jobs loeschen (RUNNING geschuetzt)` entfernt werden.
 
 ### Bestellungen: Shopware -> Django -> Microtech
 

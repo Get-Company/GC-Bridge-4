@@ -23,14 +23,44 @@ class Command(BaseCommand):
             default=20,
             help="How many recent jobs to include.",
         )
+        parser.add_argument(
+            "--all-statuses",
+            action="store_true",
+            help="Include terminal jobs (succeeded/failed/cancelled) as well.",
+        )
+        parser.add_argument(
+            "--status",
+            action="append",
+            choices=[choice for choice, _ in MicrotechJob.Status.choices],
+            help="Filter jobs by status (can be specified multiple times).",
+        )
+        parser.add_argument(
+            "--job-type",
+            action="append",
+            choices=[choice for choice, _ in MicrotechJob.JobType.choices],
+            help="Filter jobs by job type (can be specified multiple times).",
+        )
 
     def handle(self, *args, **options):
         as_json = bool(options.get("json"))
         limit = max(1, int(options.get("limit") or 20))
+        all_statuses = bool(options.get("all_statuses"))
+        status_filters = list(options.get("status") or [])
+        job_type_filters = list(options.get("job_type") or [])
 
         summary = MicrotechQueueService().summarize()
-        recent_jobs = list(
-            MicrotechJob.objects.order_by("-created_at").values(
+        queryset = MicrotechJob.objects.all()
+        if status_filters:
+            queryset = queryset.filter(status__in=status_filters)
+        elif not all_statuses:
+            queryset = queryset.filter(
+                status__in=[MicrotechJob.Status.QUEUED, MicrotechJob.Status.RUNNING]
+            )
+        if job_type_filters:
+            queryset = queryset.filter(job_type__in=job_type_filters)
+
+        jobs = list(
+            queryset.order_by("priority", "run_after", "created_at", "id").values(
                 "id",
                 "job_type",
                 "status",
@@ -46,7 +76,12 @@ class Command(BaseCommand):
 
         payload = {
             "summary": summary,
-            "recent_jobs": recent_jobs,
+            "jobs": jobs,
+            "filters": {
+                "all_statuses": all_statuses,
+                "status": status_filters,
+                "job_type": job_type_filters,
+            },
         }
         if as_json:
             self.stdout.write(json.dumps(payload, ensure_ascii=True, indent=2, default=str))
@@ -60,8 +95,8 @@ class Command(BaseCommand):
         self.stdout.write(f"- failed: {counts.get(MicrotechJob.Status.FAILED, 0)}")
         self.stdout.write(f"- oldest_queued_at: {summary.get('oldest_queued_at') or '-'}")
         self.stdout.write("")
-        self.stdout.write(f"Recent jobs (last {limit})")
-        for item in recent_jobs:
+        self.stdout.write(f"Jobs (limit {limit})")
+        for item in jobs:
             self.stdout.write(
                 f"- #{item['id']} {item['job_type']} [{item['status']}] "
                 f"attempt={item['attempt']}/{item['max_retries'] + 1}"

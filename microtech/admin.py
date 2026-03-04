@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.contrib import messages
 from django.utils import timezone
 from django.http import HttpResponseRedirect
 from django.urls import reverse
@@ -11,6 +12,7 @@ from microtech.models import (
     MicrotechOrderRuleCondition,
     MicrotechSettings,
 )
+from microtech.services import MicrotechQueueService
 
 
 class SingletonAdmin(BaseAdmin):
@@ -147,7 +149,12 @@ class MicrotechJobAdmin(BaseAdmin):
         "created_at",
         "updated_at",
     )
-    actions = ("requeue_failed_jobs", "cancel_queued_jobs")
+    actions = ("requeue_failed_jobs", "cancel_queued_jobs", "delete_selected_queue_jobs")
+
+    def get_actions(self, request):
+        actions = super().get_actions(request)
+        actions.pop("delete_selected", None)
+        return actions
 
     @admin.action(description="Ausgewaehlte FAILED Jobs erneut einreihen")
     def requeue_failed_jobs(self, request, queryset):
@@ -170,3 +177,20 @@ class MicrotechJobAdmin(BaseAdmin):
             finished_at=now,
         )
         self.message_user(request, f"{updated} Job(s) abgebrochen.")
+
+    @admin.action(description="Ausgewaehlte Jobs loeschen (RUNNING geschuetzt)")
+    def delete_selected_queue_jobs(self, request, queryset):
+        result = MicrotechQueueService().delete_jobs(
+            job_ids=list(queryset.values_list("id", flat=True)),
+            include_running=False,
+        )
+        deleted_count = result["deleted_count"]
+        protected_running_ids = result["protected_running_ids"]
+        if deleted_count:
+            self.message_user(request, f"{deleted_count} Job(s) geloescht.")
+        if protected_running_ids:
+            self.message_user(
+                request,
+                "RUNNING Jobs wurden nicht geloescht: " + ", ".join(str(job_id) for job_id in protected_running_ids),
+                level=messages.WARNING,
+            )

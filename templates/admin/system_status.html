@@ -70,6 +70,20 @@
             oldest_queued_at: {{ microtech_queue.oldest_queued_at|default:"-" }}
           </div>
         </div>
+        <div class="px-4 pb-4 flex flex-wrap gap-2">
+          <a
+            href="{% url 'admin:microtech_microtechjob_changelist' %}?status__exact=queued"
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded border border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"
+          >
+            Queue oeffnen
+          </a>
+          <a
+            href="{% url 'admin:microtech_microtechjob_changelist' %}?status__exact=running"
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded border border-yellow-300 dark:border-yellow-700 text-yellow-700 dark:text-yellow-300 hover:bg-yellow-50 dark:hover:bg-yellow-900/30 transition-colors"
+          >
+            Running anzeigen
+          </a>
+        </div>
       </div>
 
       {# ── Jobs starten ───────────────────────────────────── #}
