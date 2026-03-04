@@ -5,6 +5,14 @@
     <div id="content-main">
         <h1>Log Reader</h1>
 
+        <h2>Laufende Jobs</h2>
+        {% if runtime_entries %}
+            <pre style="white-space: pre-wrap; border: 1px solid #d1d5db; padding: 12px; margin-bottom: 16px;">{% for entry in runtime_entries %}[{{ entry.status }}] {{ entry.command_name }} | pid={{ entry.pid }} | host={{ entry.hostname }} | laufzeit={{ entry.duration }}{% if entry.metadata.stage %} | stage={{ entry.metadata.stage }}{% endif %}
+{% endfor %}</pre>
+        {% else %}
+            <p>Keine laufenden Sync-/Scheduler-Jobs.</p>
+        {% endif %}
+
         <form method="get" class="mb-4">
             <div style="display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap;">
                 <div>

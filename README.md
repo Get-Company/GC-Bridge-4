@@ -634,6 +634,26 @@ Hinweis:
 - `scheduled_product_sync` schreibt standardmaessig **keinen** Basispreis (`Vk0.Preis`) nach Microtech zurueck.
 - Falls explizit gewuenscht: `--write-base-price-back` (mit Plausibilitaetspruefung gegen grosse Preisabweichungen, z. B. Faktor 100).
 
+### Laufstatus pruefen (Task Scheduler / Hintergrundjobs)
+
+Zeigt laufende Sync-/Scheduler-Commands aus `tmp/runtime`:
+
+```bash
+.venv/bin/python manage.py sync_status
+```
+
+Auch stale Eintraege anzeigen:
+
+```bash
+.venv/bin/python manage.py sync_status --all
+```
+
+Stale Eintraege aufraeumen:
+
+```bash
+.venv/bin/python manage.py sync_status --cleanup-stale
+```
+
 ### Bestellungen: Shopware -> Django -> Microtech
 
 Offene Shopware-Bestellungen nach Django:

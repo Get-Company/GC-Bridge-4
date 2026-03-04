@@ -3,6 +3,7 @@ from django.contrib.auth.admin import GroupAdmin as BaseGroupAdmin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import Group, User
 from django.db import models
+from datetime import timedelta
 from django.template.response import TemplateResponse
 from django.urls import path
 
@@ -13,6 +14,7 @@ from unfold.contrib.forms.widgets import WysiwygWidget
 from unfold.forms import AdminPasswordChangeForm, UserChangeForm, UserCreationForm
 
 from core.log_reader import get_allowed_log_files, tail_log_file
+from core.services import CommandRuntimeService
 
 
 class BaseAdmin(UnfoldModelAdmin):
@@ -60,6 +62,10 @@ class GroupAdmin(BaseGroupAdmin, UnfoldModelAdmin):
 
 
 def admin_log_reader_view(request):
+    runtime_entries = CommandRuntimeService().list_runs(include_stale=False, cleanup_stale=True)
+    for entry in runtime_entries:
+        entry["duration"] = str(timedelta(seconds=max(0, int(entry.get("age_seconds") or 0))))
+
     file_options = get_allowed_log_files()
     selected_file_index = request.GET.get("file", "0")
     lines = request.GET.get("lines", "50")
@@ -95,6 +101,7 @@ def admin_log_reader_view(request):
         "line_count": requested_lines,
         "log_lines": log_lines,
         "file_exists": bool(selected_path and selected_path.exists()),
+        "runtime_entries": runtime_entries,
     }
     return TemplateResponse(request, "admin/log_reader.html", context)
 

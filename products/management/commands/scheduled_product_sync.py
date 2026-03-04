@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from decimal import Decimal
+import sys
 
 from django.core.management import call_command
 from django.core.management.base import BaseCommand
 from django.db.models import Q
 from django.utils import timezone
 
+from core.services import CommandRuntimeService
 from microtech.services.artikel import MicrotechArtikelService
 from microtech.services.connection import microtech_connection
 from products.models import Price
@@ -44,46 +46,62 @@ class Command(BaseCommand):
         include_inactive = not options.get("exclude_inactive", False)
         write_base_price_back = options.get("write_base_price_back", False)
 
-        self.stdout.write("1/4 Microtech -> Django import starten")
-        call_command(
-            "microtech_sync_products",
-            all=True,
-            include_inactive=include_inactive,
-            preserve_is_active=True,
-            limit=limit,
+        runtime = CommandRuntimeService().start(
+            command_name="scheduled_product_sync",
+            argv=sys.argv,
+            metadata={
+                "limit": limit,
+                "include_inactive": include_inactive,
+                "write_base_price_back": write_base_price_back,
+            },
         )
-
-        self.stdout.write("2/4 Abgelaufene Sonderpreise in Django bereinigen")
-        expired_count, affected_product_ids = self._clear_expired_specials(now=timezone.now())
-        self.stdout.write(
-            f"Abgelaufene Sonderpreise bereinigt: {expired_count} Preiszeile(n), "
-            f"{len(affected_product_ids)} Produkt(e)."
-        )
-
-        self.stdout.write("3/4 Microtech fuer abgelaufene Sonderpreise aktualisieren")
-        updated_microtech, skipped_price_writes = self._sync_expired_specials_to_microtech(
-            affected_product_ids,
-            write_base_price_back=write_base_price_back,
-        )
-        if write_base_price_back:
-            self.stdout.write(
-                "Microtech aktualisiert: "
-                f"{updated_microtech} Produkt(e), "
-                f"{skipped_price_writes} Preis-Writeback(s) wegen Plausibilitaetspruefung uebersprungen."
-            )
-        else:
-            self.stdout.write(
-                f"Microtech aktualisiert: {updated_microtech} Produkt(e) "
-                "(nur Sonderpreisfelder, kein Basispreis-Writeback)."
+        try:
+            runtime.update(stage="1/4 microtech_to_django")
+            self.stdout.write("1/4 Microtech -> Django import starten")
+            call_command(
+                "microtech_sync_products",
+                all=True,
+                include_inactive=include_inactive,
+                preserve_is_active=True,
+                limit=limit,
             )
 
-        self.stdout.write("4/4 Django -> Shopware sync starten")
-        call_command(
-            "shopware_sync_products",
-            all=True,
-            limit=limit,
-        )
-        self.stdout.write(self.style.SUCCESS("Scheduled Product Sync erfolgreich abgeschlossen."))
+            runtime.update(stage="2/4 clear_expired_specials")
+            self.stdout.write("2/4 Abgelaufene Sonderpreise in Django bereinigen")
+            expired_count, affected_product_ids = self._clear_expired_specials(now=timezone.now())
+            self.stdout.write(
+                f"Abgelaufene Sonderpreise bereinigt: {expired_count} Preiszeile(n), "
+                f"{len(affected_product_ids)} Produkt(e)."
+            )
+
+            runtime.update(stage="3/4 writeback_microtech", affected_products=len(affected_product_ids))
+            self.stdout.write("3/4 Microtech fuer abgelaufene Sonderpreise aktualisieren")
+            updated_microtech, skipped_price_writes = self._sync_expired_specials_to_microtech(
+                affected_product_ids,
+                write_base_price_back=write_base_price_back,
+            )
+            if write_base_price_back:
+                self.stdout.write(
+                    "Microtech aktualisiert: "
+                    f"{updated_microtech} Produkt(e), "
+                    f"{skipped_price_writes} Preis-Writeback(s) wegen Plausibilitaetspruefung uebersprungen."
+                )
+            else:
+                self.stdout.write(
+                    f"Microtech aktualisiert: {updated_microtech} Produkt(e) "
+                    "(nur Sonderpreisfelder, kein Basispreis-Writeback)."
+                )
+
+            runtime.update(stage="4/4 django_to_shopware")
+            self.stdout.write("4/4 Django -> Shopware sync starten")
+            call_command(
+                "shopware_sync_products",
+                all=True,
+                limit=limit,
+            )
+            self.stdout.write(self.style.SUCCESS("Scheduled Product Sync erfolgreich abgeschlossen."))
+        finally:
+            runtime.close()
 
     @staticmethod
     def _clear_expired_specials(*, now):

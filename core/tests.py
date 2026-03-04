@@ -4,6 +4,7 @@ from tempfile import TemporaryDirectory
 from django.test import SimpleTestCase, override_settings
 
 from core.log_reader import get_allowed_log_files, tail_log_file
+from core.services import CommandRuntimeService
 
 
 class LogReaderUtilsTest(SimpleTestCase):
@@ -30,3 +31,28 @@ class LogReaderUtilsTest(SimpleTestCase):
             self.assertIn(configured, file_strings)
             self.assertIn(str(logs_dir / "service_a.log"), file_strings)
             self.assertIn(str(logs_dir / "service_b.log"), file_strings)
+
+
+class CommandRuntimeServiceTest(SimpleTestCase):
+    def test_start_update_close_lifecycle(self):
+        with TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            with override_settings(BASE_DIR=base_dir):
+                service = CommandRuntimeService()
+                handle = service.start(
+                    command_name="scheduled_product_sync",
+                    argv=["manage.py", "scheduled_product_sync", "--limit", "5"],
+                    metadata={"stage": "1/4"},
+                )
+
+                entries = service.list_runs()
+                self.assertEqual(len(entries), 1)
+                self.assertEqual(entries[0]["command_name"], "scheduled_product_sync")
+                self.assertEqual(entries[0]["metadata"].get("stage"), "1/4")
+
+                handle.update(stage="2/4")
+                entries = service.list_runs()
+                self.assertEqual(entries[0]["metadata"].get("stage"), "2/4")
+
+                handle.close()
+                self.assertEqual(service.list_runs(), [])
