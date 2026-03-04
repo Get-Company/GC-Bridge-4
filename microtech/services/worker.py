@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import os
 import socket
+import threading
 from time import sleep
 from typing import Any
 from pathlib import Path
+
+_COM_CONNECT_TIMEOUT_SECONDS = 60
 
 from django.utils import timezone
 from loguru import logger
@@ -37,6 +41,30 @@ class MicrotechWorkerService(BaseService):
     def stop(self) -> None:
         self._stop_requested = True
 
+    def _start_connect_watchdog(self) -> None:
+        """Daemon thread: force-kill the process if connect() never returns.
+
+        BpNT.Application can hang indefinitely when called from Session 0
+        (SYSTEM account) because it tries to display a GUI dialog that has
+        no desktop to render on.  Without this watchdog the worker occupies
+        a runtime slot forever while no jobs are processed.
+        """
+        def _watchdog() -> None:
+            sleep(_COM_CONNECT_TIMEOUT_SECONDS)
+            logger.error(
+                "Microtech COM connect() did not complete within {}s. "
+                "Likely causes:\n"
+                "  1. Scheduled task runs as SYSTEM (Session 0 isolation) — "
+                "change /RU to a normal user account that has desktop access.\n"
+                "  2. Wrong mandant/credentials in MicrotechSettings.\n"
+                "Forcing process exit so the worker does not occupy a runtime slot.",
+                _COM_CONNECT_TIMEOUT_SECONDS,
+            )
+            os._exit(1)
+
+        t = threading.Thread(target=_watchdog, daemon=True, name="com-connect-watchdog")
+        t.start()
+
     def run_forever(
         self,
         *,
@@ -44,7 +72,8 @@ class MicrotechWorkerService(BaseService):
         runtime_handle=None,
     ) -> None:
         logger.info("Starting Microtech worker loop as {}", self.worker_id)
-        logger.info("Connecting to Microtech ERP...")
+        logger.info("Connecting to Microtech ERP (timeout {}s)...", _COM_CONNECT_TIMEOUT_SECONDS)
+        self._start_connect_watchdog()
         try:
             self.connection_service.connect()
             logger.info("Microtech ERP connected. Entering job loop.")
