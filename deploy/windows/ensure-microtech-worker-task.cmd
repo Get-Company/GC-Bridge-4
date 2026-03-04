@@ -36,11 +36,11 @@ if errorlevel 1 (
 
 set "START_OK=0"
 for /L %%R in (1,1,3) do (
-    echo [INFO] Starte "%TASK_NAME%" (Versuch %%R/3)...
+    echo [INFO] Starte "%TASK_NAME%" - Versuch %%R/3...
     schtasks /Run /TN "%TASK_NAME%" >nul 2>&1
     timeout /t 2 /nobreak >nul
 
-    powershell -NoProfile -Command "$p = Get-CimInstance Win32_Process -Filter \"Name='python.exe'\" | Where-Object { $_.CommandLine -match 'manage\\.py\\s+microtech_worker' }; if ($p) { exit 0 } else { exit 1 }" >nul 2>&1
+    call :task_running "%TASK_NAME%"
     if not errorlevel 1 (
         set "START_OK=1"
         goto :done
@@ -56,3 +56,8 @@ if "%START_OK%"=="1" (
 echo [ERROR] Task "%TASK_NAME%" wurde angestossen, aber microtech_worker laeuft nicht.
 schtasks /Query /TN "%TASK_NAME%" /V /FO LIST
 endlocal & exit /b 1
+
+:task_running
+schtasks /Query /TN "%~1" /V /FO LIST | findstr /I /C:"Status: Running" /C:"Status: Wird ausgef" >nul 2>&1
+if not errorlevel 1 exit /b 0
+exit /b 1
