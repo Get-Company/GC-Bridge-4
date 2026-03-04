@@ -6,11 +6,10 @@ from django.core.management.base import BaseCommand, CommandError
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 
-from microtech.models import MicrotechJob
 from microtech.services.artikel import MicrotechArtikelService
 from microtech.services.lager import MicrotechLagerService
 from core.admin_utils import log_admin_change
-from microtech.services import MicrotechQueueService
+from microtech.services import microtech_connection
 from products.models import Image, Price, Product, Storage, Tax
 from shopware.models import ShopwareSettings
 
@@ -103,17 +102,6 @@ class Command(BaseCommand):
             action="store_true",
             help="Bestehendes Product.is_active in Django nicht mit Microtech-Werten überschreiben.",
         )
-        parser.add_argument(
-            "--no-wait",
-            action="store_true",
-            help="Nur einreihen, nicht auf Worker-Ergebnis warten.",
-        )
-        parser.add_argument(
-            "--wait-timeout-seconds",
-            type=int,
-            default=None,
-            help="Optionales Timeout fuer das Warten auf Worker-Ergebnis.",
-        )
 
     def handle(self, *args, **options):
         erp_nrs = [nr.strip() for nr in options.get("erp_nrs") or [] if nr.strip()]
@@ -121,36 +109,19 @@ class Command(BaseCommand):
         include_inactive = options.get("include_inactive", False)
         limit = options.get("limit")
         preserve_is_active = options.get("preserve_is_active", False)
-        no_wait = bool(options.get("no_wait"))
-        wait_timeout = options.get("wait_timeout_seconds")
 
         if not erp_nrs and not sync_all:
             raise CommandError("Bitte ERP-Nummern angeben oder --all verwenden.")
 
-        queue = MicrotechQueueService()
-        job = queue.enqueue(
-            job_type=MicrotechJob.JobType.SYNC_PRODUCTS,
-            payload={
-                "erp_nrs": erp_nrs,
-                "all": sync_all,
-                "include_inactive": include_inactive,
-                "limit": limit,
-                "preserve_is_active": preserve_is_active,
-            },
-            priority=40,
-        )
-        self.stdout.write(f"MicrotechJob #{job.id} eingereiht (sync_products).")
-        if no_wait:
-            return
-
-        try:
-            completed = queue.wait_for_terminal(job_id=job.id, timeout_seconds=wait_timeout)
-        except TimeoutError as exc:
-            raise CommandError(str(exc)) from exc
-        if completed.status != MicrotechJob.Status.SUCCEEDED:
-            raise CommandError(completed.last_error or "Microtech sync failed.")
-
-        result = completed.result or {}
+        with microtech_connection() as erp:
+            result = self.run_direct(
+                erp=erp,
+                erp_nrs=erp_nrs,
+                sync_all=sync_all,
+                include_inactive=include_inactive,
+                limit=limit,
+                preserve_is_active=preserve_is_active,
+            )
         self.stdout.write(
             self.style.SUCCESS(
                 f"Microtech sync abgeschlossen: success={result.get('success_count', 0)}, "

@@ -1,6 +1,4 @@
-from django.conf import settings
 from django.db import models
-from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from core.models import BaseModel
@@ -167,58 +165,3 @@ class MicrotechOrderRuleAction(BaseModel):
         return f"{self.rule_id} | {self.target_field} = {self.target_value}"
 
 
-class MicrotechJob(BaseModel):
-    class JobType(models.TextChoices):
-        SYNC_PRODUCTS = "sync_products", _("Produkte synchronisieren")
-        LOOKUP_ARTICLE = "lookup_article", _("Artikel nachschlagen")
-        SYNC_CUSTOMER = "sync_customer", _("Kunde aus Microtech laden")
-        UPSERT_CUSTOMER = "upsert_customer", _("Kunde nach Microtech schreiben")
-        UPSERT_ORDER = "upsert_order", _("Bestellung nach Microtech schreiben")
-        SYNC_EXPIRED_SPECIALS = "sync_expired_specials", _("Abgelaufene Sonderpreise zu Microtech schreiben")
-
-    class Status(models.TextChoices):
-        QUEUED = "queued", _("In Warteschlange")
-        RUNNING = "running", _("In Bearbeitung")
-        SUCCEEDED = "succeeded", _("Erfolgreich")
-        FAILED = "failed", _("Fehlgeschlagen")
-        CANCELLED = "cancelled", _("Abgebrochen")
-
-    job_type = models.CharField(max_length=64, choices=JobType.choices, verbose_name=_("Job-Typ"))
-    status = models.CharField(
-        max_length=16,
-        choices=Status.choices,
-        default=Status.QUEUED,
-        db_index=True,
-        verbose_name=_("Status"),
-    )
-    priority = models.PositiveSmallIntegerField(default=100, db_index=True, verbose_name=_("Prioritaet"))
-    payload = models.JSONField(default=dict, blank=True, verbose_name=_("Payload"))
-    result = models.JSONField(default=dict, blank=True, verbose_name=_("Ergebnis"))
-    attempt = models.PositiveIntegerField(default=0, verbose_name=_("Versuche"))
-    max_retries = models.PositiveIntegerField(default=3, verbose_name=_("Max. Retries"))
-    run_after = models.DateTimeField(default=timezone.now, db_index=True, verbose_name=_("Fruehester Start"))
-    started_at = models.DateTimeField(null=True, blank=True, verbose_name=_("Gestartet am"))
-    finished_at = models.DateTimeField(null=True, blank=True, verbose_name=_("Beendet am"))
-    worker_id = models.CharField(max_length=128, blank=True, default="", verbose_name=_("Worker-ID"))
-    correlation_id = models.CharField(max_length=64, blank=True, default="", db_index=True, verbose_name=_("Korrelation"))
-    last_error = models.TextField(blank=True, default="", verbose_name=_("Letzter Fehler"))
-    created_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="microtech_jobs",
-        verbose_name=_("Erstellt von"),
-    )
-
-    class Meta:
-        verbose_name = _("Microtech Job")
-        verbose_name_plural = _("Microtech Jobs")
-        ordering = ("priority", "run_after", "created_at", "id")
-        indexes = [
-            models.Index(fields=("status", "run_after", "priority", "id"), name="microtech_job_queue_idx"),
-            models.Index(fields=("job_type", "status"), name="microtech_job_type_status_idx"),
-        ]
-
-    def __str__(self) -> str:
-        return f"{self.get_job_type_display()} [{self.status}] #{self.pk}"

@@ -6,9 +6,9 @@ from pathlib import Path
 from django.core.management.base import BaseCommand, CommandError
 from loguru import logger
 
-from microtech.models import MicrotechJob
-from microtech.services import MicrotechQueueService
+from microtech.services import microtech_connection
 from orders.models import Order
+from orders.services import OrderUpsertMicrotechService
 
 
 class Command(BaseCommand):
@@ -32,17 +32,6 @@ class Command(BaseCommand):
             default="tmp/logs/microtech_order_upsert.log",
             help="Pfad fuer den detaillierten Vorgangs-Log.",
         )
-        parser.add_argument(
-            "--no-wait",
-            action="store_true",
-            help="Nur einreihen, nicht auf Ergebnis warten.",
-        )
-        parser.add_argument(
-            "--wait-timeout-seconds",
-            type=int,
-            default=None,
-            help="Optionales Timeout fuer --wait.",
-        )
 
     @staticmethod
     def _add_file_sink(log_file: str) -> tuple[int, Path]:
@@ -64,8 +53,6 @@ class Command(BaseCommand):
         order_number = (options.get("order_number") or "").strip()
         order_id = options.get("id")
         log_file = (options.get("log_file") or "").strip() or "tmp/logs/microtech_order_upsert.log"
-        no_wait = bool(options.get("no_wait"))
-        wait_timeout = options.get("wait_timeout_seconds")
         sink_id, log_path = self._add_file_sink(log_file)
 
         logger.info("Starting Microtech order upsert run. log_file={}", log_path)
@@ -88,30 +75,16 @@ class Command(BaseCommand):
                 order.erp_order_id,
             )
 
-            queue = MicrotechQueueService()
-            job = queue.enqueue(
-                job_type=MicrotechJob.JobType.UPSERT_ORDER,
-                payload={
-                    "order_id": order.id,
-                    "log_file": str(log_path),
-                },
-                priority=35,
-            )
-            self.stdout.write(f"MicrotechJob #{job.id} eingereiht (upsert_order).")
-            if no_wait:
-                return
+            with microtech_connection() as erp:
+                result = OrderUpsertMicrotechService().upsert_order(order, erp=erp)
 
-            try:
-                completed = queue.wait_for_terminal(job_id=job.id, timeout_seconds=wait_timeout)
-            except TimeoutError as exc:
-                raise CommandError(str(exc)) from exc
-
-            if completed.status != MicrotechJob.Status.SUCCEEDED:
-                logger.error("Microtech order upsert failed.")
-                raise CommandError(completed.last_error or "Microtech order upsert failed.")
-
-            payload = dict(completed.result or {})
-            payload["log_file"] = str(log_path)
+            payload = {
+                "order_id": order.id,
+                "order_number": order.order_number,
+                "erp_order_id": result.erp_order_id,
+                "is_new": result.is_new,
+                "log_file": str(log_path),
+            }
             logger.info("{}", json.dumps(payload, ensure_ascii=True, indent=2, sort_keys=True))
             self.stdout.write(self.style.SUCCESS(json.dumps(payload, ensure_ascii=True)))
         finally:

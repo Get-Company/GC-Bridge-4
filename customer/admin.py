@@ -12,8 +12,8 @@ from unfold.enums import ActionVariant
 
 from core.admin import BaseAdmin, BaseTabularInline
 from customer.models import Address, Customer
-from microtech.models import MicrotechJob
-from microtech.services import MicrotechQueueService
+from customer.services import CustomerSyncService, CustomerUpsertMicrotechService
+from microtech.services import microtech_connection
 
 
 class AddressInline(BaseTabularInline):
@@ -55,8 +55,7 @@ class CustomerAdmin(BaseAdmin):
         variant=ActionVariant.PRIMARY,
     )
     def sync_from_microtech(self, request, queryset):
-        queue = MicrotechQueueService()
-        queued_count = 0
+        synced_count = 0
         error_count = 0
 
         for customer in queryset:
@@ -64,23 +63,19 @@ class CustomerAdmin(BaseAdmin):
                 error_count += 1
                 continue
             try:
-                queue.enqueue(
-                    job_type=MicrotechJob.JobType.SYNC_CUSTOMER,
-                    payload={"erp_nr": customer.erp_nr},
-                    priority=25,
-                    created_by_id=getattr(request.user, "id", None),
-                )
-                queued_count += 1
+                with microtech_connection() as erp:
+                    CustomerSyncService().sync_from_microtech(erp_nr=customer.erp_nr, erp=erp)
+                synced_count += 1
             except Exception as exc:
                 error_count += 1
                 self.message_user(
                     request,
-                    f"Einreihen fehlgeschlagen fuer Kunde {customer.erp_nr}: {exc}",
+                    f"Sync fehlgeschlagen fuer Kunde {customer.erp_nr}: {exc}",
                     level=messages.ERROR,
                 )
 
-        if queued_count:
-            self.message_user(request, f"{queued_count} Kunde(n) fuer Microtech-Sync eingereiht.")
+        if synced_count:
+            self.message_user(request, f"{synced_count} Kunde(n) von Microtech synchronisiert.")
         if error_count:
             self.message_user(request, f"{error_count} Kunde(n) mit Fehlern.", level=messages.ERROR)
 
@@ -90,29 +85,24 @@ class CustomerAdmin(BaseAdmin):
         variant=ActionVariant.PRIMARY,
     )
     def sync_to_microtech(self, request, queryset):
-        queue = MicrotechQueueService()
-        queued_count = 0
+        synced_count = 0
         error_count = 0
 
         for customer in queryset:
             try:
-                queue.enqueue(
-                    job_type=MicrotechJob.JobType.UPSERT_CUSTOMER,
-                    payload={"customer_id": customer.id},
-                    priority=30,
-                    created_by_id=getattr(request.user, "id", None),
-                )
-                queued_count += 1
+                with microtech_connection() as erp:
+                    CustomerUpsertMicrotechService().upsert_customer(customer, erp=erp)
+                synced_count += 1
             except Exception as exc:
                 error_count += 1
                 self.message_user(
                     request,
-                    f"Einreihen nach Microtech fehlgeschlagen fuer Kunde {customer.erp_nr or customer.id}: {exc}",
+                    f"Upsert nach Microtech fehlgeschlagen fuer Kunde {customer.erp_nr or customer.id}: {exc}",
                     level=messages.ERROR,
                 )
 
-        if queued_count:
-            self.message_user(request, f"{queued_count} Kunde(n) fuer Microtech-Upsert eingereiht.")
+        if synced_count:
+            self.message_user(request, f"{synced_count} Kunde(n) nach Microtech übertragen.")
         if error_count:
             self.message_user(request, f"{error_count} Kunde(n) mit Fehlern.", level=messages.ERROR)
 
@@ -131,17 +121,13 @@ class CustomerAdmin(BaseAdmin):
             return self._redirect_to_change_page(object_id)
 
         try:
-            MicrotechQueueService().enqueue(
-                job_type=MicrotechJob.JobType.SYNC_CUSTOMER,
-                payload={"erp_nr": customer.erp_nr},
-                priority=25,
-                created_by_id=getattr(request.user, "id", None),
-            )
-            self.message_user(request, f"Kunde {customer.erp_nr} fuer Sync eingereiht.")
+            with microtech_connection() as erp:
+                CustomerSyncService().sync_from_microtech(erp_nr=customer.erp_nr, erp=erp)
+            self.message_user(request, f"Kunde {customer.erp_nr} von Microtech synchronisiert.")
         except Exception as exc:
             self.message_user(
                 request,
-                f"Sync-Einreihung fehlgeschlagen fuer Kunde {customer.erp_nr}: {exc}",
+                f"Sync fehlgeschlagen fuer Kunde {customer.erp_nr}: {exc}",
                 level=messages.ERROR,
             )
 
@@ -159,20 +145,16 @@ class CustomerAdmin(BaseAdmin):
             return self._redirect_to_change_page(object_id)
 
         try:
-            MicrotechQueueService().enqueue(
-                job_type=MicrotechJob.JobType.UPSERT_CUSTOMER,
-                payload={"customer_id": customer.id},
-                priority=30,
-                created_by_id=getattr(request.user, "id", None),
-            )
+            with microtech_connection() as erp:
+                CustomerUpsertMicrotechService().upsert_customer(customer, erp=erp)
             self.message_user(
                 request,
-                f"Kunde {customer.erp_nr or customer.id} fuer Microtech-Upsert eingereiht.",
+                f"Kunde {customer.erp_nr or customer.id} erfolgreich nach Microtech übertragen.",
             )
         except Exception as exc:
             self.message_user(
                 request,
-                f"Upsert-Einreihung fehlgeschlagen fuer Kunde {customer.erp_nr or customer.id}: {exc}",
+                f"Upsert fehlgeschlagen fuer Kunde {customer.erp_nr or customer.id}: {exc}",
                 level=messages.ERROR,
             )
 

@@ -17,10 +17,9 @@ from unfold.enums import ActionVariant
 from unfold.sections import TemplateSection
 
 from core.admin import BaseAdmin, BaseTabularInline
-from microtech.models import MicrotechJob
-from microtech.services import MicrotechQueueService
+from microtech.services import microtech_connection
 from orders.models import Order, OrderDetail
-from orders.services import OrderSyncService
+from orders.services import OrderSyncService, OrderUpsertMicrotechService
 from shopware.services import OrderService
 from shopware.services.order import DEFAULT_TRANSITION_ACTIONS
 
@@ -152,23 +151,19 @@ class OrderAdmin(BaseAdmin):
             return
 
         try:
-            MicrotechQueueService().enqueue(
-                job_type=MicrotechJob.JobType.UPSERT_ORDER,
-                payload={"order_id": order.id},
-                priority=35,
-                created_by_id=getattr(request.user, "id", None),
-            )
+            with microtech_connection() as erp:
+                OrderUpsertMicrotechService().upsert_order(order, erp=erp)
         except Exception as exc:
             self.message_user(
                 request,
-                f"Microtech-Upsert-Einreihung fehlgeschlagen: {exc}",
+                f"Microtech-Upsert fehlgeschlagen: {exc}",
                 level=messages.ERROR,
             )
             return
 
         self.message_user(
             request,
-            f"Bestellung {order.order_number} fuer Microtech-Upsert eingereiht.",
+            f"Bestellung {order.order_number} erfolgreich in Microtech angelegt.",
         )
 
     def get_custom_urls(self):

@@ -7,8 +7,7 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone
 
 from core.services import CommandRuntimeService
-from microtech.models import MicrotechJob
-from microtech.services import MicrotechExpiredSpecialSyncService, MicrotechQueueService
+from microtech.services import MicrotechExpiredSpecialSyncService, microtech_connection
 
 
 class Command(BaseCommand):
@@ -37,18 +36,11 @@ class Command(BaseCommand):
                 "Standard ist AUS, um versehentliche Preisfaktor-Fehler zu vermeiden."
             ),
         )
-        parser.add_argument(
-            "--wait-timeout-seconds",
-            type=int,
-            default=None,
-            help="Optionales Timeout fuer wartende Microtech-Queue-Schritte.",
-        )
 
     def handle(self, *args, **options):
         limit = options.get("limit")
         include_inactive = not options.get("exclude_inactive", False)
         write_base_price_back = options.get("write_base_price_back", False)
-        wait_timeout = options.get("wait_timeout_seconds")
 
         runtime = CommandRuntimeService().start(
             command_name="scheduled_product_sync",
@@ -80,17 +72,10 @@ class Command(BaseCommand):
 
             runtime.update(stage="3/4 writeback_microtech", affected_products=len(affected_product_ids))
             self.stdout.write("3/4 Microtech fuer abgelaufene Sonderpreise aktualisieren")
-            if wait_timeout is None:
-                updated_microtech, skipped_price_writes = self._sync_expired_specials_to_microtech(
-                    affected_product_ids,
-                    write_base_price_back=write_base_price_back,
-                )
-            else:
-                updated_microtech, skipped_price_writes = self._sync_expired_specials_to_microtech(
-                    affected_product_ids,
-                    write_base_price_back=write_base_price_back,
-                    wait_timeout=wait_timeout,
-                )
+            updated_microtech, skipped_price_writes = self._sync_expired_specials_to_microtech(
+                affected_product_ids,
+                write_base_price_back=write_base_price_back,
+            )
             if write_base_price_back:
                 self.stdout.write(
                     "Microtech aktualisiert: "
@@ -118,27 +103,19 @@ class Command(BaseCommand):
     def _clear_expired_specials(*, now):
         return MicrotechExpiredSpecialSyncService().clear_expired_specials(now=now)
 
+    @staticmethod
     def _sync_expired_specials_to_microtech(
-        self,
         affected_product_ids: set[int],
         *,
         write_base_price_back: bool = False,
-        wait_timeout: int | None = None,
     ) -> tuple[int, int]:
-        queue = MicrotechQueueService()
-        job = queue.enqueue(
-            job_type=MicrotechJob.JobType.SYNC_EXPIRED_SPECIALS,
-            payload={
-                "affected_product_ids": sorted(affected_product_ids),
-                "write_base_price_back": write_base_price_back,
-            },
-            priority=45,
-        )
-        completed = queue.wait_for_terminal(job_id=job.id, timeout_seconds=wait_timeout)
-        if completed.status != MicrotechJob.Status.SUCCEEDED:
-            raise RuntimeError(completed.last_error or "Microtech special sync failed.")
-        result = completed.result or {}
-        return int(result.get("updated_microtech") or 0), int(result.get("skipped_price_writes") or 0)
+        with microtech_connection() as erp:
+            updated_microtech, skipped = MicrotechExpiredSpecialSyncService().sync_expired_specials_to_microtech(
+                erp=erp,
+                affected_product_ids=affected_product_ids,
+                write_base_price_back=write_base_price_back,
+            )
+        return updated_microtech, skipped
 
     @staticmethod
     def _is_suspicious_price_ratio(

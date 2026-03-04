@@ -14,16 +14,8 @@ from django.template.response import TemplateResponse
 
 from core.log_reader import get_allowed_log_files, tail_log_file
 from core.services import CommandRuntimeService
-from microtech.services import MicrotechQueueService
 
 TRIGGERABLE_JOBS = [
-    {
-        "key": "microtech_worker",
-        "label": "Microtech Worker",
-        "command": "microtech_worker",
-        "icon": "memory",
-        "description": "Queue-Worker fuer exklusive Microtech COM-Connection",
-    },
     {
         "key": "scheduled_product_sync",
         "label": "Produkt-Sync (komplett)",
@@ -57,7 +49,6 @@ TRIGGERABLE_JOBS = [
 _WINDOWS_SCHEDULED_TASKS = [
     "GC-Bridge-Uvicorn",
     "GC-Bridge-Caddy",
-    "GC-Bridge-Microtech-Worker",
     "GC-Bridge Scheduled Product Sync",
 ]
 _WINDOWS_RUNNER_SERVICES = [
@@ -70,13 +61,6 @@ def _get_runtime_entries() -> list[dict]:
     for entry in entries:
         entry["duration"] = str(timedelta(seconds=max(0, int(entry.get("age_seconds") or 0))))
     return entries
-
-
-def _get_microtech_queue_summary() -> dict:
-    try:
-        return MicrotechQueueService().summarize()
-    except Exception:
-        return {"counts": {}, "oldest_queued_at": "", "running_job_id": None, "running_job_type": ""}
 
 
 def _get_scheduled_tasks_status() -> list[dict] | None:
@@ -232,7 +216,6 @@ def system_status_view(request):
         **admin.site.each_context(request),
         "title": "System-Status",
         "runtime_entries": _get_runtime_entries(),
-        "microtech_queue": _get_microtech_queue_summary(),
         "triggerable_jobs": TRIGGERABLE_JOBS,
         "scheduled_tasks": _get_scheduled_tasks_status(),
         "runner_services": _get_runner_services_status(),
@@ -261,7 +244,6 @@ def system_status_api(request):
     return JsonResponse(
         {
             "runtime_entries": _get_runtime_entries(),
-            "microtech_queue": _get_microtech_queue_summary(),
             "log_lines": log_lines,
             "log_filename": file_name,
             "scheduled_tasks": _get_scheduled_tasks_status(),

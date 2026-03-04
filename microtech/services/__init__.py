@@ -6,7 +6,6 @@ from .vorgang import MicrotechVorgangService
 from .adresse import MicrotechAdresseService
 from .anschrift import MicrotechAnschriftService
 from .ansprechpartner import MicrotechAnsprechpartnerService
-from .queue import MicrotechQueueService
 from .expired_specials import MicrotechExpiredSpecialSyncService
 
 __all__ = [
@@ -20,6 +19,5 @@ __all__ = [
     "MicrotechAdresseService",
     "MicrotechAnschriftService",
     "MicrotechAnsprechpartnerService",
-    "MicrotechQueueService",
     "MicrotechExpiredSpecialSyncService",
 ]

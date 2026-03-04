@@ -54,23 +54,6 @@
                 <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                   PID {{ entry.pid }} &bull; {{ entry.hostname }} &bull; {{ entry.duration }}
                 </div>
-                {% if stage == 'processing' and entry.metadata.current_job_id %}
-                <div class="text-xs text-green-700 dark:text-green-300 mt-0.5">
-                  Job #{{ entry.metadata.current_job_id }} ({{ entry.metadata.current_job_type }}) &bull; Versuch {{ entry.metadata.attempt }}
-                </div>
-                {% endif %}
-                {% if stage == 'idle' and entry.metadata.queue %}
-                <div class="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
-                  Queue: queued={{ entry.metadata.queue.counts.queued|default:0 }}
-                  running={{ entry.metadata.queue.counts.running|default:0 }}
-                  failed={{ entry.metadata.queue.counts.failed|default:0 }}
-                </div>
-                {% endif %}
-                {% if not stage %}
-                <div class="text-xs text-amber-600 dark:text-amber-400 mt-0.5 font-medium">
-                  Kein Stage-Update — Worker hängt wahrscheinlich in connect()
-                </div>
-                {% endif %}
               </div>
             </div>
             {% endwith %}
@@ -78,38 +61,6 @@
           {% else %}
             <p class="text-sm text-gray-400 dark:text-gray-500 italic">Keine laufenden Jobs</p>
           {% endif %}
-        </div>
-      </div>
-
-      {# ── Microtech Queue ───────────────────────────────── #}
-      <div class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-        <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
-          <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300">
-            Microtech Queue
-          </h2>
-        </div>
-        <div id="microtech-queue" class="p-4 text-sm">
-          <div>queued: {{ microtech_queue.counts.queued|default:0 }}</div>
-          <div>running: {{ microtech_queue.counts.running|default:0 }}</div>
-          <div>succeeded: {{ microtech_queue.counts.succeeded|default:0 }}</div>
-          <div>failed: {{ microtech_queue.counts.failed|default:0 }}</div>
-          <div class="text-xs text-gray-500 dark:text-gray-400 mt-2">
-            oldest_queued_at: {{ microtech_queue.oldest_queued_at|default:"-" }}
-          </div>
-        </div>
-        <div class="px-4 pb-4 flex flex-wrap gap-2">
-          <a
-            href="{% url 'admin:microtech_microtechjob_changelist' %}?status__exact=queued"
-            class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded border border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"
-          >
-            Queue oeffnen
-          </a>
-          <a
-            href="{% url 'admin:microtech_microtechjob_changelist' %}?status__exact=running"
-            class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded border border-yellow-300 dark:border-yellow-700 text-yellow-700 dark:text-yellow-300 hover:bg-yellow-50 dark:hover:bg-yellow-900/30 transition-colors"
-          >
-            Running anzeigen
-          </a>
         </div>
       </div>
 
@@ -299,21 +250,6 @@
     logEl.scrollTop = logEl.scrollHeight;
   }
 
-  // ── Microtech Queue rendern ───────────────────────────
-  function renderMicrotechQueue(summary) {
-    const container = document.getElementById("microtech-queue");
-    if (!container || !summary) return;
-    const counts = summary.counts || {};
-    container.innerHTML = `
-      <div>queued: ${counts.queued || 0}</div>
-      <div>running: ${counts.running || 0}</div>
-      <div>succeeded: ${counts.succeeded || 0}</div>
-      <div>failed: ${counts.failed || 0}</div>
-      <div class="text-xs text-gray-500 dark:text-gray-400 mt-2">
-        oldest_queued_at: ${escHtml(summary.oldest_queued_at || "-")}
-      </div>`;
-  }
-
   window.scrollToBottom = function () {
     if (logEl) {
       logEl.scrollTop = logEl.scrollHeight;
@@ -367,23 +303,6 @@
         stageLabel = "kein stage – hängt?";
       }
 
-      // Extra details
-      let extraHtml = "";
-      if (stage === "processing" && meta.current_job_id) {
-        extraHtml = `<div class="text-xs text-green-700 dark:text-green-300 mt-0.5">
-          Job #${meta.current_job_id} (${escHtml(meta.current_job_type || "")}) &bull; Versuch ${meta.attempt || "?"}
-        </div>`;
-      } else if (stage === "idle" && meta.queue) {
-        const c = meta.queue.counts || {};
-        extraHtml = `<div class="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
-          Queue: queued=${c.queued || 0} running=${c.running || 0} failed=${c.failed || 0}
-        </div>`;
-      } else if (!stage) {
-        extraHtml = `<div class="text-xs text-amber-600 dark:text-amber-400 mt-0.5 font-medium">
-          Kein Stage-Update — Worker hängt wahrscheinlich in connect()
-        </div>`;
-      }
-
       html += `
         <div class="flex items-start gap-3 mb-2 last:mb-0 p-2 rounded border ${cardCls}">
           <span class="mt-1.5 w-2 h-2 rounded-full flex-shrink-0 ${dotCls}"></span>
@@ -395,7 +314,6 @@
             <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
               PID ${e.pid} &bull; ${escHtml(e.hostname)} &bull; ${escHtml(e.duration)}
             </div>
-            ${extraHtml}
           </div>
         </div>`;
     }
@@ -481,7 +399,6 @@
       const data = await resp.json();
 
       renderJobs(data.runtime_entries);
-      renderMicrotechQueue(data.microtech_queue);
       renderLog(data.log_lines);
       renderScheduledTasks(data.scheduled_tasks);
       renderRunnerServices(data.runner_services);
