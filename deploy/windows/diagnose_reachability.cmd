@@ -20,6 +20,8 @@ set "CADDY_BIN_OK=1"
 set "CADDY_CFG_OK=1"
 set "UVICORN_TASK_OK=1"
 set "CADDY_TASK_OK=1"
+set "MICROTECH_WORKER_TASK_OK=1"
+set "MICROTECH_WORKER_PROC_OK=0"
 set "UVICORN_PORT_OK=0"
 set "CADDY_PORT_OK=0"
 set "UVICORN_HTTP_OK=0"
@@ -52,6 +54,21 @@ if exist "%APP_DIR%\deploy\caddy\Caddyfile" (
 )
 
 call :section "SCHEDULED TASKS"
+schtasks /Query /TN "GC-Bridge-Microtech-Worker" >nul 2>&1
+if errorlevel 1 (
+    set "MICROTECH_WORKER_TASK_OK=0"
+    call :err "Task GC-Bridge-Microtech-Worker fehlt"
+) else (
+    call :ok "Task GC-Bridge-Microtech-Worker registriert"
+    powershell -NoProfile -Command "$p = Get-CimInstance Win32_Process -Filter \"Name='python.exe'\" | Where-Object { $_.CommandLine -match 'manage\\.py\\s+microtech_worker' }; if ($p) { exit 0 } else { exit 1 }" >nul 2>&1
+    if errorlevel 1 (
+        call :err "microtech_worker Prozess laeuft nicht"
+    ) else (
+        set "MICROTECH_WORKER_PROC_OK=1"
+        call :ok "microtech_worker Prozess aktiv"
+    )
+)
+
 schtasks /Query /TN "GC-Bridge-Uvicorn" >nul 2>&1
 if errorlevel 1 (
     set "UVICORN_TASK_OK=0"
@@ -121,6 +138,16 @@ if errorlevel 1 (
 call :section "URSACHENHINWEISE"
 if "%PYTHON_OK%"=="0" (
     call :hint "Python-Umgebung fehlt. Loesung: im Projektordner 'uv sync' ausfuehren."
+    goto :actions
+)
+
+if "%MICROTECH_WORKER_TASK_OK%"=="0" (
+    call :hint "Task GC-Bridge-Microtech-Worker fehlt. Loesung: deploy\\windows\\ensure-microtech-worker-task.cmd ausfuehren."
+    goto :actions
+)
+
+if "%MICROTECH_WORKER_PROC_OK%"=="0" (
+    call :hint "Task ist registriert, aber Worker laeuft nicht. Loesung: deploy\\windows\\ensure-microtech-worker-task.cmd ausfuehren."
     goto :actions
 )
 

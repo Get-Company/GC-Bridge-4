@@ -160,6 +160,7 @@ class CustomerUpsertMicrotechService(BaseService):
         billing_address: Address | None = None,
         na1_mode: str = "auto",
         na1_static_value: str = "",
+        erp: Any | None = None,
     ) -> UpsertResult:
         if not isinstance(customer, Customer):
             raise TypeError("customer must be an instance of Customer.")
@@ -175,36 +176,46 @@ class CustomerUpsertMicrotechService(BaseService):
 
         billing = billing_address or customer.billing_address or shipping
 
-        with microtech_connection() as erp:
-            adresse_service = MicrotechAdresseService(erp=erp)
-            anschrift_service = MicrotechAnschriftService(erp=erp)
-            ansprechpartner_service = MicrotechAnsprechpartnerService(erp=erp)
+        if erp is None:
+            with microtech_connection() as erp_connection:
+                return self.upsert_customer(
+                    customer,
+                    shipping_address=shipping_address,
+                    billing_address=billing_address,
+                    na1_mode=na1_mode,
+                    na1_static_value=na1_static_value,
+                    erp=erp_connection,
+                )
 
-            erp_nr, is_new_customer = self._upsert_adresse_record(
-                customer=customer,
-                shipping=shipping,
-                adresse_service=adresse_service,
-            )
+        adresse_service = MicrotechAdresseService(erp=erp)
+        anschrift_service = MicrotechAnschriftService(erp=erp)
+        ansprechpartner_service = MicrotechAnsprechpartnerService(erp=erp)
 
-            if not erp_nr:
-                raise ValueError("Could not determine ERP number after address upsert.")
+        erp_nr, is_new_customer = self._upsert_adresse_record(
+            customer=customer,
+            shipping=shipping,
+            adresse_service=adresse_service,
+        )
 
-            shipping_ans_nr, billing_ans_nr = self._upsert_anschriften_and_contacts(
-                customer=customer,
-                erp_nr=erp_nr,
-                shipping=shipping,
-                billing=billing,
-                anschrift_service=anschrift_service,
-                ansprechpartner_service=ansprechpartner_service,
-                na1_mode=na1_mode,
-                na1_static_value=na1_static_value,
-            )
+        if not erp_nr:
+            raise ValueError("Could not determine ERP number after address upsert.")
 
-            # Save default address numbers on top-level address record.
-            adresse_service.edit()
-            adresse_service.set_field("LiAnsNr", shipping_ans_nr)
-            adresse_service.set_field("ReAnsNr", billing_ans_nr)
-            adresse_service.post()
+        shipping_ans_nr, billing_ans_nr = self._upsert_anschriften_and_contacts(
+            customer=customer,
+            erp_nr=erp_nr,
+            shipping=shipping,
+            billing=billing,
+            anschrift_service=anschrift_service,
+            ansprechpartner_service=ansprechpartner_service,
+            na1_mode=na1_mode,
+            na1_static_value=na1_static_value,
+        )
+
+        # Save default address numbers on top-level address record.
+        adresse_service.edit()
+        adresse_service.set_field("LiAnsNr", shipping_ans_nr)
+        adresse_service.set_field("ReAnsNr", billing_ans_nr)
+        adresse_service.post()
 
         shopware_updated = False
         if is_new_customer:

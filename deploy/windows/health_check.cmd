@@ -76,6 +76,18 @@ for %%T in ("GC-Bridge-Uvicorn" "GC-Bridge-Caddy") do (
     schtasks /Query /TN %%T > nul 2>&1
     if errorlevel 1 (call :err "Task %%~T - nicht gefunden") else (call :ok "Task %%~T - registriert")
 )
+schtasks /Query /TN "GC-Bridge-Microtech-Worker" > nul 2>&1
+if errorlevel 1 (
+    call :err "Task GC-Bridge-Microtech-Worker - nicht gefunden"
+) else (
+    call :ok "Task GC-Bridge-Microtech-Worker - registriert"
+    powershell -NoProfile -Command "$p = Get-CimInstance Win32_Process -Filter \"Name='python.exe'\" | Where-Object { $_.CommandLine -match 'manage\\.py\\s+microtech_worker' }; if ($p) { exit 0 } else { exit 1 }" > nul 2>&1
+    if errorlevel 1 (
+        call :err "Task GC-Bridge-Microtech-Worker - Prozess nicht aktiv"
+    ) else (
+        call :ok "Task GC-Bridge-Microtech-Worker - Prozess aktiv"
+    )
+)
 schtasks /Query /TN "GC-Bridge Scheduled Product Sync" > nul 2>&1
 if errorlevel 1 (
     call :warn "Task GC-Bridge Scheduled Product Sync - nicht gefunden (optional)"

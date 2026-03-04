@@ -1,17 +1,14 @@
 from __future__ import annotations
 
-from decimal import Decimal
 import sys
 
 from django.core.management import call_command
 from django.core.management.base import BaseCommand
-from django.db.models import Q
 from django.utils import timezone
 
 from core.services import CommandRuntimeService
-from microtech.services.artikel import MicrotechArtikelService
-from microtech.services.connection import microtech_connection
-from products.models import Price
+from microtech.models import MicrotechJob
+from microtech.services import MicrotechExpiredSpecialSyncService, MicrotechQueueService
 
 
 class Command(BaseCommand):
@@ -40,11 +37,18 @@ class Command(BaseCommand):
                 "Standard ist AUS, um versehentliche Preisfaktor-Fehler zu vermeiden."
             ),
         )
+        parser.add_argument(
+            "--wait-timeout-seconds",
+            type=int,
+            default=None,
+            help="Optionales Timeout fuer wartende Microtech-Queue-Schritte.",
+        )
 
     def handle(self, *args, **options):
         limit = options.get("limit")
         include_inactive = not options.get("exclude_inactive", False)
         write_base_price_back = options.get("write_base_price_back", False)
+        wait_timeout = options.get("wait_timeout_seconds")
 
         runtime = CommandRuntimeService().start(
             command_name="scheduled_product_sync",
@@ -76,10 +80,17 @@ class Command(BaseCommand):
 
             runtime.update(stage="3/4 writeback_microtech", affected_products=len(affected_product_ids))
             self.stdout.write("3/4 Microtech fuer abgelaufene Sonderpreise aktualisieren")
-            updated_microtech, skipped_price_writes = self._sync_expired_specials_to_microtech(
-                affected_product_ids,
-                write_base_price_back=write_base_price_back,
-            )
+            if wait_timeout is None:
+                updated_microtech, skipped_price_writes = self._sync_expired_specials_to_microtech(
+                    affected_product_ids,
+                    write_base_price_back=write_base_price_back,
+                )
+            else:
+                updated_microtech, skipped_price_writes = self._sync_expired_specials_to_microtech(
+                    affected_product_ids,
+                    write_base_price_back=write_base_price_back,
+                    wait_timeout=wait_timeout,
+                )
             if write_base_price_back:
                 self.stdout.write(
                     "Microtech aktualisiert: "
@@ -105,94 +116,37 @@ class Command(BaseCommand):
 
     @staticmethod
     def _clear_expired_specials(*, now):
-        expired_filter = Q(special_percentage__isnull=False) | Q(special_price__isnull=False)
-        expired_qs = Price.objects.filter(special_end_date__lt=now).filter(expired_filter)
-        affected_product_ids = set(expired_qs.values_list("product_id", flat=True))
-        updated = expired_qs.update(
-            special_percentage=None,
-            special_price=None,
-            special_start_date=None,
-            special_end_date=None,
-        )
-        return updated, affected_product_ids
+        return MicrotechExpiredSpecialSyncService().clear_expired_specials(now=now)
 
     def _sync_expired_specials_to_microtech(
         self,
         affected_product_ids: set[int],
         *,
         write_base_price_back: bool = False,
+        wait_timeout: int | None = None,
     ) -> tuple[int, int]:
-        if not affected_product_ids:
-            return 0, 0
-
-        default_prices = (
-            Price.objects.select_related("product")
-            .filter(
-                product_id__in=affected_product_ids,
-                sales_channel__is_default=True,
-            )
-            .order_by("product_id")
+        queue = MicrotechQueueService()
+        job = queue.enqueue(
+            job_type=MicrotechJob.JobType.SYNC_EXPIRED_SPECIALS,
+            payload={
+                "affected_product_ids": sorted(affected_product_ids),
+                "write_base_price_back": write_base_price_back,
+            },
+            priority=45,
         )
-        if not default_prices.exists():
-            return 0, 0
-
-        updated = 0
-        skipped_price_writes = 0
-        with microtech_connection() as erp:
-            artikel_service = MicrotechArtikelService(erp=erp)
-            for price in default_prices:
-                erp_nr = str(price.product.erp_nr or "").strip()
-                if not erp_nr:
-                    continue
-                if not artikel_service.find(erp_nr):
-                    continue
-
-                artikel_service.edit()
-                if write_base_price_back:
-                    current_microtech_price = self._to_decimal(artikel_service.get_price())
-                    if self._is_suspicious_price_ratio(
-                        django_price=price.price,
-                        microtech_price=current_microtech_price,
-                    ):
-                        skipped_price_writes += 1
-                    else:
-                        artikel_service.set_field("Vk0.Preis", self._format_decimal(price.price))
-                artikel_service.set_field("Vk0.SPr", "")
-                artikel_service.set_field("Vk0.SVonDat", "")
-                artikel_service.set_field("Vk0.SBisDat", "")
-                artikel_service.post()
-                updated += 1
-
-        return updated, skipped_price_writes
-
-    @staticmethod
-    def _format_decimal(value: Decimal | None) -> str:
-        if value is None:
-            return ""
-        return format(value.quantize(Decimal("0.01")), "f")
-
-    @staticmethod
-    def _to_decimal(value) -> Decimal | None:
-        if value in (None, ""):
-            return None
-        try:
-            return Decimal(str(value))
-        except Exception:
-            return None
+        completed = queue.wait_for_terminal(job_id=job.id, timeout_seconds=wait_timeout)
+        if completed.status != MicrotechJob.Status.SUCCEEDED:
+            raise RuntimeError(completed.last_error or "Microtech special sync failed.")
+        result = completed.result or {}
+        return int(result.get("updated_microtech") or 0), int(result.get("skipped_price_writes") or 0)
 
     @staticmethod
     def _is_suspicious_price_ratio(
         *,
-        django_price: Decimal | None,
-        microtech_price: Decimal | None,
-        ratio_threshold: Decimal = Decimal("10"),
+        django_price,
+        microtech_price,
     ) -> bool:
-        if django_price in (None, Decimal("0")) or microtech_price in (None, Decimal("0")):
-            return False
-        source = abs(Decimal(django_price))
-        target = abs(Decimal(microtech_price))
-        lower = min(source, target)
-        if lower == 0:
-            return False
-        higher = max(source, target)
-        return (higher / lower) >= ratio_threshold
+        return MicrotechExpiredSpecialSyncService._is_suspicious_price_ratio(
+            django_price=django_price,
+            microtech_price=microtech_price,
+        )

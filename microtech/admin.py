@@ -1,9 +1,11 @@
 from django.contrib import admin
+from django.utils import timezone
 from django.http import HttpResponseRedirect
 from django.urls import reverse
 
 from core.admin import BaseAdmin, BaseTabularInline
 from microtech.models import (
+    MicrotechJob,
     MicrotechOrderRule,
     MicrotechOrderRuleAction,
     MicrotechOrderRuleCondition,
@@ -112,3 +114,59 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
             },
         ),
     )
+
+
+@admin.register(MicrotechJob)
+class MicrotechJobAdmin(BaseAdmin):
+    list_display = (
+        "id",
+        "job_type",
+        "status",
+        "priority",
+        "attempt",
+        "max_retries",
+        "run_after",
+        "worker_id",
+        "created_at",
+    )
+    list_filter = ("job_type", "status", "priority")
+    search_fields = ("id", "correlation_id", "last_error", "worker_id")
+    readonly_fields = (
+        "job_type",
+        "payload",
+        "result",
+        "attempt",
+        "max_retries",
+        "created_by",
+        "run_after",
+        "started_at",
+        "finished_at",
+        "worker_id",
+        "correlation_id",
+        "last_error",
+        "created_at",
+        "updated_at",
+    )
+    actions = ("requeue_failed_jobs", "cancel_queued_jobs")
+
+    @admin.action(description="Ausgewaehlte FAILED Jobs erneut einreihen")
+    def requeue_failed_jobs(self, request, queryset):
+        candidates = queryset.filter(status=MicrotechJob.Status.FAILED)
+        now = timezone.now()
+        updated = candidates.update(
+            status=MicrotechJob.Status.QUEUED,
+            run_after=now,
+            finished_at=None,
+            worker_id="",
+            last_error="",
+        )
+        self.message_user(request, f"{updated} Job(s) erneut eingereiht.")
+
+    @admin.action(description="Ausgewaehlte QUEUED Jobs abbrechen")
+    def cancel_queued_jobs(self, request, queryset):
+        now = timezone.now()
+        updated = queryset.filter(status=MicrotechJob.Status.QUEUED).update(
+            status=MicrotechJob.Status.CANCELLED,
+            finished_at=now,
+        )
+        self.message_user(request, f"{updated} Job(s) abgebrochen.")

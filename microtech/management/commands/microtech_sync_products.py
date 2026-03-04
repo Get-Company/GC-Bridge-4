@@ -1,17 +1,16 @@
 from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation, ROUND_UP
-import sys
 
 from django.core.management.base import BaseCommand, CommandError
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 
+from microtech.models import MicrotechJob
 from microtech.services.artikel import MicrotechArtikelService
-from microtech.services.connection import microtech_connection
 from microtech.services.lager import MicrotechLagerService
 from core.admin_utils import log_admin_change
-from core.services import CommandRuntimeService
+from microtech.services import MicrotechQueueService
 from products.models import Image, Price, Product, Storage, Tax
 from shopware.models import ShopwareSettings
 
@@ -104,6 +103,17 @@ class Command(BaseCommand):
             action="store_true",
             help="Bestehendes Product.is_active in Django nicht mit Microtech-Werten überschreiben.",
         )
+        parser.add_argument(
+            "--no-wait",
+            action="store_true",
+            help="Nur einreihen, nicht auf Worker-Ergebnis warten.",
+        )
+        parser.add_argument(
+            "--wait-timeout-seconds",
+            type=int,
+            default=None,
+            help="Optionales Timeout fuer das Warten auf Worker-Ergebnis.",
+        )
 
     def handle(self, *args, **options):
         erp_nrs = [nr.strip() for nr in options.get("erp_nrs") or [] if nr.strip()]
@@ -111,120 +121,139 @@ class Command(BaseCommand):
         include_inactive = options.get("include_inactive", False)
         limit = options.get("limit")
         preserve_is_active = options.get("preserve_is_active", False)
+        no_wait = bool(options.get("no_wait"))
+        wait_timeout = options.get("wait_timeout_seconds")
 
-        runtime = CommandRuntimeService().start(
-            command_name="microtech_sync_products",
-            argv=sys.argv,
-            metadata={
-                "mode": "all" if sync_all else "selected",
+        if not erp_nrs and not sync_all:
+            raise CommandError("Bitte ERP-Nummern angeben oder --all verwenden.")
+
+        queue = MicrotechQueueService()
+        job = queue.enqueue(
+            job_type=MicrotechJob.JobType.SYNC_PRODUCTS,
+            payload={
+                "erp_nrs": erp_nrs,
+                "all": sync_all,
+                "include_inactive": include_inactive,
                 "limit": limit,
+                "preserve_is_active": preserve_is_active,
             },
+            priority=40,
         )
+        self.stdout.write(f"MicrotechJob #{job.id} eingereiht (sync_products).")
+        if no_wait:
+            return
+
         try:
-            if not erp_nrs and not sync_all:
-                raise CommandError("Bitte ERP-Nummern angeben oder --all verwenden.")
+            completed = queue.wait_for_terminal(job_id=job.id, timeout_seconds=wait_timeout)
+        except TimeoutError as exc:
+            raise CommandError(str(exc)) from exc
+        if completed.status != MicrotechJob.Status.SUCCEEDED:
+            raise CommandError(completed.last_error or "Microtech sync failed.")
 
-            admin_user_id = _get_admin_user_id()
-            content_type_id = None
-            if admin_user_id:
-                content_type_id = ContentType.objects.get_for_model(Product).id
+        result = completed.result or {}
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"Microtech sync abgeschlossen: success={result.get('success_count', 0)}, "
+                f"errors={result.get('error_count', 0)}."
+            )
+        )
 
-            with microtech_connection() as erp:
-                artikel_service = MicrotechArtikelService(erp=erp)
-                lager_service = MicrotechLagerService(erp=erp)
-                tax_map = self._ensure_taxes()
+    def run_direct(
+        self,
+        *,
+        erp,
+        erp_nrs: list[str],
+        sync_all: bool,
+        include_inactive: bool,
+        limit: int | None,
+        preserve_is_active: bool,
+    ) -> dict:
+        admin_user_id = _get_admin_user_id()
+        content_type_id = None
+        if admin_user_id:
+            content_type_id = ContentType.objects.get_for_model(Product).id
 
-                if sync_all:
-                    runtime.update(stage="range_setup", include_inactive=include_inactive)
-                    artikel_service.set_range(from_range="000000", to_range="99999999ZZ", field=artikel_service.index_field)
-                    if not include_inactive:
-                        artikel_service.set_filter({"WShopKz": 1})
+        artikel_service = MicrotechArtikelService(erp=erp)
+        lager_service = MicrotechLagerService(erp=erp)
+        tax_map = self._ensure_taxes()
 
-                    success_count = 0
-                    error_count = 0
-                    index = 0
+        success_count = 0
+        error_count = 0
+        processed = 0
 
-                    while not artikel_service.range_eof():
-                        if limit and index >= limit:
-                            break
-                        index += 1
-                        try:
-                            self._sync_current_record(
-                                artikel_service,
-                                lager_service,
-                                tax_map=tax_map,
-                                admin_user_id=admin_user_id,
-                                content_type_id=content_type_id,
-                                preserve_is_active=preserve_is_active,
-                            )
-                            success_count += 1
-                        except Exception as exc:
-                            error_count += 1
-                            _log_admin_error(
-                                admin_user_id=admin_user_id,
-                                content_type_id=content_type_id,
-                                message=f"Microtech sync error: {exc}",
-                                object_repr="Microtech Sync (batch)",
-                            )
-                        if index == 1 or index % 25 == 0:
-                            runtime.update(
-                                stage="sync_all",
-                                processed=index,
-                                success_count=success_count,
-                                error_count=error_count,
-                            )
-                        artikel_service.range_next()
+        if sync_all:
+            artikel_service.set_range(from_range="000000", to_range="99999999ZZ", field=artikel_service.index_field)
+            if not include_inactive:
+                artikel_service.set_filter({"WShopKz": 1})
 
-                    return
+            while not artikel_service.range_eof():
+                if limit and processed >= limit:
+                    break
+                processed += 1
+                try:
+                    self._sync_current_record(
+                        artikel_service,
+                        lager_service,
+                        tax_map=tax_map,
+                        admin_user_id=admin_user_id,
+                        content_type_id=content_type_id,
+                        preserve_is_active=preserve_is_active,
+                    )
+                    success_count += 1
+                except Exception as exc:
+                    error_count += 1
+                    _log_admin_error(
+                        admin_user_id=admin_user_id,
+                        content_type_id=content_type_id,
+                        message=f"Microtech sync error: {exc}",
+                        object_repr="Microtech Sync (batch)",
+                    )
+                artikel_service.range_next()
+            return {
+                "mode": "all",
+                "processed": processed,
+                "success_count": success_count,
+                "error_count": error_count,
+            }
 
-                if limit:
-                    erp_nrs = erp_nrs[:limit]
+        if limit:
+            erp_nrs = erp_nrs[:limit]
+        for erp_nr in erp_nrs:
+            processed += 1
+            try:
+                if not artikel_service.find(erp_nr):
+                    error_count += 1
+                    _log_admin_error(
+                        admin_user_id=admin_user_id,
+                        content_type_id=content_type_id,
+                        message=f"Microtech sync error: Artikel {erp_nr} nicht gefunden.",
+                        object_repr=f"Microtech Sync {erp_nr}",
+                    )
+                    continue
 
-                if not erp_nrs:
-                    return
-
-                runtime.update(stage="sync_selected", total=len(erp_nrs))
-                success_count = 0
-                error_count = 0
-
-                for index, erp_nr in enumerate(erp_nrs, start=1):
-                    try:
-                        if not artikel_service.find(erp_nr):
-                            error_count += 1
-                            _log_admin_error(
-                                admin_user_id=admin_user_id,
-                                content_type_id=content_type_id,
-                                message=f"Microtech sync error: Artikel {erp_nr} nicht gefunden.",
-                                object_repr=f"Microtech Sync {erp_nr}",
-                            )
-                            continue
-
-                        self._sync_current_record(
-                            artikel_service,
-                            lager_service,
-                            tax_map=tax_map,
-                            admin_user_id=admin_user_id,
-                            content_type_id=content_type_id,
-                            preserve_is_active=preserve_is_active,
-                        )
-                        success_count += 1
-                    except Exception as exc:
-                        error_count += 1
-                        _log_admin_error(
-                            admin_user_id=admin_user_id,
-                            content_type_id=content_type_id,
-                            message=f"Microtech sync error for {erp_nr}: {exc}",
-                            object_repr=f"Microtech Sync {erp_nr}",
-                        )
-                    if index == 1 or index % 25 == 0:
-                        runtime.update(
-                            stage="sync_selected",
-                            processed=index,
-                            success_count=success_count,
-                            error_count=error_count,
-                        )
-        finally:
-            runtime.close()
+                self._sync_current_record(
+                    artikel_service,
+                    lager_service,
+                    tax_map=tax_map,
+                    admin_user_id=admin_user_id,
+                    content_type_id=content_type_id,
+                    preserve_is_active=preserve_is_active,
+                )
+                success_count += 1
+            except Exception as exc:
+                error_count += 1
+                _log_admin_error(
+                    admin_user_id=admin_user_id,
+                    content_type_id=content_type_id,
+                    message=f"Microtech sync error for {erp_nr}: {exc}",
+                    object_repr=f"Microtech Sync {erp_nr}",
+                )
+        return {
+            "mode": "selected",
+            "processed": processed,
+            "success_count": success_count,
+            "error_count": error_count,
+        }
 
     @staticmethod
     def _ensure_taxes() -> dict[Decimal, Tax]:

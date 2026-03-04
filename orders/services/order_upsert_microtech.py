@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal, ROUND_HALF_UP
+from typing import Any
 
 from loguru import logger
 
@@ -42,15 +43,20 @@ class MicrotechOrderDefaults:
 class OrderUpsertMicrotechService(BaseService):
     model = Order
 
-    def upsert_order(self, order: Order) -> OrderUpsertResult:
+    def upsert_order(self, order: Order, *, erp: Any | None = None) -> OrderUpsertResult:
         if not isinstance(order, Order):
             raise TypeError("order must be an instance of Order.")
+
+        if erp is None:
+            with microtech_connection() as erp_connection:
+                return self.upsert_order(order, erp=erp_connection)
 
         resolved_rule = OrderRuleResolverService().resolve_for_order(order=order)
         self._ensure_customer_synced(
             order,
             na1_mode=resolved_rule.na1_mode,
             na1_static_value=resolved_rule.na1_static_value,
+            erp=erp,
         )
         order_defaults = self._load_order_defaults()
         order_type_number = self._coerce_positive_int(
@@ -66,50 +72,49 @@ class OrderUpsertMicrotechService(BaseService):
             order_defaults.shipping_type_number,
         )
 
-        with microtech_connection() as erp:
-            vorgang_service = MicrotechVorgangService(erp=erp)
-            so_vorgang = vorgang_service.get_special_object("soVorgang")
-            if so_vorgang is None:
-                raise ValueError("SpecialObject 'soVorgang' konnte nicht geladen werden.")
+        vorgang_service = MicrotechVorgangService(erp=erp)
+        so_vorgang = vorgang_service.get_special_object("soVorgang")
+        if so_vorgang is None:
+            raise ValueError("SpecialObject 'soVorgang' konnte nicht geladen werden.")
 
-            is_new, known_beleg_nr = self._open_or_create_vorgang(
+        is_new, known_beleg_nr = self._open_or_create_vorgang(
+            order=order,
+            vorgang_service=vorgang_service,
+            so_vorgang=so_vorgang,
+            order_type_number=order_type_number,
+        )
+
+        self._set_header_fields(
+            order=order,
+            so_vorgang=so_vorgang,
+            payment_type_number=payment_type_number,
+            shipping_type_number=shipping_type_number,
+            payment_terms_text=resolved_rule.zahlungsbedingung,
+        )
+        self._add_positions(order=order, so_vorgang=so_vorgang, erp=erp)
+        self._add_shipping_position(order=order, so_vorgang=so_vorgang)
+        self._add_payment_position(
+            order=order,
+            so_vorgang=so_vorgang,
+            resolved_rule=resolved_rule,
+        )
+
+        so_vorgang.Post()
+
+        erp_order_id = (known_beleg_nr or "").strip()
+        if is_new and not erp_order_id:
+            erp_order_id = self._get_vorgang_field(so_vorgang=so_vorgang, field_name="BelegNr")
+        if not erp_order_id:
+            erp_order_id = known_beleg_nr or self._find_existing_beleg_nr(
                 order=order,
                 vorgang_service=vorgang_service,
-                so_vorgang=so_vorgang,
-                order_type_number=order_type_number,
             )
-
-            self._set_header_fields(
-                order=order,
-                so_vorgang=so_vorgang,
-                payment_type_number=payment_type_number,
-                shipping_type_number=shipping_type_number,
-                payment_terms_text=resolved_rule.zahlungsbedingung,
-            )
-            self._add_positions(order=order, so_vorgang=so_vorgang, erp=erp)
-            self._add_shipping_position(order=order, so_vorgang=so_vorgang)
-            self._add_payment_position(
-                order=order,
-                so_vorgang=so_vorgang,
-                resolved_rule=resolved_rule,
-            )
-
-            so_vorgang.Post()
-
-            erp_order_id = (known_beleg_nr or "").strip()
-            if is_new and not erp_order_id:
-                erp_order_id = self._get_vorgang_field(so_vorgang=so_vorgang, field_name="BelegNr")
-            if not erp_order_id:
-                erp_order_id = known_beleg_nr or self._find_existing_beleg_nr(
-                    order=order,
-                    vorgang_service=vorgang_service,
-                )
-            logger.info(
-                "Order {} posted as Vorgang BelegNr={} (new={}).",
-                order.order_number,
-                erp_order_id,
-                is_new,
-            )
+        logger.info(
+            "Order {} posted as Vorgang BelegNr={} (new={}).",
+            order.order_number,
+            erp_order_id,
+            is_new,
+        )
 
         self._persist_erp_order_id(order=order, erp_order_id=erp_order_id)
 
@@ -121,6 +126,7 @@ class OrderUpsertMicrotechService(BaseService):
         *,
         na1_mode: str = "auto",
         na1_static_value: str = "",
+        erp: Any | None = None,
     ) -> None:
         customer = order.customer
         if not customer:
@@ -133,6 +139,7 @@ class OrderUpsertMicrotechService(BaseService):
             billing_address=order.billing_address,
             na1_mode=na1_mode,
             na1_static_value=na1_static_value,
+            erp=erp,
         )
         customer.refresh_from_db()
 

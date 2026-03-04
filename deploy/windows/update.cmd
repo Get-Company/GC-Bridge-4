@@ -77,6 +77,14 @@ powershell -Command "Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAc
 ping 127.0.0.1 -n 4 >nul
 schtasks /Run /TN "GC-Bridge-Uvicorn" >> "%LOG_FILE%" 2>&1
 
+:: --- Microtech Worker sicherstellen + starten ---
+echo [%DATE% %TIME%] Ensuring and starting task "GC-Bridge-Microtech-Worker"... >> "%LOG_FILE%"
+call deploy\windows\ensure-microtech-worker-task.cmd >> "%LOG_FILE%" 2>&1
+if errorlevel 1 (
+    echo [%DATE% %TIME%] ERROR: ensure-microtech-worker-task failed >> "%LOG_FILE%"
+    exit /b 1
+)
+
 :: --- Scheduled Product Sync Task neu starten (falls vorhanden) ---
 echo [%DATE% %TIME%] Refreshing scheduled task "GC-Bridge Scheduled Product Sync"... >> "%LOG_FILE%"
 schtasks /Query /TN "GC-Bridge Scheduled Product Sync" >nul 2>&1

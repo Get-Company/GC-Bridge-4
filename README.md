@@ -187,6 +187,7 @@ vom Service Controller beendet wuerden).
 
 | Task-Name | Trigger | Verzoegerung | Skript | Funktion |
 |-----------|---------|--------------|--------|----------|
+| `GC-Bridge-Microtech-Worker` | `ONSTART` | 0 s | `manage.py microtech_worker` | Exklusiver Worker mit genau **einer** Microtech-COM-Connection |
 | `GC-Bridge-Uvicorn` | `ONSTART` | 0 s | `deploy\windows\start-uvicorn.cmd` | Startet Uvicorn ASGI-Server auf `127.0.0.1:8000` |
 | `GC-Bridge-Caddy` | `ONSTART` | 10 s | `deploy\windows\start-caddy.cmd` | Startet Caddy Reverse Proxy auf `:4711` |
 | `GC-Bridge Scheduled Product Sync` | z. B. `HOURLY` | optional | `manage.py scheduled_product_sync` | Produkt-Schedulerlauf (Microtech -> Django -> Shopware) |
@@ -223,6 +224,7 @@ uv pip install -r requirements.txt
 ```cmd
 schtasks /Create /TN "GC-Bridge-Uvicorn" /SC ONSTART /RU SYSTEM /RL HIGHEST /TR "\"D:\GC-Bridge-4\deploy\windows\start-uvicorn.cmd\"" /F
 schtasks /Create /TN "GC-Bridge-Caddy" /SC ONSTART /DELAY 0000:10 /RU SYSTEM /RL HIGHEST /TR "\"D:\GC-Bridge-4\deploy\windows\start-caddy.cmd\"" /F
+deploy\windows\ensure-microtech-worker-task.cmd
 schtasks /Create /TN "GC-Bridge Scheduled Product Sync" /SC HOURLY /MO 1 /RU SYSTEM /RL HIGHEST /TR "\"D:\GC-Bridge-4\.venv\Scripts\python.exe\" \"D:\GC-Bridge-4\manage.py\" scheduled_product_sync" /F
 ```
 7. Firewall-Regel fuer Port 4711 oeffnen:
@@ -231,6 +233,7 @@ netsh advfirewall firewall add rule name="GC-Bridge Caddy 4711" dir=in action=al
 ```
 8. Tasks sofort starten:
 ```cmd
+deploy\windows\ensure-microtech-worker-task.cmd
 schtasks /Run /TN "GC-Bridge-Uvicorn"
 timeout /t 5 /nobreak
 schtasks /Run /TN "GC-Bridge-Caddy"
@@ -243,6 +246,7 @@ schtasks /Run /TN "GC-Bridge-Caddy"
 Admin CMD:
 
 ```cmd
+deploy\windows\ensure-microtech-worker-task.cmd
 schtasks /Run /TN "GC-Bridge-Uvicorn"
 timeout /t 5 /nobreak
 schtasks /Run /TN "GC-Bridge-Caddy"
@@ -294,6 +298,7 @@ schtasks /Run /TN "GC-Bridge-Caddy"
 :: Tasks abfragen
 schtasks /Query /TN "GC-Bridge-Uvicorn" /FO LIST
 schtasks /Query /TN "GC-Bridge-Caddy" /FO LIST
+schtasks /Query /TN "GC-Bridge-Microtech-Worker" /FO LIST
 
 :: Ports pruefen (8000 = Uvicorn, 4711 = Caddy)
 netstat -ano | findstr /C:":8000 " /C:":4711 "
@@ -506,6 +511,7 @@ deploy\windows\health_check.cmd > health_check_output.txt 2>&1
 | 4 | **Django** | `manage.py migrate --check` | Keine offenen Migrationen |
 | 5 | **Scheduled Tasks** | `GC-Bridge-Uvicorn` | Task registriert |
 | 5 | **Scheduled Tasks** | `GC-Bridge-Caddy` | Task registriert |
+| 5 | **Scheduled Tasks** | `GC-Bridge-Microtech-Worker` | Task registriert |
 | 5 | **Scheduled Tasks** | `GC-Bridge Scheduled Product Sync` | Task registriert (optional) |
 | 6 | **Runner** | GitHub Actions Runner Dienst | Status RUNNING |
 | 7 | **Disk** | Freier Speicher auf `D:\` | Mehr als 2 GB frei |
@@ -536,6 +542,7 @@ deploy\windows\health_check.cmd > health_check_output.txt 2>&1
 [OK]    Migrationen - aktuell
 
 --- SCHEDULED TASKS ---
+[OK]    Task GC-Bridge-Microtech-Worker - registriert
 [OK]    Task GC-Bridge-Uvicorn - registriert
 [OK]    Task GC-Bridge-Caddy - registriert
 [WARN]  Task GC-Bridge Scheduled Product Sync - nicht gefunden (optional)
@@ -660,6 +667,18 @@ Stale Eintraege aufraeumen:
 ```bash
 .venv/bin/python manage.py sync_status --cleanup-stale
 ```
+
+Microtech Queue/Worker:
+
+```bash
+.venv/bin/python manage.py microtech_queue_status
+.venv/bin/python manage.py microtech_worker
+```
+
+Hinweis:
+- Microtech-bezogene Commands werden in die Queue eingereiht.
+- Standard ist: einreihen **und** auf Abschluss warten.
+- Fuer reines Einreihen ohne Warten: `--no-wait`
 
 ### Bestellungen: Shopware -> Django -> Microtech
 

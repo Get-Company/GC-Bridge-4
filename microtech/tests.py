@@ -2,9 +2,12 @@ from decimal import Decimal
 from unittest.mock import MagicMock
 
 from django.test import TestCase
+from django.utils import timezone
 
 from microtech.management.commands.microtech_sync_products import Command as MicrotechSyncProductsCommand
+from microtech.models import MicrotechJob
 from microtech.services.artikel import MicrotechArtikelService
+from microtech.services.queue import MicrotechQueueService
 from products.models import Product, Tax
 from shopware.models import ShopwareSettings
 
@@ -99,3 +102,44 @@ class MicrotechPriceFactorGuardTest(TestCase):
         factor, suspicious = MicrotechSyncProductsCommand._normalize_price_factor(Decimal("100"))
         self.assertEqual(factor, Decimal("1.0"))
         self.assertTrue(suspicious)
+
+
+class MicrotechQueueServiceTest(TestCase):
+    def test_enqueue_claim_and_mark_success(self):
+        queue = MicrotechQueueService()
+        job = queue.enqueue(
+            job_type=MicrotechJob.JobType.LOOKUP_ARTICLE,
+            payload={"artikel_nr": "204113"},
+            priority=10,
+        )
+
+        claimed = queue.claim_next_job(worker_id="test-worker")
+        self.assertIsNotNone(claimed)
+        self.assertEqual(claimed.id, job.id)
+        self.assertEqual(claimed.status, MicrotechJob.Status.RUNNING)
+        self.assertEqual(claimed.attempt, 1)
+
+        queue.mark_succeeded(claimed, result={"found": True})
+        claimed.refresh_from_db()
+        self.assertEqual(claimed.status, MicrotechJob.Status.SUCCEEDED)
+        self.assertEqual(claimed.result.get("found"), True)
+
+    def test_mark_failed_requeues_until_max_retries_then_fails(self):
+        queue = MicrotechQueueService()
+        job = queue.enqueue(
+            job_type=MicrotechJob.JobType.SYNC_PRODUCTS,
+            payload={"all": True},
+            max_retries=1,
+        )
+        claimed = queue.claim_next_job(worker_id="worker-a")
+        self.assertIsNotNone(claimed)
+        queue.mark_failed(claimed, error="first error")
+        claimed.refresh_from_db()
+        self.assertEqual(claimed.status, MicrotechJob.Status.QUEUED)
+
+        claimed.run_after = timezone.now()
+        claimed.save(update_fields=["run_after"])
+        claimed = queue.claim_next_job(worker_id="worker-a")
+        queue.mark_failed(claimed, error="second error")
+        claimed.refresh_from_db()
+        self.assertEqual(claimed.status, MicrotechJob.Status.FAILED)
