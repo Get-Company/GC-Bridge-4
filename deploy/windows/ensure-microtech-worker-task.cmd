@@ -27,6 +27,12 @@ if not exist "%MANAGE_PY%" (
     exit /b 1
 )
 
+:: Wenn bereits eine Runtime-JSON existiert, laeuft der Worker schon – nichts tun.
+if exist "%RUNTIME_DIR%\microtech_worker__*.json" (
+    echo [OK]    microtech_worker laeuft bereits (Runtime-JSON gefunden).
+    endlocal & exit /b 0
+)
+
 echo [INFO] Stelle Task "%TASK_NAME%" sicher...
 schtasks /Create /TN "%TASK_NAME%" /SC ONSTART /RU SYSTEM /RL HIGHEST /TR "%TASK_COMMAND%" /F >nul 2>&1
 if errorlevel 1 (

@@ -32,21 +32,48 @@
         <div id="running-jobs" class="p-4 min-h-[60px]">
           {% if runtime_entries %}
             {% for entry in runtime_entries %}
-            <div class="flex items-start gap-3 mb-2 last:mb-0 p-2 rounded bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
-              <span class="mt-1.5 w-2 h-2 rounded-full bg-green-500 flex-shrink-0 animate-pulse"></span>
-              <div class="min-w-0">
-                <div class="font-medium text-sm truncate">{{ entry.command_name }}</div>
+            {% with stage=entry.metadata.stage %}
+            <div class="flex items-start gap-3 mb-2 last:mb-0 p-2 rounded
+              {% if stage == 'processing' %}bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800
+              {% elif stage == 'idle' %}bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700
+              {% else %}bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800{% endif %}">
+              <span class="mt-1.5 w-2 h-2 rounded-full flex-shrink-0
+                {% if stage == 'processing' %}bg-green-500 animate-pulse
+                {% elif stage == 'idle' %}bg-gray-400
+                {% else %}bg-amber-500 animate-pulse{% endif %}"></span>
+              <div class="min-w-0 w-full">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="font-medium text-sm truncate">{{ entry.command_name }}</span>
+                  <span class="text-xs px-1.5 py-0.5 rounded font-medium flex-shrink-0
+                    {% if stage == 'processing' %}bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300
+                    {% elif stage == 'idle' %}bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400
+                    {% else %}bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300{% endif %}">
+                    {% if stage %}{{ stage }}{% else %}kein stage – hängt?{% endif %}
+                  </span>
+                </div>
                 <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                   PID {{ entry.pid }} &bull; {{ entry.hostname }} &bull; {{ entry.duration }}
                 </div>
-                {% if entry.metadata.stage %}
-                <div class="text-xs text-blue-600 dark:text-blue-400 mt-0.5">Stage: {{ entry.metadata.stage }}</div>
+                {% if stage == 'processing' and entry.metadata.current_job_id %}
+                <div class="text-xs text-green-700 dark:text-green-300 mt-0.5">
+                  Job #{{ entry.metadata.current_job_id }} ({{ entry.metadata.current_job_type }}) &bull; Versuch {{ entry.metadata.attempt }}
+                </div>
                 {% endif %}
-                {% if entry.metadata.count %}
-                <div class="text-xs text-gray-500 dark:text-gray-400">{{ entry.metadata.count }}</div>
+                {% if stage == 'idle' and entry.metadata.queue %}
+                <div class="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+                  Queue: queued={{ entry.metadata.queue.counts.queued|default:0 }}
+                  running={{ entry.metadata.queue.counts.running|default:0 }}
+                  failed={{ entry.metadata.queue.counts.failed|default:0 }}
+                </div>
+                {% endif %}
+                {% if not stage %}
+                <div class="text-xs text-amber-600 dark:text-amber-400 mt-0.5 font-medium">
+                  Kein Stage-Update — Worker hängt wahrscheinlich in connect()
+                </div>
                 {% endif %}
               </div>
             </div>
+            {% endwith %}
             {% endfor %}
           {% else %}
             <p class="text-sm text-gray-400 dark:text-gray-500 italic">Keine laufenden Jobs</p>
@@ -318,21 +345,57 @@
 
     let html = "";
     for (const e of entries) {
-      const stage = e.metadata && e.metadata.stage
-        ? `<div class="text-xs text-blue-600 dark:text-blue-400 mt-0.5">Stage: ${escHtml(e.metadata.stage)}</div>`
-        : "";
-      const count = e.metadata && e.metadata.count
-        ? `<div class="text-xs text-gray-500 dark:text-gray-400">${escHtml(String(e.metadata.count))}</div>`
-        : "";
+      const meta = e.metadata || {};
+      const stage = meta.stage || "";
+
+      // Card colour by stage
+      let cardCls, dotCls, stageBadgeCls, stageLabel;
+      if (stage === "processing") {
+        cardCls = "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800";
+        dotCls  = "bg-green-500 animate-pulse";
+        stageBadgeCls = "bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300";
+        stageLabel = "processing";
+      } else if (stage === "idle") {
+        cardCls = "bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700";
+        dotCls  = "bg-gray-400";
+        stageBadgeCls = "bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400";
+        stageLabel = "idle";
+      } else {
+        cardCls = "bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800";
+        dotCls  = "bg-amber-500 animate-pulse";
+        stageBadgeCls = "bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300";
+        stageLabel = "kein stage – hängt?";
+      }
+
+      // Extra details
+      let extraHtml = "";
+      if (stage === "processing" && meta.current_job_id) {
+        extraHtml = `<div class="text-xs text-green-700 dark:text-green-300 mt-0.5">
+          Job #${meta.current_job_id} (${escHtml(meta.current_job_type || "")}) &bull; Versuch ${meta.attempt || "?"}
+        </div>`;
+      } else if (stage === "idle" && meta.queue) {
+        const c = meta.queue.counts || {};
+        extraHtml = `<div class="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+          Queue: queued=${c.queued || 0} running=${c.running || 0} failed=${c.failed || 0}
+        </div>`;
+      } else if (!stage) {
+        extraHtml = `<div class="text-xs text-amber-600 dark:text-amber-400 mt-0.5 font-medium">
+          Kein Stage-Update — Worker hängt wahrscheinlich in connect()
+        </div>`;
+      }
+
       html += `
-        <div class="flex items-start gap-3 mb-2 last:mb-0 p-2 rounded bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
-          <span class="mt-1.5 w-2 h-2 rounded-full bg-green-500 flex-shrink-0 animate-pulse"></span>
-          <div class="min-w-0">
-            <div class="font-medium text-sm truncate">${escHtml(e.command_name)}</div>
+        <div class="flex items-start gap-3 mb-2 last:mb-0 p-2 rounded border ${cardCls}">
+          <span class="mt-1.5 w-2 h-2 rounded-full flex-shrink-0 ${dotCls}"></span>
+          <div class="min-w-0 w-full">
+            <div class="flex items-center justify-between gap-2">
+              <span class="font-medium text-sm truncate">${escHtml(e.command_name)}</span>
+              <span class="text-xs px-1.5 py-0.5 rounded font-medium flex-shrink-0 ${stageBadgeCls}">${escHtml(stageLabel)}</span>
+            </div>
             <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
               PID ${e.pid} &bull; ${escHtml(e.hostname)} &bull; ${escHtml(e.duration)}
             </div>
-            ${stage}${count}
+            ${extraHtml}
           </div>
         </div>`;
     }

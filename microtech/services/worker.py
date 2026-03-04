@@ -44,15 +44,23 @@ class MicrotechWorkerService(BaseService):
         runtime_handle=None,
     ) -> None:
         logger.info("Starting Microtech worker loop as {}", self.worker_id)
+        logger.info("Connecting to Microtech ERP...")
         try:
             self.connection_service.connect()
+            logger.info("Microtech ERP connected. Entering job loop.")
+            idle_ticks = 0
             while not self._stop_requested:
                 job = self.queue.claim_next_job(worker_id=self.worker_id)
                 if not job:
+                    idle_ticks += 1
+                    if idle_ticks == 1 or idle_ticks % 30 == 0:
+                        # Log every 60 s (30 ticks × 2 s) so log isn't flooded
+                        logger.debug("Worker idle (tick {}), queue empty or run_after in future.", idle_ticks)
                     if runtime_handle:
                         runtime_handle.update(stage="idle", queue=self.queue.summarize())
                     sleep(max(0.2, idle_sleep_seconds))
                     continue
+                idle_ticks = 0
 
                 if runtime_handle:
                     runtime_handle.update(
