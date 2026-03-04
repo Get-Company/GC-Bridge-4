@@ -16,6 +16,7 @@ cd /d "%APP_DIR%" || (
 )
 
 if not exist tmp\logs mkdir tmp\logs
+call deploy\windows\prune-logs.cmd 14 >nul 2>&1
 
 echo [%DATE% %TIME%] ============================== >> "%LOG_FILE%"
 echo [%DATE% %TIME%] Deploying %DEPLOY_TAG% >> "%LOG_FILE%"

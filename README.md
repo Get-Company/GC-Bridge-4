@@ -189,10 +189,12 @@ vom Service Controller beendet wuerden).
 |-----------|---------|--------------|--------|----------|
 | `GC-Bridge-Uvicorn` | `ONSTART` | 0 s | `deploy\windows\start-uvicorn.cmd` | Startet Uvicorn ASGI-Server auf `127.0.0.1:8000` |
 | `GC-Bridge-Caddy` | `ONSTART` | 10 s | `deploy\windows\start-caddy.cmd` | Startet Caddy Reverse Proxy auf `:4711` |
+| `GC-Bridge Scheduled Product Sync` | z. B. `HOURLY` | optional | `manage.py scheduled_product_sync` | Produkt-Schedulerlauf (Microtech -> Django -> Shopware) |
 
 Beide Tasks laufen unter dem Konto `SYSTEM` mit hoechsten Rechten (`/RL HIGHEST`).
 Die 10-Sekunden-Verzoegerung bei Caddy stellt sicher, dass Uvicorn bereits laeuft,
 bevor Caddy Verbindungen annimmt.
+Der **GitHub Runner** ist dagegen **kein Scheduled Task**, sondern ein Windows-Dienst.
 
 ---
 
@@ -221,6 +223,7 @@ uv pip install -r requirements.txt
 ```cmd
 schtasks /Create /TN "GC-Bridge-Uvicorn" /SC ONSTART /RU SYSTEM /RL HIGHEST /TR "\"D:\GC-Bridge-4\deploy\windows\start-uvicorn.cmd\"" /F
 schtasks /Create /TN "GC-Bridge-Caddy" /SC ONSTART /DELAY 0000:10 /RU SYSTEM /RL HIGHEST /TR "\"D:\GC-Bridge-4\deploy\windows\start-caddy.cmd\"" /F
+schtasks /Create /TN "GC-Bridge Scheduled Product Sync" /SC HOURLY /MO 1 /RU SYSTEM /RL HIGHEST /TR "\"D:\GC-Bridge-4\.venv\Scripts\python.exe\" \"D:\GC-Bridge-4\manage.py\" scheduled_product_sync" /F
 ```
 7. Firewall-Regel fuer Port 4711 oeffnen:
 ```cmd
@@ -345,6 +348,10 @@ Alle Logs liegen in `tmp\logs\` (wird beim ersten Start automatisch angelegt):
 | `tmp\logs\caddy-access.log` | Caddy Access-Log |
 | `tmp\logs\deploy.log` | Deployment-Log (GitHub Actions) |
 | `tmp\logs\diagnose_reachability.log` | Sequenzielle Erreichbarkeitsdiagnose mit Hints |
+
+Retention:
+- Logs unter `tmp\logs\` werden beim Start/Update automatisch auf **14 Tage** begrenzt (`deploy\windows\prune-logs.cmd`).
+- Loguru-basierte Command-Logs verwenden ebenfalls `retention="14 days"`.
 
 Letzte 50 Zeilen eines Logs anzeigen (PowerShell):
 
@@ -499,7 +506,7 @@ deploy\windows\health_check.cmd > health_check_output.txt 2>&1
 | 4 | **Django** | `manage.py migrate --check` | Keine offenen Migrationen |
 | 5 | **Scheduled Tasks** | `GC-Bridge-Uvicorn` | Task registriert |
 | 5 | **Scheduled Tasks** | `GC-Bridge-Caddy` | Task registriert |
-| 5 | **Scheduled Tasks** | `GC-Bridge-Runner` | Task registriert |
+| 5 | **Scheduled Tasks** | `GC-Bridge Scheduled Product Sync` | Task registriert (optional) |
 | 6 | **Runner** | GitHub Actions Runner Dienst | Status RUNNING |
 | 7 | **Disk** | Freier Speicher auf `D:\` | Mehr als 2 GB frei |
 | 8 | **Logs** | `uvicorn.err.log` (letzte 200 Zeilen) | Keine ERROR-Eintraege |
@@ -531,7 +538,7 @@ deploy\windows\health_check.cmd > health_check_output.txt 2>&1
 --- SCHEDULED TASKS ---
 [OK]    Task GC-Bridge-Uvicorn - registriert
 [OK]    Task GC-Bridge-Caddy - registriert
-[OK]    Task GC-Bridge-Runner - registriert
+[WARN]  Task GC-Bridge Scheduled Product Sync - nicht gefunden (optional)
 
 --- GITHUB ACTIONS RUNNER ---
 [OK]    GitHub Actions Runner - RUNNING

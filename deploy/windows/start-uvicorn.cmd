@@ -9,6 +9,7 @@ setlocal
 
 cd /d %~dp0\..\.. || exit /b 1
 if not exist tmp\logs mkdir tmp\logs
+call deploy\windows\prune-logs.cmd 14 >nul 2>&1
 
 if "%GC_BRIDGE_PUBLIC_PORT%"=="" set GC_BRIDGE_PUBLIC_PORT=4711
 if "%GC_BRIDGE_LAN_IP%"=="" set GC_BRIDGE_LAN_IP=10.0.0.5

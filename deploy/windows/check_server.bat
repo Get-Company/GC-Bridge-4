@@ -50,8 +50,8 @@ if exist "%PROJECT_ROOT%\deploy\caddy\caddy.exe" (
 )
 echo.
 
-echo --- Registrierte Dienste (sc.exe) ---
-for %%S in ("GC-Bridge-Uvicorn" "Caddy") do (
+echo --- GitHub Runner Dienste (sc.exe) ---
+for %%S in ("actions.runner.Get-Company-GC-Bridge-4.GC-Bridge-v4") do (
     echo.
     echo Dienst: %%~S
     sc.exe query %%~S 2>&1
@@ -59,7 +59,7 @@ for %%S in ("GC-Bridge-Uvicorn" "Caddy") do (
 echo.
 
 echo --- Geplante Aufgaben ---
-for %%T in ("GC-Bridge-Uvicorn" "GC-Bridge-Caddy" "GC-Bridge-Start-Uvicorn" "GC-Bridge-Start-Caddy") do (
+for %%T in ("GC-Bridge-Uvicorn" "GC-Bridge-Caddy" "GC-Bridge Scheduled Product Sync") do (
     echo.
     echo Aufgabe: %%~T
     schtasks /Query /TN %%~T /V /FO LIST 2>&1

@@ -72,9 +72,15 @@ popd
 :: ============================================================
 call :section "SCHEDULED TASKS"
 
-for %%T in ("GC-Bridge-Uvicorn" "GC-Bridge-Caddy" "GC-Bridge-Runner") do (
+for %%T in ("GC-Bridge-Uvicorn" "GC-Bridge-Caddy") do (
     schtasks /Query /TN %%T > nul 2>&1
     if errorlevel 1 (call :err "Task %%~T - nicht gefunden") else (call :ok "Task %%~T - registriert")
+)
+schtasks /Query /TN "GC-Bridge Scheduled Product Sync" > nul 2>&1
+if errorlevel 1 (
+    call :warn "Task GC-Bridge Scheduled Product Sync - nicht gefunden (optional)"
+) else (
+    call :ok "Task GC-Bridge Scheduled Product Sync - registriert"
 )
 
 :: ============================================================

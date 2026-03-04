@@ -68,6 +68,13 @@ if errorlevel 1 (
     call :ok "Task GC-Bridge-Caddy registriert"
 )
 
+schtasks /Query /TN "GC-Bridge Scheduled Product Sync" >nul 2>&1
+if errorlevel 1 (
+    call :warn "Task GC-Bridge Scheduled Product Sync fehlt (optional)"
+) else (
+    call :ok "Task GC-Bridge Scheduled Product Sync registriert"
+)
+
 call :section "PORTS"
 netstat -ano | findstr /R /C:":8000 .*LISTENING" >nul 2>&1
 if errorlevel 1 (

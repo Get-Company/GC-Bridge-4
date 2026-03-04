@@ -120,6 +120,32 @@
       </div>
       {% endif %}
 
+      {# ── GitHub Runner Dienste (nur Windows) ────────────── #}
+      {% if runner_services is not None %}
+      <div class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+        <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+          <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300">
+            GitHub Runner Dienste
+          </h2>
+        </div>
+        <div id="runner-services" class="divide-y divide-gray-100 dark:divide-gray-700">
+          {% for svc in runner_services %}
+          <div class="flex items-start gap-3 px-4 py-3">
+            <span class="mt-1 w-2 h-2 rounded-full flex-shrink-0 {% if svc.ok %}bg-green-500{% else %}bg-red-400{% endif %}"></span>
+            <div class="min-w-0 flex-1">
+              <div class="font-medium text-sm">{{ svc.name }}</div>
+              <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                Status: {{ svc.state }}
+              </div>
+            </div>
+          </div>
+          {% empty %}
+          <p class="px-4 py-3 text-sm text-gray-400 italic">Keine Runner-Dienste abgefragt</p>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
     </div>{# Ende linke Spalte #}
 
     {# ══ RECHTE SPALTE: Log-Viewer ═══════════════════════ #}
@@ -306,6 +332,33 @@
     container.innerHTML = html;
   }
 
+  // ── Runner-Dienste rendern ────────────────────────────
+  function renderRunnerServices(services) {
+    const container = document.getElementById("runner-services");
+    if (!container || services === null || services === undefined) return;
+
+    if (!services.length) {
+      container.innerHTML = '<p class="px-4 py-3 text-sm text-gray-400 italic">Keine Runner-Dienste abgefragt</p>';
+      return;
+    }
+
+    let html = "";
+    for (const s of services) {
+      const dot = s.ok ? "bg-green-500" : "bg-red-400";
+      html += `
+        <div class="flex items-start gap-3 px-4 py-3 border-b border-gray-100 dark:border-gray-700 last:border-0">
+          <span class="mt-1 w-2 h-2 rounded-full flex-shrink-0 ${dot}"></span>
+          <div class="min-w-0 flex-1">
+            <div class="font-medium text-sm">${escHtml(s.name)}</div>
+            <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+              Status: ${escHtml(s.state || "-")}
+            </div>
+          </div>
+        </div>`;
+    }
+    container.innerHTML = html;
+  }
+
   // ── API-Fetch ──────────────────────────────────────────
   async function fetchStatus() {
     const dot = document.getElementById("refresh-dot");
@@ -320,6 +373,7 @@
       renderJobs(data.runtime_entries);
       renderLog(data.log_lines);
       renderScheduledTasks(data.scheduled_tasks);
+      renderRunnerServices(data.runner_services);
 
       const el = document.getElementById("last-updated");
       if (el) el.textContent = "Stand: " + new Date().toLocaleTimeString("de-DE");

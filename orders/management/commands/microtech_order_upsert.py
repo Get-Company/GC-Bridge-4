@@ -43,6 +43,7 @@ class Command(BaseCommand):
             backtrace=True,
             diagnose=True,
             rotation="10 MB",
+            retention="14 days",
             encoding="utf-8",
         )
         return sink_id, path

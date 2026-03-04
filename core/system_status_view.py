@@ -49,6 +49,10 @@ TRIGGERABLE_JOBS = [
 _WINDOWS_SCHEDULED_TASKS = [
     "GC-Bridge-Uvicorn",
     "GC-Bridge-Caddy",
+    "GC-Bridge Scheduled Product Sync",
+]
+_WINDOWS_RUNNER_SERVICES = [
+    "actions.runner.Get-Company-GC-Bridge-4.GC-Bridge-v4",
 ]
 
 
@@ -112,6 +116,48 @@ def _get_scheduled_tasks_status() -> list[dict] | None:
     return tasks
 
 
+def _get_runner_services_status() -> list[dict] | None:
+    """Query GitHub runner services on Windows. Returns None on non-Windows."""
+    if platform.system() != "Windows":
+        return None
+
+    services = []
+    for service_name in _WINDOWS_RUNNER_SERVICES:
+        try:
+            result = subprocess.run(
+                ["sc", "query", service_name],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                encoding="cp850",
+                errors="replace",
+            )
+            state = "Nicht gefunden"
+            for line in result.stdout.splitlines():
+                if "STATE" in line.upper() and ":" in line:
+                    state = line.split(":", 1)[1].strip()
+                    break
+
+            services.append(
+                {
+                    "name": service_name,
+                    "state": state,
+                    "ok": result.returncode == 0 and "RUNNING" in state.upper(),
+                    "exists": result.returncode == 0,
+                }
+            )
+        except Exception as exc:
+            services.append(
+                {
+                    "name": service_name,
+                    "state": f"Fehler: {exc}",
+                    "ok": False,
+                    "exists": False,
+                }
+            )
+    return services
+
+
 def _spawn_job(command_name: str) -> dict:
     """Spawn a management command as a detached background process."""
     valid_commands = {job["command"] for job in TRIGGERABLE_JOBS}
@@ -172,6 +218,7 @@ def system_status_view(request):
         "runtime_entries": _get_runtime_entries(),
         "triggerable_jobs": TRIGGERABLE_JOBS,
         "scheduled_tasks": _get_scheduled_tasks_status(),
+        "runner_services": _get_runner_services_status(),
         "file_options": [{"index": i, "path": str(p), "name": p.name} for i, p in enumerate(file_options)],
         "selected_file_index": selected_index,
         "selected_path": str(selected_path) if selected_path else "",
@@ -200,6 +247,7 @@ def system_status_api(request):
             "log_lines": log_lines,
             "log_filename": file_name,
             "scheduled_tasks": _get_scheduled_tasks_status(),
+            "runner_services": _get_runner_services_status(),
         }
     )
 

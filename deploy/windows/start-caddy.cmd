@@ -9,6 +9,7 @@ setlocal
 
 cd /d %~dp0\..\.. || exit /b 1
 if not exist tmp\logs mkdir tmp\logs
+call deploy\windows\prune-logs.cmd 14 >nul 2>&1
 
 if not exist deploy\caddy\caddy.exe (
     echo [%date% %time%] caddy.exe nicht gefunden >> tmp\logs\caddy.err.log
