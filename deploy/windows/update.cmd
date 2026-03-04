@@ -36,10 +36,15 @@ if errorlevel 1 (
 
 echo [%DATE% %TIME%] git checkout -f %DEPLOY_TAG% >> "%LOG_FILE%"
 git checkout -f %DEPLOY_TAG% >> "%LOG_FILE%" 2>&1
-if errorlevel 1 (
-    echo [%DATE% %TIME%] ERROR: git checkout failed >> "%LOG_FILE%"
+:: Bitdefender GravityZone blocks writes to .cmd files in deploy/windows/ and
+:: causes git to exit with code 1 even when the checkout succeeded.
+:: Verify success by checking the actual HEAD tag instead of trusting errorlevel.
+for /f "delims=" %%T in ('git describe --exact-match --tags HEAD 2^>nul') do set "CURRENT_TAG=%%T"
+if not "%CURRENT_TAG%"=="%DEPLOY_TAG%" (
+    echo [%DATE% %TIME%] ERROR: git checkout failed, HEAD is at "%CURRENT_TAG%" not "%DEPLOY_TAG%" >> "%LOG_FILE%"
     exit /b 1
 )
+echo [%DATE% %TIME%] git checkout OK, HEAD verified at %DEPLOY_TAG% >> "%LOG_FILE%"
 echo %DEPLOY_TAG%> "%APP_DIR%\VERSION"
 
 :: --- Dependencies installieren ---
