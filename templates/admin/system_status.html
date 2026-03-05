@@ -4,10 +4,21 @@
 {% block content %}
 <div class="flex flex-col gap-6">
 
-  {# ── Kopfzeile ──────────────────────────────────────────── #}
+  {# -- Kopfzeile ------------------------------------------------- #}
   <div class="flex flex-wrap items-center justify-between gap-3">
     <h1 class="text-xl font-semibold">System-Status</h1>
     <div class="flex items-center gap-4 text-sm">
+      {# Microtech Verbindungsslot #}
+      <span id="microtech-slot" class="flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
+        <span id="microtech-slot-dot" class="inline-block w-2 h-2 rounded-full
+          {% if microtech_slot.available %}bg-green-500{% elif microtech_slot.available is None %}bg-gray-400{% else %}bg-red-500 animate-pulse{% endif %}"></span>
+        Microtech-Slot:
+        <span id="microtech-slot-label" class="font-medium
+          {% if microtech_slot.available %}text-green-600 dark:text-green-400{% elif microtech_slot.available is None %}text-gray-400{% else %}text-red-600 dark:text-red-400{% endif %}">
+          {% if microtech_slot.available %}frei{% elif microtech_slot.available is None %}?{% else %}belegt{% endif %}
+        </span>
+      </span>
+      <span class="text-gray-300 dark:text-gray-600">|</span>
       <span id="refresh-status" class="flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
         <span id="refresh-dot" class="inline-block w-2 h-2 rounded-full bg-green-500"></span>
         Auto-Refresh (5 s)
@@ -16,13 +27,47 @@
     </div>
   </div>
 
-  {# ── Hauptgitter: links Steuerung / rechts Log ─────────── #}
+  {# -- Hauptgitter: links Steuerung / rechts Log ----------------- #}
   <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
 
-    {# ══ LINKE SPALTE ══════════════════════════════════════ #}
+    {# == LINKE SPALTE ============================================ #}
     <div class="flex flex-col gap-6">
 
-      {# ── Laufende Jobs ──────────────────────────────────── #}
+      {# -- Aktive Prozesse ---------------------------------------- #}
+      <div class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+        <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+          <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300">
+            Aktive Prozesse
+          </h2>
+        </div>
+        <div id="active-processes" class="divide-y divide-gray-100 dark:divide-gray-700">
+          {% if active_processes %}
+            {% for proc in active_processes %}
+            <div class="flex items-start gap-3 px-4 py-3">
+              <span class="mt-1.5 w-2 h-2 rounded-full flex-shrink-0 bg-green-500{% if proc.is_self %} ring-2 ring-green-300 dark:ring-green-700{% endif %}"></span>
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-2">
+                  <span class="font-mono text-sm truncate">{{ proc.command }}</span>
+                  {% if proc.is_self %}
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 font-medium flex-shrink-0">SELF</span>
+                  {% endif %}
+                </div>
+                <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  PID {{ proc.pid }}
+                  {% if proc.user %}&bull; {{ proc.user }}{% endif %}
+                  {% if proc.mem_mb %}&bull; {{ proc.mem_mb }} MB{% endif %}
+                  {% if proc.started %}&bull; Start: {{ proc.started }}{% endif %}
+                </div>
+              </div>
+            </div>
+            {% endfor %}
+          {% else %}
+            <p class="px-4 py-3 text-sm text-gray-400 dark:text-gray-500 italic">Keine GC-Bridge-Prozesse gefunden</p>
+          {% endif %}
+        </div>
+      </div>
+
+      {# -- Laufende Jobs (CommandRuntime) ------------------------- #}
       <div class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
         <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
           <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300">
@@ -48,7 +93,7 @@
                     {% if stage == 'processing' %}bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300
                     {% elif stage == 'idle' %}bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400
                     {% else %}bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300{% endif %}">
-                    {% if stage %}{{ stage }}{% else %}kein stage – hängt?{% endif %}
+                    {% if stage %}{{ stage }}{% else %}kein stage{% endif %}
                   </span>
                 </div>
                 <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
@@ -64,7 +109,7 @@
         </div>
       </div>
 
-      {# ── Jobs starten ───────────────────────────────────── #}
+      {# -- Jobs starten ------------------------------------------- #}
       <div class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
         <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
           <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300">
@@ -95,7 +140,34 @@
         </div>
       </div>
 
-      {# ── Windows Scheduled Tasks (nur Windows) ──────────── #}
+      {# -- Systemd-Dienste (nur Linux) ----------------------------- #}
+      {% if systemd_units is not None %}
+      <div class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+        <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+          <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300">
+            Systemd-Dienste
+          </h2>
+        </div>
+        <div id="systemd-units" class="divide-y divide-gray-100 dark:divide-gray-700">
+          {% for unit in systemd_units %}
+          <div class="flex items-start gap-3 px-4 py-3">
+            <span class="mt-1 w-2 h-2 rounded-full flex-shrink-0 {% if unit.ok %}bg-green-500{% else %}bg-red-400{% endif %}"></span>
+            <div class="min-w-0 flex-1">
+              <div class="font-medium text-sm">{{ unit.name }}</div>
+              <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                {{ unit.active }}/{{ unit.sub }}
+                {% if unit.description %}&bull; {{ unit.description }}{% endif %}
+              </div>
+            </div>
+          </div>
+          {% empty %}
+          <p class="px-4 py-3 text-sm text-gray-400 italic">Keine GC-Bridge systemd-Units gefunden</p>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      {# -- Windows Scheduled Tasks (nur Windows) ------------------- #}
       {% if scheduled_tasks is not None %}
       <div class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
         <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
@@ -121,16 +193,9 @@
           {% endfor %}
         </div>
       </div>
-      {% else %}
-      <div class="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-        <p class="text-sm text-gray-400 dark:text-gray-500">
-          <span class="font-medium text-gray-600 dark:text-gray-300">Geplante Aufgaben</span>
-          &ndash; nur auf Windows-Server verfügbar.
-        </p>
-      </div>
       {% endif %}
 
-      {# ── GitHub Runner Dienste (nur Windows) ────────────── #}
+      {# -- GitHub Runner Dienste (nur Windows) --------------------- #}
       {% if runner_services is not None %}
       <div class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
         <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
@@ -158,7 +223,7 @@
 
     </div>{# Ende linke Spalte #}
 
-    {# ══ RECHTE SPALTE: Log-Viewer ═══════════════════════ #}
+    {# == RECHTE SPALTE: Log-Viewer =============================== #}
     <div class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden flex flex-col" style="min-height: 520px;">
       <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
         <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300 mb-3">
@@ -223,7 +288,7 @@
   </div>{# Ende Gitter #}
 </div>
 
-{# ── JavaScript ─────────────────────────────────────────── #}
+{# -- JavaScript ------------------------------------------------- #}
 <script>
 (function () {
   "use strict";
@@ -234,7 +299,7 @@
   let autoScroll = true;
   let timer = null;
 
-  // ── Auto-Scroll-Erkennung ──────────────────────────────
+  // -- Auto-Scroll-Erkennung ------------------------------------
   const logEl = document.getElementById("log-content");
   const autoscrollDot = document.getElementById("autoscroll-dot");
 
@@ -246,7 +311,6 @@
         autoscrollDot.style.backgroundColor = autoScroll ? "#4ade80" : "#94a3b8";
       }
     });
-    // Erstmaliges Scrollen nach unten
     logEl.scrollTop = logEl.scrollHeight;
   }
 
@@ -258,7 +322,7 @@
     }
   };
 
-  // ── Kontroll-Funktionen ────────────────────────────────
+  // -- Kontroll-Funktionen --------------------------------------
   window.changeLogFile = function (val) {
     fileIndex = parseInt(val, 10) || 0;
     fetchStatus();
@@ -269,7 +333,64 @@
     fetchStatus();
   };
 
-  // ── Laufende Jobs rendern ──────────────────────────────
+  // -- Aktive Prozesse rendern ----------------------------------
+  function renderActiveProcesses(processes) {
+    const container = document.getElementById("active-processes");
+    if (!container) return;
+
+    if (!processes || !processes.length) {
+      container.innerHTML = '<p class="px-4 py-3 text-sm text-gray-400 dark:text-gray-500 italic">Keine GC-Bridge-Prozesse gefunden</p>';
+      return;
+    }
+
+    let html = "";
+    for (const p of processes) {
+      const selfBadge = p.is_self
+        ? ' <span class="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 font-medium flex-shrink-0">SELF</span>'
+        : "";
+      const ringCls = p.is_self ? " ring-2 ring-green-300 dark:ring-green-700" : "";
+      const user = p.user ? ` &bull; ${escHtml(p.user)}` : "";
+      const mem = p.mem_mb ? ` &bull; ${p.mem_mb} MB` : "";
+      const started = p.started ? ` &bull; Start: ${escHtml(p.started)}` : "";
+
+      html += `
+        <div class="flex items-start gap-3 px-4 py-3">
+          <span class="mt-1.5 w-2 h-2 rounded-full flex-shrink-0 bg-green-500${ringCls}"></span>
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2">
+              <span class="font-mono text-sm truncate">${escHtml(p.command)}</span>${selfBadge}
+            </div>
+            <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+              PID ${p.pid}${user}${mem}${started}
+            </div>
+          </div>
+        </div>`;
+    }
+    container.innerHTML = html;
+  }
+
+  // -- Microtech-Slot rendern -----------------------------------
+  function renderMicrotechSlot(slot) {
+    const dot = document.getElementById("microtech-slot-dot");
+    const label = document.getElementById("microtech-slot-label");
+    if (!dot || !label || !slot) return;
+
+    if (slot.available === true) {
+      dot.className = "inline-block w-2 h-2 rounded-full bg-green-500";
+      label.textContent = "frei";
+      label.className = "font-medium text-green-600 dark:text-green-400";
+    } else if (slot.available === false) {
+      dot.className = "inline-block w-2 h-2 rounded-full bg-red-500 animate-pulse";
+      label.textContent = "belegt";
+      label.className = "font-medium text-red-600 dark:text-red-400";
+    } else {
+      dot.className = "inline-block w-2 h-2 rounded-full bg-gray-400";
+      label.textContent = "?";
+      label.className = "font-medium text-gray-400";
+    }
+  }
+
+  // -- Laufende Jobs rendern ------------------------------------
   function renderJobs(entries) {
     const container = document.getElementById("running-jobs");
     if (!container) return;
@@ -284,7 +405,6 @@
       const meta = e.metadata || {};
       const stage = meta.stage || "";
 
-      // Card colour by stage
       let cardCls, dotCls, stageBadgeCls, stageLabel;
       if (stage === "processing") {
         cardCls = "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800";
@@ -300,7 +420,7 @@
         cardCls = "bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800";
         dotCls  = "bg-amber-500 animate-pulse";
         stageBadgeCls = "bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300";
-        stageLabel = "kein stage – hängt?";
+        stageLabel = stage || "kein stage";
       }
 
       html += `
@@ -320,7 +440,7 @@
     container.innerHTML = html;
   }
 
-  // ── Log rendern ────────────────────────────────────────
+  // -- Log rendern ----------------------------------------------
   function renderLog(lines) {
     if (!logEl) return;
     const text = lines && lines.length ? lines.join("\n") : "(leer)";
@@ -329,7 +449,35 @@
     if (autoScroll) logEl.scrollTop = logEl.scrollHeight;
   }
 
-  // ── Scheduled Tasks rendern ───────────────────────────
+  // -- Systemd-Units rendern ------------------------------------
+  function renderSystemdUnits(units) {
+    const container = document.getElementById("systemd-units");
+    if (!container || units === null || units === undefined) return;
+
+    if (!units.length) {
+      container.innerHTML = '<p class="px-4 py-3 text-sm text-gray-400 italic">Keine GC-Bridge systemd-Units gefunden</p>';
+      return;
+    }
+
+    let html = "";
+    for (const u of units) {
+      const dot = u.ok ? "bg-green-500" : "bg-red-400";
+      const desc = u.description ? ` &bull; ${escHtml(u.description)}` : "";
+      html += `
+        <div class="flex items-start gap-3 px-4 py-3">
+          <span class="mt-1 w-2 h-2 rounded-full flex-shrink-0 ${dot}"></span>
+          <div class="min-w-0 flex-1">
+            <div class="font-medium text-sm">${escHtml(u.name)}</div>
+            <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+              ${escHtml(u.active)}/${escHtml(u.sub)}${desc}
+            </div>
+          </div>
+        </div>`;
+    }
+    container.innerHTML = html;
+  }
+
+  // -- Scheduled Tasks rendern ----------------------------------
   function renderScheduledTasks(tasks) {
     const container = document.getElementById("scheduled-tasks");
     if (!container || tasks === null || tasks === undefined) return;
@@ -341,9 +489,7 @@
 
     let html = "";
     for (const t of tasks) {
-      const dot = t.ok
-        ? "bg-green-500"
-        : "bg-red-400";
+      const dot = t.ok ? "bg-green-500" : "bg-red-400";
       const last = t.last_run ? ` &bull; Zuletzt: ${escHtml(t.last_run)}` : "";
       const next = t.next_run ? ` &bull; Nächste: ${escHtml(t.next_run)}` : "";
       html += `
@@ -360,7 +506,7 @@
     container.innerHTML = html;
   }
 
-  // ── Runner-Dienste rendern ────────────────────────────
+  // -- Runner-Dienste rendern -----------------------------------
   function renderRunnerServices(services) {
     const container = document.getElementById("runner-services");
     if (!container || services === null || services === undefined) return;
@@ -387,7 +533,7 @@
     container.innerHTML = html;
   }
 
-  // ── API-Fetch ──────────────────────────────────────────
+  // -- API-Fetch ------------------------------------------------
   async function fetchStatus() {
     const dot = document.getElementById("refresh-dot");
     try {
@@ -398,8 +544,11 @@
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const data = await resp.json();
 
+      renderActiveProcesses(data.active_processes);
+      renderMicrotechSlot(data.microtech_slot);
       renderJobs(data.runtime_entries);
       renderLog(data.log_lines);
+      renderSystemdUnits(data.systemd_units);
       renderScheduledTasks(data.scheduled_tasks);
       renderRunnerServices(data.runner_services);
 
@@ -412,7 +561,7 @@
     }
   }
 
-  // ── Job-Trigger ────────────────────────────────────────
+  // -- Job-Trigger ----------------------------------------------
   function getCsrfToken() {
     const match = document.cookie.match(/csrftoken=([^;]+)/);
     return match ? decodeURIComponent(match[1]) : "";
@@ -442,10 +591,10 @@
       if (toast) {
         if (result.success) {
           toast.className = "mt-2 p-3 rounded text-sm font-medium bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-800 dark:text-green-300";
-          toast.textContent = `✓ Job gestartet (PID ${result.pid})`;
+          toast.textContent = `Job gestartet (PID ${result.pid})`;
         } else {
           toast.className = "mt-2 p-3 rounded text-sm font-medium bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-300";
-          toast.textContent = `✗ Fehler: ${result.error}`;
+          toast.textContent = `Fehler: ${result.error}`;
         }
         toast.classList.remove("hidden");
         setTimeout(() => toast.classList.add("hidden"), 6000);
@@ -453,7 +602,7 @@
     } catch (err) {
       if (toast) {
         toast.className = "mt-2 p-3 rounded text-sm font-medium bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-300";
-        toast.textContent = "✗ Verbindungsfehler";
+        toast.textContent = "Verbindungsfehler";
         toast.classList.remove("hidden");
         setTimeout(() => toast.classList.add("hidden"), 6000);
       }
@@ -462,12 +611,11 @@
         btn.disabled = false;
         btn.innerHTML = originalHtml;
       }, 2000);
-      // Sofort Statusupdate holen
       setTimeout(fetchStatus, 1500);
     }
   };
 
-  // ── Hilfsfunktion ──────────────────────────────────────
+  // -- Hilfsfunktion --------------------------------------------
   function escHtml(s) {
     return String(s)
       .replace(/&/g, "&amp;")
@@ -476,11 +624,10 @@
       .replace(/"/g, "&quot;");
   }
 
-  // ── Start ──────────────────────────────────────────────
+  // -- Start ----------------------------------------------------
   fetchStatus();
   timer = setInterval(fetchStatus, REFRESH_MS);
 
-  // Refresh bei Sichtbarkeit der Seite
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
       clearInterval(timer);

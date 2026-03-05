@@ -3,11 +3,17 @@ from __future__ import annotations
 from contextlib import contextmanager
 from dataclasses import dataclass
 import os
+import threading
 from typing import Any
 
 from loguru import logger
 
 from core.services import BaseService
+
+# Only 1 simultaneous Microtech COM connection allowed (1 license per user).
+MICROTECH_MAX_CONNECTIONS = 1
+_connection_semaphore = threading.Semaphore(MICROTECH_MAX_CONNECTIONS)
+
 
 try:
     import pythoncom
@@ -111,9 +117,18 @@ class MicrotechConnectionService(BaseService):
 
 
 @contextmanager
-def microtech_connection(*, manual: bool = False, config: MicrotechConnectionConfig | None = None):
+def microtech_connection(*, manual: bool = False, config: MicrotechConnectionConfig | None = None, timeout: float = 60.0):
+    acquired = _connection_semaphore.acquire(timeout=timeout)
+    if not acquired:
+        raise RuntimeError(
+            f"Could not acquire Microtech connection slot within {timeout}s "
+            f"(max {MICROTECH_MAX_CONNECTIONS} simultaneous connection)."
+        )
     service = MicrotechConnectionService(config=config, manual=manual)
     try:
+        logger.info("Acquired Microtech connection slot.")
         yield service.connect()
     finally:
         service.close()
+        _connection_semaphore.release()
+        logger.info("Released Microtech connection slot.")

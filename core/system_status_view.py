@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import platform
 import subprocess
 import sys
@@ -54,6 +55,125 @@ _WINDOWS_SCHEDULED_TASKS = [
 _WINDOWS_RUNNER_SERVICES = [
     "actions.runner.Get-Company-GC-Bridge-4.GC-Bridge-v4",
 ]
+
+
+def _get_active_processes() -> list[dict]:
+    """Scan OS process table for GC-Bridge-related processes."""
+    keywords = ["manage.py", "uvicorn", "caddy"]
+    base_dir_lower = str(settings.BASE_DIR).lower()
+    my_pid = str(os.getpid())
+    processes = []
+
+    if platform.system() == "Windows":
+        try:
+            result = subprocess.run(
+                [
+                    "wmic", "process", "get",
+                    "ProcessId,CommandLine,CreationDate,WorkingSetSize",
+                    "/FORMAT:CSV",
+                ],
+                capture_output=True, text=True, timeout=10,
+            )
+            for line in result.stdout.strip().splitlines():
+                line = line.strip()
+                if not line or line.startswith("Node"):
+                    continue
+                parts = line.split(",")
+                if len(parts) < 5:
+                    continue
+                cmdline = ",".join(parts[1:-3])
+                if not any(kw in cmdline.lower() for kw in keywords) and base_dir_lower not in cmdline.lower():
+                    continue
+                pid = parts[-1].strip()
+                mem_bytes = int(parts[-2]) if parts[-2].strip().isdigit() else 0
+                processes.append({
+                    "pid": int(pid) if pid.isdigit() else 0,
+                    "command": cmdline.strip()[:200],
+                    "user": "",
+                    "mem_mb": round(mem_bytes / 1048576, 1),
+                    "started": parts[-3].strip() if len(parts) > 3 else "",
+                    "is_self": pid.strip() == my_pid,
+                })
+        except Exception:
+            pass
+    else:
+        try:
+            result = subprocess.run(
+                ["ps", "aux", "--no-headers"],
+                capture_output=True, text=True, timeout=10,
+            )
+            for line in result.stdout.splitlines():
+                if not any(kw in line for kw in keywords) and base_dir_lower not in line.lower():
+                    continue
+                if "grep" in line:
+                    continue
+                parts = line.split(None, 10)
+                if len(parts) < 11:
+                    continue
+                pid = parts[1]
+                rss_kb = int(parts[5]) if parts[5].isdigit() else 0
+                processes.append({
+                    "pid": int(pid) if pid.isdigit() else 0,
+                    "command": parts[10][:200],
+                    "user": parts[0],
+                    "mem_mb": round(rss_kb / 1024, 1),
+                    "started": parts[8],
+                    "is_self": pid == my_pid,
+                })
+        except Exception:
+            pass
+
+    return sorted(processes, key=lambda p: p.get("pid", 0))
+
+
+def _get_microtech_slot_status() -> dict:
+    """Check if the Microtech connection slot is currently in use."""
+    try:
+        from microtech.services.connection import MICROTECH_MAX_CONNECTIONS, _connection_semaphore
+        acquired = _connection_semaphore.acquire(blocking=False)
+        if acquired:
+            _connection_semaphore.release()
+            return {"available": True, "max": MICROTECH_MAX_CONNECTIONS}
+        return {"available": False, "max": MICROTECH_MAX_CONNECTIONS}
+    except Exception:
+        return {"available": None, "max": 0}
+
+
+def _get_systemd_units() -> list[dict] | None:
+    """Query systemd for GC-Bridge-related services/timers. Returns None on Windows."""
+    if platform.system() == "Windows":
+        return None
+
+    unit_patterns = ["gc-bridge", "GC-Bridge"]
+    units = []
+
+    try:
+        result = subprocess.run(
+            [
+                "systemctl", "list-units", "--all", "--no-pager",
+                "--no-legend", "--plain",
+                "--type=service,timer",
+            ],
+            capture_output=True, text=True, timeout=10,
+        )
+        for line in result.stdout.splitlines():
+            if not any(pat in line for pat in unit_patterns):
+                continue
+            parts = line.split(None, 4)
+            if len(parts) < 4:
+                continue
+            units.append({
+                "name": parts[0],
+                "load": parts[1],
+                "active": parts[2],
+                "sub": parts[3],
+                "description": parts[4] if len(parts) > 4 else "",
+                "ok": parts[2] == "active",
+            })
+    except Exception:
+        pass
+
+    return units if units else []
 
 
 def _get_runtime_entries() -> list[dict]:
@@ -216,8 +336,11 @@ def system_status_view(request):
         **admin.site.each_context(request),
         "title": "System-Status",
         "runtime_entries": _get_runtime_entries(),
+        "active_processes": _get_active_processes(),
+        "microtech_slot": _get_microtech_slot_status(),
         "triggerable_jobs": TRIGGERABLE_JOBS,
         "scheduled_tasks": _get_scheduled_tasks_status(),
+        "systemd_units": _get_systemd_units(),
         "runner_services": _get_runner_services_status(),
         "file_options": [{"index": i, "path": str(p), "name": p.name} for i, p in enumerate(file_options)],
         "selected_file_index": selected_index,
@@ -244,9 +367,12 @@ def system_status_api(request):
     return JsonResponse(
         {
             "runtime_entries": _get_runtime_entries(),
+            "active_processes": _get_active_processes(),
+            "microtech_slot": _get_microtech_slot_status(),
             "log_lines": log_lines,
             "log_filename": file_name,
             "scheduled_tasks": _get_scheduled_tasks_status(),
+            "systemd_units": _get_systemd_units(),
             "runner_services": _get_runner_services_status(),
         }
     )
