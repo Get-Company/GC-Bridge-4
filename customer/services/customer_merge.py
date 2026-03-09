@@ -252,53 +252,162 @@ class CustomerMergeService(BaseService):
         if target.pk == source.pk:
             raise ValueError("Ziel- und Quell-Kunde sind identisch.")
 
+        log = []
+        def _log(msg: str) -> None:
+            logger.info("MERGE| {}", msg)
+            log.append(msg)
+
         result = {
             "orders_moved": 0,
             "addresses_moved": 0,
             "shopware_orders_moved": 0,
+            "shopware_source_deleted": False,
+            "microtech_source_deleted": False,
+            "microtech_target_synced": False,
             "password_source": None,
             "errors": [],
+            "log": log,
         }
+
+        _log(f"START: target={target_erp_nr} (pk={target.pk}, api_id={target.api_id}), "
+             f"source={source_erp_nr} (pk={source.pk}, api_id={source.api_id})")
+        _log(f"address_mapping={address_mapping}, merge_shopware_orders={merge_shopware_orders}")
+
+        # Source addresses before merge
+        src_addrs = list(source.addresses.all())
+        tgt_addrs = list(target.addresses.all())
+        _log(f"Source hat {len(src_addrs)} Adressen: {[(a.pk, a.street, a.postal_code, a.city) for a in src_addrs]}")
+        _log(f"Target hat {len(tgt_addrs)} Adressen: {[(a.pk, a.street, a.postal_code, a.city) for a in tgt_addrs]}")
 
         # Determine which Shopware customer has the newer password
         password_winner = self._determine_password_winner(target, source)
         result["password_source"] = password_winner
+        _log(f"Password winner: {password_winner}")
 
         # Move orders in Django
+        source_orders = list(Order.objects.filter(customer=source).values_list("pk", flat=True))
+        _log(f"Django Orders von source: {source_orders}")
         orders_moved = Order.objects.filter(customer=source).update(customer=target)
         result["orders_moved"] = orders_moved
+        _log(f"Django Orders verschoben: {orders_moved}")
 
         # Move/merge addresses
+        _log(f"Starte Adress-Merge mit mapping: {address_mapping}")
         result["addresses_moved"] = self._merge_addresses(
             target=target,
             source=source,
             address_mapping=address_mapping,
+            _log=_log,
         )
+        _log(f"Adressen verschoben/gemergt: {result['addresses_moved']}")
+
+        # Check addresses after merge
+        tgt_addrs_after = list(target.addresses.all())
+        _log(f"Target Adressen nach Merge: {len(tgt_addrs_after)} — "
+             f"{[(a.pk, a.street, a.postal_code, a.city, a.api_id) for a in tgt_addrs_after]}")
+        src_addrs_after = list(source.addresses.all())
+        _log(f"Source Adressen nach Merge (sollte leer/reduziert sein): {len(src_addrs_after)} — "
+             f"{[(a.pk, a.street, a.postal_code, a.city) for a in src_addrs_after]}")
 
         # Move orders in Shopware
         if merge_shopware_orders and source.api_id and target.api_id:
+            _log(f"Shopware Orders verschieben: source_sw={source.api_id} -> target_sw={target.api_id}")
             sw_moved, sw_errors = self._move_shopware_orders(
                 target_sw_id=target.api_id,
                 source_sw_id=source.api_id,
             )
             result["shopware_orders_moved"] = sw_moved
             result["errors"].extend(sw_errors)
+            _log(f"Shopware Orders verschoben: {sw_moved}, Fehler: {sw_errors}")
+        else:
+            _log(f"Shopware Orders uebersprungen (merge_sw={merge_shopware_orders}, "
+                 f"source.api_id={source.api_id}, target.api_id={target.api_id})")
 
         # Update Shopware password/email if needed
         if password_winner == "source" and source.api_id and target.api_id:
+            _log("Kopiere Shopware-Login von source nach target")
             try:
                 self._copy_shopware_login(
                     from_sw_id=source.api_id,
                     to_sw_id=target.api_id,
                 )
+                _log("Shopware-Login kopiert")
             except Exception as exc:
                 result["errors"].append(f"Passwort-Kopie fehlgeschlagen: {exc}")
+                _log(f"Shopware-Login Fehler: {exc}")
+
+        # Delete source customer in Shopware
+        if source.api_id:
+            _log(f"Loesche Shopware-Quellkunde: {source.api_id}")
+            try:
+                from shopware.services import CustomerService
+                service = CustomerService()
+                service.request_delete(f"/customer/{source.api_id}")
+                result["shopware_source_deleted"] = True
+                _log("Shopware-Quellkunde geloescht")
+            except Exception as exc:
+                result["errors"].append(f"Shopware Quell-Kunde loeschen: {exc}")
+                result["shopware_source_deleted"] = False
+                _log(f"Shopware-Quellkunde Fehler: {exc}")
+        else:
+            _log("Shopware-Quellkunde: kein api_id, uebersprungen")
+
+        # Delete source customer in Microtech
+        _log(f"Loesche Microtech-Quellkunde: {source.erp_nr}")
+        try:
+            from microtech.services import (
+                MicrotechAdresseService,
+                MicrotechAnschriftService,
+                MicrotechAnsprechpartnerService,
+                microtech_connection,
+            )
+            with microtech_connection() as erp:
+                adresse = MicrotechAdresseService(erp=erp)
+                if adresse.find(source.erp_nr):
+                    anschrift = MicrotechAnschriftService(erp=erp)
+                    ansprechpartner = MicrotechAnsprechpartnerService(erp=erp)
+                    deleted_ans = 0
+                    if anschrift.set_range(from_range=[source.erp_nr, 0], to_range=[source.erp_nr, 999]):
+                        while not anschrift.range_eof():
+                            ans_nr = anschrift.get_field("AnsNr")
+                            if ans_nr is not None and ansprechpartner.set_range(
+                                from_range=[source.erp_nr, ans_nr, 0],
+                                to_range=[source.erp_nr, ans_nr, 999],
+                            ):
+                                while not ansprechpartner.range_eof():
+                                    ansprechpartner.delete()
+                            anschrift.delete()
+                            deleted_ans += 1
+                    adresse.delete()
+                    result["microtech_source_deleted"] = True
+                    _log(f"Microtech-Quellkunde geloescht ({deleted_ans} Anschriften)")
+                else:
+                    result["microtech_source_deleted"] = "not_found"
+                    _log("Microtech-Quellkunde: nicht gefunden")
+        except Exception as exc:
+            result["errors"].append(f"Microtech Quell-Kunde loeschen: {exc}")
+            result["microtech_source_deleted"] = False
+            _log(f"Microtech-Quellkunde Fehler: {exc}")
 
         # Delete source customer in Django
         source_label = f"{source.erp_nr} ({source.name})"
+        _log(f"Loesche Django-Quellkunde: {source_label}")
         source.delete()
-        logger.info("Customer merge: source {} deleted, target {}", source_label, target.erp_nr)
+        _log("Django-Quellkunde geloescht")
 
+        # Re-sync target to Microtech (push merged addresses)
+        _log(f"Sync target {target_erp_nr} nach Microtech")
+        try:
+            sync_svc = CustomerSyncDirectionService()
+            sync_svc._django_to_microtech(target_erp_nr)
+            result["microtech_target_synced"] = True
+            _log("Microtech-Ziel-Sync erfolgreich")
+        except Exception as exc:
+            result["errors"].append(f"Microtech Ziel-Sync: {exc}")
+            result["microtech_target_synced"] = False
+            _log(f"Microtech-Ziel-Sync Fehler: {exc}")
+
+        _log(f"FERTIG: result={result}")
         return result
 
     def _determine_password_winner(self, target: Customer, source: Customer) -> str:
@@ -330,24 +439,39 @@ class CustomerMergeService(BaseService):
         target: Customer,
         source: Customer,
         address_mapping: dict[str, str | None],
+        _log=None,
     ) -> int:
+        if _log is None:
+            _log = lambda msg: logger.info("MERGE| {}", msg)
+
         moved = 0
+        _log(f"_merge_addresses: mapping hat {len(address_mapping)} Eintraege")
         for src_addr_id_str, action in address_mapping.items():
+            _log(f"  Mapping: src_addr_id={src_addr_id_str}, action={action!r}")
             try:
                 src_addr = Address.objects.get(pk=int(src_addr_id_str), customer=source)
             except Address.DoesNotExist:
+                _log(f"  -> src_addr {src_addr_id_str} nicht gefunden bei source (pk={source.pk})")
                 continue
 
+            _log(f"  -> src_addr gefunden: pk={src_addr.pk}, street={src_addr.street}, "
+                 f"zip={src_addr.postal_code}, city={src_addr.city}, api_id={src_addr.api_id}")
+
             if action is None or action == "":
+                _log("  -> action=verwerfen, uebersprungen")
                 continue
             elif action == "new":
+                old_customer_pk = src_addr.customer_id
                 src_addr.customer = target
                 src_addr.erp_combined_id = None
                 src_addr.save()
                 moved += 1
+                _log(f"  -> als neue Adresse verschoben (customer {old_customer_pk} -> {target.pk})")
             else:
                 try:
                     tgt_addr = Address.objects.get(pk=int(action), customer=target)
+                    _log(f"  -> ueberschreibe target_addr pk={tgt_addr.pk} "
+                         f"(street={tgt_addr.street}, zip={tgt_addr.postal_code})")
                     for field in (
                         "name1", "name2", "name3", "department", "street",
                         "postal_code", "city", "country_code", "email",
@@ -357,8 +481,11 @@ class CustomerMergeService(BaseService):
                     tgt_addr.save()
                     src_addr.delete()
                     moved += 1
+                    _log(f"  -> target_addr aktualisiert, src_addr geloescht")
                 except Address.DoesNotExist:
+                    _log(f"  -> target_addr {action} nicht gefunden bei target (pk={target.pk})")
                     continue
+        _log(f"_merge_addresses fertig: {moved} verschoben/gemergt")
         return moved
 
     def _move_shopware_orders(
