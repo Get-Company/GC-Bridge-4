@@ -3,6 +3,12 @@ from django.http import HttpResponseRedirect
 from django.urls import reverse
 
 from core.admin import BaseAdmin, BaseTabularInline
+from microtech.forms import (
+    MicrotechOrderRuleActionForm,
+    MicrotechOrderRuleConditionForm,
+    action_example_for_field,
+    condition_example_for_field,
+)
 from microtech.models import (
     MicrotechOrderRule,
     MicrotechOrderRuleAction,
@@ -59,24 +65,42 @@ class MicrotechSettingsAdmin(SingletonAdmin):
 class MicrotechOrderRuleAdmin(BaseAdmin):
     class ConditionInline(BaseTabularInline):
         model = MicrotechOrderRuleCondition
+        form = MicrotechOrderRuleConditionForm
         fields = (
             "is_active",
             "priority",
             "source_field",
             "operator",
             "expected_value",
+            "value_example",
         )
+        readonly_fields = BaseTabularInline.readonly_fields + ("value_example",)
         extra = 0
+
+        @admin.display(description="Beispiel")
+        def value_example(self, obj):
+            if not obj:
+                return "-"
+            return condition_example_for_field(obj.source_field)
 
     class ActionInline(BaseTabularInline):
         model = MicrotechOrderRuleAction
+        form = MicrotechOrderRuleActionForm
         fields = (
             "is_active",
             "priority",
             "target_field",
             "target_value",
+            "value_example",
         )
+        readonly_fields = BaseTabularInline.readonly_fields + ("value_example",)
         extra = 0
+
+        @admin.display(description="Beispiel")
+        def value_example(self, obj):
+            if not obj:
+                return "-"
+            return action_example_for_field(obj.target_field)
 
     list_display = (
         "priority",
@@ -93,6 +117,9 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
     )
     ordering = ("priority", "id")
     inlines = (ConditionInline, ActionInline)
+
+    class Media:
+        js = ("microtech/js/order_rule_builder.js",)
 
     fieldsets = (
         (
@@ -111,6 +138,19 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
                 ),
             },
         ),
+        (
+            "Hinweise fuer Regelbuilder",
+            {
+                "fields": (),
+                "description": (
+                    "Kundentyp wird automatisch erkannt: Firma wenn Name1 wie Firmenname aussieht "
+                    "(kein Vorname/Nachname, keine Anrede), sonst Privat. "
+                    "Operator und Vergleichswerte sind typabhaengig (String, Integer, Bool, Decimal, Enum). "
+                    "Na1 Modus steuert den Empfaengertext in Anschriften: auto/firma_or_salutation/"
+                    "salutation_only/static. "
+                    "Zusatzposition Zahlungsart anlegen fuegt eine zusaetzliche Vorgangsposition "
+                    "mit payment_position_erp_nr hinzu (z. B. P fuer PayPal)."
+                ),
+            },
+        ),
     )
-
-
