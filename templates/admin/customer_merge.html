@@ -2,6 +2,23 @@
 {% load i18n %}
 
 {% block content %}
+<style>
+  @keyframes shimmer { to { background-position: -200% 0; } }
+  .cell-loading {
+    background: linear-gradient(90deg, transparent 25%, rgba(120,120,120,.08) 50%, transparent 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+  }
+  .dark .cell-loading {
+    background: linear-gradient(90deg, transparent 25%, rgba(255,255,255,.04) 50%, transparent 75%);
+    background-size: 200% 100%;
+  }
+  .toggle-section { max-height: 0; overflow: hidden; transition: max-height .25s ease; }
+  .toggle-section.open { max-height: 2000px; }
+  .toggle-btn .arrow { transition: transform .2s; display: inline-block; }
+  .toggle-btn.open .arrow { transform: rotate(90deg); }
+</style>
+
 <div class="flex flex-col gap-6" id="merge-app">
 
   {# -- Search bar --------------------------------------------------- #}
@@ -14,19 +31,18 @@
         placeholder="z.B. 10001, 10002">
       <button onclick="doSearch()" id="search-btn"
         class="px-4 py-2 bg-primary-600 text-white rounded text-sm font-medium
-               hover:bg-primary-700 transition flex items-center gap-2">
+               hover:bg-primary-700 transition flex items-center gap-2 disabled:opacity-50">
         <span class="material-symbols-outlined text-base">search</span>
         Suchen
       </button>
     </div>
-    <div id="search-status" class="mt-2 text-xs text-gray-500 dark:text-gray-400 hidden"></div>
   </div>
 
-  {# -- Results area ------------------------------------------------- #}
-  <div id="results-area" class="hidden">
+  {# -- Results table ------------------------------------------------ #}
+  <div id="results-area" class="hidden space-y-6">
 
-    {# -- 3-column comparison grid ----------------------------------- #}
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6" id="comparison-grid"></div>
+    {# rows get injected here #}
+    <div id="results-rows"></div>
 
     {# -- Merge panel ------------------------------------------------ #}
     <div id="merge-panel" class="hidden border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
@@ -48,11 +64,18 @@
           </div>
         </div>
 
-        <div id="password-info" class="hidden p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded text-sm"></div>
+        {# password winner — collapsible #}
+        <div id="password-info" class="hidden"></div>
 
+        {# address mapping — collapsible #}
         <div id="address-mapping-area" class="hidden">
-          <h3 class="text-sm font-medium mb-2">Adress-Zuordnung:</h3>
-          <div id="address-mapping-list" class="space-y-2"></div>
+          <button class="toggle-btn flex items-center gap-1 text-sm font-medium mb-2" onclick="toggleSection(this)">
+            <span class="arrow material-symbols-outlined text-xs">chevron_right</span>
+            Adress-Zuordnung
+          </button>
+          <div class="toggle-section">
+            <div id="address-mapping-list" class="space-y-2"></div>
+          </div>
         </div>
 
         <div class="flex items-center gap-3">
@@ -65,7 +88,7 @@
         <div class="flex gap-3">
           <button onclick="executeMerge()" id="merge-btn"
             class="px-4 py-2 bg-red-600 text-white rounded text-sm font-medium
-                   hover:bg-red-700 transition flex items-center gap-2">
+                   hover:bg-red-700 transition flex items-center gap-2 disabled:opacity-50">
             <span class="material-symbols-outlined text-base">merge</span>
             Merge ausfuehren
           </button>
@@ -73,222 +96,262 @@
         <div id="merge-result" class="hidden"></div>
       </div>
     </div>
-
-    {# -- ID editing panel ------------------------------------------- #}
-    <div id="id-panel" class="mt-4 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-      <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
-        <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300 flex items-center gap-2">
-          <span class="material-symbols-outlined text-base">edit</span>
-          IDs bearbeiten
-        </h2>
-      </div>
-      <div id="id-edit-list" class="p-4 space-y-3"></div>
-      <div id="id-result" class="px-4 pb-4 hidden"></div>
-    </div>
   </div>
 </div>
 
 <script>
 const CSRF = '{{ csrf_token }}';
 let searchData = {};
+let searchErps = [];
 
-function esc(str) {
-  const d = document.createElement('div');
-  d.textContent = str ?? '';
-  return d.innerHTML;
+/* ── helpers ─────────────────────────────────────────── */
+function esc(s) { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; }
+
+function toggleSection(btn) {
+  btn.classList.toggle('open');
+  const sec = btn.nextElementSibling;
+  sec.classList.toggle('open');
 }
 
+function loaderHtml() {
+  return `<div class="flex items-center gap-2 text-xs text-gray-400 py-6 justify-center cell-loading rounded">
+    <span class="material-symbols-outlined text-sm animate-spin">progress_activity</span>
+    Lade...
+  </div>`;
+}
+
+/* ── search ──────────────────────────────────────────── */
 async function doSearch() {
-  const input = document.getElementById('search-input').value.trim();
-  if (!input) return;
+  const raw = document.getElementById('search-input').value.trim();
+  if (!raw) return;
+  searchErps = raw.split(',').map(s => s.trim()).filter(Boolean);
+  if (!searchErps.length) return;
+
   const btn = document.getElementById('search-btn');
-  const status = document.getElementById('search-status');
   btn.disabled = true;
-  btn.innerHTML = '<span class="material-symbols-outlined text-base animate-spin">progress_activity</span> Suche...';
-  status.classList.remove('hidden');
-  status.textContent = 'Suche in Django, Shopware und Microtech...';
+
+  const area = document.getElementById('results-area');
+  area.classList.remove('hidden');
+
+  // init searchData + show skeleton
+  searchData = {};
+  searchErps.forEach(nr => { searchData[nr] = { shopware: null, django: null, microtech: null }; });
+  renderRows(true);
 
   try {
-    const resp = await fetch(`/admin/customer-merge/api/search/?erp_nrs=${encodeURIComponent(input)}`);
-    const data = await resp.json();
-    if (data.error) {
-      status.textContent = 'Fehler: ' + data.error;
-      return;
-    }
-    searchData = data.results;
-    renderResults();
-    status.classList.add('hidden');
+    const resp = await fetch(`/admin/customer-merge/api/search/?erp_nrs=${encodeURIComponent(raw)}`);
+    const json = await resp.json();
+    if (json.error) { alert(json.error); return; }
+    searchData = json.results;
+    renderRows(false);
+    setupMergePanel();
   } catch(e) {
-    status.textContent = 'Fehler: ' + e.message;
+    alert('Fehler: ' + e.message);
   } finally {
     btn.disabled = false;
-    btn.innerHTML = '<span class="material-symbols-outlined text-base">search</span> Suchen';
   }
 }
 
-function renderResults() {
-  const area = document.getElementById('results-area');
-  const grid = document.getElementById('comparison-grid');
-  area.classList.remove('hidden');
-  grid.innerHTML = '';
+/* ── render ──────────────────────────────────────────── */
+const SYSTEMS = [
+  { key: 'shopware',  label: 'Shopware',  icon: 'shopping_bag',            color: 'blue'   },
+  { key: 'django',    label: 'Django',     icon: 'database',               color: 'green'  },
+  { key: 'microtech', label: 'Microtech',  icon: 'precision_manufacturing', color: 'orange' },
+];
 
-  const erps = Object.keys(searchData);
-  if (erps.length === 0) return;
+function renderRows(loading) {
+  const container = document.getElementById('results-rows');
+  let html = '';
 
-  // Build columns: Django | Shopware | Microtech
-  const systems = [
-    {key: 'django', label: 'Django', icon: 'database', color: 'green'},
-    {key: 'shopware', label: 'Shopware', icon: 'shopping_bag', color: 'blue'},
-    {key: 'microtech', label: 'Microtech', icon: 'precision_manufacturing', color: 'orange'},
-  ];
+  searchErps.forEach(nr => {
+    html += `<div class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">`;
+    // Row header
+    html += `<div class="bg-gray-50 dark:bg-gray-800 px-4 py-2 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+      <span class="font-mono font-semibold text-sm">${esc(nr)}</span>
+      ${loading ? '<span class="material-symbols-outlined text-sm animate-spin text-gray-400">progress_activity</span>' : ''}
+    </div>`;
 
-  systems.forEach(sys => {
-    const col = document.createElement('div');
-    col.className = 'border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden';
-    let html = `
-      <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
-        <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300 flex items-center gap-2">
-          <span class="material-symbols-outlined text-base">${sys.icon}</span>
+    // 3-column grid
+    html += `<div class="grid grid-cols-1 lg:grid-cols-3 divide-y lg:divide-y-0 lg:divide-x divide-gray-200 dark:divide-gray-700">`;
+    SYSTEMS.forEach(sys => {
+      html += `<div class="flex flex-col">`;
+      // column header
+      html += `<div class="px-3 py-1.5 bg-gray-50/50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-700/50">
+        <span class="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 flex items-center gap-1">
+          <span class="material-symbols-outlined" style="font-size:12px">${sys.icon}</span>
           ${sys.label}
-        </h2>
-      </div>
-      <div class="divide-y divide-gray-100 dark:divide-gray-700">`;
-
-    erps.forEach(nr => {
-      const d = searchData[nr][sys.key];
-      html += renderCustomerCard(d, nr, sys.key);
+        </span>
+      </div>`;
+      // cell content
+      html += `<div class="p-3 flex-1" id="cell-${nr}-${sys.key}">`;
+      if (loading) {
+        html += loaderHtml();
+      } else {
+        html += renderCell(nr, sys.key);
+      }
+      html += `</div></div>`;
     });
+    html += `</div>`; // end grid
 
-    html += '</div>';
-    col.innerHTML = html;
-    grid.appendChild(col);
+    // ID editing row (inline, below the grid) — only when loaded
+    if (!loading && searchData[nr]?.django && !searchData[nr].django.error) {
+      html += renderIdRow(nr);
+    }
+
+    html += `</div>`; // end card
   });
 
-  // Setup merge & ID panels
-  if (erps.length >= 2) setupMergePanel(erps);
-  setupIdPanel(erps);
+  container.innerHTML = html;
 }
 
-function renderCustomerCard(data, erp_nr, system) {
-  if (!data) {
-    return `<div class="p-4 text-sm text-gray-400 dark:text-gray-500">
-      <span class="font-mono">${esc(erp_nr)}</span> — nicht gefunden
-    </div>`;
-  }
-  if (data.error) {
-    return `<div class="p-4 text-sm text-red-500">
-      <span class="font-mono">${esc(erp_nr)}</span> — Fehler: ${esc(data.error)}
-    </div>`;
-  }
+/* ── cell renderers ─────────────────────────────────── */
+function renderCell(nr, sys) {
+  const d = searchData[nr]?.[sys];
+  if (!d) return `<div class="text-xs text-gray-400 italic">nicht gefunden</div>`;
+  if (d.error) return `<div class="text-xs text-red-500">Fehler: ${esc(d.error)}</div>`;
 
-  let html = `<div class="p-4 space-y-2">`;
-  html += `<div class="flex items-center justify-between">
-    <span class="font-mono font-semibold text-sm">${esc(erp_nr)}</span>`;
-  if (system === 'shopware' && data.id) {
-    html += `<span class="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 font-mono">${esc(data.id.substring(0, 8))}...</span>`;
-  }
-  html += `</div>`;
-
-  if (system === 'django') {
-    html += `<div class="text-sm space-y-0.5">
-      <div><span class="text-gray-500 w-16 inline-block">Name:</span> ${esc(data.name)}</div>
-      <div><span class="text-gray-500 w-16 inline-block">E-Mail:</span> ${esc(data.email)}</div>
-      <div><span class="text-gray-500 w-16 inline-block">API-ID:</span> <span class="font-mono text-xs">${esc(data.api_id || '—')}</span></div>
-      <div><span class="text-gray-500 w-16 inline-block">USt-ID:</span> ${esc(data.vat_id || '—')}</div>
-    </div>`;
-    if (data.addresses && data.addresses.length) {
-      html += `<div class="mt-2"><span class="text-xs font-medium text-gray-500 uppercase">Adressen (${data.addresses.length})</span>`;
-      data.addresses.forEach(a => {
-        const flags = [];
-        if (a.is_shipping) flags.push('Liefer');
-        if (a.is_invoice) flags.push('Rechnung');
-        html += `<div class="ml-2 mt-1 text-xs border-l-2 border-gray-200 dark:border-gray-600 pl-2">
-          <div class="font-medium">${esc(a.name1)}${a.name2 ? ' / ' + esc(a.name2) : ''}</div>
-          <div>${esc(a.street)}, ${esc(a.postal_code)} ${esc(a.city)}</div>
-          ${a.email ? '<div>' + esc(a.email) + '</div>' : ''}
-          ${flags.length ? '<div class="text-primary-600 dark:text-primary-400">' + flags.join(', ') + '</div>' : ''}
-        </div>`;
-      });
-      html += `</div>`;
-    }
-    if (data.orders && data.orders.length) {
-      html += `<div class="mt-2"><span class="text-xs font-medium text-gray-500 uppercase">Bestellungen (${data.orders.length})</span>`;
-      data.orders.forEach(o => {
-        const date = o.purchase_date ? new Date(o.purchase_date).toLocaleDateString('de-DE') : '';
-        html += `<div class="ml-2 mt-1 text-xs border-l-2 border-gray-200 dark:border-gray-600 pl-2">
-          <span class="font-mono">${esc(o.order_number)}</span>
-          <span class="text-gray-400 mx-1">|</span>
-          ${esc(o.total_price)} EUR
-          <span class="text-gray-400 mx-1">|</span>
-          ${esc(o.order_state)}
-          ${date ? '<span class="text-gray-400 ml-1">' + date + '</span>' : ''}
-        </div>`;
-      });
-      html += `</div>`;
-    }
-  } else if (system === 'shopware') {
-    const name = [data.firstName, data.lastName].filter(Boolean).join(' ');
-    html += `<div class="text-sm space-y-0.5">
-      <div><span class="text-gray-500 w-16 inline-block">Name:</span> ${esc(data.company || name)}</div>
-      <div><span class="text-gray-500 w-16 inline-block">E-Mail:</span> ${esc(data.email)}</div>
-      ${data.lastLogin ? '<div><span class="text-gray-500 w-16 inline-block">Login:</span> ' + esc(data.lastLogin) + '</div>' : ''}
-      ${data.updatedAt ? '<div><span class="text-gray-500 w-16 inline-block">Update:</span> ' + esc(data.updatedAt) + '</div>' : ''}
-    </div>`;
-    if (data.addresses && data.addresses.length) {
-      html += `<div class="mt-2"><span class="text-xs font-medium text-gray-500 uppercase">Adressen (${data.addresses.length})</span>`;
-      data.addresses.forEach(a => {
-        const name = [a.firstName, a.lastName].filter(Boolean).join(' ');
-        html += `<div class="ml-2 mt-1 text-xs border-l-2 border-gray-200 dark:border-gray-600 pl-2">
-          <div class="font-medium">${esc(a.company || name)}</div>
-          <div>${esc(a.street)}, ${esc(a.zipcode)} ${esc(a.city)}</div>
-          ${a.email ? '<div>' + esc(a.email) + '</div>' : ''}
-        </div>`;
-      });
-      html += `</div>`;
-    }
-  } else {
-    html += `<div class="text-sm space-y-0.5">
-      <div><span class="text-gray-500 w-16 inline-block">Name:</span> ${esc(data.name)}</div>
-      <div><span class="text-gray-500 w-16 inline-block">E-Mail:</span> ${esc(data.email)}</div>
-      <div><span class="text-gray-500 w-16 inline-block">Status:</span> ${esc(data.status || '—')}</div>
-    </div>`;
-    if (data.addresses && data.addresses.length) {
-      html += `<div class="mt-2"><span class="text-xs font-medium text-gray-500 uppercase">Adressen (${data.addresses.length})</span>`;
-      data.addresses.forEach(a => {
-        html += `<div class="ml-2 mt-1 text-xs border-l-2 border-gray-200 dark:border-gray-600 pl-2">
-          <div class="font-medium">${esc(a.name1)}${a.name2 ? ' / ' + esc(a.name2) : ''}</div>
-          <div>${esc(a.street)}, ${esc(a.postal_code)} ${esc(a.city)}</div>
-          ${a.email ? '<div>' + esc(a.email) + '</div>' : ''}
-        </div>`;
-      });
-      html += `</div>`;
-    }
-  }
-
-  html += `</div>`;
-  return html;
+  if (sys === 'shopware')  return renderShopware(d);
+  if (sys === 'django')    return renderDjango(d);
+  return renderMicrotech(d);
 }
 
-function setupMergePanel(erps) {
+function renderShopware(d) {
+  const name = [d.firstName, d.lastName].filter(Boolean).join(' ');
+  let h = `<div class="space-y-1 text-xs">
+    <div class="flex justify-between items-start">
+      <span class="font-medium text-sm">${esc(d.company || name)}</span>
+      <span class="font-mono text-[10px] text-gray-400 shrink-0 ml-2" title="${esc(d.id)}">${esc((d.id||'').substring(0,8))}</span>
+    </div>
+    <div class="text-gray-500">${esc(d.email)}</div>`;
+  if (d.lastLogin) h += `<div class="text-gray-400">Login: ${esc(d.lastLogin)}</div>`;
+  if (d.updatedAt) h += `<div class="text-gray-400">Update: ${esc(d.updatedAt)}</div>`;
+  h += `</div>`;
+
+  // Addresses — collapsible
+  if (d.addresses?.length) {
+    h += renderToggle('Adressen', d.addresses.length, d.addresses.map(a => {
+      const n = [a.firstName, a.lastName].filter(Boolean).join(' ');
+      return `<div class="border-l-2 border-blue-200 dark:border-blue-700 pl-2 py-0.5">
+        <div class="font-medium">${esc(a.company || n)}</div>
+        <div>${esc(a.street)}, ${esc(a.zipcode)} ${esc(a.city)}</div>
+        ${a.countryIso ? `<div class="text-gray-400">${esc(a.countryIso)}</div>` : ''}
+      </div>`;
+    }).join(''));
+  }
+  return h;
+}
+
+function renderDjango(d) {
+  let h = `<div class="space-y-1 text-xs">
+    <div class="font-medium text-sm">${esc(d.name)}</div>
+    <div class="text-gray-500">${esc(d.email)}</div>
+    ${d.vat_id ? `<div class="text-gray-400">USt-ID: ${esc(d.vat_id)}</div>` : ''}
+    ${d.api_id ? `<div class="text-gray-400 font-mono">SW: ${esc((d.api_id||'').substring(0,12))}</div>` : ''}
+  </div>`;
+
+  // Addresses — collapsible
+  if (d.addresses?.length) {
+    h += renderToggle('Adressen', d.addresses.length, d.addresses.map(a => {
+      const flags = [];
+      if (a.is_shipping) flags.push('<span class="text-green-600 dark:text-green-400">Liefer</span>');
+      if (a.is_invoice)  flags.push('<span class="text-blue-600 dark:text-blue-400">Rechnung</span>');
+      return `<div class="border-l-2 border-green-200 dark:border-green-700 pl-2 py-0.5">
+        <div class="font-medium">${esc(a.name1)}${a.name2 ? ' / '+esc(a.name2) : ''}</div>
+        <div>${esc(a.street)}, ${esc(a.postal_code)} ${esc(a.city)}</div>
+        ${a.email ? `<div>${esc(a.email)}</div>` : ''}
+        ${flags.length ? `<div>${flags.join(' &middot; ')}</div>` : ''}
+      </div>`;
+    }).join(''));
+  }
+
+  // Orders — collapsible
+  if (d.orders?.length) {
+    h += renderToggle('Bestellungen', d.orders.length, d.orders.map(o => {
+      const dt = o.purchase_date ? new Date(o.purchase_date).toLocaleDateString('de-DE') : '';
+      return `<div class="border-l-2 border-green-200 dark:border-green-700 pl-2 py-0.5 flex items-center gap-2 flex-wrap">
+        <span class="font-mono">${esc(o.order_number)}</span>
+        <span class="text-gray-400">${esc(o.total_price)}&nbsp;EUR</span>
+        <span class="px-1 py-0.5 rounded text-[10px] bg-gray-100 dark:bg-gray-700">${esc(o.order_state)}</span>
+        ${dt ? `<span class="text-gray-400">${dt}</span>` : ''}
+      </div>`;
+    }).join(''));
+  }
+  return h;
+}
+
+function renderMicrotech(d) {
+  let h = `<div class="space-y-1 text-xs">
+    <div class="font-medium text-sm">${esc(d.name)}</div>
+    <div class="text-gray-500">${esc(d.email)}</div>
+    ${d.status ? `<div class="text-gray-400">${esc(d.status)}</div>` : ''}
+  </div>`;
+
+  if (d.addresses?.length) {
+    h += renderToggle('Adressen', d.addresses.length, d.addresses.map(a => {
+      return `<div class="border-l-2 border-orange-200 dark:border-orange-700 pl-2 py-0.5">
+        <div class="font-medium">${esc(a.name1)}${a.name2 ? ' / '+esc(a.name2) : ''}</div>
+        <div>${esc(a.street)}, ${esc(a.postal_code)} ${esc(a.city)}</div>
+        ${a.email ? `<div>${esc(a.email)}</div>` : ''}
+      </div>`;
+    }).join(''));
+  }
+  return h;
+}
+
+function renderToggle(label, count, content) {
+  const id = 'tgl-' + Math.random().toString(36).slice(2, 8);
+  return `<div class="mt-2">
+    <button class="toggle-btn text-[10px] font-semibold uppercase tracking-wider text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex items-center gap-0.5" onclick="toggleSection(this)">
+      <span class="arrow material-symbols-outlined" style="font-size:12px">chevron_right</span>
+      ${esc(label)} (${count})
+    </button>
+    <div class="toggle-section">
+      <div class="mt-1 space-y-1 text-xs">${content}</div>
+    </div>
+  </div>`;
+}
+
+/* ── ID editing (inline per row) ─────────────────────── */
+function renderIdRow(nr) {
+  const d = searchData[nr].django;
+  return `<div class="px-4 py-2 bg-gray-50/30 dark:bg-gray-800/30 border-t border-gray-100 dark:border-gray-700/50 flex items-center gap-4 flex-wrap text-xs">
+    <span class="text-gray-400 font-medium">IDs:</span>
+    <div class="flex items-center gap-1.5">
+      <label class="text-gray-500">ERP-Nr</label>
+      <input type="text" id="erp-nr-${d.id}" value="${esc(d.erp_nr)}"
+        class="border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-xs bg-white dark:bg-gray-800 w-24 font-mono">
+      <button onclick="updateId(${d.id}, 'update_erp_nr', 'erp-nr-${d.id}')"
+        class="px-2 py-1 bg-primary-600 text-white rounded text-[10px] hover:bg-primary-700 transition">Speichern</button>
+      <span id="erp-nr-status-${d.id}" class="text-[10px]"></span>
+    </div>
+    <div class="flex items-center gap-1.5">
+      <label class="text-gray-500">Shopware-ID</label>
+      <input type="text" id="api-id-${d.id}" value="${esc(d.api_id)}"
+        class="border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-xs bg-white dark:bg-gray-800 w-64 font-mono"
+        placeholder="UUID">
+      <button onclick="updateId(${d.id}, 'update_shopware_id', 'api-id-${d.id}')"
+        class="px-2 py-1 bg-primary-600 text-white rounded text-[10px] hover:bg-primary-700 transition">Speichern</button>
+      <span id="api-id-status-${d.id}" class="text-[10px]"></span>
+    </div>
+  </div>`;
+}
+
+/* ── merge ───────────────────────────────────────────── */
+function setupMergePanel() {
   const panel = document.getElementById('merge-panel');
+  const djangoErps = searchErps.filter(nr => searchData[nr]?.django && !searchData[nr].django.error);
+  if (djangoErps.length < 2) { panel.classList.add('hidden'); return; }
+
+  panel.classList.remove('hidden');
   const target = document.getElementById('merge-target');
   const source = document.getElementById('merge-source');
 
-  // Only show merge if at least 2 customers found in Django
-  const djangoErps = erps.filter(nr => searchData[nr].django && !searchData[nr].django.error);
-  if (djangoErps.length < 2) {
-    panel.classList.add('hidden');
-    return;
-  }
-
-  panel.classList.remove('hidden');
   target.innerHTML = djangoErps.map(nr =>
     `<option value="${esc(nr)}">${esc(nr)} — ${esc(searchData[nr].django.name)}</option>`
   ).join('');
   source.innerHTML = djangoErps.map((nr, i) =>
-    `<option value="${esc(nr)}" ${i === 1 ? 'selected' : ''}>${esc(nr)} — ${esc(searchData[nr].django.name)}</option>`
+    `<option value="${esc(nr)}" ${i===1?'selected':''}>${esc(nr)} — ${esc(searchData[nr].django.name)}</option>`
   ).join('');
-
   updateMergeUI();
 }
 
@@ -296,60 +359,55 @@ function updateMergeUI() {
   const targetNr = document.getElementById('merge-target').value;
   const sourceNr = document.getElementById('merge-source').value;
 
+  const pwInfo = document.getElementById('password-info');
+  const addrArea = document.getElementById('address-mapping-area');
+
   if (!targetNr || !sourceNr || targetNr === sourceNr) {
-    document.getElementById('address-mapping-area').classList.add('hidden');
-    document.getElementById('password-info').classList.add('hidden');
+    pwInfo.classList.add('hidden');
+    addrArea.classList.add('hidden');
     return;
   }
 
-  const targetData = searchData[targetNr]?.django;
-  const sourceData = searchData[sourceNr]?.django;
-  if (!targetData || !sourceData) return;
+  const td = searchData[targetNr]?.django;
+  const sd = searchData[sourceNr]?.django;
+  if (!td || !sd) return;
 
-  // Password info
-  const pwInfo = document.getElementById('password-info');
-  const targetSw = searchData[targetNr]?.shopware;
-  const sourceSw = searchData[sourceNr]?.shopware;
-  if (targetSw && sourceSw && !targetSw.error && !sourceSw.error) {
-    const tUp = targetSw.updatedAt || '';
-    const sUp = sourceSw.updatedAt || '';
-    const winner = sUp > tUp ? sourceNr : targetNr;
-    pwInfo.innerHTML = `<span class="material-symbols-outlined text-base align-middle mr-1">key</span>
-      Das aktuellere Passwort stammt von Kunde <strong>${esc(winner)}</strong>.
-      Login-E-Mail wird bei Bedarf uebernommen.`;
+  // Password winner
+  const tsw = searchData[targetNr]?.shopware;
+  const ssw = searchData[sourceNr]?.shopware;
+  if (tsw && ssw && !tsw.error && !ssw.error) {
+    const winner = (ssw.updatedAt||'') > (tsw.updatedAt||'') ? sourceNr : targetNr;
+    pwInfo.innerHTML = `<div class="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded text-sm flex items-center gap-2">
+      <span class="material-symbols-outlined text-base">key</span>
+      Aktuelleres Passwort: <strong>${esc(winner)}</strong> — Login-E-Mail wird uebernommen.
+    </div>`;
     pwInfo.classList.remove('hidden');
   } else {
     pwInfo.classList.add('hidden');
   }
 
   // Address mapping
-  const area = document.getElementById('address-mapping-area');
+  const srcAddrs = sd.addresses || [];
+  if (!srcAddrs.length) { addrArea.classList.add('hidden'); return; }
+
+  addrArea.classList.remove('hidden');
+  const tgtAddrs = td.addresses || [];
   const list = document.getElementById('address-mapping-list');
-  const srcAddresses = sourceData.addresses || [];
-
-  if (srcAddresses.length === 0) {
-    area.classList.add('hidden');
-    return;
-  }
-
-  area.classList.remove('hidden');
-  const tgtAddresses = targetData.addresses || [];
-
   let html = '';
-  srcAddresses.forEach(sa => {
-    const srcLabel = `${sa.name1 || ''} — ${sa.street || ''}, ${sa.postal_code || ''} ${sa.city || ''}`;
-    html += `<div class="flex items-center gap-3 text-sm flex-wrap">
-      <div class="flex-1 min-w-48 border border-gray-200 dark:border-gray-600 rounded px-3 py-2 bg-gray-50 dark:bg-gray-800">
-        <div class="font-medium text-xs text-gray-500">Quell-Adresse (${esc(sourceNr)})</div>
-        <div>${esc(srcLabel)}</div>
+  srcAddrs.forEach(sa => {
+    const lbl = `${sa.name1||''} — ${sa.street||''}, ${sa.postal_code||''} ${sa.city||''}`;
+    html += `<div class="flex items-center gap-2 text-sm flex-wrap">
+      <div class="flex-1 min-w-44 border border-gray-200 dark:border-gray-600 rounded px-3 py-2 bg-gray-50 dark:bg-gray-800 text-xs">
+        <div class="text-[10px] text-gray-400 mb-0.5">Quelle (${esc(sourceNr)})</div>
+        ${esc(lbl)}
       </div>
-      <span class="material-symbols-outlined text-gray-400">arrow_forward</span>
-      <select data-src-addr-id="${sa.id}" class="addr-mapping-select flex-1 min-w-48 border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm bg-white dark:bg-gray-800">
+      <span class="material-symbols-outlined text-gray-400 text-sm">arrow_forward</span>
+      <select data-src-addr-id="${sa.id}" class="addr-mapping-select flex-1 min-w-44 border border-gray-300 dark:border-gray-600 rounded px-2 py-2 text-xs bg-white dark:bg-gray-800">
         <option value="new">Als neue Adresse uebernehmen</option>
         <option value="">Verwerfen</option>`;
-    tgtAddresses.forEach(ta => {
-      const tgtLabel = `${ta.name1 || ''} — ${ta.street || ''}, ${ta.postal_code || ''} ${ta.city || ''}`;
-      html += `<option value="${ta.id}">Ueberschreiben: ${esc(tgtLabel)}</option>`;
+    tgtAddrs.forEach(ta => {
+      const tl = `${ta.name1||''} — ${ta.street||''}, ${ta.postal_code||''} ${ta.city||''}`;
+      html += `<option value="${ta.id}">Ueberschreiben: ${esc(tl)}</option>`;
     });
     html += `</select></div>`;
   });
@@ -359,140 +417,79 @@ function updateMergeUI() {
 async function executeMerge() {
   const targetNr = document.getElementById('merge-target').value;
   const sourceNr = document.getElementById('merge-source').value;
-
-  if (!targetNr || !sourceNr || targetNr === sourceNr) {
-    alert('Bitte unterschiedliche Ziel- und Quell-Kunden waehlen.');
-    return;
-  }
-
-  if (!confirm(`Kunde ${sourceNr} wird in ${targetNr} zusammengefuehrt und anschliessend geloescht. Fortfahren?`)) {
-    return;
-  }
+  if (!targetNr || !sourceNr || targetNr === sourceNr) { alert('Bitte unterschiedliche Kunden waehlen.'); return; }
+  if (!confirm(`Kunde ${sourceNr} wird in ${targetNr} zusammengefuehrt und geloescht. Fortfahren?`)) return;
 
   const btn = document.getElementById('merge-btn');
-  const resultDiv = document.getElementById('merge-result');
+  const res = document.getElementById('merge-result');
   btn.disabled = true;
   btn.innerHTML = '<span class="material-symbols-outlined text-base animate-spin">progress_activity</span> Merge...';
 
-  const addressMapping = {};
-  document.querySelectorAll('.addr-mapping-select').forEach(sel => {
-    addressMapping[sel.dataset.srcAddrId] = sel.value || null;
-  });
+  const mapping = {};
+  document.querySelectorAll('.addr-mapping-select').forEach(s => { mapping[s.dataset.srcAddrId] = s.value || null; });
 
   try {
     const resp = await fetch('/admin/customer-merge/api/merge/', {
       method: 'POST',
-      headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF},
+      headers: {'Content-Type':'application/json','X-CSRFToken':CSRF},
       body: JSON.stringify({
-        target_erp_nr: targetNr,
-        source_erp_nr: sourceNr,
-        address_mapping: addressMapping,
+        target_erp_nr: targetNr, source_erp_nr: sourceNr,
+        address_mapping: mapping,
         merge_shopware_orders: document.getElementById('merge-sw-orders').checked,
       }),
     });
     const data = await resp.json();
-    resultDiv.classList.remove('hidden');
-
+    res.classList.remove('hidden');
     if (data.error) {
-      resultDiv.innerHTML = `<div class="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-sm text-red-700 dark:text-red-300">${esc(data.error)}</div>`;
+      res.innerHTML = `<div class="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-sm text-red-600 dark:text-red-400">${esc(data.error)}</div>`;
     } else {
-      let msg = `<div class="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded text-sm text-green-700 dark:text-green-300">
-        Merge erfolgreich!
-        Bestellungen verschoben: ${data.orders_moved},
-        Adressen verschoben: ${data.addresses_moved}`;
-      if (data.shopware_orders_moved) msg += `, Shopware-Bestellungen: ${data.shopware_orders_moved}`;
-      if (data.password_source) msg += `, Passwort-Quelle: ${data.password_source}`;
-      if (data.errors && data.errors.length) {
-        msg += `<div class="mt-2 text-yellow-700 dark:text-yellow-300">Warnungen:<ul class="list-disc ml-4">`;
-        data.errors.forEach(e => msg += `<li>${esc(e)}</li>`);
-        msg += `</ul></div>`;
+      let m = `Merge erfolgreich! Bestellungen: ${data.orders_moved}, Adressen: ${data.addresses_moved}`;
+      if (data.shopware_orders_moved) m += `, SW-Bestellungen: ${data.shopware_orders_moved}`;
+      let w = '';
+      if (data.errors?.length) {
+        w = `<div class="mt-1 text-yellow-600 dark:text-yellow-400 text-xs">${data.errors.map(e=>'&bull; '+esc(e)).join('<br>')}</div>`;
       }
-      msg += `</div>`;
-      resultDiv.innerHTML = msg;
-      // Re-search to refresh data
-      setTimeout(() => doSearch(), 1000);
+      res.innerHTML = `<div class="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded text-sm text-green-700 dark:text-green-400">${esc(m)}${w}</div>`;
+      setTimeout(doSearch, 1000);
     }
   } catch(e) {
-    resultDiv.classList.remove('hidden');
-    resultDiv.innerHTML = `<div class="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-sm text-red-700 dark:text-red-300">${esc(e.message)}</div>`;
+    res.classList.remove('hidden');
+    res.innerHTML = `<div class="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-sm text-red-600">${esc(e.message)}</div>`;
   } finally {
     btn.disabled = false;
     btn.innerHTML = '<span class="material-symbols-outlined text-base">merge</span> Merge ausfuehren';
   }
 }
 
-function setupIdPanel(erps) {
-  const list = document.getElementById('id-edit-list');
-  const djangoErps = erps.filter(nr => searchData[nr].django && !searchData[nr].django.error);
-  if (!djangoErps.length) {
-    list.innerHTML = '<div class="text-sm text-gray-400">Keine Django-Kunden gefunden.</div>';
-    return;
-  }
-
-  let html = '';
-  djangoErps.forEach(nr => {
-    const d = searchData[nr].django;
-    html += `<div class="p-3 border border-gray-200 dark:border-gray-600 rounded space-y-2">
-      <div class="font-medium text-sm">${esc(nr)} — ${esc(d.name)}</div>
-      <div class="flex items-center gap-2 flex-wrap">
-        <label class="text-xs text-gray-500 w-24">ERP-Nr:</label>
-        <input type="text" id="erp-nr-${d.id}" value="${esc(d.erp_nr)}"
-          class="border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm bg-white dark:bg-gray-800 w-32">
-        <button onclick="updateId(${d.id}, 'update_erp_nr', 'erp-nr-${d.id}')"
-          class="px-3 py-1 bg-primary-600 text-white rounded text-xs hover:bg-primary-700 transition">
-          Speichern
-        </button>
-        <span id="erp-nr-status-${d.id}" class="text-xs"></span>
-      </div>
-      <div class="flex items-center gap-2 flex-wrap">
-        <label class="text-xs text-gray-500 w-24">Shopware-ID:</label>
-        <input type="text" id="api-id-${d.id}" value="${esc(d.api_id)}"
-          class="border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-sm bg-white dark:bg-gray-800 font-mono w-72"
-          placeholder="Shopware UUID">
-        <button onclick="updateId(${d.id}, 'update_shopware_id', 'api-id-${d.id}')"
-          class="px-3 py-1 bg-primary-600 text-white rounded text-xs hover:bg-primary-700 transition">
-          Speichern
-        </button>
-        <span id="api-id-status-${d.id}" class="text-xs"></span>
-      </div>
-    </div>`;
-  });
-  list.innerHTML = html;
-}
-
+/* ── ID update ───────────────────────────────────────── */
 async function updateId(customerId, action, inputId) {
   const input = document.getElementById(inputId);
-  const statusId = inputId.replace('erp-nr-', 'erp-nr-status-').replace('api-id-', 'api-id-status-');
+  const statusId = inputId.replace('erp-nr-','erp-nr-status-').replace('api-id-','api-id-status-');
   const status = document.getElementById(statusId);
+  status.textContent = '...';
+  status.className = 'text-[10px] text-gray-400';
 
   try {
     const resp = await fetch('/admin/customer-merge/api/update-ids/', {
       method: 'POST',
-      headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF},
-      body: JSON.stringify({
-        action: action,
-        customer_id: customerId,
-        value: input.value,
-      }),
+      headers: {'Content-Type':'application/json','X-CSRFToken':CSRF},
+      body: JSON.stringify({ action, customer_id: customerId, value: input.value }),
     });
     const data = await resp.json();
     if (data.error) {
       status.textContent = data.error;
-      status.className = 'text-xs text-red-500';
+      status.className = 'text-[10px] text-red-500';
     } else {
-      status.textContent = 'Gespeichert!';
-      status.className = 'text-xs text-green-500';
+      status.textContent = 'Gespeichert';
+      status.className = 'text-[10px] text-green-500';
       setTimeout(() => { status.textContent = ''; }, 3000);
     }
   } catch(e) {
     status.textContent = e.message;
-    status.className = 'text-xs text-red-500';
+    status.className = 'text-[10px] text-red-500';
   }
 }
 
-// Enter key triggers search
-document.getElementById('search-input').addEventListener('keydown', e => {
-  if (e.key === 'Enter') doSearch();
-});
+document.getElementById('search-input').addEventListener('keydown', e => { if (e.key==='Enter') doSearch(); });
 </script>
 {% endblock %}

@@ -63,18 +63,24 @@ class CustomerMergeSearchService(BaseService):
                 return None
             customer = data[0]
             attrs = customer.get("attributes") or customer
-            addresses_raw = (
-                (attrs.get("addresses") or {}).get("data")
-                or attrs.get("addresses")
-                or []
-            )
-            if isinstance(addresses_raw, dict):
-                addresses_raw = list(addresses_raw.values())
+            addresses_field = attrs.get("addresses")
+            if isinstance(addresses_field, dict):
+                addresses_raw = addresses_field.get("data") or list(addresses_field.values())
+            elif isinstance(addresses_field, list):
+                addresses_raw = addresses_field
+            else:
+                addresses_raw = []
             addresses = []
-            for addr in (addresses_raw or []):
+            for addr in addresses_raw:
+                if not isinstance(addr, dict):
+                    continue
                 a = addr.get("attributes") or addr
-                country_data = (a.get("country") or {}).get("data") or a.get("country") or {}
-                country_attrs = country_data.get("attributes") or country_data
+                country_field = a.get("country")
+                if isinstance(country_field, dict):
+                    country_data = country_field.get("data") or country_field
+                else:
+                    country_data = {}
+                country_attrs = country_data.get("attributes") or country_data if isinstance(country_data, dict) else {}
                 addresses.append({
                     "id": addr.get("id") or a.get("id", ""),
                     "firstName": a.get("firstName", ""),
