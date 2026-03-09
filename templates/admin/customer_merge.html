@@ -5,18 +5,21 @@
 <style>
   @keyframes shimmer { to { background-position: -200% 0; } }
   .cell-loading {
-    background: linear-gradient(90deg, transparent 25%, rgba(120,120,120,.08) 50%, transparent 75%);
+    background: linear-gradient(90deg, transparent 25%, rgba(120,120,120,.06) 50%, transparent 75%);
     background-size: 200% 100%;
     animation: shimmer 1.5s infinite;
   }
   .dark .cell-loading {
-    background: linear-gradient(90deg, transparent 25%, rgba(255,255,255,.04) 50%, transparent 75%);
+    background: linear-gradient(90deg, transparent 25%, rgba(255,255,255,.03) 50%, transparent 75%);
     background-size: 200% 100%;
   }
-  .toggle-section { max-height: 0; overflow: hidden; transition: max-height .25s ease; }
-  .toggle-section.open { max-height: 2000px; }
+  .toggle-section { max-height: 0; overflow: hidden; transition: max-height .3s ease; }
+  .toggle-section.open { max-height: 4000px; }
   .toggle-btn .arrow { transition: transform .2s; display: inline-block; }
   .toggle-btn.open .arrow { transform: rotate(90deg); }
+  /* Highlight diffs: cells that differ from the first found system */
+  .diff-highlight { background: rgba(251,191,36,.1); }
+  .dark .diff-highlight { background: rgba(251,191,36,.06); }
 </style>
 
 <div class="flex flex-col gap-6" id="merge-app">
@@ -38,64 +41,10 @@
     </div>
   </div>
 
-  {# -- Results table ------------------------------------------------ #}
-  <div id="results-area" class="hidden space-y-6">
-
-    {# rows get injected here #}
+  {# -- Results area ------------------------------------------------- #}
+  <div id="results-area" class="hidden space-y-4">
     <div id="results-rows"></div>
-
-    {# -- Merge panel ------------------------------------------------ #}
-    <div id="merge-panel" class="hidden border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-      <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
-        <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300 flex items-center gap-2">
-          <span class="material-symbols-outlined text-base">merge</span>
-          Kunden zusammenfuehren
-        </h2>
-      </div>
-      <div class="p-4 space-y-4">
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label class="block text-xs font-medium mb-1">Ziel-Kunde (bleibt erhalten):</label>
-            <select id="merge-target" class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm bg-white dark:bg-gray-800" onchange="updateMergeUI()"></select>
-          </div>
-          <div>
-            <label class="block text-xs font-medium mb-1">Quell-Kunde (wird geloescht):</label>
-            <select id="merge-source" class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm bg-white dark:bg-gray-800" onchange="updateMergeUI()"></select>
-          </div>
-        </div>
-
-        {# password winner — collapsible #}
-        <div id="password-info" class="hidden"></div>
-
-        {# address mapping — collapsible #}
-        <div id="address-mapping-area" class="hidden">
-          <button class="toggle-btn flex items-center gap-1 text-sm font-medium mb-2" onclick="toggleSection(this)">
-            <span class="arrow material-symbols-outlined text-xs">chevron_right</span>
-            Adress-Zuordnung
-          </button>
-          <div class="toggle-section">
-            <div id="address-mapping-list" class="space-y-2"></div>
-          </div>
-        </div>
-
-        <div class="flex items-center gap-3">
-          <label class="flex items-center gap-2 text-sm">
-            <input type="checkbox" id="merge-sw-orders" checked class="rounded">
-            Bestellungen in Shopware uebertragen
-          </label>
-        </div>
-
-        <div class="flex gap-3">
-          <button onclick="executeMerge()" id="merge-btn"
-            class="px-4 py-2 bg-red-600 text-white rounded text-sm font-medium
-                   hover:bg-red-700 transition flex items-center gap-2 disabled:opacity-50">
-            <span class="material-symbols-outlined text-base">merge</span>
-            Merge ausfuehren
-          </button>
-        </div>
-        <div id="merge-result" class="hidden"></div>
-      </div>
-    </div>
+    <div id="merge-section"></div>
   </div>
 </div>
 
@@ -104,38 +53,89 @@ const CSRF = '{{ csrf_token }}';
 let searchData = {};
 let searchErps = [];
 
-/* ── helpers ─────────────────────────────────────────── */
-function esc(s) { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; }
+const SYSTEMS = [
+  { key: 'shopware',  label: 'Shopware',  icon: 'shopping_bag',            accent: 'blue'   },
+  { key: 'django',    label: 'Django',     icon: 'database',               accent: 'green'  },
+  { key: 'microtech', label: 'Microtech',  icon: 'precision_manufacturing', accent: 'orange' },
+];
 
-function toggleSection(btn) {
-  btn.classList.toggle('open');
-  const sec = btn.nextElementSibling;
-  sec.classList.toggle('open');
+/* ── helpers ──────────────────────────────────────────── */
+function esc(s) { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; }
+function toggleSection(btn) { btn.classList.toggle('open'); btn.nextElementSibling.classList.toggle('open'); }
+function spinner() { return '<span class="material-symbols-outlined text-sm animate-spin">progress_activity</span>'; }
+function loaderCell() {
+  return `<div class="flex items-center gap-2 text-xs text-gray-400 py-8 justify-center cell-loading rounded">${spinner()} Lade...</div>`;
 }
 
-function loaderHtml() {
-  return `<div class="flex items-center gap-2 text-xs text-gray-400 py-6 justify-center cell-loading rounded">
-    <span class="material-symbols-outlined text-sm animate-spin">progress_activity</span>
-    Lade...
-  </div>`;
+/* ── Normalize data into common format per system ───── */
+function normalize(d, sys) {
+  if (!d || d.error) return null;
+  if (sys === 'shopware') {
+    const name = [d.firstName, d.lastName].filter(Boolean).join(' ');
+    return {
+      name: d.company || name || '',
+      email: d.email || '',
+      systemId: d.id || '',
+      extra: [
+        d.lastLogin ? `Login: ${d.lastLogin}` : '',
+        d.updatedAt ? `Update: ${d.updatedAt}` : '',
+      ].filter(Boolean),
+      addresses: (d.addresses || []).map(a => {
+        const n = [a.firstName, a.lastName].filter(Boolean).join(' ');
+        return { label: a.company || n, street: a.street||'', zip: a.zipcode||'', city: a.city||'', country: a.countryIso||'', email: a.email||'', flags: [] };
+      }),
+      orders: [],
+    };
+  }
+  if (sys === 'django') {
+    return {
+      name: d.name || '',
+      email: d.email || '',
+      systemId: d.api_id || '',
+      extra: [
+        d.vat_id ? `USt-ID: ${d.vat_id}` : '',
+      ].filter(Boolean),
+      addresses: (d.addresses || []).map(a => {
+        const flags = [];
+        if (a.is_shipping) flags.push('Liefer');
+        if (a.is_invoice) flags.push('Rechnung');
+        return { label: [a.name1, a.name2].filter(Boolean).join(' / '), street: a.street||'', zip: a.postal_code||'', city: a.city||'', country: a.country_code||'', email: a.email||'', flags };
+      }),
+      orders: (d.orders || []).map(o => ({
+        nr: o.order_number||'', total: o.total_price||'', state: o.order_state||'',
+        date: o.purchase_date ? new Date(o.purchase_date).toLocaleDateString('de-DE') : '',
+      })),
+    };
+  }
+  // microtech
+  return {
+    name: d.name || '',
+    email: d.email || '',
+    systemId: d.erp_id != null ? String(d.erp_id) : '',
+    extra: [
+      d.status ? `Status: ${d.status}` : '',
+    ].filter(Boolean),
+    addresses: (d.addresses || []).map(a => ({
+      label: [a.name1, a.name2].filter(Boolean).join(' / '),
+      street: a.street||'', zip: a.postal_code||'', city: a.city||'',
+      country: a.country_code||'', email: a.email||'', flags: [],
+    })),
+    orders: [],
+  };
 }
 
 /* ── search ──────────────────────────────────────────── */
 async function doSearch() {
   const raw = document.getElementById('search-input').value.trim();
   if (!raw) return;
-  searchErps = raw.split(',').map(s => s.trim()).filter(Boolean);
+  searchErps = [...new Set(raw.split(',').map(s => s.trim()).filter(Boolean))];
   if (!searchErps.length) return;
 
-  const btn = document.getElementById('search-btn');
-  btn.disabled = true;
+  document.getElementById('search-btn').disabled = true;
+  document.getElementById('results-area').classList.remove('hidden');
 
-  const area = document.getElementById('results-area');
-  area.classList.remove('hidden');
-
-  // init searchData + show skeleton
   searchData = {};
-  searchErps.forEach(nr => { searchData[nr] = { shopware: null, django: null, microtech: null }; });
+  searchErps.forEach(nr => { searchData[nr] = {}; });
   renderRows(true);
 
   try {
@@ -144,286 +144,368 @@ async function doSearch() {
     if (json.error) { alert(json.error); return; }
     searchData = json.results;
     renderRows(false);
-    setupMergePanel();
+    renderMergeSection();
   } catch(e) {
     alert('Fehler: ' + e.message);
   } finally {
-    btn.disabled = false;
+    document.getElementById('search-btn').disabled = false;
   }
 }
 
-/* ── render ──────────────────────────────────────────── */
-const SYSTEMS = [
-  { key: 'shopware',  label: 'Shopware',  icon: 'shopping_bag',            color: 'blue'   },
-  { key: 'django',    label: 'Django',     icon: 'database',               color: 'green'  },
-  { key: 'microtech', label: 'Microtech',  icon: 'precision_manufacturing', color: 'orange' },
-];
-
+/* ── render rows ─────────────────────────────────────── */
 function renderRows(loading) {
   const container = document.getElementById('results-rows');
   let html = '';
 
   searchErps.forEach(nr => {
-    html += `<div class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">`;
+    html += `<div class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden mb-4" id="row-${esc(nr)}">`;
+
     // Row header
-    html += `<div class="bg-gray-50 dark:bg-gray-800 px-4 py-2 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+    html += `<div class="bg-gray-50 dark:bg-gray-800 px-4 py-2 border-b border-gray-200 dark:border-gray-700 flex items-center gap-3">
       <span class="font-mono font-semibold text-sm">${esc(nr)}</span>
-      ${loading ? '<span class="material-symbols-outlined text-sm animate-spin text-gray-400">progress_activity</span>' : ''}
+      <span id="row-spinner-${esc(nr)}" class="${loading ? '' : 'hidden'}">${spinner()}</span>
     </div>`;
 
-    // 3-column grid
+    // 3 columns
     html += `<div class="grid grid-cols-1 lg:grid-cols-3 divide-y lg:divide-y-0 lg:divide-x divide-gray-200 dark:divide-gray-700">`;
     SYSTEMS.forEach(sys => {
-      html += `<div class="flex flex-col">`;
-      // column header
-      html += `<div class="px-3 py-1.5 bg-gray-50/50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-700/50">
-        <span class="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 flex items-center gap-1">
-          <span class="material-symbols-outlined" style="font-size:12px">${sys.icon}</span>
-          ${sys.label}
+      html += `<div class="flex flex-col" id="col-${esc(nr)}-${sys.key}">`;
+      // Column label
+      html += `<div class="px-3 py-1.5 bg-gray-50/60 dark:bg-gray-800/60 border-b border-gray-100 dark:border-gray-700/50">
+        <span class="text-[10px] font-semibold uppercase tracking-wider text-gray-400 flex items-center gap-1">
+          <span class="material-symbols-outlined" style="font-size:12px">${sys.icon}</span> ${sys.label}
         </span>
       </div>`;
-      // cell content
-      html += `<div class="p-3 flex-1" id="cell-${nr}-${sys.key}">`;
+      html += `<div class="p-3 flex-1">`;
       if (loading) {
-        html += loaderHtml();
+        html += loaderCell();
       } else {
-        html += renderCell(nr, sys.key);
+        html += renderUnifiedCell(nr, sys.key);
       }
       html += `</div></div>`;
     });
-    html += `</div>`; // end grid
+    html += `</div>`;
 
-    // ID editing row (inline, below the grid) — only when loaded
+    // ID row
     if (!loading && searchData[nr]?.django && !searchData[nr].django.error) {
       html += renderIdRow(nr);
     }
 
-    html += `</div>`; // end card
+    html += `</div>`;
   });
 
   container.innerHTML = html;
 }
 
-/* ── cell renderers ─────────────────────────────────── */
-function renderCell(nr, sys) {
-  const d = searchData[nr]?.[sys];
-  if (!d) return `<div class="text-xs text-gray-400 italic">nicht gefunden</div>`;
-  if (d.error) return `<div class="text-xs text-red-500">Fehler: ${esc(d.error)}</div>`;
+/* ── Unified cell renderer — same structure for all 3 systems ─── */
+function renderUnifiedCell(nr, sysKey) {
+  const raw = searchData[nr]?.[sysKey];
+  if (!raw) return `<div class="text-xs text-gray-400 italic py-2">nicht gefunden</div>`;
+  if (raw.error) return `<div class="text-xs text-red-500 py-2">Fehler: ${esc(raw.error)}</div>`;
 
-  if (sys === 'shopware')  return renderShopware(d);
-  if (sys === 'django')    return renderDjango(d);
-  return renderMicrotech(d);
-}
+  const d = normalize(raw, sysKey);
+  if (!d) return '';
+  const sys = SYSTEMS.find(s => s.key === sysKey);
+  const color = sys.accent;
 
-function renderShopware(d) {
-  const name = [d.firstName, d.lastName].filter(Boolean).join(' ');
-  let h = `<div class="space-y-1 text-xs">
-    <div class="flex justify-between items-start">
-      <span class="font-medium text-sm">${esc(d.company || name)}</span>
-      <span class="font-mono text-[10px] text-gray-400 shrink-0 ml-2" title="${esc(d.id)}">${esc((d.id||'').substring(0,8))}</span>
-    </div>
-    <div class="text-gray-500">${esc(d.email)}</div>`;
-  if (d.lastLogin) h += `<div class="text-gray-400">Login: ${esc(d.lastLogin)}</div>`;
-  if (d.updatedAt) h += `<div class="text-gray-400">Update: ${esc(d.updatedAt)}</div>`;
+  // Check what other systems have for diff highlighting
+  const others = SYSTEMS.filter(s => s.key !== sysKey).map(s => normalize(searchData[nr]?.[s.key], s.key)).filter(Boolean);
+  const nameDiff = others.length && others.some(o => o.name && d.name && o.name !== d.name);
+  const emailDiff = others.length && others.some(o => o.email && d.email && o.email !== d.email);
+
+  let h = `<div class="space-y-1.5 text-xs">`;
+
+  // Row 1: Name
+  h += `<div class="${nameDiff ? 'diff-highlight rounded px-1 -mx-1' : ''}">
+    <span class="text-[10px] text-gray-400 uppercase">Name</span>
+    <div class="font-medium text-sm">${esc(d.name) || '<span class="text-gray-300">—</span>'}</div>
+  </div>`;
+
+  // Row 2: E-Mail
+  h += `<div class="${emailDiff ? 'diff-highlight rounded px-1 -mx-1' : ''}">
+    <span class="text-[10px] text-gray-400 uppercase">E-Mail</span>
+    <div>${esc(d.email) || '<span class="text-gray-300">—</span>'}</div>
+  </div>`;
+
+  // Row 3: System ID
+  if (d.systemId) {
+    h += `<div>
+      <span class="text-[10px] text-gray-400 uppercase">ID</span>
+      <div class="font-mono text-[11px] text-gray-500 truncate" title="${esc(d.systemId)}">${esc(d.systemId)}</div>
+    </div>`;
+  }
+
+  // Extra info
+  d.extra.forEach(e => { h += `<div class="text-gray-400">${esc(e)}</div>`; });
+
   h += `</div>`;
 
   // Addresses — collapsible
-  if (d.addresses?.length) {
-    h += renderToggle('Adressen', d.addresses.length, d.addresses.map(a => {
-      const n = [a.firstName, a.lastName].filter(Boolean).join(' ');
-      return `<div class="border-l-2 border-blue-200 dark:border-blue-700 pl-2 py-0.5">
-        <div class="font-medium">${esc(a.company || n)}</div>
-        <div>${esc(a.street)}, ${esc(a.zipcode)} ${esc(a.city)}</div>
-        ${a.countryIso ? `<div class="text-gray-400">${esc(a.countryIso)}</div>` : ''}
+  if (d.addresses.length) {
+    h += renderToggle(`Adressen`, d.addresses.length, d.addresses.map(a => {
+      let flags = '';
+      if (a.flags.length) flags = `<div class="text-${color}-600 dark:text-${color}-400 text-[10px]">${a.flags.join(' · ')}</div>`;
+      return `<div class="border-l-2 border-${color}-200 dark:border-${color}-700 pl-2 py-0.5">
+        <div class="font-medium">${esc(a.label)}</div>
+        <div>${esc(a.street)}, ${esc(a.zip)} ${esc(a.city)} ${a.country ? esc(a.country) : ''}</div>
+        ${a.email ? `<div class="text-gray-500">${esc(a.email)}</div>` : ''}
+        ${flags}
       </div>`;
-    }).join(''));
+    }).join(''), color);
   }
+
+  // Orders — collapsible (only Django has orders)
+  if (d.orders.length) {
+    h += renderToggle(`Bestellungen`, d.orders.length, d.orders.map(o =>
+      `<div class="border-l-2 border-${color}-200 dark:border-${color}-700 pl-2 py-0.5 flex items-center gap-2 flex-wrap">
+        <span class="font-mono">${esc(o.nr)}</span>
+        <span class="text-gray-400">${esc(String(o.total))}&nbsp;EUR</span>
+        <span class="px-1 py-0.5 rounded text-[10px] bg-gray-100 dark:bg-gray-700">${esc(o.state)}</span>
+        ${o.date ? `<span class="text-gray-400">${o.date}</span>` : ''}
+      </div>`
+    ).join(''), color);
+  }
+
   return h;
 }
 
-function renderDjango(d) {
-  let h = `<div class="space-y-1 text-xs">
-    <div class="font-medium text-sm">${esc(d.name)}</div>
-    <div class="text-gray-500">${esc(d.email)}</div>
-    ${d.vat_id ? `<div class="text-gray-400">USt-ID: ${esc(d.vat_id)}</div>` : ''}
-    ${d.api_id ? `<div class="text-gray-400 font-mono">SW: ${esc((d.api_id||'').substring(0,12))}</div>` : ''}
-  </div>`;
-
-  // Addresses — collapsible
-  if (d.addresses?.length) {
-    h += renderToggle('Adressen', d.addresses.length, d.addresses.map(a => {
-      const flags = [];
-      if (a.is_shipping) flags.push('<span class="text-green-600 dark:text-green-400">Liefer</span>');
-      if (a.is_invoice)  flags.push('<span class="text-blue-600 dark:text-blue-400">Rechnung</span>');
-      return `<div class="border-l-2 border-green-200 dark:border-green-700 pl-2 py-0.5">
-        <div class="font-medium">${esc(a.name1)}${a.name2 ? ' / '+esc(a.name2) : ''}</div>
-        <div>${esc(a.street)}, ${esc(a.postal_code)} ${esc(a.city)}</div>
-        ${a.email ? `<div>${esc(a.email)}</div>` : ''}
-        ${flags.length ? `<div>${flags.join(' &middot; ')}</div>` : ''}
-      </div>`;
-    }).join(''));
-  }
-
-  // Orders — collapsible
-  if (d.orders?.length) {
-    h += renderToggle('Bestellungen', d.orders.length, d.orders.map(o => {
-      const dt = o.purchase_date ? new Date(o.purchase_date).toLocaleDateString('de-DE') : '';
-      return `<div class="border-l-2 border-green-200 dark:border-green-700 pl-2 py-0.5 flex items-center gap-2 flex-wrap">
-        <span class="font-mono">${esc(o.order_number)}</span>
-        <span class="text-gray-400">${esc(o.total_price)}&nbsp;EUR</span>
-        <span class="px-1 py-0.5 rounded text-[10px] bg-gray-100 dark:bg-gray-700">${esc(o.order_state)}</span>
-        ${dt ? `<span class="text-gray-400">${dt}</span>` : ''}
-      </div>`;
-    }).join(''));
-  }
-  return h;
-}
-
-function renderMicrotech(d) {
-  let h = `<div class="space-y-1 text-xs">
-    <div class="font-medium text-sm">${esc(d.name)}</div>
-    <div class="text-gray-500">${esc(d.email)}</div>
-    ${d.status ? `<div class="text-gray-400">${esc(d.status)}</div>` : ''}
-  </div>`;
-
-  if (d.addresses?.length) {
-    h += renderToggle('Adressen', d.addresses.length, d.addresses.map(a => {
-      return `<div class="border-l-2 border-orange-200 dark:border-orange-700 pl-2 py-0.5">
-        <div class="font-medium">${esc(a.name1)}${a.name2 ? ' / '+esc(a.name2) : ''}</div>
-        <div>${esc(a.street)}, ${esc(a.postal_code)} ${esc(a.city)}</div>
-        ${a.email ? `<div>${esc(a.email)}</div>` : ''}
-      </div>`;
-    }).join(''));
-  }
-  return h;
-}
-
-function renderToggle(label, count, content) {
-  const id = 'tgl-' + Math.random().toString(36).slice(2, 8);
+function renderToggle(label, count, content, color) {
   return `<div class="mt-2">
     <button class="toggle-btn text-[10px] font-semibold uppercase tracking-wider text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex items-center gap-0.5" onclick="toggleSection(this)">
       <span class="arrow material-symbols-outlined" style="font-size:12px">chevron_right</span>
       ${esc(label)} (${count})
     </button>
     <div class="toggle-section">
-      <div class="mt-1 space-y-1 text-xs">${content}</div>
+      <div class="mt-1 space-y-1.5 text-xs">${content}</div>
     </div>
   </div>`;
 }
 
-/* ── ID editing (inline per row) ─────────────────────── */
+/* ── ID editing row ──────────────────────────────────── */
 function renderIdRow(nr) {
   const d = searchData[nr].django;
-  return `<div class="px-4 py-2 bg-gray-50/30 dark:bg-gray-800/30 border-t border-gray-100 dark:border-gray-700/50 flex items-center gap-4 flex-wrap text-xs">
-    <span class="text-gray-400 font-medium">IDs:</span>
-    <div class="flex items-center gap-1.5">
-      <label class="text-gray-500">ERP-Nr</label>
-      <input type="text" id="erp-nr-${d.id}" value="${esc(d.erp_nr)}"
-        class="border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-xs bg-white dark:bg-gray-800 w-24 font-mono">
-      <button onclick="updateId(${d.id}, 'update_erp_nr', 'erp-nr-${d.id}')"
-        class="px-2 py-1 bg-primary-600 text-white rounded text-[10px] hover:bg-primary-700 transition">Speichern</button>
-      <span id="erp-nr-status-${d.id}" class="text-[10px]"></span>
-    </div>
-    <div class="flex items-center gap-1.5">
-      <label class="text-gray-500">Shopware-ID</label>
-      <input type="text" id="api-id-${d.id}" value="${esc(d.api_id)}"
-        class="border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-xs bg-white dark:bg-gray-800 w-64 font-mono"
-        placeholder="UUID">
-      <button onclick="updateId(${d.id}, 'update_shopware_id', 'api-id-${d.id}')"
-        class="px-2 py-1 bg-primary-600 text-white rounded text-[10px] hover:bg-primary-700 transition">Speichern</button>
-      <span id="api-id-status-${d.id}" class="text-[10px]"></span>
+  return `<div id="id-row-${d.id}" class="px-4 py-2.5 bg-gray-50/30 dark:bg-gray-800/30 border-t border-gray-100 dark:border-gray-700/50">
+    <div class="flex items-center gap-4 flex-wrap text-xs">
+      <span class="text-gray-400 font-medium flex items-center gap-1">
+        <span class="material-symbols-outlined" style="font-size:14px">edit</span> IDs
+      </span>
+      <div class="flex items-center gap-1.5">
+        <label class="text-gray-500">ERP-Nr</label>
+        <input type="text" id="erp-nr-${d.id}" value="${esc(d.erp_nr)}"
+          class="border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-xs bg-white dark:bg-gray-800 w-24 font-mono">
+        <button onclick="updateId('${esc(nr)}', ${d.id}, 'update_erp_nr', 'erp-nr-${d.id}')"
+          class="px-2 py-1 bg-primary-600 text-white rounded text-[10px] hover:bg-primary-700 transition">Setzen</button>
+        <span id="erp-nr-status-${d.id}" class="text-[10px]"></span>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <label class="text-gray-500">Shopware-ID</label>
+        <input type="text" id="api-id-${d.id}" value="${esc(d.api_id)}"
+          class="border border-gray-300 dark:border-gray-600 rounded px-2 py-1 text-xs bg-white dark:bg-gray-800 w-64 font-mono"
+          placeholder="UUID">
+        <button onclick="updateId('${esc(nr)}', ${d.id}, 'update_shopware_id', 'api-id-${d.id}')"
+          class="px-2 py-1 bg-primary-600 text-white rounded text-[10px] hover:bg-primary-700 transition">Setzen</button>
+        <span id="api-id-status-${d.id}" class="text-[10px]"></span>
+      </div>
     </div>
   </div>`;
 }
 
-/* ── merge ───────────────────────────────────────────── */
-function setupMergePanel() {
-  const panel = document.getElementById('merge-panel');
+/* ── ID update — writes to all systems, then re-fetches row ─── */
+async function updateId(erpNr, customerId, action, inputId) {
+  const input = document.getElementById(inputId);
+  const value = input.value.trim();
+
+  // Show loader on all 3 cells of this row
+  SYSTEMS.forEach(sys => {
+    const cell = document.querySelector(`#col-${CSS.escape(erpNr)}-${sys.key} > div:last-child`);
+    if (cell) cell.innerHTML = loaderCell();
+  });
+  const rowSpinner = document.getElementById(`row-spinner-${erpNr}`);
+  if (rowSpinner) rowSpinner.classList.remove('hidden');
+
+  try {
+    const resp = await fetch('/admin/customer-merge/api/update-ids/', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json','X-CSRFToken':CSRF},
+      body: JSON.stringify({ action, customer_id: customerId, value }),
+    });
+    const data = await resp.json();
+    if (data.error) {
+      alert('Fehler: ' + data.error);
+      // Re-render current data
+      renderRowCells(erpNr);
+      return;
+    }
+
+    // Show step results briefly
+    if (data.steps) {
+      const parts = Object.entries(data.steps).map(([k,v]) => `${k}: ${v}`).join(', ');
+      logger_info(parts);
+    }
+
+    // Determine the new ERP-Nr to search for
+    const searchNr = data.new_erp_nr || erpNr;
+
+    // Re-fetch this row from all 3 systems
+    await refetchRow(erpNr, searchNr);
+  } catch(e) {
+    alert('Fehler: ' + e.message);
+    renderRowCells(erpNr);
+  }
+}
+
+function logger_info(msg) {
+  // silent — just for debug
+}
+
+async function refetchRow(oldNr, newNr) {
+  try {
+    const resp = await fetch(`/admin/customer-merge/api/search/?erp_nrs=${encodeURIComponent(newNr)}`);
+    const json = await resp.json();
+    if (json.results && json.results[newNr]) {
+      // Update searchData
+      if (oldNr !== newNr) {
+        delete searchData[oldNr];
+        const idx = searchErps.indexOf(oldNr);
+        if (idx >= 0) searchErps[idx] = newNr;
+      }
+      searchData[newNr] = json.results[newNr];
+    }
+  } catch(e) {
+    // ignore fetch errors
+  }
+  renderRows(false);
+  renderMergeSection();
+}
+
+function renderRowCells(nr) {
+  SYSTEMS.forEach(sys => {
+    const cell = document.querySelector(`#col-${CSS.escape(nr)}-${sys.key} > div:last-child`);
+    if (cell) cell.innerHTML = renderUnifiedCell(nr, sys.key);
+  });
+  const rowSpinner = document.getElementById(`row-spinner-${nr}`);
+  if (rowSpinner) rowSpinner.classList.add('hidden');
+}
+
+/* ── Merge section ───────────────────────────────────── */
+function renderMergeSection() {
+  const container = document.getElementById('merge-section');
   const djangoErps = searchErps.filter(nr => searchData[nr]?.django && !searchData[nr].django.error);
-  if (djangoErps.length < 2) { panel.classList.add('hidden'); return; }
+  if (djangoErps.length < 2) { container.innerHTML = ''; return; }
 
-  panel.classList.remove('hidden');
-  const target = document.getElementById('merge-target');
-  const source = document.getElementById('merge-source');
-
-  target.innerHTML = djangoErps.map(nr =>
-    `<option value="${esc(nr)}">${esc(nr)} — ${esc(searchData[nr].django.name)}</option>`
-  ).join('');
-  source.innerHTML = djangoErps.map((nr, i) =>
-    `<option value="${esc(nr)}" ${i===1?'selected':''}>${esc(nr)} — ${esc(searchData[nr].django.name)}</option>`
-  ).join('');
+  container.innerHTML = `
+  <div class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+    <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+      <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300 flex items-center gap-2">
+        <span class="material-symbols-outlined text-base">merge</span>
+        Kunden zusammenfuehren
+      </h2>
+    </div>
+    <div class="p-4 space-y-4">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-xs font-medium mb-1">Ziel-Kunde (bleibt erhalten):</label>
+          <select id="merge-target" class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm bg-white dark:bg-gray-800" onchange="updateMergeUI()">
+            ${djangoErps.map(nr => `<option value="${esc(nr)}">${esc(nr)} — ${esc(searchData[nr].django.name)}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium mb-1">Quell-Kunde (wird geloescht):</label>
+          <select id="merge-source" class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm bg-white dark:bg-gray-800" onchange="updateMergeUI()">
+            ${djangoErps.map((nr,i) => `<option value="${esc(nr)}" ${i===1?'selected':''}>${esc(nr)} — ${esc(searchData[nr].django.name)}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div id="merge-details"></div>
+      <div class="flex items-center gap-3">
+        <label class="flex items-center gap-2 text-sm cursor-pointer">
+          <input type="checkbox" id="merge-sw-orders" checked class="rounded">
+          Bestellungen in Shopware uebertragen
+        </label>
+      </div>
+      <button onclick="executeMerge()" id="merge-btn"
+        class="px-4 py-2 bg-red-600 text-white rounded text-sm font-medium
+               hover:bg-red-700 transition flex items-center gap-2 disabled:opacity-50">
+        <span class="material-symbols-outlined text-base">merge</span>
+        Merge ausfuehren
+      </button>
+      <div id="merge-result" class="hidden"></div>
+    </div>
+  </div>`;
   updateMergeUI();
 }
 
 function updateMergeUI() {
-  const targetNr = document.getElementById('merge-target').value;
-  const sourceNr = document.getElementById('merge-source').value;
+  const tgt = document.getElementById('merge-target')?.value;
+  const src = document.getElementById('merge-source')?.value;
+  const details = document.getElementById('merge-details');
+  if (!details || !tgt || !src || tgt === src) { if (details) details.innerHTML = ''; return; }
 
-  const pwInfo = document.getElementById('password-info');
-  const addrArea = document.getElementById('address-mapping-area');
-
-  if (!targetNr || !sourceNr || targetNr === sourceNr) {
-    pwInfo.classList.add('hidden');
-    addrArea.classList.add('hidden');
-    return;
-  }
-
-  const td = searchData[targetNr]?.django;
-  const sd = searchData[sourceNr]?.django;
+  const td = searchData[tgt]?.django;
+  const sd = searchData[src]?.django;
   if (!td || !sd) return;
 
+  let html = '';
+
   // Password winner
-  const tsw = searchData[targetNr]?.shopware;
-  const ssw = searchData[sourceNr]?.shopware;
+  const tsw = searchData[tgt]?.shopware;
+  const ssw = searchData[src]?.shopware;
   if (tsw && ssw && !tsw.error && !ssw.error) {
-    const winner = (ssw.updatedAt||'') > (tsw.updatedAt||'') ? sourceNr : targetNr;
-    pwInfo.innerHTML = `<div class="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded text-sm flex items-center gap-2">
+    const winner = (ssw.updatedAt||'') > (tsw.updatedAt||'') ? src : tgt;
+    html += `<div class="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded text-sm flex items-center gap-2">
       <span class="material-symbols-outlined text-base">key</span>
       Aktuelleres Passwort: <strong>${esc(winner)}</strong> — Login-E-Mail wird uebernommen.
     </div>`;
-    pwInfo.classList.remove('hidden');
-  } else {
-    pwInfo.classList.add('hidden');
   }
 
   // Address mapping
   const srcAddrs = sd.addresses || [];
-  if (!srcAddrs.length) { addrArea.classList.add('hidden'); return; }
-
-  addrArea.classList.remove('hidden');
   const tgtAddrs = td.addresses || [];
-  const list = document.getElementById('address-mapping-list');
-  let html = '';
-  srcAddrs.forEach(sa => {
-    const lbl = `${sa.name1||''} — ${sa.street||''}, ${sa.postal_code||''} ${sa.city||''}`;
-    html += `<div class="flex items-center gap-2 text-sm flex-wrap">
-      <div class="flex-1 min-w-44 border border-gray-200 dark:border-gray-600 rounded px-3 py-2 bg-gray-50 dark:bg-gray-800 text-xs">
-        <div class="text-[10px] text-gray-400 mb-0.5">Quelle (${esc(sourceNr)})</div>
-        ${esc(lbl)}
-      </div>
-      <span class="material-symbols-outlined text-gray-400 text-sm">arrow_forward</span>
-      <select data-src-addr-id="${sa.id}" class="addr-mapping-select flex-1 min-w-44 border border-gray-300 dark:border-gray-600 rounded px-2 py-2 text-xs bg-white dark:bg-gray-800">
-        <option value="new">Als neue Adresse uebernehmen</option>
-        <option value="">Verwerfen</option>`;
-    tgtAddrs.forEach(ta => {
-      const tl = `${ta.name1||''} — ${ta.street||''}, ${ta.postal_code||''} ${ta.city||''}`;
-      html += `<option value="${ta.id}">Ueberschreiben: ${esc(tl)}</option>`;
+  if (srcAddrs.length) {
+    html += `<div class="space-y-2">
+      <div class="text-xs font-semibold uppercase tracking-wider text-gray-500">Adress-Zuordnung</div>`;
+    srcAddrs.forEach(sa => {
+      const srcLbl = [sa.name1, sa.street, [sa.postal_code, sa.city].filter(Boolean).join(' ')].filter(Boolean).join(' — ');
+      html += `<div class="flex items-center gap-2 flex-wrap">
+        <div class="flex-1 min-w-48 border border-gray-200 dark:border-gray-600 rounded px-3 py-2 bg-gray-50 dark:bg-gray-800 text-xs">
+          <div class="text-[10px] text-gray-400 mb-0.5">Quelle (${esc(src)})</div>
+          <div class="font-medium">${esc(srcLbl)}</div>
+        </div>
+        <span class="material-symbols-outlined text-gray-400 text-sm">arrow_forward</span>
+        <select data-src-addr-id="${sa.id}" class="addr-mapping-select flex-1 min-w-48 border border-gray-300 dark:border-gray-600 rounded px-2 py-2 text-xs bg-white dark:bg-gray-800">
+          <option value="new">Als neue Adresse uebernehmen</option>
+          <option value="">Verwerfen</option>
+          ${tgtAddrs.map(ta => {
+            const tl = [ta.name1, ta.street, [ta.postal_code, ta.city].filter(Boolean).join(' ')].filter(Boolean).join(' — ');
+            return `<option value="${ta.id}">In Adresse ueberschreiben: ${esc(tl)}</option>`;
+          }).join('')}
+        </select>
+      </div>`;
     });
-    html += `</select></div>`;
-  });
-  list.innerHTML = html;
+    html += `</div>`;
+  }
+
+  // Orders preview
+  const srcOrders = sd.orders || [];
+  if (srcOrders.length) {
+    html += `<div class="p-3 bg-gray-50 dark:bg-gray-800 rounded text-xs text-gray-500">
+      ${srcOrders.length} Bestellung(en) von <strong>${esc(src)}</strong> werden an <strong>${esc(tgt)}</strong> uebertragen.
+    </div>`;
+  }
+
+  details.innerHTML = html;
 }
 
 async function executeMerge() {
-  const targetNr = document.getElementById('merge-target').value;
-  const sourceNr = document.getElementById('merge-source').value;
-  if (!targetNr || !sourceNr || targetNr === sourceNr) { alert('Bitte unterschiedliche Kunden waehlen.'); return; }
-  if (!confirm(`Kunde ${sourceNr} wird in ${targetNr} zusammengefuehrt und geloescht. Fortfahren?`)) return;
+  const tgt = document.getElementById('merge-target').value;
+  const src = document.getElementById('merge-source').value;
+  if (!tgt || !src || tgt === src) { alert('Bitte unterschiedliche Kunden waehlen.'); return; }
+  if (!confirm(`Kunde ${src} wird in ${tgt} zusammengefuehrt und anschliessend geloescht. Fortfahren?`)) return;
 
   const btn = document.getElementById('merge-btn');
   const res = document.getElementById('merge-result');
   btn.disabled = true;
-  btn.innerHTML = '<span class="material-symbols-outlined text-base animate-spin">progress_activity</span> Merge...';
+  btn.innerHTML = `${spinner()} Merge laeuft...`;
 
   const mapping = {};
   document.querySelectorAll('.addr-mapping-select').forEach(s => { mapping[s.dataset.srcAddrId] = s.value || null; });
@@ -433,7 +515,7 @@ async function executeMerge() {
       method: 'POST',
       headers: {'Content-Type':'application/json','X-CSRFToken':CSRF},
       body: JSON.stringify({
-        target_erp_nr: targetNr, source_erp_nr: sourceNr,
+        target_erp_nr: tgt, source_erp_nr: src,
         address_mapping: mapping,
         merge_shopware_orders: document.getElementById('merge-sw-orders').checked,
       }),
@@ -446,11 +528,9 @@ async function executeMerge() {
       let m = `Merge erfolgreich! Bestellungen: ${data.orders_moved}, Adressen: ${data.addresses_moved}`;
       if (data.shopware_orders_moved) m += `, SW-Bestellungen: ${data.shopware_orders_moved}`;
       let w = '';
-      if (data.errors?.length) {
-        w = `<div class="mt-1 text-yellow-600 dark:text-yellow-400 text-xs">${data.errors.map(e=>'&bull; '+esc(e)).join('<br>')}</div>`;
-      }
+      if (data.errors?.length) w = `<div class="mt-1 text-yellow-600 dark:text-yellow-400 text-xs">${data.errors.map(e=>'· '+esc(e)).join('<br>')}</div>`;
       res.innerHTML = `<div class="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded text-sm text-green-700 dark:text-green-400">${esc(m)}${w}</div>`;
-      setTimeout(doSearch, 1000);
+      setTimeout(doSearch, 1500);
     }
   } catch(e) {
     res.classList.remove('hidden');
@@ -458,35 +538,6 @@ async function executeMerge() {
   } finally {
     btn.disabled = false;
     btn.innerHTML = '<span class="material-symbols-outlined text-base">merge</span> Merge ausfuehren';
-  }
-}
-
-/* ── ID update ───────────────────────────────────────── */
-async function updateId(customerId, action, inputId) {
-  const input = document.getElementById(inputId);
-  const statusId = inputId.replace('erp-nr-','erp-nr-status-').replace('api-id-','api-id-status-');
-  const status = document.getElementById(statusId);
-  status.textContent = '...';
-  status.className = 'text-[10px] text-gray-400';
-
-  try {
-    const resp = await fetch('/admin/customer-merge/api/update-ids/', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json','X-CSRFToken':CSRF},
-      body: JSON.stringify({ action, customer_id: customerId, value: input.value }),
-    });
-    const data = await resp.json();
-    if (data.error) {
-      status.textContent = data.error;
-      status.className = 'text-[10px] text-red-500';
-    } else {
-      status.textContent = 'Gespeichert';
-      status.className = 'text-[10px] text-green-500';
-      setTimeout(() => { status.textContent = ''; }, 3000);
-    }
-  } catch(e) {
-    status.textContent = e.message;
-    status.className = 'text-[10px] text-red-500';
   }
 }
 

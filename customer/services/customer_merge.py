@@ -15,6 +15,25 @@ def _to_str(value: Any) -> str:
     return str(value).strip()
 
 
+def _safe_list(value: Any) -> list:
+    """Safely coerce a value into a list of dicts."""
+    if isinstance(value, list):
+        return value
+    if isinstance(value, dict):
+        data = value.get("data")
+        if isinstance(data, list):
+            return data
+        return list(value.values())
+    return []
+
+
+def _safe_attrs(item: Any) -> dict:
+    """Extract attributes from a Shopware entity (handles both flat and JSON:API)."""
+    if not isinstance(item, dict):
+        return {}
+    return item.get("attributes") or item
+
+
 class CustomerMergeSearchService(BaseService):
     """Searches for customer data across Django, Shopware 6, and Microtech."""
 
@@ -62,25 +81,12 @@ class CustomerMergeSearchService(BaseService):
             if not data:
                 return None
             customer = data[0]
-            attrs = customer.get("attributes") or customer
-            addresses_field = attrs.get("addresses")
-            if isinstance(addresses_field, dict):
-                addresses_raw = addresses_field.get("data") or list(addresses_field.values())
-            elif isinstance(addresses_field, list):
-                addresses_raw = addresses_field
-            else:
-                addresses_raw = []
+            attrs = _safe_attrs(customer)
             addresses = []
-            for addr in addresses_raw:
-                if not isinstance(addr, dict):
-                    continue
-                a = addr.get("attributes") or addr
-                country_field = a.get("country")
-                if isinstance(country_field, dict):
-                    country_data = country_field.get("data") or country_field
-                else:
-                    country_data = {}
-                country_attrs = country_data.get("attributes") or country_data if isinstance(country_data, dict) else {}
+            for addr in _safe_list(attrs.get("addresses")):
+                a = _safe_attrs(addr)
+                country = _safe_attrs(a.get("country")) if isinstance(a.get("country"), dict) else {}
+                country_a = _safe_attrs(country) if country else {}
                 addresses.append({
                     "id": addr.get("id") or a.get("id", ""),
                     "firstName": a.get("firstName", ""),
@@ -89,7 +95,7 @@ class CustomerMergeSearchService(BaseService):
                     "street": a.get("street", ""),
                     "zipcode": a.get("zipcode", ""),
                     "city": a.get("city", ""),
-                    "countryIso": country_attrs.get("iso", ""),
+                    "countryIso": country_a.get("iso", ""),
                     "email": a.get("email") or attrs.get("email", ""),
                 })
 
@@ -239,13 +245,11 @@ class CustomerMergeService(BaseService):
         return result
 
     def _determine_password_winner(self, target: Customer, source: Customer) -> str:
-        """Returns 'target' or 'source' based on which has the more recent Shopware login."""
         if not target.api_id or not source.api_id:
             return "target"
         try:
             from shopware.services import CustomerService
             service = CustomerService()
-
             target_data = service.get_by_id(target.api_id)
             source_data = service.get_by_id(source.api_id)
 
@@ -253,15 +257,12 @@ class CustomerMergeService(BaseService):
                 data = (resp or {}).get("data", []) or []
                 if not data:
                     return ""
-                attrs = data[0].get("attributes") or data[0]
+                attrs = _safe_attrs(data[0])
                 return attrs.get("updatedAt") or attrs.get("lastLogin") or ""
 
             target_ts = _get_timestamp(target_data)
             source_ts = _get_timestamp(source_data)
-
-            if source_ts > target_ts:
-                return "source"
-            return "target"
+            return "source" if source_ts > target_ts else "target"
         except Exception as exc:
             logger.warning("Could not determine password winner: {}. Using target.", exc)
             return "target"
@@ -273,13 +274,6 @@ class CustomerMergeService(BaseService):
         source: Customer,
         address_mapping: dict[str, str | None],
     ) -> int:
-        """
-        Merge addresses from source to target.
-        address_mapping: { source_address_id: target_address_id | "new" | None }
-        - target_address_id: overwrite target address with source data
-        - "new": move source address to target as new address
-        - None: discard source address
-        """
         moved = 0
         for src_addr_id_str, action in address_mapping.items():
             try:
@@ -297,7 +291,6 @@ class CustomerMergeService(BaseService):
             else:
                 try:
                     tgt_addr = Address.objects.get(pk=int(action), customer=target)
-                    # Overwrite target address fields from source
                     for field in (
                         "name1", "name2", "name3", "department", "street",
                         "postal_code", "city", "country_code", "email",
@@ -314,15 +307,10 @@ class CustomerMergeService(BaseService):
     def _move_shopware_orders(
         self, *, target_sw_id: str, source_sw_id: str
     ) -> tuple[int, list[str]]:
-        """Reassign all Shopware orders from source customer to target customer."""
         moved = 0
         errors = []
         try:
-            from shopware.services import CustomerService, Criteria, EqualsFilter
-            service = CustomerService()
-
-            # Search for all orders belonging to source customer
-            from shopware.services import OrderService
+            from shopware.services import Criteria, EqualsFilter, OrderService
             order_service = OrderService()
             criteria = Criteria(limit=500)
             criteria.associations["orderCustomer"] = Criteria()
@@ -333,12 +321,15 @@ class CustomerMergeService(BaseService):
             orders = (response or {}).get("data", []) or []
 
             for order in orders:
-                order_id = order.get("id") or (order.get("attributes") or {}).get("id")
+                order_id = order.get("id") or _safe_attrs(order).get("id")
                 if not order_id:
                     continue
-                # Get the orderCustomer ID
-                oc_data = (order.get("orderCustomer") or {}).get("data") or order.get("orderCustomer") or {}
-                oc_attrs = oc_data.get("attributes") or oc_data
+                oc = order.get("orderCustomer") or {}
+                if isinstance(oc, dict):
+                    oc_data = oc.get("data") or oc
+                else:
+                    oc_data = {}
+                oc_attrs = _safe_attrs(oc_data)
                 oc_id = oc_data.get("id") or oc_attrs.get("id")
                 if not oc_id:
                     errors.append(f"Order {order_id}: orderCustomer ID nicht gefunden")
@@ -351,34 +342,22 @@ class CustomerMergeService(BaseService):
                     moved += 1
                 except Exception as exc:
                     errors.append(f"Order {order_id}: {exc}")
-
         except Exception as exc:
             errors.append(f"Shopware order migration failed: {exc}")
         return moved, errors
 
     def _copy_shopware_login(self, *, from_sw_id: str, to_sw_id: str) -> None:
-        """Copy password hash and email from source to target in Shopware."""
         from shopware.services import CustomerService
         service = CustomerService()
-
         source_resp = service.get_by_id(from_sw_id)
         source_data = (source_resp or {}).get("data", []) or []
         if not source_data:
             raise ValueError("Source Shopware customer not found.")
-
-        source_attrs = source_data[0].get("attributes") or source_data[0]
+        source_attrs = _safe_attrs(source_data[0])
         source_email = source_attrs.get("email", "")
-
-        # Update target customer with source's email
-        # Note: password hash cannot be copied via API - Shopware protects this.
-        # The workaround is to keep the source email as the login identifier
-        # so the user can use "forgot password" if needed.
         if source_email:
             service.update_customer(to_sw_id, {"email": source_email})
-            logger.info(
-                "Shopware: copied email {} from {} to {}",
-                source_email, from_sw_id, to_sw_id,
-            )
+            logger.info("Shopware: copied email {} from {} to {}", source_email, from_sw_id, to_sw_id)
 
 
 class CustomerIdUpdateService(BaseService):
@@ -393,40 +372,55 @@ class CustomerIdUpdateService(BaseService):
         if not new_erp_nr:
             raise ValueError("ERP-Nummer darf nicht leer sein.")
 
-        # Check Django uniqueness
         existing = Customer.objects.filter(erp_nr=new_erp_nr).exclude(pk=customer_id).first()
         if existing:
             raise ValueError(f"ERP-Nummer {new_erp_nr} wird bereits von Kunde {existing.name} verwendet.")
 
         old_erp_nr = customer.erp_nr
+        steps = {"django": "ok", "shopware": "skipped", "microtech": "skipped"}
 
-        # Update Shopware customerNumber if linked
+        # 1) Shopware
         if customer.api_id:
             try:
                 from shopware.services import CustomerService
                 service = CustomerService()
-                # Check Shopware uniqueness
                 check = service.get_by_customer_number(new_erp_nr)
                 check_data = (check or {}).get("data", []) or []
                 for item in check_data:
-                    item_id = item.get("id") or (item.get("attributes") or {}).get("id", "")
+                    item_id = item.get("id") or _safe_attrs(item).get("id", "")
                     if item_id and item_id != customer.api_id:
                         raise ValueError(
                             f"Shopware: customerNumber {new_erp_nr} wird bereits "
                             f"von Kunde {item_id} verwendet."
                         )
                 service.update_customer_number(customer.api_id, new_erp_nr)
+                steps["shopware"] = "ok"
             except ValueError:
                 raise
             except Exception as exc:
-                raise ValueError(f"Shopware-Update fehlgeschlagen: {exc}")
+                steps["shopware"] = str(exc)
 
-        # Update Django
+        # 2) Microtech — try to update AdrNr on the existing record
+        try:
+            from microtech.services import MicrotechAdresseService, microtech_connection
+            with microtech_connection() as erp:
+                adresse = MicrotechAdresseService(erp=erp)
+                if adresse.find(old_erp_nr):
+                    adresse.edit()
+                    adresse.set_field("AdrNr", new_erp_nr)
+                    adresse.post()
+                    steps["microtech"] = "ok"
+                else:
+                    steps["microtech"] = "nicht gefunden"
+        except Exception as exc:
+            steps["microtech"] = str(exc)
+
+        # 3) Django
         customer.erp_nr = new_erp_nr
         customer.save(update_fields=["erp_nr", "updated_at"])
 
-        logger.info("ERP-Nr changed: {} -> {} (customer {})", old_erp_nr, new_erp_nr, customer.pk)
-        return {"old_erp_nr": old_erp_nr, "new_erp_nr": new_erp_nr}
+        logger.info("ERP-Nr changed: {} -> {} (customer {}) steps={}", old_erp_nr, new_erp_nr, customer.pk, steps)
+        return {"old_erp_nr": old_erp_nr, "new_erp_nr": new_erp_nr, "steps": steps}
 
     def update_shopware_id(self, customer_id: int, new_api_id: str) -> dict[str, Any]:
         customer = Customer.objects.filter(pk=customer_id).first()
@@ -434,17 +428,14 @@ class CustomerIdUpdateService(BaseService):
             raise ValueError("Kunde nicht gefunden.")
 
         new_api_id = _to_str(new_api_id)
+        steps = {"django": "ok", "shopware": "skipped"}
 
-        # Check Django uniqueness (if not empty)
         if new_api_id:
             existing = Customer.objects.filter(api_id=new_api_id).exclude(pk=customer_id).first()
             if existing:
                 raise ValueError(
-                    f"Shopware-ID {new_api_id} wird bereits von Kunde "
-                    f"{existing.erp_nr} verwendet."
+                    f"Shopware-ID {new_api_id} wird bereits von Kunde {existing.erp_nr} verwendet."
                 )
-
-            # Verify the ID exists in Shopware
             try:
                 from shopware.services import CustomerService
                 service = CustomerService()
@@ -452,14 +443,18 @@ class CustomerIdUpdateService(BaseService):
                 check_data = (check or {}).get("data", []) or []
                 if not check_data:
                     raise ValueError(f"Shopware-Kunde mit ID {new_api_id} nicht gefunden.")
+                # Set the customerNumber in Shopware to match our erp_nr
+                if customer.erp_nr:
+                    service.update_customer_number(new_api_id, customer.erp_nr)
+                steps["shopware"] = "ok"
             except ValueError:
                 raise
             except Exception as exc:
-                raise ValueError(f"Shopware-Validierung fehlgeschlagen: {exc}")
+                steps["shopware"] = str(exc)
 
         old_api_id = customer.api_id
         customer.api_id = new_api_id
         customer.save(update_fields=["api_id", "updated_at"])
 
-        logger.info("Shopware-ID changed: {} -> {} (customer {})", old_api_id, new_api_id, customer.pk)
-        return {"old_api_id": old_api_id, "new_api_id": new_api_id}
+        logger.info("Shopware-ID changed: {} -> {} (customer {}) steps={}", old_api_id, new_api_id, customer.pk, steps)
+        return {"old_api_id": old_api_id, "new_api_id": new_api_id, "steps": steps}
