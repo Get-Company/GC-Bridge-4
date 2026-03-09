@@ -457,20 +457,18 @@ class CustomerIdUpdateService(BaseService):
             except Exception as exc:
                 steps["shopware"] = str(exc)
 
-        # 2) Microtech — rename if exists, otherwise full upsert with addresses
+        # 2) Microtech — rename AdrNr if exists
         try:
             from microtech.services import MicrotechAdresseService, microtech_connection
             with microtech_connection() as erp:
                 adresse = MicrotechAdresseService(erp=erp)
                 if adresse.find(old_erp_nr):
-                    # Rename existing record
                     adresse.edit()
                     adresse.set_field("AdrNr", new_erp_nr)
                     adresse.post()
-                    steps["microtech"] = "ok (umbenannt)"
+                    steps["microtech"] = "renamed"
                 else:
-                    # Not found — full upsert with all addresses after Django save
-                    steps["microtech"] = "upsert"
+                    steps["microtech"] = "not_found"
         except Exception as exc:
             steps["microtech"] = str(exc)
 
@@ -478,12 +476,13 @@ class CustomerIdUpdateService(BaseService):
         customer.erp_nr = new_erp_nr
         customer.save(update_fields=["erp_nr", "updated_at"])
 
-        # 4) Microtech full upsert if record didn't exist
-        if steps["microtech"] == "upsert":
+        # 4) Microtech full upsert (updates all addresses regardless)
+        if steps["microtech"] in ("renamed", "not_found"):
             try:
                 sync_svc = CustomerSyncDirectionService()
                 sync_svc._django_to_microtech(new_erp_nr)
-                steps["microtech"] = "ok (neu angelegt mit Adressen)"
+                label = "umbenannt + Adressen aktualisiert" if steps["microtech"] == "renamed" else "neu angelegt mit Adressen"
+                steps["microtech"] = f"ok ({label})"
             except Exception as exc:
                 steps["microtech"] = f"upsert fehlgeschlagen: {exc}"
 
