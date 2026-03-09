@@ -584,6 +584,7 @@ class CustomerSyncDirectionService(BaseService):
         default_billing_id = _os_to_str(raw.get("defaultBillingAddressId"))
         default_shipping_id = _os_to_str(raw.get("defaultShippingAddressId"))
         addr_count = 0
+        seen_addr_ids: set[int] = set()
 
         for addr_data in addresses_raw:
             if not isinstance(addr_data, dict):
@@ -592,7 +593,15 @@ class CustomerSyncDirectionService(BaseService):
             if not api_id:
                 continue
 
+            # Match by api_id first, then by street+zip to avoid duplicates
             addr = Address.objects.filter(customer=customer, api_id=api_id).first()
+            if not addr:
+                sw_street = _os_to_str(addr_data.get("street"))
+                sw_zip = _os_to_str(addr_data.get("zipcode"))
+                if sw_street and sw_zip:
+                    addr = Address.objects.filter(
+                        customer=customer, street=sw_street, postal_code=sw_zip,
+                    ).exclude(id__in=seen_addr_ids).first()
             if not addr:
                 addr = Address(customer=customer)
 
@@ -600,7 +609,14 @@ class CustomerSyncDirectionService(BaseService):
             country = addr_data.get("country") or {}
             if isinstance(country, dict):
                 country = country.get("attributes") or country
+            # Salutation from Shopware association
+            salutation = addr_data.get("salutation") or {}
+            if isinstance(salutation, dict):
+                salutation = salutation.get("attributes") or salutation
+            salutation_name = _os_to_str(salutation.get("displayName") if isinstance(salutation, dict) else "")
+
             full_name = f"{_os_to_str(addr_data.get('firstName'))} {_os_to_str(addr_data.get('lastName'))}".strip()
+            addr.title = salutation_name or addr.title
             addr.name1 = _os_to_str(addr_data.get("company")) or full_name
             addr.name2 = full_name if _os_to_str(addr_data.get("company")) else ""
             addr.department = _os_to_str(addr_data.get("department"))
@@ -615,16 +631,26 @@ class CustomerSyncDirectionService(BaseService):
             addr.is_invoice = (api_id == default_billing_id)
             addr.is_shipping = (api_id == default_shipping_id)
             addr.save()
+            seen_addr_ids.add(addr.pk)
             addr_count += 1
+
+        # Remove Django addresses that no longer exist in Shopware
+        if seen_addr_ids:
+            orphans = Address.objects.filter(customer=customer).exclude(id__in=seen_addr_ids)
+            orphan_count = orphans.count()
+            if orphan_count:
+                orphans.delete()
+                logger.info("Shopware->Django: {} removed {} orphan addresses", erp_nr, orphan_count)
 
         logger.info("Shopware->Django: {} synced ({} addresses)", erp_nr, addr_count)
         return {"message": f"Kunde aus Shopware importiert ({addr_count} Adressen)"}
 
     def _django_to_shopware(self, erp_nr: str) -> dict[str, Any]:
-        """Sync Django customer to Shopware (upsert — auto-creates Django customer from Shopware if missing)."""
+        """Sync Django customer + addresses to Shopware (upsert)."""
+        from orders.services.order_sync import _normalize_entity
+
         customer = Customer.objects.filter(erp_nr=erp_nr).first()
         if not customer:
-            # Auto-create from Shopware first, then link
             self._shopware_to_django(erp_nr)
             customer = Customer.objects.filter(erp_nr=erp_nr).first()
             if not customer:
@@ -645,9 +671,94 @@ class CustomerSyncDirectionService(BaseService):
                 customer.save(update_fields=["api_id", "updated_at"])
                 logger.info("Django->Shopware: auto-linked {} -> {}", erp_nr, sw_id)
 
+        # Fetch existing Shopware addresses to match and get countryId/salutationId
+        sw_response = service.get_by_id(customer.api_id)
+        sw_data = (sw_response or {}).get("data", []) or []
+        sw_raw = _normalize_entity(sw_data[0]) if sw_data else {}
+        sw_addresses_raw = sw_raw.get("addresses") or []
+        if isinstance(sw_addresses_raw, dict):
+            sw_addresses_raw = sw_addresses_raw.get("data") or []
+        if isinstance(sw_addresses_raw, list):
+            sw_addresses_raw = [_normalize_entity(a) if isinstance(a, dict) else a for a in sw_addresses_raw]
+
+        # Build lookup: api_id -> sw_address, street+zip -> sw_address
+        sw_by_id: dict[str, dict] = {}
+        sw_by_location: dict[str, dict] = {}
+        default_country_id = ""
+        default_salutation_id = ""
+        for swa in sw_addresses_raw:
+            if not isinstance(swa, dict):
+                continue
+            swa_id = _to_str(swa.get("id"))
+            if swa_id:
+                sw_by_id[swa_id] = swa
+            loc_key = f"{_to_str(swa.get('street'))}|{_to_str(swa.get('zipcode'))}".lower()
+            if loc_key and loc_key != "|":
+                sw_by_location[loc_key] = swa
+            if not default_country_id:
+                default_country_id = _to_str(swa.get("countryId"))
+            if not default_salutation_id:
+                default_salutation_id = _to_str(swa.get("salutationId"))
+
+        if not default_salutation_id:
+            default_salutation_id = _to_str(sw_raw.get("salutationId"))
+
+        # Upsert Django addresses into Shopware
+        django_addresses = list(customer.addresses.all())
+        addr_count = 0
+        for addr in django_addresses:
+            sw_match = None
+            if addr.api_id:
+                sw_match = sw_by_id.get(addr.api_id)
+            if not sw_match:
+                loc_key = f"{addr.street}|{addr.postal_code}".lower()
+                sw_match = sw_by_location.get(loc_key)
+
+            # Build payload
+            payload: dict[str, Any] = {
+                "firstName": addr.first_name or addr.name1 or ".",
+                "lastName": addr.last_name or addr.name2 or ".",
+                "street": addr.street or ".",
+                "zipcode": addr.postal_code or ".",
+                "city": addr.city or ".",
+                "company": addr.name1 if addr.name2 else "",
+            }
+            if addr.phone:
+                payload["phoneNumber"] = addr.phone
+
+            if sw_match:
+                # Update existing Shopware address
+                sw_addr_id = _to_str(sw_match.get("id"))
+                if sw_addr_id:
+                    try:
+                        service.request_patch(f"/customer-address/{sw_addr_id}", payload=payload)
+                        if not addr.api_id:
+                            addr.api_id = sw_addr_id
+                            addr.save(update_fields=["api_id", "updated_at"])
+                        addr_count += 1
+                    except Exception as exc:
+                        logger.warning("Django->Shopware: failed to update address {}: {}", sw_addr_id, exc)
+            else:
+                # Create new address in Shopware
+                payload["customerId"] = customer.api_id
+                payload["countryId"] = default_country_id
+                payload["salutationId"] = default_salutation_id
+                try:
+                    result = service.request_post("/customer-address", payload=payload)
+                    # Extract new address ID from response
+                    new_id = ""
+                    if isinstance(result, dict):
+                        new_id = _to_str(result.get("data", {}).get("id") if isinstance(result.get("data"), dict) else result.get("id"))
+                    if new_id:
+                        addr.api_id = new_id
+                        addr.save(update_fields=["api_id", "updated_at"])
+                    addr_count += 1
+                except Exception as exc:
+                    logger.warning("Django->Shopware: failed to create address for {}: {}", erp_nr, exc)
+
         service.update_customer_number(customer.api_id, erp_nr)
-        logger.info("Django->Shopware: customerNumber {} set for {}", erp_nr, customer.api_id)
-        return {"message": f"Shopware verknuepft (ID: {customer.api_id}) und customerNumber auf {erp_nr} gesetzt"}
+        logger.info("Django->Shopware: {} synced ({} addresses)", erp_nr, addr_count)
+        return {"message": f"Shopware verknuepft ({addr_count} Adressen synchronisiert)"}
 
     def _microtech_to_django(self, erp_nr: str) -> dict[str, Any]:
         """Import customer + addresses from Microtech into Django."""
