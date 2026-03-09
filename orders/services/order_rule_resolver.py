@@ -114,20 +114,56 @@ class OrderRuleResolverService(BaseService):
             MicrotechOrderRuleCondition.SourceField.SHIPPING_COSTS: order.shipping_costs,
             MicrotechOrderRuleCondition.SourceField.ORDER_NUMBER: _to_str(order.order_number),
         }
+        order_label = _to_str(order.order_number) or f"id={order.pk}"
+        logger.info(
+            "Resolving Microtech order rule for order {} (payment_method='{}', shipping_method='{}').",
+            order_label,
+            _to_str(order.payment_method),
+            _to_str(order.shipping_method),
+        )
 
-        rules = (
+        rules = list(
             self.get_queryset()
             .filter(is_active=True)
             .prefetch_related("conditions", "actions")
             .order_by("priority", "id")
         )
+        logger.info("Order {}: evaluating {} active rule(s).", order_label, len(rules))
 
         for rule in rules:
-            if not self._matches_rule(rule=rule, context=context):
+            if not self._matches_rule(rule=rule, context=context, order_label=order_label):
+                logger.info(
+                    "Order {}: rule {} ('{}') did not match.",
+                    order_label,
+                    rule.pk,
+                    _to_str(rule.name),
+                )
                 continue
             resolved = ResolvedOrderRule.from_rule(rule=rule, customer_type=customer_type)
-            return self._apply_dynamic_actions(rule=rule, resolved=resolved)
+            logger.info(
+                "Order {}: rule {} ('{}') matched. Applying actions.",
+                order_label,
+                rule.pk,
+                _to_str(rule.name),
+            )
+            resolved = self._apply_dynamic_actions(rule=rule, resolved=resolved)
+            logger.info(
+                "Order {}: resolved rule result -> rule_id={}, zahlungsart_id={}, versandart_id={}, "
+                "vorgangsart_id={}, add_payment_position={}, payment_position_erp_nr='{}', "
+                "payment_position_mode='{}', payment_position_value='{}'.",
+                order_label,
+                resolved.rule_id,
+                resolved.zahlungsart_id,
+                resolved.versandart_id,
+                resolved.vorgangsart_id,
+                resolved.add_payment_position,
+                _to_str(resolved.payment_position_erp_nr),
+                resolved.payment_position_mode,
+                _to_str(resolved.payment_position_value),
+            )
+            return resolved
 
+        logger.info("Order {}: no active rule matched, using defaults.", order_label)
         return ResolvedOrderRule(customer_type=customer_type)
 
     def _matches_rule(
@@ -135,15 +171,23 @@ class OrderRuleResolverService(BaseService):
         *,
         rule: MicrotechOrderRule,
         context: dict[str, object],
+        order_label: str = "",
     ) -> bool:
         active_conditions = [condition for condition in rule.conditions.all() if condition.is_active]
         if not active_conditions:
             # Dynamic-only mode: a rule without conditions is a global fallback.
+            logger.info(
+                "Order {}: rule {} ('{}') has no active conditions and acts as global fallback.",
+                order_label or "?",
+                rule.pk,
+                _to_str(rule.name),
+            )
             return True
         return self._matches_dynamic_conditions(
             rule=rule,
             active_conditions=active_conditions,
             context=context,
+            order_label=order_label,
         )
 
     def _matches_dynamic_conditions(
@@ -152,14 +196,39 @@ class OrderRuleResolverService(BaseService):
         rule: MicrotechOrderRule,
         active_conditions: list[MicrotechOrderRuleCondition],
         context: dict[str, object],
+        order_label: str = "",
     ) -> bool:
-        evaluations = [
-            self._evaluate_condition(condition=condition, context=context)
-            for condition in sorted(active_conditions, key=lambda item: (item.priority, item.id))
-        ]
+        sorted_conditions = sorted(active_conditions, key=lambda item: (item.priority, item.id))
+        evaluations: list[bool] = []
+        for condition in sorted_conditions:
+            result = self._evaluate_condition(condition=condition, context=context)
+            evaluations.append(result)
+            actual_value = context.get(condition.source_field)
+            logger.info(
+                "Order {}: rule {} ('{}') condition {} -> {} {} '{}' (actual='{}') => {}",
+                order_label or "?",
+                rule.pk,
+                _to_str(rule.name),
+                condition.pk,
+                condition.source_field,
+                condition.operator,
+                _to_str(condition.expected_value),
+                _to_str(actual_value),
+                "MATCH" if result else "NO_MATCH",
+            )
         if rule.condition_logic == MicrotechOrderRule.ConditionLogic.ANY:
-            return any(evaluations)
-        return all(evaluations)
+            final_result = any(evaluations)
+        else:
+            final_result = all(evaluations)
+        logger.info(
+            "Order {}: rule {} ('{}') final condition result={} (logic='{}').",
+            order_label or "?",
+            rule.pk,
+            _to_str(rule.name),
+            final_result,
+            rule.condition_logic,
+        )
+        return final_result
 
     @classmethod
     def _evaluate_condition(
@@ -216,10 +285,32 @@ class OrderRuleResolverService(BaseService):
             if action.is_active
         ]
         if not active_actions:
+            logger.info(
+                "Rule {} ('{}') matched but has no active actions.",
+                rule.pk,
+                _to_str(rule.name),
+            )
             return resolved
 
         for action in sorted(active_actions, key=lambda item: (item.priority, item.id)):
+            before = resolved
             resolved = cls._apply_action(action=action, resolved=resolved, rule_id=rule.pk)
+            if resolved != before:
+                logger.info(
+                    "Rule {} ('{}') action {}='{}' applied.",
+                    rule.pk,
+                    _to_str(rule.name),
+                    action.target_field,
+                    _to_str(action.target_value),
+                )
+            else:
+                logger.info(
+                    "Rule {} ('{}') action {}='{}' was ignored.",
+                    rule.pk,
+                    _to_str(rule.name),
+                    action.target_field,
+                    _to_str(action.target_value),
+                )
         return resolved
 
     @classmethod

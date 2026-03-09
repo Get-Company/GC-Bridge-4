@@ -1,11 +1,13 @@
 from decimal import Decimal
+from types import SimpleNamespace
 
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 
 from customer.models import Address, Customer
 from microtech.models import MicrotechOrderRule, MicrotechOrderRuleAction, MicrotechOrderRuleCondition
 from orders.models import Order
-from orders.services.order_rule_resolver import OrderRuleResolverService
+from orders.services.order_rule_resolver import OrderRuleResolverService, ResolvedOrderRule
+from orders.services.order_upsert_microtech import OrderRuleDebugInfo, OrderUpsertMicrotechService
 
 
 class OrderRuleResolverDynamicRulesTest(TestCase):
@@ -178,3 +180,39 @@ class OrderRuleResolverDynamicRulesTest(TestCase):
         resolved = OrderRuleResolverService().resolve_for_order(order=order)
 
         self.assertEqual(resolved.zahlungsart_id, 55)
+
+
+class OrderUpsertRuleDebugTest(SimpleTestCase):
+    def test_payment_position_missing_amount_uses_default_article_price(self):
+        order = SimpleNamespace(order_number="ORDER-TRACE")
+        so_vorgang = SimpleNamespace(Positionen=SimpleNamespace(Add=lambda *args, **kwargs: None))
+        resolved_rule = ResolvedOrderRule(
+            rule_id=42,
+            rule_name="PayPal Regel",
+            add_payment_position=True,
+            payment_position_erp_nr="P",
+        )
+
+        debug = OrderUpsertMicrotechService()._add_payment_position(
+            order=order,
+            so_vorgang=so_vorgang,
+            resolved_rule=resolved_rule,
+        )
+
+        self.assertTrue(debug.payment_position_requested)
+        self.assertTrue(debug.payment_position_added)
+        self.assertEqual(debug.payment_position_erp_nr, "P")
+        self.assertIn("ohne Preisanpassung", debug.payment_position_reason)
+
+    def test_rule_debug_info_dataclass_is_constructible(self):
+        debug = OrderRuleDebugInfo(
+            rule_id=1,
+            rule_name="Fallback",
+            payment_position_requested=False,
+            payment_position_added=False,
+            payment_position_reason="Keine Zusatzposition gefordert.",
+            payment_position_erp_nr="",
+        )
+
+        self.assertEqual(debug.rule_id, 1)
+        self.assertEqual(debug.rule_name, "Fallback")

@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 from typing import Any
 
 from django.contrib import admin, messages
@@ -17,9 +18,11 @@ from unfold.enums import ActionVariant
 from unfold.sections import TemplateSection
 
 from core.admin import BaseAdmin, BaseTabularInline
+from loguru import logger
 from microtech.services import microtech_connection
 from orders.models import Order, OrderDetail
 from orders.services import OrderSyncService, OrderUpsertMicrotechService
+from orders.services.order_upsert_microtech import OrderRuleDebugInfo
 from shopware.services import OrderService
 from shopware.services.order import DEFAULT_TRANSITION_ACTIONS
 
@@ -144,27 +147,81 @@ class OrderAdmin(BaseAdmin):
     def _redirect_to_change_page(self, object_id: str) -> HttpResponseRedirect:
         return HttpResponseRedirect(reverse("admin:orders_order_change", args=(object_id,)))
 
+    @staticmethod
+    def _add_upsert_file_sink() -> tuple[int, Path]:
+        log_path = Path("tmp/logs/microtech_order_upsert.log")
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        sink_id = logger.add(
+            str(log_path),
+            level="DEBUG",
+            enqueue=False,
+            backtrace=True,
+            diagnose=True,
+            rotation="10 MB",
+            retention="14 days",
+            encoding="utf-8",
+        )
+        return sink_id, log_path
+
+    @staticmethod
+    def _format_rule_debug_message(rule_debug: OrderRuleDebugInfo) -> tuple[str, int]:
+        if rule_debug.rule_id is None:
+            rule_label = "keine passende Regel"
+        elif rule_debug.rule_name:
+            rule_label = f"{rule_debug.rule_name} (ID {rule_debug.rule_id})"
+        else:
+            rule_label = f"ID {rule_debug.rule_id}"
+
+        payment_state = "angelegt" if rule_debug.payment_position_added else "nicht angelegt"
+        message = (
+            f"Regel-Debug: {rule_label}. Zahlungs-Zusatzposition {payment_state}. "
+            f"Grund: {rule_debug.payment_position_reason}"
+        )
+        if rule_debug.payment_position_requested and not rule_debug.payment_position_added:
+            return message, messages.WARNING
+        if rule_debug.payment_position_added:
+            return message, messages.SUCCESS
+        return message, messages.INFO
+
     def _run_microtech_upsert(self, request, object_id: str) -> None:
         order = self.get_object(request, object_id)
         if not order:
             self.message_user(request, "Bestellung nicht gefunden.", level=messages.ERROR)
             return
 
+        sink_id, log_path = self._add_upsert_file_sink()
         try:
+            logger.info(
+                "Manual Microtech order upsert started from admin for order {} (id={}).",
+                order.order_number,
+                order.pk,
+            )
             with microtech_connection() as erp:
-                OrderUpsertMicrotechService().upsert_order(order, erp=erp)
+                result = OrderUpsertMicrotechService().upsert_order(order, erp=erp)
         except Exception as exc:
             self.message_user(
                 request,
-                f"Microtech-Upsert fehlgeschlagen: {exc}",
+                f"Microtech-Upsert fehlgeschlagen: {exc} | Log: {log_path}",
                 level=messages.ERROR,
             )
             return
+        finally:
+            logger.info(
+                "Manual Microtech order upsert finished for order {} (id={}). log_file={}",
+                order.order_number,
+                order.pk,
+                log_path,
+            )
+            logger.remove(sink_id)
 
         self.message_user(
             request,
             f"Bestellung {order.order_number} erfolgreich in Microtech angelegt.",
+            level=messages.SUCCESS,
         )
+        rule_message, rule_level = self._format_rule_debug_message(result.rule_debug)
+        self.message_user(request, rule_message, level=rule_level)
+        self.message_user(request, f"Detail-Log: {log_path}", level=messages.INFO)
 
     def get_custom_urls(self):
         urls = super().get_custom_urls()

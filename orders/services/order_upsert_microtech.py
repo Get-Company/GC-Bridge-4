@@ -31,6 +31,18 @@ class OrderUpsertResult:
     order: Order
     erp_order_id: str
     is_new: bool
+    rule_debug: "OrderRuleDebugInfo"
+
+
+@dataclass(frozen=True, slots=True)
+class OrderRuleDebugInfo:
+    rule_id: int | None
+    rule_name: str
+    payment_position_requested: bool
+    payment_position_added: bool
+    payment_position_reason: str
+    payment_position_erp_nr: str
+    payment_position_amount: Decimal | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,10 +105,23 @@ class OrderUpsertMicrotechService(BaseService):
         )
         self._add_positions(order=order, so_vorgang=so_vorgang, erp=erp)
         self._add_shipping_position(order=order, so_vorgang=so_vorgang)
-        self._add_payment_position(
+        rule_debug = self._add_payment_position(
             order=order,
             so_vorgang=so_vorgang,
             resolved_rule=resolved_rule,
+        )
+        logger.info(
+            "Order {} rule debug: rule_id={}, rule_name='{}', payment_position_requested={}, "
+            "payment_position_added={}, payment_position_erp_nr='{}', payment_position_amount='{}', "
+            "reason='{}'.",
+            order.order_number,
+            rule_debug.rule_id,
+            rule_debug.rule_name,
+            rule_debug.payment_position_requested,
+            rule_debug.payment_position_added,
+            rule_debug.payment_position_erp_nr,
+            rule_debug.payment_position_amount,
+            rule_debug.payment_position_reason,
         )
 
         so_vorgang.Post()
@@ -118,7 +143,12 @@ class OrderUpsertMicrotechService(BaseService):
 
         self._persist_erp_order_id(order=order, erp_order_id=erp_order_id)
 
-        return OrderUpsertResult(order=order, erp_order_id=erp_order_id, is_new=is_new)
+        return OrderUpsertResult(
+            order=order,
+            erp_order_id=erp_order_id,
+            is_new=is_new,
+            rule_debug=rule_debug,
+        )
 
     def _ensure_customer_synced(
         self,
@@ -401,21 +431,57 @@ class OrderUpsertMicrotechService(BaseService):
         order: Order,
         so_vorgang,
         resolved_rule: ResolvedOrderRule,
-    ) -> None:
+    ) -> OrderRuleDebugInfo:
+        rule_id = resolved_rule.rule_id
+        rule_name = (resolved_rule.rule_name or "").strip()
+
         if not resolved_rule.add_payment_position:
-            return
+            reason = "Regel fordert keine Zahlungs-Zusatzposition an."
+            logger.info("Order {}: {}", order.order_number, reason)
+            return OrderRuleDebugInfo(
+                rule_id=rule_id,
+                rule_name=rule_name,
+                payment_position_requested=False,
+                payment_position_added=False,
+                payment_position_reason=reason,
+                payment_position_erp_nr=(resolved_rule.payment_position_erp_nr or "").strip(),
+            )
 
         erp_nr = (resolved_rule.payment_position_erp_nr or "").strip()
         if not erp_nr:
+            reason = "Zahlungs-Zusatzposition aktiviert, aber ERP-Nr ist leer."
             logger.warning(
-                "Rule {} requests payment surcharge position, but payment_position_erp_nr is empty.",
+                "Rule {} requests payment surcharge position, but payment_position_erp_nr is empty. "
+                "Order {} will not receive this position.",
                 resolved_rule.rule_name or resolved_rule.rule_id,
+                order.order_number,
             )
-            return
+            return OrderRuleDebugInfo(
+                rule_id=rule_id,
+                rule_name=rule_name,
+                payment_position_requested=True,
+                payment_position_added=False,
+                payment_position_reason=reason,
+                payment_position_erp_nr="",
+            )
 
         amount = self._resolve_payment_position_amount(order=order, resolved_rule=resolved_rule)
-        if amount is None or amount == Decimal("0.00"):
-            return
+        if amount is None:
+            so_vorgang.Positionen.Add(1, DEFAULT_UNIT, erp_nr)
+            reason = (
+                f"Zahlungs-Zusatzposition '{erp_nr}' wurde angelegt "
+                "ohne Preisanpassung (Microtech-Standardpreis)."
+            )
+            logger.info("Order {}: {}", order.order_number, reason)
+            return OrderRuleDebugInfo(
+                rule_id=rule_id,
+                rule_name=rule_name,
+                payment_position_requested=True,
+                payment_position_added=True,
+                payment_position_reason=reason,
+                payment_position_erp_nr=erp_nr,
+                payment_position_amount=None,
+            )
 
         so_vorgang.Positionen.Add(1, DEFAULT_UNIT, erp_nr)
         self._set_position_price(
@@ -423,6 +489,17 @@ class OrderUpsertMicrotechService(BaseService):
             price=amount,
             is_gross=order.customer.is_gross,
             position_name=(resolved_rule.payment_position_name or "").strip(),
+        )
+        reason = f"Zahlungs-Zusatzposition '{erp_nr}' wurde mit Betrag {amount} angelegt."
+        logger.info("Order {}: {}", order.order_number, reason)
+        return OrderRuleDebugInfo(
+            rule_id=rule_id,
+            rule_name=rule_name,
+            payment_position_requested=True,
+            payment_position_added=True,
+            payment_position_reason=reason,
+            payment_position_erp_nr=erp_nr,
+            payment_position_amount=amount,
         )
 
     @staticmethod
@@ -641,4 +718,4 @@ class OrderUpsertMicrotechService(BaseService):
         return parsed
 
 
-__all__ = ["OrderUpsertMicrotechService", "OrderUpsertResult"]
+__all__ = ["OrderRuleDebugInfo", "OrderUpsertMicrotechService", "OrderUpsertResult"]

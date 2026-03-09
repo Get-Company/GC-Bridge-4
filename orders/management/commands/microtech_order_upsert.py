@@ -83,6 +83,17 @@ class Command(BaseCommand):
                 "order_number": order.order_number,
                 "erp_order_id": result.erp_order_id,
                 "is_new": result.is_new,
+                "rule_id": result.rule_debug.rule_id,
+                "rule_name": result.rule_debug.rule_name,
+                "payment_position_requested": result.rule_debug.payment_position_requested,
+                "payment_position_added": result.rule_debug.payment_position_added,
+                "payment_position_reason": result.rule_debug.payment_position_reason,
+                "payment_position_erp_nr": result.rule_debug.payment_position_erp_nr,
+                "payment_position_amount": (
+                    str(result.rule_debug.payment_position_amount)
+                    if result.rule_debug.payment_position_amount is not None
+                    else ""
+                ),
                 "log_file": str(log_path),
             }
             logger.info("{}", json.dumps(payload, ensure_ascii=True, indent=2, sort_keys=True))
