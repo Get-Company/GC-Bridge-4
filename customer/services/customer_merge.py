@@ -457,24 +457,35 @@ class CustomerIdUpdateService(BaseService):
             except Exception as exc:
                 steps["shopware"] = str(exc)
 
-        # 2) Microtech — try to update AdrNr on the existing record
+        # 2) Microtech — rename if exists, otherwise full upsert with addresses
         try:
             from microtech.services import MicrotechAdresseService, microtech_connection
             with microtech_connection() as erp:
                 adresse = MicrotechAdresseService(erp=erp)
                 if adresse.find(old_erp_nr):
+                    # Rename existing record
                     adresse.edit()
                     adresse.set_field("AdrNr", new_erp_nr)
                     adresse.post()
-                    steps["microtech"] = "ok"
+                    steps["microtech"] = "ok (umbenannt)"
                 else:
-                    steps["microtech"] = "nicht gefunden"
+                    # Not found — full upsert with all addresses after Django save
+                    steps["microtech"] = "upsert"
         except Exception as exc:
             steps["microtech"] = str(exc)
 
         # 3) Django
         customer.erp_nr = new_erp_nr
         customer.save(update_fields=["erp_nr", "updated_at"])
+
+        # 4) Microtech full upsert if record didn't exist
+        if steps["microtech"] == "upsert":
+            try:
+                sync_svc = CustomerSyncDirectionService()
+                sync_svc._django_to_microtech(new_erp_nr)
+                steps["microtech"] = "ok (neu angelegt mit Adressen)"
+            except Exception as exc:
+                steps["microtech"] = f"upsert fehlgeschlagen: {exc}"
 
         logger.info("ERP-Nr changed: {} -> {} (customer {}) steps={}", old_erp_nr, new_erp_nr, customer.pk, steps)
         return {"old_erp_nr": old_erp_nr, "new_erp_nr": new_erp_nr, "steps": steps}
