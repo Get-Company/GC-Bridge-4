@@ -534,10 +534,23 @@ class CustomerUpsertMicrotechService(BaseService):
             na1_static_value=na1_static_value,
         )
 
+        # Na1 = Anrede (Herr/Frau/Firma), Na2 = Name, Na3 = Zusatz
+        first = _to_str(address.first_name)
+        last = _to_str(address.last_name)
+        full_name = f"{first} {last}".strip()
+        company = _to_str(address.name1) if self._looks_like_company(address=address) else ""
+
+        if company:
+            na2_value = company
+            na3_value = full_name or _to_str(address.name2)
+        else:
+            na2_value = full_name or _to_str(address.name1) or _to_str(address.name2)
+            na3_value = _to_str(address.name3)
+
         anschrift_service.set_field("AdrNr", erp_nr)
         anschrift_service.set_field("Na1", na1_value)
-        anschrift_service.set_field("Na2", address.name1 or address.name2)
-        anschrift_service.set_field("Na3", address.name2 or address.name3)
+        anschrift_service.set_field("Na2", na2_value)
+        anschrift_service.set_field("Na3", na3_value)
         anschrift_service.set_field("Str", address.street)
         anschrift_service.set_field("PLZ", address.postal_code)
         anschrift_service.set_field("Ort", address.city)
