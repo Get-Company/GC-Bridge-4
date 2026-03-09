@@ -5,10 +5,8 @@ import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from django.contrib import admin
-from django.contrib.admin.views.decorators import staff_member_required
 from django.http import JsonResponse
 from django.template.response import TemplateResponse
-from django.views.decorators.http import require_GET, require_POST
 from loguru import logger
 
 from customer.services.customer_merge import (
@@ -18,8 +16,6 @@ from customer.services.customer_merge import (
 )
 
 
-@staff_member_required
-@require_GET
 def customer_merge_view(request):
     context = {
         **admin.site.each_context(request),
@@ -28,8 +24,6 @@ def customer_merge_view(request):
     return TemplateResponse(request, "admin/customer_merge.html", context)
 
 
-@staff_member_required
-@require_GET
 def customer_merge_search_api(request):
     erp_nrs_raw = request.GET.get("erp_nrs", "")
     erp_nrs = [nr.strip() for nr in erp_nrs_raw.split(",") if nr.strip()]
@@ -75,9 +69,9 @@ def customer_merge_search_api(request):
     return JsonResponse({"results": results})
 
 
-@staff_member_required
-@require_POST
 def customer_merge_execute_api(request):
+    if request.method != "POST":
+        return JsonResponse({"error": "POST erforderlich."}, status=405)
     try:
         body = json.loads(request.body)
         target_erp_nr = body.get("target_erp_nr", "").strip()
@@ -105,9 +99,9 @@ def customer_merge_execute_api(request):
         return JsonResponse({"error": str(exc)}, status=500)
 
 
-@staff_member_required
-@require_POST
 def customer_update_ids_api(request):
+    if request.method != "POST":
+        return JsonResponse({"error": "POST erforderlich."}, status=405)
     try:
         body = json.loads(request.body)
         action = body.get("action", "")
