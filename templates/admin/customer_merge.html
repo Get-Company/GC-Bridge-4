@@ -266,7 +266,7 @@ function renderRows(loading) {
 
       // Sync arrows between columns
       if (idx === 0) {
-        html += renderSyncArrows(nr, 'shopware_to_django', 'django_to_shopware');
+        html += renderSyncArrows(nr, 'django_to_shopware', 'shopware_to_django');
       } else if (idx === 1) {
         html += renderSyncArrows(nr, 'microtech_to_django', 'django_to_microtech');
       }

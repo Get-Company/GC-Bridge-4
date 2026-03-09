@@ -611,10 +611,14 @@ class CustomerSyncDirectionService(BaseService):
         return {"message": f"Kunde aus Shopware importiert ({addr_count} Adressen)"}
 
     def _django_to_shopware(self, erp_nr: str) -> dict[str, Any]:
-        """Sync Django customer to Shopware (upsert — auto-links if api_id missing)."""
+        """Sync Django customer to Shopware (upsert — auto-creates Django customer from Shopware if missing)."""
         customer = Customer.objects.filter(erp_nr=erp_nr).first()
         if not customer:
-            raise ValueError(f"Kunde {erp_nr} nicht in Django gefunden.")
+            # Auto-create from Shopware first, then link
+            self._shopware_to_django(erp_nr)
+            customer = Customer.objects.filter(erp_nr=erp_nr).first()
+            if not customer:
+                raise ValueError(f"Kunde {erp_nr} weder in Django noch in Shopware gefunden.")
 
         from shopware.services import CustomerService
         service = CustomerService()
@@ -645,10 +649,14 @@ class CustomerSyncDirectionService(BaseService):
         return {"message": f"Kunde aus Microtech importiert ({addr_count} Adressen)"}
 
     def _django_to_microtech(self, erp_nr: str) -> dict[str, Any]:
-        """Push customer + addresses from Django to Microtech."""
+        """Push customer + addresses from Django to Microtech (auto-creates Django customer from Microtech if missing)."""
         customer = Customer.objects.filter(erp_nr=erp_nr).first()
         if not customer:
-            raise ValueError(f"Kunde {erp_nr} nicht in Django gefunden.")
+            # Auto-create from Microtech first
+            self._microtech_to_django(erp_nr)
+            customer = Customer.objects.filter(erp_nr=erp_nr).first()
+            if not customer:
+                raise ValueError(f"Kunde {erp_nr} weder in Django noch in Microtech gefunden.")
 
         from customer.services.customer_upsert_microtech import CustomerUpsertMicrotechService
         svc = CustomerUpsertMicrotechService()
