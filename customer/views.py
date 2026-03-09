@@ -171,6 +171,26 @@ def customer_update_ids_api(request):
         return JsonResponse({"error": str(exc)}, status=500)
 
 
+def customer_delete_addresses_api(request):
+    if request.method != "POST":
+        return JsonResponse({"error": "POST erforderlich."}, status=405)
+    try:
+        body = json.loads(request.body)
+        address_ids = body.get("address_ids", [])
+        if not address_ids:
+            return JsonResponse({"error": "Keine Adressen ausgewaehlt."}, status=400)
+
+        from customer.models import Address
+        qs = Address.objects.filter(id__in=address_ids)
+        count = qs.count()
+        qs.delete()
+        logger.info("Deleted {} Django addresses: {}", count, address_ids)
+        return JsonResponse({"success": True, "deleted": count})
+    except Exception as exc:
+        logger.error("Address delete failed: {}\n{}", exc, traceback.format_exc())
+        return JsonResponse({"error": str(exc)}, status=500)
+
+
 def customer_sync_direction_api(request):
     if request.method != "POST":
         return JsonResponse({"error": "POST erforderlich."}, status=405)
