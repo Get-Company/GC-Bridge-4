@@ -20,6 +20,19 @@
   /* Highlight diffs: cells that differ from the first found system */
   .diff-highlight { background: rgba(251,191,36,.1); }
   .dark .diff-highlight { background: rgba(251,191,36,.06); }
+  /* Sync arrows between columns */
+  .sync-arrows { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-width: 28px; }
+  .sync-arrows button {
+    display: flex; align-items: center; justify-content: center;
+    width: 24px; height: 24px; border-radius: 4px; border: 1px solid;
+    border-color: rgba(156,163,175,.4); background: transparent;
+    color: rgba(107,114,128,1); cursor: pointer; transition: all .15s;
+    font-size: 0; line-height: 1;
+  }
+  .sync-arrows button:hover { background: rgba(99,102,241,.1); border-color: rgba(99,102,241,.5); color: rgba(99,102,241,1); }
+  .sync-arrows button:disabled { opacity: .4; cursor: not-allowed; }
+  .sync-arrows button .material-symbols-outlined { font-size: 16px; }
+  @media (max-width: 1023px) { .sync-arrows { display: none; } }
 </style>
 
 <div class="flex flex-col gap-6" id="merge-app">
@@ -27,11 +40,11 @@
   {# -- Search bar --------------------------------------------------- #}
   <div class="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
     <div class="flex items-center gap-3">
-      <label class="font-medium text-sm whitespace-nowrap">ERP-Nummern:</label>
+      <label class="font-medium text-sm whitespace-nowrap">Suche:</label>
       <input type="text" id="search-input"
         class="flex-1 border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm
                bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-primary-500"
-        placeholder="z.B. 10001, 10002">
+        placeholder="ERP-Nr, Shopware-UUID oder Name — z.B. 10001, Müller, 5a8f...">
       <button onclick="doSearch()" id="search-btn"
         class="px-4 py-2 bg-primary-600 text-white rounded text-sm font-medium
                hover:bg-primary-700 transition flex items-center gap-2 disabled:opacity-50">
@@ -128,21 +141,33 @@ function normalize(d, sys) {
 async function doSearch() {
   const raw = document.getElementById('search-input').value.trim();
   if (!raw) return;
-  searchErps = [...new Set(raw.split(',').map(s => s.trim()).filter(Boolean))];
-  if (!searchErps.length) return;
 
   document.getElementById('search-btn').disabled = true;
   document.getElementById('results-area').classList.remove('hidden');
 
+  // Show loading state with input terms
+  const inputTerms = [...new Set(raw.split(',').map(s => s.trim()).filter(Boolean))];
+  searchErps = inputTerms;
   searchData = {};
-  searchErps.forEach(nr => { searchData[nr] = {}; });
+  inputTerms.forEach(t => { searchData[t] = {}; });
   renderRows(true);
 
   try {
     const resp = await fetch(`/admin/customer-merge/api/search/?erp_nrs=${encodeURIComponent(raw)}`);
     const json = await resp.json();
     if (json.error) { alert(json.error); return; }
-    searchData = json.results;
+
+    // Use resolved ERP numbers as rows
+    searchData = json.results || {};
+    searchErps = Object.keys(searchData);
+
+    if (!searchErps.length) {
+      document.getElementById('results-rows').innerHTML =
+        '<div class="text-sm text-gray-400 italic p-4">Keine Ergebnisse gefunden.</div>';
+      document.getElementById('merge-section').innerHTML = '';
+      return;
+    }
+
     renderRows(false);
     renderMergeSection();
   } catch(e) {
@@ -166,10 +191,10 @@ function renderRows(loading) {
       <span id="row-spinner-${esc(nr)}" class="${loading ? '' : 'hidden'}">${spinner()}</span>
     </div>`;
 
-    // 3 columns
-    html += `<div class="grid grid-cols-1 lg:grid-cols-3 divide-y lg:divide-y-0 lg:divide-x divide-gray-200 dark:divide-gray-700">`;
-    SYSTEMS.forEach(sys => {
-      html += `<div class="flex flex-col" id="col-${esc(nr)}-${sys.key}">`;
+    // 3 columns with sync arrows between them
+    html += `<div class="flex divide-y lg:divide-y-0">`;
+    SYSTEMS.forEach((sys, idx) => {
+      html += `<div class="flex flex-col flex-1 min-w-0 ${idx > 0 ? 'border-l border-gray-200 dark:border-gray-700' : ''}" id="col-${esc(nr)}-${sys.key}">`;
       // Column label
       html += `<div class="px-3 py-1.5 bg-gray-50/60 dark:bg-gray-800/60 border-b border-gray-100 dark:border-gray-700/50">
         <span class="text-[10px] font-semibold uppercase tracking-wider text-gray-400 flex items-center gap-1">
@@ -183,6 +208,15 @@ function renderRows(loading) {
         html += renderUnifiedCell(nr, sys.key);
       }
       html += `</div></div>`;
+
+      // Sync arrows between columns (after Shopware → before Django, after Django → before Microtech)
+      if (idx === 0) {
+        // Shopware ↔ Django
+        html += renderSyncArrows(nr, 'shopware_to_django', 'django_to_shopware');
+      } else if (idx === 1) {
+        // Django ↔ Microtech
+        html += renderSyncArrows(nr, 'microtech_to_django', 'django_to_microtech');
+      }
     });
     html += `</div>`;
 
@@ -385,6 +419,65 @@ function renderRowCells(nr) {
   });
   const rowSpinner = document.getElementById(`row-spinner-${nr}`);
   if (rowSpinner) rowSpinner.classList.add('hidden');
+}
+
+/* ── Sync arrows between columns ─────────────────────── */
+function renderSyncArrows(nr, leftDir, rightDir) {
+  return `<div class="sync-arrows" id="sync-${esc(nr)}-${esc(leftDir)}">
+    <button title="${syncLabel(leftDir)}" onclick="syncDirection('${esc(nr)}','${esc(leftDir)}',this)">
+      <span class="material-symbols-outlined">arrow_back</span>
+    </button>
+    <button title="${syncLabel(rightDir)}" onclick="syncDirection('${esc(nr)}','${esc(rightDir)}',this)">
+      <span class="material-symbols-outlined">arrow_forward</span>
+    </button>
+  </div>`;
+}
+
+function syncLabel(dir) {
+  const labels = {
+    'shopware_to_django': 'Shopware → Django',
+    'django_to_shopware': 'Django → Shopware',
+    'microtech_to_django': 'Microtech → Django',
+    'django_to_microtech': 'Django → Microtech',
+  };
+  return labels[dir] || dir;
+}
+
+async function syncDirection(erpNr, direction, btn) {
+  if (!confirm(`${syncLabel(direction)} fuer ${erpNr} ausfuehren?`)) return;
+
+  // Disable all sync arrow buttons for this row
+  const row = document.getElementById(`row-${CSS.escape(erpNr)}`);
+  const allBtns = row ? row.querySelectorAll('.sync-arrows button') : [];
+  allBtns.forEach(b => { b.disabled = true; });
+  btn.innerHTML = spinner();
+
+  // Show loaders on all 3 columns
+  SYSTEMS.forEach(sys => {
+    const cell = document.querySelector(`#col-${CSS.escape(erpNr)}-${sys.key} > div:last-child`);
+    if (cell) cell.innerHTML = loaderCell();
+  });
+  const rowSpinner = document.getElementById(`row-spinner-${erpNr}`);
+  if (rowSpinner) rowSpinner.classList.remove('hidden');
+
+  try {
+    const resp = await fetch('/admin/customer-merge/api/sync/', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json','X-CSRFToken':CSRF},
+      body: JSON.stringify({ erp_nr: erpNr, direction }),
+    });
+    const data = await resp.json();
+    if (data.error) {
+      alert('Fehler: ' + data.error);
+      renderRowCells(erpNr);
+      return;
+    }
+    // Re-fetch row data from all systems
+    await refetchRow(erpNr, erpNr);
+  } catch(e) {
+    alert('Fehler: ' + e.message);
+    renderRowCells(erpNr);
+  }
 }
 
 /* ── Merge section ───────────────────────────────────── */

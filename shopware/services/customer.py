@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .shopware6 import Criteria, EqualsFilter, Shopware6Service
+from .shopware6 import ContainsFilter, Criteria, EqualsFilter, Shopware6Service
 
 
 class CustomerService(Shopware6Service):
@@ -26,6 +26,19 @@ class CustomerService(Shopware6Service):
     def get_by_customer_number(self, customer_number: str) -> dict[str, Any]:
         criteria = self._base_customer_criteria(limit=1)
         criteria.filter.append(EqualsFilter(field="customerNumber", value=customer_number))
+        return self.request_post(self.search_path, payload=criteria)
+
+    def search_by_name(self, name: str, *, limit: int = 20) -> dict[str, Any]:
+        from lib_shopware6_api_base import MultiFilter
+        criteria = self._base_customer_criteria(limit=limit)
+        criteria.filter.append(MultiFilter(
+            operator="OR",
+            queries=[
+                ContainsFilter(field="lastName", value=name),
+                ContainsFilter(field="firstName", value=name),
+                ContainsFilter(field="company", value=name),
+            ],
+        ))
         return self.request_post(self.search_path, payload=criteria)
 
     def update_customer(self, customer_id: str, payload: dict[str, Any]) -> Any:

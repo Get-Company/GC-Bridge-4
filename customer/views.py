@@ -13,6 +13,7 @@ from customer.services.customer_merge import (
     CustomerIdUpdateService,
     CustomerMergeSearchService,
     CustomerMergeService,
+    CustomerSyncDirectionService,
 )
 
 
@@ -25,13 +26,39 @@ def customer_merge_view(request):
 
 
 def customer_merge_search_api(request):
-    erp_nrs_raw = request.GET.get("erp_nrs", "")
-    erp_nrs = [nr.strip() for nr in erp_nrs_raw.split(",") if nr.strip()]
-    if not erp_nrs:
-        return JsonResponse({"error": "Keine ERP-Nummern angegeben."}, status=400)
+    query_raw = request.GET.get("erp_nrs", "")
+    terms = [t.strip() for t in query_raw.split(",") if t.strip()]
+    if not terms:
+        return JsonResponse({"error": "Keine Suchbegriffe angegeben."}, status=400)
 
     search_service = CustomerMergeSearchService()
-    results = {}
+
+    # Phase 1: Resolve search terms → ERP numbers (parallel)
+    resolved_sets: dict[str, list[str]] = {}
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        future_map = {executor.submit(search_service.resolve_query, t): t for t in terms}
+        for future in as_completed(future_map):
+            term = future_map[future]
+            try:
+                resolved_sets[term] = future.result()
+            except Exception as exc:
+                logger.error("Resolve error for '{}': {}", term, exc)
+                resolved_sets[term] = []
+
+    # Deduplicate, preserve order
+    erp_nrs: list[str] = []
+    seen: set[str] = set()
+    for term in terms:
+        for nr in resolved_sets.get(term, []):
+            if nr not in seen:
+                erp_nrs.append(nr)
+                seen.add(nr)
+
+    if not erp_nrs:
+        return JsonResponse({"results": {}, "resolved_from": resolved_sets})
+
+    # Phase 2: Full search per ERP number across all 3 systems
+    results: dict[str, dict] = {}
 
     def _search_django(nr):
         return ("django", nr, search_service.search_django(nr))
@@ -42,16 +69,16 @@ def customer_merge_search_api(request):
     def _search_microtech(nr):
         return ("microtech", nr, search_service.search_microtech(nr))
 
-    tasks = []
+    search_tasks = []
     for nr in erp_nrs:
         results[nr] = {"django": None, "shopware": None, "microtech": None}
-        tasks.append(("django", nr))
-        tasks.append(("shopware", nr))
-        tasks.append(("microtech", nr))
+        search_tasks.append(("django", nr))
+        search_tasks.append(("shopware", nr))
+        search_tasks.append(("microtech", nr))
 
     with ThreadPoolExecutor(max_workers=6) as executor:
         futures = []
-        for system, nr in tasks:
+        for system, nr in search_tasks:
             if system == "django":
                 futures.append(executor.submit(_search_django, nr))
             elif system == "shopware":
@@ -66,7 +93,7 @@ def customer_merge_search_api(request):
             except Exception as exc:
                 logger.error("Search error: {}", exc)
 
-    return JsonResponse({"results": results})
+    return JsonResponse({"results": results, "resolved_from": resolved_sets})
 
 
 def customer_merge_execute_api(request):
@@ -125,4 +152,27 @@ def customer_update_ids_api(request):
         return JsonResponse({"error": str(exc)}, status=400)
     except Exception as exc:
         logger.error("ID update failed: {}\n{}", exc, traceback.format_exc())
+        return JsonResponse({"error": str(exc)}, status=500)
+
+
+def customer_sync_direction_api(request):
+    if request.method != "POST":
+        return JsonResponse({"error": "POST erforderlich."}, status=405)
+    try:
+        body = json.loads(request.body)
+        erp_nr = body.get("erp_nr", "").strip()
+        direction = body.get("direction", "").strip()
+
+        if not erp_nr:
+            return JsonResponse({"error": "erp_nr erforderlich."}, status=400)
+        if not direction:
+            return JsonResponse({"error": "direction erforderlich."}, status=400)
+
+        service = CustomerSyncDirectionService()
+        result = service.sync(erp_nr, direction)
+        return JsonResponse({"success": True, **result})
+    except ValueError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+    except Exception as exc:
+        logger.error("Sync direction failed: {}\n{}", exc, traceback.format_exc())
         return JsonResponse({"error": str(exc)}, status=500)

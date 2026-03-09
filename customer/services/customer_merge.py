@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from loguru import logger
 
+from django.db import models
+
 from core.services import BaseService
 from customer.models import Address, Customer
 from orders.models import Order
+
+_UUID_RE = re.compile(r"^[0-9a-f]{32}$|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
 
 
 def _to_str(value: Any) -> str:
@@ -36,6 +41,58 @@ def _safe_attrs(item: Any) -> dict:
 
 class CustomerMergeSearchService(BaseService):
     """Searches for customer data across Django, Shopware 6, and Microtech."""
+
+    def resolve_query(self, term: str) -> list[str]:
+        """Resolve a search term (ERP-Nr, UUID, or name) into a list of ERP numbers."""
+        term = term.strip()
+        if not term:
+            return []
+
+        # 1) Numeric → treat as ERP-Nr directly
+        if term.isdigit():
+            return [term]
+
+        # 2) UUID → look up in Django and Shopware
+        if _UUID_RE.match(term):
+            erp_nrs: set[str] = set()
+            # Django lookup
+            cust = Customer.objects.filter(api_id=term).first()
+            if cust:
+                erp_nrs.add(cust.erp_nr)
+            # Shopware lookup
+            try:
+                from shopware.services import CustomerService
+                service = CustomerService()
+                response = service.get_by_id(term)
+                for item in (response or {}).get("data", []) or []:
+                    attrs = _safe_attrs(item)
+                    cn = _to_str(attrs.get("customerNumber"))
+                    if cn:
+                        erp_nrs.add(cn)
+            except Exception as exc:
+                logger.warning("Shopware UUID resolve failed for {}: {}", term, exc)
+            return sorted(erp_nrs) if erp_nrs else [term]
+
+        # 3) Name search → Django + Shopware
+        erp_nrs: set[str] = set()
+        # Django: name or email icontains
+        for cust in Customer.objects.filter(
+            models.Q(name__icontains=term) | models.Q(email__icontains=term)
+        )[:20]:
+            erp_nrs.add(cust.erp_nr)
+        # Shopware: name search
+        try:
+            from shopware.services import CustomerService
+            service = CustomerService()
+            response = service.search_by_name(term, limit=20)
+            for item in (response or {}).get("data", []) or []:
+                attrs = _safe_attrs(item)
+                cn = _to_str(attrs.get("customerNumber"))
+                if cn:
+                    erp_nrs.add(cn)
+        except Exception as exc:
+            logger.warning("Shopware name resolve failed for '{}': {}", term, exc)
+        return sorted(erp_nrs)
 
     def search_django(self, erp_nr: str) -> dict[str, Any] | None:
         try:
@@ -458,3 +515,135 @@ class CustomerIdUpdateService(BaseService):
 
         logger.info("Shopware-ID changed: {} -> {} (customer {}) steps={}", old_api_id, new_api_id, customer.pk, steps)
         return {"old_api_id": old_api_id, "new_api_id": new_api_id, "steps": steps}
+
+
+class CustomerSyncDirectionService(BaseService):
+    """Syncs a single customer between two systems using existing services."""
+
+    def sync(self, erp_nr: str, direction: str) -> dict[str, Any]:
+        dispatch = {
+            "shopware_to_django": self._shopware_to_django,
+            "django_to_shopware": self._django_to_shopware,
+            "microtech_to_django": self._microtech_to_django,
+            "django_to_microtech": self._django_to_microtech,
+        }
+        handler = dispatch.get(direction)
+        if not handler:
+            raise ValueError(f"Unbekannte Richtung: {direction}")
+        return handler(erp_nr)
+
+    def _shopware_to_django(self, erp_nr: str) -> dict[str, Any]:
+        """Import customer + addresses from Shopware into Django."""
+        from shopware.services import CustomerService
+
+        service = CustomerService()
+        response = service.get_by_customer_number(erp_nr)
+        data = (response or {}).get("data", []) or []
+        if not data:
+            raise ValueError(f"Kunde {erp_nr} nicht in Shopware gefunden.")
+
+        from orders.services.order_sync import _normalize_entity, _to_str as _os_to_str
+
+        raw = _normalize_entity(data[0])
+        customer_id = _os_to_str(raw.get("id"))
+        customer_number = _os_to_str(raw.get("customerNumber")) or erp_nr
+
+        customer = Customer.objects.filter(erp_nr=customer_number).first()
+        if not customer and customer_id:
+            customer = Customer.objects.filter(api_id=customer_id).first()
+        if not customer:
+            customer = Customer(erp_nr=customer_number)
+
+        vat_ids = raw.get("vatIds") or []
+        first = _os_to_str(raw.get("firstName"))
+        last = _os_to_str(raw.get("lastName"))
+        company = _os_to_str(raw.get("company"))
+        customer.name = company or f"{first} {last}".strip() or customer.name
+        customer.email = _os_to_str(raw.get("email")) or customer.email
+        customer.api_id = customer_id or customer.api_id
+        customer.is_gross = bool((raw.get("group") or {}).get("displayGross", True))
+        customer.vat_id = _os_to_str(vat_ids[0]) if vat_ids else customer.vat_id
+        customer.save()
+
+        # Upsert addresses
+        addresses_raw = raw.get("addresses") or []
+        if isinstance(addresses_raw, dict):
+            addresses_raw = addresses_raw.get("data") or []
+        addresses_raw = _normalize_entity(addresses_raw) if isinstance(addresses_raw, list) else []
+
+        default_billing_id = _os_to_str(raw.get("defaultBillingAddressId"))
+        default_shipping_id = _os_to_str(raw.get("defaultShippingAddressId"))
+        addr_count = 0
+
+        for addr_data in addresses_raw:
+            if not isinstance(addr_data, dict):
+                continue
+            api_id = _os_to_str(addr_data.get("id"))
+            if not api_id:
+                continue
+
+            addr = Address.objects.filter(customer=customer, api_id=api_id).first()
+            if not addr:
+                addr = Address(customer=customer)
+
+            addr.api_id = api_id
+            country = addr_data.get("country") or {}
+            if isinstance(country, dict):
+                country = country.get("attributes") or country
+            full_name = f"{_os_to_str(addr_data.get('firstName'))} {_os_to_str(addr_data.get('lastName'))}".strip()
+            addr.name1 = _os_to_str(addr_data.get("company")) or full_name
+            addr.name2 = full_name if _os_to_str(addr_data.get("company")) else ""
+            addr.department = _os_to_str(addr_data.get("department"))
+            addr.street = _os_to_str(addr_data.get("street"))
+            addr.postal_code = _os_to_str(addr_data.get("zipcode"))
+            addr.city = _os_to_str(addr_data.get("city"))
+            addr.country_code = _os_to_str(country.get("iso")) if isinstance(country, dict) else ""
+            addr.email = _os_to_str(addr_data.get("email")) or customer.email
+            addr.first_name = _os_to_str(addr_data.get("firstName"))
+            addr.last_name = _os_to_str(addr_data.get("lastName"))
+            addr.phone = _os_to_str(addr_data.get("phoneNumber"))
+            addr.is_invoice = (api_id == default_billing_id)
+            addr.is_shipping = (api_id == default_shipping_id)
+            addr.save()
+            addr_count += 1
+
+        logger.info("Shopware->Django: {} synced ({} addresses)", erp_nr, addr_count)
+        return {"message": f"Kunde aus Shopware importiert ({addr_count} Adressen)"}
+
+    def _django_to_shopware(self, erp_nr: str) -> dict[str, Any]:
+        """Update customerNumber in Shopware to match Django erp_nr."""
+        customer = Customer.objects.filter(erp_nr=erp_nr).first()
+        if not customer:
+            raise ValueError(f"Kunde {erp_nr} nicht in Django gefunden.")
+        if not customer.api_id:
+            raise ValueError(f"Kunde {erp_nr} hat keine Shopware-ID — Verknuepfung fehlt.")
+
+        from shopware.services import CustomerService
+        service = CustomerService()
+        service.update_customer_number(customer.api_id, erp_nr)
+        logger.info("Django->Shopware: customerNumber {} set for {}", erp_nr, customer.api_id)
+        return {"message": f"Shopware customerNumber auf {erp_nr} gesetzt"}
+
+    def _microtech_to_django(self, erp_nr: str) -> dict[str, Any]:
+        """Import customer + addresses from Microtech into Django."""
+        from customer.services.customer_sync import CustomerSyncService
+        svc = CustomerSyncService()
+        customer = svc.sync_from_microtech(erp_nr)
+        addr_count = customer.addresses.count()
+        logger.info("Microtech->Django: {} synced ({} addresses)", erp_nr, addr_count)
+        return {"message": f"Kunde aus Microtech importiert ({addr_count} Adressen)"}
+
+    def _django_to_microtech(self, erp_nr: str) -> dict[str, Any]:
+        """Push customer + addresses from Django to Microtech."""
+        customer = Customer.objects.filter(erp_nr=erp_nr).first()
+        if not customer:
+            raise ValueError(f"Kunde {erp_nr} nicht in Django gefunden.")
+
+        from customer.services.customer_upsert_microtech import CustomerUpsertMicrotechService
+        svc = CustomerUpsertMicrotechService()
+        result = svc.upsert_customer(customer)
+        msg = f"Kunde nach Microtech uebertragen (ERP-Nr: {result.erp_nr})"
+        if result.is_new_customer:
+            msg += " [NEU]"
+        logger.info("Django->Microtech: {} upserted", erp_nr)
+        return {"message": msg}

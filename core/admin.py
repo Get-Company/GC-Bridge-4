@@ -21,6 +21,7 @@ from customer.views import (
     customer_merge_search_api,
     customer_merge_execute_api,
     customer_update_ids_api,
+    customer_sync_direction_api,
 )
 
 
@@ -126,6 +127,7 @@ def _admin_get_urls():
         path("customer-merge/api/search/", admin.site.admin_view(customer_merge_search_api), name="customer_merge_search"),
         path("customer-merge/api/merge/", admin.site.admin_view(customer_merge_execute_api), name="customer_merge_execute"),
         path("customer-merge/api/update-ids/", admin.site.admin_view(customer_update_ids_api), name="customer_merge_update_ids"),
+        path("customer-merge/api/sync/", admin.site.admin_view(customer_sync_direction_api), name="customer_merge_sync"),
     ]
     return custom_urls + _default_admin_get_urls()
 
