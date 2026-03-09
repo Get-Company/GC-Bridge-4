@@ -649,7 +649,7 @@ class CustomerSyncDirectionService(BaseService):
         return {"message": f"Kunde aus Microtech importiert ({addr_count} Adressen)"}
 
     def _django_to_microtech(self, erp_nr: str) -> dict[str, Any]:
-        """Push customer + addresses from Django to Microtech (auto-creates Django customer from Microtech if missing)."""
+        """Push customer + ALL addresses from Django to Microtech."""
         customer = Customer.objects.filter(erp_nr=erp_nr).first()
         if not customer:
             # Auto-create from Microtech first
@@ -658,11 +658,81 @@ class CustomerSyncDirectionService(BaseService):
             if not customer:
                 raise ValueError(f"Kunde {erp_nr} weder in Django noch in Microtech gefunden.")
 
+        all_addresses = list(customer.addresses.all())
+        if not all_addresses:
+            raise ValueError(f"Kunde {erp_nr} hat keine Adressen in Django.")
+
         from customer.services.customer_upsert_microtech import CustomerUpsertMicrotechService
+        from microtech.services import (
+            MicrotechAdresseService,
+            MicrotechAnschriftService,
+            MicrotechAnsprechpartnerService,
+            microtech_connection,
+        )
+
         svc = CustomerUpsertMicrotechService()
-        result = svc.upsert_customer(customer)
-        msg = f"Kunde nach Microtech uebertragen (ERP-Nr: {result.erp_nr})"
-        if result.is_new_customer:
+
+        with microtech_connection() as erp:
+            adresse_service = MicrotechAdresseService(erp=erp)
+            anschrift_service = MicrotechAnschriftService(erp=erp)
+            ansprechpartner_service = MicrotechAnsprechpartnerService(erp=erp)
+
+            # Upsert the top-level Adresse record (uses first address for UStKat)
+            shipping = customer.shipping_address or all_addresses[0]
+            actual_erp_nr, is_new = svc._upsert_adresse_record(
+                customer=customer,
+                shipping=shipping,
+                adresse_service=adresse_service,
+            )
+
+            # Reset all standard flags before setting new ones
+            svc._reset_anschrift_standard_flags(
+                erp_nr=actual_erp_nr,
+                anschrift_service=anschrift_service,
+            )
+
+            # Upsert ALL addresses as Anschrift + Ansprechpartner
+            used_ans_nrs: set[int] = set()
+            first_shipping_nr = None
+            first_billing_nr = None
+
+            for addr in all_addresses:
+                ans_nr = svc._determine_ans_nr(
+                    erp_nr=actual_erp_nr,
+                    address=addr,
+                    anschrift_service=anschrift_service,
+                    reserved=used_ans_nrs,
+                )
+                used_ans_nrs.add(ans_nr)
+
+                svc._upsert_anschrift_and_contact(
+                    erp_nr=actual_erp_nr,
+                    address=addr,
+                    ans_nr=ans_nr,
+                    is_shipping=bool(addr.is_shipping),
+                    is_invoice=bool(addr.is_invoice),
+                    anschrift_service=anschrift_service,
+                    ansprechpartner_service=ansprechpartner_service,
+                    na1_mode="auto",
+                    na1_static_value="",
+                )
+
+                if addr.is_shipping and first_shipping_nr is None:
+                    first_shipping_nr = ans_nr
+                if addr.is_invoice and first_billing_nr is None:
+                    first_billing_nr = ans_nr
+
+            # Set default Liefer/Rechnungs-AnsNr on the Adresse record
+            ship_nr = first_shipping_nr or min(used_ans_nrs)
+            bill_nr = first_billing_nr or ship_nr
+            adresse_service.edit()
+            adresse_service.set_field("LiAnsNr", ship_nr)
+            adresse_service.set_field("ReAnsNr", bill_nr)
+            adresse_service.post()
+
+        addr_count = len(all_addresses)
+        msg = f"Kunde nach Microtech uebertragen ({addr_count} Adressen)"
+        if is_new:
             msg += " [NEU]"
-        logger.info("Django->Microtech: {} upserted", erp_nr)
+        logger.info("Django->Microtech: {} upserted ({} addresses)", erp_nr, addr_count)
         return {"message": msg}
