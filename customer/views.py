@@ -25,15 +25,14 @@ def customer_merge_view(request):
     return TemplateResponse(request, "admin/customer_merge.html", context)
 
 
-def customer_merge_search_api(request):
-    query_raw = request.GET.get("erp_nrs", "")
+def customer_merge_resolve_api(request):
+    """Phase 1: Resolve search terms (ERP-Nr, UUID, name) into ERP numbers."""
+    query_raw = request.GET.get("q", "")
     terms = [t.strip() for t in query_raw.split(",") if t.strip()]
     if not terms:
         return JsonResponse({"error": "Keine Suchbegriffe angegeben."}, status=400)
 
     search_service = CustomerMergeSearchService()
-
-    # Phase 1: Resolve search terms → ERP numbers (parallel)
     resolved_sets: dict[str, list[str]] = {}
     with ThreadPoolExecutor(max_workers=4) as executor:
         future_map = {executor.submit(search_service.resolve_query, t): t for t in terms}
@@ -54,38 +53,55 @@ def customer_merge_search_api(request):
                 erp_nrs.append(nr)
                 seen.add(nr)
 
-    if not erp_nrs:
-        return JsonResponse({"results": {}, "resolved_from": resolved_sets})
+    return JsonResponse({"erp_nrs": erp_nrs, "resolved_from": resolved_sets})
 
-    # Phase 2: Full search per ERP number across all 3 systems
+
+def customer_merge_search_cell_api(request):
+    """Phase 2: Search a single system for a single ERP number."""
+    erp_nr = request.GET.get("erp_nr", "").strip()
+    system = request.GET.get("system", "").strip()
+    if not erp_nr or not system:
+        return JsonResponse({"error": "erp_nr und system erforderlich."}, status=400)
+
+    search_service = CustomerMergeSearchService()
+    if system == "django":
+        data = search_service.search_django(erp_nr)
+    elif system == "shopware":
+        data = search_service.search_shopware(erp_nr)
+    elif system == "microtech":
+        data = search_service.search_microtech(erp_nr)
+    else:
+        return JsonResponse({"error": f"Unbekanntes System: {system}"}, status=400)
+
+    return JsonResponse({"erp_nr": erp_nr, "system": system, "data": data})
+
+
+def customer_merge_search_api(request):
+    """Legacy: full search across all systems (used by refetchRow)."""
+    query_raw = request.GET.get("erp_nrs", "")
+    erp_nrs = [nr.strip() for nr in query_raw.split(",") if nr.strip()]
+    if not erp_nrs:
+        return JsonResponse({"error": "Keine Suchbegriffe angegeben."}, status=400)
+
+    search_service = CustomerMergeSearchService()
     results: dict[str, dict] = {}
 
-    def _search_django(nr):
-        return ("django", nr, search_service.search_django(nr))
-
-    def _search_shopware(nr):
-        return ("shopware", nr, search_service.search_shopware(nr))
-
-    def _search_microtech(nr):
-        return ("microtech", nr, search_service.search_microtech(nr))
+    def _search(system, nr):
+        if system == "django":
+            return (system, nr, search_service.search_django(nr))
+        elif system == "shopware":
+            return (system, nr, search_service.search_shopware(nr))
+        else:
+            return (system, nr, search_service.search_microtech(nr))
 
     search_tasks = []
     for nr in erp_nrs:
         results[nr] = {"django": None, "shopware": None, "microtech": None}
-        search_tasks.append(("django", nr))
-        search_tasks.append(("shopware", nr))
-        search_tasks.append(("microtech", nr))
+        for sys in ("django", "shopware", "microtech"):
+            search_tasks.append((sys, nr))
 
     with ThreadPoolExecutor(max_workers=6) as executor:
-        futures = []
-        for system, nr in search_tasks:
-            if system == "django":
-                futures.append(executor.submit(_search_django, nr))
-            elif system == "shopware":
-                futures.append(executor.submit(_search_shopware, nr))
-            else:
-                futures.append(executor.submit(_search_microtech, nr))
-
+        futures = [executor.submit(_search, sys, nr) for sys, nr in search_tasks]
         for future in as_completed(futures):
             try:
                 system, nr, data = future.result()
@@ -93,7 +109,7 @@ def customer_merge_search_api(request):
             except Exception as exc:
                 logger.error("Search error: {}", exc)
 
-    return JsonResponse({"results": results, "resolved_from": resolved_sets})
+    return JsonResponse({"results": results})
 
 
 def customer_merge_execute_api(request):

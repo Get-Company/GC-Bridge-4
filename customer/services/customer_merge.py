@@ -611,18 +611,29 @@ class CustomerSyncDirectionService(BaseService):
         return {"message": f"Kunde aus Shopware importiert ({addr_count} Adressen)"}
 
     def _django_to_shopware(self, erp_nr: str) -> dict[str, Any]:
-        """Update customerNumber in Shopware to match Django erp_nr."""
+        """Sync Django customer to Shopware (upsert — auto-links if api_id missing)."""
         customer = Customer.objects.filter(erp_nr=erp_nr).first()
         if not customer:
             raise ValueError(f"Kunde {erp_nr} nicht in Django gefunden.")
-        if not customer.api_id:
-            raise ValueError(f"Kunde {erp_nr} hat keine Shopware-ID — Verknuepfung fehlt.")
 
         from shopware.services import CustomerService
         service = CustomerService()
+
+        # Auto-link: if no api_id, try to find Shopware customer by customerNumber
+        if not customer.api_id:
+            response = service.get_by_customer_number(erp_nr)
+            data = (response or {}).get("data", []) or []
+            if not data:
+                raise ValueError(f"Kunde {erp_nr} nicht in Shopware gefunden — kann nicht verknuepfen.")
+            sw_id = _to_str(_safe_attrs(data[0]).get("id") or data[0].get("id"))
+            if sw_id:
+                customer.api_id = sw_id
+                customer.save(update_fields=["api_id", "updated_at"])
+                logger.info("Django->Shopware: auto-linked {} -> {}", erp_nr, sw_id)
+
         service.update_customer_number(customer.api_id, erp_nr)
         logger.info("Django->Shopware: customerNumber {} set for {}", erp_nr, customer.api_id)
-        return {"message": f"Shopware customerNumber auf {erp_nr} gesetzt"}
+        return {"message": f"Shopware verknuepft (ID: {customer.api_id}) und customerNumber auf {erp_nr} gesetzt"}
 
     def _microtech_to_django(self, erp_nr: str) -> dict[str, Any]:
         """Import customer + addresses from Microtech into Django."""

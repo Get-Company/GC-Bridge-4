@@ -18,6 +18,8 @@ from core.services import CommandRuntimeService
 from core.system_status_view import system_status_api, system_status_run, system_status_view
 from customer.views import (
     customer_merge_view,
+    customer_merge_resolve_api,
+    customer_merge_search_cell_api,
     customer_merge_search_api,
     customer_merge_execute_api,
     customer_update_ids_api,
@@ -124,6 +126,8 @@ def _admin_get_urls():
         path("system/api/", admin.site.admin_view(system_status_api), name="core_system_status_api"),
         path("system/run/", admin.site.admin_view(system_status_run), name="core_system_status_run"),
         path("customer-merge/", admin.site.admin_view(customer_merge_view), name="customer_merge"),
+        path("customer-merge/api/resolve/", admin.site.admin_view(customer_merge_resolve_api), name="customer_merge_resolve"),
+        path("customer-merge/api/search-cell/", admin.site.admin_view(customer_merge_search_cell_api), name="customer_merge_search_cell"),
         path("customer-merge/api/search/", admin.site.admin_view(customer_merge_search_api), name="customer_merge_search"),
         path("customer-merge/api/merge/", admin.site.admin_view(customer_merge_execute_api), name="customer_merge_execute"),
         path("customer-merge/api/update-ids/", admin.site.admin_view(customer_update_ids_api), name="customer_merge_update_ids"),
