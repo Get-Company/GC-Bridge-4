@@ -181,11 +181,61 @@ def customer_delete_addresses_api(request):
             return JsonResponse({"error": "Keine Adressen ausgewaehlt."}, status=400)
 
         from customer.models import Address
-        qs = Address.objects.filter(id__in=address_ids)
-        count = qs.count()
-        qs.delete()
-        logger.info("Deleted {} Django addresses: {}", count, address_ids)
-        return JsonResponse({"success": True, "deleted": count})
+
+        addresses = list(Address.objects.filter(id__in=address_ids))
+        if not addresses:
+            return JsonResponse({"error": "Keine Adressen gefunden."}, status=400)
+
+        errors = []
+
+        # Delete in Shopware
+        sw_ids = [a.api_id for a in addresses if a.api_id]
+        if sw_ids:
+            try:
+                from shopware.services.shopware6 import Shopware6Service
+                sw = Shopware6Service()
+                for sw_id in sw_ids:
+                    try:
+                        sw.request_delete(f"/customer-address/{sw_id}")
+                    except Exception as exc:
+                        errors.append(f"Shopware {sw_id}: {exc}")
+            except Exception as exc:
+                errors.append(f"Shopware: {exc}")
+
+        # Delete in Microtech
+        mt_addresses = [(a.customer.erp_nr, a.erp_ans_nr) for a in addresses if a.erp_ans_nr is not None]
+        if mt_addresses:
+            try:
+                from microtech.services import (
+                    MicrotechAnschriftService,
+                    MicrotechAnsprechpartnerService,
+                    microtech_connection,
+                )
+                with microtech_connection() as erp:
+                    anschrift = MicrotechAnschriftService(erp=erp)
+                    ansprechpartner = MicrotechAnsprechpartnerService(erp=erp)
+                    for erp_nr, ans_nr in mt_addresses:
+                        try:
+                            # Delete Ansprechpartner first
+                            if ansprechpartner.set_range(
+                                from_range=[erp_nr, ans_nr, 0],
+                                to_range=[erp_nr, ans_nr, 999],
+                            ):
+                                while not ansprechpartner.range_eof():
+                                    ansprechpartner.delete()
+                            # Delete Anschrift
+                            if anschrift.find([erp_nr, ans_nr]):
+                                anschrift.delete()
+                        except Exception as exc:
+                            errors.append(f"Microtech {erp_nr}/{ans_nr}: {exc}")
+            except Exception as exc:
+                errors.append(f"Microtech: {exc}")
+
+        # Delete in Django
+        count = len(addresses)
+        Address.objects.filter(id__in=address_ids).delete()
+        logger.info("Deleted {} addresses (Django + Shopware + Microtech), errors: {}", count, errors)
+        return JsonResponse({"success": True, "deleted": count, "errors": errors})
     except Exception as exc:
         logger.error("Address delete failed: {}\n{}", exc, traceback.format_exc())
         return JsonResponse({"error": str(exc)}, status=500)

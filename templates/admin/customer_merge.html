@@ -526,7 +526,10 @@ async function deleteSelectedAddresses(erpNr, groupId) {
     });
     const data = await resp.json();
     if (data.error) { alert('Fehler: ' + data.error); return; }
-    // Re-fetch Django cell
+    if (data.errors && data.errors.length) {
+      alert('Teilweise Fehler:\n' + data.errors.join('\n'));
+    }
+    // Re-fetch all cells (addresses changed in all systems)
     await refetchRow(erpNr, erpNr);
   } catch(e) {
     alert('Fehler: ' + e.message);
