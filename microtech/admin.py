@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.http import JsonResponse
 from django.http import HttpResponseRedirect
 from django.urls import reverse
 
@@ -10,11 +11,15 @@ from microtech.forms import (
     condition_example_for_field,
 )
 from microtech.models import (
+    MicrotechOrderRuleActionTarget,
+    MicrotechOrderRuleConditionSource,
+    MicrotechOrderRuleOperator,
     MicrotechOrderRule,
     MicrotechOrderRuleAction,
     MicrotechOrderRuleCondition,
     MicrotechSettings,
 )
+from microtech.rule_builder import get_action_target_defs, get_condition_source_defs, get_operator_defs
 
 
 class SingletonAdmin(BaseAdmin):
@@ -121,6 +126,58 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
     class Media:
         js = ("microtech/js/order_rule_builder.js",)
 
+    def get_custom_urls(self):
+        urls = super().get_custom_urls()
+        return (
+            *urls,
+            (
+                "rule-builder-meta/",
+                "microtech_orderrule_builder_meta",
+                self.rule_builder_meta_view,
+            ),
+        )
+
+    def rule_builder_meta_view(self, request, **kwargs):
+        if not self.has_view_permission(request):
+            return JsonResponse({"ok": False, "error": "Zugriff verweigert."}, status=403)
+        payload = {
+            "ok": True,
+            "operators": [
+                {
+                    "code": item.code,
+                    "name": item.name,
+                    "engine_operator": item.engine_operator,
+                    "hint": item.hint,
+                }
+                for item in get_operator_defs()
+            ],
+            "condition_sources": [
+                {
+                    "code": item.code,
+                    "name": item.name,
+                    "engine_source_field": item.engine_source_field,
+                    "value_type": item.value_type,
+                    "allowed_operator_codes": list(item.allowed_operator_codes),
+                    "hint": item.hint,
+                    "example": item.example,
+                }
+                for item in get_condition_source_defs()
+            ],
+            "action_targets": [
+                {
+                    "code": item.code,
+                    "name": item.name,
+                    "engine_target_field": item.engine_target_field,
+                    "value_type": item.value_type,
+                    "enum_values": list(item.enum_values),
+                    "hint": item.hint,
+                    "example": item.example,
+                }
+                for item in get_action_target_defs()
+            ],
+        }
+        return JsonResponse(payload)
+
     fieldsets = (
         (
             "Regel",
@@ -143,13 +200,96 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
             {
                 "fields": (),
                 "description": (
-                    "Kundentyp wird automatisch erkannt: Firma wenn Name1 wie Firmenname aussieht "
-                    "(kein Vorname/Nachname, keine Anrede), sonst Privat. "
-                    "Operator und Vergleichswerte sind typabhaengig (String, Integer, Bool, Decimal, Enum). "
-                    "Na1 Modus steuert den Empfaengertext in Anschriften: auto/firma_or_salutation/"
-                    "salutation_only/static. "
-                    "Zusatzposition Zahlungsart anlegen fuegt eine zusaetzliche Vorgangsposition "
-                    "mit payment_position_erp_nr hinzu (z. B. P fuer PayPal)."
+                    "Source/Target-Felder und Operatoren werden in separaten Rulebuilder-Tabellen gepflegt. "
+                    "Operatoren werden im Inline je Source-Feld gefiltert."
+                ),
+            },
+        ),
+    )
+
+
+@admin.register(MicrotechOrderRuleOperator)
+class MicrotechOrderRuleOperatorAdmin(BaseAdmin):
+    list_display = ("priority", "name", "code", "engine_operator", "is_active", "updated_at")
+    list_editable = ("is_active",)
+    search_fields = ("code", "name", "hint")
+    list_filter = ("is_active", "engine_operator")
+    ordering = ("priority", "id")
+    fieldsets = (
+        (
+            "Operator",
+            {
+                "fields": ("is_active", "priority", "code", "name", "engine_operator", "hint"),
+            },
+        ),
+    )
+
+
+@admin.register(MicrotechOrderRuleConditionSource)
+class MicrotechOrderRuleConditionSourceAdmin(BaseAdmin):
+    list_display = (
+        "priority",
+        "name",
+        "code",
+        "engine_source_field",
+        "value_type",
+        "is_active",
+        "updated_at",
+    )
+    list_editable = ("is_active",)
+    search_fields = ("code", "name", "hint", "example")
+    list_filter = ("is_active", "value_type", "engine_source_field")
+    ordering = ("priority", "id")
+    filter_horizontal = ("operators",)
+    fieldsets = (
+        (
+            "Condition Source Feld",
+            {
+                "fields": (
+                    "is_active",
+                    "priority",
+                    "code",
+                    "name",
+                    "engine_source_field",
+                    "value_type",
+                    "operators",
+                    "hint",
+                    "example",
+                ),
+            },
+        ),
+    )
+
+
+@admin.register(MicrotechOrderRuleActionTarget)
+class MicrotechOrderRuleActionTargetAdmin(BaseAdmin):
+    list_display = (
+        "priority",
+        "name",
+        "code",
+        "engine_target_field",
+        "value_type",
+        "is_active",
+        "updated_at",
+    )
+    list_editable = ("is_active",)
+    search_fields = ("code", "name", "hint", "example")
+    list_filter = ("is_active", "value_type", "engine_target_field")
+    ordering = ("priority", "id")
+    fieldsets = (
+        (
+            "Action Target Feld",
+            {
+                "fields": (
+                    "is_active",
+                    "priority",
+                    "code",
+                    "name",
+                    "engine_target_field",
+                    "value_type",
+                    "enum_values",
+                    "hint",
+                    "example",
                 ),
             },
         ),

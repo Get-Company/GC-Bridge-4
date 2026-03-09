@@ -1,9 +1,9 @@
-from django.test import SimpleTestCase
+from django.test import TestCase
 
 from microtech.forms import MicrotechOrderRuleActionForm, MicrotechOrderRuleConditionForm
 
 
-class MicrotechOrderRuleFormsTest(SimpleTestCase):
+class MicrotechOrderRuleFormsTest(TestCase):
     def test_condition_form_normalizes_customer_type_alias(self):
         form = MicrotechOrderRuleConditionForm(
             data={

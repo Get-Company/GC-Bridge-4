@@ -70,6 +70,12 @@ class MicrotechOrderRule(BaseModel):
 
 
 class MicrotechOrderRuleCondition(BaseModel):
+    class ValueType(models.TextChoices):
+        STRING = "string", _("Text")
+        DECIMAL = "decimal", _("Dezimalzahl")
+        ENUM = "enum", _("Enum")
+        COUNTRY_CODE = "country_code", _("ISO2-Laendercode")
+
     class SourceField(models.TextChoices):
         CUSTOMER_TYPE = "customer_type", _("Kundentyp")
         BILLING_COUNTRY_CODE = "billing_country_code", _("Rechnungsland (ISO2)")
@@ -97,12 +103,10 @@ class MicrotechOrderRuleCondition(BaseModel):
     priority = models.PositiveIntegerField(default=100, verbose_name=_("Prioritaet"))
     source_field = models.CharField(
         max_length=64,
-        choices=SourceField.choices,
         verbose_name=_("Source Feld"),
     )
     operator = models.CharField(
         max_length=16,
-        choices=Operator.choices,
         default=Operator.EQUALS,
         verbose_name=_("Operator"),
     )
@@ -123,6 +127,13 @@ class MicrotechOrderRuleCondition(BaseModel):
 
 
 class MicrotechOrderRuleAction(BaseModel):
+    class ValueType(models.TextChoices):
+        STRING = "string", _("Text")
+        INT = "int", _("Ganzzahl")
+        DECIMAL = "decimal", _("Dezimalzahl")
+        BOOL = "bool", _("Bool")
+        ENUM = "enum", _("Enum")
+
     class TargetField(models.TextChoices):
         NA1_MODE = "na1_mode", _("Na1 Modus")
         NA1_STATIC_VALUE = "na1_static_value", _("Na1 statischer Text")
@@ -146,7 +157,6 @@ class MicrotechOrderRuleAction(BaseModel):
     priority = models.PositiveIntegerField(default=100, verbose_name=_("Prioritaet"))
     target_field = models.CharField(
         max_length=64,
-        choices=TargetField.choices,
         verbose_name=_("Target Feld"),
     )
     target_value = models.CharField(
@@ -165,3 +175,97 @@ class MicrotechOrderRuleAction(BaseModel):
         return f"{self.rule_id} | {self.target_field} = {self.target_value}"
 
 
+class MicrotechOrderRuleOperator(BaseModel):
+    class EngineOperator(models.TextChoices):
+        EQUALS = "eq", _("==")
+        CONTAINS = "contains", _("enthaelt")
+        GREATER_THAN = "gt", _(">")
+        LESS_THAN = "lt", _("<")
+
+    code = models.CharField(max_length=64, unique=True, verbose_name=_("Code"))
+    name = models.CharField(max_length=255, verbose_name=_("Name"))
+    engine_operator = models.CharField(
+        max_length=16,
+        choices=EngineOperator.choices,
+        default=EngineOperator.EQUALS,
+        verbose_name=_("Engine Operator"),
+    )
+    hint = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Hinweis"))
+    is_active = models.BooleanField(default=True, verbose_name=_("Aktiv"))
+    priority = models.PositiveIntegerField(default=100, verbose_name=_("Prioritaet"))
+
+    class Meta:
+        verbose_name = _("Microtech Bestellregel Operator")
+        verbose_name_plural = _("Microtech Bestellregel Operatoren")
+        ordering = ("priority", "id")
+
+    def __str__(self) -> str:
+        return f"{self.priority} | {self.name} ({self.code})"
+
+
+class MicrotechOrderRuleConditionSource(BaseModel):
+    code = models.CharField(max_length=64, unique=True, verbose_name=_("Code"))
+    name = models.CharField(max_length=255, verbose_name=_("Name"))
+    engine_source_field = models.CharField(
+        max_length=64,
+        choices=MicrotechOrderRuleCondition.SourceField.choices,
+        verbose_name=_("Engine Source Feld"),
+    )
+    value_type = models.CharField(
+        max_length=32,
+        choices=MicrotechOrderRuleCondition.ValueType.choices,
+        default=MicrotechOrderRuleCondition.ValueType.STRING,
+        verbose_name=_("Wertetyp"),
+    )
+    operators = models.ManyToManyField(
+        MicrotechOrderRuleOperator,
+        related_name="condition_sources",
+        blank=True,
+        verbose_name=_("Erlaubte Operatoren"),
+    )
+    hint = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Hinweis"))
+    example = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Beispiel"))
+    is_active = models.BooleanField(default=True, verbose_name=_("Aktiv"))
+    priority = models.PositiveIntegerField(default=100, verbose_name=_("Prioritaet"))
+
+    class Meta:
+        verbose_name = _("Microtech Bestellregel Source Feld")
+        verbose_name_plural = _("Microtech Bestellregel Source Felder")
+        ordering = ("priority", "id")
+
+    def __str__(self) -> str:
+        return f"{self.priority} | {self.name} ({self.code})"
+
+
+class MicrotechOrderRuleActionTarget(BaseModel):
+    code = models.CharField(max_length=64, unique=True, verbose_name=_("Code"))
+    name = models.CharField(max_length=255, verbose_name=_("Name"))
+    engine_target_field = models.CharField(
+        max_length=64,
+        choices=MicrotechOrderRuleAction.TargetField.choices,
+        verbose_name=_("Engine Target Feld"),
+    )
+    value_type = models.CharField(
+        max_length=32,
+        choices=MicrotechOrderRuleAction.ValueType.choices,
+        default=MicrotechOrderRuleAction.ValueType.STRING,
+        verbose_name=_("Wertetyp"),
+    )
+    enum_values = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        verbose_name=_("Enum Werte (kommagetrennt)"),
+    )
+    hint = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Hinweis"))
+    example = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Beispiel"))
+    is_active = models.BooleanField(default=True, verbose_name=_("Aktiv"))
+    priority = models.PositiveIntegerField(default=100, verbose_name=_("Prioritaet"))
+
+    class Meta:
+        verbose_name = _("Microtech Bestellregel Target Feld")
+        verbose_name_plural = _("Microtech Bestellregel Target Felder")
+        ordering = ("priority", "id")
+
+    def __str__(self) -> str:
+        return f"{self.priority} | {self.name} ({self.code})"

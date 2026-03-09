@@ -7,6 +7,7 @@ from loguru import logger
 
 from core.services import BaseService
 from microtech.models import MicrotechOrderRule, MicrotechOrderRuleAction, MicrotechOrderRuleCondition
+from microtech.rule_builder import get_action_target_map, get_condition_source_map, get_operator_engine_map
 from orders.models import Order
 
 
@@ -128,10 +129,19 @@ class OrderRuleResolverService(BaseService):
             .prefetch_related("conditions", "actions")
             .order_by("priority", "id")
         )
+        source_field_map = get_condition_source_map()
+        operator_engine_map = get_operator_engine_map()
+        action_target_map = get_action_target_map()
         logger.info("Order {}: evaluating {} active rule(s).", order_label, len(rules))
 
         for rule in rules:
-            if not self._matches_rule(rule=rule, context=context, order_label=order_label):
+            if not self._matches_rule(
+                rule=rule,
+                context=context,
+                order_label=order_label,
+                source_field_map=source_field_map,
+                operator_engine_map=operator_engine_map,
+            ):
                 logger.info(
                     "Order {}: rule {} ('{}') did not match.",
                     order_label,
@@ -146,7 +156,11 @@ class OrderRuleResolverService(BaseService):
                 rule.pk,
                 _to_str(rule.name),
             )
-            resolved = self._apply_dynamic_actions(rule=rule, resolved=resolved)
+            resolved = self._apply_dynamic_actions(
+                rule=rule,
+                resolved=resolved,
+                action_target_map=action_target_map,
+            )
             logger.info(
                 "Order {}: resolved rule result -> rule_id={}, zahlungsart_id={}, versandart_id={}, "
                 "vorgangsart_id={}, add_payment_position={}, payment_position_erp_nr='{}', "
@@ -172,6 +186,8 @@ class OrderRuleResolverService(BaseService):
         rule: MicrotechOrderRule,
         context: dict[str, object],
         order_label: str = "",
+        source_field_map: dict[str, object] | None = None,
+        operator_engine_map: dict[str, str] | None = None,
     ) -> bool:
         active_conditions = [condition for condition in rule.conditions.all() if condition.is_active]
         if not active_conditions:
@@ -188,6 +204,8 @@ class OrderRuleResolverService(BaseService):
             active_conditions=active_conditions,
             context=context,
             order_label=order_label,
+            source_field_map=source_field_map or {},
+            operator_engine_map=operator_engine_map or {},
         )
 
     def _matches_dynamic_conditions(
@@ -197,22 +215,55 @@ class OrderRuleResolverService(BaseService):
         active_conditions: list[MicrotechOrderRuleCondition],
         context: dict[str, object],
         order_label: str = "",
+        source_field_map: dict[str, object] | None = None,
+        operator_engine_map: dict[str, str] | None = None,
     ) -> bool:
+        source_field_map = source_field_map or {}
+        operator_engine_map = operator_engine_map or {}
         sorted_conditions = sorted(active_conditions, key=lambda item: (item.priority, item.id))
         evaluations: list[bool] = []
         for condition in sorted_conditions:
-            result = self._evaluate_condition(condition=condition, context=context)
+            source_def = source_field_map.get(condition.source_field)
+            engine_source_field = (
+                _to_str(getattr(source_def, "engine_source_field", ""))
+                or _to_str(condition.source_field)
+            )
+            allowed_operators = set(getattr(source_def, "allowed_operator_codes", ()) or ())
+            operator_code = _to_str(condition.operator)
+            engine_operator = _to_str(operator_engine_map.get(operator_code)) or operator_code
+            value_type = _to_str(getattr(source_def, "value_type", ""))
+
+            if allowed_operators and operator_code not in allowed_operators:
+                result = False
+                logger.warning(
+                    "Order {}: condition {} uses disallowed operator '{}' for source '{}'.",
+                    order_label or "?",
+                    condition.pk,
+                    operator_code,
+                    condition.source_field,
+                )
+            else:
+                result = self._evaluate_condition(
+                    operator=engine_operator,
+                    actual_value=context.get(engine_source_field),
+                    expected_raw=_to_str(condition.expected_value),
+                    value_type=value_type,
+                    engine_source_field=engine_source_field,
+                )
             evaluations.append(result)
-            actual_value = context.get(condition.source_field)
+            actual_value = context.get(engine_source_field)
             logger.info(
-                "Order {}: rule {} ('{}') condition {} -> {} {} '{}' (actual='{}') => {}",
+                "Order {}: rule {} ('{}') condition {} -> {} {} '{}' [engine_source='{}', "
+                "engine_operator='{}'] (actual='{}') => {}",
                 order_label or "?",
                 rule.pk,
                 _to_str(rule.name),
                 condition.pk,
                 condition.source_field,
-                condition.operator,
+                operator_code,
                 _to_str(condition.expected_value),
+                engine_source_field,
+                engine_operator,
                 _to_str(actual_value),
                 "MATCH" if result else "NO_MATCH",
             )
@@ -234,13 +285,12 @@ class OrderRuleResolverService(BaseService):
     def _evaluate_condition(
         cls,
         *,
-        condition: MicrotechOrderRuleCondition,
-        context: dict[str, object],
+        operator: str,
+        actual_value: object,
+        expected_raw: str,
+        value_type: str = "",
+        engine_source_field: str = "",
     ) -> bool:
-        actual_value = context.get(condition.source_field)
-        expected_raw = _to_str(condition.expected_value)
-        operator = condition.operator
-
         if operator == MicrotechOrderRuleCondition.Operator.CONTAINS:
             if not expected_raw:
                 return True
@@ -264,7 +314,7 @@ class OrderRuleResolverService(BaseService):
             MicrotechOrderRuleCondition.SourceField.ORDER_TOTAL_TAX,
             MicrotechOrderRuleCondition.SourceField.SHIPPING_COSTS,
         }
-        if condition.source_field in numeric_fields:
+        if value_type == MicrotechOrderRuleCondition.ValueType.DECIMAL or engine_source_field in numeric_fields:
             actual_decimal = _to_decimal(actual_value)
             expected_decimal = _to_decimal(expected_raw)
             if actual_decimal is None or expected_decimal is None:
@@ -278,7 +328,9 @@ class OrderRuleResolverService(BaseService):
         *,
         rule: MicrotechOrderRule,
         resolved: ResolvedOrderRule,
+        action_target_map: dict[str, object] | None = None,
     ) -> ResolvedOrderRule:
+        action_target_map = action_target_map or {}
         active_actions = [
             action
             for action in rule.actions.all()
@@ -294,7 +346,12 @@ class OrderRuleResolverService(BaseService):
 
         for action in sorted(active_actions, key=lambda item: (item.priority, item.id)):
             before = resolved
-            resolved = cls._apply_action(action=action, resolved=resolved, rule_id=rule.pk)
+            resolved = cls._apply_action(
+                action=action,
+                resolved=resolved,
+                rule_id=rule.pk,
+                action_target_map=action_target_map,
+            )
             if resolved != before:
                 logger.info(
                     "Rule {} ('{}') action {}='{}' applied.",
@@ -320,9 +377,26 @@ class OrderRuleResolverService(BaseService):
         action: MicrotechOrderRuleAction,
         resolved: ResolvedOrderRule,
         rule_id: int | None,
+        action_target_map: dict[str, object] | None = None,
     ) -> ResolvedOrderRule:
+        action_target_map = action_target_map or {}
         target = action.target_field
+        target_def = action_target_map.get(target)
+        engine_target = (
+            _to_str(getattr(target_def, "engine_target_field", ""))
+            or target
+        )
+        value_type = _to_str(getattr(target_def, "value_type", ""))
+        enum_values = set(getattr(target_def, "enum_values", ()) or ())
         raw_value = _to_str(action.target_value)
+        if not hasattr(resolved, engine_target):
+            logger.warning(
+                "Rule {} action {} ignored: unknown target field '{}'.",
+                rule_id,
+                target,
+                engine_target,
+            )
+            return resolved
 
         int_targets = {
             MicrotechOrderRuleAction.TargetField.VORGANGSART_ID,
@@ -336,45 +410,54 @@ class OrderRuleResolverService(BaseService):
             MicrotechOrderRuleAction.TargetField.PAYMENT_POSITION_NAME,
         }
 
-        if target in int_targets:
+        if value_type == MicrotechOrderRuleAction.ValueType.INT or engine_target in int_targets:
             parsed = _to_int(raw_value)
             if parsed is None:
                 logger.warning("Rule {} action {} ignored: invalid int value '{}'.", rule_id, target, raw_value)
                 return resolved
-            return replace(resolved, **{target: parsed})
+            return replace(resolved, **{engine_target: parsed})
 
-        if target in string_targets:
-            return replace(resolved, **{target: raw_value})
+        if value_type == MicrotechOrderRuleAction.ValueType.STRING or engine_target in string_targets:
+            return replace(resolved, **{engine_target: raw_value})
 
-        if target == MicrotechOrderRuleAction.TargetField.PAYMENT_POSITION_VALUE:
+        if (
+            value_type == MicrotechOrderRuleAction.ValueType.DECIMAL
+            or engine_target == MicrotechOrderRuleAction.TargetField.PAYMENT_POSITION_VALUE
+        ):
             parsed_decimal = _to_decimal(raw_value)
             if parsed_decimal is None:
                 logger.warning("Rule {} action {} ignored: invalid decimal value '{}'.", rule_id, target, raw_value)
                 return resolved
             return replace(resolved, payment_position_value=parsed_decimal)
 
-        if target == MicrotechOrderRuleAction.TargetField.ADD_PAYMENT_POSITION:
+        if (
+            value_type == MicrotechOrderRuleAction.ValueType.BOOL
+            or engine_target == MicrotechOrderRuleAction.TargetField.ADD_PAYMENT_POSITION
+        ):
             parsed_bool = _to_bool(raw_value)
             if parsed_bool is None:
                 logger.warning("Rule {} action {} ignored: invalid boolean value '{}'.", rule_id, target, raw_value)
                 return resolved
             return replace(resolved, add_payment_position=parsed_bool)
 
-        if target == MicrotechOrderRuleAction.TargetField.NA1_MODE:
-            valid_values = set(MicrotechOrderRule.Na1Mode.values)
+        if (
+            value_type == MicrotechOrderRuleAction.ValueType.ENUM
+            or engine_target in {
+                MicrotechOrderRuleAction.TargetField.NA1_MODE,
+                MicrotechOrderRuleAction.TargetField.PAYMENT_POSITION_MODE,
+            }
+        ):
+            valid_values = set(enum_values)
+            if not valid_values and engine_target == MicrotechOrderRuleAction.TargetField.NA1_MODE:
+                valid_values = set(MicrotechOrderRule.Na1Mode.values)
+            if not valid_values and engine_target == MicrotechOrderRuleAction.TargetField.PAYMENT_POSITION_MODE:
+                valid_values = set(MicrotechOrderRule.PaymentPositionMode.values)
             if raw_value not in valid_values:
                 logger.warning("Rule {} action {} ignored: unknown enum value '{}'.", rule_id, target, raw_value)
                 return resolved
-            return replace(resolved, na1_mode=raw_value)
+            return replace(resolved, **{engine_target: raw_value})
 
-        if target == MicrotechOrderRuleAction.TargetField.PAYMENT_POSITION_MODE:
-            valid_values = set(MicrotechOrderRule.PaymentPositionMode.values)
-            if raw_value not in valid_values:
-                logger.warning("Rule {} action {} ignored: unknown enum value '{}'.", rule_id, target, raw_value)
-                return resolved
-            return replace(resolved, payment_position_mode=raw_value)
-
-        logger.warning("Rule {} action ignored: unknown target field '{}'.", rule_id, target)
+        logger.warning("Rule {} action ignored: unsupported value type '{}'.", rule_id, value_type or "?")
         return resolved
 
     @staticmethod
