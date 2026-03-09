@@ -274,6 +274,11 @@ UNFOLD = {
                         "icon": "home",
                         "link": reverse_lazy("admin:customer_address_changelist"),
                     },
+                    {
+                        "title": _("Kunden Merge"),
+                        "icon": "merge",
+                        "link": reverse_lazy("admin:customer_merge"),
+                    },
                 ],
             },
             {
