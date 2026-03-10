@@ -261,9 +261,6 @@ class CustomerMergeService(BaseService):
             "orders_moved": 0,
             "addresses_moved": 0,
             "shopware_orders_moved": 0,
-            "shopware_source_deleted": False,
-            "microtech_source_deleted": False,
-            "microtech_target_synced": False,
             "password_source": None,
             "errors": [],
             "log": log,
@@ -336,77 +333,7 @@ class CustomerMergeService(BaseService):
                 result["errors"].append(f"Passwort-Kopie fehlgeschlagen: {exc}")
                 _log(f"Shopware-Login Fehler: {exc}")
 
-        # Delete source customer in Shopware
-        if source.api_id:
-            _log(f"Loesche Shopware-Quellkunde: {source.api_id}")
-            try:
-                from shopware.services import CustomerService
-                service = CustomerService()
-                service.request_delete(f"/customer/{source.api_id}")
-                result["shopware_source_deleted"] = True
-                _log("Shopware-Quellkunde geloescht")
-            except Exception as exc:
-                result["errors"].append(f"Shopware Quell-Kunde loeschen: {exc}")
-                result["shopware_source_deleted"] = False
-                _log(f"Shopware-Quellkunde Fehler: {exc}")
-        else:
-            _log("Shopware-Quellkunde: kein api_id, uebersprungen")
-
-        # Delete source customer in Microtech
-        _log(f"Loesche Microtech-Quellkunde: {source.erp_nr}")
-        try:
-            from microtech.services import (
-                MicrotechAdresseService,
-                MicrotechAnschriftService,
-                MicrotechAnsprechpartnerService,
-                microtech_connection,
-            )
-            with microtech_connection() as erp:
-                adresse = MicrotechAdresseService(erp=erp)
-                if adresse.find(source.erp_nr):
-                    anschrift = MicrotechAnschriftService(erp=erp)
-                    ansprechpartner = MicrotechAnsprechpartnerService(erp=erp)
-                    deleted_ans = 0
-                    if anschrift.set_range(from_range=[source.erp_nr, 0], to_range=[source.erp_nr, 999]):
-                        while not anschrift.range_eof():
-                            ans_nr = anschrift.get_field("AnsNr")
-                            if ans_nr is not None and ansprechpartner.set_range(
-                                from_range=[source.erp_nr, ans_nr, 0],
-                                to_range=[source.erp_nr, ans_nr, 999],
-                            ):
-                                while not ansprechpartner.range_eof():
-                                    ansprechpartner.delete()
-                            anschrift.delete()
-                            deleted_ans += 1
-                    adresse.delete()
-                    result["microtech_source_deleted"] = True
-                    _log(f"Microtech-Quellkunde geloescht ({deleted_ans} Anschriften)")
-                else:
-                    result["microtech_source_deleted"] = "not_found"
-                    _log("Microtech-Quellkunde: nicht gefunden")
-        except Exception as exc:
-            result["errors"].append(f"Microtech Quell-Kunde loeschen: {exc}")
-            result["microtech_source_deleted"] = False
-            _log(f"Microtech-Quellkunde Fehler: {exc}")
-
-        # Delete source customer in Django
-        source_label = f"{source.erp_nr} ({source.name})"
-        _log(f"Loesche Django-Quellkunde: {source_label}")
-        source.delete()
-        _log("Django-Quellkunde geloescht")
-
-        # Re-sync target to Microtech (push merged addresses)
-        _log(f"Sync target {target_erp_nr} nach Microtech")
-        try:
-            sync_svc = CustomerSyncDirectionService()
-            sync_svc._django_to_microtech(target_erp_nr)
-            result["microtech_target_synced"] = True
-            _log("Microtech-Ziel-Sync erfolgreich")
-        except Exception as exc:
-            result["errors"].append(f"Microtech Ziel-Sync: {exc}")
-            result["microtech_target_synced"] = False
-            _log(f"Microtech-Ziel-Sync Fehler: {exc}")
-
+        _log("Merge abgeschlossen (Loeschen erfolgt manuell)")
         _log(f"FERTIG: result={result}")
         return result
 
@@ -542,6 +469,57 @@ class CustomerMergeService(BaseService):
         if source_email:
             service.update_customer(to_sw_id, {"email": source_email})
             logger.info("Shopware: copied email {} from {} to {}", source_email, from_sw_id, to_sw_id)
+
+
+class CustomerDeleteService(BaseService):
+    """Deletes a customer from Django or Shopware."""
+
+    def delete_django(self, erp_nr: str) -> dict[str, Any]:
+        customer = Customer.objects.filter(erp_nr=erp_nr).first()
+        if not customer:
+            raise ValueError(f"Kunde {erp_nr} nicht in Django gefunden.")
+
+        addr_count = customer.addresses.count()
+        order_count = customer.orders.count()
+        if order_count:
+            raise ValueError(
+                f"Kunde {erp_nr} hat noch {order_count} Bestellungen in Django. "
+                f"Bitte zuerst Bestellungen verschieben (Merge)."
+            )
+
+        label = f"{customer.erp_nr} ({customer.name})"
+        customer.delete()
+        logger.info("Deleted Django customer {} ({} addresses)", label, addr_count)
+        return {"deleted": label, "addresses_deleted": addr_count}
+
+    def delete_shopware(self, erp_nr: str) -> dict[str, Any]:
+        customer = Customer.objects.filter(erp_nr=erp_nr).first()
+        sw_id = customer.api_id if customer else None
+
+        if not sw_id:
+            # Try to find directly in Shopware by customerNumber
+            from shopware.services import CustomerService
+            service = CustomerService()
+            response = service.get_by_customer_number(erp_nr)
+            data = (response or {}).get("data", []) or []
+            if not data:
+                raise ValueError(f"Kunde {erp_nr} nicht in Shopware gefunden.")
+            sw_id = _to_str(_safe_attrs(data[0]).get("id") or data[0].get("id"))
+
+        if not sw_id:
+            raise ValueError(f"Keine Shopware-ID fuer Kunde {erp_nr}.")
+
+        from shopware.services import CustomerService
+        service = CustomerService()
+        service.request_delete(f"/customer/{sw_id}")
+
+        # Clear api_id in Django if customer exists
+        if customer and customer.api_id == sw_id:
+            customer.api_id = ""
+            customer.save(update_fields=["api_id", "updated_at"])
+
+        logger.info("Deleted Shopware customer {} (sw_id={})", erp_nr, sw_id)
+        return {"deleted_sw_id": sw_id}
 
 
 class CustomerIdUpdateService(BaseService):

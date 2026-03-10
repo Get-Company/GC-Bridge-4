@@ -599,7 +599,19 @@ async function syncDirection(erpNr, direction, btn) {
 function renderMergeSection() {
   const container = document.getElementById('merge-section');
   const djangoErps = searchErps.filter(nr => searchData[nr]?.django && !searchData[nr].django.error);
-  if (djangoErps.length < 2) { container.innerHTML = ''; return; }
+  if (djangoErps.length < 2) {
+    if (searchErps.length >= 2) {
+      const missing = searchErps.filter(nr => !searchData[nr]?.django || searchData[nr].django.error);
+      container.innerHTML = `<div class="border border-yellow-200 dark:border-yellow-700 rounded-lg p-4 text-sm text-yellow-700 dark:text-yellow-400 flex items-center gap-2">
+        <span class="material-symbols-outlined text-base">warning</span>
+        Merge nicht moeglich: ${missing.map(nr => '<strong>' + esc(nr) + '</strong>').join(', ')} nicht in Django gefunden.
+        Bitte zuerst aus Shopware/Microtech importieren (Sync-Pfeile).
+      </div>`;
+    } else {
+      container.innerHTML = '';
+    }
+    return;
+  }
 
   container.innerHTML = `
   <div class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
