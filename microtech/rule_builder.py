@@ -57,6 +57,8 @@ DEFAULT_OPERATOR_DEFS: tuple[OperatorDef, ...] = (
     OperatorDef(code="contains", name="enthaelt", engine_operator="contains"),
     OperatorDef(code="gt", name=">", engine_operator="gt"),
     OperatorDef(code="lt", name="<", engine_operator="lt"),
+    OperatorDef(code="is_empty", name="ist leer", engine_operator="is_empty"),
+    OperatorDef(code="is_not_empty", name="ist nicht leer", engine_operator="is_not_empty"),
 )
 
 _ALLOWED_RELATIONS: tuple[str, ...] = ("customer", "billing_address", "shipping_address")
@@ -124,10 +126,10 @@ def _field_value_kind(field: Field) -> str:
 
 def _default_operator_codes(value_kind: str) -> tuple[str, ...]:
     if value_kind in {"int", "decimal", "date", "datetime"}:
-        return ("eq", "gt", "lt")
+        return ("eq", "gt", "lt", "is_empty", "is_not_empty")
     if value_kind == "bool":
-        return ("eq",)
-    return ("eq", "contains")
+        return ("eq", "is_empty", "is_not_empty")
+    return ("eq", "contains", "is_empty", "is_not_empty")
 
 
 def _default_example(value_kind: str) -> str:

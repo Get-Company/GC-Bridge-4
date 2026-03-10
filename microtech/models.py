@@ -257,6 +257,8 @@ class MicrotechOrderRuleOperator(BaseModel):
         CONTAINS = "contains", _("enthaelt")
         GREATER_THAN = "gt", _(">")
         LESS_THAN = "lt", _("<")
+        IS_EMPTY = "is_empty", _("ist leer")
+        IS_NOT_EMPTY = "is_not_empty", _("ist nicht leer")
 
     code = models.CharField(max_length=64, unique=True, verbose_name=_("Code"))
     name = models.CharField(max_length=255, verbose_name=_("Name"))

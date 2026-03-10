@@ -76,6 +76,15 @@
     }
   }
 
+  const VALUELESS_OPERATORS = ["is_empty", "is_not_empty"];
+
+  function updateExpectedValueVisibility(operatorSelect, expectedInput) {
+    if (!operatorSelect || !expectedInput) return;
+    const hide = VALUELESS_OPERATORS.includes(operatorSelect.value);
+    expectedInput.style.display = hide ? "none" : "";
+    if (hide) expectedInput.value = "";
+  }
+
   function updateConditionRow(row) {
     const pathInput = row.querySelector("select[name$='-django_field_path'], input[name$='-django_field_path']");
     const operatorSelect = row.querySelector("select[name$='-operator_code']");
@@ -89,12 +98,14 @@
       rebuildOperatorOptions(operatorSelect, [], currentOperator);
       expectedInput.placeholder = "";
       expectedInput.title = "";
+      updateExpectedValueVisibility(operatorSelect, expectedInput);
       return;
     }
 
     rebuildOperatorOptions(operatorSelect, fieldDef.allowed_operator_codes || [], currentOperator);
     expectedInput.placeholder = fieldDef.example || "";
     expectedInput.title = fieldDef.hint || "";
+    updateExpectedValueVisibility(operatorSelect, expectedInput);
   }
 
   function rebuildDatasetFieldOptions(datasetFieldSelect, datasetId, currentValue) {
@@ -190,6 +201,12 @@
         pathInput.addEventListener("input", () => updateConditionRow(row));
       }
       updateConditionRow(row);
+    }
+
+    const operatorSelect = row.querySelector("select[name$='-operator_code']");
+    const expectedInput = row.querySelector("input[name$='-expected_value']");
+    if (operatorSelect && expectedInput) {
+      operatorSelect.addEventListener("change", () => updateExpectedValueVisibility(operatorSelect, expectedInput));
     }
 
     if (datasetSelect) {
