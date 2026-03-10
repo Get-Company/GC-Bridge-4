@@ -15,10 +15,20 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
+from django.views.static import serve as static_serve
 from django.urls import path
-from django.views.generic import TemplateView
+from django.views.generic import RedirectView, TemplateView
+
+from GC_Bridge_4.settings import BASE_DIR
 
 urlpatterns = [
     path('', TemplateView.as_view(template_name='landing.html'), name='home'),
+    path("docs/html/", RedirectView.as_view(url="/docs/html/index.html", permanent=False), name="docs-index"),
+    path(
+        "docs/html/<path:path>",
+        static_serve,
+        {"document_root": BASE_DIR / "docs" / "build" / "html"},
+        name="docs-html",
+    ),
     path('admin/', admin.site.urls),
 ]
