@@ -223,6 +223,14 @@ class MicrotechOrderRuleConditionSource(BaseModel):
         blank=True,
         verbose_name=_("Erlaubte Operatoren"),
     )
+    dataset_field = models.ForeignKey(
+        "microtech.MicrotechDatasetField",
+        on_delete=models.SET_NULL,
+        related_name="condition_sources",
+        null=True,
+        blank=True,
+        verbose_name=_("Dataset Feld (Katalog)"),
+    )
     hint = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Hinweis"))
     example = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Beispiel"))
     is_active = models.BooleanField(default=True, verbose_name=_("Aktiv"))
@@ -257,6 +265,14 @@ class MicrotechOrderRuleActionTarget(BaseModel):
         default="",
         verbose_name=_("Enum Werte (kommagetrennt)"),
     )
+    dataset_field = models.ForeignKey(
+        "microtech.MicrotechDatasetField",
+        on_delete=models.SET_NULL,
+        related_name="action_targets",
+        null=True,
+        blank=True,
+        verbose_name=_("Dataset Feld (Katalog)"),
+    )
     hint = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Hinweis"))
     example = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Beispiel"))
     is_active = models.BooleanField(default=True, verbose_name=_("Aktiv"))
@@ -269,3 +285,53 @@ class MicrotechOrderRuleActionTarget(BaseModel):
 
     def __str__(self) -> str:
         return f"{self.priority} | {self.name} ({self.code})"
+
+
+class MicrotechDatasetCatalog(BaseModel):
+    code = models.CharField(max_length=64, unique=True, verbose_name=_("Code"))
+    name = models.CharField(max_length=255, verbose_name=_("Dataset Name"))
+    description = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Bezeichnung"))
+    source_identifier = models.CharField(max_length=255, unique=True, verbose_name=_("Source Identifier"))
+    is_active = models.BooleanField(default=True, verbose_name=_("Aktiv"))
+    priority = models.PositiveIntegerField(default=100, verbose_name=_("Prioritaet"))
+
+    class Meta:
+        verbose_name = _("Microtech Dataset")
+        verbose_name_plural = _("Microtech Datasets")
+        ordering = ("priority", "name", "id")
+
+    def __str__(self) -> str:
+        if self.description:
+            return f"{self.priority} | {self.name} - {self.description}"
+        return f"{self.priority} | {self.name}"
+
+
+class MicrotechDatasetField(BaseModel):
+    dataset = models.ForeignKey(
+        MicrotechDatasetCatalog,
+        on_delete=models.CASCADE,
+        related_name="fields",
+        verbose_name=_("Dataset"),
+    )
+    field_name = models.CharField(max_length=128, verbose_name=_("Feldname"))
+    label = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Bezeichnung"))
+    field_type = models.CharField(max_length=64, blank=True, default="", verbose_name=_("Feldtyp"))
+    is_calc_field = models.BooleanField(default=False, verbose_name=_("Berechnetes Feld"))
+    can_access = models.BooleanField(default=True, verbose_name=_("Lesbar"))
+    is_active = models.BooleanField(default=True, verbose_name=_("Aktiv"))
+    priority = models.PositiveIntegerField(default=100, verbose_name=_("Prioritaet"))
+
+    class Meta:
+        verbose_name = _("Microtech Dataset Feld")
+        verbose_name_plural = _("Microtech Dataset Felder")
+        ordering = ("dataset__priority", "dataset_id", "priority", "field_name", "id")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("dataset", "field_name"),
+                name="unique_microtech_dataset_field_name",
+            )
+        ]
+
+    def __str__(self) -> str:
+        dataset_name = self.dataset.name if self.dataset_id else "?"
+        return f"{dataset_name}.{self.field_name}"

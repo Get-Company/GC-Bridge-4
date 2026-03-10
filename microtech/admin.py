@@ -11,6 +11,8 @@ from microtech.forms import (
     condition_example_for_field,
 )
 from microtech.models import (
+    MicrotechDatasetCatalog,
+    MicrotechDatasetField,
     MicrotechOrderRuleActionTarget,
     MicrotechOrderRuleConditionSource,
     MicrotechOrderRuleOperator,
@@ -232,15 +234,17 @@ class MicrotechOrderRuleConditionSourceAdmin(BaseAdmin):
         "name",
         "code",
         "engine_source_field",
+        "dataset_field",
         "value_type",
         "is_active",
         "updated_at",
     )
     list_editable = ("is_active",)
     search_fields = ("code", "name", "hint", "example")
-    list_filter = ("is_active", "value_type", "engine_source_field")
+    list_filter = ("is_active", "value_type", "engine_source_field", "dataset_field__dataset")
     ordering = ("priority", "id")
     filter_horizontal = ("operators",)
+    autocomplete_fields = ("dataset_field",)
     fieldsets = (
         (
             "Condition Source Feld",
@@ -251,6 +255,7 @@ class MicrotechOrderRuleConditionSourceAdmin(BaseAdmin):
                     "code",
                     "name",
                     "engine_source_field",
+                    "dataset_field",
                     "value_type",
                     "operators",
                     "hint",
@@ -268,14 +273,16 @@ class MicrotechOrderRuleActionTargetAdmin(BaseAdmin):
         "name",
         "code",
         "engine_target_field",
+        "dataset_field",
         "value_type",
         "is_active",
         "updated_at",
     )
     list_editable = ("is_active",)
     search_fields = ("code", "name", "hint", "example")
-    list_filter = ("is_active", "value_type", "engine_target_field")
+    list_filter = ("is_active", "value_type", "engine_target_field", "dataset_field__dataset")
     ordering = ("priority", "id")
+    autocomplete_fields = ("dataset_field",)
     fieldsets = (
         (
             "Action Target Feld",
@@ -286,10 +293,64 @@ class MicrotechOrderRuleActionTargetAdmin(BaseAdmin):
                     "code",
                     "name",
                     "engine_target_field",
+                    "dataset_field",
                     "value_type",
                     "enum_values",
                     "hint",
                     "example",
+                ),
+            },
+        ),
+    )
+
+
+@admin.register(MicrotechDatasetCatalog)
+class MicrotechDatasetCatalogAdmin(BaseAdmin):
+    list_display = ("priority", "name", "description", "code", "is_active", "updated_at")
+    list_editable = ("is_active",)
+    search_fields = ("code", "name", "description", "source_identifier")
+    list_filter = ("is_active",)
+    ordering = ("priority", "name", "id")
+    fieldsets = (
+        (
+            "Dataset",
+            {
+                "fields": ("is_active", "priority", "code", "name", "description", "source_identifier"),
+            },
+        ),
+    )
+
+
+@admin.register(MicrotechDatasetField)
+class MicrotechDatasetFieldAdmin(BaseAdmin):
+    list_display = (
+        "priority",
+        "dataset",
+        "field_name",
+        "field_type",
+        "is_calc_field",
+        "can_access",
+        "is_active",
+        "updated_at",
+    )
+    list_editable = ("is_active",)
+    search_fields = ("field_name", "label", "field_type", "dataset__name", "dataset__description")
+    list_filter = ("is_active", "is_calc_field", "can_access", "field_type", "dataset")
+    ordering = ("dataset__priority", "dataset__name", "priority", "field_name", "id")
+    autocomplete_fields = ("dataset",)
+    fieldsets = (
+        (
+            "Dataset Feld",
+            {
+                "fields": (
+                    "is_active",
+                    "priority",
+                    "dataset",
+                    "field_name",
+                    "label",
+                    "field_type",
+                    "is_calc_field",
+                    "can_access",
                 ),
             },
         ),
