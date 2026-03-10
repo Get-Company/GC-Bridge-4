@@ -160,15 +160,32 @@ class MicrotechOrderRuleActionForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        dataset_field_id = _to_str(
+            self.data.get(self.add_prefix("dataset_field"))
+            or self.initial.get("dataset_field")
+            or getattr(self.instance, "dataset_field_id", "")
+        )
         selected_dataset_id = _to_str(
             self.data.get(self.add_prefix("dataset"))
             or self.initial.get("dataset")
             or getattr(self.instance, "dataset_id", "")
         )
+        if not selected_dataset_id and dataset_field_id.isdigit():
+            selected_dataset_id = _to_str(
+                MicrotechDatasetField.objects
+                .filter(pk=int(dataset_field_id))
+                .values_list("dataset_id", flat=True)
+                .first()
+            )
 
-        self.fields["dataset"].queryset = MicrotechDatasetCatalog.objects.filter(is_active=True).order_by("priority", "id")
-        self.fields["dataset"].required = False
-        self.fields["dataset"].widget = forms.HiddenInput()
+        if "dataset" in self.fields:
+            self.fields["dataset"].queryset = (
+                MicrotechDatasetCatalog.objects
+                .filter(is_active=True)
+                .order_by("priority", "id")
+            )
+            self.fields["dataset"].required = False
+            self.fields["dataset"].widget = forms.HiddenInput()
 
         if selected_dataset_id:
             self.fields["dataset_field"].queryset = (
