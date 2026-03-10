@@ -199,13 +199,16 @@ def customer_delete_addresses_api(request):
                 sw = Shopware6Service()
                 for sw_id in sw_ids:
                     try:
+                        logger.info("Delete-addresses: Shopware deleting {}", sw_id)
                         sw.request_delete(f"/customer-address/{sw_id}")
+                        logger.info("Delete-addresses: Shopware deleted {}", sw_id)
                     except Exception as exc:
                         errors.append(f"Shopware {sw_id}: {exc}")
+                        logger.warning("Delete-addresses: Shopware {} failed: {}", sw_id, exc)
             except Exception as exc:
                 errors.append(f"Shopware: {exc}")
-
-        logger.info("Delete-addresses: Shopware done")
+                logger.warning("Delete-addresses: Shopware init failed: {}", exc)
+        logger.info("Delete-addresses: Shopware phase done")
 
         # Delete in Microtech
         mt_addresses = [(a.customer.erp_nr, a.erp_ans_nr) for a in addresses if a.erp_ans_nr is not None]
@@ -217,11 +220,14 @@ def customer_delete_addresses_api(request):
                     MicrotechAnsprechpartnerService,
                     microtech_connection,
                 )
+                logger.info("Delete-addresses: Microtech connecting...")
                 with microtech_connection() as erp:
+                    logger.info("Delete-addresses: Microtech connected")
                     anschrift = MicrotechAnschriftService(erp=erp)
                     ansprechpartner = MicrotechAnsprechpartnerService(erp=erp)
                     for erp_nr, ans_nr in mt_addresses:
                         try:
+                            logger.info("Delete-addresses: Microtech deleting {}/{}", erp_nr, ans_nr)
                             # Delete Ansprechpartner first
                             if ansprechpartner.set_range(
                                 from_range=[erp_nr, ans_nr, 0],
@@ -232,12 +238,14 @@ def customer_delete_addresses_api(request):
                             # Delete Anschrift
                             if anschrift.find([erp_nr, ans_nr]):
                                 anschrift.delete()
+                            logger.info("Delete-addresses: Microtech deleted {}/{}", erp_nr, ans_nr)
                         except Exception as exc:
                             errors.append(f"Microtech {erp_nr}/{ans_nr}: {exc}")
+                            logger.warning("Delete-addresses: Microtech {}/{} failed: {}", erp_nr, ans_nr, exc)
             except Exception as exc:
                 errors.append(f"Microtech: {exc}")
-
-        logger.info("Delete-addresses: Microtech done")
+                logger.warning("Delete-addresses: Microtech connection failed: {}", exc)
+        logger.info("Delete-addresses: Microtech phase done")
 
         # Delete in Django
         count = len(addresses)
