@@ -330,6 +330,31 @@ UNFOLD = {
                         "icon": "cable",
                         "link": reverse_lazy("admin:microtech_microtechsettings_changelist"),
                     },
+                    {
+                        "title": _("Operatoren"),
+                        "icon": "rule",
+                        "link": reverse_lazy("admin:microtech_microtechorderruleoperator_changelist"),
+                    },
+                    {
+                        "title": _("Source Felder"),
+                        "icon": "input",
+                        "link": reverse_lazy("admin:microtech_microtechorderruleconditionsource_changelist"),
+                    },
+                    {
+                        "title": _("Target Felder"),
+                        "icon": "output",
+                        "link": reverse_lazy("admin:microtech_microtechorderruleactiontarget_changelist"),
+                    },
+                    {
+                        "title": _("Datasets"),
+                        "icon": "storage",
+                        "link": reverse_lazy("admin:microtech_microtechdatasetcatalog_changelist"),
+                    },
+                    {
+                        "title": _("Dataset Felder"),
+                        "icon": "table_rows",
+                        "link": reverse_lazy("admin:microtech_microtechdatasetfield_changelist"),
+                    },
                 ],
             },
             {
