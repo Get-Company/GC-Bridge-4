@@ -1,7 +1,43 @@
+import uuid
+
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
 from core.models import BaseModel
+
+
+class MicrotechJob(BaseModel):
+    class Status(models.TextChoices):
+        QUEUED = "queued", _("Wartend")
+        RUNNING = "running", _("Laufend")
+        SUCCEEDED = "succeeded", _("Erfolgreich")
+        FAILED = "failed", _("Fehlgeschlagen")
+        CANCELLED = "cancelled", _("Abgebrochen")
+
+    status = models.CharField(
+        max_length=16, choices=Status.choices, default=Status.QUEUED, db_index=True, verbose_name=_("Status")
+    )
+    priority = models.PositiveSmallIntegerField(default=100, db_index=True, verbose_name=_("Prioritaet"))
+    label = models.CharField(max_length=255, verbose_name=_("Bezeichnung"))
+    correlation_id = models.CharField(max_length=64, unique=True, db_index=True, verbose_name=_("Correlation ID"))
+    started_at = models.DateTimeField(null=True, blank=True, verbose_name=_("Gestartet"))
+    finished_at = models.DateTimeField(null=True, blank=True, verbose_name=_("Beendet"))
+    last_error = models.TextField(blank=True, default="", verbose_name=_("Letzter Fehler"))
+
+    class Meta:
+        verbose_name = _("Microtech Job")
+        verbose_name_plural = _("Microtech Jobs")
+        ordering = ("priority", "created_at")
+        indexes = [
+            models.Index(fields=["status", "priority", "created_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"[{self.status}] {self.label} (P{self.priority})"
+
+    @staticmethod
+    def make_correlation_id() -> str:
+        return uuid.uuid4().hex[:16]
 
 
 class MicrotechSettings(BaseModel):

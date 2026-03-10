@@ -1,18 +1,15 @@
 from __future__ import annotations
 
+import traceback
 from contextlib import contextmanager
 from dataclasses import dataclass
 import os
-import threading
 from typing import Any
 
+from django.utils import timezone
 from loguru import logger
 
 from core.services import BaseService
-
-# Only 1 simultaneous Microtech COM connection allowed (1 license per user).
-MICROTECH_MAX_CONNECTIONS = 1
-_connection_semaphore = threading.Semaphore(MICROTECH_MAX_CONNECTIONS)
 
 
 try:
@@ -117,18 +114,63 @@ class MicrotechConnectionService(BaseService):
 
 
 @contextmanager
-def microtech_connection(*, manual: bool = False, config: MicrotechConnectionConfig | None = None, timeout: float = 60.0):
-    acquired = _connection_semaphore.acquire(timeout=timeout)
-    if not acquired:
+def microtech_connection(
+    *,
+    manual: bool = False,
+    config: MicrotechConnectionConfig | None = None,
+    timeout: float = 120.0,
+    priority: int = 100,
+    label: str = "",
+):
+    from microtech.models import MicrotechJob
+    from microtech.services.queue_worker import MicrotechQueueWorker
+
+    if not label:
+        # Auto-generate label from caller info
+        frame = traceback.extract_stack(limit=3)
+        caller = frame[0] if frame else None
+        label = f"{caller.filename.rsplit('/', 1)[-1]}:{caller.lineno}" if caller else "unknown"
+
+    correlation_id = MicrotechJob.make_correlation_id()
+    job = MicrotechJob.objects.create(
+        status=MicrotechJob.Status.QUEUED,
+        priority=priority,
+        label=label,
+        correlation_id=correlation_id,
+    )
+    logger.info("Microtech job {} created: '{}' (priority={}).", job.id, label, priority)
+
+    worker = MicrotechQueueWorker.get()
+    turn_event = worker.register_turn(correlation_id)
+
+    # Wait for the worker to grant us our turn
+    if not turn_event.wait(timeout=timeout):
+        job.status = MicrotechJob.Status.FAILED
+        job.last_error = f"Timeout waiting for turn ({timeout}s)"
+        job.finished_at = timezone.now()
+        job.save(update_fields=["status", "last_error", "finished_at", "updated_at"])
+        worker.release_turn(correlation_id)
         raise RuntimeError(
-            f"Could not acquire Microtech connection slot within {timeout}s "
-            f"(max {MICROTECH_MAX_CONNECTIONS} simultaneous connection)."
+            f"Could not acquire Microtech connection slot within {timeout}s. "
+            f"Job {job.id} ('{label}') timed out in queue."
         )
+
+    # It's our turn — create the COM connection in this thread
     service = MicrotechConnectionService(config=config, manual=manual)
     try:
-        logger.info("Acquired Microtech connection slot.")
+        logger.info("Microtech job {} starting COM connection.", job.id)
         yield service.connect()
+        # Success
+        job.status = MicrotechJob.Status.SUCCEEDED
+        job.finished_at = timezone.now()
+        job.save(update_fields=["status", "finished_at", "updated_at"])
+    except Exception as exc:
+        job.status = MicrotechJob.Status.FAILED
+        job.last_error = str(exc)[:2000]
+        job.finished_at = timezone.now()
+        job.save(update_fields=["status", "last_error", "finished_at", "updated_at"])
+        raise
     finally:
         service.close()
-        _connection_semaphore.release()
-        logger.info("Released Microtech connection slot.")
+        worker.release_turn(correlation_id)
+        logger.info("Microtech job {} finished. Released turn.", job.id)

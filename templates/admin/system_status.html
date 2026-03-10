@@ -9,15 +9,15 @@
     <h1 class="text-xl font-semibold">System-Status</h1>
     <div class="flex items-center gap-4 text-sm">
       {# Microtech Verbindungsslot #}
-      <span id="microtech-slot" class="flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
+      <a href="/admin/microtech-queue/" id="microtech-slot" class="flex items-center gap-1.5 text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors" title="Microtech Queue oeffnen">
         <span id="microtech-slot-dot" class="inline-block w-2 h-2 rounded-full
           {% if microtech_slot.available %}bg-green-500{% elif microtech_slot.available is None %}bg-gray-400{% else %}bg-red-500 animate-pulse{% endif %}"></span>
-        Microtech-Slot:
+        Microtech-Queue:
         <span id="microtech-slot-label" class="font-medium
           {% if microtech_slot.available %}text-green-600 dark:text-green-400{% elif microtech_slot.available is None %}text-gray-400{% else %}text-red-600 dark:text-red-400{% endif %}">
-          {% if microtech_slot.available %}frei{% elif microtech_slot.available is None %}?{% else %}belegt{% endif %}
+          {% if microtech_slot.available %}frei{% elif microtech_slot.available is None %}?{% else %}belegt ({{ microtech_slot.running }} aktiv, {{ microtech_slot.queued }} wartend){% endif %}
         </span>
-      </span>
+      </a>
       <span class="text-gray-300 dark:text-gray-600">|</span>
       <span id="refresh-status" class="flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
         <span id="refresh-dot" class="inline-block w-2 h-2 rounded-full bg-green-500"></span>
@@ -377,11 +377,14 @@
 
     if (slot.available === true) {
       dot.className = "inline-block w-2 h-2 rounded-full bg-green-500";
-      label.textContent = "frei";
+      const queued = slot.queued || 0;
+      label.textContent = queued > 0 ? `frei (${queued} wartend)` : "frei";
       label.className = "font-medium text-green-600 dark:text-green-400";
     } else if (slot.available === false) {
       dot.className = "inline-block w-2 h-2 rounded-full bg-red-500 animate-pulse";
-      label.textContent = "belegt";
+      const r = slot.running || 0;
+      const q = slot.queued || 0;
+      label.textContent = `belegt (${r} aktiv, ${q} wartend)`;
       label.className = "font-medium text-red-600 dark:text-red-400";
     } else {
       dot.className = "inline-block w-2 h-2 rounded-full bg-gray-400";

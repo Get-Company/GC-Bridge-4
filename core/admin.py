@@ -16,6 +16,7 @@ from unfold.forms import AdminPasswordChangeForm, UserChangeForm, UserCreationFo
 from core.log_reader import get_allowed_log_files, tail_log_file
 from core.services import CommandRuntimeService
 from core.system_status_view import system_status_api, system_status_run, system_status_view
+from microtech.views.queue_view import microtech_queue_view, microtech_queue_api, microtech_queue_action
 from customer.views import (
     customer_merge_view,
     customer_merge_resolve_api,
@@ -134,6 +135,9 @@ def _admin_get_urls():
         path("customer-merge/api/update-ids/", admin.site.admin_view(customer_update_ids_api), name="customer_merge_update_ids"),
         path("customer-merge/api/delete-addresses/", admin.site.admin_view(customer_delete_addresses_api), name="customer_merge_delete_addresses"),
         path("customer-merge/api/sync/", admin.site.admin_view(customer_sync_direction_api), name="customer_merge_sync"),
+        path("microtech-queue/", admin.site.admin_view(microtech_queue_view), name="microtech_queue"),
+        path("microtech-queue/api/", admin.site.admin_view(microtech_queue_api), name="microtech_queue_api"),
+        path("microtech-queue/api/action/", admin.site.admin_view(microtech_queue_action), name="microtech_queue_action"),
     ]
     return custom_urls + _default_admin_get_urls()
 

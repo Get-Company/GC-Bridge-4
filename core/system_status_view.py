@@ -127,16 +127,18 @@ def _get_active_processes() -> list[dict]:
 
 
 def _get_microtech_slot_status() -> dict:
-    """Check if the Microtech connection slot is currently in use."""
+    """Check if the Microtech COM queue status."""
     try:
-        from microtech.services.connection import MICROTECH_MAX_CONNECTIONS, _connection_semaphore
-        acquired = _connection_semaphore.acquire(blocking=False)
-        if acquired:
-            _connection_semaphore.release()
-            return {"available": True, "max": MICROTECH_MAX_CONNECTIONS}
-        return {"available": False, "max": MICROTECH_MAX_CONNECTIONS}
+        from microtech.models import MicrotechJob
+        queued = MicrotechJob.objects.filter(status=MicrotechJob.Status.QUEUED).count()
+        running = MicrotechJob.objects.filter(status=MicrotechJob.Status.RUNNING).count()
+        return {
+            "available": running == 0,
+            "queued": queued,
+            "running": running,
+        }
     except Exception:
-        return {"available": None, "max": 0}
+        return {"available": None, "queued": 0, "running": 0}
 
 
 def _get_systemd_units() -> list[dict] | None:
