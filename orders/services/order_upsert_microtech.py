@@ -500,21 +500,30 @@ class OrderUpsertMicrotechService(BaseService):
         create_position_requested = 0
         create_position_applied = 0
         created_erp_nrs: list[str] = []
+        seen_created_erp_nrs: set[str] = set()
         notes: list[str] = []
 
         for action in resolved_rule.dataset_actions:
             total += 1
             if action.action_type == MicrotechOrderRuleAction.ActionType.CREATE_EXTRA_POSITION:
                 create_position_requested += 1
-                so_vorgang.Positionen.Add(1, DEFAULT_UNIT, action.target_value)
+                erp_nr = (action.target_value or "").strip()
+                if not erp_nr:
+                    notes.append("create_extra_position skipped: empty ERP-Nr")
+                    continue
+                if erp_nr in seen_created_erp_nrs:
+                    notes.append(f"duplicate create_extra_position skipped: {erp_nr}")
+                    continue
+                seen_created_erp_nrs.add(erp_nr)
+                so_vorgang.Positionen.Add(1, DEFAULT_UNIT, erp_nr)
                 created_extra_position = True
                 create_position_applied += 1
                 applied += 1
-                created_erp_nrs.append(action.target_value)
+                created_erp_nrs.append(erp_nr)
                 logger.info(
                     "Order {}: created extra position with ERP-Nr '{}'.",
                     order.order_number,
-                    action.target_value,
+                    erp_nr,
                 )
                 continue
 

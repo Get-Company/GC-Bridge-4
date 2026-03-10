@@ -167,6 +167,8 @@ class MicrotechOrderRuleActionForm(forms.ModelForm):
         )
 
         self.fields["dataset"].queryset = MicrotechDatasetCatalog.objects.filter(is_active=True).order_by("priority", "id")
+        self.fields["dataset"].required = False
+        self.fields["dataset"].widget = forms.HiddenInput()
 
         if selected_dataset_id:
             self.fields["dataset_field"].queryset = (
@@ -176,10 +178,18 @@ class MicrotechOrderRuleActionForm(forms.ModelForm):
                 .order_by("priority", "id")
             )
         else:
-            self.fields["dataset_field"].queryset = MicrotechDatasetField.objects.none()
+            self.fields["dataset_field"].queryset = (
+                MicrotechDatasetField.objects
+                .filter(is_active=True, dataset__is_active=True)
+                .select_related("dataset")
+                .order_by("dataset__priority", "dataset__name", "priority", "field_name", "id")
+            )
 
         self.fields["target_value"].help_text = (
             "Bei Aktionstyp 'create_extra_position' enthaelt target_value die ERP-Nr der Zusatzposition."
+        )
+        self.fields["dataset_field"].help_text = (
+            "Suche ueber alle aktiven Dataset-Felder. Das Dataset wird automatisch aus der Auswahl abgeleitet."
         )
 
     def clean(self):
@@ -190,10 +200,12 @@ class MicrotechOrderRuleActionForm(forms.ModelForm):
         target_value = _to_str(cleaned_data.get("target_value"))
 
         if action_type == MicrotechOrderRuleAction.ActionType.SET_FIELD:
-            if not dataset:
-                self.add_error("dataset", "Dataset ist fuer set_field erforderlich.")
             if not dataset_field:
                 self.add_error("dataset_field", "Dataset Feld ist fuer set_field erforderlich.")
+                return cleaned_data
+            if not dataset:
+                dataset = dataset_field.dataset
+                cleaned_data["dataset"] = dataset
             if dataset and dataset_field and dataset_field.dataset_id != dataset.id:
                 self.add_error("dataset_field", "Dataset Feld passt nicht zum gewaehlten Dataset.")
             if not target_value:

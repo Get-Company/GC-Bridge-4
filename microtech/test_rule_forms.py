@@ -73,3 +73,32 @@ class MicrotechOrderRuleFormsTest(TestCase):
 
         self.assertFalse(form.is_valid())
         self.assertIn("target_value", form.errors)
+
+    def test_action_form_derives_dataset_from_dataset_field(self):
+        dataset = MicrotechDatasetCatalog.objects.create(
+            code="vorgangposition_vorgangspositionen",
+            name="VorgangPosition",
+            description="Vorgangspositionen",
+            source_identifier="VorgangPosition - Vorgangspositionen",
+            priority=10,
+        )
+        field = MicrotechDatasetField.objects.create(
+            dataset=dataset,
+            field_name="KuBez",
+            label="Kurzbezeichnung",
+            field_type="UnicodeString",
+            priority=10,
+        )
+
+        form = MicrotechOrderRuleActionForm(
+            data={
+                "is_active": True,
+                "priority": 10,
+                "action_type": MicrotechOrderRuleAction.ActionType.SET_FIELD,
+                "dataset_field": field.id,
+                "target_value": "PayPal Gebuehr",
+            }
+        )
+
+        self.assertTrue(form.is_valid(), msg=form.errors.as_json())
+        self.assertEqual(form.cleaned_data["dataset"], dataset)

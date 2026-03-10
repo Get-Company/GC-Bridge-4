@@ -12,7 +12,11 @@ from microtech.models import (
     MicrotechOrderRuleCondition,
 )
 from orders.models import Order
-from orders.services.order_rule_resolver import OrderRuleResolverService, ResolvedOrderRule
+from orders.services.order_rule_resolver import (
+    OrderRuleResolverService,
+    ResolvedDatasetAction,
+    ResolvedOrderRule,
+)
 from orders.services.order_upsert_microtech import OrderRuleDebugInfo, OrderUpsertMicrotechService
 
 
@@ -189,3 +193,46 @@ class OrderUpsertRuleDebugTest(SimpleTestCase):
 
         self.assertEqual(debug.rule_id, 1)
         self.assertEqual(debug.rule_name, "Fallback")
+
+    def test_duplicate_create_extra_position_actions_are_applied_once_per_erp_nr(self):
+        calls: list[tuple[int, str, str]] = []
+
+        def add_position(quantity, unit, erp_nr):
+            calls.append((quantity, unit, erp_nr))
+
+        order = SimpleNamespace(order_number="ORDER-TRACE")
+        so_vorgang = SimpleNamespace(
+            Positionen=SimpleNamespace(
+                Add=add_position,
+                DataSet=SimpleNamespace(),
+            )
+        )
+        resolved_rule = ResolvedOrderRule(
+            rule_id=42,
+            rule_name="P dedupe",
+            dataset_actions=(
+                ResolvedDatasetAction(
+                    action_type=MicrotechOrderRuleAction.ActionType.CREATE_EXTRA_POSITION,
+                    target_value="P",
+                ),
+                ResolvedDatasetAction(
+                    action_type=MicrotechOrderRuleAction.ActionType.CREATE_EXTRA_POSITION,
+                    target_value="P",
+                ),
+                ResolvedDatasetAction(
+                    action_type=MicrotechOrderRuleAction.ActionType.CREATE_EXTRA_POSITION,
+                    target_value="Q",
+                ),
+            ),
+        )
+
+        debug = OrderUpsertMicrotechService()._apply_rule_dataset_actions(
+            order=order,
+            so_vorgang=so_vorgang,
+            resolved_rule=resolved_rule,
+        )
+
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(debug.create_position_requested, 3)
+        self.assertEqual(debug.create_position_applied, 2)
+        self.assertEqual(debug.created_position_erp_nrs, ("P", "Q"))

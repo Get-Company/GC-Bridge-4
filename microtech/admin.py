@@ -99,10 +99,10 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
             "is_active",
             "priority",
             "action_type",
-            "dataset",
             "dataset_field",
             "target_value",
         )
+        autocomplete_fields = ("dataset_field",)
         extra = 0
 
     list_display = (

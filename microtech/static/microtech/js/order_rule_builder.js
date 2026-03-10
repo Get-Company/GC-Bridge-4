@@ -41,10 +41,16 @@
     return RULE_META.dataset_fields.find((item) => String(item.id) === id) || null;
   }
 
+  function datasetById(idValue) {
+    if (!RULE_META || !Array.isArray(RULE_META.datasets)) return null;
+    const id = String(idValue || "");
+    return RULE_META.datasets.find((item) => String(item.id) === id) || null;
+  }
+
   function datasetFieldsFor(datasetId) {
     if (!RULE_META || !Array.isArray(RULE_META.dataset_fields)) return [];
     const id = String(datasetId || "");
-    if (!id) return [];
+    if (!id) return RULE_META.dataset_fields.slice();
     return RULE_META.dataset_fields.filter((item) => String(item.dataset_id) === id);
   }
 
@@ -113,6 +119,7 @@
 
   function rebuildDatasetFieldOptions(datasetFieldSelect, datasetId, currentValue) {
     const fields = datasetFieldsFor(datasetId);
+    const includeDatasetName = !String(datasetId || "");
     datasetFieldSelect.innerHTML = "";
 
     const empty = document.createElement("option");
@@ -123,7 +130,10 @@
     fields.forEach((item) => {
       const option = document.createElement("option");
       option.value = String(item.id);
-      const label = item.label ? `${item.field_name} - ${item.label}` : item.field_name;
+      const baseLabel = item.label ? `${item.field_name} - ${item.label}` : item.field_name;
+      const dataset = datasetById(item.dataset_id);
+      const datasetLabel = dataset ? (dataset.description || dataset.name || dataset.code || "") : "";
+      const label = includeDatasetName && datasetLabel ? `${datasetLabel}: ${baseLabel}` : baseLabel;
       option.textContent = label;
       datasetFieldSelect.appendChild(option);
     });
@@ -138,11 +148,13 @@
     const datasetSelect = row.querySelector("select[name$='-dataset']");
     const datasetFieldSelect = row.querySelector("select[name$='-dataset_field']");
     const targetInput = row.querySelector("input[name$='-target_value']");
-    if (!actionTypeSelect || !datasetSelect || !datasetFieldSelect || !targetInput) return;
+    if (!actionTypeSelect || !datasetFieldSelect || !targetInput) return;
 
     const isCreatePosition = actionTypeSelect.value === "create_extra_position";
 
-    datasetSelect.disabled = isCreatePosition;
+    if (datasetSelect) {
+      datasetSelect.disabled = isCreatePosition;
+    }
     datasetFieldSelect.disabled = isCreatePosition;
 
     if (isCreatePosition) {
@@ -165,10 +177,19 @@
     const actionTypeSelect = row.querySelector("select[name$='-action_type']");
     const datasetSelect = row.querySelector("select[name$='-dataset']");
     const datasetFieldSelect = row.querySelector("select[name$='-dataset_field']");
-    if (!actionTypeSelect || !datasetSelect || !datasetFieldSelect || !RULE_META) return;
+    if (!actionTypeSelect || !datasetFieldSelect || !RULE_META) return;
 
-    const currentField = datasetFieldSelect.value;
-    rebuildDatasetFieldOptions(datasetFieldSelect, datasetSelect.value, currentField);
+    if (datasetSelect) {
+      const currentField = datasetFieldSelect.value;
+      rebuildDatasetFieldOptions(datasetFieldSelect, datasetSelect.value, currentField);
+
+      if (!datasetSelect.value && datasetFieldSelect.value) {
+        const fieldDef = datasetFieldById(datasetFieldSelect.value);
+        if (fieldDef && fieldDef.dataset_id) {
+          datasetSelect.value = String(fieldDef.dataset_id);
+        }
+      }
+    }
     toggleActionTypeFields(row);
   }
 
