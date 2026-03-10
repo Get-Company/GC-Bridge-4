@@ -4,6 +4,7 @@ from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
 from django import forms
+from unfold.widgets import UnfoldAdminSelect2Widget
 
 from microtech.models import (
     MicrotechDatasetCatalog,
@@ -64,6 +65,17 @@ def _operator_choices_for_path(field_path: str, selected: str = "") -> list[tupl
     return choices
 
 
+def _django_field_choices(selected: str = "") -> list[tuple[str, str]]:
+    field_map = get_django_field_map()
+    choices = sorted(
+        ((item.path, item.label) for item in field_map.values()),
+        key=lambda row: row[1].lower(),
+    )
+    if selected and selected not in {code for code, _ in choices}:
+        choices.append((selected, selected))
+    return choices
+
+
 class MicrotechOrderRuleConditionForm(forms.ModelForm):
     class Meta:
         model = MicrotechOrderRuleCondition
@@ -82,11 +94,9 @@ class MicrotechOrderRuleConditionForm(forms.ModelForm):
             or getattr(self.instance, "operator_code", "")
         )
 
-        self.fields["django_field_path"].widget = forms.TextInput(
-            attrs={
-                "list": "microtech-django-field-paths",
-                "placeholder": "z. B. payment_method oder shipping_address__country_code",
-            }
+        self.fields["django_field_path"].widget = UnfoldAdminSelect2Widget(
+            attrs={"data-placeholder": "Django Feldpfad suchen..."},
+            choices=_django_field_choices(selected_path),
         )
         self.fields["operator_code"].widget = forms.Select(
             choices=_operator_choices_for_path(selected_path, selected_operator)

@@ -54,24 +54,6 @@
     return RULE_META.dataset_fields.filter((item) => String(item.dataset_id) === id);
   }
 
-  function ensureDjangoFieldDatalist() {
-    if (!RULE_META || !Array.isArray(RULE_META.django_fields)) return;
-    let datalist = document.getElementById("microtech-django-field-paths");
-    if (!datalist) {
-      datalist = document.createElement("datalist");
-      datalist.id = "microtech-django-field-paths";
-      document.body.appendChild(datalist);
-    }
-    datalist.innerHTML = "";
-    RULE_META.django_fields.forEach((item) => {
-      if (!item || !item.path) return;
-      const option = document.createElement("option");
-      option.value = item.path;
-      option.label = item.label || item.path;
-      datalist.appendChild(option);
-    });
-  }
-
   function rebuildOperatorOptions(operatorSelect, allowedCodes, current) {
     const byCode = operatorsByCode();
     operatorSelect.innerHTML = "";
@@ -95,12 +77,10 @@
   }
 
   function updateConditionRow(row) {
-    const pathInput = row.querySelector("input[name$='-django_field_path']");
+    const pathInput = row.querySelector("select[name$='-django_field_path'], input[name$='-django_field_path']");
     const operatorSelect = row.querySelector("select[name$='-operator_code']");
     const expectedInput = row.querySelector("input[name$='-expected_value']");
     if (!pathInput || !operatorSelect || !expectedInput || !RULE_META) return;
-
-    pathInput.setAttribute("list", "microtech-django-field-paths");
 
     const fieldDef = djangoFieldByPath(pathInput.value);
     const currentOperator = operatorSelect.value;
@@ -199,14 +179,16 @@
     }
     row.dataset.ruleBuilderBound = "1";
 
-    const pathInput = row.querySelector("input[name$='-django_field_path']");
+    const pathInput = row.querySelector("select[name$='-django_field_path'], input[name$='-django_field_path']");
     const datasetSelect = row.querySelector("select[name$='-dataset']");
     const datasetFieldSelect = row.querySelector("select[name$='-dataset_field']");
     const actionTypeSelect = row.querySelector("select[name$='-action_type']");
 
     if (pathInput) {
       pathInput.addEventListener("change", () => updateConditionRow(row));
-      pathInput.addEventListener("input", () => updateConditionRow(row));
+      if (pathInput.tagName === "INPUT") {
+        pathInput.addEventListener("input", () => updateConditionRow(row));
+      }
       updateConditionRow(row);
     }
 
@@ -271,7 +253,6 @@
 
   async function init() {
     await loadMeta();
-    ensureDjangoFieldDatalist();
     bindAllRows();
     bindFormsetAddedEvents();
     observeInlineRows();
