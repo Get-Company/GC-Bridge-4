@@ -141,6 +141,7 @@ def microtech_connection(
     logger.info("Microtech job {} created: '{}' (priority={}).", job.id, label, priority)
 
     worker = MicrotechQueueWorker.get()
+    worker.start()
     turn_event = worker.register_turn(correlation_id)
 
     # Wait for the worker to grant us our turn

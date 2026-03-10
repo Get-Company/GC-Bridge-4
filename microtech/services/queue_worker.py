@@ -97,8 +97,21 @@ class MicrotechQueueWorker:
     def _claim_next_job(self):
         from microtech.models import MicrotechJob
 
+        # Only claim jobs that have a caller waiting in this process.
+        # The in-memory event registry is process-local, therefore claiming
+        # arbitrary queued jobs from other processes would create false
+        # "orphaned job" failures.
+        with self._registry_lock:
+            local_correlation_ids = list(self._turn_events.keys())
+
+        if not local_correlation_ids:
+            return None
+
         job = (
-            MicrotechJob.objects.filter(status=MicrotechJob.Status.QUEUED)
+            MicrotechJob.objects.filter(
+                status=MicrotechJob.Status.QUEUED,
+                correlation_id__in=local_correlation_ids,
+            )
             .order_by("priority", "created_at")
             .first()
         )
