@@ -336,14 +336,9 @@ UNFOLD = {
                         "link": reverse_lazy("admin:microtech_microtechorderruleoperator_changelist"),
                     },
                     {
-                        "title": _("Source Felder"),
+                        "title": _("Django Feld Policies"),
                         "icon": "input",
-                        "link": reverse_lazy("admin:microtech_microtechorderruleconditionsource_changelist"),
-                    },
-                    {
-                        "title": _("Target Felder"),
-                        "icon": "output",
-                        "link": reverse_lazy("admin:microtech_microtechorderruleactiontarget_changelist"),
+                        "link": reverse_lazy("admin:microtech_microtechorderruledjangofieldpolicy_changelist"),
                     },
                     {
                         "title": _("Datasets"),

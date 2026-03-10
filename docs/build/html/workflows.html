@@ -122,10 +122,85 @@ inklusive Kunden- und Adressdaten.</p>
 </div>
 </section>
 </section>
-<section id="workflow-4-kunden-nach-microtech-upserten">
-<h2>Workflow 4: Kunden nach Microtech upserten<a class="headerlink" href="#workflow-4-kunden-nach-microtech-upserten" title="Link to this heading">¶</a></h2>
+<section id="workflow-4-rulebuilder-regel-mit-beispiel-umsetzen-paypal-at">
+<h2>Workflow 4: Rulebuilder-Regel mit Beispiel umsetzen (PayPal + AT)<a class="headerlink" href="#workflow-4-rulebuilder-regel-mit-beispiel-umsetzen-paypal-at" title="Link to this heading">¶</a></h2>
 <section id="id4">
 <h3>Ziel<a class="headerlink" href="#id4" title="Link to this heading">¶</a></h3>
+<p>Eine fachliche Regel im Admin konfigurieren und mit einer Testbestellung verifizieren.</p>
+</section>
+<section id="beispielregel">
+<h3>Beispielregel<a class="headerlink" href="#beispielregel" title="Link to this heading">¶</a></h3>
+<p>Wenn <code class="docutils literal notranslate"><span class="pre">payment_method</span></code> den Text <code class="docutils literal notranslate"><span class="pre">paypal</span></code> enthaelt und
+<code class="docutils literal notranslate"><span class="pre">shipping_address__country_code</span></code> gleich <code class="docutils literal notranslate"><span class="pre">AT</span></code> ist:</p>
+<ol class="arabic simple">
+<li><p>Zusatzposition mit ERP-Nr <code class="docutils literal notranslate"><span class="pre">P</span></code> erzeugen</p></li>
+<li><p>Im Dataset <code class="docutils literal notranslate"><span class="pre">Vorgang</span></code> das Feld <code class="docutils literal notranslate"><span class="pre">ZahlArt</span></code> auf <code class="docutils literal notranslate"><span class="pre">22</span></code> setzen</p></li>
+<li><p>Im Dataset <code class="docutils literal notranslate"><span class="pre">VorgangPosition</span></code> das Feld <code class="docutils literal notranslate"><span class="pre">KuBez</span></code> auf <code class="docutils literal notranslate"><span class="pre">PayPal</span> <span class="pre">Gebuehr</span></code> setzen</p></li>
+</ol>
+</section>
+<section id="schritte-im-admin">
+<h3>Schritte im Admin<a class="headerlink" href="#schritte-im-admin" title="Link to this heading">¶</a></h3>
+<ol class="arabic simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">Microtech</span> <span class="pre">-&gt;</span> <span class="pre">Operatoren</span></code></p></li>
+</ol>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">eq</span></code> und <code class="docutils literal notranslate"><span class="pre">contains</span></code> aktiv</p></li>
+</ul>
+<ol class="arabic simple" start="2">
+<li><p><code class="docutils literal notranslate"><span class="pre">Microtech</span> <span class="pre">-&gt;</span> <span class="pre">Django</span> <span class="pre">Feld</span> <span class="pre">Policies</span></code> (optional)</p></li>
+</ol>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">field_path</span> <span class="pre">=</span> <span class="pre">payment_method</span></code></p></li>
+<li><p>erlaubte Operatoren: <code class="docutils literal notranslate"><span class="pre">eq</span></code>, <code class="docutils literal notranslate"><span class="pre">contains</span></code></p></li>
+</ul>
+<ol class="arabic simple" start="3">
+<li><p><code class="docutils literal notranslate"><span class="pre">Microtech</span> <span class="pre">-&gt;</span> <span class="pre">Einstellungen</span></code> neue Regel <code class="docutils literal notranslate"><span class="pre">AT</span> <span class="pre">+</span> <span class="pre">PayPal</span></code></p></li>
+</ol>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">is_active</span> <span class="pre">=</span> <span class="pre">Ja</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">priority</span> <span class="pre">=</span> <span class="pre">10</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">condition_logic</span> <span class="pre">=</span> <span class="pre">all</span></code></p></li>
+</ul>
+<ol class="arabic simple" start="4">
+<li><p>Bedingungen in der Regel</p></li>
+</ol>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">django_field_path</span> <span class="pre">=</span> <span class="pre">payment_method</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">operator_code</span> <span class="pre">=</span> <span class="pre">contains</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">expected_value</span> <span class="pre">=</span> <span class="pre">paypal</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">django_field_path</span> <span class="pre">=</span> <span class="pre">shipping_address__country_code</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">operator_code</span> <span class="pre">=</span> <span class="pre">eq</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">expected_value</span> <span class="pre">=</span> <span class="pre">AT</span></code></p></li>
+</ul>
+<ol class="arabic simple" start="5">
+<li><p>Aktionen in der Regel</p></li>
+</ol>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">action_type</span> <span class="pre">=</span> <span class="pre">create_extra_position</span></code>, <code class="docutils literal notranslate"><span class="pre">target_value</span> <span class="pre">=</span> <span class="pre">P</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">action_type</span> <span class="pre">=</span> <span class="pre">set_field</span></code>, <code class="docutils literal notranslate"><span class="pre">dataset</span> <span class="pre">=</span> <span class="pre">Vorgang</span></code>, <code class="docutils literal notranslate"><span class="pre">dataset_field</span> <span class="pre">=</span> <span class="pre">ZahlArt</span></code>, <code class="docutils literal notranslate"><span class="pre">target_value</span> <span class="pre">=</span> <span class="pre">22</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">action_type</span> <span class="pre">=</span> <span class="pre">set_field</span></code>, <code class="docutils literal notranslate"><span class="pre">dataset</span> <span class="pre">=</span> <span class="pre">VorgangPosition</span></code>, <code class="docutils literal notranslate"><span class="pre">dataset_field</span> <span class="pre">=</span> <span class="pre">KuBez</span></code>, <code class="docutils literal notranslate"><span class="pre">target_value</span> <span class="pre">=</span> <span class="pre">PayPal</span> <span class="pre">Gebuehr</span></code></p></li>
+</ul>
+</section>
+<section id="testbefehl">
+<h3>Testbefehl<a class="headerlink" href="#testbefehl" title="Link to this heading">¶</a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>.venv/bin/python<span class="w"> </span>manage.py<span class="w"> </span>microtech_order_upsert<span class="w"> </span>--order-number<span class="w"> </span>&lt;DEINE_BESTELLNUMMER&gt;
+</pre></div>
+</div>
+</section>
+<section id="erwartung-im-ergebnis">
+<h3>Erwartung im Ergebnis<a class="headerlink" href="#erwartung-im-ergebnis" title="Link to this heading">¶</a></h3>
+<ol class="arabic simple">
+<li><p>Regel matcht nur bei PayPal + AT.</p></li>
+<li><p>Zusatzposition <code class="docutils literal notranslate"><span class="pre">P</span></code> wird erzeugt.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ZahlArt</span></code> wird im Vorgang gesetzt.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">KuBez</span></code> wird auf der zusaetzlich erzeugten VorgangPosition gesetzt.</p></li>
+</ol>
+</section>
+</section>
+<section id="workflow-5-kunden-nach-microtech-upserten">
+<h2>Workflow 5: Kunden nach Microtech upserten<a class="headerlink" href="#workflow-5-kunden-nach-microtech-upserten" title="Link to this heading">¶</a></h2>
+<section id="id5">
+<h3>Ziel<a class="headerlink" href="#id5" title="Link to this heading">¶</a></h3>
 <p>Einen einzelnen Kunden aus Django in Microtech Adressen/Anschriften/Ansprechpartner uebertragen.</p>
 </section>
 <section id="befehle">
@@ -138,14 +213,14 @@ inklusive Kunden- und Adressdaten.</p>
 </div>
 </section>
 </section>
-<section id="workflow-5-shopware-produktsync-aus-django">
-<h2>Workflow 5: Shopware-Produktsync aus Django<a class="headerlink" href="#workflow-5-shopware-produktsync-aus-django" title="Link to this heading">¶</a></h2>
-<section id="id5">
-<h3>Ziel<a class="headerlink" href="#id5" title="Link to this heading">¶</a></h3>
+<section id="workflow-6-shopware-produktsync-aus-django">
+<h2>Workflow 6: Shopware-Produktsync aus Django<a class="headerlink" href="#workflow-6-shopware-produktsync-aus-django" title="Link to this heading">¶</a></h2>
+<section id="id6">
+<h3>Ziel<a class="headerlink" href="#id6" title="Link to this heading">¶</a></h3>
 <p>Produktstammdaten und Preise aus Django nach Shopware updaten.</p>
 </section>
-<section id="id6">
-<h3>Befehle<a class="headerlink" href="#id6" title="Link to this heading">¶</a></h3>
+<section id="id7">
+<h3>Befehle<a class="headerlink" href="#id7" title="Link to this heading">¶</a></h3>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>.venv/bin/python<span class="w"> </span>manage.py<span class="w"> </span>shopware_sync_products<span class="w"> </span>--all<span class="w"> </span>--batch-size<span class="w"> </span><span class="m">50</span>
 </pre></div>
 </div>
@@ -195,13 +270,15 @@ inklusive Kunden- und Adressdaten.</p>
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="einleitung.html">Einleitung</a></li>
 <li class="toctree-l1"><a class="reference internal" href="erste_schritte.html">Erste Schritte</a></li>
+<li class="toctree-l1"><a class="reference internal" href="microtech_rulebuilder_feldkatalog.html">Microtech Rulebuilder mit Feldkatalog (Schritt fuer Schritt)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="operator_checkliste.html">Operator-Checkliste (1 Seite)</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Workflows</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#workflow-1-produkte-synchronisieren">Workflow 1: Produkte synchronisieren</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#workflow-2-offene-shopware-bestellungen-laden">Workflow 2: Offene Shopware-Bestellungen laden</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#workflow-3-einzelbestellung-nach-microtech-upserten">Workflow 3: Einzelbestellung nach Microtech upserten</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#workflow-4-kunden-nach-microtech-upserten">Workflow 4: Kunden nach Microtech upserten</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#workflow-5-shopware-produktsync-aus-django">Workflow 5: Shopware-Produktsync aus Django</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#workflow-4-rulebuilder-regel-mit-beispiel-umsetzen-paypal-at">Workflow 4: Rulebuilder-Regel mit Beispiel umsetzen (PayPal + AT)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#workflow-5-kunden-nach-microtech-upserten">Workflow 5: Kunden nach Microtech upserten</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#workflow-6-shopware-produktsync-aus-django">Workflow 6: Shopware-Produktsync aus Django</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#betriebliche-kontrolle">Betriebliche Kontrolle</a></li>
 </ul>
 </li>

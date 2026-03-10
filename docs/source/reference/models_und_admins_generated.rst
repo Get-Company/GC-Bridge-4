@@ -3,7 +3,7 @@ Model- und Admin-Inventar
 
 Diese Seite wird automatisch aus dem Django-Projekt erzeugt und deckt alle lokalen Apps, Models und registrierten Admin-Klassen ab.
 
-Generiert am: 2026-03-10 09:41:12 UTC
+Generiert am: 2026-03-10 10:32:44 UTC
 
 core
 ----
@@ -566,10 +566,18 @@ Felder
      - PositiveIntegerField
      - default=100
      - verbose=Prioritaet
-   * - target_field
+   * - action_type
      - CharField
-     - -
-     - verbose=Target Feld, max_length=64
+     - default=set_field
+     - choices=2, verbose=Aktionstyp, max_length=32
+   * - dataset
+     - ForeignKey
+     - db_index, null, blank
+     - relation=microtech.MicrotechDatasetCatalog, verbose=Dataset
+   * - dataset_field
+     - ForeignKey
+     - db_index, null, blank
+     - relation=microtech.MicrotechDatasetField, verbose=Dataset Feld
    * - target_value
      - CharField
      - blank
@@ -585,109 +593,6 @@ Admin-Konfiguration
      - Wert
    * - Registrierung
      - Kein ModelAdmin registriert
-
-microtech.MicrotechOrderRuleActionTarget
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-* Python: ``microtech.models.MicrotechOrderRuleActionTarget``
-* DB-Tabelle: ``microtech_microtechorderruleactiontarget``
-* Verbose Name: ``Microtech Bestellregel Target Feld``
-* Verbose Name Plural: ``Microtech Bestellregel Target Felder``
-* Default Ordering: ``priority, id``
-
-Felder
-^^^^^^
-
-.. list-table::
-   :header-rows: 1
-
-   * - Feld
-     - Typ
-     - Optionen
-     - Details
-   * - id
-     - BigAutoField
-     - pk, unique, blank
-     - verbose=ID
-   * - created_at
-     - DateTimeField
-     - blank
-     - verbose=Angelegt am
-   * - updated_at
-     - DateTimeField
-     - blank
-     - verbose=Aktualisiert am
-   * - code
-     - CharField
-     - unique
-     - verbose=Code, max_length=64
-   * - name
-     - CharField
-     - -
-     - verbose=Name, max_length=255
-   * - engine_target_field
-     - CharField
-     - -
-     - choices=11, verbose=Engine Target Feld, max_length=64
-   * - value_type
-     - CharField
-     - default=string
-     - choices=5, verbose=Wertetyp, max_length=32
-   * - enum_values
-     - CharField
-     - blank
-     - verbose=Enum Werte (kommagetrennt), max_length=255
-   * - dataset_field
-     - ForeignKey
-     - db_index, null, blank
-     - relation=microtech.MicrotechDatasetField, verbose=Dataset Feld (Katalog)
-   * - hint
-     - CharField
-     - blank
-     - verbose=Hinweis, max_length=255
-   * - example
-     - CharField
-     - blank
-     - verbose=Beispiel, max_length=255
-   * - is_active
-     - BooleanField
-     - default=True
-     - verbose=Aktiv
-   * - priority
-     - PositiveIntegerField
-     - default=100
-     - verbose=Prioritaet
-
-Admin-Konfiguration
-^^^^^^^^^^^^^^^^^^^
-
-.. list-table::
-   :header-rows: 1
-
-   * - Aspekt
-     - Wert
-   * - Admin-Klasse
-     - microtech.admin.MicrotechOrderRuleActionTargetAdmin
-   * - list_display
-     - priority, name, code, engine_target_field, dataset_field, value_type, is_active, updated_at
-   * - list_filter
-     - is_active, value_type, engine_target_field, dataset_field__dataset
-   * - search_fields
-     - code, name, hint, example
-   * - readonly_fields
-     - created_at, updated_at
-   * - ordering
-     - priority, id
-   * - list_select_related
-     - False
-   * - list_per_page
-     - 100
-   * - inlines
-     - -
-   * - actions
-     - -
-   * - action_form
-     - unfold.forms.ActionForm
 
 microtech.MicrotechOrderRuleCondition
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -732,14 +637,14 @@ Felder
      - PositiveIntegerField
      - default=100
      - verbose=Prioritaet
-   * - source_field
+   * - django_field_path
      - CharField
-     - -
-     - verbose=Source Feld, max_length=64
-   * - operator
+     - blank
+     - verbose=Django Feldpfad, max_length=255
+   * - operator_code
      - CharField
      - default=eq
-     - verbose=Operator, max_length=16
+     - verbose=Operator, max_length=64
    * - expected_value
      - CharField
      - blank
@@ -756,14 +661,14 @@ Admin-Konfiguration
    * - Registrierung
      - Kein ModelAdmin registriert
 
-microtech.MicrotechOrderRuleConditionSource
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+microtech.MicrotechOrderRuleDjangoFieldPolicy
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-* Python: ``microtech.models.MicrotechOrderRuleConditionSource``
-* DB-Tabelle: ``microtech_microtechorderruleconditionsource``
-* Verbose Name: ``Microtech Bestellregel Source Feld``
-* Verbose Name Plural: ``Microtech Bestellregel Source Felder``
-* Default Ordering: ``priority, id``
+* Python: ``microtech.models.MicrotechOrderRuleDjangoFieldPolicy``
+* DB-Tabelle: ``microtech_microtechorderruledjangofieldpolicy``
+* Verbose Name: ``Microtech Django Bedingungsfeld``
+* Verbose Name Plural: ``Microtech Django Bedingungsfelder``
+* Default Ordering: ``priority, field_path, id``
 
 Felder
 ^^^^^^
@@ -787,34 +692,18 @@ Felder
      - DateTimeField
      - blank
      - verbose=Aktualisiert am
-   * - code
+   * - field_path
      - CharField
      - unique
-     - verbose=Code, max_length=64
-   * - name
+     - verbose=Django Feldpfad, max_length=255
+   * - label_override
      - CharField
-     - -
-     - verbose=Name, max_length=255
-   * - engine_source_field
-     - CharField
-     - -
-     - choices=9, verbose=Engine Source Feld, max_length=64
-   * - value_type
-     - CharField
-     - default=string
-     - choices=4, verbose=Wertetyp, max_length=32
-   * - dataset_field
-     - ForeignKey
-     - db_index, null, blank
-     - relation=microtech.MicrotechDatasetField, verbose=Dataset Feld (Katalog)
+     - blank
+     - verbose=Label Override, max_length=255
    * - hint
      - CharField
      - blank
      - verbose=Hinweis, max_length=255
-   * - example
-     - CharField
-     - blank
-     - verbose=Beispiel, max_length=255
    * - is_active
      - BooleanField
      - default=True
@@ -823,7 +712,7 @@ Felder
      - PositiveIntegerField
      - default=100
      - verbose=Prioritaet
-   * - operators
+   * - allowed_operators
      - ManyToManyField
      - blank
      - relation=microtech.MicrotechOrderRuleOperator, verbose=Erlaubte Operatoren
@@ -837,13 +726,13 @@ Admin-Konfiguration
    * - Aspekt
      - Wert
    * - Admin-Klasse
-     - microtech.admin.MicrotechOrderRuleConditionSourceAdmin
+     - microtech.admin.MicrotechOrderRuleDjangoFieldPolicyAdmin
    * - list_display
-     - priority, name, code, engine_source_field, dataset_field, value_type, is_active, updated_at
+     - priority, field_path, label_override, is_active, updated_at
    * - list_filter
-     - is_active, value_type, engine_source_field, dataset_field__dataset
+     - is_active
    * - search_fields
-     - code, name, hint, example
+     - field_path, label_override, hint
    * - readonly_fields
      - created_at, updated_at
    * - ordering

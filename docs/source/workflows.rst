@@ -96,7 +96,74 @@ Logpfad anpassen
 
    .venv/bin/python manage.py microtech_order_upsert SW100045 --log-file tmp/logs/microtech_order_upsert.log
 
-Workflow 4: Kunden nach Microtech upserten
+Workflow 4: Rulebuilder-Regel mit Beispiel umsetzen (PayPal + AT)
+------------------------------------------------------------------
+
+Ziel
+^^^^
+
+Eine fachliche Regel im Admin konfigurieren und mit einer Testbestellung verifizieren.
+
+Beispielregel
+^^^^^^^^^^^^^
+
+Wenn ``payment_method`` den Text ``paypal`` enthaelt und
+``shipping_address__country_code`` gleich ``AT`` ist:
+
+1. Zusatzposition mit ERP-Nr ``P`` erzeugen
+2. Im Dataset ``Vorgang`` das Feld ``ZahlArt`` auf ``22`` setzen
+3. Im Dataset ``VorgangPosition`` das Feld ``KuBez`` auf ``PayPal Gebuehr`` setzen
+
+Schritte im Admin
+^^^^^^^^^^^^^^^^^
+
+1. ``Microtech -> Operatoren``
+
+- ``eq`` und ``contains`` aktiv
+
+2. ``Microtech -> Django Feld Policies`` (optional)
+
+- ``field_path = payment_method``
+- erlaubte Operatoren: ``eq``, ``contains``
+
+3. ``Microtech -> Einstellungen`` neue Regel ``AT + PayPal``
+
+- ``is_active = Ja``
+- ``priority = 10``
+- ``condition_logic = all``
+
+4. Bedingungen in der Regel
+
+- ``django_field_path = payment_method``
+- ``operator_code = contains``
+- ``expected_value = paypal``
+
+- ``django_field_path = shipping_address__country_code``
+- ``operator_code = eq``
+- ``expected_value = AT``
+
+5. Aktionen in der Regel
+
+- ``action_type = create_extra_position``, ``target_value = P``
+- ``action_type = set_field``, ``dataset = Vorgang``, ``dataset_field = ZahlArt``, ``target_value = 22``
+- ``action_type = set_field``, ``dataset = VorgangPosition``, ``dataset_field = KuBez``, ``target_value = PayPal Gebuehr``
+
+Testbefehl
+^^^^^^^^^^
+
+.. code-block:: bash
+
+   .venv/bin/python manage.py microtech_order_upsert --order-number <DEINE_BESTELLNUMMER>
+
+Erwartung im Ergebnis
+^^^^^^^^^^^^^^^^^^^^^
+
+1. Regel matcht nur bei PayPal + AT.
+2. Zusatzposition ``P`` wird erzeugt.
+3. ``ZahlArt`` wird im Vorgang gesetzt.
+4. ``KuBez`` wird auf der zusaetzlich erzeugten VorgangPosition gesetzt.
+
+Workflow 5: Kunden nach Microtech upserten
 ------------------------------------------
 
 Ziel
@@ -115,7 +182,7 @@ Befehle
 
    .venv/bin/python manage.py microtech_customer_upsert --id 7
 
-Workflow 5: Shopware-Produktsync aus Django
+Workflow 6: Shopware-Produktsync aus Django
 -------------------------------------------
 
 Ziel

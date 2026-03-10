@@ -36,7 +36,7 @@
   <section id="model-und-admin-inventar">
 <h1>Model- und Admin-Inventar<a class="headerlink" href="#model-und-admin-inventar" title="Link to this heading">¶</a></h1>
 <p>Diese Seite wird automatisch aus dem Django-Projekt erzeugt und deckt alle lokalen Apps, Models und registrierten Admin-Klassen ab.</p>
-<p>Generiert am: 2026-03-10 09:41:12 UTC</p>
+<p>Generiert am: 2026-03-10 10:32:44 UTC</p>
 <section id="core">
 <h2>core<a class="headerlink" href="#core" title="Link to this heading">¶</a></h2>
 <p>Keine lokalen Models in dieser App.</p>
@@ -786,13 +786,20 @@
 <td><p>default=100</p></td>
 <td><p>verbose=Prioritaet</p></td>
 </tr>
-<tr class="row-even"><td><p>target_field</p></td>
+<tr class="row-even"><td><p>action_type</p></td>
 <td><p>CharField</p></td>
-<td><ul class="simple">
-<li></li>
-</ul>
-</td>
-<td><p>verbose=Target Feld, max_length=64</p></td>
+<td><p>default=set_field</p></td>
+<td><p>choices=2, verbose=Aktionstyp, max_length=32</p></td>
+</tr>
+<tr class="row-odd"><td><p>dataset</p></td>
+<td><p>ForeignKey</p></td>
+<td><p>db_index, null, blank</p></td>
+<td><p>relation=microtech.MicrotechDatasetCatalog, verbose=Dataset</p></td>
+</tr>
+<tr class="row-even"><td><p>dataset_field</p></td>
+<td><p>ForeignKey</p></td>
+<td><p>db_index, null, blank</p></td>
+<td><p>relation=microtech.MicrotechDatasetField, verbose=Dataset Feld</p></td>
 </tr>
 <tr class="row-odd"><td><p>target_value</p></td>
 <td><p>CharField</p></td>
@@ -818,152 +825,6 @@
 </table>
 </section>
 </section>
-<section id="microtech-microtechorderruleactiontarget">
-<h3>microtech.MicrotechOrderRuleActionTarget<a class="headerlink" href="#microtech-microtechorderruleactiontarget" title="Link to this heading">¶</a></h3>
-<ul class="simple">
-<li><p>Python: <code class="docutils literal notranslate"><span class="pre">microtech.models.MicrotechOrderRuleActionTarget</span></code></p></li>
-<li><p>DB-Tabelle: <code class="docutils literal notranslate"><span class="pre">microtech_microtechorderruleactiontarget</span></code></p></li>
-<li><p>Verbose Name: <code class="docutils literal notranslate"><span class="pre">Microtech</span> <span class="pre">Bestellregel</span> <span class="pre">Target</span> <span class="pre">Feld</span></code></p></li>
-<li><p>Verbose Name Plural: <code class="docutils literal notranslate"><span class="pre">Microtech</span> <span class="pre">Bestellregel</span> <span class="pre">Target</span> <span class="pre">Felder</span></code></p></li>
-<li><p>Default Ordering: <code class="docutils literal notranslate"><span class="pre">priority,</span> <span class="pre">id</span></code></p></li>
-</ul>
-<section id="id11">
-<h4>Felder<a class="headerlink" href="#id11" title="Link to this heading">¶</a></h4>
-<table class="docutils align-default">
-<thead>
-<tr class="row-odd"><th class="head"><p>Feld</p></th>
-<th class="head"><p>Typ</p></th>
-<th class="head"><p>Optionen</p></th>
-<th class="head"><p>Details</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p>id</p></td>
-<td><p>BigAutoField</p></td>
-<td><p>pk, unique, blank</p></td>
-<td><p>verbose=ID</p></td>
-</tr>
-<tr class="row-odd"><td><p>created_at</p></td>
-<td><p>DateTimeField</p></td>
-<td><p>blank</p></td>
-<td><p>verbose=Angelegt am</p></td>
-</tr>
-<tr class="row-even"><td><p>updated_at</p></td>
-<td><p>DateTimeField</p></td>
-<td><p>blank</p></td>
-<td><p>verbose=Aktualisiert am</p></td>
-</tr>
-<tr class="row-odd"><td><p>code</p></td>
-<td><p>CharField</p></td>
-<td><p>unique</p></td>
-<td><p>verbose=Code, max_length=64</p></td>
-</tr>
-<tr class="row-even"><td><p>name</p></td>
-<td><p>CharField</p></td>
-<td><ul class="simple">
-<li></li>
-</ul>
-</td>
-<td><p>verbose=Name, max_length=255</p></td>
-</tr>
-<tr class="row-odd"><td><p>engine_target_field</p></td>
-<td><p>CharField</p></td>
-<td><ul class="simple">
-<li></li>
-</ul>
-</td>
-<td><p>choices=11, verbose=Engine Target Feld, max_length=64</p></td>
-</tr>
-<tr class="row-even"><td><p>value_type</p></td>
-<td><p>CharField</p></td>
-<td><p>default=string</p></td>
-<td><p>choices=5, verbose=Wertetyp, max_length=32</p></td>
-</tr>
-<tr class="row-odd"><td><p>enum_values</p></td>
-<td><p>CharField</p></td>
-<td><p>blank</p></td>
-<td><p>verbose=Enum Werte (kommagetrennt), max_length=255</p></td>
-</tr>
-<tr class="row-even"><td><p>dataset_field</p></td>
-<td><p>ForeignKey</p></td>
-<td><p>db_index, null, blank</p></td>
-<td><p>relation=microtech.MicrotechDatasetField, verbose=Dataset Feld (Katalog)</p></td>
-</tr>
-<tr class="row-odd"><td><p>hint</p></td>
-<td><p>CharField</p></td>
-<td><p>blank</p></td>
-<td><p>verbose=Hinweis, max_length=255</p></td>
-</tr>
-<tr class="row-even"><td><p>example</p></td>
-<td><p>CharField</p></td>
-<td><p>blank</p></td>
-<td><p>verbose=Beispiel, max_length=255</p></td>
-</tr>
-<tr class="row-odd"><td><p>is_active</p></td>
-<td><p>BooleanField</p></td>
-<td><p>default=True</p></td>
-<td><p>verbose=Aktiv</p></td>
-</tr>
-<tr class="row-even"><td><p>priority</p></td>
-<td><p>PositiveIntegerField</p></td>
-<td><p>default=100</p></td>
-<td><p>verbose=Prioritaet</p></td>
-</tr>
-</tbody>
-</table>
-</section>
-<section id="id12">
-<h4>Admin-Konfiguration<a class="headerlink" href="#id12" title="Link to this heading">¶</a></h4>
-<table class="docutils align-default">
-<thead>
-<tr class="row-odd"><th class="head"><p>Aspekt</p></th>
-<th class="head"><p>Wert</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p>Admin-Klasse</p></td>
-<td><p>microtech.admin.MicrotechOrderRuleActionTargetAdmin</p></td>
-</tr>
-<tr class="row-odd"><td><p>list_display</p></td>
-<td><p>priority, name, code, engine_target_field, dataset_field, value_type, is_active, updated_at</p></td>
-</tr>
-<tr class="row-even"><td><p>list_filter</p></td>
-<td><p>is_active, value_type, engine_target_field, dataset_field__dataset</p></td>
-</tr>
-<tr class="row-odd"><td><p>search_fields</p></td>
-<td><p>code, name, hint, example</p></td>
-</tr>
-<tr class="row-even"><td><p>readonly_fields</p></td>
-<td><p>created_at, updated_at</p></td>
-</tr>
-<tr class="row-odd"><td><p>ordering</p></td>
-<td><p>priority, id</p></td>
-</tr>
-<tr class="row-even"><td><p>list_select_related</p></td>
-<td><p>False</p></td>
-</tr>
-<tr class="row-odd"><td><p>list_per_page</p></td>
-<td><p>100</p></td>
-</tr>
-<tr class="row-even"><td><p>inlines</p></td>
-<td><ul class="simple">
-<li></li>
-</ul>
-</td>
-</tr>
-<tr class="row-odd"><td><p>actions</p></td>
-<td><ul class="simple">
-<li></li>
-</ul>
-</td>
-</tr>
-<tr class="row-even"><td><p>action_form</p></td>
-<td><p>unfold.forms.ActionForm</p></td>
-</tr>
-</tbody>
-</table>
-</section>
-</section>
 <section id="microtech-microtechorderrulecondition">
 <h3>microtech.MicrotechOrderRuleCondition<a class="headerlink" href="#microtech-microtechorderrulecondition" title="Link to this heading">¶</a></h3>
 <ul class="simple">
@@ -973,8 +834,8 @@
 <li><p>Verbose Name Plural: <code class="docutils literal notranslate"><span class="pre">Microtech</span> <span class="pre">Bestellregel</span> <span class="pre">Bedingungen</span></code></p></li>
 <li><p>Default Ordering: <code class="docutils literal notranslate"><span class="pre">rule,</span> <span class="pre">priority,</span> <span class="pre">id</span></code></p></li>
 </ul>
-<section id="id13">
-<h4>Felder<a class="headerlink" href="#id13" title="Link to this heading">¶</a></h4>
+<section id="id11">
+<h4>Felder<a class="headerlink" href="#id11" title="Link to this heading">¶</a></h4>
 <table class="docutils align-default">
 <thead>
 <tr class="row-odd"><th class="head"><p>Feld</p></th>
@@ -1014,18 +875,15 @@
 <td><p>default=100</p></td>
 <td><p>verbose=Prioritaet</p></td>
 </tr>
-<tr class="row-even"><td><p>source_field</p></td>
+<tr class="row-even"><td><p>django_field_path</p></td>
 <td><p>CharField</p></td>
-<td><ul class="simple">
-<li></li>
-</ul>
-</td>
-<td><p>verbose=Source Feld, max_length=64</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Django Feldpfad, max_length=255</p></td>
 </tr>
-<tr class="row-odd"><td><p>operator</p></td>
+<tr class="row-odd"><td><p>operator_code</p></td>
 <td><p>CharField</p></td>
 <td><p>default=eq</p></td>
-<td><p>verbose=Operator, max_length=16</p></td>
+<td><p>verbose=Operator, max_length=64</p></td>
 </tr>
 <tr class="row-even"><td><p>expected_value</p></td>
 <td><p>CharField</p></td>
@@ -1035,8 +893,8 @@
 </tbody>
 </table>
 </section>
-<section id="id14">
-<h4>Admin-Konfiguration<a class="headerlink" href="#id14" title="Link to this heading">¶</a></h4>
+<section id="id12">
+<h4>Admin-Konfiguration<a class="headerlink" href="#id12" title="Link to this heading">¶</a></h4>
 <table class="docutils align-default">
 <thead>
 <tr class="row-odd"><th class="head"><p>Aspekt</p></th>
@@ -1051,17 +909,17 @@
 </table>
 </section>
 </section>
-<section id="microtech-microtechorderruleconditionsource">
-<h3>microtech.MicrotechOrderRuleConditionSource<a class="headerlink" href="#microtech-microtechorderruleconditionsource" title="Link to this heading">¶</a></h3>
+<section id="microtech-microtechorderruledjangofieldpolicy">
+<h3>microtech.MicrotechOrderRuleDjangoFieldPolicy<a class="headerlink" href="#microtech-microtechorderruledjangofieldpolicy" title="Link to this heading">¶</a></h3>
 <ul class="simple">
-<li><p>Python: <code class="docutils literal notranslate"><span class="pre">microtech.models.MicrotechOrderRuleConditionSource</span></code></p></li>
-<li><p>DB-Tabelle: <code class="docutils literal notranslate"><span class="pre">microtech_microtechorderruleconditionsource</span></code></p></li>
-<li><p>Verbose Name: <code class="docutils literal notranslate"><span class="pre">Microtech</span> <span class="pre">Bestellregel</span> <span class="pre">Source</span> <span class="pre">Feld</span></code></p></li>
-<li><p>Verbose Name Plural: <code class="docutils literal notranslate"><span class="pre">Microtech</span> <span class="pre">Bestellregel</span> <span class="pre">Source</span> <span class="pre">Felder</span></code></p></li>
-<li><p>Default Ordering: <code class="docutils literal notranslate"><span class="pre">priority,</span> <span class="pre">id</span></code></p></li>
+<li><p>Python: <code class="docutils literal notranslate"><span class="pre">microtech.models.MicrotechOrderRuleDjangoFieldPolicy</span></code></p></li>
+<li><p>DB-Tabelle: <code class="docutils literal notranslate"><span class="pre">microtech_microtechorderruledjangofieldpolicy</span></code></p></li>
+<li><p>Verbose Name: <code class="docutils literal notranslate"><span class="pre">Microtech</span> <span class="pre">Django</span> <span class="pre">Bedingungsfeld</span></code></p></li>
+<li><p>Verbose Name Plural: <code class="docutils literal notranslate"><span class="pre">Microtech</span> <span class="pre">Django</span> <span class="pre">Bedingungsfelder</span></code></p></li>
+<li><p>Default Ordering: <code class="docutils literal notranslate"><span class="pre">priority,</span> <span class="pre">field_path,</span> <span class="pre">id</span></code></p></li>
 </ul>
-<section id="id15">
-<h4>Felder<a class="headerlink" href="#id15" title="Link to this heading">¶</a></h4>
+<section id="id13">
+<h4>Felder<a class="headerlink" href="#id13" title="Link to this heading">¶</a></h4>
 <table class="docutils align-default">
 <thead>
 <tr class="row-odd"><th class="head"><p>Feld</p></th>
@@ -1086,46 +944,20 @@
 <td><p>blank</p></td>
 <td><p>verbose=Aktualisiert am</p></td>
 </tr>
-<tr class="row-odd"><td><p>code</p></td>
+<tr class="row-odd"><td><p>field_path</p></td>
 <td><p>CharField</p></td>
 <td><p>unique</p></td>
-<td><p>verbose=Code, max_length=64</p></td>
+<td><p>verbose=Django Feldpfad, max_length=255</p></td>
 </tr>
-<tr class="row-even"><td><p>name</p></td>
+<tr class="row-even"><td><p>label_override</p></td>
 <td><p>CharField</p></td>
-<td><ul class="simple">
-<li></li>
-</ul>
-</td>
-<td><p>verbose=Name, max_length=255</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Label Override, max_length=255</p></td>
 </tr>
-<tr class="row-odd"><td><p>engine_source_field</p></td>
-<td><p>CharField</p></td>
-<td><ul class="simple">
-<li></li>
-</ul>
-</td>
-<td><p>choices=9, verbose=Engine Source Feld, max_length=64</p></td>
-</tr>
-<tr class="row-even"><td><p>value_type</p></td>
-<td><p>CharField</p></td>
-<td><p>default=string</p></td>
-<td><p>choices=4, verbose=Wertetyp, max_length=32</p></td>
-</tr>
-<tr class="row-odd"><td><p>dataset_field</p></td>
-<td><p>ForeignKey</p></td>
-<td><p>db_index, null, blank</p></td>
-<td><p>relation=microtech.MicrotechDatasetField, verbose=Dataset Feld (Katalog)</p></td>
-</tr>
-<tr class="row-even"><td><p>hint</p></td>
+<tr class="row-odd"><td><p>hint</p></td>
 <td><p>CharField</p></td>
 <td><p>blank</p></td>
 <td><p>verbose=Hinweis, max_length=255</p></td>
-</tr>
-<tr class="row-odd"><td><p>example</p></td>
-<td><p>CharField</p></td>
-<td><p>blank</p></td>
-<td><p>verbose=Beispiel, max_length=255</p></td>
 </tr>
 <tr class="row-even"><td><p>is_active</p></td>
 <td><p>BooleanField</p></td>
@@ -1137,7 +969,7 @@
 <td><p>default=100</p></td>
 <td><p>verbose=Prioritaet</p></td>
 </tr>
-<tr class="row-even"><td><p>operators</p></td>
+<tr class="row-even"><td><p>allowed_operators</p></td>
 <td><p>ManyToManyField</p></td>
 <td><p>blank</p></td>
 <td><p>relation=microtech.MicrotechOrderRuleOperator, verbose=Erlaubte Operatoren</p></td>
@@ -1145,8 +977,8 @@
 </tbody>
 </table>
 </section>
-<section id="id16">
-<h4>Admin-Konfiguration<a class="headerlink" href="#id16" title="Link to this heading">¶</a></h4>
+<section id="id14">
+<h4>Admin-Konfiguration<a class="headerlink" href="#id14" title="Link to this heading">¶</a></h4>
 <table class="docutils align-default">
 <thead>
 <tr class="row-odd"><th class="head"><p>Aspekt</p></th>
@@ -1155,16 +987,16 @@
 </thead>
 <tbody>
 <tr class="row-even"><td><p>Admin-Klasse</p></td>
-<td><p>microtech.admin.MicrotechOrderRuleConditionSourceAdmin</p></td>
+<td><p>microtech.admin.MicrotechOrderRuleDjangoFieldPolicyAdmin</p></td>
 </tr>
 <tr class="row-odd"><td><p>list_display</p></td>
-<td><p>priority, name, code, engine_source_field, dataset_field, value_type, is_active, updated_at</p></td>
+<td><p>priority, field_path, label_override, is_active, updated_at</p></td>
 </tr>
 <tr class="row-even"><td><p>list_filter</p></td>
-<td><p>is_active, value_type, engine_source_field, dataset_field__dataset</p></td>
+<td><p>is_active</p></td>
 </tr>
 <tr class="row-odd"><td><p>search_fields</p></td>
-<td><p>code, name, hint, example</p></td>
+<td><p>field_path, label_override, hint</p></td>
 </tr>
 <tr class="row-even"><td><p>readonly_fields</p></td>
 <td><p>created_at, updated_at</p></td>
@@ -1206,8 +1038,8 @@
 <li><p>Verbose Name Plural: <code class="docutils literal notranslate"><span class="pre">Microtech</span> <span class="pre">Bestellregel</span> <span class="pre">Operatoren</span></code></p></li>
 <li><p>Default Ordering: <code class="docutils literal notranslate"><span class="pre">priority,</span> <span class="pre">id</span></code></p></li>
 </ul>
-<section id="id17">
-<h4>Felder<a class="headerlink" href="#id17" title="Link to this heading">¶</a></h4>
+<section id="id15">
+<h4>Felder<a class="headerlink" href="#id15" title="Link to this heading">¶</a></h4>
 <table class="docutils align-default">
 <thead>
 <tr class="row-odd"><th class="head"><p>Feld</p></th>
@@ -1268,8 +1100,8 @@
 </tbody>
 </table>
 </section>
-<section id="id18">
-<h4>Admin-Konfiguration<a class="headerlink" href="#id18" title="Link to this heading">¶</a></h4>
+<section id="id16">
+<h4>Admin-Konfiguration<a class="headerlink" href="#id16" title="Link to this heading">¶</a></h4>
 <table class="docutils align-default">
 <thead>
 <tr class="row-odd"><th class="head"><p>Aspekt</p></th>
@@ -1329,8 +1161,8 @@
 <li><p>Verbose Name Plural: <code class="docutils literal notranslate"><span class="pre">Microtech</span> <span class="pre">Konfiguration</span></code></p></li>
 <li><p>Default Ordering: <code class="docutils literal notranslate"><span class="pre">-</span></code></p></li>
 </ul>
-<section id="id19">
-<h4>Felder<a class="headerlink" href="#id19" title="Link to this heading">¶</a></h4>
+<section id="id17">
+<h4>Felder<a class="headerlink" href="#id17" title="Link to this heading">¶</a></h4>
 <table class="docutils align-default">
 <thead>
 <tr class="row-odd"><th class="head"><p>Feld</p></th>
@@ -1396,8 +1228,8 @@
 </tbody>
 </table>
 </section>
-<section id="id20">
-<h4>Admin-Konfiguration<a class="headerlink" href="#id20" title="Link to this heading">¶</a></h4>
+<section id="id18">
+<h4>Admin-Konfiguration<a class="headerlink" href="#id18" title="Link to this heading">¶</a></h4>
 <table class="docutils align-default">
 <thead>
 <tr class="row-odd"><th class="head"><p>Aspekt</p></th>
@@ -1466,8 +1298,8 @@
 <li><p>Verbose Name Plural: <code class="docutils literal notranslate"><span class="pre">Bestellungen</span></code></p></li>
 <li><p>Default Ordering: <code class="docutils literal notranslate"><span class="pre">-purchase_date,</span> <span class="pre">-created_at</span></code></p></li>
 </ul>
-<section id="id21">
-<h4>Felder<a class="headerlink" href="#id21" title="Link to this heading">¶</a></h4>
+<section id="id19">
+<h4>Felder<a class="headerlink" href="#id19" title="Link to this heading">¶</a></h4>
 <table class="docutils align-default">
 <thead>
 <tr class="row-odd"><th class="head"><p>Feld</p></th>
@@ -1590,8 +1422,8 @@
 </tbody>
 </table>
 </section>
-<section id="id22">
-<h4>Admin-Konfiguration<a class="headerlink" href="#id22" title="Link to this heading">¶</a></h4>
+<section id="id20">
+<h4>Admin-Konfiguration<a class="headerlink" href="#id20" title="Link to this heading">¶</a></h4>
 <table class="docutils align-default">
 <thead>
 <tr class="row-odd"><th class="head"><p>Aspekt</p></th>
@@ -1645,8 +1477,8 @@
 <li><p>Verbose Name Plural: <code class="docutils literal notranslate"><span class="pre">Bestellpositionen</span></code></p></li>
 <li><p>Default Ordering: <code class="docutils literal notranslate"><span class="pre">order,</span> <span class="pre">id</span></code></p></li>
 </ul>
-<section id="id23">
-<h4>Felder<a class="headerlink" href="#id23" title="Link to this heading">¶</a></h4>
+<section id="id21">
+<h4>Felder<a class="headerlink" href="#id21" title="Link to this heading">¶</a></h4>
 <table class="docutils align-default">
 <thead>
 <tr class="row-odd"><th class="head"><p>Feld</p></th>
@@ -1719,8 +1551,8 @@
 </tbody>
 </table>
 </section>
-<section id="id24">
-<h4>Admin-Konfiguration<a class="headerlink" href="#id24" title="Link to this heading">¶</a></h4>
+<section id="id22">
+<h4>Admin-Konfiguration<a class="headerlink" href="#id22" title="Link to this heading">¶</a></h4>
 <table class="docutils align-default">
 <thead>
 <tr class="row-odd"><th class="head"><p>Aspekt</p></th>
@@ -1783,8 +1615,8 @@
 <li><p>Verbose Name Plural: <code class="docutils literal notranslate"><span class="pre">Kategorien</span></code></p></li>
 <li><p>Default Ordering: <code class="docutils literal notranslate"><span class="pre">name</span></code></p></li>
 </ul>
-<section id="id25">
-<h4>Felder<a class="headerlink" href="#id25" title="Link to this heading">¶</a></h4>
+<section id="id23">
+<h4>Felder<a class="headerlink" href="#id23" title="Link to this heading">¶</a></h4>
 <table class="docutils align-default">
 <thead>
 <tr class="row-odd"><th class="head"><p>Feld</p></th>
@@ -1840,8 +1672,8 @@
 </tbody>
 </table>
 </section>
-<section id="id26">
-<h4>Admin-Konfiguration<a class="headerlink" href="#id26" title="Link to this heading">¶</a></h4>
+<section id="id24">
+<h4>Admin-Konfiguration<a class="headerlink" href="#id24" title="Link to this heading">¶</a></h4>
 <table class="docutils align-default">
 <thead>
 <tr class="row-odd"><th class="head"><p>Aspekt</p></th>
@@ -1901,8 +1733,8 @@
 <li><p>Verbose Name Plural: <code class="docutils literal notranslate"><span class="pre">Bilder</span></code></p></li>
 <li><p>Default Ordering: <code class="docutils literal notranslate"><span class="pre">id</span></code></p></li>
 </ul>
-<section id="id27">
-<h4>Felder<a class="headerlink" href="#id27" title="Link to this heading">¶</a></h4>
+<section id="id25">
+<h4>Felder<a class="headerlink" href="#id25" title="Link to this heading">¶</a></h4>
 <table class="docutils align-default">
 <thead>
 <tr class="row-odd"><th class="head"><p>Feld</p></th>
@@ -1943,8 +1775,8 @@
 </tbody>
 </table>
 </section>
-<section id="id28">
-<h4>Admin-Konfiguration<a class="headerlink" href="#id28" title="Link to this heading">¶</a></h4>
+<section id="id26">
+<h4>Admin-Konfiguration<a class="headerlink" href="#id26" title="Link to this heading">¶</a></h4>
 <table class="docutils align-default">
 <thead>
 <tr class="row-odd"><th class="head"><p>Aspekt</p></th>
@@ -1968,8 +1800,8 @@
 <li><p>Verbose Name Plural: <code class="docutils literal notranslate"><span class="pre">Preise</span></code></p></li>
 <li><p>Default Ordering: <code class="docutils literal notranslate"><span class="pre">product,</span> <span class="pre">sales_channel,</span> <span class="pre">price</span></code></p></li>
 </ul>
-<section id="id29">
-<h4>Felder<a class="headerlink" href="#id29" title="Link to this heading">¶</a></h4>
+<section id="id27">
+<h4>Felder<a class="headerlink" href="#id27" title="Link to this heading">¶</a></h4>
 <table class="docutils align-default">
 <thead>
 <tr class="row-odd"><th class="head"><p>Feld</p></th>
@@ -2045,8 +1877,8 @@
 </tbody>
 </table>
 </section>
-<section id="id30">
-<h4>Admin-Konfiguration<a class="headerlink" href="#id30" title="Link to this heading">¶</a></h4>
+<section id="id28">
+<h4>Admin-Konfiguration<a class="headerlink" href="#id28" title="Link to this heading">¶</a></h4>
 <table class="docutils align-default">
 <thead>
 <tr class="row-odd"><th class="head"><p>Aspekt</p></th>
@@ -2103,8 +1935,8 @@
 <li><p>Verbose Name Plural: <code class="docutils literal notranslate"><span class="pre">Produkte</span></code></p></li>
 <li><p>Default Ordering: <code class="docutils literal notranslate"><span class="pre">erp_nr,</span> <span class="pre">name</span></code></p></li>
 </ul>
-<section id="id31">
-<h4>Felder<a class="headerlink" href="#id31" title="Link to this heading">¶</a></h4>
+<section id="id29">
+<h4>Felder<a class="headerlink" href="#id29" title="Link to this heading">¶</a></h4>
 <table class="docutils align-default">
 <thead>
 <tr class="row-odd"><th class="head"><p>Feld</p></th>
@@ -2247,8 +2079,8 @@
 </tbody>
 </table>
 </section>
-<section id="id32">
-<h4>Admin-Konfiguration<a class="headerlink" href="#id32" title="Link to this heading">¶</a></h4>
+<section id="id30">
+<h4>Admin-Konfiguration<a class="headerlink" href="#id30" title="Link to this heading">¶</a></h4>
 <table class="docutils align-default">
 <thead>
 <tr class="row-odd"><th class="head"><p>Aspekt</p></th>
@@ -2302,8 +2134,8 @@
 <li><p>Verbose Name Plural: <code class="docutils literal notranslate"><span class="pre">Lagerbestaende</span></code></p></li>
 <li><p>Default Ordering: <code class="docutils literal notranslate"><span class="pre">product</span></code></p></li>
 </ul>
-<section id="id33">
-<h4>Felder<a class="headerlink" href="#id33" title="Link to this heading">¶</a></h4>
+<section id="id31">
+<h4>Felder<a class="headerlink" href="#id31" title="Link to this heading">¶</a></h4>
 <table class="docutils align-default">
 <thead>
 <tr class="row-odd"><th class="head"><p>Feld</p></th>
@@ -2351,8 +2183,8 @@
 </tbody>
 </table>
 </section>
-<section id="id34">
-<h4>Admin-Konfiguration<a class="headerlink" href="#id34" title="Link to this heading">¶</a></h4>
+<section id="id32">
+<h4>Admin-Konfiguration<a class="headerlink" href="#id32" title="Link to this heading">¶</a></h4>
 <table class="docutils align-default">
 <thead>
 <tr class="row-odd"><th class="head"><p>Aspekt</p></th>
@@ -2412,8 +2244,8 @@
 <li><p>Verbose Name Plural: <code class="docutils literal notranslate"><span class="pre">Steuern</span></code></p></li>
 <li><p>Default Ordering: <code class="docutils literal notranslate"><span class="pre">name</span></code></p></li>
 </ul>
-<section id="id35">
-<h4>Felder<a class="headerlink" href="#id35" title="Link to this heading">¶</a></h4>
+<section id="id33">
+<h4>Felder<a class="headerlink" href="#id33" title="Link to this heading">¶</a></h4>
 <table class="docutils align-default">
 <thead>
 <tr class="row-odd"><th class="head"><p>Feld</p></th>
@@ -2462,8 +2294,8 @@
 </tbody>
 </table>
 </section>
-<section id="id36">
-<h4>Admin-Konfiguration<a class="headerlink" href="#id36" title="Link to this heading">¶</a></h4>
+<section id="id34">
+<h4>Admin-Konfiguration<a class="headerlink" href="#id34" title="Link to this heading">¶</a></h4>
 <table class="docutils align-default">
 <thead>
 <tr class="row-odd"><th class="head"><p>Aspekt</p></th>
@@ -2526,8 +2358,8 @@
 <li><p>Verbose Name Plural: <code class="docutils literal notranslate"><span class="pre">Shopware</span> <span class="pre">Verbindung</span></code></p></li>
 <li><p>Default Ordering: <code class="docutils literal notranslate"><span class="pre">-</span></code></p></li>
 </ul>
-<section id="id37">
-<h4>Felder<a class="headerlink" href="#id37" title="Link to this heading">¶</a></h4>
+<section id="id35">
+<h4>Felder<a class="headerlink" href="#id35" title="Link to this heading">¶</a></h4>
 <table class="docutils align-default">
 <thead>
 <tr class="row-odd"><th class="head"><p>Feld</p></th>
@@ -2588,8 +2420,8 @@
 </tbody>
 </table>
 </section>
-<section id="id38">
-<h4>Admin-Konfiguration<a class="headerlink" href="#id38" title="Link to this heading">¶</a></h4>
+<section id="id36">
+<h4>Admin-Konfiguration<a class="headerlink" href="#id36" title="Link to this heading">¶</a></h4>
 <table class="docutils align-default">
 <thead>
 <tr class="row-odd"><th class="head"><p>Aspekt</p></th>
@@ -2655,8 +2487,8 @@
 <li><p>Verbose Name Plural: <code class="docutils literal notranslate"><span class="pre">Shopware</span> <span class="pre">Konfigurationen</span></code></p></li>
 <li><p>Default Ordering: <code class="docutils literal notranslate"><span class="pre">-</span></code></p></li>
 </ul>
-<section id="id39">
-<h4>Felder<a class="headerlink" href="#id39" title="Link to this heading">¶</a></h4>
+<section id="id37">
+<h4>Felder<a class="headerlink" href="#id37" title="Link to this heading">¶</a></h4>
 <table class="docutils align-default">
 <thead>
 <tr class="row-odd"><th class="head"><p>Feld</p></th>
@@ -2729,8 +2561,8 @@
 </tbody>
 </table>
 </section>
-<section id="id40">
-<h4>Admin-Konfiguration<a class="headerlink" href="#id40" title="Link to this heading">¶</a></h4>
+<section id="id38">
+<h4>Admin-Konfiguration<a class="headerlink" href="#id38" title="Link to this heading">¶</a></h4>
 <table class="docutils align-default">
 <thead>
 <tr class="row-odd"><th class="head"><p>Aspekt</p></th>

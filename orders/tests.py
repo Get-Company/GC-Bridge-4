@@ -4,7 +4,13 @@ from types import SimpleNamespace
 from django.test import SimpleTestCase, TestCase
 
 from customer.models import Address, Customer
-from microtech.models import MicrotechOrderRule, MicrotechOrderRuleAction, MicrotechOrderRuleCondition
+from microtech.models import (
+    MicrotechDatasetCatalog,
+    MicrotechDatasetField,
+    MicrotechOrderRule,
+    MicrotechOrderRuleAction,
+    MicrotechOrderRuleCondition,
+)
 from orders.models import Order
 from orders.services.order_rule_resolver import OrderRuleResolverService, ResolvedOrderRule
 from orders.services.order_upsert_microtech import OrderRuleDebugInfo, OrderUpsertMicrotechService
@@ -25,7 +31,7 @@ class OrderRuleResolverDynamicRulesTest(TestCase):
     ) -> Order:
         customer = Customer.objects.create(
             erp_nr=f"ERP-{api_id}",
-            name="Testkunde",
+            name="Testkunde GmbH",
             is_gross=True,
         )
         billing_address = Address.objects.create(
@@ -55,131 +61,98 @@ class OrderRuleResolverDynamicRulesTest(TestCase):
             shipping_costs=shipping_costs,
         )
 
-    def test_single_source_condition_can_set_multiple_targets(self):
+    def test_django_field_conditions_collect_dataset_actions(self):
         order = self._create_order(
             api_id="A1",
-            total_price=Decimal("150.00"),
+            payment_method="PayPal Plus",
+            shipping_country="AT",
         )
+
+        vorgang_dataset = MicrotechDatasetCatalog.objects.create(
+            code="vorgang_vorgange",
+            name="Vorgang",
+            description="Vorgange",
+            source_identifier="Vorgang - Vorgange",
+            priority=10,
+        )
+        vorgang_field = MicrotechDatasetField.objects.create(
+            dataset=vorgang_dataset,
+            field_name="ZahlArt",
+            label="Zahlungsart",
+            field_type="Integer",
+            priority=10,
+        )
+
         rule = MicrotechOrderRule.objects.create(
-            name="Grossbestellung",
+            name="AT + PayPal",
             priority=1,
             is_active=True,
             condition_logic=MicrotechOrderRule.ConditionLogic.ALL,
         )
         MicrotechOrderRuleCondition.objects.create(
             rule=rule,
-            source_field=MicrotechOrderRuleCondition.SourceField.ORDER_TOTAL,
-            operator=MicrotechOrderRuleCondition.Operator.GREATER_THAN,
-            expected_value="100",
-            priority=1,
-        )
-        MicrotechOrderRuleAction.objects.create(
-            rule=rule,
-            target_field=MicrotechOrderRuleAction.TargetField.ZAHLUNGSART_ID,
-            target_value="77",
-            priority=1,
-        )
-        MicrotechOrderRuleAction.objects.create(
-            rule=rule,
-            target_field=MicrotechOrderRuleAction.TargetField.VERSANDART_ID,
-            target_value="88",
-            priority=2,
-        )
-
-        resolved = OrderRuleResolverService().resolve_for_order(order=order)
-
-        self.assertEqual(resolved.zahlungsart_id, 77)
-        self.assertEqual(resolved.versandart_id, 88)
-
-    def test_multiple_source_conditions_with_or_can_set_multiple_targets(self):
-        order = self._create_order(
-            api_id="A2",
-            payment_method="Vorkasse",
-            shipping_country="AT",
-        )
-        rule = MicrotechOrderRule.objects.create(
-            name="AT oder PayPal",
-            priority=1,
-            is_active=True,
-            condition_logic=MicrotechOrderRule.ConditionLogic.ANY,
-        )
-        MicrotechOrderRuleCondition.objects.create(
-            rule=rule,
-            source_field=MicrotechOrderRuleCondition.SourceField.PAYMENT_METHOD,
-            operator=MicrotechOrderRuleCondition.Operator.CONTAINS,
+            django_field_path="payment_method",
+            operator_code="contains",
             expected_value="paypal",
             priority=1,
         )
         MicrotechOrderRuleCondition.objects.create(
             rule=rule,
-            source_field=MicrotechOrderRuleCondition.SourceField.SHIPPING_COUNTRY_CODE,
-            operator=MicrotechOrderRuleCondition.Operator.EQUALS,
+            django_field_path="shipping_address__country_code",
+            operator_code="eq",
             expected_value="AT",
             priority=2,
         )
         MicrotechOrderRuleAction.objects.create(
             rule=rule,
-            target_field=MicrotechOrderRuleAction.TargetField.ZAHLUNGSART_ID,
-            target_value="22",
+            action_type=MicrotechOrderRuleAction.ActionType.CREATE_EXTRA_POSITION,
+            target_value="P",
             priority=1,
         )
         MicrotechOrderRuleAction.objects.create(
             rule=rule,
-            target_field=MicrotechOrderRuleAction.TargetField.ZAHLUNGSBEDINGUNG,
-            target_value="Sofort ohne Abzug",
+            action_type=MicrotechOrderRuleAction.ActionType.SET_FIELD,
+            dataset=vorgang_dataset,
+            dataset_field=vorgang_field,
+            target_value="22",
             priority=2,
         )
 
         resolved = OrderRuleResolverService().resolve_for_order(order=order)
 
-        self.assertEqual(resolved.zahlungsart_id, 22)
-        self.assertEqual(resolved.zahlungsbedingung, "Sofort ohne Abzug")
+        self.assertEqual(resolved.rule_id, rule.id)
+        self.assertEqual(len(resolved.dataset_actions), 2)
+        self.assertEqual(resolved.dataset_actions[0].action_type, MicrotechOrderRuleAction.ActionType.CREATE_EXTRA_POSITION)
+        self.assertEqual(resolved.dataset_actions[1].dataset_field_name, "ZahlArt")
+        self.assertEqual(resolved.dataset_actions[1].target_value, "22")
 
-    def test_dynamic_and_condition_must_match_all_or_fallback_to_global_rule(self):
-        order = self._create_order(
-            api_id="A3",
-            payment_method="Rechnung",
-            shipping_country="DE",
-        )
-        strict_rule = MicrotechOrderRule.objects.create(
-            name="PayPal und DE",
+    def test_invalid_django_field_path_does_not_match_and_fallback_rule_wins(self):
+        order = self._create_order(api_id="A2")
+
+        invalid_rule = MicrotechOrderRule.objects.create(
+            name="Invalid field rule",
             priority=1,
             is_active=True,
             condition_logic=MicrotechOrderRule.ConditionLogic.ALL,
         )
         MicrotechOrderRuleCondition.objects.create(
-            rule=strict_rule,
-            source_field=MicrotechOrderRuleCondition.SourceField.PAYMENT_METHOD,
-            operator=MicrotechOrderRuleCondition.Operator.CONTAINS,
-            expected_value="paypal",
-            priority=1,
-        )
-        MicrotechOrderRuleCondition.objects.create(
-            rule=strict_rule,
-            source_field=MicrotechOrderRuleCondition.SourceField.SHIPPING_COUNTRY_CODE,
-            operator=MicrotechOrderRuleCondition.Operator.EQUALS,
-            expected_value="DE",
-            priority=2,
-        )
-        MicrotechOrderRuleAction.objects.create(
-            rule=strict_rule,
-            target_field=MicrotechOrderRuleAction.TargetField.ZAHLUNGSART_ID,
-            target_value="91",
+            rule=invalid_rule,
+            django_field_path="not_existing_field",
+            operator_code="eq",
+            expected_value="x",
             priority=1,
         )
 
-        fallback_rule = MicrotechOrderRule.objects.create(name="Fallback Global", priority=2, is_active=True)
-        MicrotechOrderRuleAction.objects.create(
-            rule=fallback_rule,
-            target_field=MicrotechOrderRuleAction.TargetField.ZAHLUNGSART_ID,
-            target_value="55",
-            priority=1,
+        fallback_rule = MicrotechOrderRule.objects.create(
+            name="Fallback",
+            priority=2,
+            is_active=True,
+            condition_logic=MicrotechOrderRule.ConditionLogic.ALL,
         )
-        self.assertIsNotNone(fallback_rule.pk)
 
         resolved = OrderRuleResolverService().resolve_for_order(order=order)
 
-        self.assertEqual(resolved.zahlungsart_id, 55)
+        self.assertEqual(resolved.rule_id, fallback_rule.id)
 
 
 class OrderUpsertRuleDebugTest(SimpleTestCase):

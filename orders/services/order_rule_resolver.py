@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
 from loguru import logger
 
 from core.services import BaseService
 from microtech.models import MicrotechOrderRule, MicrotechOrderRuleAction, MicrotechOrderRuleCondition
-from microtech.rule_builder import get_action_target_map, get_condition_source_map, get_operator_engine_map
+from microtech.rule_builder import get_django_field_map, get_operator_engine_map, resolve_django_field_value
 from orders.models import Order
 
 
@@ -26,6 +27,9 @@ _SALUTATION_VALUES = {
     "female",
 }
 
+_BOOL_TRUE_VALUES = {"1", "true", "yes", "on", "ja"}
+_BOOL_FALSE_VALUES = {"0", "false", "no", "off", "nein"}
+
 
 def _to_str(value: object) -> str:
     if value is None:
@@ -43,23 +47,51 @@ def _to_decimal(value: object) -> Decimal | None:
         return None
 
 
-def _to_int(value: object) -> int | None:
+def _to_bool(value: object) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    text = _to_str(value).lower()
+    if text in _BOOL_TRUE_VALUES:
+        return True
+    if text in _BOOL_FALSE_VALUES:
+        return False
+    return None
+
+
+def _to_date(value: object) -> date | None:
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
     text = _to_str(value)
     if not text:
         return None
     try:
-        return int(text)
-    except (TypeError, ValueError):
+        return date.fromisoformat(text)
+    except ValueError:
         return None
 
 
-def _to_bool(value: object) -> bool | None:
-    text = _to_str(value).lower()
-    if text in {"1", "true", "yes", "on", "ja"}:
-        return True
-    if text in {"0", "false", "no", "off", "nein"}:
-        return False
-    return None
+def _to_datetime(value: object) -> datetime | None:
+    if isinstance(value, datetime):
+        return value
+    text = _to_str(value)
+    if not text:
+        return None
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError:
+        return None
+
+
+@dataclass(frozen=True, slots=True)
+class ResolvedDatasetAction:
+    action_type: str
+    dataset_source_identifier: str = ""
+    dataset_name: str = ""
+    dataset_field_name: str = ""
+    dataset_field_type: str = ""
+    target_value: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,6 +110,7 @@ class ResolvedOrderRule:
     payment_position_name: str = ""
     payment_position_mode: str = MicrotechOrderRule.PaymentPositionMode.FIXED
     payment_position_value: Decimal | None = None
+    dataset_actions: tuple[ResolvedDatasetAction, ...] = ()
 
     @classmethod
     def from_rule(cls, *, rule: MicrotechOrderRule, customer_type: str) -> "ResolvedOrderRule":
@@ -96,50 +129,24 @@ class OrderRuleResolverService(BaseService):
             raise TypeError("order must be an instance of Order.")
 
         customer_type = self._detect_customer_type(order=order)
-        billing_country = self._country_code(
-            _to_str(getattr(order.billing_address, "country_code", ""))
-        )
-        shipping_country = self._country_code(
-            _to_str(getattr(order.shipping_address, "country_code", ""))
-        )
-        payment_method = _to_str(order.payment_method).lower()
-        shipping_method = _to_str(order.shipping_method).lower()
-        context = {
-            MicrotechOrderRuleCondition.SourceField.CUSTOMER_TYPE: customer_type,
-            MicrotechOrderRuleCondition.SourceField.BILLING_COUNTRY_CODE: billing_country,
-            MicrotechOrderRuleCondition.SourceField.SHIPPING_COUNTRY_CODE: shipping_country,
-            MicrotechOrderRuleCondition.SourceField.PAYMENT_METHOD: payment_method,
-            MicrotechOrderRuleCondition.SourceField.SHIPPING_METHOD: shipping_method,
-            MicrotechOrderRuleCondition.SourceField.ORDER_TOTAL: order.total_price,
-            MicrotechOrderRuleCondition.SourceField.ORDER_TOTAL_TAX: order.total_tax,
-            MicrotechOrderRuleCondition.SourceField.SHIPPING_COSTS: order.shipping_costs,
-            MicrotechOrderRuleCondition.SourceField.ORDER_NUMBER: _to_str(order.order_number),
-        }
         order_label = _to_str(order.order_number) or f"id={order.pk}"
-        logger.info(
-            "Resolving Microtech order rule for order {} (payment_method='{}', shipping_method='{}').",
-            order_label,
-            _to_str(order.payment_method),
-            _to_str(order.shipping_method),
-        )
 
         rules = list(
             self.get_queryset()
             .filter(is_active=True)
-            .prefetch_related("conditions", "actions")
+            .prefetch_related("conditions", "actions", "actions__dataset", "actions__dataset_field")
             .order_by("priority", "id")
         )
-        source_field_map = get_condition_source_map()
+        django_field_map = get_django_field_map()
         operator_engine_map = get_operator_engine_map()
-        action_target_map = get_action_target_map()
         logger.info("Order {}: evaluating {} active rule(s).", order_label, len(rules))
 
         for rule in rules:
             if not self._matches_rule(
                 rule=rule,
-                context=context,
+                order=order,
                 order_label=order_label,
-                source_field_map=source_field_map,
+                django_field_map=django_field_map,
                 operator_engine_map=operator_engine_map,
             ):
                 logger.info(
@@ -149,31 +156,18 @@ class OrderRuleResolverService(BaseService):
                     _to_str(rule.name),
                 )
                 continue
+
             resolved = ResolvedOrderRule.from_rule(rule=rule, customer_type=customer_type)
+            resolved = replace(
+                resolved,
+                dataset_actions=self._collect_dataset_actions(rule=rule, order_label=order_label),
+            )
             logger.info(
-                "Order {}: rule {} ('{}') matched. Applying actions.",
+                "Order {}: rule {} ('{}') matched with {} dataset action(s).",
                 order_label,
                 rule.pk,
                 _to_str(rule.name),
-            )
-            resolved = self._apply_dynamic_actions(
-                rule=rule,
-                resolved=resolved,
-                action_target_map=action_target_map,
-            )
-            logger.info(
-                "Order {}: resolved rule result -> rule_id={}, zahlungsart_id={}, versandart_id={}, "
-                "vorgangsart_id={}, add_payment_position={}, payment_position_erp_nr='{}', "
-                "payment_position_mode='{}', payment_position_value='{}'.",
-                order_label,
-                resolved.rule_id,
-                resolved.zahlungsart_id,
-                resolved.versandart_id,
-                resolved.vorgangsart_id,
-                resolved.add_payment_position,
-                _to_str(resolved.payment_position_erp_nr),
-                resolved.payment_position_mode,
-                _to_str(resolved.payment_position_value),
+                len(resolved.dataset_actions),
             )
             return resolved
 
@@ -184,96 +178,83 @@ class OrderRuleResolverService(BaseService):
         self,
         *,
         rule: MicrotechOrderRule,
-        context: dict[str, object],
-        order_label: str = "",
-        source_field_map: dict[str, object] | None = None,
-        operator_engine_map: dict[str, str] | None = None,
+        order: Order,
+        order_label: str,
+        django_field_map: dict[str, object],
+        operator_engine_map: dict[str, str],
     ) -> bool:
         active_conditions = [condition for condition in rule.conditions.all() if condition.is_active]
         if not active_conditions:
-            # Dynamic-only mode: a rule without conditions is a global fallback.
             logger.info(
                 "Order {}: rule {} ('{}') has no active conditions and acts as global fallback.",
-                order_label or "?",
+                order_label,
                 rule.pk,
                 _to_str(rule.name),
             )
             return True
-        return self._matches_dynamic_conditions(
-            rule=rule,
-            active_conditions=active_conditions,
-            context=context,
-            order_label=order_label,
-            source_field_map=source_field_map or {},
-            operator_engine_map=operator_engine_map or {},
-        )
 
-    def _matches_dynamic_conditions(
-        self,
-        *,
-        rule: MicrotechOrderRule,
-        active_conditions: list[MicrotechOrderRuleCondition],
-        context: dict[str, object],
-        order_label: str = "",
-        source_field_map: dict[str, object] | None = None,
-        operator_engine_map: dict[str, str] | None = None,
-    ) -> bool:
-        source_field_map = source_field_map or {}
-        operator_engine_map = operator_engine_map or {}
-        sorted_conditions = sorted(active_conditions, key=lambda item: (item.priority, item.id))
         evaluations: list[bool] = []
-        for condition in sorted_conditions:
-            source_def = source_field_map.get(condition.source_field)
-            engine_source_field = (
-                _to_str(getattr(source_def, "engine_source_field", ""))
-                or _to_str(condition.source_field)
-            )
-            allowed_operators = set(getattr(source_def, "allowed_operator_codes", ()) or ())
-            operator_code = _to_str(condition.operator)
-            engine_operator = _to_str(operator_engine_map.get(operator_code)) or operator_code
-            value_type = _to_str(getattr(source_def, "value_type", ""))
+        for condition in sorted(active_conditions, key=lambda item: (item.priority, item.id)):
+            field_path = _to_str(condition.django_field_path)
+            field_def = django_field_map.get(field_path)
+            operator_code = _to_str(condition.operator_code)
 
-            if allowed_operators and operator_code not in allowed_operators:
-                result = False
+            if not field_def:
                 logger.warning(
-                    "Order {}: condition {} uses disallowed operator '{}' for source '{}'.",
-                    order_label or "?",
+                    "Order {}: condition {} uses unknown django field path '{}'.",
+                    order_label,
+                    condition.pk,
+                    field_path,
+                )
+                evaluations.append(False)
+                continue
+
+            allowed_operators = set(getattr(field_def, "allowed_operator_codes", ()) or ())
+            if operator_code not in allowed_operators:
+                logger.warning(
+                    "Order {}: condition {} uses disallowed operator '{}' for field '{}'.",
+                    order_label,
                     condition.pk,
                     operator_code,
-                    condition.source_field,
+                    field_path,
                 )
-            else:
-                result = self._evaluate_condition(
-                    operator=engine_operator,
-                    actual_value=context.get(engine_source_field),
-                    expected_raw=_to_str(condition.expected_value),
-                    value_type=value_type,
-                    engine_source_field=engine_source_field,
-                )
+                evaluations.append(False)
+                continue
+
+            engine_operator = _to_str(operator_engine_map.get(operator_code)) or operator_code
+            actual_value = resolve_django_field_value(order=order, path=field_path)
+            expected_raw = _to_str(condition.expected_value)
+            value_kind = _to_str(getattr(field_def, "value_kind", "string")) or "string"
+
+            result = self._evaluate_condition(
+                operator=engine_operator,
+                actual_value=actual_value,
+                expected_raw=expected_raw,
+                value_kind=value_kind,
+            )
             evaluations.append(result)
-            actual_value = context.get(engine_source_field)
+
             logger.info(
-                "Order {}: rule {} ('{}') condition {} -> {} {} '{}' [engine_source='{}', "
-                "engine_operator='{}'] (actual='{}') => {}",
-                order_label or "?",
+                "Order {}: rule {} ('{}') condition {} -> field='{}' operator='{}' expected='{}' actual='{}' => {}",
+                order_label,
                 rule.pk,
                 _to_str(rule.name),
                 condition.pk,
-                condition.source_field,
+                field_path,
                 operator_code,
-                _to_str(condition.expected_value),
-                engine_source_field,
-                engine_operator,
+                expected_raw,
                 _to_str(actual_value),
                 "MATCH" if result else "NO_MATCH",
             )
+
         if rule.condition_logic == MicrotechOrderRule.ConditionLogic.ANY:
             final_result = any(evaluations)
         else:
             final_result = all(evaluations)
+
         logger.info(
             "Order {}: rule {} ('{}') final condition result={} (logic='{}').",
-            order_label or "?",
+            order_label,
             rule.pk,
             _to_str(rule.name),
             final_result,
@@ -288,177 +269,130 @@ class OrderRuleResolverService(BaseService):
         operator: str,
         actual_value: object,
         expected_raw: str,
-        value_type: str = "",
-        engine_source_field: str = "",
+        value_kind: str,
     ) -> bool:
         if operator == MicrotechOrderRuleCondition.Operator.CONTAINS:
             if not expected_raw:
                 return True
             return expected_raw.lower() in _to_str(actual_value).lower()
 
-        if operator in (
-            MicrotechOrderRuleCondition.Operator.GREATER_THAN,
-            MicrotechOrderRuleCondition.Operator.LESS_THAN,
-        ):
+        if value_kind in {"int", "decimal"}:
             actual_decimal = _to_decimal(actual_value)
             expected_decimal = _to_decimal(expected_raw)
             if actual_decimal is None or expected_decimal is None:
                 return False
             if operator == MicrotechOrderRuleCondition.Operator.GREATER_THAN:
                 return actual_decimal > expected_decimal
-            return actual_decimal < expected_decimal
-
-        # equals
-        numeric_fields = {
-            MicrotechOrderRuleCondition.SourceField.ORDER_TOTAL,
-            MicrotechOrderRuleCondition.SourceField.ORDER_TOTAL_TAX,
-            MicrotechOrderRuleCondition.SourceField.SHIPPING_COSTS,
-        }
-        if value_type == MicrotechOrderRuleCondition.ValueType.DECIMAL or engine_source_field in numeric_fields:
-            actual_decimal = _to_decimal(actual_value)
-            expected_decimal = _to_decimal(expected_raw)
-            if actual_decimal is None or expected_decimal is None:
-                return False
+            if operator == MicrotechOrderRuleCondition.Operator.LESS_THAN:
+                return actual_decimal < expected_decimal
             return actual_decimal == expected_decimal
+
+        if value_kind == "bool":
+            actual_bool = _to_bool(actual_value)
+            expected_bool = _to_bool(expected_raw)
+            if actual_bool is None or expected_bool is None:
+                return False
+            return actual_bool == expected_bool
+
+        if value_kind == "date":
+            actual_date = _to_date(actual_value)
+            expected_date = _to_date(expected_raw)
+            if actual_date is None or expected_date is None:
+                return False
+            if operator == MicrotechOrderRuleCondition.Operator.GREATER_THAN:
+                return actual_date > expected_date
+            if operator == MicrotechOrderRuleCondition.Operator.LESS_THAN:
+                return actual_date < expected_date
+            return actual_date == expected_date
+
+        if value_kind == "datetime":
+            actual_dt = _to_datetime(actual_value)
+            expected_dt = _to_datetime(expected_raw)
+            if actual_dt is None or expected_dt is None:
+                return False
+            if operator == MicrotechOrderRuleCondition.Operator.GREATER_THAN:
+                return actual_dt > expected_dt
+            if operator == MicrotechOrderRuleCondition.Operator.LESS_THAN:
+                return actual_dt < expected_dt
+            return actual_dt == expected_dt
+
+        # string
+        if operator == MicrotechOrderRuleCondition.Operator.GREATER_THAN:
+            return _to_str(actual_value).lower() > expected_raw.lower()
+        if operator == MicrotechOrderRuleCondition.Operator.LESS_THAN:
+            return _to_str(actual_value).lower() < expected_raw.lower()
         return _to_str(actual_value).lower() == expected_raw.lower()
 
     @classmethod
-    def _apply_dynamic_actions(
+    def _collect_dataset_actions(
         cls,
         *,
         rule: MicrotechOrderRule,
-        resolved: ResolvedOrderRule,
-        action_target_map: dict[str, object] | None = None,
-    ) -> ResolvedOrderRule:
-        action_target_map = action_target_map or {}
-        active_actions = [
-            action
-            for action in rule.actions.all()
-            if action.is_active
-        ]
-        if not active_actions:
-            logger.info(
-                "Rule {} ('{}') matched but has no active actions.",
-                rule.pk,
-                _to_str(rule.name),
-            )
-            return resolved
+        order_label: str,
+    ) -> tuple[ResolvedDatasetAction, ...]:
+        resolved: list[ResolvedDatasetAction] = []
+        active_actions = [action for action in rule.actions.all() if action.is_active]
 
         for action in sorted(active_actions, key=lambda item: (item.priority, item.id)):
-            before = resolved
-            resolved = cls._apply_action(
-                action=action,
-                resolved=resolved,
-                rule_id=rule.pk,
-                action_target_map=action_target_map,
-            )
-            if resolved != before:
-                logger.info(
-                    "Rule {} ('{}') action {}='{}' applied.",
-                    rule.pk,
-                    _to_str(rule.name),
-                    action.target_field,
-                    _to_str(action.target_value),
+            action_type = _to_str(action.action_type)
+
+            if action_type == MicrotechOrderRuleAction.ActionType.CREATE_EXTRA_POSITION:
+                erp_nr = _to_str(action.target_value)
+                if not erp_nr:
+                    logger.warning(
+                        "Order {}: rule {} action {} ignored (missing ERP-Nr for create_extra_position).",
+                        order_label,
+                        rule.pk,
+                        action.pk,
+                    )
+                    continue
+                resolved.append(
+                    ResolvedDatasetAction(
+                        action_type=action_type,
+                        target_value=erp_nr,
+                    )
                 )
-            else:
-                logger.info(
-                    "Rule {} ('{}') action {}='{}' was ignored.",
+                continue
+
+            if action_type != MicrotechOrderRuleAction.ActionType.SET_FIELD:
+                logger.warning(
+                    "Order {}: rule {} action {} ignored (unknown action_type='{}').",
+                    order_label,
                     rule.pk,
-                    _to_str(rule.name),
-                    action.target_field,
-                    _to_str(action.target_value),
+                    action.pk,
+                    action_type,
                 )
-        return resolved
+                continue
 
-    @classmethod
-    def _apply_action(
-        cls,
-        *,
-        action: MicrotechOrderRuleAction,
-        resolved: ResolvedOrderRule,
-        rule_id: int | None,
-        action_target_map: dict[str, object] | None = None,
-    ) -> ResolvedOrderRule:
-        action_target_map = action_target_map or {}
-        target = action.target_field
-        target_def = action_target_map.get(target)
-        engine_target = (
-            _to_str(getattr(target_def, "engine_target_field", ""))
-            or target
-        )
-        value_type = _to_str(getattr(target_def, "value_type", ""))
-        enum_values = set(getattr(target_def, "enum_values", ()) or ())
-        raw_value = _to_str(action.target_value)
-        if not hasattr(resolved, engine_target):
-            logger.warning(
-                "Rule {} action {} ignored: unknown target field '{}'.",
-                rule_id,
-                target,
-                engine_target,
+            if not action.dataset_id or not action.dataset_field_id:
+                logger.warning(
+                    "Order {}: rule {} action {} ignored (dataset/dataset_field missing).",
+                    order_label,
+                    rule.pk,
+                    action.pk,
+                )
+                continue
+            if action.dataset_field.dataset_id != action.dataset_id:
+                logger.warning(
+                    "Order {}: rule {} action {} ignored (dataset_field does not belong to dataset).",
+                    order_label,
+                    rule.pk,
+                    action.pk,
+                )
+                continue
+
+            resolved.append(
+                ResolvedDatasetAction(
+                    action_type=action_type,
+                    dataset_source_identifier=_to_str(action.dataset.source_identifier),
+                    dataset_name=_to_str(action.dataset.name),
+                    dataset_field_name=_to_str(action.dataset_field.field_name),
+                    dataset_field_type=_to_str(action.dataset_field.field_type),
+                    target_value=_to_str(action.target_value),
+                )
             )
-            return resolved
 
-        int_targets = {
-            MicrotechOrderRuleAction.TargetField.VORGANGSART_ID,
-            MicrotechOrderRuleAction.TargetField.ZAHLUNGSART_ID,
-            MicrotechOrderRuleAction.TargetField.VERSANDART_ID,
-        }
-        string_targets = {
-            MicrotechOrderRuleAction.TargetField.NA1_STATIC_VALUE,
-            MicrotechOrderRuleAction.TargetField.ZAHLUNGSBEDINGUNG,
-            MicrotechOrderRuleAction.TargetField.PAYMENT_POSITION_ERP_NR,
-            MicrotechOrderRuleAction.TargetField.PAYMENT_POSITION_NAME,
-        }
-
-        if value_type == MicrotechOrderRuleAction.ValueType.INT or engine_target in int_targets:
-            parsed = _to_int(raw_value)
-            if parsed is None:
-                logger.warning("Rule {} action {} ignored: invalid int value '{}'.", rule_id, target, raw_value)
-                return resolved
-            return replace(resolved, **{engine_target: parsed})
-
-        if value_type == MicrotechOrderRuleAction.ValueType.STRING or engine_target in string_targets:
-            return replace(resolved, **{engine_target: raw_value})
-
-        if (
-            value_type == MicrotechOrderRuleAction.ValueType.DECIMAL
-            or engine_target == MicrotechOrderRuleAction.TargetField.PAYMENT_POSITION_VALUE
-        ):
-            parsed_decimal = _to_decimal(raw_value)
-            if parsed_decimal is None:
-                logger.warning("Rule {} action {} ignored: invalid decimal value '{}'.", rule_id, target, raw_value)
-                return resolved
-            return replace(resolved, payment_position_value=parsed_decimal)
-
-        if (
-            value_type == MicrotechOrderRuleAction.ValueType.BOOL
-            or engine_target == MicrotechOrderRuleAction.TargetField.ADD_PAYMENT_POSITION
-        ):
-            parsed_bool = _to_bool(raw_value)
-            if parsed_bool is None:
-                logger.warning("Rule {} action {} ignored: invalid boolean value '{}'.", rule_id, target, raw_value)
-                return resolved
-            return replace(resolved, add_payment_position=parsed_bool)
-
-        if (
-            value_type == MicrotechOrderRuleAction.ValueType.ENUM
-            or engine_target in {
-                MicrotechOrderRuleAction.TargetField.NA1_MODE,
-                MicrotechOrderRuleAction.TargetField.PAYMENT_POSITION_MODE,
-            }
-        ):
-            valid_values = set(enum_values)
-            if not valid_values and engine_target == MicrotechOrderRuleAction.TargetField.NA1_MODE:
-                valid_values = set(MicrotechOrderRule.Na1Mode.values)
-            if not valid_values and engine_target == MicrotechOrderRuleAction.TargetField.PAYMENT_POSITION_MODE:
-                valid_values = set(MicrotechOrderRule.PaymentPositionMode.values)
-            if raw_value not in valid_values:
-                logger.warning("Rule {} action {} ignored: unknown enum value '{}'.", rule_id, target, raw_value)
-                return resolved
-            return replace(resolved, **{engine_target: raw_value})
-
-        logger.warning("Rule {} action ignored: unsupported value type '{}'.", rule_id, value_type or "?")
-        return resolved
+        return tuple(resolved)
 
     @staticmethod
     def _country_code(value: str) -> str:
@@ -491,4 +425,4 @@ class OrderRuleResolverService(BaseService):
         return True
 
 
-__all__ = ["OrderRuleResolverService", "ResolvedOrderRule"]
+__all__ = ["OrderRuleResolverService", "ResolvedDatasetAction", "ResolvedOrderRule"]

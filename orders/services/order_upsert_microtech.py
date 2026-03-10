@@ -8,7 +8,7 @@ from loguru import logger
 
 from core.services import BaseService
 from customer.services import CustomerUpsertMicrotechService
-from microtech.models import MicrotechSettings
+from microtech.models import MicrotechOrderRuleAction, MicrotechSettings
 from microtech.services import (
     MicrotechArtikelService,
     MicrotechVorgangService,
@@ -22,7 +22,11 @@ from orders.services.constants import (
     DEFAULT_SHIPPING_TYPE_NUMBER,
     DEFAULT_UNIT,
 )
-from orders.services.order_rule_resolver import OrderRuleResolverService, ResolvedOrderRule
+from orders.services.order_rule_resolver import (
+    OrderRuleResolverService,
+    ResolvedDatasetAction,
+    ResolvedOrderRule,
+)
 from products.models import Product
 
 
@@ -105,6 +109,7 @@ class OrderUpsertMicrotechService(BaseService):
         )
         self._add_positions(order=order, so_vorgang=so_vorgang, erp=erp)
         self._add_shipping_position(order=order, so_vorgang=so_vorgang)
+        self._apply_rule_dataset_actions(order=order, so_vorgang=so_vorgang, resolved_rule=resolved_rule)
         rule_debug = self._add_payment_position(
             order=order,
             so_vorgang=so_vorgang,
@@ -436,6 +441,94 @@ class OrderUpsertMicrotechService(BaseService):
             is_gross=order.customer.is_gross,
         )
 
+    def _apply_rule_dataset_actions(
+        self,
+        *,
+        order: Order,
+        so_vorgang,
+        resolved_rule: ResolvedOrderRule,
+    ) -> None:
+        if not resolved_rule.dataset_actions:
+            return
+
+        created_extra_position = False
+        for action in resolved_rule.dataset_actions:
+            if action.action_type == MicrotechOrderRuleAction.ActionType.CREATE_EXTRA_POSITION:
+                so_vorgang.Positionen.Add(1, DEFAULT_UNIT, action.target_value)
+                created_extra_position = True
+                logger.info(
+                    "Order {}: created extra position with ERP-Nr '{}'.",
+                    order.order_number,
+                    action.target_value,
+                )
+                continue
+
+            if action.action_type != MicrotechOrderRuleAction.ActionType.SET_FIELD:
+                logger.warning(
+                    "Order {}: unknown dataset action_type '{}', skipping.",
+                    order.order_number,
+                    action.action_type,
+                )
+                continue
+
+            if self._is_vorgang_dataset_action(action):
+                written = self._set_dataset_field(
+                    dataset=so_vorgang.DataSet,
+                    field_name=action.dataset_field_name,
+                    value=action.target_value,
+                )
+                if not written:
+                    logger.warning(
+                        "Order {}: failed to set Vorgang field '{}' to '{}'.",
+                        order.order_number,
+                        action.dataset_field_name,
+                        action.target_value,
+                    )
+                continue
+
+            if self._is_vorgang_position_dataset_action(action):
+                if not created_extra_position:
+                    logger.warning(
+                        "Order {}: action on VorgangPosition skipped because no extra position was created.",
+                        order.order_number,
+                    )
+                    continue
+                position_dataset = so_vorgang.Positionen.DataSet
+                position_dataset.Edit()
+                written = self._set_dataset_field(
+                    dataset=position_dataset,
+                    field_name=action.dataset_field_name,
+                    value=action.target_value,
+                )
+                if written:
+                    position_dataset.Post()
+                else:
+                    logger.warning(
+                        "Order {}: failed to set VorgangPosition field '{}' to '{}'.",
+                        order.order_number,
+                        action.dataset_field_name,
+                        action.target_value,
+                    )
+                continue
+
+            logger.warning(
+                "Order {}: dataset action for unsupported dataset '{}' ignored.",
+                order.order_number,
+                action.dataset_source_identifier or action.dataset_name,
+            )
+
+    @staticmethod
+    def _is_vorgang_dataset_action(action: ResolvedDatasetAction) -> bool:
+        source = (action.dataset_source_identifier or "").strip().lower()
+        name = (action.dataset_name or "").strip().lower()
+        return source == "vorgang - vorgange" or name == "vorgang"
+
+    @staticmethod
+    def _is_vorgang_position_dataset_action(action: ResolvedDatasetAction) -> bool:
+        source = (action.dataset_source_identifier or "").strip().lower()
+        name = (action.dataset_name or "").strip().lower()
+        return source == "vorgangposition - vorgangspositionen" or name == "vorgangposition"
+
     def _add_payment_position(
         self,
         *,
@@ -603,6 +696,45 @@ class OrderUpsertMicrotechService(BaseService):
             except Exception:
                 continue
         return False
+
+    @staticmethod
+    def _set_dataset_field(*, dataset, field_name: str, value: object) -> bool:
+        try:
+            field = dataset.Fields.Item(field_name)
+        except Exception:
+            return False
+
+        field_type = str(getattr(field, "FieldType", "") or "")
+        text_value = str(value)
+
+        try:
+            if field_type in {"Integer", "Byte", "AutoInc", "Boolean", "SmallInt"}:
+                normalized = text_value.strip().lower()
+                if normalized in {"1", "true", "yes", "on", "ja"}:
+                    field.AsInteger = 1
+                    return True
+                if normalized in {"0", "false", "no", "off", "nein"}:
+                    field.AsInteger = 0
+                    return True
+                field.AsInteger = int(text_value)
+                return True
+
+            if field_type in {"Float", "Double"}:
+                field.AsFloat = float(text_value.replace(",", "."))
+                return True
+
+            if field_type in {"Blob", "Info"}:
+                field.Text = text_value
+                return True
+
+            if field_type in {"Date", "DateTime"}:
+                field.AsString = text_value
+                return True
+
+            field.AsString = text_value
+            return True
+        except Exception:
+            return False
 
     @staticmethod
     def _resolve_position_name(

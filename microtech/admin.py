@@ -1,27 +1,29 @@
 from django.contrib import admin
-from django.http import JsonResponse
-from django.http import HttpResponseRedirect
+from django.http import HttpResponseRedirect, JsonResponse
 from django.urls import reverse
 
 from core.admin import BaseAdmin, BaseTabularInline
 from microtech.forms import (
     MicrotechOrderRuleActionForm,
     MicrotechOrderRuleConditionForm,
-    action_example_for_field,
     condition_example_for_field,
 )
 from microtech.models import (
     MicrotechDatasetCatalog,
     MicrotechDatasetField,
-    MicrotechOrderRuleActionTarget,
-    MicrotechOrderRuleConditionSource,
-    MicrotechOrderRuleOperator,
     MicrotechOrderRule,
     MicrotechOrderRuleAction,
     MicrotechOrderRuleCondition,
+    MicrotechOrderRuleDjangoFieldPolicy,
+    MicrotechOrderRuleOperator,
     MicrotechSettings,
 )
-from microtech.rule_builder import get_action_target_defs, get_condition_source_defs, get_operator_defs
+from microtech.rule_builder import (
+    get_dataset_defs,
+    get_dataset_field_defs,
+    get_django_field_defs,
+    get_operator_defs,
+)
 
 
 class SingletonAdmin(BaseAdmin):
@@ -55,14 +57,14 @@ class MicrotechSettingsAdmin(SingletonAdmin):
             "Benutzer",
             {
                 "fields": ("benutzer", "manual_benutzer"),
-                "description": "Benutzer für automatische und manuelle Sync-Vorgänge.",
+                "description": "Benutzer fuer automatische und manuelle Sync-Vorgaenge.",
             },
         ),
         (
             "Vorgang-Standardwerte",
             {
                 "fields": ("default_vorgangsart_id", "default_zahlungsart_id", "default_versandart_id"),
-                "description": "Standard-IDs für neue Microtech-Bestellungen (Vorgänge).",
+                "description": "Standard-IDs fuer neue Microtech-Bestellungen (Vorgaenge).",
             },
         ),
     )
@@ -76,8 +78,8 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
         fields = (
             "is_active",
             "priority",
-            "source_field",
-            "operator",
+            "django_field_path",
+            "operator_code",
             "expected_value",
             "value_example",
         )
@@ -88,7 +90,7 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
         def value_example(self, obj):
             if not obj:
                 return "-"
-            return condition_example_for_field(obj.source_field)
+            return condition_example_for_field(obj.django_field_path)
 
     class ActionInline(BaseTabularInline):
         model = MicrotechOrderRuleAction
@@ -96,18 +98,12 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
         fields = (
             "is_active",
             "priority",
-            "target_field",
+            "action_type",
+            "dataset",
+            "dataset_field",
             "target_value",
-            "value_example",
         )
-        readonly_fields = BaseTabularInline.readonly_fields + ("value_example",)
         extra = 0
-
-        @admin.display(description="Beispiel")
-        def value_example(self, obj):
-            if not obj:
-                return "-"
-            return action_example_for_field(obj.target_field)
 
     list_display = (
         "priority",
@@ -153,29 +149,38 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
                 }
                 for item in get_operator_defs()
             ],
-            "condition_sources": [
+            "django_fields": [
                 {
-                    "code": item.code,
-                    "name": item.name,
-                    "engine_source_field": item.engine_source_field,
-                    "value_type": item.value_type,
+                    "path": item.path,
+                    "label": item.label,
+                    "value_kind": item.value_kind,
                     "allowed_operator_codes": list(item.allowed_operator_codes),
                     "hint": item.hint,
                     "example": item.example,
                 }
-                for item in get_condition_source_defs()
+                for item in get_django_field_defs()
             ],
-            "action_targets": [
+            "datasets": [
                 {
+                    "id": item.id,
                     "code": item.code,
                     "name": item.name,
-                    "engine_target_field": item.engine_target_field,
-                    "value_type": item.value_type,
-                    "enum_values": list(item.enum_values),
-                    "hint": item.hint,
-                    "example": item.example,
+                    "description": item.description,
+                    "source_identifier": item.source_identifier,
                 }
-                for item in get_action_target_defs()
+                for item in get_dataset_defs()
+            ],
+            "dataset_fields": [
+                {
+                    "id": item.id,
+                    "dataset_id": item.dataset_id,
+                    "field_name": item.field_name,
+                    "label": item.label,
+                    "field_type": item.field_type,
+                    "can_access": item.can_access,
+                    "is_calc_field": item.is_calc_field,
+                }
+                for item in get_dataset_field_defs()
             ],
         }
         return JsonResponse(payload)
@@ -198,12 +203,13 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
             },
         ),
         (
-            "Hinweise fuer Regelbuilder",
+            "Hinweise fuer Rulebuilder",
             {
                 "fields": (),
                 "description": (
-                    "Source/Target-Felder und Operatoren werden in separaten Rulebuilder-Tabellen gepflegt. "
-                    "Operatoren werden im Inline je Source-Feld gefiltert."
+                    "Bedingungsfelder werden ueber Django-Feldpfade (Autocomplete) gewaehlt. "
+                    "Operatoren werden feldtypbasiert gefiltert und optional ueber Feld-Policies eingeschraenkt. "
+                    "Aktionen waehlen Dataset und Dataset-Feld."
                 ),
             },
         ),
@@ -227,77 +233,31 @@ class MicrotechOrderRuleOperatorAdmin(BaseAdmin):
     )
 
 
-@admin.register(MicrotechOrderRuleConditionSource)
-class MicrotechOrderRuleConditionSourceAdmin(BaseAdmin):
+@admin.register(MicrotechOrderRuleDjangoFieldPolicy)
+class MicrotechOrderRuleDjangoFieldPolicyAdmin(BaseAdmin):
     list_display = (
         "priority",
-        "name",
-        "code",
-        "engine_source_field",
-        "dataset_field",
-        "value_type",
+        "field_path",
+        "label_override",
         "is_active",
         "updated_at",
     )
     list_editable = ("is_active",)
-    search_fields = ("code", "name", "hint", "example")
-    list_filter = ("is_active", "value_type", "engine_source_field", "dataset_field__dataset")
+    search_fields = ("field_path", "label_override", "hint")
+    list_filter = ("is_active",)
     ordering = ("priority", "id")
-    filter_horizontal = ("operators",)
-    autocomplete_fields = ("dataset_field",)
+    filter_horizontal = ("allowed_operators",)
     fieldsets = (
         (
-            "Condition Source Feld",
+            "Django Bedingungsfeld",
             {
                 "fields": (
                     "is_active",
                     "priority",
-                    "code",
-                    "name",
-                    "engine_source_field",
-                    "dataset_field",
-                    "value_type",
-                    "operators",
+                    "field_path",
+                    "label_override",
+                    "allowed_operators",
                     "hint",
-                    "example",
-                ),
-            },
-        ),
-    )
-
-
-@admin.register(MicrotechOrderRuleActionTarget)
-class MicrotechOrderRuleActionTargetAdmin(BaseAdmin):
-    list_display = (
-        "priority",
-        "name",
-        "code",
-        "engine_target_field",
-        "dataset_field",
-        "value_type",
-        "is_active",
-        "updated_at",
-    )
-    list_editable = ("is_active",)
-    search_fields = ("code", "name", "hint", "example")
-    list_filter = ("is_active", "value_type", "engine_target_field", "dataset_field__dataset")
-    ordering = ("priority", "id")
-    autocomplete_fields = ("dataset_field",)
-    fieldsets = (
-        (
-            "Action Target Feld",
-            {
-                "fields": (
-                    "is_active",
-                    "priority",
-                    "code",
-                    "name",
-                    "engine_target_field",
-                    "dataset_field",
-                    "value_type",
-                    "enum_values",
-                    "hint",
-                    "example",
                 ),
             },
         ),

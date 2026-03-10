@@ -21,80 +21,186 @@
     return map;
   }
 
-  function sourceByCode(code) {
-    if (!RULE_META || !Array.isArray(RULE_META.condition_sources)) return null;
-    return RULE_META.condition_sources.find((item) => item.code === code) || null;
+  function operatorsByCode() {
+    const map = {};
+    if (!RULE_META || !Array.isArray(RULE_META.operators)) return map;
+    RULE_META.operators.forEach((op) => {
+      if (op && op.code) map[op.code] = op;
+    });
+    return map;
   }
 
-  function targetByCode(code) {
-    if (!RULE_META || !Array.isArray(RULE_META.action_targets)) return null;
-    return RULE_META.action_targets.find((item) => item.code === code) || null;
+  function djangoFieldByPath(path) {
+    if (!RULE_META || !Array.isArray(RULE_META.django_fields)) return null;
+    return RULE_META.django_fields.find((item) => item.path === path) || null;
+  }
+
+  function datasetFieldById(idValue) {
+    if (!RULE_META || !Array.isArray(RULE_META.dataset_fields)) return null;
+    const id = String(idValue || "");
+    return RULE_META.dataset_fields.find((item) => String(item.id) === id) || null;
+  }
+
+  function datasetFieldsFor(datasetId) {
+    if (!RULE_META || !Array.isArray(RULE_META.dataset_fields)) return [];
+    const id = String(datasetId || "");
+    if (!id) return [];
+    return RULE_META.dataset_fields.filter((item) => String(item.dataset_id) === id);
+  }
+
+  function ensureDjangoFieldDatalist() {
+    if (!RULE_META || !Array.isArray(RULE_META.django_fields)) return;
+    let datalist = document.getElementById("microtech-django-field-paths");
+    if (!datalist) {
+      datalist = document.createElement("datalist");
+      datalist.id = "microtech-django-field-paths";
+      document.body.appendChild(datalist);
+    }
+    datalist.innerHTML = "";
+    RULE_META.django_fields.forEach((item) => {
+      if (!item || !item.path) return;
+      const option = document.createElement("option");
+      option.value = item.path;
+      option.label = item.label || item.path;
+      datalist.appendChild(option);
+    });
+  }
+
+  function rebuildOperatorOptions(operatorSelect, allowedCodes, current) {
+    const byCode = operatorsByCode();
+    operatorSelect.innerHTML = "";
+
+    const options = (allowedCodes && allowedCodes.length > 0)
+      ? allowedCodes
+      : Object.keys(byCode);
+
+    options.forEach((code) => {
+      const option = document.createElement("option");
+      option.value = code;
+      option.textContent = (byCode[code] && (byCode[code].name || byCode[code].code)) || code;
+      operatorSelect.appendChild(option);
+    });
+
+    if (current && options.includes(current)) {
+      operatorSelect.value = current;
+    } else if (options.length > 0) {
+      operatorSelect.value = options[0];
+    }
   }
 
   function updateConditionRow(row) {
-    const sourceSelect = row.querySelector("select[name$='-source_field']");
-    const operatorSelect = row.querySelector("select[name$='-operator']");
+    const pathInput = row.querySelector("input[name$='-django_field_path']");
+    const operatorSelect = row.querySelector("select[name$='-operator_code']");
     const expectedInput = row.querySelector("input[name$='-expected_value']");
-    if (!sourceSelect || !operatorSelect || !expectedInput || !RULE_META) return;
+    if (!pathInput || !operatorSelect || !expectedInput || !RULE_META) return;
 
-    const source = sourceByCode(sourceSelect.value);
-    if (!source) {
+    pathInput.setAttribute("list", "microtech-django-field-paths");
+
+    const fieldDef = djangoFieldByPath(pathInput.value);
+    const currentOperator = operatorSelect.value;
+
+    if (!fieldDef) {
+      rebuildOperatorOptions(operatorSelect, [], currentOperator);
       expectedInput.placeholder = "";
       expectedInput.title = "";
       return;
     }
 
-    const labels = operatorLabelMap();
-    const current = operatorSelect.value;
-    const allowed = Array.isArray(source.allowed_operator_codes) ? source.allowed_operator_codes : [];
+    rebuildOperatorOptions(operatorSelect, fieldDef.allowed_operator_codes || [], currentOperator);
+    expectedInput.placeholder = fieldDef.example || "";
+    expectedInput.title = fieldDef.hint || "";
+  }
 
-    let hasCurrent = false;
-    Array.from(operatorSelect.options).forEach((option) => {
-      if (!option.value) {
-        option.hidden = false;
-        return;
-      }
-      option.text = labels[option.value] || option.text;
-      const allowedForSource = allowed.length === 0 || allowed.includes(option.value);
-      option.hidden = !allowedForSource;
-      if (allowedForSource && option.value === current) {
-        hasCurrent = true;
-      }
+  function rebuildDatasetFieldOptions(datasetFieldSelect, datasetId, currentValue) {
+    const fields = datasetFieldsFor(datasetId);
+    datasetFieldSelect.innerHTML = "";
+
+    const empty = document.createElement("option");
+    empty.value = "";
+    empty.textContent = "---------";
+    datasetFieldSelect.appendChild(empty);
+
+    fields.forEach((item) => {
+      const option = document.createElement("option");
+      option.value = String(item.id);
+      const label = item.label ? `${item.field_name} - ${item.label}` : item.field_name;
+      option.textContent = label;
+      datasetFieldSelect.appendChild(option);
     });
 
-    if (!hasCurrent && allowed.length > 0) {
-      operatorSelect.value = allowed[0];
+    if (currentValue && fields.some((item) => String(item.id) === String(currentValue))) {
+      datasetFieldSelect.value = String(currentValue);
+    }
+  }
+
+  function toggleActionTypeFields(row) {
+    const actionTypeSelect = row.querySelector("select[name$='-action_type']");
+    const datasetSelect = row.querySelector("select[name$='-dataset']");
+    const datasetFieldSelect = row.querySelector("select[name$='-dataset_field']");
+    const targetInput = row.querySelector("input[name$='-target_value']");
+    if (!actionTypeSelect || !datasetSelect || !datasetFieldSelect || !targetInput) return;
+
+    const isCreatePosition = actionTypeSelect.value === "create_extra_position";
+
+    datasetSelect.disabled = isCreatePosition;
+    datasetFieldSelect.disabled = isCreatePosition;
+
+    if (isCreatePosition) {
+      targetInput.placeholder = "ERP-Nr fuer Zusatzposition, z. B. P";
+      targetInput.title = "Wird fuer Positionen.Add(1, Einheit, ERP-Nr) verwendet.";
+      return;
     }
 
-    expectedInput.placeholder = source.example || "";
-    expectedInput.title = source.hint || "";
+    const fieldDef = datasetFieldById(datasetFieldSelect.value);
+    if (fieldDef) {
+      targetInput.placeholder = fieldDef.field_type || "";
+      targetInput.title = fieldDef.label || "";
+    } else {
+      targetInput.placeholder = "";
+      targetInput.title = "";
+    }
   }
 
   function updateActionRow(row) {
-    const targetSelect = row.querySelector("select[name$='-target_field']");
-    const targetInput = row.querySelector("input[name$='-target_value']");
-    if (!targetSelect || !targetInput || !RULE_META) return;
+    const actionTypeSelect = row.querySelector("select[name$='-action_type']");
+    const datasetSelect = row.querySelector("select[name$='-dataset']");
+    const datasetFieldSelect = row.querySelector("select[name$='-dataset_field']");
+    if (!actionTypeSelect || !datasetSelect || !datasetFieldSelect || !RULE_META) return;
 
-    const target = targetByCode(targetSelect.value);
-    if (!target) {
-      targetInput.placeholder = "";
-      targetInput.title = "";
-      return;
-    }
-    targetInput.placeholder = target.example || "";
-    targetInput.title = target.hint || "";
+    const currentField = datasetFieldSelect.value;
+    rebuildDatasetFieldOptions(datasetFieldSelect, datasetSelect.value, currentField);
+    toggleActionTypeFields(row);
   }
 
   function bindRow(row) {
-    const sourceSelect = row.querySelector("select[name$='-source_field']");
-    const targetSelect = row.querySelector("select[name$='-target_field']");
+    if (!row || row.dataset.ruleBuilderBound === "1") {
+      return;
+    }
+    row.dataset.ruleBuilderBound = "1";
 
-    if (sourceSelect) {
-      sourceSelect.addEventListener("change", () => updateConditionRow(row));
+    const pathInput = row.querySelector("input[name$='-django_field_path']");
+    const datasetSelect = row.querySelector("select[name$='-dataset']");
+    const datasetFieldSelect = row.querySelector("select[name$='-dataset_field']");
+    const actionTypeSelect = row.querySelector("select[name$='-action_type']");
+
+    if (pathInput) {
+      pathInput.addEventListener("change", () => updateConditionRow(row));
+      pathInput.addEventListener("input", () => updateConditionRow(row));
       updateConditionRow(row);
     }
-    if (targetSelect) {
-      targetSelect.addEventListener("change", () => updateActionRow(row));
+
+    if (datasetSelect) {
+      datasetSelect.addEventListener("change", () => updateActionRow(row));
+      updateActionRow(row);
+    }
+
+    if (datasetFieldSelect) {
+      datasetFieldSelect.addEventListener("change", () => updateActionRow(row));
+      updateActionRow(row);
+    }
+
+    if (actionTypeSelect) {
+      actionTypeSelect.addEventListener("change", () => updateActionRow(row));
       updateActionRow(row);
     }
   }
@@ -103,11 +209,34 @@
     document.querySelectorAll("tr.form-row, .inline-related").forEach(bindRow);
   }
 
+  function bindFormsetAddedEvents() {
+    document.addEventListener("formset:added", (event) => {
+      const target = event && event.target;
+      if (target) {
+        bindRow(target);
+      }
+    });
+  }
+
+  function observeInlineRows() {
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        mutation.addedNodes.forEach((node) => {
+          if (!(node instanceof HTMLElement)) return;
+
+          if (node.matches("tr.form-row, .inline-related")) {
+            bindRow(node);
+          }
+          node.querySelectorAll("tr.form-row, .inline-related").forEach(bindRow);
+        });
+      });
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+  }
+
   async function loadMeta() {
     const url = buildMetaUrl();
-    if (!url) {
-      return;
-    }
+    if (!url) return;
     try {
       const response = await fetch(url, { credentials: "same-origin" });
       if (!response.ok) return;
@@ -121,7 +250,10 @@
 
   async function init() {
     await loadMeta();
+    ensureDjangoFieldDatalist();
     bindAllRows();
+    bindFormsetAddedEvents();
+    observeInlineRows();
   }
 
   document.addEventListener("DOMContentLoaded", init);

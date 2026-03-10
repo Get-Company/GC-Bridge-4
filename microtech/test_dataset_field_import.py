@@ -9,10 +9,8 @@ from django.test import TestCase
 from microtech.models import (
     MicrotechDatasetCatalog,
     MicrotechDatasetField,
-    MicrotechOrderRuleAction,
-    MicrotechOrderRuleActionTarget,
-    MicrotechOrderRuleCondition,
-    MicrotechOrderRuleConditionSource,
+    MicrotechOrderRuleDjangoFieldPolicy,
+    MicrotechOrderRuleOperator,
 )
 
 
@@ -104,37 +102,22 @@ DataSet: Adressen - Adressen
         self.assertFalse(bez_field.is_active)
 
 
-class MicrotechRuleBuilderDatasetReferenceTest(TestCase):
-    def test_condition_source_and_action_target_accept_dataset_field_reference(self):
-        dataset = MicrotechDatasetCatalog.objects.create(
-            code="vorgang_vorgange",
-            name="Vorgang",
-            description="Vorgange",
-            source_identifier="Vorgang - Vorgange",
+class MicrotechDjangoFieldPolicyTest(TestCase):
+    def test_policy_can_bind_allowed_operators(self):
+        operator = MicrotechOrderRuleOperator.objects.create(
+            code="eq",
+            name="==",
+            engine_operator=MicrotechOrderRuleOperator.EngineOperator.EQUALS,
             priority=10,
+            is_active=True,
         )
-        field = MicrotechDatasetField.objects.create(
-            dataset=dataset,
-            field_name="BelegNr",
-            label="Belegnummer",
-            field_type="UnicodeString",
+        policy = MicrotechOrderRuleDjangoFieldPolicy.objects.create(
+            field_path="payment_method",
+            label_override="Zahlungsart",
+            hint="Nur equals",
             priority=10,
+            is_active=True,
         )
+        policy.allowed_operators.add(operator)
 
-        condition_source = MicrotechOrderRuleConditionSource.objects.create(
-            code="order_number",
-            name="Bestellnummer",
-            engine_source_field=MicrotechOrderRuleCondition.SourceField.ORDER_NUMBER,
-            value_type=MicrotechOrderRuleCondition.ValueType.STRING,
-            dataset_field=field,
-        )
-        action_target = MicrotechOrderRuleActionTarget.objects.create(
-            code="vorgangsart_id",
-            name="Vorgangsart-ID",
-            engine_target_field=MicrotechOrderRuleAction.TargetField.VORGANGSART_ID,
-            value_type=MicrotechOrderRuleAction.ValueType.INT,
-            dataset_field=field,
-        )
-
-        self.assertEqual(condition_source.dataset_field_id, field.id)
-        self.assertEqual(action_target.dataset_field_id, field.id)
+        self.assertEqual(policy.allowed_operators.count(), 1)

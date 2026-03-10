@@ -4,57 +4,49 @@ Microtech Rulebuilder mit Feldkatalog (Schritt fuer Schritt)
 Ziel
 ----
 
-Diese Anleitung beschreibt die komplette Bedienung des Rulebuilders mit Feldkatalog,
-inklusive Feld-fuer-Feld-Erklaerung aller neuen Modelle.
+Diese Anleitung beschreibt den aktuellen Rulebuilder-Stand auf Basis von Django-Feldpfaden
+(Bedingungen) und Microtech-Dataset-Feldern (Aktionen).
 
 Durchgehendes Beispiel (wird in allen Abschnitten verwendet)
 -------------------------------------------------------------
 
 Geschaeftsregel:
 
-"Wenn Zahlungsart `PayPal` und Lieferland `AT`, dann setze Zahlungsart-ID `22`,
-Zahlungsbedingung `Sofort ohne Abzug` und eine Zahlungs-Zusatzposition mit `2.50`."
-
-Beispiel-Codes, die wir durchgaengig nutzen:
-
-- Operatoren: ``eq``, ``contains``
-- Source-Felder: ``payment_method``, ``shipping_country``
-- Target-Felder: ``set_payment_type``, ``set_payment_terms``, ``set_fee_enabled``, ``set_fee_value``
-- Regelname: ``AT + PayPal``
+"Wenn Zahlungsart den Text `paypal` enthaelt und Lieferland `AT` ist,
+lege eine Zusatzposition mit ERP-Nr `P` an, setze im Vorgang das Feld `ZahlArt` auf `22`
+und setze im neu erzeugten VorgangPosition-Datensatz `KuBez` auf `PayPal Gebuehr`."
 
 Voraussetzungen
 ---------------
 
 1. Migrationen sind eingespielt:
-   ``./.venv/bin/python manage.py migrate``
-2. Admin ist erreichbar und dein Benutzer darf Modelle im Bereich ``Microtech`` bearbeiten.
-3. Die Datei ``FELD_25.LST`` liegt im Projektroot.
 
-Schnellstart
-------------
+.. code-block:: bash
 
-1. Feldkatalog importieren
+   ./.venv/bin/python manage.py migrate
+
+2. Der Feldkatalog ist importiert:
 
 .. code-block:: bash
 
    ./.venv/bin/python manage.py microtech_import_dataset_fields --dry-run
    ./.venv/bin/python manage.py microtech_import_dataset_fields
 
-2. Admin-Menue ``Microtech`` verwenden
+3. Admin-Menue `Microtech` ist sichtbar.
 
-- Operatoren
-- Source Felder
-- Target Felder
-- Datasets
-- Dataset Felder
-- Einstellungen (Bestellregeln)
+Menuepunkte im Admin
+--------------------
 
-3. Regel mit dem Beispiel anlegen (Details weiter unten in dieser Seite)
+Unter `Microtech` sind fuer den Rulebuilder relevant:
 
-Feldreferenz: alle neuen Modelle
---------------------------------
+1. `Einstellungen` (enthaelt `MicrotechOrderRule` inkl. Inlines)
+2. `Operatoren` (`MicrotechOrderRuleOperator`)
+3. `Django Feld Policies` (`MicrotechOrderRuleDjangoFieldPolicy`)
+4. `Datasets` (`MicrotechDatasetCatalog`)
+5. `Dataset Felder` (`MicrotechDatasetField`)
 
-Die folgenden Abschnitte erklaeren jedes Feld mit Zweck und Beispielwert.
+Feldreferenz: alle Rulebuilder-Modelle
+--------------------------------------
 
 1) Microtech Dataset (``MicrotechDatasetCatalog``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -65,43 +57,34 @@ Adminpfad: ``Microtech -> Datasets``
    :header-rows: 1
 
    * - Feld
-     - Was bedeutet das?
-     - Was trage ich ein?
+     - Bedeutung
      - Beispiel
    * - ``is_active``
-     - Aktiviert/deaktiviert das Dataset im Katalog.
-     - ``Ja`` fuer nutzbare Datasets.
+     - Dataset ist im Rulebuilder verfuegbar.
      - ``Ja``
    * - ``priority``
      - Sortierung im Admin (kleiner = weiter oben).
-     - Fuer wichtige Datasets niedrige Werte.
-     - ``10`` fuer ``Vorgang``
+     - ``10``
    * - ``code``
-     - Technischer eindeutiger Schluessel (intern, API-sicher).
-     - Klein, eindeutig, stabil, mit ``_`` statt Leerzeichen.
+     - Stabiler technischer Schluessel.
      - ``vorgang_vorgange``
    * - ``name``
-     - Dataset-Name aus Microtech.
-     - Originalname aus der Liste.
+     - Kurzer Dataset-Name.
      - ``Vorgang``
    * - ``description``
-     - Menschlich lesbare Bezeichnung/Variante.
-     - Originalbezeichnung aus der Liste.
+     - Lesbare Zusatzbezeichnung.
      - ``Vorgange``
    * - ``source_identifier``
-     - Eindeutige Quelle aus ``FELD_25.LST``.
-     - Kombination aus Name und Beschreibung.
+     - Eindeutiger Identifier aus Feldliste.
      - ``Vorgang - Vorgange``
    * - ``created_at`` / ``updated_at``
-     - Zeitstempel (automatisch).
-     - Nicht manuell pflegen.
+     - Automatische Zeitstempel.
      - Automatisch
 
-Wichtig zu ``priority`` und ``code``
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Wichtig:
 
-- ``priority`` ist nur Sortierung, keine Regel-Logik.
-- ``code`` sollte nach dem ersten produktiven Einsatz nicht mehr geaendert werden.
+- ``code`` nur einmal festlegen und danach stabil halten.
+- ``priority`` ist nur Sortierung, keine fachliche Logik.
 
 2) Microtech Dataset Feld (``MicrotechDatasetField``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -112,44 +95,34 @@ Adminpfad: ``Microtech -> Dataset Felder``
    :header-rows: 1
 
    * - Feld
-     - Was bedeutet das?
-     - Was trage ich ein?
+     - Bedeutung
      - Beispiel
    * - ``is_active``
-     - Feld im Katalog sichtbar/nutzbar.
-     - ``Ja`` fuer verwendete Felder.
+     - Feld ist in Aktions-Dropdowns nutzbar.
      - ``Ja``
    * - ``priority``
-     - Sortierung innerhalb des Datasets.
-     - Niedrig fuer haeufige Felder.
+     - Sortierung innerhalb eines Datasets.
      - ``10``
    * - ``dataset``
      - Zugehoeriges Dataset.
-     - Passendes Dataset waehlen.
      - ``Vorgang - Vorgange``
    * - ``field_name``
-     - Technischer Feldname aus Microtech.
-     - Genau wie in ``FELD_25.LST``.
-     - ``BelegNr``
+     - Technischer Feldname.
+     - ``ZahlArt``
    * - ``label``
-     - Lesbare Feldbezeichnung.
-     - Text aus Liste oder sprechend erweitern.
-     - ``Belegnummer``
+     - Lesbarer Name.
+     - ``Zahlungsart``
    * - ``field_type``
-     - Microtech-Feldtyp.
-     - Aus ``FELD_25.LST`` uebernehmen.
-     - ``UnicodeString``
+     - Feldtyp aus Katalog.
+     - ``Integer``
    * - ``is_calc_field``
-     - Kennzeichnet berechnete Felder (``*`` in Liste).
-     - Wird beim Import gesetzt.
+     - Kennzeichnung als berechnetes Feld.
      - ``Nein``
    * - ``can_access``
-     - Laut Feldliste direkt lesbar.
-     - Wird beim Import gesetzt.
+     - Feld ist les-/schreibbar laut Katalog.
      - ``Ja``
    * - ``created_at`` / ``updated_at``
-     - Zeitstempel (automatisch).
-     - Nicht manuell pflegen.
+     - Automatische Zeitstempel.
      - Automatisch
 
 3) Rulebuilder Operator (``MicrotechOrderRuleOperator``)
@@ -161,172 +134,86 @@ Adminpfad: ``Microtech -> Operatoren``
    :header-rows: 1
 
    * - Feld
-     - Was bedeutet das?
-     - Was trage ich ein?
+     - Bedeutung
      - Beispiel
    * - ``is_active``
-     - Nur aktive Operatoren sind verwendbar.
-     - ``Ja`` fuer freigegebene Operatoren.
+     - Nur aktive Operatoren stehen zur Wahl.
      - ``Ja``
    * - ``priority``
-     - Sortierung im Dropdown.
-     - ``10`` fuer haeufige Operatoren.
-     - ``10`` fuer ``eq``
+     - Sortierung im Operator-Dropdown.
+     - ``10``
    * - ``code``
-     - Technischer Schluessel, auf den Source-Felder verweisen.
-     - Kurz, eindeutig, stabil.
+     - Technischer Operator-Code.
      - ``contains``
    * - ``name``
      - Anzeige im UI.
-     - Benutzerfreundlich benennen.
      - ``enthaelt``
    * - ``engine_operator``
-     - Interne Evaluationslogik.
-     - Einer aus ``eq``, ``contains``, ``gt``, ``lt``.
+     - Interne Auswertung (`eq`, `contains`, `gt`, `lt`).
      - ``contains``
    * - ``hint``
-     - Admin-Hinweis zur Nutzung.
-     - Optional, aber sinnvoll.
-     - ``Nur fuer Textfelder``
+     - Kurzinfo fuer Admin-Nutzer.
+     - ``Textvergleich``
    * - ``created_at`` / ``updated_at``
-     - Zeitstempel (automatisch).
-     - Nicht manuell pflegen.
+     - Automatische Zeitstempel.
      - Automatisch
 
-Praxis fuer ``code``
-^^^^^^^^^^^^^^^^^^^^
+Wichtig:
 
-- ``code`` ist der Referenzwert in Source-Feldern.
-- Wenn du ``code`` aenderst, koennen bestehende Source-Zuordnungen brechen.
-- Empfehlung: ``code`` nur einmal sauber festlegen und danach stabil halten.
+- ``code`` ist die Referenz in Bedingungen.
+- ``engine_operator`` steuert das reale Vergleichsverhalten.
 
-4) Rulebuilder Source Feld (``MicrotechOrderRuleConditionSource``)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Adminpfad: ``Microtech -> Source Felder``
-
-.. list-table::
-   :header-rows: 1
-
-   * - Feld
-     - Was bedeutet das?
-     - Was trage ich ein?
-     - Beispiel
-   * - ``is_active``
-     - Nur aktive Sources erscheinen in Regel-Bedingungen.
-     - ``Ja`` fuer produktive Sources.
-     - ``Ja``
-   * - ``priority``
-     - Reihenfolge im Source-Dropdown.
-     - Haeufige Sources niedrig priorisieren.
-     - ``10`` fuer ``payment_method``
-   * - ``code``
-     - Technischer Source-Schluessel, der in Bedingungen gespeichert wird.
-     - Kurz, eindeutig, stabil.
-     - ``payment_method``
-   * - ``name``
-     - Anzeige im Dropdown.
-     - Klarer Fachbegriff.
-     - ``Zahlungsart-Text``
-   * - ``engine_source_field``
-     - Auf welches Runtime-Kontextfeld ausgewertet wird.
-     - Passendes Engine-Feld aus Auswahl.
-     - ``payment_method``
-   * - ``dataset_field``
-     - Optionaler Katalogbezug fuer Dokumentation/Orientierung.
-     - Passendes Feld aus Dataset-Feldern waehlen.
-     - ``Adressen.Land`` (Beispielhaft)
-   * - ``value_type``
-     - Validierung fuer ``expected_value``.
-     - Passend zum inhaltlichen Typ.
-     - ``string`` fuer Zahlungsart
-   * - ``operators``
-     - Erlaubte Operatoren fuer genau dieses Source-Feld.
-     - Mindestens passende Operatoren hinterlegen.
-     - ``contains`` und ``eq``
-   * - ``hint``
-     - Tooltip/Hinweis im Rulebuilder.
-     - Kurz erklaeren, was erwartet wird.
-     - ``Wert wird klein geschrieben verglichen``
-   * - ``example``
-     - Beispielwert als Platzhalter.
-     - Realistischen Wert eintragen.
-     - ``paypal``
-   * - ``created_at`` / ``updated_at``
-     - Zeitstempel (automatisch).
-     - Nicht manuell pflegen.
-     - Automatisch
-
-5) Rulebuilder Target Feld (``MicrotechOrderRuleActionTarget``)
+4) Django Feld Policy (``MicrotechOrderRuleDjangoFieldPolicy``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Adminpfad: ``Microtech -> Target Felder``
+Adminpfad: ``Microtech -> Django Feld Policies``
+
+Zweck:
+
+- Optionales Whitelisting pro Django-Feldpfad.
+- Ohne Policy sind alle vom System angebotenen Felder aktiv.
+- Mit Policy kannst du Felder ausblenden oder Operatoren begrenzen.
 
 .. list-table::
    :header-rows: 1
 
    * - Feld
-     - Was bedeutet das?
-     - Was trage ich ein?
+     - Bedeutung
      - Beispiel
    * - ``is_active``
-     - Nur aktive Targets erscheinen in Regel-Aktionen.
-     - ``Ja`` fuer produktive Targets.
+     - Policy ist aktiv.
      - ``Ja``
    * - ``priority``
-     - Reihenfolge im Target-Dropdown.
-     - Wichtige Targets niedrig priorisieren.
-     - ``10`` fuer Zahlungsart-ID
-   * - ``code``
-     - Technischer Target-Schluessel in Aktionen.
-     - Kurz, eindeutig, stabil.
-     - ``set_payment_type``
-   * - ``name``
-     - Anzeige im Dropdown.
-     - Klarer Fachbegriff.
-     - ``Zahlungsart setzen``
-   * - ``engine_target_field``
-     - Welches Resolver-Zielfeld gesetzt wird.
-     - Passendes Engine-Feld waehlen.
-     - ``zahlungsart_id``
-   * - ``dataset_field``
-     - Optionaler Katalogbezug fuer Dokumentation.
-     - Passendes Feld aus Dataset-Feldern.
-     - ``VorgangArten.ID`` (Beispielhaft)
-   * - ``value_type``
-     - Validierung fuer ``target_value``.
-     - Muss zum Ziel passen.
-     - ``int`` fuer IDs
-   * - ``enum_values``
-     - Nur bei ``value_type = enum`` relevant.
-     - Kommagetrennte gueltige Werte.
-     - ``auto,firma_or_salutation,salutation_only,static``
+     - Sortierung in der Policy-Verwaltung.
+     - ``10``
+   * - ``field_path``
+     - Exakter Django-Feldpfad aus Autocomplete.
+     - ``payment_method``
+   * - ``label_override``
+     - Eigene Anzeigebezeichnung fuer das Feld.
+     - ``Zahlungsart (Shop)``
+   * - ``allowed_operators``
+     - Erlaubte Operatoren fuer genau dieses Feld.
+     - ``eq``, ``contains``
    * - ``hint``
-     - Tooltip/Hinweis im Rulebuilder.
-     - Erwartetes Format erklaeren.
-     - ``Positive Ganzzahl, z. B. 22``
-   * - ``example``
-     - Platzhalter im Eingabefeld.
-     - Realistischen Wert eintragen.
-     - ``22``
+     - Tooltip fuer das Feld.
+     - ``Vergleich gegen Shopware Zahlungsname``
    * - ``created_at`` / ``updated_at``
-     - Zeitstempel (automatisch).
-     - Nicht manuell pflegen.
+     - Automatische Zeitstempel.
      - Automatisch
 
-6) Bestellregel (``MicrotechOrderRule`` inkl. Inlines)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+5) Bestellregel (``MicrotechOrderRule``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Adminpfad: ``Microtech -> Einstellungen``
 
-Regelkopf
-^^^^^^^^^
+Regelkopf:
 
 .. list-table::
    :header-rows: 1
 
    * - Feld
-     - Was bedeutet das?
+     - Bedeutung
      - Beispiel
    * - ``name``
      - Anzeigename der Regel.
@@ -338,161 +225,199 @@ Regelkopf
      - Reihenfolge der Regelauswertung (kleiner zuerst).
      - ``10``
    * - ``condition_logic``
-     - Verknuepfung der Bedingungen: ``all`` (UND) oder ``any`` (ODER).
+     - Verknuepfung der Bedingungen (`all`/UND oder `any`/ODER).
      - ``all``
 
-Bedingungs-Inline (``MicrotechOrderRuleCondition``)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Wichtig zu ``priority`` und ``code`` im Betrieb:
+
+- Die Regel mit der kleinsten ``priority`` wird zuerst geprueft.
+- Sobald eine Regel matcht, werden keine nachfolgenden Regeln ausgewertet.
+- ``code``-Felder (bei Operatoren/Datasets) sollten nicht nachtraeglich umbenannt werden.
+
+6) Bedingungs-Inline (``MicrotechOrderRuleCondition``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+In der Regel unterhalb des Regelkopfs.
 
 .. list-table::
    :header-rows: 1
 
    * - Feld
-     - Was bedeutet das?
+     - Bedeutung
      - Beispiel
    * - ``is_active``
-     - Nur aktive Bedingungen zaehlen.
+     - Nur aktive Bedingungen werden geprueft.
      - ``Ja``
    * - ``priority``
      - Reihenfolge innerhalb der Regel.
-     - ``10`` fuer Zahlungsart, ``20`` fuer Lieferland
-   * - ``source_field``
-     - Verweis auf Source-``code``.
-     - ``payment_method``
-   * - ``operator``
-     - Verweis auf Operator-``code``.
-     - ``contains``
+     - ``10``
+   * - ``django_field_path``
+     - Django-Feldpfad (Textfeld mit Autocomplete).
+     - ``shipping_address__country_code``
+   * - ``operator_code``
+     - Operator aus Dropdown, automatisch feldtypgefiltert.
+     - ``eq``
    * - ``expected_value``
-     - Vergleichswert.
-     - ``paypal``
+     - Vergleichswert als Text.
+     - ``AT``
 
-Aktions-Inline (``MicrotechOrderRuleAction``)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Hinweis:
+
+- Die Auswahl ``django_field_path`` steuert, welche Operatoren erlaubt sind.
+- Typbeispiele:
+  - Textfeld: ``eq``, ``contains``
+  - Zahl/Datum: ``eq``, ``gt``, ``lt``
+  - Bool: ``eq``
+
+7) Aktions-Inline (``MicrotechOrderRuleAction``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+In der Regel unterhalb der Bedingungen.
 
 .. list-table::
    :header-rows: 1
 
    * - Feld
-     - Was bedeutet das?
+     - Bedeutung
      - Beispiel
    * - ``is_active``
-     - Nur aktive Aktionen werden angewendet.
+     - Nur aktive Aktionen werden ausgefuehrt.
      - ``Ja``
    * - ``priority``
-     - Reihenfolge innerhalb der Regel.
-     - ``10``, ``20``, ``30``, ``40``
-   * - ``target_field``
-     - Verweis auf Target-``code``.
-     - ``set_payment_type``
+     - Reihenfolge der Ausfuehrung.
+     - ``10``
+   * - ``action_type``
+     - Aktionstyp (`set_field` oder `create_extra_position`).
+     - ``set_field``
+   * - ``dataset``
+     - Ziel-Dataset fuer `set_field`.
+     - ``Vorgang - Vorgange``
+   * - ``dataset_field``
+     - Ziel-Feld, gefiltert nach gewaehltem Dataset.
+     - ``ZahlArt``
    * - ``target_value``
-     - Zu setzender Wert.
-     - ``22``
+     - Zu schreibender Wert oder ERP-Nr bei `create_extra_position`.
+     - ``22`` oder ``P``
+
+Wichtig:
+
+- Bei ``create_extra_position`` muessen ``dataset`` und ``dataset_field`` leer sein.
+- Bei ``set_field`` muessen ``dataset`` und ``dataset_field`` gesetzt sein.
 
 Durchgehendes Beispiel: komplette Umsetzung im Admin
 ----------------------------------------------------
 
-1. Datasets importieren
-~~~~~~~~~~~~~~~~~~~~~~~
-
-.. code-block:: bash
-
-   ./.venv/bin/python manage.py microtech_import_dataset_fields --dry-run
-   ./.venv/bin/python manage.py microtech_import_dataset_fields
-
-2. Operatoren anlegen
+1. Operatoren pruefen
 ~~~~~~~~~~~~~~~~~~~~~
 
-In ``Microtech -> Operatoren``:
+In ``Microtech -> Operatoren`` sicherstellen:
 
-- ``eq`` (Engine: ``eq``)
-- ``contains`` (Engine: ``contains``)
+- ``eq`` (Engine ``eq``)
+- ``contains`` (Engine ``contains``)
 
-3. Source Felder anlegen
-~~~~~~~~~~~~~~~~~~~~~~~~
+2. Optional: Feld-Policy fuer Zahlungsart
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-In ``Microtech -> Source Felder``:
+In ``Microtech -> Django Feld Policies``:
 
-- ``payment_method``
-  - Engine Source: ``payment_method``
-  - Value Type: ``string``
-  - Operatoren: ``contains``, ``eq``
-  - Beispiel: ``paypal``
-- ``shipping_country``
-  - Engine Source: ``shipping_country_code``
-  - Value Type: ``country_code``
-  - Operatoren: ``eq``
-  - Beispiel: ``AT``
+- ``field_path``: ``payment_method``
+- ``label_override``: ``Zahlungsart (Shop)``
+- ``allowed_operators``: ``eq`` und ``contains``
+- ``is_active``: ``Ja``
 
-4. Target Felder anlegen
-~~~~~~~~~~~~~~~~~~~~~~~~
+3. Regelkopf anlegen
+~~~~~~~~~~~~~~~~~~~~
 
-In ``Microtech -> Target Felder``:
+In ``Microtech -> Einstellungen`` neue Regel:
 
-- ``set_payment_type`` -> ``zahlungsart_id`` (``int``), Beispiel ``22``
-- ``set_payment_terms`` -> ``zahlungsbedingung`` (``string``), Beispiel ``Sofort ohne Abzug``
-- ``set_fee_enabled`` -> ``add_payment_position`` (``bool``), Beispiel ``true``
-- ``set_fee_value`` -> ``payment_position_value`` (``decimal``), Beispiel ``2.50``
+- ``name``: ``AT + PayPal``
+- ``is_active``: ``Ja``
+- ``priority``: ``10``
+- ``condition_logic``: ``all``
 
-5. Regel anlegen
-~~~~~~~~~~~~~~~~
+4. Bedingungen anlegen
+~~~~~~~~~~~~~~~~~~~~~~
 
-In ``Microtech -> Einstellungen``:
+Bedingung A:
 
-- Regelkopf:
-  - Name: ``AT + PayPal``
-  - Aktiv: ``Ja``
-  - Prioritaet: ``10``
-  - Bedingungslogik: ``UND``
-- Bedingungen:
-  - ``payment_method`` + ``contains`` + ``paypal``
-  - ``shipping_country`` + ``eq`` + ``AT``
-- Aktionen:
-  - ``set_payment_type`` = ``22``
-  - ``set_payment_terms`` = ``Sofort ohne Abzug``
-  - ``set_fee_enabled`` = ``true``
-  - ``set_fee_value`` = ``2.50``
+- ``priority``: ``10``
+- ``django_field_path``: ``payment_method``
+- ``operator_code``: ``contains``
+- ``expected_value``: ``paypal``
 
-6. Testen
-~~~~~~~~~
+Bedingung B:
+
+- ``priority``: ``20``
+- ``django_field_path``: ``shipping_address__country_code``
+- ``operator_code``: ``eq``
+- ``expected_value``: ``AT``
+
+5. Aktionen anlegen
+~~~~~~~~~~~~~~~~~~~
+
+Aktion A (zusaetzliche Position):
+
+- ``priority``: ``10``
+- ``action_type``: ``create_extra_position``
+- ``target_value``: ``P``
+
+Aktion B (Vorgang-Feld setzen):
+
+- ``priority``: ``20``
+- ``action_type``: ``set_field``
+- ``dataset``: ``Vorgang - Vorgange``
+- ``dataset_field``: ``ZahlArt``
+- ``target_value``: ``22``
+
+Aktion C (Feld auf der neu erstellten VorgangPosition setzen):
+
+- ``priority``: ``30``
+- ``action_type``: ``set_field``
+- ``dataset``: ``VorgangPosition - Vorgangspositionen``
+- ``dataset_field``: ``KuBez``
+- ``target_value``: ``PayPal Gebuehr``
+
+6. Testlauf
+~~~~~~~~~~~
 
 .. code-block:: bash
 
    ./.venv/bin/python manage.py microtech_order_upsert --order-number <DEINE_BESTELLNUMMER>
 
-Erwartete Wirkung:
+Erwartete Wirkung fuer das Beispiel:
 
-- ``zahlungsart_id = 22``
-- ``zahlungsbedingung = Sofort ohne Abzug``
-- ``add_payment_position = true``
-- ``payment_position_value = 2.50``
+1. Bedingungen matchen nur bei PayPal + AT.
+2. Zusatzposition mit ERP-Nr ``P`` wird angelegt.
+3. Im Vorgang wird ``ZahlArt = 22`` gesetzt.
+4. In der neu erzeugten VorgangPosition wird ``KuBez = PayPal Gebuehr`` gesetzt.
 
 Typische Fehler und Loesungen
 -----------------------------
 
-1. Source oder Target wird im Dropdown nicht angeboten
+1. Feldpfad wird nicht akzeptiert
 
-- ``is_active`` ist aus.
-- ``code`` ist doppelt oder ungueltig.
+- Schreibweise stimmt nicht exakt mit dem Autocomplete ueberein.
+- Das Feld wurde per Policy deaktiviert.
 
-2. Operator fehlt trotz vorhandenem Operator-Datensatz
+2. Operator fehlt im Dropdown
 
-- Der Operator ist im Source-Feld nicht unter ``operators`` zugeordnet.
+- Feldtyp erlaubt den Operator nicht.
+- In ``Django Feld Policies`` wurde der Operator nicht freigegeben.
 
-3. Aktion wird ignoriert
+3. ``set_field`` speichert nicht
 
-- ``target_value`` passt nicht zu ``value_type`` (z. B. Text statt ``int``).
-- Bei ``enum`` ist ``target_value`` nicht in ``enum_values`` enthalten.
+- ``dataset_field`` passt nicht zum ausgewaehlten ``dataset``.
+- Zielwert passt nicht zum Feldtyp.
 
-4. Katalogfeld fehlt
+4. Aktion auf VorgangPosition greift nicht
 
-- Import nicht gelaufen oder falscher ``--dataset`` Filter.
+- Es wurde keine ``create_extra_position``-Aktion ausgefuehrt.
 
 Empfohlener Betrieb
 -------------------
 
-1. Erst ``--dry-run``
-2. Dann echter Feldimport
-3. Operatoren pflegen
-4. Source/Target mit klaren ``code``-Konventionen pflegen
-5. Regeln mit niedriger Prioritaet testen
-6. Erst danach produktiv priorisieren
+1. Feldkatalog zuerst per ``--dry-run`` pruefen.
+2. Operatoren klein halten (nur benoetigte freigeben).
+3. Policies nur einsetzen, wenn du Felder bewusst einschranken willst.
+4. Neue Regeln erst mit hoher ``priority`` (z. B. 900) testen.
+5. Nach erfolgreichem Test ``priority`` auf produktiven Wert senken.

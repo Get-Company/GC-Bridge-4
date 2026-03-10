@@ -1,57 +1,73 @@
 from django.test import TestCase
 
 from microtech.forms import MicrotechOrderRuleActionForm, MicrotechOrderRuleConditionForm
+from microtech.models import MicrotechDatasetCatalog, MicrotechDatasetField, MicrotechOrderRuleAction
 
 
 class MicrotechOrderRuleFormsTest(TestCase):
-    def test_condition_form_normalizes_customer_type_alias(self):
+    def test_condition_form_accepts_django_field_path(self):
         form = MicrotechOrderRuleConditionForm(
             data={
                 "is_active": True,
                 "priority": 10,
-                "source_field": "customer_type",
-                "operator": "eq",
-                "expected_value": "Firma",
+                "django_field_path": "payment_method",
+                "operator_code": "contains",
+                "expected_value": "paypal",
             }
         )
 
         self.assertTrue(form.is_valid(), msg=form.errors.as_json())
-        self.assertEqual(form.cleaned_data["expected_value"], "company")
 
-    def test_condition_form_rejects_contains_for_decimal_field(self):
+    def test_condition_form_rejects_disallowed_operator_for_bool_field(self):
         form = MicrotechOrderRuleConditionForm(
             data={
                 "is_active": True,
                 "priority": 10,
-                "source_field": "order_total",
-                "operator": "contains",
-                "expected_value": "100",
+                "django_field_path": "customer__is_gross",
+                "operator_code": "contains",
+                "expected_value": "true",
             }
         )
 
         self.assertFalse(form.is_valid())
-        self.assertIn("operator", form.errors)
+        self.assertIn("operator_code", form.errors)
 
-    def test_action_form_normalizes_bool_values(self):
+    def test_action_form_validates_set_field_dataset_binding(self):
+        dataset = MicrotechDatasetCatalog.objects.create(
+            code="vorgang_vorgange",
+            name="Vorgang",
+            description="Vorgange",
+            source_identifier="Vorgang - Vorgange",
+            priority=10,
+        )
+        field = MicrotechDatasetField.objects.create(
+            dataset=dataset,
+            field_name="ZahlArt",
+            label="Zahlungsart",
+            field_type="Integer",
+            priority=10,
+        )
+
         form = MicrotechOrderRuleActionForm(
             data={
                 "is_active": True,
                 "priority": 10,
-                "target_field": "add_payment_position",
-                "target_value": "Ja",
+                "action_type": MicrotechOrderRuleAction.ActionType.SET_FIELD,
+                "dataset": dataset.id,
+                "dataset_field": field.id,
+                "target_value": "22",
             }
         )
 
         self.assertTrue(form.is_valid(), msg=form.errors.as_json())
-        self.assertEqual(form.cleaned_data["target_value"], "true")
 
-    def test_action_form_rejects_invalid_enum(self):
+    def test_action_form_requires_erp_nr_for_create_extra_position(self):
         form = MicrotechOrderRuleActionForm(
             data={
                 "is_active": True,
                 "priority": 10,
-                "target_field": "payment_position_mode",
-                "target_value": "percentage",
+                "action_type": MicrotechOrderRuleAction.ActionType.CREATE_EXTRA_POSITION,
+                "target_value": "",
             }
         )
 

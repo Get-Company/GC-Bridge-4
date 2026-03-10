@@ -3,15 +3,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from django.db import OperationalError, ProgrammingError
+from django.db.models import Field
 
 from microtech.models import (
-    MicrotechOrderRule,
-    MicrotechOrderRuleAction,
-    MicrotechOrderRuleActionTarget,
-    MicrotechOrderRuleCondition,
-    MicrotechOrderRuleConditionSource,
+    MicrotechDatasetCatalog,
+    MicrotechDatasetField,
+    MicrotechOrderRuleDjangoFieldPolicy,
     MicrotechOrderRuleOperator,
 )
+from orders.models import Order
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,25 +23,33 @@ class OperatorDef:
 
 
 @dataclass(frozen=True, slots=True)
-class ConditionSourceDef:
-    code: str
-    name: str
-    engine_source_field: str
-    value_type: str
+class DjangoFieldDef:
+    path: str
+    label: str
+    value_kind: str
     allowed_operator_codes: tuple[str, ...]
     hint: str = ""
     example: str = ""
 
 
 @dataclass(frozen=True, slots=True)
-class ActionTargetDef:
+class DatasetDef:
+    id: int
     code: str
     name: str
-    engine_target_field: str
-    value_type: str
-    enum_values: tuple[str, ...]
-    hint: str = ""
-    example: str = ""
+    description: str
+    source_identifier: str
+
+
+@dataclass(frozen=True, slots=True)
+class DatasetFieldDef:
+    id: int
+    dataset_id: int
+    field_name: str
+    label: str
+    field_type: str
+    can_access: bool
+    is_calc_field: bool
 
 
 DEFAULT_OPERATOR_DEFS: tuple[OperatorDef, ...] = (
@@ -51,188 +59,15 @@ DEFAULT_OPERATOR_DEFS: tuple[OperatorDef, ...] = (
     OperatorDef(code="lt", name="<", engine_operator="lt"),
 )
 
-DEFAULT_CONDITION_SOURCE_DEFS: tuple[ConditionSourceDef, ...] = (
-    ConditionSourceDef(
-        code=MicrotechOrderRuleCondition.SourceField.CUSTOMER_TYPE,
-        name="Kundentyp",
-        engine_source_field=MicrotechOrderRuleCondition.SourceField.CUSTOMER_TYPE,
-        value_type=MicrotechOrderRuleCondition.ValueType.ENUM,
-        allowed_operator_codes=("eq",),
-        hint="private/company/any",
-        example="private",
-    ),
-    ConditionSourceDef(
-        code=MicrotechOrderRuleCondition.SourceField.BILLING_COUNTRY_CODE,
-        name="Rechnungsland (ISO2)",
-        engine_source_field=MicrotechOrderRuleCondition.SourceField.BILLING_COUNTRY_CODE,
-        value_type=MicrotechOrderRuleCondition.ValueType.COUNTRY_CODE,
-        allowed_operator_codes=("eq", "contains"),
-        hint="ISO2, z. B. DE/AT/CH",
-        example="DE",
-    ),
-    ConditionSourceDef(
-        code=MicrotechOrderRuleCondition.SourceField.SHIPPING_COUNTRY_CODE,
-        name="Lieferland (ISO2)",
-        engine_source_field=MicrotechOrderRuleCondition.SourceField.SHIPPING_COUNTRY_CODE,
-        value_type=MicrotechOrderRuleCondition.ValueType.COUNTRY_CODE,
-        allowed_operator_codes=("eq", "contains"),
-        hint="ISO2, z. B. DE/AT/CH",
-        example="AT",
-    ),
-    ConditionSourceDef(
-        code=MicrotechOrderRuleCondition.SourceField.PAYMENT_METHOD,
-        name="Zahlungsart",
-        engine_source_field=MicrotechOrderRuleCondition.SourceField.PAYMENT_METHOD,
-        value_type=MicrotechOrderRuleCondition.ValueType.STRING,
-        allowed_operator_codes=("eq", "contains"),
-        hint="String",
-        example="paypal",
-    ),
-    ConditionSourceDef(
-        code=MicrotechOrderRuleCondition.SourceField.SHIPPING_METHOD,
-        name="Versandart",
-        engine_source_field=MicrotechOrderRuleCondition.SourceField.SHIPPING_METHOD,
-        value_type=MicrotechOrderRuleCondition.ValueType.STRING,
-        allowed_operator_codes=("eq", "contains"),
-        hint="String",
-        example="dhl",
-    ),
-    ConditionSourceDef(
-        code=MicrotechOrderRuleCondition.SourceField.ORDER_TOTAL,
-        name="Bestellwert gesamt",
-        engine_source_field=MicrotechOrderRuleCondition.SourceField.ORDER_TOTAL,
-        value_type=MicrotechOrderRuleCondition.ValueType.DECIMAL,
-        allowed_operator_codes=("eq", "gt", "lt"),
-        hint="Dezimalzahl",
-        example="100.50",
-    ),
-    ConditionSourceDef(
-        code=MicrotechOrderRuleCondition.SourceField.ORDER_TOTAL_TAX,
-        name="Steuer gesamt",
-        engine_source_field=MicrotechOrderRuleCondition.SourceField.ORDER_TOTAL_TAX,
-        value_type=MicrotechOrderRuleCondition.ValueType.DECIMAL,
-        allowed_operator_codes=("eq", "gt", "lt"),
-        hint="Dezimalzahl",
-        example="19.00",
-    ),
-    ConditionSourceDef(
-        code=MicrotechOrderRuleCondition.SourceField.SHIPPING_COSTS,
-        name="Versandkosten",
-        engine_source_field=MicrotechOrderRuleCondition.SourceField.SHIPPING_COSTS,
-        value_type=MicrotechOrderRuleCondition.ValueType.DECIMAL,
-        allowed_operator_codes=("eq", "gt", "lt"),
-        hint="Dezimalzahl",
-        example="4.90",
-    ),
-    ConditionSourceDef(
-        code=MicrotechOrderRuleCondition.SourceField.ORDER_NUMBER,
-        name="Bestellnummer",
-        engine_source_field=MicrotechOrderRuleCondition.SourceField.ORDER_NUMBER,
-        value_type=MicrotechOrderRuleCondition.ValueType.STRING,
-        allowed_operator_codes=("eq", "contains"),
-        hint="String",
-        example="SW100045",
-    ),
-)
-
-DEFAULT_ACTION_TARGET_DEFS: tuple[ActionTargetDef, ...] = (
-    ActionTargetDef(
-        code=MicrotechOrderRuleAction.TargetField.NA1_MODE,
-        name="Na1 Modus",
-        engine_target_field=MicrotechOrderRuleAction.TargetField.NA1_MODE,
-        value_type=MicrotechOrderRuleAction.ValueType.ENUM,
-        enum_values=tuple(MicrotechOrderRule.Na1Mode.values),
-        hint="Empfaengertext-Steuerung",
-        example="auto",
-    ),
-    ActionTargetDef(
-        code=MicrotechOrderRuleAction.TargetField.NA1_STATIC_VALUE,
-        name="Na1 statischer Text",
-        engine_target_field=MicrotechOrderRuleAction.TargetField.NA1_STATIC_VALUE,
-        value_type=MicrotechOrderRuleAction.ValueType.STRING,
-        enum_values=(),
-        example="Firma",
-    ),
-    ActionTargetDef(
-        code=MicrotechOrderRuleAction.TargetField.VORGANGSART_ID,
-        name="Vorgangsart-ID",
-        engine_target_field=MicrotechOrderRuleAction.TargetField.VORGANGSART_ID,
-        value_type=MicrotechOrderRuleAction.ValueType.INT,
-        enum_values=(),
-        example="111",
-    ),
-    ActionTargetDef(
-        code=MicrotechOrderRuleAction.TargetField.ZAHLUNGSART_ID,
-        name="Zahlungsart-ID",
-        engine_target_field=MicrotechOrderRuleAction.TargetField.ZAHLUNGSART_ID,
-        value_type=MicrotechOrderRuleAction.ValueType.INT,
-        enum_values=(),
-        example="22",
-    ),
-    ActionTargetDef(
-        code=MicrotechOrderRuleAction.TargetField.VERSANDART_ID,
-        name="Versandart-ID",
-        engine_target_field=MicrotechOrderRuleAction.TargetField.VERSANDART_ID,
-        value_type=MicrotechOrderRuleAction.ValueType.INT,
-        enum_values=(),
-        example="10",
-    ),
-    ActionTargetDef(
-        code=MicrotechOrderRuleAction.TargetField.ZAHLUNGSBEDINGUNG,
-        name="Zahlungsbedingung",
-        engine_target_field=MicrotechOrderRuleAction.TargetField.ZAHLUNGSBEDINGUNG,
-        value_type=MicrotechOrderRuleAction.ValueType.STRING,
-        enum_values=(),
-        example="Sofort ohne Abzug",
-    ),
-    ActionTargetDef(
-        code=MicrotechOrderRuleAction.TargetField.ADD_PAYMENT_POSITION,
-        name="Zusatzposition Zahlungsart anlegen",
-        engine_target_field=MicrotechOrderRuleAction.TargetField.ADD_PAYMENT_POSITION,
-        value_type=MicrotechOrderRuleAction.ValueType.BOOL,
-        enum_values=(),
-        example="true",
-    ),
-    ActionTargetDef(
-        code=MicrotechOrderRuleAction.TargetField.PAYMENT_POSITION_ERP_NR,
-        name="Zahlungs-Zusatzposition ERP-Nr",
-        engine_target_field=MicrotechOrderRuleAction.TargetField.PAYMENT_POSITION_ERP_NR,
-        value_type=MicrotechOrderRuleAction.ValueType.STRING,
-        enum_values=(),
-        example="P",
-    ),
-    ActionTargetDef(
-        code=MicrotechOrderRuleAction.TargetField.PAYMENT_POSITION_NAME,
-        name="Zahlungs-Zusatzposition Name",
-        engine_target_field=MicrotechOrderRuleAction.TargetField.PAYMENT_POSITION_NAME,
-        value_type=MicrotechOrderRuleAction.ValueType.STRING,
-        enum_values=(),
-        example="PayPal",
-    ),
-    ActionTargetDef(
-        code=MicrotechOrderRuleAction.TargetField.PAYMENT_POSITION_MODE,
-        name="Zahlungs-Zusatzposition Modus",
-        engine_target_field=MicrotechOrderRuleAction.TargetField.PAYMENT_POSITION_MODE,
-        value_type=MicrotechOrderRuleAction.ValueType.ENUM,
-        enum_values=tuple(MicrotechOrderRule.PaymentPositionMode.values),
-        example="fixed",
-    ),
-    ActionTargetDef(
-        code=MicrotechOrderRuleAction.TargetField.PAYMENT_POSITION_VALUE,
-        name="Zahlungs-Zusatzposition Wert",
-        engine_target_field=MicrotechOrderRuleAction.TargetField.PAYMENT_POSITION_VALUE,
-        value_type=MicrotechOrderRuleAction.ValueType.DECIMAL,
-        enum_values=(),
-        example="2.50",
-    ),
-)
+_ALLOWED_RELATIONS: tuple[str, ...] = ("customer", "billing_address", "shipping_address")
 
 
 def _db_has_rule_builder_tables() -> bool:
     try:
         MicrotechOrderRuleOperator.objects.exists()
-        MicrotechOrderRuleConditionSource.objects.exists()
-        MicrotechOrderRuleActionTarget.objects.exists()
+        MicrotechOrderRuleDjangoFieldPolicy.objects.exists()
+        MicrotechDatasetCatalog.objects.exists()
+        MicrotechDatasetField.objects.exists()
         return True
     except (OperationalError, ProgrammingError):
         return False
@@ -251,7 +86,7 @@ def get_operator_defs() -> list[OperatorDef]:
     return [
         OperatorDef(
             code=str(row.code).strip(),
-            name=str(row.name).strip(),
+            name=str(row.name).strip() or str(row.code).strip(),
             engine_operator=str(row.engine_operator).strip(),
             hint=str(row.hint or "").strip(),
         )
@@ -260,83 +95,238 @@ def get_operator_defs() -> list[OperatorDef]:
     ]
 
 
-def get_condition_source_defs() -> list[ConditionSourceDef]:
-    if not _db_has_rule_builder_tables():
-        return list(DEFAULT_CONDITION_SOURCE_DEFS)
-    rows = list(
-        MicrotechOrderRuleConditionSource.objects
-        .filter(is_active=True)
-        .prefetch_related("operators")
-        .order_by("priority", "id")
-    )
-    if not rows:
-        return list(DEFAULT_CONDITION_SOURCE_DEFS)
-    defs: list[ConditionSourceDef] = []
-    all_operator_codes = tuple(item.code for item in get_operator_defs())
-    for row in rows:
-        code = str(row.code).strip()
-        if not code:
-            continue
-        allowed_codes = tuple(
-            str(op.code).strip()
-            for op in row.operators.filter(is_active=True).order_by("priority", "id")
-            if str(op.code).strip()
-        )
-        defs.append(
-            ConditionSourceDef(
-                code=code,
-                name=str(row.name).strip() or code,
-                engine_source_field=str(row.engine_source_field).strip(),
-                value_type=str(row.value_type).strip(),
-                allowed_operator_codes=allowed_codes or all_operator_codes,
-                hint=str(row.hint or "").strip(),
-                example=str(row.example or "").strip(),
-            )
-        )
-    return defs or list(DEFAULT_CONDITION_SOURCE_DEFS)
-
-
-def get_action_target_defs() -> list[ActionTargetDef]:
-    if not _db_has_rule_builder_tables():
-        return list(DEFAULT_ACTION_TARGET_DEFS)
-    rows = list(
-        MicrotechOrderRuleActionTarget.objects
-        .filter(is_active=True)
-        .order_by("priority", "id")
-    )
-    if not rows:
-        return list(DEFAULT_ACTION_TARGET_DEFS)
-    defs: list[ActionTargetDef] = []
-    for row in rows:
-        code = str(row.code).strip()
-        if not code:
-            continue
-        enum_values = tuple(
-            item.strip()
-            for item in str(row.enum_values or "").split(",")
-            if item.strip()
-        )
-        defs.append(
-            ActionTargetDef(
-                code=code,
-                name=str(row.name).strip() or code,
-                engine_target_field=str(row.engine_target_field).strip(),
-                value_type=str(row.value_type).strip(),
-                enum_values=enum_values,
-                hint=str(row.hint or "").strip(),
-                example=str(row.example or "").strip(),
-            )
-        )
-    return defs or list(DEFAULT_ACTION_TARGET_DEFS)
-
-
 def get_operator_engine_map() -> dict[str, str]:
     return {item.code: item.engine_operator for item in get_operator_defs()}
 
 
-def get_condition_source_map() -> dict[str, ConditionSourceDef]:
-    return {item.code: item for item in get_condition_source_defs()}
+def _field_value_kind(field: Field) -> str:
+    python_type = field.get_internal_type()
+    if python_type in {"BooleanField", "NullBooleanField"}:
+        return "bool"
+    if python_type in {
+        "IntegerField",
+        "BigIntegerField",
+        "SmallIntegerField",
+        "PositiveIntegerField",
+        "PositiveSmallIntegerField",
+        "AutoField",
+        "BigAutoField",
+    }:
+        return "int"
+    if python_type in {"DecimalField", "FloatField"}:
+        return "decimal"
+    if python_type in {"DateField"}:
+        return "date"
+    if python_type in {"DateTimeField"}:
+        return "datetime"
+    return "string"
 
 
-def get_action_target_map() -> dict[str, ActionTargetDef]:
-    return {item.code: item for item in get_action_target_defs()}
+def _default_operator_codes(value_kind: str) -> tuple[str, ...]:
+    if value_kind in {"int", "decimal", "date", "datetime"}:
+        return ("eq", "gt", "lt")
+    if value_kind == "bool":
+        return ("eq",)
+    return ("eq", "contains")
+
+
+def _default_example(value_kind: str) -> str:
+    if value_kind == "bool":
+        return "true"
+    if value_kind == "int":
+        return "42"
+    if value_kind == "decimal":
+        return "2.50"
+    if value_kind == "date":
+        return "2026-01-31"
+    if value_kind == "datetime":
+        return "2026-01-31T12:30:00"
+    return "paypal"
+
+
+def _iter_field_defs_for_model(*, model, prefix: str = "") -> list[tuple[str, Field, str]]:
+    defs: list[tuple[str, Field, str]] = []
+    for field in model._meta.concrete_fields:
+        if field.auto_created:
+            continue
+        if getattr(field, "many_to_many", False):
+            continue
+
+        if field.is_relation:
+            # store FK as *_id for stable scalar comparisons
+            path = f"{prefix}{field.attname}"
+            label = f"{field.verbose_name} ID"
+        else:
+            path = f"{prefix}{field.name}"
+            label = str(field.verbose_name)
+        defs.append((path, field, label))
+    return defs
+
+
+def _build_base_django_field_defs() -> list[DjangoFieldDef]:
+    base_defs: list[DjangoFieldDef] = []
+
+    for path, field, label in _iter_field_defs_for_model(model=Order):
+        value_kind = _field_value_kind(field)
+        base_defs.append(
+            DjangoFieldDef(
+                path=path,
+                label=f"Order - {label} ({path})",
+                value_kind=value_kind,
+                allowed_operator_codes=_default_operator_codes(value_kind),
+                example=_default_example(value_kind),
+            )
+        )
+
+    relation_models = {
+        "customer": Order._meta.get_field("customer").remote_field.model,
+        "billing_address": Order._meta.get_field("billing_address").remote_field.model,
+        "shipping_address": Order._meta.get_field("shipping_address").remote_field.model,
+    }
+
+    for rel_name in _ALLOWED_RELATIONS:
+        rel_model = relation_models[rel_name]
+        prefix = f"{rel_name}__"
+        for path, field, label in _iter_field_defs_for_model(model=rel_model, prefix=prefix):
+            value_kind = _field_value_kind(field)
+            rel_title = rel_name.replace("_", " ").title()
+            base_defs.append(
+                DjangoFieldDef(
+                    path=path,
+                    label=f"{rel_title} - {label} ({path})",
+                    value_kind=value_kind,
+                    allowed_operator_codes=_default_operator_codes(value_kind),
+                    example=_default_example(value_kind),
+                )
+            )
+
+    unique_by_path: dict[str, DjangoFieldDef] = {}
+    for item in base_defs:
+        unique_by_path[item.path] = item
+    return list(unique_by_path.values())
+
+
+def get_django_field_defs() -> list[DjangoFieldDef]:
+    base_defs = _build_base_django_field_defs()
+    if not _db_has_rule_builder_tables():
+        return sorted(base_defs, key=lambda item: item.path)
+
+    policies = {
+        row.field_path: row
+        for row in MicrotechOrderRuleDjangoFieldPolicy.objects
+        .prefetch_related("allowed_operators")
+        .order_by("priority", "id")
+    }
+
+    defs: list[DjangoFieldDef] = []
+    for item in base_defs:
+        policy = policies.get(item.path)
+        if policy and not policy.is_active:
+            continue
+
+        allowed_codes = set(item.allowed_operator_codes)
+        if policy:
+            policy_codes = {
+                str(op.code).strip()
+                for op in policy.allowed_operators.filter(is_active=True)
+                if str(op.code).strip()
+            }
+            if policy_codes:
+                allowed_codes = allowed_codes.intersection(policy_codes)
+
+        if not allowed_codes:
+            continue
+
+        label = item.label
+        hint = ""
+        if policy:
+            label_override = str(policy.label_override or "").strip()
+            if label_override:
+                label = f"{label_override} ({item.path})"
+            hint = str(policy.hint or "").strip()
+
+        defs.append(
+            DjangoFieldDef(
+                path=item.path,
+                label=label,
+                value_kind=item.value_kind,
+                allowed_operator_codes=tuple(sorted(allowed_codes)),
+                hint=hint,
+                example=item.example,
+            )
+        )
+
+    return sorted(defs, key=lambda row: row.label.lower())
+
+
+def get_django_field_map() -> dict[str, DjangoFieldDef]:
+    return {item.path: item for item in get_django_field_defs()}
+
+
+def get_dataset_defs() -> list[DatasetDef]:
+    if not _db_has_rule_builder_tables():
+        return []
+    rows = list(
+        MicrotechDatasetCatalog.objects
+        .filter(is_active=True)
+        .order_by("priority", "id")
+    )
+    return [
+        DatasetDef(
+            id=row.id,
+            code=str(row.code).strip(),
+            name=str(row.name).strip(),
+            description=str(row.description or "").strip(),
+            source_identifier=str(row.source_identifier).strip(),
+        )
+        for row in rows
+    ]
+
+
+def get_dataset_field_defs() -> list[DatasetFieldDef]:
+    if not _db_has_rule_builder_tables():
+        return []
+    rows = list(
+        MicrotechDatasetField.objects
+        .filter(is_active=True, dataset__is_active=True)
+        .select_related("dataset")
+        .order_by("dataset__priority", "dataset_id", "priority", "id")
+    )
+    return [
+        DatasetFieldDef(
+            id=row.id,
+            dataset_id=row.dataset_id,
+            field_name=str(row.field_name).strip(),
+            label=str(row.label or "").strip(),
+            field_type=str(row.field_type or "").strip(),
+            can_access=bool(row.can_access),
+            is_calc_field=bool(row.is_calc_field),
+        )
+        for row in rows
+    ]
+
+
+def resolve_django_field_value(*, order: Order, path: str) -> object:
+    current: object = order
+    for segment in str(path).split("__"):
+        if current is None:
+            return None
+        if not hasattr(current, segment):
+            return None
+        current = getattr(current, segment)
+    return current
+
+
+__all__ = [
+    "DatasetDef",
+    "DatasetFieldDef",
+    "DjangoFieldDef",
+    "OperatorDef",
+    "get_dataset_defs",
+    "get_dataset_field_defs",
+    "get_django_field_defs",
+    "get_django_field_map",
+    "get_operator_defs",
+    "get_operator_engine_map",
+    "resolve_django_field_value",
+]
