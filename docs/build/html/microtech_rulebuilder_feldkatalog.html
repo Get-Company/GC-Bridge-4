@@ -38,8 +38,21 @@
 <h1>Microtech Rulebuilder mit Feldkatalog (Schritt fuer Schritt)<a class="headerlink" href="#microtech-rulebuilder-mit-feldkatalog-schritt-fuer-schritt" title="Link to this heading">¶</a></h1>
 <section id="ziel">
 <h2>Ziel<a class="headerlink" href="#ziel" title="Link to this heading">¶</a></h2>
-<p>Diese Anleitung zeigt den kompletten Ablauf fuer neue Bestellregeln im Microtech-Rulebuilder,
-inklusive Feldkatalog-Import aus <code class="docutils literal notranslate"><span class="pre">FELD_25.LST</span></code> und einem durchgehenden Praxisbeispiel.</p>
+<p>Diese Anleitung beschreibt die komplette Bedienung des Rulebuilders mit Feldkatalog,
+inklusive Feld-fuer-Feld-Erklaerung aller neuen Modelle.</p>
+</section>
+<section id="durchgehendes-beispiel-wird-in-allen-abschnitten-verwendet">
+<h2>Durchgehendes Beispiel (wird in allen Abschnitten verwendet)<a class="headerlink" href="#durchgehendes-beispiel-wird-in-allen-abschnitten-verwendet" title="Link to this heading">¶</a></h2>
+<p>Geschaeftsregel:</p>
+<p>„Wenn Zahlungsart <cite>PayPal</cite> und Lieferland <cite>AT</cite>, dann setze Zahlungsart-ID <cite>22</cite>,
+Zahlungsbedingung <cite>Sofort ohne Abzug</cite> und eine Zahlungs-Zusatzposition mit <cite>2.50</cite>.“</p>
+<p>Beispiel-Codes, die wir durchgaengig nutzen:</p>
+<ul class="simple">
+<li><p>Operatoren: <code class="docutils literal notranslate"><span class="pre">eq</span></code>, <code class="docutils literal notranslate"><span class="pre">contains</span></code></p></li>
+<li><p>Source-Felder: <code class="docutils literal notranslate"><span class="pre">payment_method</span></code>, <code class="docutils literal notranslate"><span class="pre">shipping_country</span></code></p></li>
+<li><p>Target-Felder: <code class="docutils literal notranslate"><span class="pre">set_payment_type</span></code>, <code class="docutils literal notranslate"><span class="pre">set_payment_terms</span></code>, <code class="docutils literal notranslate"><span class="pre">set_fee_enabled</span></code>, <code class="docutils literal notranslate"><span class="pre">set_fee_value</span></code></p></li>
+<li><p>Regelname: <code class="docutils literal notranslate"><span class="pre">AT</span> <span class="pre">+</span> <span class="pre">PayPal</span></code></p></li>
+</ul>
 </section>
 <section id="voraussetzungen">
 <h2>Voraussetzungen<a class="headerlink" href="#voraussetzungen" title="Link to this heading">¶</a></h2>
@@ -50,226 +63,558 @@ inklusive Feldkatalog-Import aus <code class="docutils literal notranslate"><spa
 <li><p>Die Datei <code class="docutils literal notranslate"><span class="pre">FELD_25.LST</span></code> liegt im Projektroot.</p></li>
 </ol>
 </section>
-<section id="was-ist-neu">
-<h2>Was ist neu?<a class="headerlink" href="#was-ist-neu" title="Link to this heading">¶</a></h2>
-<p>Im Admin gibt es jetzt zusaetzliche Bereiche unter <code class="docutils literal notranslate"><span class="pre">Microtech</span></code>:</p>
+<section id="schnellstart">
+<h2>Schnellstart<a class="headerlink" href="#schnellstart" title="Link to this heading">¶</a></h2>
+<ol class="arabic simple">
+<li><p>Feldkatalog importieren</p></li>
+</ol>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>./.venv/bin/python<span class="w"> </span>manage.py<span class="w"> </span>microtech_import_dataset_fields<span class="w"> </span>--dry-run
+./.venv/bin/python<span class="w"> </span>manage.py<span class="w"> </span>microtech_import_dataset_fields
+</pre></div>
+</div>
+<ol class="arabic simple" start="2">
+<li><p>Admin-Menue <code class="docutils literal notranslate"><span class="pre">Microtech</span></code> verwenden</p></li>
+</ol>
 <ul class="simple">
 <li><p>Operatoren</p></li>
 <li><p>Source Felder</p></li>
 <li><p>Target Felder</p></li>
 <li><p>Datasets</p></li>
 <li><p>Dataset Felder</p></li>
+<li><p>Einstellungen (Bestellregeln)</p></li>
 </ul>
-<p>Damit kannst du</p>
+<ol class="arabic simple" start="3">
+<li><p>Regel mit dem Beispiel anlegen (Details weiter unten in dieser Seite)</p></li>
+</ol>
+</section>
+<section id="feldreferenz-alle-neuen-modelle">
+<h2>Feldreferenz: alle neuen Modelle<a class="headerlink" href="#feldreferenz-alle-neuen-modelle" title="Link to this heading">¶</a></h2>
+<p>Die folgenden Abschnitte erklaeren jedes Feld mit Zweck und Beispielwert.</p>
+<section id="microtech-dataset-microtechdatasetcatalog">
+<h3>1) Microtech Dataset (<code class="docutils literal notranslate"><span class="pre">MicrotechDatasetCatalog</span></code>)<a class="headerlink" href="#microtech-dataset-microtechdatasetcatalog" title="Link to this heading">¶</a></h3>
+<p>Adminpfad: <code class="docutils literal notranslate"><span class="pre">Microtech</span> <span class="pre">-&gt;</span> <span class="pre">Datasets</span></code></p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Was bedeutet das?</p></th>
+<th class="head"><p>Was trage ich ein?</p></th>
+<th class="head"><p>Beispiel</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">is_active</span></code></p></td>
+<td><p>Aktiviert/deaktiviert das Dataset im Katalog.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Ja</span></code> fuer nutzbare Datasets.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Ja</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">priority</span></code></p></td>
+<td><p>Sortierung im Admin (kleiner = weiter oben).</p></td>
+<td><p>Fuer wichtige Datasets niedrige Werte.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">10</span></code> fuer <code class="docutils literal notranslate"><span class="pre">Vorgang</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">code</span></code></p></td>
+<td><p>Technischer eindeutiger Schluessel (intern, API-sicher).</p></td>
+<td><p>Klein, eindeutig, stabil, mit <code class="docutils literal notranslate"><span class="pre">_</span></code> statt Leerzeichen.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">vorgang_vorgange</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">name</span></code></p></td>
+<td><p>Dataset-Name aus Microtech.</p></td>
+<td><p>Originalname aus der Liste.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Vorgang</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">description</span></code></p></td>
+<td><p>Menschlich lesbare Bezeichnung/Variante.</p></td>
+<td><p>Originalbezeichnung aus der Liste.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Vorgange</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">source_identifier</span></code></p></td>
+<td><p>Eindeutige Quelle aus <code class="docutils literal notranslate"><span class="pre">FELD_25.LST</span></code>.</p></td>
+<td><p>Kombination aus Name und Beschreibung.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Vorgang</span> <span class="pre">-</span> <span class="pre">Vorgange</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">created_at</span></code> / <code class="docutils literal notranslate"><span class="pre">updated_at</span></code></p></td>
+<td><p>Zeitstempel (automatisch).</p></td>
+<td><p>Nicht manuell pflegen.</p></td>
+<td><p>Automatisch</p></td>
+</tr>
+</tbody>
+</table>
+<section id="wichtig-zu-priority-und-code">
+<h4>Wichtig zu <code class="docutils literal notranslate"><span class="pre">priority</span></code> und <code class="docutils literal notranslate"><span class="pre">code</span></code><a class="headerlink" href="#wichtig-zu-priority-und-code" title="Link to this heading">¶</a></h4>
 <ul class="simple">
-<li><p>importierte Microtech-Felder zentral pflegen,</p></li>
-<li><p>Source/Target-Definitionen auf Katalogfelder referenzieren,</p></li>
-<li><p>und in Regeln nur die von dir freigegebenen Source/Operator/Target-Kombinationen nutzen.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">priority</span></code> ist nur Sortierung, keine Regel-Logik.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">code</span></code> sollte nach dem ersten produktiven Einsatz nicht mehr geaendert werden.</p></li>
 </ul>
 </section>
-<section id="schritt-1-feldkatalog-importieren">
-<h2>Schritt 1: Feldkatalog importieren<a class="headerlink" href="#schritt-1-feldkatalog-importieren" title="Link to this heading">¶</a></h2>
-<p>Zuerst die Feldliste einlesen:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>./.venv/bin/python<span class="w"> </span>manage.py<span class="w"> </span>microtech_import_dataset_fields<span class="w"> </span>--dry-run
-</pre></div>
-</div>
-<p>Wenn die Vorschau passt, echten Import ausfuehren:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>./.venv/bin/python<span class="w"> </span>manage.py<span class="w"> </span>microtech_import_dataset_fields
-</pre></div>
-</div>
-<p>Standardmaessig werden folgende Kern-Datasets importiert:</p>
-<ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">Adressen</span> <span class="pre">-</span> <span class="pre">Adressen</span></code></p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">Anschriften</span> <span class="pre">-</span> <span class="pre">Anschriften</span></code></p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">Ansprechpartner</span> <span class="pre">-</span> <span class="pre">Ansprechpartner</span></code></p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">Vorgang</span> <span class="pre">-</span> <span class="pre">Vorgange</span></code></p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">VorgangArten</span> <span class="pre">-</span> <span class="pre">Vorgangsarten</span></code></p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">VorgangPosition</span> <span class="pre">-</span> <span class="pre">Vorgangspositionen</span></code></p></li>
-</ul>
-<p>Optional:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>./.venv/bin/python<span class="w"> </span>manage.py<span class="w"> </span>microtech_import_dataset_fields<span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--dataset<span class="w"> </span><span class="s2">&quot;Vorgang - Vorgange&quot;</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span>--dataset<span class="w"> </span><span class="s2">&quot;VorgangPosition - Vorgangspositionen&quot;</span>
-</pre></div>
-</div>
 </section>
-<section id="schritt-2-operatoren-pflegen">
-<h2>Schritt 2: Operatoren pflegen<a class="headerlink" href="#schritt-2-operatoren-pflegen" title="Link to this heading">¶</a></h2>
+<section id="microtech-dataset-feld-microtechdatasetfield">
+<h3>2) Microtech Dataset Feld (<code class="docutils literal notranslate"><span class="pre">MicrotechDatasetField</span></code>)<a class="headerlink" href="#microtech-dataset-feld-microtechdatasetfield" title="Link to this heading">¶</a></h3>
+<p>Adminpfad: <code class="docutils literal notranslate"><span class="pre">Microtech</span> <span class="pre">-&gt;</span> <span class="pre">Dataset</span> <span class="pre">Felder</span></code></p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Was bedeutet das?</p></th>
+<th class="head"><p>Was trage ich ein?</p></th>
+<th class="head"><p>Beispiel</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">is_active</span></code></p></td>
+<td><p>Feld im Katalog sichtbar/nutzbar.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Ja</span></code> fuer verwendete Felder.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Ja</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">priority</span></code></p></td>
+<td><p>Sortierung innerhalb des Datasets.</p></td>
+<td><p>Niedrig fuer haeufige Felder.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">10</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">dataset</span></code></p></td>
+<td><p>Zugehoeriges Dataset.</p></td>
+<td><p>Passendes Dataset waehlen.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Vorgang</span> <span class="pre">-</span> <span class="pre">Vorgange</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">field_name</span></code></p></td>
+<td><p>Technischer Feldname aus Microtech.</p></td>
+<td><p>Genau wie in <code class="docutils literal notranslate"><span class="pre">FELD_25.LST</span></code>.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">BelegNr</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">label</span></code></p></td>
+<td><p>Lesbare Feldbezeichnung.</p></td>
+<td><p>Text aus Liste oder sprechend erweitern.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Belegnummer</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">field_type</span></code></p></td>
+<td><p>Microtech-Feldtyp.</p></td>
+<td><p>Aus <code class="docutils literal notranslate"><span class="pre">FELD_25.LST</span></code> uebernehmen.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">UnicodeString</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">is_calc_field</span></code></p></td>
+<td><p>Kennzeichnet berechnete Felder (<code class="docutils literal notranslate"><span class="pre">*</span></code> in Liste).</p></td>
+<td><p>Wird beim Import gesetzt.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Nein</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">can_access</span></code></p></td>
+<td><p>Laut Feldliste direkt lesbar.</p></td>
+<td><p>Wird beim Import gesetzt.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Ja</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">created_at</span></code> / <code class="docutils literal notranslate"><span class="pre">updated_at</span></code></p></td>
+<td><p>Zeitstempel (automatisch).</p></td>
+<td><p>Nicht manuell pflegen.</p></td>
+<td><p>Automatisch</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="rulebuilder-operator-microtechorderruleoperator">
+<h3>3) Rulebuilder Operator (<code class="docutils literal notranslate"><span class="pre">MicrotechOrderRuleOperator</span></code>)<a class="headerlink" href="#rulebuilder-operator-microtechorderruleoperator" title="Link to this heading">¶</a></h3>
 <p>Adminpfad: <code class="docutils literal notranslate"><span class="pre">Microtech</span> <span class="pre">-&gt;</span> <span class="pre">Operatoren</span></code></p>
-<p>Empfohlene Basisoperatoren:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Was bedeutet das?</p></th>
+<th class="head"><p>Was trage ich ein?</p></th>
+<th class="head"><p>Beispiel</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">is_active</span></code></p></td>
+<td><p>Nur aktive Operatoren sind verwendbar.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Ja</span></code> fuer freigegebene Operatoren.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Ja</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">priority</span></code></p></td>
+<td><p>Sortierung im Dropdown.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">10</span></code> fuer haeufige Operatoren.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">10</span></code> fuer <code class="docutils literal notranslate"><span class="pre">eq</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">code</span></code></p></td>
+<td><p>Technischer Schluessel, auf den Source-Felder verweisen.</p></td>
+<td><p>Kurz, eindeutig, stabil.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">contains</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">name</span></code></p></td>
+<td><p>Anzeige im UI.</p></td>
+<td><p>Benutzerfreundlich benennen.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">enthaelt</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">engine_operator</span></code></p></td>
+<td><p>Interne Evaluationslogik.</p></td>
+<td><p>Einer aus <code class="docutils literal notranslate"><span class="pre">eq</span></code>, <code class="docutils literal notranslate"><span class="pre">contains</span></code>, <code class="docutils literal notranslate"><span class="pre">gt</span></code>, <code class="docutils literal notranslate"><span class="pre">lt</span></code>.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">contains</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">hint</span></code></p></td>
+<td><p>Admin-Hinweis zur Nutzung.</p></td>
+<td><p>Optional, aber sinnvoll.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Nur</span> <span class="pre">fuer</span> <span class="pre">Textfelder</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">created_at</span></code> / <code class="docutils literal notranslate"><span class="pre">updated_at</span></code></p></td>
+<td><p>Zeitstempel (automatisch).</p></td>
+<td><p>Nicht manuell pflegen.</p></td>
+<td><p>Automatisch</p></td>
+</tr>
+</tbody>
+</table>
+<section id="praxis-fuer-code">
+<h4>Praxis fuer <code class="docutils literal notranslate"><span class="pre">code</span></code><a class="headerlink" href="#praxis-fuer-code" title="Link to this heading">¶</a></h4>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">eq</span></code> (==)</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">contains</span></code> (enthaelt)</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">gt</span></code> (&gt;)</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">lt</span></code> (&lt;)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">code</span></code> ist der Referenzwert in Source-Feldern.</p></li>
+<li><p>Wenn du <code class="docutils literal notranslate"><span class="pre">code</span></code> aenderst, koennen bestehende Source-Zuordnungen brechen.</p></li>
+<li><p>Empfehlung: <code class="docutils literal notranslate"><span class="pre">code</span></code> nur einmal sauber festlegen und danach stabil halten.</p></li>
 </ul>
-<p>Hinweis: Welche Operatoren in einer Regel wirklich waehlbar sind, wird pro Source Feld festgelegt.</p>
 </section>
-<section id="schritt-3-source-felder-definieren">
-<h2>Schritt 3: Source Felder definieren<a class="headerlink" href="#schritt-3-source-felder-definieren" title="Link to this heading">¶</a></h2>
+</section>
+<section id="rulebuilder-source-feld-microtechorderruleconditionsource">
+<h3>4) Rulebuilder Source Feld (<code class="docutils literal notranslate"><span class="pre">MicrotechOrderRuleConditionSource</span></code>)<a class="headerlink" href="#rulebuilder-source-feld-microtechorderruleconditionsource" title="Link to this heading">¶</a></h3>
 <p>Adminpfad: <code class="docutils literal notranslate"><span class="pre">Microtech</span> <span class="pre">-&gt;</span> <span class="pre">Source</span> <span class="pre">Felder</span></code></p>
-<p>Hier legst du fest,</p>
-<ul class="simple">
-<li><p>welcher fachliche Source-Code in Regeln erscheint,</p></li>
-<li><p>welcher Engine-Source-Wert ausgewertet wird,</p></li>
-<li><p>welche Operatoren erlaubt sind,</p></li>
-<li><p>und optional welches importierte Dataset-Feld als Referenz dient.</p></li>
-</ul>
-<p>Beispiel-Definitionen:</p>
-<ol class="arabic simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">shipping_country</span></code>
-- Name: <code class="docutils literal notranslate"><span class="pre">Lieferland</span></code>
-- Engine Source Feld: <code class="docutils literal notranslate"><span class="pre">shipping_country_code</span></code>
-- Wertetyp: <code class="docutils literal notranslate"><span class="pre">country_code</span></code>
-- Erlaubte Operatoren: <code class="docutils literal notranslate"><span class="pre">eq</span></code>
-- Beispiel: <code class="docutils literal notranslate"><span class="pre">AT</span></code></p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">payment_method</span></code>
-- Name: <code class="docutils literal notranslate"><span class="pre">Zahlungsart-Text</span></code>
-- Engine Source Feld: <code class="docutils literal notranslate"><span class="pre">payment_method</span></code>
-- Wertetyp: <code class="docutils literal notranslate"><span class="pre">string</span></code>
-- Erlaubte Operatoren: <code class="docutils literal notranslate"><span class="pre">contains</span></code>, <code class="docutils literal notranslate"><span class="pre">eq</span></code>
-- Beispiel: <code class="docutils literal notranslate"><span class="pre">paypal</span></code></p></li>
-</ol>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Was bedeutet das?</p></th>
+<th class="head"><p>Was trage ich ein?</p></th>
+<th class="head"><p>Beispiel</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">is_active</span></code></p></td>
+<td><p>Nur aktive Sources erscheinen in Regel-Bedingungen.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Ja</span></code> fuer produktive Sources.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Ja</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">priority</span></code></p></td>
+<td><p>Reihenfolge im Source-Dropdown.</p></td>
+<td><p>Haeufige Sources niedrig priorisieren.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">10</span></code> fuer <code class="docutils literal notranslate"><span class="pre">payment_method</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">code</span></code></p></td>
+<td><p>Technischer Source-Schluessel, der in Bedingungen gespeichert wird.</p></td>
+<td><p>Kurz, eindeutig, stabil.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">payment_method</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">name</span></code></p></td>
+<td><p>Anzeige im Dropdown.</p></td>
+<td><p>Klarer Fachbegriff.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Zahlungsart-Text</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">engine_source_field</span></code></p></td>
+<td><p>Auf welches Runtime-Kontextfeld ausgewertet wird.</p></td>
+<td><p>Passendes Engine-Feld aus Auswahl.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">payment_method</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">dataset_field</span></code></p></td>
+<td><p>Optionaler Katalogbezug fuer Dokumentation/Orientierung.</p></td>
+<td><p>Passendes Feld aus Dataset-Feldern waehlen.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Adressen.Land</span></code> (Beispielhaft)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">value_type</span></code></p></td>
+<td><p>Validierung fuer <code class="docutils literal notranslate"><span class="pre">expected_value</span></code>.</p></td>
+<td><p>Passend zum inhaltlichen Typ.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">string</span></code> fuer Zahlungsart</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">operators</span></code></p></td>
+<td><p>Erlaubte Operatoren fuer genau dieses Source-Feld.</p></td>
+<td><p>Mindestens passende Operatoren hinterlegen.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">contains</span></code> und <code class="docutils literal notranslate"><span class="pre">eq</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">hint</span></code></p></td>
+<td><p>Tooltip/Hinweis im Rulebuilder.</p></td>
+<td><p>Kurz erklaeren, was erwartet wird.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Wert</span> <span class="pre">wird</span> <span class="pre">klein</span> <span class="pre">geschrieben</span> <span class="pre">verglichen</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">example</span></code></p></td>
+<td><p>Beispielwert als Platzhalter.</p></td>
+<td><p>Realistischen Wert eintragen.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">paypal</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">created_at</span></code> / <code class="docutils literal notranslate"><span class="pre">updated_at</span></code></p></td>
+<td><p>Zeitstempel (automatisch).</p></td>
+<td><p>Nicht manuell pflegen.</p></td>
+<td><p>Automatisch</p></td>
+</tr>
+</tbody>
+</table>
 </section>
-<section id="schritt-4-target-felder-definieren">
-<h2>Schritt 4: Target Felder definieren<a class="headerlink" href="#schritt-4-target-felder-definieren" title="Link to this heading">¶</a></h2>
+<section id="rulebuilder-target-feld-microtechorderruleactiontarget">
+<h3>5) Rulebuilder Target Feld (<code class="docutils literal notranslate"><span class="pre">MicrotechOrderRuleActionTarget</span></code>)<a class="headerlink" href="#rulebuilder-target-feld-microtechorderruleactiontarget" title="Link to this heading">¶</a></h3>
 <p>Adminpfad: <code class="docutils literal notranslate"><span class="pre">Microtech</span> <span class="pre">-&gt;</span> <span class="pre">Target</span> <span class="pre">Felder</span></code></p>
-<p>Hier legst du fest,</p>
-<ul class="simple">
-<li><p>welcher fachliche Target-Code in Regeln erscheint,</p></li>
-<li><p>welches Engine-Target gesetzt wird,</p></li>
-<li><p>welchen Typ der Zielwert hat,</p></li>
-<li><p>und optional welches Dataset-Feld als Referenz hinterlegt ist.</p></li>
-</ul>
-<p>Beispiel-Definitionen:</p>
-<ol class="arabic simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">set_payment_type</span></code>
-- Engine Target Feld: <code class="docutils literal notranslate"><span class="pre">zahlungsart_id</span></code>
-- Wertetyp: <code class="docutils literal notranslate"><span class="pre">int</span></code>
-- Beispiel: <code class="docutils literal notranslate"><span class="pre">22</span></code></p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">set_payment_terms</span></code>
-- Engine Target Feld: <code class="docutils literal notranslate"><span class="pre">zahlungsbedingung</span></code>
-- Wertetyp: <code class="docutils literal notranslate"><span class="pre">string</span></code>
-- Beispiel: <code class="docutils literal notranslate"><span class="pre">Sofort</span> <span class="pre">ohne</span> <span class="pre">Abzug</span></code></p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">set_fee_enabled</span></code>
-- Engine Target Feld: <code class="docutils literal notranslate"><span class="pre">add_payment_position</span></code>
-- Wertetyp: <code class="docutils literal notranslate"><span class="pre">bool</span></code>
-- Beispiel: <code class="docutils literal notranslate"><span class="pre">true</span></code></p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">set_fee_value</span></code>
-- Engine Target Feld: <code class="docutils literal notranslate"><span class="pre">payment_position_value</span></code>
-- Wertetyp: <code class="docutils literal notranslate"><span class="pre">decimal</span></code>
-- Beispiel: <code class="docutils literal notranslate"><span class="pre">2.50</span></code></p></li>
-</ol>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Was bedeutet das?</p></th>
+<th class="head"><p>Was trage ich ein?</p></th>
+<th class="head"><p>Beispiel</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">is_active</span></code></p></td>
+<td><p>Nur aktive Targets erscheinen in Regel-Aktionen.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Ja</span></code> fuer produktive Targets.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Ja</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">priority</span></code></p></td>
+<td><p>Reihenfolge im Target-Dropdown.</p></td>
+<td><p>Wichtige Targets niedrig priorisieren.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">10</span></code> fuer Zahlungsart-ID</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">code</span></code></p></td>
+<td><p>Technischer Target-Schluessel in Aktionen.</p></td>
+<td><p>Kurz, eindeutig, stabil.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">set_payment_type</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">name</span></code></p></td>
+<td><p>Anzeige im Dropdown.</p></td>
+<td><p>Klarer Fachbegriff.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Zahlungsart</span> <span class="pre">setzen</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">engine_target_field</span></code></p></td>
+<td><p>Welches Resolver-Zielfeld gesetzt wird.</p></td>
+<td><p>Passendes Engine-Feld waehlen.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">zahlungsart_id</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">dataset_field</span></code></p></td>
+<td><p>Optionaler Katalogbezug fuer Dokumentation.</p></td>
+<td><p>Passendes Feld aus Dataset-Feldern.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">VorgangArten.ID</span></code> (Beispielhaft)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">value_type</span></code></p></td>
+<td><p>Validierung fuer <code class="docutils literal notranslate"><span class="pre">target_value</span></code>.</p></td>
+<td><p>Muss zum Ziel passen.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">int</span></code> fuer IDs</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">enum_values</span></code></p></td>
+<td><p>Nur bei <code class="docutils literal notranslate"><span class="pre">value_type</span> <span class="pre">=</span> <span class="pre">enum</span></code> relevant.</p></td>
+<td><p>Kommagetrennte gueltige Werte.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">auto,firma_or_salutation,salutation_only,static</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">hint</span></code></p></td>
+<td><p>Tooltip/Hinweis im Rulebuilder.</p></td>
+<td><p>Erwartetes Format erklaeren.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Positive</span> <span class="pre">Ganzzahl,</span> <span class="pre">z.</span> <span class="pre">B.</span> <span class="pre">22</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">example</span></code></p></td>
+<td><p>Platzhalter im Eingabefeld.</p></td>
+<td><p>Realistischen Wert eintragen.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">22</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">created_at</span></code> / <code class="docutils literal notranslate"><span class="pre">updated_at</span></code></p></td>
+<td><p>Zeitstempel (automatisch).</p></td>
+<td><p>Nicht manuell pflegen.</p></td>
+<td><p>Automatisch</p></td>
+</tr>
+</tbody>
+</table>
 </section>
-<section id="durchgehendes-beispiel">
-<h2>Durchgehendes Beispiel<a class="headerlink" href="#durchgehendes-beispiel" title="Link to this heading">¶</a></h2>
-<p>Anforderung:</p>
-<p>„Wenn Zahlungsart <cite>PayPal</cite> und Lieferland <cite>AT</cite>, dann setze Zahlungsart-ID 22,
-Zahlungsbedingung <cite>Sofort ohne Abzug</cite> und fuege eine Zahlungs-Zusatzposition mit 2.50 hinzu.“</p>
+<section id="bestellregel-microtechorderrule-inkl-inlines">
+<h3>6) Bestellregel (<code class="docutils literal notranslate"><span class="pre">MicrotechOrderRule</span></code> inkl. Inlines)<a class="headerlink" href="#bestellregel-microtechorderrule-inkl-inlines" title="Link to this heading">¶</a></h3>
+<p>Adminpfad: <code class="docutils literal notranslate"><span class="pre">Microtech</span> <span class="pre">-&gt;</span> <span class="pre">Einstellungen</span></code></p>
+<section id="regelkopf">
+<h4>Regelkopf<a class="headerlink" href="#regelkopf" title="Link to this heading">¶</a></h4>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Was bedeutet das?</p></th>
+<th class="head"><p>Beispiel</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">name</span></code></p></td>
+<td><p>Anzeigename der Regel.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">AT</span> <span class="pre">+</span> <span class="pre">PayPal</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">is_active</span></code></p></td>
+<td><p>Nur aktive Regeln werden ausgewertet.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Ja</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">priority</span></code></p></td>
+<td><p>Reihenfolge der Regelauswertung (kleiner zuerst).</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">10</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">condition_logic</span></code></p></td>
+<td><p>Verknuepfung der Bedingungen: <code class="docutils literal notranslate"><span class="pre">all</span></code> (UND) oder <code class="docutils literal notranslate"><span class="pre">any</span></code> (ODER).</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">all</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="bedingungs-inline-microtechorderrulecondition">
+<h4>Bedingungs-Inline (<code class="docutils literal notranslate"><span class="pre">MicrotechOrderRuleCondition</span></code>)<a class="headerlink" href="#bedingungs-inline-microtechorderrulecondition" title="Link to this heading">¶</a></h4>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Was bedeutet das?</p></th>
+<th class="head"><p>Beispiel</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">is_active</span></code></p></td>
+<td><p>Nur aktive Bedingungen zaehlen.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Ja</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">priority</span></code></p></td>
+<td><p>Reihenfolge innerhalb der Regel.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">10</span></code> fuer Zahlungsart, <code class="docutils literal notranslate"><span class="pre">20</span></code> fuer Lieferland</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">source_field</span></code></p></td>
+<td><p>Verweis auf Source-<code class="docutils literal notranslate"><span class="pre">code</span></code>.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">payment_method</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">operator</span></code></p></td>
+<td><p>Verweis auf Operator-<code class="docutils literal notranslate"><span class="pre">code</span></code>.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">contains</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">expected_value</span></code></p></td>
+<td><p>Vergleichswert.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">paypal</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="aktions-inline-microtechorderruleaction">
+<h4>Aktions-Inline (<code class="docutils literal notranslate"><span class="pre">MicrotechOrderRuleAction</span></code>)<a class="headerlink" href="#aktions-inline-microtechorderruleaction" title="Link to this heading">¶</a></h4>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Was bedeutet das?</p></th>
+<th class="head"><p>Beispiel</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">is_active</span></code></p></td>
+<td><p>Nur aktive Aktionen werden angewendet.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Ja</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">priority</span></code></p></td>
+<td><p>Reihenfolge innerhalb der Regel.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">10</span></code>, <code class="docutils literal notranslate"><span class="pre">20</span></code>, <code class="docutils literal notranslate"><span class="pre">30</span></code>, <code class="docutils literal notranslate"><span class="pre">40</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">target_field</span></code></p></td>
+<td><p>Verweis auf Target-<code class="docutils literal notranslate"><span class="pre">code</span></code>.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">set_payment_type</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">target_value</span></code></p></td>
+<td><p>Zu setzender Wert.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">22</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+</section>
+<section id="durchgehendes-beispiel-komplette-umsetzung-im-admin">
+<h2>Durchgehendes Beispiel: komplette Umsetzung im Admin<a class="headerlink" href="#durchgehendes-beispiel-komplette-umsetzung-im-admin" title="Link to this heading">¶</a></h2>
+<section id="datasets-importieren">
+<h3>1. Datasets importieren<a class="headerlink" href="#datasets-importieren" title="Link to this heading">¶</a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>./.venv/bin/python<span class="w"> </span>manage.py<span class="w"> </span>microtech_import_dataset_fields<span class="w"> </span>--dry-run
+./.venv/bin/python<span class="w"> </span>manage.py<span class="w"> </span>microtech_import_dataset_fields
+</pre></div>
+</div>
+</section>
+<section id="operatoren-anlegen">
+<h3>2. Operatoren anlegen<a class="headerlink" href="#operatoren-anlegen" title="Link to this heading">¶</a></h3>
+<p>In <code class="docutils literal notranslate"><span class="pre">Microtech</span> <span class="pre">-&gt;</span> <span class="pre">Operatoren</span></code>:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">eq</span></code> (Engine: <code class="docutils literal notranslate"><span class="pre">eq</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">contains</span></code> (Engine: <code class="docutils literal notranslate"><span class="pre">contains</span></code>)</p></li>
+</ul>
+</section>
+<section id="source-felder-anlegen">
+<h3>3. Source Felder anlegen<a class="headerlink" href="#source-felder-anlegen" title="Link to this heading">¶</a></h3>
+<p>In <code class="docutils literal notranslate"><span class="pre">Microtech</span> <span class="pre">-&gt;</span> <span class="pre">Source</span> <span class="pre">Felder</span></code>:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">payment_method</span></code>
+- Engine Source: <code class="docutils literal notranslate"><span class="pre">payment_method</span></code>
+- Value Type: <code class="docutils literal notranslate"><span class="pre">string</span></code>
+- Operatoren: <code class="docutils literal notranslate"><span class="pre">contains</span></code>, <code class="docutils literal notranslate"><span class="pre">eq</span></code>
+- Beispiel: <code class="docutils literal notranslate"><span class="pre">paypal</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">shipping_country</span></code>
+- Engine Source: <code class="docutils literal notranslate"><span class="pre">shipping_country_code</span></code>
+- Value Type: <code class="docutils literal notranslate"><span class="pre">country_code</span></code>
+- Operatoren: <code class="docutils literal notranslate"><span class="pre">eq</span></code>
+- Beispiel: <code class="docutils literal notranslate"><span class="pre">AT</span></code></p></li>
+</ul>
+</section>
+<section id="target-felder-anlegen">
+<h3>4. Target Felder anlegen<a class="headerlink" href="#target-felder-anlegen" title="Link to this heading">¶</a></h3>
+<p>In <code class="docutils literal notranslate"><span class="pre">Microtech</span> <span class="pre">-&gt;</span> <span class="pre">Target</span> <span class="pre">Felder</span></code>:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">set_payment_type</span></code> -&gt; <code class="docutils literal notranslate"><span class="pre">zahlungsart_id</span></code> (<code class="docutils literal notranslate"><span class="pre">int</span></code>), Beispiel <code class="docutils literal notranslate"><span class="pre">22</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">set_payment_terms</span></code> -&gt; <code class="docutils literal notranslate"><span class="pre">zahlungsbedingung</span></code> (<code class="docutils literal notranslate"><span class="pre">string</span></code>), Beispiel <code class="docutils literal notranslate"><span class="pre">Sofort</span> <span class="pre">ohne</span> <span class="pre">Abzug</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">set_fee_enabled</span></code> -&gt; <code class="docutils literal notranslate"><span class="pre">add_payment_position</span></code> (<code class="docutils literal notranslate"><span class="pre">bool</span></code>), Beispiel <code class="docutils literal notranslate"><span class="pre">true</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">set_fee_value</span></code> -&gt; <code class="docutils literal notranslate"><span class="pre">payment_position_value</span></code> (<code class="docutils literal notranslate"><span class="pre">decimal</span></code>), Beispiel <code class="docutils literal notranslate"><span class="pre">2.50</span></code></p></li>
+</ul>
+</section>
 <section id="regel-anlegen">
-<h3>1. Regel anlegen<a class="headerlink" href="#regel-anlegen" title="Link to this heading">¶</a></h3>
-<p>Adminpfad: <code class="docutils literal notranslate"><span class="pre">Microtech</span> <span class="pre">-&gt;</span> <span class="pre">Einstellungen</span></code> (Bestellregeln)</p>
+<h3>5. Regel anlegen<a class="headerlink" href="#regel-anlegen" title="Link to this heading">¶</a></h3>
+<p>In <code class="docutils literal notranslate"><span class="pre">Microtech</span> <span class="pre">-&gt;</span> <span class="pre">Einstellungen</span></code>:</p>
 <ul class="simple">
-<li><p>Name: <code class="docutils literal notranslate"><span class="pre">AT</span> <span class="pre">+</span> <span class="pre">PayPal</span></code></p></li>
-<li><p>Aktiv: <code class="docutils literal notranslate"><span class="pre">Ja</span></code></p></li>
-<li><p>Prioritaet: <code class="docutils literal notranslate"><span class="pre">10</span></code></p></li>
-<li><p>Bedingungslogik: <code class="docutils literal notranslate"><span class="pre">UND</span></code></p></li>
+<li><p>Regelkopf:
+- Name: <code class="docutils literal notranslate"><span class="pre">AT</span> <span class="pre">+</span> <span class="pre">PayPal</span></code>
+- Aktiv: <code class="docutils literal notranslate"><span class="pre">Ja</span></code>
+- Prioritaet: <code class="docutils literal notranslate"><span class="pre">10</span></code>
+- Bedingungslogik: <code class="docutils literal notranslate"><span class="pre">UND</span></code></p></li>
+<li><p>Bedingungen:
+- <code class="docutils literal notranslate"><span class="pre">payment_method</span></code> + <code class="docutils literal notranslate"><span class="pre">contains</span></code> + <code class="docutils literal notranslate"><span class="pre">paypal</span></code>
+- <code class="docutils literal notranslate"><span class="pre">shipping_country</span></code> + <code class="docutils literal notranslate"><span class="pre">eq</span></code> + <code class="docutils literal notranslate"><span class="pre">AT</span></code></p></li>
+<li><p>Aktionen:
+- <code class="docutils literal notranslate"><span class="pre">set_payment_type</span></code> = <code class="docutils literal notranslate"><span class="pre">22</span></code>
+- <code class="docutils literal notranslate"><span class="pre">set_payment_terms</span></code> = <code class="docutils literal notranslate"><span class="pre">Sofort</span> <span class="pre">ohne</span> <span class="pre">Abzug</span></code>
+- <code class="docutils literal notranslate"><span class="pre">set_fee_enabled</span></code> = <code class="docutils literal notranslate"><span class="pre">true</span></code>
+- <code class="docutils literal notranslate"><span class="pre">set_fee_value</span></code> = <code class="docutils literal notranslate"><span class="pre">2.50</span></code></p></li>
 </ul>
 </section>
-<section id="bedingungen-anlegen">
-<h3>2. Bedingungen anlegen<a class="headerlink" href="#bedingungen-anlegen" title="Link to this heading">¶</a></h3>
-<p>Bedingung A:</p>
-<ul class="simple">
-<li><p>Source Feld: <code class="docutils literal notranslate"><span class="pre">payment_method</span></code></p></li>
-<li><p>Operator: <code class="docutils literal notranslate"><span class="pre">contains</span></code></p></li>
-<li><p>Vergleichswert: <code class="docutils literal notranslate"><span class="pre">paypal</span></code></p></li>
-</ul>
-<p>Bedingung B:</p>
-<ul class="simple">
-<li><p>Source Feld: <code class="docutils literal notranslate"><span class="pre">shipping_country</span></code></p></li>
-<li><p>Operator: <code class="docutils literal notranslate"><span class="pre">eq</span></code></p></li>
-<li><p>Vergleichswert: <code class="docutils literal notranslate"><span class="pre">AT</span></code></p></li>
-</ul>
-<p>Wichtig: Im Operator-Dropdown erscheinen nur die beim jeweiligen Source Feld erlaubten Operatoren.</p>
-</section>
-<section id="aktionen-anlegen">
-<h3>3. Aktionen anlegen<a class="headerlink" href="#aktionen-anlegen" title="Link to this heading">¶</a></h3>
-<p>Aktion A:</p>
-<ul class="simple">
-<li><p>Target Feld: <code class="docutils literal notranslate"><span class="pre">set_payment_type</span></code></p></li>
-<li><p>Zielwert: <code class="docutils literal notranslate"><span class="pre">22</span></code></p></li>
-</ul>
-<p>Aktion B:</p>
-<ul class="simple">
-<li><p>Target Feld: <code class="docutils literal notranslate"><span class="pre">set_payment_terms</span></code></p></li>
-<li><p>Zielwert: <code class="docutils literal notranslate"><span class="pre">Sofort</span> <span class="pre">ohne</span> <span class="pre">Abzug</span></code></p></li>
-</ul>
-<p>Aktion C:</p>
-<ul class="simple">
-<li><p>Target Feld: <code class="docutils literal notranslate"><span class="pre">set_fee_enabled</span></code></p></li>
-<li><p>Zielwert: <code class="docutils literal notranslate"><span class="pre">true</span></code></p></li>
-</ul>
-<p>Aktion D:</p>
-<ul class="simple">
-<li><p>Target Feld: <code class="docutils literal notranslate"><span class="pre">set_fee_value</span></code></p></li>
-<li><p>Zielwert: <code class="docutils literal notranslate"><span class="pre">2.50</span></code></p></li>
-</ul>
-</section>
-<section id="ergebnis-pruefen">
-<h3>4. Ergebnis pruefen<a class="headerlink" href="#ergebnis-pruefen" title="Link to this heading">¶</a></h3>
-<p>Eine passende Testbestellung sollte beim Upsert in Microtech folgende Rule-Auswirkung zeigen:</p>
+<section id="testen">
+<h3>6. Testen<a class="headerlink" href="#testen" title="Link to this heading">¶</a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>./.venv/bin/python<span class="w"> </span>manage.py<span class="w"> </span>microtech_order_upsert<span class="w"> </span>--order-number<span class="w"> </span>&lt;DEINE_BESTELLNUMMER&gt;
+</pre></div>
+</div>
+<p>Erwartete Wirkung:</p>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">zahlungsart_id</span> <span class="pre">=</span> <span class="pre">22</span></code></p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">zahlungsbedingung</span> <span class="pre">=</span> <span class="pre">Sofort</span> <span class="pre">ohne</span> <span class="pre">Abzug</span></code></p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">add_payment_position</span> <span class="pre">=</span> <span class="pre">true</span></code></p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">payment_position_value</span> <span class="pre">=</span> <span class="pre">2.50</span></code></p></li>
 </ul>
-<p>Schneller Test ueber Command:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>./.venv/bin/python<span class="w"> </span>manage.py<span class="w"> </span>microtech_order_upsert<span class="w"> </span>--order-number<span class="w"> </span>&lt;DEINE_BESTELLNUMMER&gt;
-</pre></div>
-</div>
 </section>
 </section>
-<section id="typische-fehler-und-loesung">
-<h2>Typische Fehler und Loesung<a class="headerlink" href="#typische-fehler-und-loesung" title="Link to this heading">¶</a></h2>
+<section id="typische-fehler-und-loesungen">
+<h2>Typische Fehler und Loesungen<a class="headerlink" href="#typische-fehler-und-loesungen" title="Link to this heading">¶</a></h2>
 <ol class="arabic simple">
-<li><p>Source Feld wird nicht angeboten</p></li>
+<li><p>Source oder Target wird im Dropdown nicht angeboten</p></li>
 </ol>
 <ul class="simple">
-<li><p>Source Feld ist in <code class="docutils literal notranslate"><span class="pre">Microtech</span> <span class="pre">-&gt;</span> <span class="pre">Source</span> <span class="pre">Felder</span></code> nicht aktiv.</p></li>
-<li><p>Code ist leer oder doppelt.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">is_active</span></code> ist aus.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">code</span></code> ist doppelt oder ungueltig.</p></li>
 </ul>
 <ol class="arabic simple" start="2">
-<li><p>Operator fehlt im Dropdown</p></li>
+<li><p>Operator fehlt trotz vorhandenem Operator-Datensatz</p></li>
 </ol>
 <ul class="simple">
-<li><p>Operator ist beim Source Feld nicht in <code class="docutils literal notranslate"><span class="pre">Erlaubte</span> <span class="pre">Operatoren</span></code> hinterlegt.</p></li>
-<li><p>Operator selbst ist in <code class="docutils literal notranslate"><span class="pre">Microtech</span> <span class="pre">-&gt;</span> <span class="pre">Operatoren</span></code> inaktiv.</p></li>
+<li><p>Der Operator ist im Source-Feld nicht unter <code class="docutils literal notranslate"><span class="pre">operators</span></code> zugeordnet.</p></li>
 </ul>
 <ol class="arabic simple" start="3">
 <li><p>Aktion wird ignoriert</p></li>
 </ol>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">target_value</span></code> passt nicht zum Typ (z. B. Text statt Zahl).</p></li>
-<li><p>Enum-Wert ist nicht in <code class="docutils literal notranslate"><span class="pre">enum_values</span></code> des Target Felds enthalten.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">target_value</span></code> passt nicht zu <code class="docutils literal notranslate"><span class="pre">value_type</span></code> (z. B. Text statt <code class="docutils literal notranslate"><span class="pre">int</span></code>).</p></li>
+<li><p>Bei <code class="docutils literal notranslate"><span class="pre">enum</span></code> ist <code class="docutils literal notranslate"><span class="pre">target_value</span></code> nicht in <code class="docutils literal notranslate"><span class="pre">enum_values</span></code> enthalten.</p></li>
 </ul>
 <ol class="arabic simple" start="4">
-<li><p>Katalogfeld nicht sichtbar</p></li>
+<li><p>Katalogfeld fehlt</p></li>
 </ol>
 <ul class="simple">
-<li><p>Feldimport noch nicht gelaufen.</p></li>
-<li><p>Import wurde mit zu engem <code class="docutils literal notranslate"><span class="pre">--dataset</span></code>-Filter gestartet.</p></li>
+<li><p>Import nicht gelaufen oder falscher <code class="docutils literal notranslate"><span class="pre">--dataset</span></code> Filter.</p></li>
 </ul>
 </section>
-<section id="empfohlener-betriebsablauf">
-<h2>Empfohlener Betriebsablauf<a class="headerlink" href="#empfohlener-betriebsablauf" title="Link to this heading">¶</a></h2>
+<section id="empfohlener-betrieb">
+<h2>Empfohlener Betrieb<a class="headerlink" href="#empfohlener-betrieb" title="Link to this heading">¶</a></h2>
 <ol class="arabic simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">microtech_import_dataset_fields</span> <span class="pre">--dry-run</span></code></p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">microtech_import_dataset_fields</span></code></p></li>
-<li><p>Operatoren kontrollieren</p></li>
-<li><p>Source/Target-Felder pflegen</p></li>
-<li><p>Regel anlegen und mit einer echten Bestellung testen</p></li>
-<li><p>Bei Aenderungen zuerst inaktivieren, dann iterativ anpassen</p></li>
+<li><p>Erst <code class="docutils literal notranslate"><span class="pre">--dry-run</span></code></p></li>
+<li><p>Dann echter Feldimport</p></li>
+<li><p>Operatoren pflegen</p></li>
+<li><p>Source/Target mit klaren <code class="docutils literal notranslate"><span class="pre">code</span></code>-Konventionen pflegen</p></li>
+<li><p>Regeln mit niedriger Prioritaet testen</p></li>
+<li><p>Erst danach produktiv priorisieren</p></li>
 </ol>
 </section>
 </section>
@@ -306,15 +651,13 @@ Zahlungsbedingung <cite>Sofort ohne Abzug</cite> und fuege eine Zahlungs-Zusatzp
 <li class="toctree-l1"><a class="reference internal" href="erste_schritte.html">Erste Schritte</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Microtech Rulebuilder mit Feldkatalog (Schritt fuer Schritt)</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#ziel">Ziel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#durchgehendes-beispiel-wird-in-allen-abschnitten-verwendet">Durchgehendes Beispiel (wird in allen Abschnitten verwendet)</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#voraussetzungen">Voraussetzungen</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#was-ist-neu">Was ist neu?</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#schritt-1-feldkatalog-importieren">Schritt 1: Feldkatalog importieren</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#schritt-2-operatoren-pflegen">Schritt 2: Operatoren pflegen</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#schritt-3-source-felder-definieren">Schritt 3: Source Felder definieren</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#schritt-4-target-felder-definieren">Schritt 4: Target Felder definieren</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#durchgehendes-beispiel">Durchgehendes Beispiel</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#typische-fehler-und-loesung">Typische Fehler und Loesung</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#empfohlener-betriebsablauf">Empfohlener Betriebsablauf</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#schnellstart">Schnellstart</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#feldreferenz-alle-neuen-modelle">Feldreferenz: alle neuen Modelle</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#durchgehendes-beispiel-komplette-umsetzung-im-admin">Durchgehendes Beispiel: komplette Umsetzung im Admin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#typische-fehler-und-loesungen">Typische Fehler und Loesungen</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#empfohlener-betrieb">Empfohlener Betrieb</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="operator_checkliste.html">Operator-Checkliste (1 Seite)</a></li>

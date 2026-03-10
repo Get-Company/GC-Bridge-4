@@ -3,7 +3,7 @@ Model- und Admin-Inventar
 
 Diese Seite wird automatisch aus dem Django-Projekt erzeugt und deckt alle lokalen Apps, Models und registrierten Admin-Klassen ab.
 
-Generiert am: 2026-03-10 09:24:26 UTC
+Generiert am: 2026-03-10 09:41:12 UTC
 
 core
 ----
