@@ -54,6 +54,7 @@ class DatasetFieldDef:
 
 DEFAULT_OPERATOR_DEFS: tuple[OperatorDef, ...] = (
     OperatorDef(code="eq", name="==", engine_operator="eq"),
+    OperatorDef(code="ne", name="<>", engine_operator="ne"),
     OperatorDef(code="contains", name="enthaelt", engine_operator="contains"),
     OperatorDef(code="gt", name=">", engine_operator="gt"),
     OperatorDef(code="lt", name="<", engine_operator="lt"),
@@ -126,10 +127,10 @@ def _field_value_kind(field: Field) -> str:
 
 def _default_operator_codes(value_kind: str) -> tuple[str, ...]:
     if value_kind in {"int", "decimal", "date", "datetime"}:
-        return ("eq", "gt", "lt", "is_empty", "is_not_empty")
+        return ("eq", "ne", "gt", "lt", "is_empty", "is_not_empty")
     if value_kind == "bool":
-        return ("eq", "is_empty", "is_not_empty")
-    return ("eq", "contains", "is_empty", "is_not_empty")
+        return ("eq", "ne", "is_empty", "is_not_empty")
+    return ("eq", "ne", "contains", "is_empty", "is_not_empty")
 
 
 def _default_example(value_kind: str) -> str:

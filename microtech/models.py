@@ -254,6 +254,7 @@ class MicrotechOrderRuleAction(BaseModel):
 class MicrotechOrderRuleOperator(BaseModel):
     class EngineOperator(models.TextChoices):
         EQUALS = "eq", _("==")
+        NOT_EQUALS = "ne", _("<>")
         CONTAINS = "contains", _("enthaelt")
         GREATER_THAN = "gt", _(">")
         LESS_THAN = "lt", _("<")

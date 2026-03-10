@@ -277,6 +277,11 @@ class OrderRuleResolverService(BaseService):
         if operator == "is_not_empty":
             return actual_value is not None and _to_str(actual_value) != ""
 
+        if operator == "ne":
+            return not cls._evaluate_condition(
+                operator="eq", actual_value=actual_value, expected_raw=expected_raw, value_kind=value_kind,
+            )
+
         if operator == MicrotechOrderRuleCondition.Operator.CONTAINS:
             if not expected_raw:
                 return True
