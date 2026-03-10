@@ -513,26 +513,38 @@ async function deleteSelectedAddresses(erpNr, groupId) {
   const checked = [...document.querySelectorAll(`.addr-cb-${groupId}:checked`)];
   if (!checked.length) { alert('Keine Adressen ausgewaehlt.'); return; }
   const ids = checked.map(cb => parseInt(cb.value));
+  console.log(`[DELETE] ${ids.length} Adresse(n) ausgewaehlt:`, ids, `fuer Kunde ${erpNr}`);
   if (!confirm(`${ids.length} Adresse(n) unwiderruflich loeschen?`)) return;
 
   const btn = document.getElementById(`del-btn-${groupId}`);
   if (btn) { btn.disabled = true; btn.innerHTML = `${spinner()} Loesche...`; }
 
+  console.log(`[DELETE] Sende Request an /admin/customer-merge/api/delete-addresses/ ...`);
+  const t0 = performance.now();
   try {
     const resp = await fetch('/admin/customer-merge/api/delete-addresses/', {
       method: 'POST',
       headers: {'Content-Type':'application/json','X-CSRFToken':CSRF},
       body: JSON.stringify({ address_ids: ids }),
     });
+    const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
+    console.log(`[DELETE] Response: ${resp.status} ${resp.statusText} (${elapsed}s)`);
     const data = await resp.json();
+    console.log(`[DELETE] Response-Body:`, data);
     if (data.error) { alert('Fehler: ' + data.error); return; }
     if (data.errors && data.errors.length) {
       alert('Teilweise Fehler:\n' + data.errors.join('\n'));
     }
+    console.log(`[DELETE] Erfolgreich: ${data.deleted} Adressen geloescht. Lade Zeile neu...`);
     // Re-fetch all cells (addresses changed in all systems)
     await refetchRow(erpNr, erpNr);
+    console.log(`[DELETE] Zeile neu geladen.`);
   } catch(e) {
+    const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
+    console.error(`[DELETE] Fehler nach ${elapsed}s:`, e);
     alert('Fehler: ' + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = `<span class="material-symbols-outlined" style="font-size:12px">delete</span> Markierte loeschen`; }
   }
 }
 

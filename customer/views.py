@@ -177,12 +177,14 @@ def customer_delete_addresses_api(request):
     try:
         body = json.loads(request.body)
         address_ids = body.get("address_ids", [])
+        logger.info("Delete-addresses request: address_ids={}", address_ids)
         if not address_ids:
             return JsonResponse({"error": "Keine Adressen ausgewaehlt."}, status=400)
 
         from customer.models import Address
 
         addresses = list(Address.objects.filter(id__in=address_ids))
+        logger.info("Delete-addresses: found {} addresses in DB", len(addresses))
         if not addresses:
             return JsonResponse({"error": "Keine Adressen gefunden."}, status=400)
 
@@ -190,6 +192,7 @@ def customer_delete_addresses_api(request):
 
         # Delete in Shopware
         sw_ids = [a.api_id for a in addresses if a.api_id]
+        logger.info("Delete-addresses: {} Shopware-IDs to delete: {}", len(sw_ids), sw_ids)
         if sw_ids:
             try:
                 from shopware.services.shopware6 import Shopware6Service
@@ -202,8 +205,11 @@ def customer_delete_addresses_api(request):
             except Exception as exc:
                 errors.append(f"Shopware: {exc}")
 
+        logger.info("Delete-addresses: Shopware done")
+
         # Delete in Microtech
         mt_addresses = [(a.customer.erp_nr, a.erp_ans_nr) for a in addresses if a.erp_ans_nr is not None]
+        logger.info("Delete-addresses: {} Microtech-Anschriften to delete: {}", len(mt_addresses), mt_addresses)
         if mt_addresses:
             try:
                 from microtech.services import (
@@ -231,10 +237,13 @@ def customer_delete_addresses_api(request):
             except Exception as exc:
                 errors.append(f"Microtech: {exc}")
 
+        logger.info("Delete-addresses: Microtech done")
+
         # Delete in Django
         count = len(addresses)
+        logger.info("Delete-addresses: deleting {} addresses in Django...", count)
         Address.objects.filter(id__in=address_ids).delete()
-        logger.info("Deleted {} addresses (Django + Shopware + Microtech), errors: {}", count, errors)
+        logger.info("Delete-addresses: DONE - deleted {} addresses, errors: {}", count, errors)
         return JsonResponse({"success": True, "deleted": count, "errors": errors})
     except Exception as exc:
         logger.error("Address delete failed: {}\n{}", exc, traceback.format_exc())
