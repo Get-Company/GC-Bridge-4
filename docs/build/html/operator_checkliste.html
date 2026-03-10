@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+
+<html lang="de" data-content_root="./">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Operator-Checkliste (1 Seite) &#8212; GC-Bridge-4 0.1.0 Dokumentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=5ecbeea2" />
+    <link rel="stylesheet" type="text/css" href="_static/basic.css?v=b08954a9" />
+    <link rel="stylesheet" type="text/css" href="_static/alabaster.css?v=27fed22d" />
+    <script src="_static/documentation_options.js?v=7c8c992d"></script>
+    <script src="_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/translations.js?v=9bf55d28"></script>
+    <link rel="index" title="Stichwortverzeichnis" href="genindex.html" />
+    <link rel="search" title="Suche" href="search.html" />
+    <link rel="next" title="Workflows" href="workflows.html" />
+    <link rel="prev" title="Erste Schritte" href="erste_schritte.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="operator-checkliste-1-seite">
+<h1>Operator-Checkliste (1 Seite)<a class="headerlink" href="#operator-checkliste-1-seite" title="Link to this heading">¶</a></h1>
+<section id="ziel">
+<h2>Ziel<a class="headerlink" href="#ziel" title="Link to this heading">¶</a></h2>
+<p>Diese Checkliste ist fuer den taeglichen Betrieb gedacht: kurz, reproduzierbar, ohne Tiefendiagnose.</p>
+</section>
+<section id="taeglicher-startcheck-3-5-minuten">
+<h2>Taeglicher Startcheck (3-5 Minuten)<a class="headerlink" href="#taeglicher-startcheck-3-5-minuten" title="Link to this heading">¶</a></h2>
+<ol class="arabic simple">
+<li><p>Erreichbarkeit testen</p></li>
+</ol>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>http://127.0.0.1:4711/admin/
+</pre></div>
+</div>
+<ol class="arabic simple" start="2">
+<li><p>Health Check ausfuehren (Windows)</p></li>
+</ol>
+<div class="highlight-doscon notranslate"><div class="highlight"><pre><span></span><span class="go">deploy\windows\health_check.cmd</span>
+</pre></div>
+</div>
+<ol class="arabic simple" start="3">
+<li><p>Bei Fehlern sofort Diagnose starten</p></li>
+</ol>
+<div class="highlight-doscon notranslate"><div class="highlight"><pre><span></span><span class="go">deploy\windows\diagnose_reachability.cmd</span>
+</pre></div>
+</div>
+<ol class="arabic simple" start="4">
+<li><p>Kernlogs pruefen</p></li>
+</ol>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">tmp\logs\uvicorn.err.log</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">tmp\logs\caddy.err.log</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">tmp\logs\deploy.log</span></code></p></li>
+</ul>
+</section>
+<section id="taeglicher-betriebsablauf">
+<h2>Taeglicher Betriebsablauf<a class="headerlink" href="#taeglicher-betriebsablauf" title="Link to this heading">¶</a></h2>
+<ol class="arabic simple">
+<li><p>Produkt-Sync anstossen (falls nicht per Scheduler)</p></li>
+</ol>
+<div class="highlight-doscon notranslate"><div class="highlight"><pre><span></span><span class="go">.venv\Scripts\python.exe manage.py scheduled_product_sync --limit 200</span>
+</pre></div>
+</div>
+<ol class="arabic simple" start="2">
+<li><p>Offene Bestellungen laden</p></li>
+</ol>
+<div class="highlight-doscon notranslate"><div class="highlight"><pre><span></span><span class="go">.venv\Scripts\python.exe manage.py shopware_sync_open_orders --limit-orders 100</span>
+</pre></div>
+</div>
+<ol class="arabic simple" start="3">
+<li><p>Stichprobe im Admin</p></li>
+</ol>
+<ul class="simple">
+<li><p>Neue/aktualisierte Produkte kontrollieren</p></li>
+<li><p>Neue Orders und OrderDetails pruefen</p></li>
+<li><p>Problemfaelle (fehlende IDs, leere Preise, Mappingprobleme) markieren</p></li>
+</ul>
+</section>
+<section id="wenn-die-seite-nicht-erreichbar-ist">
+<h2>Wenn die Seite nicht erreichbar ist<a class="headerlink" href="#wenn-die-seite-nicht-erreichbar-ist" title="Link to this heading">¶</a></h2>
+<ol class="arabic simple">
+<li><p>Startskript klicken:</p></li>
+</ol>
+<div class="highlight-doscon notranslate"><div class="highlight"><pre><span></span><span class="go">deploy\windows\start-server.cmd</span>
+</pre></div>
+</div>
+<ol class="arabic simple" start="2">
+<li><p>Danach erneut pruefen:</p></li>
+</ol>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>http://127.0.0.1:4711/admin/
+</pre></div>
+</div>
+<ol class="arabic simple" start="3">
+<li><p>Falls weiterhin Fehler: Diagnose-Log lesen</p></li>
+</ol>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">tmp\logs\diagnose_reachability.log</span></code></p></li>
+</ul>
+</section>
+<section id="operator-entscheidungen">
+<h2>Operator-Entscheidungen<a class="headerlink" href="#operator-entscheidungen" title="Link to this heading">¶</a></h2>
+<p>Sofort eskalieren an Technik, wenn:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">health_check.cmd</span></code> Fehler meldet, die nicht durch Neustart loesbar sind</p></li>
+<li><p>wiederholte DB-/Migration-Fehler auftreten</p></li>
+<li><p>Uvicorn/Caddy mehrfach taeglich abstuerzen</p></li>
+<li><p>Deployment-Log wiederholt fehlschlaegt</p></li>
+</ul>
+</section>
+<section id="schnellbefehle">
+<h2>Schnellbefehle<a class="headerlink" href="#schnellbefehle" title="Link to this heading">¶</a></h2>
+<p>Start (Windows, manuell):</p>
+<div class="highlight-doscon notranslate"><div class="highlight"><pre><span></span><span class="go">deploy\windows\start-server.cmd</span>
+</pre></div>
+</div>
+<p>Status und Diagnose:</p>
+<div class="highlight-doscon notranslate"><div class="highlight"><pre><span></span><span class="go">deploy\windows\health_check.cmd</span>
+<span class="go">deploy\windows\diagnose_reachability.cmd</span>
+</pre></div>
+</div>
+<p>Linux-Betrieb (falls aktiv):</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>sudo<span class="w"> </span>systemctl<span class="w"> </span>status<span class="w"> </span>gc-bridge-uvicorn
+sudo<span class="w"> </span>systemctl<span class="w"> </span>status<span class="w"> </span>caddy
+</pre></div>
+</div>
+</section>
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="index.html">GC-Bridge-4</a></h1>
+
+
+
+
+
+
+
+
+
+<search id="searchbox" style="display: none" role="search">
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Search"/>
+      <input type="submit" value="Los" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script><h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Inhalte</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="einleitung.html">Einleitung</a></li>
+<li class="toctree-l1"><a class="reference internal" href="erste_schritte.html">Erste Schritte</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Operator-Checkliste (1 Seite)</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#ziel">Ziel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#taeglicher-startcheck-3-5-minuten">Taeglicher Startcheck (3-5 Minuten)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#taeglicher-betriebsablauf">Taeglicher Betriebsablauf</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#wenn-die-seite-nicht-erreichbar-ist">Wenn die Seite nicht erreichbar ist</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#operator-entscheidungen">Operator-Entscheidungen</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#schnellbefehle">Schnellbefehle</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="workflows.html">Workflows</a></li>
+<li class="toctree-l1"><a class="reference internal" href="betrieb_technik.html">Betrieb und Technik</a></li>
+<li class="toctree-l1"><a class="reference internal" href="stoerung_nicht_erreichbar.html">Stoerung: Seite nicht erreichbar</a></li>
+<li class="toctree-l1"><a class="reference internal" href="reference/index.html">Referenz</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+      <li>Previous: <a href="erste_schritte.html" title="vorheriges Kapitel">Erste Schritte</a></li>
+      <li>Next: <a href="workflows.html" title="nächstes Kapitel">Workflows</a></li>
+  </ul></li>
+</ul>
+</div>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 9.1.0</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+      
+      |
+      <a href="_sources/operator_checkliste.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

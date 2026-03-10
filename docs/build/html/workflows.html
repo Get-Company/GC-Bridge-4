@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+
+<html lang="de" data-content_root="./">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Workflows &#8212; GC-Bridge-4 0.1.0 Dokumentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=5ecbeea2" />
+    <link rel="stylesheet" type="text/css" href="_static/basic.css?v=b08954a9" />
+    <link rel="stylesheet" type="text/css" href="_static/alabaster.css?v=27fed22d" />
+    <script src="_static/documentation_options.js?v=7c8c992d"></script>
+    <script src="_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/translations.js?v=9bf55d28"></script>
+    <link rel="index" title="Stichwortverzeichnis" href="genindex.html" />
+    <link rel="search" title="Suche" href="search.html" />
+    <link rel="next" title="Betrieb und Technik" href="betrieb_technik.html" />
+    <link rel="prev" title="Operator-Checkliste (1 Seite)" href="operator_checkliste.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="workflows">
+<h1>Workflows<a class="headerlink" href="#workflows" title="Link to this heading">¶</a></h1>
+<section id="workflow-1-produkte-synchronisieren">
+<h2>Workflow 1: Produkte synchronisieren<a class="headerlink" href="#workflow-1-produkte-synchronisieren" title="Link to this heading">¶</a></h2>
+<section id="ziel">
+<h3>Ziel<a class="headerlink" href="#ziel" title="Link to this heading">¶</a></h3>
+<p>Produkte aus Microtech importieren, abgelaufene Sonderpreise bereinigen,
+Rueckschreiben nach Microtech und anschliessend nach Shopware synchronisieren.</p>
+</section>
+<section id="befehl">
+<h3>Befehl<a class="headerlink" href="#befehl" title="Link to this heading">¶</a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>.venv/bin/python<span class="w"> </span>manage.py<span class="w"> </span>scheduled_product_sync<span class="w"> </span>--limit<span class="w"> </span><span class="m">200</span>
+</pre></div>
+</div>
+<p>Windows:</p>
+<div class="highlight-doscon notranslate"><div class="highlight"><pre><span></span><span class="go">.venv\Scripts\python.exe manage.py scheduled_product_sync --limit 200</span>
+</pre></div>
+</div>
+</section>
+<section id="ablauf-intern">
+<h3>Ablauf intern<a class="headerlink" href="#ablauf-intern" title="Link to this heading">¶</a></h3>
+<ol class="arabic simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">microtech_sync_products</span> <span class="pre">--all</span></code></p></li>
+<li><p>Bereinigung abgelaufener Sonderpreise in <code class="docutils literal notranslate"><span class="pre">products.Price</span></code></p></li>
+<li><p>Rueckschreiben bereinigter Sonderpreise nach Microtech</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">shopware_sync_products</span> <span class="pre">--all</span></code></p></li>
+</ol>
+</section>
+<section id="wichtige-hinweise">
+<h3>Wichtige Hinweise<a class="headerlink" href="#wichtige-hinweise" title="Link to this heading">¶</a></h3>
+<ul class="simple">
+<li><p>Mit <code class="docutils literal notranslate"><span class="pre">--exclude-inactive</span></code> werden inaktive Microtech-Artikel beim Import ausgelassen.</p></li>
+<li><p>Fuer Debug-Laeufe <code class="docutils literal notranslate"><span class="pre">--limit</span></code> klein halten.</p></li>
+<li><p>Basispreis-Writeback nach Microtech ist standardmaessig deaktiviert (Schutz vor Fehlskalierung).</p></li>
+<li><p>Falls zwingend noetig: <code class="docutils literal notranslate"><span class="pre">--write-base-price-back</span></code>.</p></li>
+</ul>
+</section>
+</section>
+<section id="workflow-2-offene-shopware-bestellungen-laden">
+<h2>Workflow 2: Offene Shopware-Bestellungen laden<a class="headerlink" href="#workflow-2-offene-shopware-bestellungen-laden" title="Link to this heading">¶</a></h2>
+<section id="id1">
+<h3>Ziel<a class="headerlink" href="#id1" title="Link to this heading">¶</a></h3>
+<p>Offene Shopware-Bestellungen in Django <code class="docutils literal notranslate"><span class="pre">orders.Order</span></code> und <code class="docutils literal notranslate"><span class="pre">orders.OrderDetail</span></code> uebernehmen,
+inklusive Kunden- und Adressdaten.</p>
+</section>
+<section id="id2">
+<h3>Befehl<a class="headerlink" href="#id2" title="Link to this heading">¶</a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>.venv/bin/python<span class="w"> </span>manage.py<span class="w"> </span>shopware_sync_open_orders<span class="w"> </span>--limit-orders<span class="w"> </span><span class="m">100</span>
+</pre></div>
+</div>
+<p>Windows:</p>
+<div class="highlight-doscon notranslate"><div class="highlight"><pre><span></span><span class="go">.venv\Scripts\python.exe manage.py shopware_sync_open_orders --limit-orders 100</span>
+</pre></div>
+</div>
+</section>
+<section id="optionen">
+<h3>Optionen<a class="headerlink" href="#optionen" title="Link to this heading">¶</a></h3>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">--sales-channel-id</span> <span class="pre">&lt;id&gt;</span></code> (mehrfach nutzbar)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--limit-orders</span> <span class="pre">&lt;n&gt;</span></code></p></li>
+</ul>
+</section>
+</section>
+<section id="workflow-3-einzelbestellung-nach-microtech-upserten">
+<h2>Workflow 3: Einzelbestellung nach Microtech upserten<a class="headerlink" href="#workflow-3-einzelbestellung-nach-microtech-upserten" title="Link to this heading">¶</a></h2>
+<section id="id3">
+<h3>Ziel<a class="headerlink" href="#id3" title="Link to this heading">¶</a></h3>
+<p>Eine konkrete Bestellung aus Django in Microtech als Vorgang schreiben oder aktualisieren.</p>
+</section>
+<section id="befehl-mit-shopware-bestellnummer">
+<h3>Befehl mit Shopware-Bestellnummer<a class="headerlink" href="#befehl-mit-shopware-bestellnummer" title="Link to this heading">¶</a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>.venv/bin/python<span class="w"> </span>manage.py<span class="w"> </span>microtech_order_upsert<span class="w"> </span>SW100045
+</pre></div>
+</div>
+</section>
+<section id="befehl-mit-interner-django-id">
+<h3>Befehl mit interner Django-ID<a class="headerlink" href="#befehl-mit-interner-django-id" title="Link to this heading">¶</a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>.venv/bin/python<span class="w"> </span>manage.py<span class="w"> </span>microtech_order_upsert<span class="w"> </span>--id<span class="w"> </span><span class="m">42</span>
+</pre></div>
+</div>
+</section>
+<section id="logpfad-anpassen">
+<h3>Logpfad anpassen<a class="headerlink" href="#logpfad-anpassen" title="Link to this heading">¶</a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>.venv/bin/python<span class="w"> </span>manage.py<span class="w"> </span>microtech_order_upsert<span class="w"> </span>SW100045<span class="w"> </span>--log-file<span class="w"> </span>tmp/logs/microtech_order_upsert.log
+</pre></div>
+</div>
+</section>
+</section>
+<section id="workflow-4-kunden-nach-microtech-upserten">
+<h2>Workflow 4: Kunden nach Microtech upserten<a class="headerlink" href="#workflow-4-kunden-nach-microtech-upserten" title="Link to this heading">¶</a></h2>
+<section id="id4">
+<h3>Ziel<a class="headerlink" href="#id4" title="Link to this heading">¶</a></h3>
+<p>Einen einzelnen Kunden aus Django in Microtech Adressen/Anschriften/Ansprechpartner uebertragen.</p>
+</section>
+<section id="befehle">
+<h3>Befehle<a class="headerlink" href="#befehle" title="Link to this heading">¶</a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>.venv/bin/python<span class="w"> </span>manage.py<span class="w"> </span>microtech_customer_upsert<span class="w"> </span><span class="m">100012</span>
+</pre></div>
+</div>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>.venv/bin/python<span class="w"> </span>manage.py<span class="w"> </span>microtech_customer_upsert<span class="w"> </span>--id<span class="w"> </span><span class="m">7</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="workflow-5-shopware-produktsync-aus-django">
+<h2>Workflow 5: Shopware-Produktsync aus Django<a class="headerlink" href="#workflow-5-shopware-produktsync-aus-django" title="Link to this heading">¶</a></h2>
+<section id="id5">
+<h3>Ziel<a class="headerlink" href="#id5" title="Link to this heading">¶</a></h3>
+<p>Produktstammdaten und Preise aus Django nach Shopware updaten.</p>
+</section>
+<section id="id6">
+<h3>Befehle<a class="headerlink" href="#id6" title="Link to this heading">¶</a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>.venv/bin/python<span class="w"> </span>manage.py<span class="w"> </span>shopware_sync_products<span class="w"> </span>--all<span class="w"> </span>--batch-size<span class="w"> </span><span class="m">50</span>
+</pre></div>
+</div>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>.venv/bin/python<span class="w"> </span>manage.py<span class="w"> </span>shopware_sync_products<span class="w"> </span><span class="m">100001</span><span class="w"> </span><span class="m">100002</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="betriebliche-kontrolle">
+<h2>Betriebliche Kontrolle<a class="headerlink" href="#betriebliche-kontrolle" title="Link to this heading">¶</a></h2>
+<p>Nach jedem Lauf pruefen:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">tmp/logs/</span></code> auf Fehlerhinweise</p></li>
+<li><p>Django-Admin Aenderungslog fuer Sync-bezogene Eintraege</p></li>
+<li><p>Stichproben in Shopware/Microtech</p></li>
+</ul>
+</section>
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="index.html">GC-Bridge-4</a></h1>
+
+
+
+
+
+
+
+
+
+<search id="searchbox" style="display: none" role="search">
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Search"/>
+      <input type="submit" value="Los" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script><h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Inhalte</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="einleitung.html">Einleitung</a></li>
+<li class="toctree-l1"><a class="reference internal" href="erste_schritte.html">Erste Schritte</a></li>
+<li class="toctree-l1"><a class="reference internal" href="operator_checkliste.html">Operator-Checkliste (1 Seite)</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Workflows</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#workflow-1-produkte-synchronisieren">Workflow 1: Produkte synchronisieren</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#workflow-2-offene-shopware-bestellungen-laden">Workflow 2: Offene Shopware-Bestellungen laden</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#workflow-3-einzelbestellung-nach-microtech-upserten">Workflow 3: Einzelbestellung nach Microtech upserten</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#workflow-4-kunden-nach-microtech-upserten">Workflow 4: Kunden nach Microtech upserten</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#workflow-5-shopware-produktsync-aus-django">Workflow 5: Shopware-Produktsync aus Django</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#betriebliche-kontrolle">Betriebliche Kontrolle</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="betrieb_technik.html">Betrieb und Technik</a></li>
+<li class="toctree-l1"><a class="reference internal" href="stoerung_nicht_erreichbar.html">Stoerung: Seite nicht erreichbar</a></li>
+<li class="toctree-l1"><a class="reference internal" href="reference/index.html">Referenz</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+      <li>Previous: <a href="operator_checkliste.html" title="vorheriges Kapitel">Operator-Checkliste (1 Seite)</a></li>
+      <li>Next: <a href="betrieb_technik.html" title="nächstes Kapitel">Betrieb und Technik</a></li>
+  </ul></li>
+</ul>
+</div>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 9.1.0</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+      
+      |
+      <a href="_sources/workflows.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

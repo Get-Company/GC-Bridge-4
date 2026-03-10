@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+
+<html lang="de" data-content_root="./">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Einleitung &#8212; GC-Bridge-4 0.1.0 Dokumentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=5ecbeea2" />
+    <link rel="stylesheet" type="text/css" href="_static/basic.css?v=b08954a9" />
+    <link rel="stylesheet" type="text/css" href="_static/alabaster.css?v=27fed22d" />
+    <script src="_static/documentation_options.js?v=7c8c992d"></script>
+    <script src="_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/translations.js?v=9bf55d28"></script>
+    <link rel="index" title="Stichwortverzeichnis" href="genindex.html" />
+    <link rel="search" title="Suche" href="search.html" />
+    <link rel="next" title="Erste Schritte" href="erste_schritte.html" />
+    <link rel="prev" title="GC-Bridge Handbuch" href="index.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="einleitung">
+<h1>Einleitung<a class="headerlink" href="#einleitung" title="Link to this heading">¶</a></h1>
+<section id="was-ist-die-gc-bridge">
+<h2>Was ist die GC-Bridge?<a class="headerlink" href="#was-ist-die-gc-bridge" title="Link to this heading">¶</a></h2>
+<p>Die GC-Bridge verbindet Microtech ERP, Shopware 6 und die interne Django-Datenhaltung.
+Sie sorgt fuer einen kontrollierten Datenaustausch zwischen Produkt-, Kunden- und Bestellwelt.</p>
+</section>
+<section id="zielgruppen">
+<h2>Zielgruppen<a class="headerlink" href="#zielgruppen" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p>Admins, die Datenpflege und Integrationsparameter im Django-Admin betreuen</p></li>
+<li><p>Operatoren, die regelmaessige Sync-Laeufe ausfuehren und pruefen</p></li>
+<li><p>Technik-Verantwortliche, die Dienste, Logs und Deployment betreiben</p></li>
+</ul>
+</section>
+<section id="hauptprinzipien">
+<h2>Hauptprinzipien<a class="headerlink" href="#hauptprinzipien" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p>Produktfluss: Microtech -&gt; Django -&gt; Shopware</p></li>
+<li><p>Bestellfluss: Shopware -&gt; Django -&gt; Microtech</p></li>
+<li><p>Revisionsfaehigkeit ueber Admin-Logeintraege und Laufzeit-Logs</p></li>
+</ul>
+</section>
+<section id="systemueberblick">
+<h2>Systemueberblick<a class="headerlink" href="#systemueberblick" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p>Django-App: GC-Bridge Kernlogik und Admin-UI</p></li>
+<li><p>Uvicorn: ASGI-App-Server auf Port 8000 (localhost)</p></li>
+<li><p>Caddy: Reverse-Proxy auf Port 4711</p></li>
+<li><p>PostgreSQL: persistente Datenhaltung fuer GC-Bridge Models</p></li>
+</ul>
+</section>
+<section id="referenzbereich-fuer-models-admins">
+<h2>Referenzbereich fuer Models/Admins<a class="headerlink" href="#referenzbereich-fuer-models-admins" title="Link to this heading">¶</a></h2>
+<p>Eine vollstaendige, automatisch erzeugte Referenz zu allen lokalen Models und registrierten Admin-Klassen findest du unter:</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="reference/models_und_admins_generated.html"><span class="doc">Model- und Admin-Inventar</span></a></p></li>
+</ul>
+<p>Diese Seite wird beim Sphinx-Build aus dem aktuellen Codebestand generiert.</p>
+</section>
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="index.html">GC-Bridge-4</a></h1>
+
+
+
+
+
+
+
+
+
+<search id="searchbox" style="display: none" role="search">
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Search"/>
+      <input type="submit" value="Los" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script><h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Inhalte</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Einleitung</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#was-ist-die-gc-bridge">Was ist die GC-Bridge?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#zielgruppen">Zielgruppen</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#hauptprinzipien">Hauptprinzipien</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#systemueberblick">Systemueberblick</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#referenzbereich-fuer-models-admins">Referenzbereich fuer Models/Admins</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="erste_schritte.html">Erste Schritte</a></li>
+<li class="toctree-l1"><a class="reference internal" href="workflows.html">Workflows</a></li>
+<li class="toctree-l1"><a class="reference internal" href="betrieb_technik.html">Betrieb und Technik</a></li>
+<li class="toctree-l1"><a class="reference internal" href="stoerung_nicht_erreichbar.html">Stoerung: Seite nicht erreichbar</a></li>
+<li class="toctree-l1"><a class="reference internal" href="reference/index.html">Referenz</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+      <li>Previous: <a href="index.html" title="vorheriges Kapitel">GC-Bridge Handbuch</a></li>
+      <li>Next: <a href="erste_schritte.html" title="nächstes Kapitel">Erste Schritte</a></li>
+  </ul></li>
+</ul>
+</div>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 9.1.0</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+      
+      |
+      <a href="_sources/einleitung.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

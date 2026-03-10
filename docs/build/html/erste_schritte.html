@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+
+<html lang="de" data-content_root="./">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Erste Schritte &#8212; GC-Bridge-4 0.1.0 Dokumentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=5ecbeea2" />
+    <link rel="stylesheet" type="text/css" href="_static/basic.css?v=b08954a9" />
+    <link rel="stylesheet" type="text/css" href="_static/alabaster.css?v=27fed22d" />
+    <script src="_static/documentation_options.js?v=7c8c992d"></script>
+    <script src="_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/translations.js?v=9bf55d28"></script>
+    <link rel="index" title="Stichwortverzeichnis" href="genindex.html" />
+    <link rel="search" title="Suche" href="search.html" />
+    <link rel="next" title="Workflows" href="workflows.html" />
+    <link rel="prev" title="Einleitung" href="einleitung.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="erste-schritte">
+<h1>Erste Schritte<a class="headerlink" href="#erste-schritte" title="Link to this heading">¶</a></h1>
+<section id="voraussetzungen">
+<h2>Voraussetzungen<a class="headerlink" href="#voraussetzungen" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p>Projekt liegt lokal vor (inkl. <code class="docutils literal notranslate"><span class="pre">.env</span></code>)</p></li>
+<li><p>Virtuelle Umgebung ist angelegt und mit <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">sync</span></code> aktualisiert</p></li>
+<li><p>Datenbank ist erreichbar</p></li>
+<li><p>Ein Admin-User existiert</p></li>
+</ul>
+</section>
+<section id="serverstart-auf-windows-klick-datei">
+<h2>Serverstart auf Windows (Klick-Datei)<a class="headerlink" href="#serverstart-auf-windows-klick-datei" title="Link to this heading">¶</a></h2>
+<p>Fuer den manuellen Start per Doppelklick nutze:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">deploy\\windows\\start-server.cmd</span></code></p></li>
+</ul>
+<p>Diese Datei startet beide Scheduled Tasks in der richtigen Reihenfolge:</p>
+<ol class="arabic simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">GC-Bridge-Uvicorn</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">GC-Bridge-Caddy</span></code></p></li>
+</ol>
+<p>Einzelskripte (nur wenn noetig):</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">deploy\\windows\\start-uvicorn.cmd</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">deploy\\windows\\start-caddy.cmd</span></code></p></li>
+</ul>
+</section>
+<section id="erstlogin-im-admin">
+<h2>Erstlogin im Admin<a class="headerlink" href="#erstlogin-im-admin" title="Link to this heading">¶</a></h2>
+<ol class="arabic simple">
+<li><p>Browser oeffnen: <code class="docutils literal notranslate"><span class="pre">http://127.0.0.1:4711/admin/</span></code></p></li>
+<li><p>Mit Admin-Benutzer anmelden</p></li>
+<li><p>Grundkonfiguration pruefen:
+- Shopware-Verbindungen und Sales-Channels
+- Microtech-Einstellungen und Order-Regeln</p></li>
+</ol>
+</section>
+<section id="schneller-funktionstest">
+<h2>Schneller Funktionstest<a class="headerlink" href="#schneller-funktionstest" title="Link to this heading">¶</a></h2>
+<p>Im Projektverzeichnis:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>.venv/bin/python<span class="w"> </span>manage.py<span class="w"> </span>check
+</pre></div>
+</div>
+<p>Produkt-Synchronisation fuer ersten Test:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>.venv/bin/python<span class="w"> </span>manage.py<span class="w"> </span>scheduled_product_sync<span class="w"> </span>--limit<span class="w"> </span><span class="m">5</span>
+</pre></div>
+</div>
+<p>Wenn unter Windows gearbeitet wird:</p>
+<div class="highlight-doscon notranslate"><div class="highlight"><pre><span></span><span class="go">.venv\Scripts\python.exe manage.py scheduled_product_sync --limit 5</span>
+</pre></div>
+</div>
+</section>
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="index.html">GC-Bridge-4</a></h1>
+
+
+
+
+
+
+
+
+
+<search id="searchbox" style="display: none" role="search">
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Search"/>
+      <input type="submit" value="Los" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script><h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Inhalte</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="einleitung.html">Einleitung</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Erste Schritte</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#voraussetzungen">Voraussetzungen</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#serverstart-auf-windows-klick-datei">Serverstart auf Windows (Klick-Datei)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#erstlogin-im-admin">Erstlogin im Admin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#schneller-funktionstest">Schneller Funktionstest</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="workflows.html">Workflows</a></li>
+<li class="toctree-l1"><a class="reference internal" href="betrieb_technik.html">Betrieb und Technik</a></li>
+<li class="toctree-l1"><a class="reference internal" href="stoerung_nicht_erreichbar.html">Stoerung: Seite nicht erreichbar</a></li>
+<li class="toctree-l1"><a class="reference internal" href="reference/index.html">Referenz</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+      <li>Previous: <a href="einleitung.html" title="vorheriges Kapitel">Einleitung</a></li>
+      <li>Next: <a href="workflows.html" title="nächstes Kapitel">Workflows</a></li>
+  </ul></li>
+</ul>
+</div>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 9.1.0</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+      
+      |
+      <a href="_sources/erste_schritte.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

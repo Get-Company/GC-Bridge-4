@@ -1,0 +1,2866 @@
+<!DOCTYPE html>
+
+<html lang="de" data-content_root="../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Model- und Admin-Inventar &#8212; GC-Bridge-4 0.1.0 Dokumentation</title>
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=5ecbeea2" />
+    <link rel="stylesheet" type="text/css" href="../_static/basic.css?v=b08954a9" />
+    <link rel="stylesheet" type="text/css" href="../_static/alabaster.css?v=27fed22d" />
+    <script src="../_static/documentation_options.js?v=7c8c992d"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/translations.js?v=9bf55d28"></script>
+    <link rel="index" title="Stichwortverzeichnis" href="../genindex.html" />
+    <link rel="search" title="Suche" href="../search.html" />
+    <link rel="prev" title="Referenz" href="index.html" />
+   
+  <link rel="stylesheet" href="../_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="model-und-admin-inventar">
+<h1>Model- und Admin-Inventar<a class="headerlink" href="#model-und-admin-inventar" title="Link to this heading">¶</a></h1>
+<p>Diese Seite wird automatisch aus dem Django-Projekt erzeugt und deckt alle lokalen Apps, Models und registrierten Admin-Klassen ab.</p>
+<p>Generiert am: 2026-03-10 09:24:26 UTC</p>
+<section id="core">
+<h2>core<a class="headerlink" href="#core" title="Link to this heading">¶</a></h2>
+<p>Keine lokalen Models in dieser App.</p>
+</section>
+<section id="customer">
+<h2>customer<a class="headerlink" href="#customer" title="Link to this heading">¶</a></h2>
+<section id="customer-address">
+<h3>customer.Address<a class="headerlink" href="#customer-address" title="Link to this heading">¶</a></h3>
+<ul class="simple">
+<li><p>Python: <code class="docutils literal notranslate"><span class="pre">customer.models.Address</span></code></p></li>
+<li><p>DB-Tabelle: <code class="docutils literal notranslate"><span class="pre">customer_address</span></code></p></li>
+<li><p>Verbose Name: <code class="docutils literal notranslate"><span class="pre">Adresse</span></code></p></li>
+<li><p>Verbose Name Plural: <code class="docutils literal notranslate"><span class="pre">Adressen</span></code></p></li>
+<li><p>Default Ordering: <code class="docutils literal notranslate"><span class="pre">customer,</span> <span class="pre">erp_ans_id,</span> <span class="pre">erp_asp_id</span></code></p></li>
+</ul>
+<section id="felder">
+<h4>Felder<a class="headerlink" href="#felder" title="Link to this heading">¶</a></h4>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Typ</p></th>
+<th class="head"><p>Optionen</p></th>
+<th class="head"><p>Details</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>id</p></td>
+<td><p>BigAutoField</p></td>
+<td><p>pk, unique, blank</p></td>
+<td><p>verbose=ID</p></td>
+</tr>
+<tr class="row-odd"><td><p>created_at</p></td>
+<td><p>DateTimeField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Angelegt am</p></td>
+</tr>
+<tr class="row-even"><td><p>updated_at</p></td>
+<td><p>DateTimeField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Aktualisiert am</p></td>
+</tr>
+<tr class="row-odd"><td><p>customer</p></td>
+<td><p>ForeignKey</p></td>
+<td><p>db_index</p></td>
+<td><p>relation=customer.Customer, verbose=Kunde</p></td>
+</tr>
+<tr class="row-even"><td><p>erp_combined_id</p></td>
+<td><p>CharField</p></td>
+<td><p>unique, null, blank</p></td>
+<td><p>verbose=ERP Kombi-ID, max_length=255</p></td>
+</tr>
+<tr class="row-odd"><td><p>api_id</p></td>
+<td><p>CharField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Shopware Adress-ID, max_length=255</p></td>
+</tr>
+<tr class="row-even"><td><p>erp_nr</p></td>
+<td><p>IntegerField</p></td>
+<td><p>null, blank</p></td>
+<td><p>verbose=ERP-Nummer</p></td>
+</tr>
+<tr class="row-odd"><td><p>erp_ans_id</p></td>
+<td><p>IntegerField</p></td>
+<td><p>null, blank</p></td>
+<td><p>verbose=Anschrift-ID</p></td>
+</tr>
+<tr class="row-even"><td><p>erp_ans_nr</p></td>
+<td><p>IntegerField</p></td>
+<td><p>null, blank</p></td>
+<td><p>verbose=Anschrift-Nummer</p></td>
+</tr>
+<tr class="row-odd"><td><p>erp_asp_id</p></td>
+<td><p>IntegerField</p></td>
+<td><p>null, blank</p></td>
+<td><p>verbose=Ansprechpartner-ID</p></td>
+</tr>
+<tr class="row-even"><td><p>erp_asp_nr</p></td>
+<td><p>IntegerField</p></td>
+<td><p>null, blank</p></td>
+<td><p>verbose=Ansprechpartner-Nummer</p></td>
+</tr>
+<tr class="row-odd"><td><p>name1</p></td>
+<td><p>CharField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Name 1, max_length=255</p></td>
+</tr>
+<tr class="row-even"><td><p>name2</p></td>
+<td><p>CharField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Name 2, max_length=255</p></td>
+</tr>
+<tr class="row-odd"><td><p>name3</p></td>
+<td><p>CharField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Name 3, max_length=255</p></td>
+</tr>
+<tr class="row-even"><td><p>department</p></td>
+<td><p>CharField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Abteilung, max_length=255</p></td>
+</tr>
+<tr class="row-odd"><td><p>street</p></td>
+<td><p>CharField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Strasse, max_length=255</p></td>
+</tr>
+<tr class="row-even"><td><p>postal_code</p></td>
+<td><p>CharField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=PLZ, max_length=255</p></td>
+</tr>
+<tr class="row-odd"><td><p>city</p></td>
+<td><p>CharField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Ort, max_length=255</p></td>
+</tr>
+<tr class="row-even"><td><p>country_code</p></td>
+<td><p>CharField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Laendercode, max_length=8</p></td>
+</tr>
+<tr class="row-odd"><td><p>email</p></td>
+<td><p>EmailField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=E-Mail, max_length=255</p></td>
+</tr>
+<tr class="row-even"><td><p>title</p></td>
+<td><p>CharField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Titel, max_length=255</p></td>
+</tr>
+<tr class="row-odd"><td><p>first_name</p></td>
+<td><p>CharField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Vorname, max_length=255</p></td>
+</tr>
+<tr class="row-even"><td><p>last_name</p></td>
+<td><p>CharField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Nachname, max_length=255</p></td>
+</tr>
+<tr class="row-odd"><td><p>phone</p></td>
+<td><p>CharField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Telefon, max_length=255</p></td>
+</tr>
+<tr class="row-even"><td><p>is_shipping</p></td>
+<td><p>BooleanField</p></td>
+<td><p>default=False</p></td>
+<td><p>verbose=Lieferanschrift</p></td>
+</tr>
+<tr class="row-odd"><td><p>is_invoice</p></td>
+<td><p>BooleanField</p></td>
+<td><p>default=False</p></td>
+<td><p>verbose=Rechnungsanschrift</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="admin-konfiguration">
+<h4>Admin-Konfiguration<a class="headerlink" href="#admin-konfiguration" title="Link to this heading">¶</a></h4>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Aspekt</p></th>
+<th class="head"><p>Wert</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Admin-Klasse</p></td>
+<td><p>customer.admin.AddressAdmin</p></td>
+</tr>
+<tr class="row-odd"><td><p>list_display</p></td>
+<td><p>customer, erp_ans_id, name1, city, is_invoice, is_shipping, created_at</p></td>
+</tr>
+<tr class="row-even"><td><p>list_filter</p></td>
+<td><p>(‚is_invoice‘, &lt;class ‚unfold.contrib.filters.admin.choice_filters.BooleanRadioFilter‘&gt;), (‚is_shipping‘, &lt;class ‚unfold.contrib.filters.admin.choice_filters.BooleanRadioFilter‘&gt;), (‚country_code‘, &lt;class ‚unfold.contrib.filters.admin.text_filters.FieldTextFilter‘&gt;), (‚created_at‘, &lt;class ‚unfold.contrib.filters.admin.datetime_filters.RangeDateTimeFilter‘&gt;)</p></td>
+</tr>
+<tr class="row-odd"><td><p>search_fields</p></td>
+<td><p>customer__erp_nr, name1, name2, street, postal_code, city</p></td>
+</tr>
+<tr class="row-even"><td><p>readonly_fields</p></td>
+<td><p>created_at, updated_at</p></td>
+</tr>
+<tr class="row-odd"><td><p>ordering</p></td>
+<td><p>-created_at</p></td>
+</tr>
+<tr class="row-even"><td><p>list_select_related</p></td>
+<td><p>False</p></td>
+</tr>
+<tr class="row-odd"><td><p>list_per_page</p></td>
+<td><p>100</p></td>
+</tr>
+<tr class="row-even"><td><p>inlines</p></td>
+<td><ul class="simple">
+<li></li>
+</ul>
+</td>
+</tr>
+<tr class="row-odd"><td><p>actions</p></td>
+<td><ul class="simple">
+<li></li>
+</ul>
+</td>
+</tr>
+<tr class="row-even"><td><p>action_form</p></td>
+<td><p>unfold.forms.ActionForm</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="customer-customer">
+<h3>customer.Customer<a class="headerlink" href="#customer-customer" title="Link to this heading">¶</a></h3>
+<ul class="simple">
+<li><p>Python: <code class="docutils literal notranslate"><span class="pre">customer.models.Customer</span></code></p></li>
+<li><p>DB-Tabelle: <code class="docutils literal notranslate"><span class="pre">customer_customer</span></code></p></li>
+<li><p>Verbose Name: <code class="docutils literal notranslate"><span class="pre">Kunde</span></code></p></li>
+<li><p>Verbose Name Plural: <code class="docutils literal notranslate"><span class="pre">Kunden</span></code></p></li>
+<li><p>Default Ordering: <code class="docutils literal notranslate"><span class="pre">erp_nr</span></code></p></li>
+</ul>
+<section id="id1">
+<h4>Felder<a class="headerlink" href="#id1" title="Link to this heading">¶</a></h4>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Typ</p></th>
+<th class="head"><p>Optionen</p></th>
+<th class="head"><p>Details</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>id</p></td>
+<td><p>BigAutoField</p></td>
+<td><p>pk, unique, blank</p></td>
+<td><p>verbose=ID</p></td>
+</tr>
+<tr class="row-odd"><td><p>created_at</p></td>
+<td><p>DateTimeField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Angelegt am</p></td>
+</tr>
+<tr class="row-even"><td><p>updated_at</p></td>
+<td><p>DateTimeField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Aktualisiert am</p></td>
+</tr>
+<tr class="row-odd"><td><p>erp_nr</p></td>
+<td><p>CharField</p></td>
+<td><p>unique</p></td>
+<td><p>verbose=ERP-Nummer, max_length=64</p></td>
+</tr>
+<tr class="row-even"><td><p>erp_id</p></td>
+<td><p>IntegerField</p></td>
+<td><p>unique, null, blank</p></td>
+<td><p>verbose=ERP-ID</p></td>
+</tr>
+<tr class="row-odd"><td><p>name</p></td>
+<td><p>CharField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Name, max_length=255</p></td>
+</tr>
+<tr class="row-even"><td><p>email</p></td>
+<td><p>EmailField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=E-Mail, max_length=255</p></td>
+</tr>
+<tr class="row-odd"><td><p>api_id</p></td>
+<td><p>CharField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Shopware Kunden-ID, max_length=255</p></td>
+</tr>
+<tr class="row-even"><td><p>vat_id</p></td>
+<td><p>CharField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=USt-IdNr, max_length=255</p></td>
+</tr>
+<tr class="row-odd"><td><p>is_gross</p></td>
+<td><p>BooleanField</p></td>
+<td><p>default=True</p></td>
+<td><p>verbose=Bruttopreise</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="id2">
+<h4>Admin-Konfiguration<a class="headerlink" href="#id2" title="Link to this heading">¶</a></h4>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Aspekt</p></th>
+<th class="head"><p>Wert</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Admin-Klasse</p></td>
+<td><p>customer.admin.CustomerAdmin</p></td>
+</tr>
+<tr class="row-odd"><td><p>list_display</p></td>
+<td><p>erp_nr, name, email, is_gross, created_at</p></td>
+</tr>
+<tr class="row-even"><td><p>list_filter</p></td>
+<td><p>(‚is_gross‘, &lt;class ‚unfold.contrib.filters.admin.choice_filters.BooleanRadioFilter‘&gt;), (‚created_at‘, &lt;class ‚unfold.contrib.filters.admin.datetime_filters.RangeDateTimeFilter‘&gt;)</p></td>
+</tr>
+<tr class="row-odd"><td><p>search_fields</p></td>
+<td><p>erp_nr, name, email</p></td>
+</tr>
+<tr class="row-even"><td><p>readonly_fields</p></td>
+<td><p>created_at, updated_at</p></td>
+</tr>
+<tr class="row-odd"><td><p>ordering</p></td>
+<td><p>-created_at</p></td>
+</tr>
+<tr class="row-even"><td><p>list_select_related</p></td>
+<td><p>False</p></td>
+</tr>
+<tr class="row-odd"><td><p>list_per_page</p></td>
+<td><p>100</p></td>
+</tr>
+<tr class="row-even"><td><p>inlines</p></td>
+<td><p>customer.admin.AddressInline</p></td>
+</tr>
+<tr class="row-odd"><td><p>actions</p></td>
+<td><p>sync_from_microtech, sync_to_microtech</p></td>
+</tr>
+<tr class="row-even"><td><p>action_form</p></td>
+<td><p>unfold.forms.ActionForm</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+</section>
+<section id="microtech">
+<h2>microtech<a class="headerlink" href="#microtech" title="Link to this heading">¶</a></h2>
+<section id="microtech-microtechdatasetcatalog">
+<h3>microtech.MicrotechDatasetCatalog<a class="headerlink" href="#microtech-microtechdatasetcatalog" title="Link to this heading">¶</a></h3>
+<ul class="simple">
+<li><p>Python: <code class="docutils literal notranslate"><span class="pre">microtech.models.MicrotechDatasetCatalog</span></code></p></li>
+<li><p>DB-Tabelle: <code class="docutils literal notranslate"><span class="pre">microtech_microtechdatasetcatalog</span></code></p></li>
+<li><p>Verbose Name: <code class="docutils literal notranslate"><span class="pre">Microtech</span> <span class="pre">Dataset</span></code></p></li>
+<li><p>Verbose Name Plural: <code class="docutils literal notranslate"><span class="pre">Microtech</span> <span class="pre">Datasets</span></code></p></li>
+<li><p>Default Ordering: <code class="docutils literal notranslate"><span class="pre">priority,</span> <span class="pre">name,</span> <span class="pre">id</span></code></p></li>
+</ul>
+<section id="id3">
+<h4>Felder<a class="headerlink" href="#id3" title="Link to this heading">¶</a></h4>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Typ</p></th>
+<th class="head"><p>Optionen</p></th>
+<th class="head"><p>Details</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>id</p></td>
+<td><p>BigAutoField</p></td>
+<td><p>pk, unique, blank</p></td>
+<td><p>verbose=ID</p></td>
+</tr>
+<tr class="row-odd"><td><p>created_at</p></td>
+<td><p>DateTimeField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Angelegt am</p></td>
+</tr>
+<tr class="row-even"><td><p>updated_at</p></td>
+<td><p>DateTimeField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Aktualisiert am</p></td>
+</tr>
+<tr class="row-odd"><td><p>code</p></td>
+<td><p>CharField</p></td>
+<td><p>unique</p></td>
+<td><p>verbose=Code, max_length=64</p></td>
+</tr>
+<tr class="row-even"><td><p>name</p></td>
+<td><p>CharField</p></td>
+<td><ul class="simple">
+<li></li>
+</ul>
+</td>
+<td><p>verbose=Dataset Name, max_length=255</p></td>
+</tr>
+<tr class="row-odd"><td><p>description</p></td>
+<td><p>CharField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Bezeichnung, max_length=255</p></td>
+</tr>
+<tr class="row-even"><td><p>source_identifier</p></td>
+<td><p>CharField</p></td>
+<td><p>unique</p></td>
+<td><p>verbose=Source Identifier, max_length=255</p></td>
+</tr>
+<tr class="row-odd"><td><p>is_active</p></td>
+<td><p>BooleanField</p></td>
+<td><p>default=True</p></td>
+<td><p>verbose=Aktiv</p></td>
+</tr>
+<tr class="row-even"><td><p>priority</p></td>
+<td><p>PositiveIntegerField</p></td>
+<td><p>default=100</p></td>
+<td><p>verbose=Prioritaet</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="id4">
+<h4>Admin-Konfiguration<a class="headerlink" href="#id4" title="Link to this heading">¶</a></h4>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Aspekt</p></th>
+<th class="head"><p>Wert</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Admin-Klasse</p></td>
+<td><p>microtech.admin.MicrotechDatasetCatalogAdmin</p></td>
+</tr>
+<tr class="row-odd"><td><p>list_display</p></td>
+<td><p>priority, name, description, code, is_active, updated_at</p></td>
+</tr>
+<tr class="row-even"><td><p>list_filter</p></td>
+<td><p>is_active</p></td>
+</tr>
+<tr class="row-odd"><td><p>search_fields</p></td>
+<td><p>code, name, description, source_identifier</p></td>
+</tr>
+<tr class="row-even"><td><p>readonly_fields</p></td>
+<td><p>created_at, updated_at</p></td>
+</tr>
+<tr class="row-odd"><td><p>ordering</p></td>
+<td><p>priority, name, id</p></td>
+</tr>
+<tr class="row-even"><td><p>list_select_related</p></td>
+<td><p>False</p></td>
+</tr>
+<tr class="row-odd"><td><p>list_per_page</p></td>
+<td><p>100</p></td>
+</tr>
+<tr class="row-even"><td><p>inlines</p></td>
+<td><ul class="simple">
+<li></li>
+</ul>
+</td>
+</tr>
+<tr class="row-odd"><td><p>actions</p></td>
+<td><ul class="simple">
+<li></li>
+</ul>
+</td>
+</tr>
+<tr class="row-even"><td><p>action_form</p></td>
+<td><p>unfold.forms.ActionForm</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="microtech-microtechdatasetfield">
+<h3>microtech.MicrotechDatasetField<a class="headerlink" href="#microtech-microtechdatasetfield" title="Link to this heading">¶</a></h3>
+<ul class="simple">
+<li><p>Python: <code class="docutils literal notranslate"><span class="pre">microtech.models.MicrotechDatasetField</span></code></p></li>
+<li><p>DB-Tabelle: <code class="docutils literal notranslate"><span class="pre">microtech_microtechdatasetfield</span></code></p></li>
+<li><p>Verbose Name: <code class="docutils literal notranslate"><span class="pre">Microtech</span> <span class="pre">Dataset</span> <span class="pre">Feld</span></code></p></li>
+<li><p>Verbose Name Plural: <code class="docutils literal notranslate"><span class="pre">Microtech</span> <span class="pre">Dataset</span> <span class="pre">Felder</span></code></p></li>
+<li><p>Default Ordering: <code class="docutils literal notranslate"><span class="pre">dataset__priority,</span> <span class="pre">dataset_id,</span> <span class="pre">priority,</span> <span class="pre">field_name,</span> <span class="pre">id</span></code></p></li>
+</ul>
+<section id="id5">
+<h4>Felder<a class="headerlink" href="#id5" title="Link to this heading">¶</a></h4>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Typ</p></th>
+<th class="head"><p>Optionen</p></th>
+<th class="head"><p>Details</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>id</p></td>
+<td><p>BigAutoField</p></td>
+<td><p>pk, unique, blank</p></td>
+<td><p>verbose=ID</p></td>
+</tr>
+<tr class="row-odd"><td><p>created_at</p></td>
+<td><p>DateTimeField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Angelegt am</p></td>
+</tr>
+<tr class="row-even"><td><p>updated_at</p></td>
+<td><p>DateTimeField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Aktualisiert am</p></td>
+</tr>
+<tr class="row-odd"><td><p>dataset</p></td>
+<td><p>ForeignKey</p></td>
+<td><p>db_index</p></td>
+<td><p>relation=microtech.MicrotechDatasetCatalog, verbose=Dataset</p></td>
+</tr>
+<tr class="row-even"><td><p>field_name</p></td>
+<td><p>CharField</p></td>
+<td><ul class="simple">
+<li></li>
+</ul>
+</td>
+<td><p>verbose=Feldname, max_length=128</p></td>
+</tr>
+<tr class="row-odd"><td><p>label</p></td>
+<td><p>CharField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Bezeichnung, max_length=255</p></td>
+</tr>
+<tr class="row-even"><td><p>field_type</p></td>
+<td><p>CharField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Feldtyp, max_length=64</p></td>
+</tr>
+<tr class="row-odd"><td><p>is_calc_field</p></td>
+<td><p>BooleanField</p></td>
+<td><p>default=False</p></td>
+<td><p>verbose=Berechnetes Feld</p></td>
+</tr>
+<tr class="row-even"><td><p>can_access</p></td>
+<td><p>BooleanField</p></td>
+<td><p>default=True</p></td>
+<td><p>verbose=Lesbar</p></td>
+</tr>
+<tr class="row-odd"><td><p>is_active</p></td>
+<td><p>BooleanField</p></td>
+<td><p>default=True</p></td>
+<td><p>verbose=Aktiv</p></td>
+</tr>
+<tr class="row-even"><td><p>priority</p></td>
+<td><p>PositiveIntegerField</p></td>
+<td><p>default=100</p></td>
+<td><p>verbose=Prioritaet</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="id6">
+<h4>Admin-Konfiguration<a class="headerlink" href="#id6" title="Link to this heading">¶</a></h4>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Aspekt</p></th>
+<th class="head"><p>Wert</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Admin-Klasse</p></td>
+<td><p>microtech.admin.MicrotechDatasetFieldAdmin</p></td>
+</tr>
+<tr class="row-odd"><td><p>list_display</p></td>
+<td><p>priority, dataset, field_name, field_type, is_calc_field, can_access, is_active, updated_at</p></td>
+</tr>
+<tr class="row-even"><td><p>list_filter</p></td>
+<td><p>is_active, is_calc_field, can_access, field_type, dataset</p></td>
+</tr>
+<tr class="row-odd"><td><p>search_fields</p></td>
+<td><p>field_name, label, field_type, dataset__name, dataset__description</p></td>
+</tr>
+<tr class="row-even"><td><p>readonly_fields</p></td>
+<td><p>created_at, updated_at</p></td>
+</tr>
+<tr class="row-odd"><td><p>ordering</p></td>
+<td><p>dataset__priority, dataset__name, priority, field_name, id</p></td>
+</tr>
+<tr class="row-even"><td><p>list_select_related</p></td>
+<td><p>False</p></td>
+</tr>
+<tr class="row-odd"><td><p>list_per_page</p></td>
+<td><p>100</p></td>
+</tr>
+<tr class="row-even"><td><p>inlines</p></td>
+<td><ul class="simple">
+<li></li>
+</ul>
+</td>
+</tr>
+<tr class="row-odd"><td><p>actions</p></td>
+<td><ul class="simple">
+<li></li>
+</ul>
+</td>
+</tr>
+<tr class="row-even"><td><p>action_form</p></td>
+<td><p>unfold.forms.ActionForm</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="microtech-microtechorderrule">
+<h3>microtech.MicrotechOrderRule<a class="headerlink" href="#microtech-microtechorderrule" title="Link to this heading">¶</a></h3>
+<ul class="simple">
+<li><p>Python: <code class="docutils literal notranslate"><span class="pre">microtech.models.MicrotechOrderRule</span></code></p></li>
+<li><p>DB-Tabelle: <code class="docutils literal notranslate"><span class="pre">microtech_microtechorderrule</span></code></p></li>
+<li><p>Verbose Name: <code class="docutils literal notranslate"><span class="pre">Microtech</span> <span class="pre">Bestellregel</span></code></p></li>
+<li><p>Verbose Name Plural: <code class="docutils literal notranslate"><span class="pre">Microtech</span> <span class="pre">Bestellregeln</span></code></p></li>
+<li><p>Default Ordering: <code class="docutils literal notranslate"><span class="pre">priority,</span> <span class="pre">id</span></code></p></li>
+</ul>
+<section id="id7">
+<h4>Felder<a class="headerlink" href="#id7" title="Link to this heading">¶</a></h4>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Typ</p></th>
+<th class="head"><p>Optionen</p></th>
+<th class="head"><p>Details</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>id</p></td>
+<td><p>BigAutoField</p></td>
+<td><p>pk, unique, blank</p></td>
+<td><p>verbose=ID</p></td>
+</tr>
+<tr class="row-odd"><td><p>created_at</p></td>
+<td><p>DateTimeField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Angelegt am</p></td>
+</tr>
+<tr class="row-even"><td><p>updated_at</p></td>
+<td><p>DateTimeField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Aktualisiert am</p></td>
+</tr>
+<tr class="row-odd"><td><p>name</p></td>
+<td><p>CharField</p></td>
+<td><ul class="simple">
+<li></li>
+</ul>
+</td>
+<td><p>verbose=Name, max_length=255</p></td>
+</tr>
+<tr class="row-even"><td><p>is_active</p></td>
+<td><p>BooleanField</p></td>
+<td><p>default=True</p></td>
+<td><p>verbose=Aktiv</p></td>
+</tr>
+<tr class="row-odd"><td><p>priority</p></td>
+<td><p>PositiveIntegerField</p></td>
+<td><p>default=100</p></td>
+<td><p>verbose=Prioritaet</p></td>
+</tr>
+<tr class="row-even"><td><p>condition_logic</p></td>
+<td><p>CharField</p></td>
+<td><p>default=all</p></td>
+<td><p>choices=2, verbose=Bedingungslogik, max_length=16</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="id8">
+<h4>Admin-Konfiguration<a class="headerlink" href="#id8" title="Link to this heading">¶</a></h4>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Aspekt</p></th>
+<th class="head"><p>Wert</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Admin-Klasse</p></td>
+<td><p>microtech.admin.MicrotechOrderRuleAdmin</p></td>
+</tr>
+<tr class="row-odd"><td><p>list_display</p></td>
+<td><p>priority, name, is_active, condition_logic, updated_at</p></td>
+</tr>
+<tr class="row-even"><td><p>list_filter</p></td>
+<td><p>is_active, condition_logic</p></td>
+</tr>
+<tr class="row-odd"><td><p>search_fields</p></td>
+<td><p>name</p></td>
+</tr>
+<tr class="row-even"><td><p>readonly_fields</p></td>
+<td><p>created_at, updated_at</p></td>
+</tr>
+<tr class="row-odd"><td><p>ordering</p></td>
+<td><p>priority, id</p></td>
+</tr>
+<tr class="row-even"><td><p>list_select_related</p></td>
+<td><p>False</p></td>
+</tr>
+<tr class="row-odd"><td><p>list_per_page</p></td>
+<td><p>100</p></td>
+</tr>
+<tr class="row-even"><td><p>inlines</p></td>
+<td><p>microtech.admin.ConditionInline, microtech.admin.ActionInline</p></td>
+</tr>
+<tr class="row-odd"><td><p>actions</p></td>
+<td><ul class="simple">
+<li></li>
+</ul>
+</td>
+</tr>
+<tr class="row-even"><td><p>action_form</p></td>
+<td><p>unfold.forms.ActionForm</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="microtech-microtechorderruleaction">
+<h3>microtech.MicrotechOrderRuleAction<a class="headerlink" href="#microtech-microtechorderruleaction" title="Link to this heading">¶</a></h3>
+<ul class="simple">
+<li><p>Python: <code class="docutils literal notranslate"><span class="pre">microtech.models.MicrotechOrderRuleAction</span></code></p></li>
+<li><p>DB-Tabelle: <code class="docutils literal notranslate"><span class="pre">microtech_microtechorderruleaction</span></code></p></li>
+<li><p>Verbose Name: <code class="docutils literal notranslate"><span class="pre">Microtech</span> <span class="pre">Bestellregel</span> <span class="pre">Aktion</span></code></p></li>
+<li><p>Verbose Name Plural: <code class="docutils literal notranslate"><span class="pre">Microtech</span> <span class="pre">Bestellregel</span> <span class="pre">Aktionen</span></code></p></li>
+<li><p>Default Ordering: <code class="docutils literal notranslate"><span class="pre">rule,</span> <span class="pre">priority,</span> <span class="pre">id</span></code></p></li>
+</ul>
+<section id="id9">
+<h4>Felder<a class="headerlink" href="#id9" title="Link to this heading">¶</a></h4>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Typ</p></th>
+<th class="head"><p>Optionen</p></th>
+<th class="head"><p>Details</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>id</p></td>
+<td><p>BigAutoField</p></td>
+<td><p>pk, unique, blank</p></td>
+<td><p>verbose=ID</p></td>
+</tr>
+<tr class="row-odd"><td><p>created_at</p></td>
+<td><p>DateTimeField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Angelegt am</p></td>
+</tr>
+<tr class="row-even"><td><p>updated_at</p></td>
+<td><p>DateTimeField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Aktualisiert am</p></td>
+</tr>
+<tr class="row-odd"><td><p>rule</p></td>
+<td><p>ForeignKey</p></td>
+<td><p>db_index</p></td>
+<td><p>relation=microtech.MicrotechOrderRule, verbose=Regel</p></td>
+</tr>
+<tr class="row-even"><td><p>is_active</p></td>
+<td><p>BooleanField</p></td>
+<td><p>default=True</p></td>
+<td><p>verbose=Aktiv</p></td>
+</tr>
+<tr class="row-odd"><td><p>priority</p></td>
+<td><p>PositiveIntegerField</p></td>
+<td><p>default=100</p></td>
+<td><p>verbose=Prioritaet</p></td>
+</tr>
+<tr class="row-even"><td><p>target_field</p></td>
+<td><p>CharField</p></td>
+<td><ul class="simple">
+<li></li>
+</ul>
+</td>
+<td><p>verbose=Target Feld, max_length=64</p></td>
+</tr>
+<tr class="row-odd"><td><p>target_value</p></td>
+<td><p>CharField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Zielwert, max_length=255</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="id10">
+<h4>Admin-Konfiguration<a class="headerlink" href="#id10" title="Link to this heading">¶</a></h4>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Aspekt</p></th>
+<th class="head"><p>Wert</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Registrierung</p></td>
+<td><p>Kein ModelAdmin registriert</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="microtech-microtechorderruleactiontarget">
+<h3>microtech.MicrotechOrderRuleActionTarget<a class="headerlink" href="#microtech-microtechorderruleactiontarget" title="Link to this heading">¶</a></h3>
+<ul class="simple">
+<li><p>Python: <code class="docutils literal notranslate"><span class="pre">microtech.models.MicrotechOrderRuleActionTarget</span></code></p></li>
+<li><p>DB-Tabelle: <code class="docutils literal notranslate"><span class="pre">microtech_microtechorderruleactiontarget</span></code></p></li>
+<li><p>Verbose Name: <code class="docutils literal notranslate"><span class="pre">Microtech</span> <span class="pre">Bestellregel</span> <span class="pre">Target</span> <span class="pre">Feld</span></code></p></li>
+<li><p>Verbose Name Plural: <code class="docutils literal notranslate"><span class="pre">Microtech</span> <span class="pre">Bestellregel</span> <span class="pre">Target</span> <span class="pre">Felder</span></code></p></li>
+<li><p>Default Ordering: <code class="docutils literal notranslate"><span class="pre">priority,</span> <span class="pre">id</span></code></p></li>
+</ul>
+<section id="id11">
+<h4>Felder<a class="headerlink" href="#id11" title="Link to this heading">¶</a></h4>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Typ</p></th>
+<th class="head"><p>Optionen</p></th>
+<th class="head"><p>Details</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>id</p></td>
+<td><p>BigAutoField</p></td>
+<td><p>pk, unique, blank</p></td>
+<td><p>verbose=ID</p></td>
+</tr>
+<tr class="row-odd"><td><p>created_at</p></td>
+<td><p>DateTimeField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Angelegt am</p></td>
+</tr>
+<tr class="row-even"><td><p>updated_at</p></td>
+<td><p>DateTimeField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Aktualisiert am</p></td>
+</tr>
+<tr class="row-odd"><td><p>code</p></td>
+<td><p>CharField</p></td>
+<td><p>unique</p></td>
+<td><p>verbose=Code, max_length=64</p></td>
+</tr>
+<tr class="row-even"><td><p>name</p></td>
+<td><p>CharField</p></td>
+<td><ul class="simple">
+<li></li>
+</ul>
+</td>
+<td><p>verbose=Name, max_length=255</p></td>
+</tr>
+<tr class="row-odd"><td><p>engine_target_field</p></td>
+<td><p>CharField</p></td>
+<td><ul class="simple">
+<li></li>
+</ul>
+</td>
+<td><p>choices=11, verbose=Engine Target Feld, max_length=64</p></td>
+</tr>
+<tr class="row-even"><td><p>value_type</p></td>
+<td><p>CharField</p></td>
+<td><p>default=string</p></td>
+<td><p>choices=5, verbose=Wertetyp, max_length=32</p></td>
+</tr>
+<tr class="row-odd"><td><p>enum_values</p></td>
+<td><p>CharField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Enum Werte (kommagetrennt), max_length=255</p></td>
+</tr>
+<tr class="row-even"><td><p>dataset_field</p></td>
+<td><p>ForeignKey</p></td>
+<td><p>db_index, null, blank</p></td>
+<td><p>relation=microtech.MicrotechDatasetField, verbose=Dataset Feld (Katalog)</p></td>
+</tr>
+<tr class="row-odd"><td><p>hint</p></td>
+<td><p>CharField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Hinweis, max_length=255</p></td>
+</tr>
+<tr class="row-even"><td><p>example</p></td>
+<td><p>CharField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Beispiel, max_length=255</p></td>
+</tr>
+<tr class="row-odd"><td><p>is_active</p></td>
+<td><p>BooleanField</p></td>
+<td><p>default=True</p></td>
+<td><p>verbose=Aktiv</p></td>
+</tr>
+<tr class="row-even"><td><p>priority</p></td>
+<td><p>PositiveIntegerField</p></td>
+<td><p>default=100</p></td>
+<td><p>verbose=Prioritaet</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="id12">
+<h4>Admin-Konfiguration<a class="headerlink" href="#id12" title="Link to this heading">¶</a></h4>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Aspekt</p></th>
+<th class="head"><p>Wert</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Admin-Klasse</p></td>
+<td><p>microtech.admin.MicrotechOrderRuleActionTargetAdmin</p></td>
+</tr>
+<tr class="row-odd"><td><p>list_display</p></td>
+<td><p>priority, name, code, engine_target_field, dataset_field, value_type, is_active, updated_at</p></td>
+</tr>
+<tr class="row-even"><td><p>list_filter</p></td>
+<td><p>is_active, value_type, engine_target_field, dataset_field__dataset</p></td>
+</tr>
+<tr class="row-odd"><td><p>search_fields</p></td>
+<td><p>code, name, hint, example</p></td>
+</tr>
+<tr class="row-even"><td><p>readonly_fields</p></td>
+<td><p>created_at, updated_at</p></td>
+</tr>
+<tr class="row-odd"><td><p>ordering</p></td>
+<td><p>priority, id</p></td>
+</tr>
+<tr class="row-even"><td><p>list_select_related</p></td>
+<td><p>False</p></td>
+</tr>
+<tr class="row-odd"><td><p>list_per_page</p></td>
+<td><p>100</p></td>
+</tr>
+<tr class="row-even"><td><p>inlines</p></td>
+<td><ul class="simple">
+<li></li>
+</ul>
+</td>
+</tr>
+<tr class="row-odd"><td><p>actions</p></td>
+<td><ul class="simple">
+<li></li>
+</ul>
+</td>
+</tr>
+<tr class="row-even"><td><p>action_form</p></td>
+<td><p>unfold.forms.ActionForm</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="microtech-microtechorderrulecondition">
+<h3>microtech.MicrotechOrderRuleCondition<a class="headerlink" href="#microtech-microtechorderrulecondition" title="Link to this heading">¶</a></h3>
+<ul class="simple">
+<li><p>Python: <code class="docutils literal notranslate"><span class="pre">microtech.models.MicrotechOrderRuleCondition</span></code></p></li>
+<li><p>DB-Tabelle: <code class="docutils literal notranslate"><span class="pre">microtech_microtechorderrulecondition</span></code></p></li>
+<li><p>Verbose Name: <code class="docutils literal notranslate"><span class="pre">Microtech</span> <span class="pre">Bestellregel</span> <span class="pre">Bedingung</span></code></p></li>
+<li><p>Verbose Name Plural: <code class="docutils literal notranslate"><span class="pre">Microtech</span> <span class="pre">Bestellregel</span> <span class="pre">Bedingungen</span></code></p></li>
+<li><p>Default Ordering: <code class="docutils literal notranslate"><span class="pre">rule,</span> <span class="pre">priority,</span> <span class="pre">id</span></code></p></li>
+</ul>
+<section id="id13">
+<h4>Felder<a class="headerlink" href="#id13" title="Link to this heading">¶</a></h4>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Typ</p></th>
+<th class="head"><p>Optionen</p></th>
+<th class="head"><p>Details</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>id</p></td>
+<td><p>BigAutoField</p></td>
+<td><p>pk, unique, blank</p></td>
+<td><p>verbose=ID</p></td>
+</tr>
+<tr class="row-odd"><td><p>created_at</p></td>
+<td><p>DateTimeField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Angelegt am</p></td>
+</tr>
+<tr class="row-even"><td><p>updated_at</p></td>
+<td><p>DateTimeField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Aktualisiert am</p></td>
+</tr>
+<tr class="row-odd"><td><p>rule</p></td>
+<td><p>ForeignKey</p></td>
+<td><p>db_index</p></td>
+<td><p>relation=microtech.MicrotechOrderRule, verbose=Regel</p></td>
+</tr>
+<tr class="row-even"><td><p>is_active</p></td>
+<td><p>BooleanField</p></td>
+<td><p>default=True</p></td>
+<td><p>verbose=Aktiv</p></td>
+</tr>
+<tr class="row-odd"><td><p>priority</p></td>
+<td><p>PositiveIntegerField</p></td>
+<td><p>default=100</p></td>
+<td><p>verbose=Prioritaet</p></td>
+</tr>
+<tr class="row-even"><td><p>source_field</p></td>
+<td><p>CharField</p></td>
+<td><ul class="simple">
+<li></li>
+</ul>
+</td>
+<td><p>verbose=Source Feld, max_length=64</p></td>
+</tr>
+<tr class="row-odd"><td><p>operator</p></td>
+<td><p>CharField</p></td>
+<td><p>default=eq</p></td>
+<td><p>verbose=Operator, max_length=16</p></td>
+</tr>
+<tr class="row-even"><td><p>expected_value</p></td>
+<td><p>CharField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Vergleichswert, max_length=255</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="id14">
+<h4>Admin-Konfiguration<a class="headerlink" href="#id14" title="Link to this heading">¶</a></h4>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Aspekt</p></th>
+<th class="head"><p>Wert</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Registrierung</p></td>
+<td><p>Kein ModelAdmin registriert</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="microtech-microtechorderruleconditionsource">
+<h3>microtech.MicrotechOrderRuleConditionSource<a class="headerlink" href="#microtech-microtechorderruleconditionsource" title="Link to this heading">¶</a></h3>
+<ul class="simple">
+<li><p>Python: <code class="docutils literal notranslate"><span class="pre">microtech.models.MicrotechOrderRuleConditionSource</span></code></p></li>
+<li><p>DB-Tabelle: <code class="docutils literal notranslate"><span class="pre">microtech_microtechorderruleconditionsource</span></code></p></li>
+<li><p>Verbose Name: <code class="docutils literal notranslate"><span class="pre">Microtech</span> <span class="pre">Bestellregel</span> <span class="pre">Source</span> <span class="pre">Feld</span></code></p></li>
+<li><p>Verbose Name Plural: <code class="docutils literal notranslate"><span class="pre">Microtech</span> <span class="pre">Bestellregel</span> <span class="pre">Source</span> <span class="pre">Felder</span></code></p></li>
+<li><p>Default Ordering: <code class="docutils literal notranslate"><span class="pre">priority,</span> <span class="pre">id</span></code></p></li>
+</ul>
+<section id="id15">
+<h4>Felder<a class="headerlink" href="#id15" title="Link to this heading">¶</a></h4>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Typ</p></th>
+<th class="head"><p>Optionen</p></th>
+<th class="head"><p>Details</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>id</p></td>
+<td><p>BigAutoField</p></td>
+<td><p>pk, unique, blank</p></td>
+<td><p>verbose=ID</p></td>
+</tr>
+<tr class="row-odd"><td><p>created_at</p></td>
+<td><p>DateTimeField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Angelegt am</p></td>
+</tr>
+<tr class="row-even"><td><p>updated_at</p></td>
+<td><p>DateTimeField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Aktualisiert am</p></td>
+</tr>
+<tr class="row-odd"><td><p>code</p></td>
+<td><p>CharField</p></td>
+<td><p>unique</p></td>
+<td><p>verbose=Code, max_length=64</p></td>
+</tr>
+<tr class="row-even"><td><p>name</p></td>
+<td><p>CharField</p></td>
+<td><ul class="simple">
+<li></li>
+</ul>
+</td>
+<td><p>verbose=Name, max_length=255</p></td>
+</tr>
+<tr class="row-odd"><td><p>engine_source_field</p></td>
+<td><p>CharField</p></td>
+<td><ul class="simple">
+<li></li>
+</ul>
+</td>
+<td><p>choices=9, verbose=Engine Source Feld, max_length=64</p></td>
+</tr>
+<tr class="row-even"><td><p>value_type</p></td>
+<td><p>CharField</p></td>
+<td><p>default=string</p></td>
+<td><p>choices=4, verbose=Wertetyp, max_length=32</p></td>
+</tr>
+<tr class="row-odd"><td><p>dataset_field</p></td>
+<td><p>ForeignKey</p></td>
+<td><p>db_index, null, blank</p></td>
+<td><p>relation=microtech.MicrotechDatasetField, verbose=Dataset Feld (Katalog)</p></td>
+</tr>
+<tr class="row-even"><td><p>hint</p></td>
+<td><p>CharField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Hinweis, max_length=255</p></td>
+</tr>
+<tr class="row-odd"><td><p>example</p></td>
+<td><p>CharField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Beispiel, max_length=255</p></td>
+</tr>
+<tr class="row-even"><td><p>is_active</p></td>
+<td><p>BooleanField</p></td>
+<td><p>default=True</p></td>
+<td><p>verbose=Aktiv</p></td>
+</tr>
+<tr class="row-odd"><td><p>priority</p></td>
+<td><p>PositiveIntegerField</p></td>
+<td><p>default=100</p></td>
+<td><p>verbose=Prioritaet</p></td>
+</tr>
+<tr class="row-even"><td><p>operators</p></td>
+<td><p>ManyToManyField</p></td>
+<td><p>blank</p></td>
+<td><p>relation=microtech.MicrotechOrderRuleOperator, verbose=Erlaubte Operatoren</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="id16">
+<h4>Admin-Konfiguration<a class="headerlink" href="#id16" title="Link to this heading">¶</a></h4>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Aspekt</p></th>
+<th class="head"><p>Wert</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Admin-Klasse</p></td>
+<td><p>microtech.admin.MicrotechOrderRuleConditionSourceAdmin</p></td>
+</tr>
+<tr class="row-odd"><td><p>list_display</p></td>
+<td><p>priority, name, code, engine_source_field, dataset_field, value_type, is_active, updated_at</p></td>
+</tr>
+<tr class="row-even"><td><p>list_filter</p></td>
+<td><p>is_active, value_type, engine_source_field, dataset_field__dataset</p></td>
+</tr>
+<tr class="row-odd"><td><p>search_fields</p></td>
+<td><p>code, name, hint, example</p></td>
+</tr>
+<tr class="row-even"><td><p>readonly_fields</p></td>
+<td><p>created_at, updated_at</p></td>
+</tr>
+<tr class="row-odd"><td><p>ordering</p></td>
+<td><p>priority, id</p></td>
+</tr>
+<tr class="row-even"><td><p>list_select_related</p></td>
+<td><p>False</p></td>
+</tr>
+<tr class="row-odd"><td><p>list_per_page</p></td>
+<td><p>100</p></td>
+</tr>
+<tr class="row-even"><td><p>inlines</p></td>
+<td><ul class="simple">
+<li></li>
+</ul>
+</td>
+</tr>
+<tr class="row-odd"><td><p>actions</p></td>
+<td><ul class="simple">
+<li></li>
+</ul>
+</td>
+</tr>
+<tr class="row-even"><td><p>action_form</p></td>
+<td><p>unfold.forms.ActionForm</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="microtech-microtechorderruleoperator">
+<h3>microtech.MicrotechOrderRuleOperator<a class="headerlink" href="#microtech-microtechorderruleoperator" title="Link to this heading">¶</a></h3>
+<ul class="simple">
+<li><p>Python: <code class="docutils literal notranslate"><span class="pre">microtech.models.MicrotechOrderRuleOperator</span></code></p></li>
+<li><p>DB-Tabelle: <code class="docutils literal notranslate"><span class="pre">microtech_microtechorderruleoperator</span></code></p></li>
+<li><p>Verbose Name: <code class="docutils literal notranslate"><span class="pre">Microtech</span> <span class="pre">Bestellregel</span> <span class="pre">Operator</span></code></p></li>
+<li><p>Verbose Name Plural: <code class="docutils literal notranslate"><span class="pre">Microtech</span> <span class="pre">Bestellregel</span> <span class="pre">Operatoren</span></code></p></li>
+<li><p>Default Ordering: <code class="docutils literal notranslate"><span class="pre">priority,</span> <span class="pre">id</span></code></p></li>
+</ul>
+<section id="id17">
+<h4>Felder<a class="headerlink" href="#id17" title="Link to this heading">¶</a></h4>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Typ</p></th>
+<th class="head"><p>Optionen</p></th>
+<th class="head"><p>Details</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>id</p></td>
+<td><p>BigAutoField</p></td>
+<td><p>pk, unique, blank</p></td>
+<td><p>verbose=ID</p></td>
+</tr>
+<tr class="row-odd"><td><p>created_at</p></td>
+<td><p>DateTimeField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Angelegt am</p></td>
+</tr>
+<tr class="row-even"><td><p>updated_at</p></td>
+<td><p>DateTimeField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Aktualisiert am</p></td>
+</tr>
+<tr class="row-odd"><td><p>code</p></td>
+<td><p>CharField</p></td>
+<td><p>unique</p></td>
+<td><p>verbose=Code, max_length=64</p></td>
+</tr>
+<tr class="row-even"><td><p>name</p></td>
+<td><p>CharField</p></td>
+<td><ul class="simple">
+<li></li>
+</ul>
+</td>
+<td><p>verbose=Name, max_length=255</p></td>
+</tr>
+<tr class="row-odd"><td><p>engine_operator</p></td>
+<td><p>CharField</p></td>
+<td><p>default=eq</p></td>
+<td><p>choices=4, verbose=Engine Operator, max_length=16</p></td>
+</tr>
+<tr class="row-even"><td><p>hint</p></td>
+<td><p>CharField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Hinweis, max_length=255</p></td>
+</tr>
+<tr class="row-odd"><td><p>is_active</p></td>
+<td><p>BooleanField</p></td>
+<td><p>default=True</p></td>
+<td><p>verbose=Aktiv</p></td>
+</tr>
+<tr class="row-even"><td><p>priority</p></td>
+<td><p>PositiveIntegerField</p></td>
+<td><p>default=100</p></td>
+<td><p>verbose=Prioritaet</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="id18">
+<h4>Admin-Konfiguration<a class="headerlink" href="#id18" title="Link to this heading">¶</a></h4>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Aspekt</p></th>
+<th class="head"><p>Wert</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Admin-Klasse</p></td>
+<td><p>microtech.admin.MicrotechOrderRuleOperatorAdmin</p></td>
+</tr>
+<tr class="row-odd"><td><p>list_display</p></td>
+<td><p>priority, name, code, engine_operator, is_active, updated_at</p></td>
+</tr>
+<tr class="row-even"><td><p>list_filter</p></td>
+<td><p>is_active, engine_operator</p></td>
+</tr>
+<tr class="row-odd"><td><p>search_fields</p></td>
+<td><p>code, name, hint</p></td>
+</tr>
+<tr class="row-even"><td><p>readonly_fields</p></td>
+<td><p>created_at, updated_at</p></td>
+</tr>
+<tr class="row-odd"><td><p>ordering</p></td>
+<td><p>priority, id</p></td>
+</tr>
+<tr class="row-even"><td><p>list_select_related</p></td>
+<td><p>False</p></td>
+</tr>
+<tr class="row-odd"><td><p>list_per_page</p></td>
+<td><p>100</p></td>
+</tr>
+<tr class="row-even"><td><p>inlines</p></td>
+<td><ul class="simple">
+<li></li>
+</ul>
+</td>
+</tr>
+<tr class="row-odd"><td><p>actions</p></td>
+<td><ul class="simple">
+<li></li>
+</ul>
+</td>
+</tr>
+<tr class="row-even"><td><p>action_form</p></td>
+<td><p>unfold.forms.ActionForm</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="microtech-microtechsettings">
+<h3>microtech.MicrotechSettings<a class="headerlink" href="#microtech-microtechsettings" title="Link to this heading">¶</a></h3>
+<ul class="simple">
+<li><p>Python: <code class="docutils literal notranslate"><span class="pre">microtech.models.MicrotechSettings</span></code></p></li>
+<li><p>DB-Tabelle: <code class="docutils literal notranslate"><span class="pre">microtech_microtechsettings</span></code></p></li>
+<li><p>Verbose Name: <code class="docutils literal notranslate"><span class="pre">Microtech</span> <span class="pre">Konfiguration</span></code></p></li>
+<li><p>Verbose Name Plural: <code class="docutils literal notranslate"><span class="pre">Microtech</span> <span class="pre">Konfiguration</span></code></p></li>
+<li><p>Default Ordering: <code class="docutils literal notranslate"><span class="pre">-</span></code></p></li>
+</ul>
+<section id="id19">
+<h4>Felder<a class="headerlink" href="#id19" title="Link to this heading">¶</a></h4>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Typ</p></th>
+<th class="head"><p>Optionen</p></th>
+<th class="head"><p>Details</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>id</p></td>
+<td><p>BigAutoField</p></td>
+<td><p>pk, unique, blank</p></td>
+<td><p>verbose=ID</p></td>
+</tr>
+<tr class="row-odd"><td><p>created_at</p></td>
+<td><p>DateTimeField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Angelegt am</p></td>
+</tr>
+<tr class="row-even"><td><p>updated_at</p></td>
+<td><p>DateTimeField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Aktualisiert am</p></td>
+</tr>
+<tr class="row-odd"><td><p>mandant</p></td>
+<td><p>CharField</p></td>
+<td><ul class="simple">
+<li></li>
+</ul>
+</td>
+<td><p>verbose=Mandant, max_length=100</p></td>
+</tr>
+<tr class="row-even"><td><p>firma</p></td>
+<td><p>CharField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Firma, max_length=255</p></td>
+</tr>
+<tr class="row-odd"><td><p>benutzer</p></td>
+<td><p>CharField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Benutzer (Autosync), max_length=100</p></td>
+</tr>
+<tr class="row-even"><td><p>manual_benutzer</p></td>
+<td><p>CharField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Benutzer (Manuell), max_length=100</p></td>
+</tr>
+<tr class="row-odd"><td><p>default_zahlungsart_id</p></td>
+<td><p>PositiveIntegerField</p></td>
+<td><p>default=22</p></td>
+<td><p>verbose=Standard Zahlungsart-ID</p></td>
+</tr>
+<tr class="row-even"><td><p>default_versandart_id</p></td>
+<td><p>PositiveIntegerField</p></td>
+<td><p>default=10</p></td>
+<td><p>verbose=Standard Versandart-ID</p></td>
+</tr>
+<tr class="row-odd"><td><p>default_vorgangsart_id</p></td>
+<td><p>PositiveIntegerField</p></td>
+<td><p>default=111</p></td>
+<td><p>verbose=Standard Vorgangsart-ID</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="id20">
+<h4>Admin-Konfiguration<a class="headerlink" href="#id20" title="Link to this heading">¶</a></h4>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Aspekt</p></th>
+<th class="head"><p>Wert</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Admin-Klasse</p></td>
+<td><p>microtech.admin.MicrotechSettingsAdmin</p></td>
+</tr>
+<tr class="row-odd"><td><p>list_display</p></td>
+<td><p>__str__</p></td>
+</tr>
+<tr class="row-even"><td><p>list_filter</p></td>
+<td><ul class="simple">
+<li></li>
+</ul>
+</td>
+</tr>
+<tr class="row-odd"><td><p>search_fields</p></td>
+<td><ul class="simple">
+<li></li>
+</ul>
+</td>
+</tr>
+<tr class="row-even"><td><p>readonly_fields</p></td>
+<td><p>created_at, updated_at</p></td>
+</tr>
+<tr class="row-odd"><td><p>ordering</p></td>
+<td><p>-created_at</p></td>
+</tr>
+<tr class="row-even"><td><p>list_select_related</p></td>
+<td><p>False</p></td>
+</tr>
+<tr class="row-odd"><td><p>list_per_page</p></td>
+<td><p>100</p></td>
+</tr>
+<tr class="row-even"><td><p>inlines</p></td>
+<td><ul class="simple">
+<li></li>
+</ul>
+</td>
+</tr>
+<tr class="row-odd"><td><p>actions</p></td>
+<td><ul class="simple">
+<li></li>
+</ul>
+</td>
+</tr>
+<tr class="row-even"><td><p>action_form</p></td>
+<td><p>unfold.forms.ActionForm</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+</section>
+<section id="orders">
+<h2>orders<a class="headerlink" href="#orders" title="Link to this heading">¶</a></h2>
+<section id="orders-order">
+<h3>orders.Order<a class="headerlink" href="#orders-order" title="Link to this heading">¶</a></h3>
+<ul class="simple">
+<li><p>Python: <code class="docutils literal notranslate"><span class="pre">orders.models.Order</span></code></p></li>
+<li><p>DB-Tabelle: <code class="docutils literal notranslate"><span class="pre">orders_order</span></code></p></li>
+<li><p>Verbose Name: <code class="docutils literal notranslate"><span class="pre">Bestellung</span></code></p></li>
+<li><p>Verbose Name Plural: <code class="docutils literal notranslate"><span class="pre">Bestellungen</span></code></p></li>
+<li><p>Default Ordering: <code class="docutils literal notranslate"><span class="pre">-purchase_date,</span> <span class="pre">-created_at</span></code></p></li>
+</ul>
+<section id="id21">
+<h4>Felder<a class="headerlink" href="#id21" title="Link to this heading">¶</a></h4>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Typ</p></th>
+<th class="head"><p>Optionen</p></th>
+<th class="head"><p>Details</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>id</p></td>
+<td><p>BigAutoField</p></td>
+<td><p>pk, unique, blank</p></td>
+<td><p>verbose=ID</p></td>
+</tr>
+<tr class="row-odd"><td><p>created_at</p></td>
+<td><p>DateTimeField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Angelegt am</p></td>
+</tr>
+<tr class="row-even"><td><p>updated_at</p></td>
+<td><p>DateTimeField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Aktualisiert am</p></td>
+</tr>
+<tr class="row-odd"><td><p>api_id</p></td>
+<td><p>CharField</p></td>
+<td><p>unique</p></td>
+<td><p>verbose=Shopware Bestell-ID, max_length=64</p></td>
+</tr>
+<tr class="row-even"><td><p>api_delivery_id</p></td>
+<td><p>CharField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Shopware Liefer-ID, max_length=64</p></td>
+</tr>
+<tr class="row-odd"><td><p>api_transaction_id</p></td>
+<td><p>CharField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Shopware Transaktions-ID, max_length=64</p></td>
+</tr>
+<tr class="row-even"><td><p>sales_channel_id</p></td>
+<td><p>CharField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Verkaufskanal-ID, max_length=255</p></td>
+</tr>
+<tr class="row-odd"><td><p>order_number</p></td>
+<td><p>CharField</p></td>
+<td><p>db_index, blank</p></td>
+<td><p>verbose=Bestellnummer, max_length=255</p></td>
+</tr>
+<tr class="row-even"><td><p>erp_order_id</p></td>
+<td><p>CharField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=ERP Vorgangsnummer, max_length=255</p></td>
+</tr>
+<tr class="row-odd"><td><p>description</p></td>
+<td><p>TextField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Beschreibung</p></td>
+</tr>
+<tr class="row-even"><td><p>total_price</p></td>
+<td><p>DecimalField</p></td>
+<td><p>default=0.00</p></td>
+<td><p>verbose=Gesamtpreis, decimal=12/2</p></td>
+</tr>
+<tr class="row-odd"><td><p>total_tax</p></td>
+<td><p>DecimalField</p></td>
+<td><p>default=0.00</p></td>
+<td><p>verbose=Steuer gesamt, decimal=12/2</p></td>
+</tr>
+<tr class="row-even"><td><p>shipping_costs</p></td>
+<td><p>DecimalField</p></td>
+<td><p>default=0.00</p></td>
+<td><p>verbose=Versandkosten, decimal=12/2</p></td>
+</tr>
+<tr class="row-odd"><td><p>payment_method</p></td>
+<td><p>CharField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Zahlungsart, max_length=255</p></td>
+</tr>
+<tr class="row-even"><td><p>shipping_method</p></td>
+<td><p>CharField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Versandart, max_length=255</p></td>
+</tr>
+<tr class="row-odd"><td><p>order_state</p></td>
+<td><p>CharField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Bestellstatus, max_length=64</p></td>
+</tr>
+<tr class="row-even"><td><p>shipping_state</p></td>
+<td><p>CharField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Versandstatus, max_length=64</p></td>
+</tr>
+<tr class="row-odd"><td><p>payment_state</p></td>
+<td><p>CharField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Zahlstatus, max_length=64</p></td>
+</tr>
+<tr class="row-even"><td><p>purchase_date</p></td>
+<td><p>DateTimeField</p></td>
+<td><p>null, blank</p></td>
+<td><p>verbose=Bestelldatum</p></td>
+</tr>
+<tr class="row-odd"><td><p>customer</p></td>
+<td><p>ForeignKey</p></td>
+<td><p>db_index, null, blank</p></td>
+<td><p>relation=customer.Customer, verbose=Kunde</p></td>
+</tr>
+<tr class="row-even"><td><p>billing_address</p></td>
+<td><p>ForeignKey</p></td>
+<td><p>db_index, null, blank</p></td>
+<td><p>relation=customer.Address, verbose=Rechnungsanschrift</p></td>
+</tr>
+<tr class="row-odd"><td><p>shipping_address</p></td>
+<td><p>ForeignKey</p></td>
+<td><p>db_index, null, blank</p></td>
+<td><p>relation=customer.Address, verbose=Lieferanschrift</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="id22">
+<h4>Admin-Konfiguration<a class="headerlink" href="#id22" title="Link to this heading">¶</a></h4>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Aspekt</p></th>
+<th class="head"><p>Wert</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Admin-Klasse</p></td>
+<td><p>orders.admin.OrderAdmin</p></td>
+</tr>
+<tr class="row-odd"><td><p>list_display</p></td>
+<td><p>order_number, customer, total_price, purchase_date, order_state</p></td>
+</tr>
+<tr class="row-even"><td><p>list_filter</p></td>
+<td><p>(‚order_state‘, &lt;class ‚unfold.contrib.filters.admin.text_filters.FieldTextFilter‘&gt;), (‚payment_state‘, &lt;class ‚unfold.contrib.filters.admin.text_filters.FieldTextFilter‘&gt;), (‚shipping_state‘, &lt;class ‚unfold.contrib.filters.admin.text_filters.FieldTextFilter‘&gt;), (‚purchase_date‘, &lt;class ‚unfold.contrib.filters.admin.datetime_filters.RangeDateTimeFilter‘&gt;), (‚created_at‘, &lt;class ‚unfold.contrib.filters.admin.datetime_filters.RangeDateTimeFilter‘&gt;)</p></td>
+</tr>
+<tr class="row-odd"><td><p>search_fields</p></td>
+<td><p>order_number, api_id, customer__erp_nr, customer__email</p></td>
+</tr>
+<tr class="row-even"><td><p>readonly_fields</p></td>
+<td><p>created_at, updated_at</p></td>
+</tr>
+<tr class="row-odd"><td><p>ordering</p></td>
+<td><p>-created_at</p></td>
+</tr>
+<tr class="row-even"><td><p>list_select_related</p></td>
+<td><p>False</p></td>
+</tr>
+<tr class="row-odd"><td><p>list_per_page</p></td>
+<td><p>100</p></td>
+</tr>
+<tr class="row-even"><td><p>inlines</p></td>
+<td><p>orders.admin.OrderDetailInline</p></td>
+</tr>
+<tr class="row-odd"><td><p>actions</p></td>
+<td><p>sync_open_orders_from_shopware</p></td>
+</tr>
+<tr class="row-even"><td><p>action_form</p></td>
+<td><p>unfold.forms.ActionForm</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="orders-orderdetail">
+<h3>orders.OrderDetail<a class="headerlink" href="#orders-orderdetail" title="Link to this heading">¶</a></h3>
+<ul class="simple">
+<li><p>Python: <code class="docutils literal notranslate"><span class="pre">orders.models.OrderDetail</span></code></p></li>
+<li><p>DB-Tabelle: <code class="docutils literal notranslate"><span class="pre">orders_orderdetail</span></code></p></li>
+<li><p>Verbose Name: <code class="docutils literal notranslate"><span class="pre">Bestellposition</span></code></p></li>
+<li><p>Verbose Name Plural: <code class="docutils literal notranslate"><span class="pre">Bestellpositionen</span></code></p></li>
+<li><p>Default Ordering: <code class="docutils literal notranslate"><span class="pre">order,</span> <span class="pre">id</span></code></p></li>
+</ul>
+<section id="id23">
+<h4>Felder<a class="headerlink" href="#id23" title="Link to this heading">¶</a></h4>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Typ</p></th>
+<th class="head"><p>Optionen</p></th>
+<th class="head"><p>Details</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>id</p></td>
+<td><p>BigAutoField</p></td>
+<td><p>pk, unique, blank</p></td>
+<td><p>verbose=ID</p></td>
+</tr>
+<tr class="row-odd"><td><p>created_at</p></td>
+<td><p>DateTimeField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Angelegt am</p></td>
+</tr>
+<tr class="row-even"><td><p>updated_at</p></td>
+<td><p>DateTimeField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Aktualisiert am</p></td>
+</tr>
+<tr class="row-odd"><td><p>order</p></td>
+<td><p>ForeignKey</p></td>
+<td><p>db_index</p></td>
+<td><p>relation=orders.Order, verbose=Bestellung</p></td>
+</tr>
+<tr class="row-even"><td><p>api_id</p></td>
+<td><p>CharField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Shopware Position-ID, max_length=64</p></td>
+</tr>
+<tr class="row-odd"><td><p>erp_nr</p></td>
+<td><p>CharField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=ERP-Nummer, max_length=255</p></td>
+</tr>
+<tr class="row-even"><td><p>name</p></td>
+<td><p>CharField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Bezeichnung, max_length=255</p></td>
+</tr>
+<tr class="row-odd"><td><p>unit</p></td>
+<td><p>CharField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Einheit, max_length=64</p></td>
+</tr>
+<tr class="row-even"><td><p>quantity</p></td>
+<td><p>IntegerField</p></td>
+<td><p>default=0</p></td>
+<td><p>verbose=Menge</p></td>
+</tr>
+<tr class="row-odd"><td><p>unit_price</p></td>
+<td><p>DecimalField</p></td>
+<td><p>default=0.00</p></td>
+<td><p>verbose=Einzelpreis, decimal=12/2</p></td>
+</tr>
+<tr class="row-even"><td><p>total_price</p></td>
+<td><p>DecimalField</p></td>
+<td><p>default=0.00</p></td>
+<td><p>verbose=Gesamtpreis, decimal=12/2</p></td>
+</tr>
+<tr class="row-odd"><td><p>tax</p></td>
+<td><p>DecimalField</p></td>
+<td><p>null, blank</p></td>
+<td><p>verbose=Steuer, decimal=12/2</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="id24">
+<h4>Admin-Konfiguration<a class="headerlink" href="#id24" title="Link to this heading">¶</a></h4>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Aspekt</p></th>
+<th class="head"><p>Wert</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Admin-Klasse</p></td>
+<td><p>orders.admin.OrderDetailAdmin</p></td>
+</tr>
+<tr class="row-odd"><td><p>list_display</p></td>
+<td><p>order, erp_nr, name, quantity, unit_price, total_price, created_at</p></td>
+</tr>
+<tr class="row-even"><td><p>list_filter</p></td>
+<td><p>(‚created_at‘, &lt;class ‚unfold.contrib.filters.admin.datetime_filters.RangeDateTimeFilter‘&gt;)</p></td>
+</tr>
+<tr class="row-odd"><td><p>search_fields</p></td>
+<td><p>order__order_number, order__api_id, erp_nr, name</p></td>
+</tr>
+<tr class="row-even"><td><p>readonly_fields</p></td>
+<td><p>created_at, updated_at</p></td>
+</tr>
+<tr class="row-odd"><td><p>ordering</p></td>
+<td><p>-created_at</p></td>
+</tr>
+<tr class="row-even"><td><p>list_select_related</p></td>
+<td><p>False</p></td>
+</tr>
+<tr class="row-odd"><td><p>list_per_page</p></td>
+<td><p>100</p></td>
+</tr>
+<tr class="row-even"><td><p>inlines</p></td>
+<td><ul class="simple">
+<li></li>
+</ul>
+</td>
+</tr>
+<tr class="row-odd"><td><p>actions</p></td>
+<td><ul class="simple">
+<li></li>
+</ul>
+</td>
+</tr>
+<tr class="row-even"><td><p>action_form</p></td>
+<td><p>unfold.forms.ActionForm</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+</section>
+<section id="products">
+<h2>products<a class="headerlink" href="#products" title="Link to this heading">¶</a></h2>
+<section id="products-category">
+<h3>products.Category<a class="headerlink" href="#products-category" title="Link to this heading">¶</a></h3>
+<ul class="simple">
+<li><p>Python: <code class="docutils literal notranslate"><span class="pre">products.models.Category</span></code></p></li>
+<li><p>DB-Tabelle: <code class="docutils literal notranslate"><span class="pre">products_category</span></code></p></li>
+<li><p>Verbose Name: <code class="docutils literal notranslate"><span class="pre">Kategorie</span></code></p></li>
+<li><p>Verbose Name Plural: <code class="docutils literal notranslate"><span class="pre">Kategorien</span></code></p></li>
+<li><p>Default Ordering: <code class="docutils literal notranslate"><span class="pre">name</span></code></p></li>
+</ul>
+<section id="id25">
+<h4>Felder<a class="headerlink" href="#id25" title="Link to this heading">¶</a></h4>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Typ</p></th>
+<th class="head"><p>Optionen</p></th>
+<th class="head"><p>Details</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>id</p></td>
+<td><p>BigAutoField</p></td>
+<td><p>pk, unique, blank</p></td>
+<td><p>verbose=ID</p></td>
+</tr>
+<tr class="row-odd"><td><p>created_at</p></td>
+<td><p>DateTimeField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Angelegt am</p></td>
+</tr>
+<tr class="row-even"><td><p>updated_at</p></td>
+<td><p>DateTimeField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Aktualisiert am</p></td>
+</tr>
+<tr class="row-odd"><td><p>name</p></td>
+<td><p>CharField</p></td>
+<td><ul class="simple">
+<li></li>
+</ul>
+</td>
+<td><p>verbose=Name, max_length=128</p></td>
+</tr>
+<tr class="row-even"><td><p>name_de</p></td>
+<td><p>TranslationCharField</p></td>
+<td><p>null, blank</p></td>
+<td><p>verbose=Name [de], max_length=128</p></td>
+</tr>
+<tr class="row-odd"><td><p>name_en</p></td>
+<td><p>TranslationCharField</p></td>
+<td><p>null, blank</p></td>
+<td><p>verbose=Name [en], max_length=128</p></td>
+</tr>
+<tr class="row-even"><td><p>slug</p></td>
+<td><p>SlugField</p></td>
+<td><p>unique, db_index</p></td>
+<td><p>verbose=Slug, max_length=160</p></td>
+</tr>
+<tr class="row-odd"><td><p>parent</p></td>
+<td><p>ForeignKey</p></td>
+<td><p>db_index, null, blank</p></td>
+<td><p>relation=products.Category, verbose=Oberkategorie</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="id26">
+<h4>Admin-Konfiguration<a class="headerlink" href="#id26" title="Link to this heading">¶</a></h4>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Aspekt</p></th>
+<th class="head"><p>Wert</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Admin-Klasse</p></td>
+<td><p>products.admin.CategoryAdmin</p></td>
+</tr>
+<tr class="row-odd"><td><p>list_display</p></td>
+<td><p>name, slug, parent, created_at</p></td>
+</tr>
+<tr class="row-even"><td><p>list_filter</p></td>
+<td><p>(‚parent‘, &lt;class ‚unfold.contrib.filters.admin.dropdown_filters.RelatedDropdownFilter‘&gt;), (‚created_at‘, &lt;class ‚unfold.contrib.filters.admin.datetime_filters.RangeDateTimeFilter‘&gt;)</p></td>
+</tr>
+<tr class="row-odd"><td><p>search_fields</p></td>
+<td><p>name, slug, parent__name</p></td>
+</tr>
+<tr class="row-even"><td><p>readonly_fields</p></td>
+<td><p>created_at, updated_at</p></td>
+</tr>
+<tr class="row-odd"><td><p>ordering</p></td>
+<td><p>-created_at</p></td>
+</tr>
+<tr class="row-even"><td><p>list_select_related</p></td>
+<td><p>False</p></td>
+</tr>
+<tr class="row-odd"><td><p>list_per_page</p></td>
+<td><p>100</p></td>
+</tr>
+<tr class="row-even"><td><p>inlines</p></td>
+<td><ul class="simple">
+<li></li>
+</ul>
+</td>
+</tr>
+<tr class="row-odd"><td><p>actions</p></td>
+<td><ul class="simple">
+<li></li>
+</ul>
+</td>
+</tr>
+<tr class="row-even"><td><p>action_form</p></td>
+<td><p>unfold.forms.ActionForm</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="products-image">
+<h3>products.Image<a class="headerlink" href="#products-image" title="Link to this heading">¶</a></h3>
+<ul class="simple">
+<li><p>Python: <code class="docutils literal notranslate"><span class="pre">products.models.Image</span></code></p></li>
+<li><p>DB-Tabelle: <code class="docutils literal notranslate"><span class="pre">products_image</span></code></p></li>
+<li><p>Verbose Name: <code class="docutils literal notranslate"><span class="pre">Bild</span></code></p></li>
+<li><p>Verbose Name Plural: <code class="docutils literal notranslate"><span class="pre">Bilder</span></code></p></li>
+<li><p>Default Ordering: <code class="docutils literal notranslate"><span class="pre">id</span></code></p></li>
+</ul>
+<section id="id27">
+<h4>Felder<a class="headerlink" href="#id27" title="Link to this heading">¶</a></h4>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Typ</p></th>
+<th class="head"><p>Optionen</p></th>
+<th class="head"><p>Details</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>id</p></td>
+<td><p>BigAutoField</p></td>
+<td><p>pk, unique, blank</p></td>
+<td><p>verbose=ID</p></td>
+</tr>
+<tr class="row-odd"><td><p>created_at</p></td>
+<td><p>DateTimeField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Angelegt am</p></td>
+</tr>
+<tr class="row-even"><td><p>updated_at</p></td>
+<td><p>DateTimeField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Aktualisiert am</p></td>
+</tr>
+<tr class="row-odd"><td><p>path</p></td>
+<td><p>CharField</p></td>
+<td><ul class="simple">
+<li></li>
+</ul>
+</td>
+<td><p>verbose=Bildpfad, max_length=255</p></td>
+</tr>
+<tr class="row-even"><td><p>alt_text</p></td>
+<td><p>CharField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Alternativtext, max_length=255</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="id28">
+<h4>Admin-Konfiguration<a class="headerlink" href="#id28" title="Link to this heading">¶</a></h4>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Aspekt</p></th>
+<th class="head"><p>Wert</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Registrierung</p></td>
+<td><p>Kein ModelAdmin registriert</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="products-price">
+<h3>products.Price<a class="headerlink" href="#products-price" title="Link to this heading">¶</a></h3>
+<ul class="simple">
+<li><p>Python: <code class="docutils literal notranslate"><span class="pre">products.models.Price</span></code></p></li>
+<li><p>DB-Tabelle: <code class="docutils literal notranslate"><span class="pre">products_price</span></code></p></li>
+<li><p>Verbose Name: <code class="docutils literal notranslate"><span class="pre">Preis</span></code></p></li>
+<li><p>Verbose Name Plural: <code class="docutils literal notranslate"><span class="pre">Preise</span></code></p></li>
+<li><p>Default Ordering: <code class="docutils literal notranslate"><span class="pre">product,</span> <span class="pre">sales_channel,</span> <span class="pre">price</span></code></p></li>
+</ul>
+<section id="id29">
+<h4>Felder<a class="headerlink" href="#id29" title="Link to this heading">¶</a></h4>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Typ</p></th>
+<th class="head"><p>Optionen</p></th>
+<th class="head"><p>Details</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>id</p></td>
+<td><p>BigAutoField</p></td>
+<td><p>pk, unique, blank</p></td>
+<td><p>verbose=ID</p></td>
+</tr>
+<tr class="row-odd"><td><p>created_at</p></td>
+<td><p>DateTimeField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Angelegt am</p></td>
+</tr>
+<tr class="row-even"><td><p>updated_at</p></td>
+<td><p>DateTimeField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Aktualisiert am</p></td>
+</tr>
+<tr class="row-odd"><td><p>product</p></td>
+<td><p>ForeignKey</p></td>
+<td><p>db_index</p></td>
+<td><p>relation=products.Product, verbose=Produkt</p></td>
+</tr>
+<tr class="row-even"><td><p>sales_channel</p></td>
+<td><p>ForeignKey</p></td>
+<td><p>db_index, null, blank</p></td>
+<td><p>relation=shopware.ShopwareSettings, verbose=Verkaufskanal</p></td>
+</tr>
+<tr class="row-odd"><td><p>price</p></td>
+<td><p>DecimalField</p></td>
+<td><ul class="simple">
+<li></li>
+</ul>
+</td>
+<td><p>verbose=Preis, decimal=10/2</p></td>
+</tr>
+<tr class="row-even"><td><p>rebate_quantity</p></td>
+<td><p>IntegerField</p></td>
+<td><p>null, blank</p></td>
+<td><p>verbose=Staffelmenge</p></td>
+</tr>
+<tr class="row-odd"><td><p>rebate_price</p></td>
+<td><p>DecimalField</p></td>
+<td><p>null, blank</p></td>
+<td><p>verbose=Staffelpreis, decimal=10/2</p></td>
+</tr>
+<tr class="row-even"><td><p>special_percentage</p></td>
+<td><p>DecimalField</p></td>
+<td><p>null, blank</p></td>
+<td><p>verbose=Sonderpreis (%), decimal=5/2</p></td>
+</tr>
+<tr class="row-odd"><td><p>special_price</p></td>
+<td><p>DecimalField</p></td>
+<td><p>null, blank</p></td>
+<td><p>verbose=Sonderpreis, decimal=10/2</p></td>
+</tr>
+<tr class="row-even"><td><p>special_start_date</p></td>
+<td><p>DateTimeField</p></td>
+<td><p>null, blank</p></td>
+<td><p>verbose=Sonderpreis ab</p></td>
+</tr>
+<tr class="row-odd"><td><p>special_end_date</p></td>
+<td><p>DateTimeField</p></td>
+<td><p>null, blank</p></td>
+<td><p>verbose=Sonderpreis bis</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="id30">
+<h4>Admin-Konfiguration<a class="headerlink" href="#id30" title="Link to this heading">¶</a></h4>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Aspekt</p></th>
+<th class="head"><p>Wert</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Admin-Klasse</p></td>
+<td><p>products.admin.PriceAdmin</p></td>
+</tr>
+<tr class="row-odd"><td><p>list_display</p></td>
+<td><p>product, sales_channel, price, special_percentage, special_price, special_active, rebate_price, created_at</p></td>
+</tr>
+<tr class="row-even"><td><p>list_filter</p></td>
+<td><p>(‚sales_channel‘, &lt;class ‚unfold.contrib.filters.admin.dropdown_filters.RelatedDropdownFilter‘&gt;), (‚price‘, &lt;class ‚unfold.contrib.filters.admin.numeric_filters.RangeNumericFilter‘&gt;), (‚created_at‘, &lt;class ‚unfold.contrib.filters.admin.datetime_filters.RangeDateTimeFilter‘&gt;)</p></td>
+</tr>
+<tr class="row-odd"><td><p>search_fields</p></td>
+<td><p>product__erp_nr, product__name, sales_channel__name</p></td>
+</tr>
+<tr class="row-even"><td><p>readonly_fields</p></td>
+<td><p>created_at, updated_at</p></td>
+</tr>
+<tr class="row-odd"><td><p>ordering</p></td>
+<td><p>-created_at</p></td>
+</tr>
+<tr class="row-even"><td><p>list_select_related</p></td>
+<td><p>False</p></td>
+</tr>
+<tr class="row-odd"><td><p>list_per_page</p></td>
+<td><p>100</p></td>
+</tr>
+<tr class="row-even"><td><p>inlines</p></td>
+<td><ul class="simple">
+<li></li>
+</ul>
+</td>
+</tr>
+<tr class="row-odd"><td><p>actions</p></td>
+<td><p>set_special_price_bulk, clear_special_price_bulk</p></td>
+</tr>
+<tr class="row-even"><td><p>action_form</p></td>
+<td><p>products.admin.PriceActionForm</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="products-product">
+<h3>products.Product<a class="headerlink" href="#products-product" title="Link to this heading">¶</a></h3>
+<ul class="simple">
+<li><p>Python: <code class="docutils literal notranslate"><span class="pre">products.models.Product</span></code></p></li>
+<li><p>DB-Tabelle: <code class="docutils literal notranslate"><span class="pre">products_product</span></code></p></li>
+<li><p>Verbose Name: <code class="docutils literal notranslate"><span class="pre">Produkt</span></code></p></li>
+<li><p>Verbose Name Plural: <code class="docutils literal notranslate"><span class="pre">Produkte</span></code></p></li>
+<li><p>Default Ordering: <code class="docutils literal notranslate"><span class="pre">erp_nr,</span> <span class="pre">name</span></code></p></li>
+</ul>
+<section id="id31">
+<h4>Felder<a class="headerlink" href="#id31" title="Link to this heading">¶</a></h4>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Typ</p></th>
+<th class="head"><p>Optionen</p></th>
+<th class="head"><p>Details</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>id</p></td>
+<td><p>BigAutoField</p></td>
+<td><p>pk, unique, blank</p></td>
+<td><p>verbose=ID</p></td>
+</tr>
+<tr class="row-odd"><td><p>created_at</p></td>
+<td><p>DateTimeField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Angelegt am</p></td>
+</tr>
+<tr class="row-even"><td><p>updated_at</p></td>
+<td><p>DateTimeField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Aktualisiert am</p></td>
+</tr>
+<tr class="row-odd"><td><p>sku</p></td>
+<td><p>CharField</p></td>
+<td><p>unique, null, blank</p></td>
+<td><p>verbose=Artikelnummer (SKU), max_length=64</p></td>
+</tr>
+<tr class="row-even"><td><p>erp_nr</p></td>
+<td><p>CharField</p></td>
+<td><p>unique</p></td>
+<td><p>verbose=ERP-Nummer, max_length=64</p></td>
+</tr>
+<tr class="row-odd"><td><p>gtin</p></td>
+<td><p>CharField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=GTIN, max_length=32</p></td>
+</tr>
+<tr class="row-even"><td><p>name</p></td>
+<td><p>CharField</p></td>
+<td><p>null, blank</p></td>
+<td><p>verbose=Name, max_length=255</p></td>
+</tr>
+<tr class="row-odd"><td><p>name_de</p></td>
+<td><p>TranslationCharField</p></td>
+<td><p>null, blank</p></td>
+<td><p>verbose=Name [de], max_length=255</p></td>
+</tr>
+<tr class="row-even"><td><p>name_en</p></td>
+<td><p>TranslationCharField</p></td>
+<td><p>null, blank</p></td>
+<td><p>verbose=Name [en], max_length=255</p></td>
+</tr>
+<tr class="row-odd"><td><p>sort_order</p></td>
+<td><p>PositiveIntegerField</p></td>
+<td><p>default=1000</p></td>
+<td><p>verbose=Sortierung</p></td>
+</tr>
+<tr class="row-even"><td><p>description</p></td>
+<td><p>TextField</p></td>
+<td><p>null, blank</p></td>
+<td><p>verbose=Beschreibung</p></td>
+</tr>
+<tr class="row-odd"><td><p>description_de</p></td>
+<td><p>TranslationTextField</p></td>
+<td><p>null, blank</p></td>
+<td><p>verbose=Beschreibung [de]</p></td>
+</tr>
+<tr class="row-even"><td><p>description_en</p></td>
+<td><p>TranslationTextField</p></td>
+<td><p>null, blank</p></td>
+<td><p>verbose=Beschreibung [en]</p></td>
+</tr>
+<tr class="row-odd"><td><p>description_short</p></td>
+<td><p>TextField</p></td>
+<td><p>null, blank</p></td>
+<td><p>verbose=Kurzbeschreibung</p></td>
+</tr>
+<tr class="row-even"><td><p>description_short_de</p></td>
+<td><p>TranslationTextField</p></td>
+<td><p>null, blank</p></td>
+<td><p>verbose=Kurzbeschreibung [de]</p></td>
+</tr>
+<tr class="row-odd"><td><p>description_short_en</p></td>
+<td><p>TranslationTextField</p></td>
+<td><p>null, blank</p></td>
+<td><p>verbose=Kurzbeschreibung [en]</p></td>
+</tr>
+<tr class="row-even"><td><p>is_active</p></td>
+<td><p>BooleanField</p></td>
+<td><p>default=True</p></td>
+<td><p>verbose=Aktiv</p></td>
+</tr>
+<tr class="row-odd"><td><p>factor</p></td>
+<td><p>IntegerField</p></td>
+<td><p>null, blank</p></td>
+<td><p>verbose=Faktor</p></td>
+</tr>
+<tr class="row-even"><td><p>unit</p></td>
+<td><p>CharField</p></td>
+<td><p>null, blank</p></td>
+<td><p>verbose=Einheit, max_length=255</p></td>
+</tr>
+<tr class="row-odd"><td><p>unit_de</p></td>
+<td><p>TranslationCharField</p></td>
+<td><p>null, blank</p></td>
+<td><p>verbose=Einheit [de], max_length=255</p></td>
+</tr>
+<tr class="row-even"><td><p>unit_en</p></td>
+<td><p>TranslationCharField</p></td>
+<td><p>null, blank</p></td>
+<td><p>verbose=Einheit [en], max_length=255</p></td>
+</tr>
+<tr class="row-odd"><td><p>min_purchase</p></td>
+<td><p>IntegerField</p></td>
+<td><p>null, blank</p></td>
+<td><p>verbose=Mindestabnahme</p></td>
+</tr>
+<tr class="row-even"><td><p>purchase_unit</p></td>
+<td><p>IntegerField</p></td>
+<td><p>null, blank</p></td>
+<td><p>verbose=Kaufeinheit</p></td>
+</tr>
+<tr class="row-odd"><td><p>tax</p></td>
+<td><p>ForeignKey</p></td>
+<td><p>db_index, null, blank</p></td>
+<td><p>relation=products.Tax, verbose=Steuer</p></td>
+</tr>
+<tr class="row-even"><td><p>categories</p></td>
+<td><p>ManyToManyField</p></td>
+<td><p>blank</p></td>
+<td><p>relation=products.Category, verbose=Kategorien</p></td>
+</tr>
+<tr class="row-odd"><td><p>images</p></td>
+<td><p>ManyToManyField</p></td>
+<td><p>blank</p></td>
+<td><p>relation=products.Image, verbose=Bilder</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="id32">
+<h4>Admin-Konfiguration<a class="headerlink" href="#id32" title="Link to this heading">¶</a></h4>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Aspekt</p></th>
+<th class="head"><p>Wert</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Admin-Klasse</p></td>
+<td><p>products.admin.ProductAdmin</p></td>
+</tr>
+<tr class="row-odd"><td><p>list_display</p></td>
+<td><p>erp_nr, name, is_active, created_at</p></td>
+</tr>
+<tr class="row-even"><td><p>list_filter</p></td>
+<td><p>(‚is_active‘, &lt;class ‚unfold.contrib.filters.admin.choice_filters.BooleanRadioFilter‘&gt;), (‚tax‘, &lt;class ‚unfold.contrib.filters.admin.dropdown_filters.RelatedDropdownFilter‘&gt;), (‚categories‘, &lt;class ‚unfold.contrib.filters.admin.dropdown_filters.RelatedDropdownFilter‘&gt;), (‚created_at‘, &lt;class ‚unfold.contrib.filters.admin.datetime_filters.RangeDateTimeFilter‘&gt;)</p></td>
+</tr>
+<tr class="row-odd"><td><p>search_fields</p></td>
+<td><p>erp_nr, sku, name</p></td>
+</tr>
+<tr class="row-even"><td><p>readonly_fields</p></td>
+<td><p>created_at, updated_at</p></td>
+</tr>
+<tr class="row-odd"><td><p>ordering</p></td>
+<td><p>-created_at</p></td>
+</tr>
+<tr class="row-even"><td><p>list_select_related</p></td>
+<td><p>False</p></td>
+</tr>
+<tr class="row-odd"><td><p>list_per_page</p></td>
+<td><p>100</p></td>
+</tr>
+<tr class="row-even"><td><p>inlines</p></td>
+<td><p>products.admin.StorageInline, products.admin.PriceInline</p></td>
+</tr>
+<tr class="row-odd"><td><p>actions</p></td>
+<td><p>sync_from_microtech, sync_to_shopware, set_special_price_for_channel, clear_special_price_for_channel</p></td>
+</tr>
+<tr class="row-even"><td><p>action_form</p></td>
+<td><p>products.admin.ProductSpecialPriceActionForm</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="products-storage">
+<h3>products.Storage<a class="headerlink" href="#products-storage" title="Link to this heading">¶</a></h3>
+<ul class="simple">
+<li><p>Python: <code class="docutils literal notranslate"><span class="pre">products.models.Storage</span></code></p></li>
+<li><p>DB-Tabelle: <code class="docutils literal notranslate"><span class="pre">products_storage</span></code></p></li>
+<li><p>Verbose Name: <code class="docutils literal notranslate"><span class="pre">Lagerbestand</span></code></p></li>
+<li><p>Verbose Name Plural: <code class="docutils literal notranslate"><span class="pre">Lagerbestaende</span></code></p></li>
+<li><p>Default Ordering: <code class="docutils literal notranslate"><span class="pre">product</span></code></p></li>
+</ul>
+<section id="id33">
+<h4>Felder<a class="headerlink" href="#id33" title="Link to this heading">¶</a></h4>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Typ</p></th>
+<th class="head"><p>Optionen</p></th>
+<th class="head"><p>Details</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>id</p></td>
+<td><p>BigAutoField</p></td>
+<td><p>pk, unique, blank</p></td>
+<td><p>verbose=ID</p></td>
+</tr>
+<tr class="row-odd"><td><p>created_at</p></td>
+<td><p>DateTimeField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Angelegt am</p></td>
+</tr>
+<tr class="row-even"><td><p>updated_at</p></td>
+<td><p>DateTimeField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Aktualisiert am</p></td>
+</tr>
+<tr class="row-odd"><td><p>product</p></td>
+<td><p>OneToOneField</p></td>
+<td><p>unique, db_index, null, blank</p></td>
+<td><p>relation=products.Product, verbose=Produkt</p></td>
+</tr>
+<tr class="row-even"><td><p>stock</p></td>
+<td><p>IntegerField</p></td>
+<td><p>null, blank</p></td>
+<td><p>verbose=Bestand</p></td>
+</tr>
+<tr class="row-odd"><td><p>location</p></td>
+<td><p>CharField</p></td>
+<td><p>null, blank</p></td>
+<td><p>verbose=Lagerort, max_length=255</p></td>
+</tr>
+<tr class="row-even"><td><p>virtual_stock</p></td>
+<td><p>PositiveIntegerField</p></td>
+<td><p>default=0</p></td>
+<td><p>verbose=Virtueller Bestand</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="id34">
+<h4>Admin-Konfiguration<a class="headerlink" href="#id34" title="Link to this heading">¶</a></h4>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Aspekt</p></th>
+<th class="head"><p>Wert</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Admin-Klasse</p></td>
+<td><p>products.admin.StorageAdmin</p></td>
+</tr>
+<tr class="row-odd"><td><p>list_display</p></td>
+<td><p>product, stock, virtual_stock, location, created_at</p></td>
+</tr>
+<tr class="row-even"><td><p>list_filter</p></td>
+<td><p>(‚stock‘, &lt;class ‚unfold.contrib.filters.admin.numeric_filters.RangeNumericFilter‘&gt;), (‚created_at‘, &lt;class ‚unfold.contrib.filters.admin.datetime_filters.RangeDateTimeFilter‘&gt;)</p></td>
+</tr>
+<tr class="row-odd"><td><p>search_fields</p></td>
+<td><p>product__erp_nr, product__name, location</p></td>
+</tr>
+<tr class="row-even"><td><p>readonly_fields</p></td>
+<td><p>created_at, updated_at</p></td>
+</tr>
+<tr class="row-odd"><td><p>ordering</p></td>
+<td><p>-created_at</p></td>
+</tr>
+<tr class="row-even"><td><p>list_select_related</p></td>
+<td><p>False</p></td>
+</tr>
+<tr class="row-odd"><td><p>list_per_page</p></td>
+<td><p>100</p></td>
+</tr>
+<tr class="row-even"><td><p>inlines</p></td>
+<td><ul class="simple">
+<li></li>
+</ul>
+</td>
+</tr>
+<tr class="row-odd"><td><p>actions</p></td>
+<td><ul class="simple">
+<li></li>
+</ul>
+</td>
+</tr>
+<tr class="row-even"><td><p>action_form</p></td>
+<td><p>unfold.forms.ActionForm</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="products-tax">
+<h3>products.Tax<a class="headerlink" href="#products-tax" title="Link to this heading">¶</a></h3>
+<ul class="simple">
+<li><p>Python: <code class="docutils literal notranslate"><span class="pre">products.models.Tax</span></code></p></li>
+<li><p>DB-Tabelle: <code class="docutils literal notranslate"><span class="pre">products_tax</span></code></p></li>
+<li><p>Verbose Name: <code class="docutils literal notranslate"><span class="pre">Steuer</span></code></p></li>
+<li><p>Verbose Name Plural: <code class="docutils literal notranslate"><span class="pre">Steuern</span></code></p></li>
+<li><p>Default Ordering: <code class="docutils literal notranslate"><span class="pre">name</span></code></p></li>
+</ul>
+<section id="id35">
+<h4>Felder<a class="headerlink" href="#id35" title="Link to this heading">¶</a></h4>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Typ</p></th>
+<th class="head"><p>Optionen</p></th>
+<th class="head"><p>Details</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>id</p></td>
+<td><p>BigAutoField</p></td>
+<td><p>pk, unique, blank</p></td>
+<td><p>verbose=ID</p></td>
+</tr>
+<tr class="row-odd"><td><p>created_at</p></td>
+<td><p>DateTimeField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Angelegt am</p></td>
+</tr>
+<tr class="row-even"><td><p>updated_at</p></td>
+<td><p>DateTimeField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Aktualisiert am</p></td>
+</tr>
+<tr class="row-odd"><td><p>name</p></td>
+<td><p>CharField</p></td>
+<td><ul class="simple">
+<li></li>
+</ul>
+</td>
+<td><p>verbose=Steuerbezeichnung, max_length=64</p></td>
+</tr>
+<tr class="row-even"><td><p>rate</p></td>
+<td><p>DecimalField</p></td>
+<td><ul class="simple">
+<li></li>
+</ul>
+</td>
+<td><p>verbose=Steuersatz (%), decimal=5/2</p></td>
+</tr>
+<tr class="row-odd"><td><p>shopware_id</p></td>
+<td><p>CharField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Shopware Steuer-ID, max_length=64</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="id36">
+<h4>Admin-Konfiguration<a class="headerlink" href="#id36" title="Link to this heading">¶</a></h4>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Aspekt</p></th>
+<th class="head"><p>Wert</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Admin-Klasse</p></td>
+<td><p>products.admin.TaxAdmin</p></td>
+</tr>
+<tr class="row-odd"><td><p>list_display</p></td>
+<td><p>name, rate, shopware_id, created_at</p></td>
+</tr>
+<tr class="row-even"><td><p>list_filter</p></td>
+<td><p>(‚rate‘, &lt;class ‚unfold.contrib.filters.admin.numeric_filters.RangeNumericFilter‘&gt;), (‚created_at‘, &lt;class ‚unfold.contrib.filters.admin.datetime_filters.RangeDateTimeFilter‘&gt;)</p></td>
+</tr>
+<tr class="row-odd"><td><p>search_fields</p></td>
+<td><p>name, shopware_id</p></td>
+</tr>
+<tr class="row-even"><td><p>readonly_fields</p></td>
+<td><p>created_at, updated_at</p></td>
+</tr>
+<tr class="row-odd"><td><p>ordering</p></td>
+<td><p>-created_at</p></td>
+</tr>
+<tr class="row-even"><td><p>list_select_related</p></td>
+<td><p>False</p></td>
+</tr>
+<tr class="row-odd"><td><p>list_per_page</p></td>
+<td><p>100</p></td>
+</tr>
+<tr class="row-even"><td><p>inlines</p></td>
+<td><ul class="simple">
+<li></li>
+</ul>
+</td>
+</tr>
+<tr class="row-odd"><td><p>actions</p></td>
+<td><ul class="simple">
+<li></li>
+</ul>
+</td>
+</tr>
+<tr class="row-even"><td><p>action_form</p></td>
+<td><p>unfold.forms.ActionForm</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+</section>
+<section id="shopware">
+<h2>shopware<a class="headerlink" href="#shopware" title="Link to this heading">¶</a></h2>
+<section id="shopware-shopwareconnection">
+<h3>shopware.ShopwareConnection<a class="headerlink" href="#shopware-shopwareconnection" title="Link to this heading">¶</a></h3>
+<ul class="simple">
+<li><p>Python: <code class="docutils literal notranslate"><span class="pre">shopware.models.ShopwareConnection</span></code></p></li>
+<li><p>DB-Tabelle: <code class="docutils literal notranslate"><span class="pre">shopware_shopwareconnection</span></code></p></li>
+<li><p>Verbose Name: <code class="docutils literal notranslate"><span class="pre">Shopware</span> <span class="pre">Verbindung</span></code></p></li>
+<li><p>Verbose Name Plural: <code class="docutils literal notranslate"><span class="pre">Shopware</span> <span class="pre">Verbindung</span></code></p></li>
+<li><p>Default Ordering: <code class="docutils literal notranslate"><span class="pre">-</span></code></p></li>
+</ul>
+<section id="id37">
+<h4>Felder<a class="headerlink" href="#id37" title="Link to this heading">¶</a></h4>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Typ</p></th>
+<th class="head"><p>Optionen</p></th>
+<th class="head"><p>Details</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>id</p></td>
+<td><p>BigAutoField</p></td>
+<td><p>pk, unique, blank</p></td>
+<td><p>verbose=ID</p></td>
+</tr>
+<tr class="row-odd"><td><p>created_at</p></td>
+<td><p>DateTimeField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Angelegt am</p></td>
+</tr>
+<tr class="row-even"><td><p>updated_at</p></td>
+<td><p>DateTimeField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Aktualisiert am</p></td>
+</tr>
+<tr class="row-odd"><td><p>api_url</p></td>
+<td><p>CharField</p></td>
+<td><ul class="simple">
+<li></li>
+</ul>
+</td>
+<td><p>help=z.B. <a class="reference external" href="https://mein-shop.de/api">https://mein-shop.de/api</a>, verbose=API URL, max_length=500</p></td>
+</tr>
+<tr class="row-even"><td><p>client_id</p></td>
+<td><p>CharField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Client ID, max_length=255</p></td>
+</tr>
+<tr class="row-odd"><td><p>client_secret</p></td>
+<td><p>CharField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Client Secret, max_length=500</p></td>
+</tr>
+<tr class="row-even"><td><p>grant_type</p></td>
+<td><p>CharField</p></td>
+<td><p>default=resource_owner</p></td>
+<td><p>choices=2, verbose=Grant Type, max_length=32</p></td>
+</tr>
+<tr class="row-odd"><td><p>username</p></td>
+<td><p>CharField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Benutzername, max_length=255</p></td>
+</tr>
+<tr class="row-even"><td><p>password</p></td>
+<td><p>CharField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Passwort, max_length=500</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="id38">
+<h4>Admin-Konfiguration<a class="headerlink" href="#id38" title="Link to this heading">¶</a></h4>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Aspekt</p></th>
+<th class="head"><p>Wert</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Admin-Klasse</p></td>
+<td><p>shopware.admin.ShopwareConnectionAdmin</p></td>
+</tr>
+<tr class="row-odd"><td><p>list_display</p></td>
+<td><p>__str__</p></td>
+</tr>
+<tr class="row-even"><td><p>list_filter</p></td>
+<td><ul class="simple">
+<li></li>
+</ul>
+</td>
+</tr>
+<tr class="row-odd"><td><p>search_fields</p></td>
+<td><ul class="simple">
+<li></li>
+</ul>
+</td>
+</tr>
+<tr class="row-even"><td><p>readonly_fields</p></td>
+<td><p>created_at, updated_at</p></td>
+</tr>
+<tr class="row-odd"><td><p>ordering</p></td>
+<td><p>-created_at</p></td>
+</tr>
+<tr class="row-even"><td><p>list_select_related</p></td>
+<td><p>False</p></td>
+</tr>
+<tr class="row-odd"><td><p>list_per_page</p></td>
+<td><p>100</p></td>
+</tr>
+<tr class="row-even"><td><p>inlines</p></td>
+<td><ul class="simple">
+<li></li>
+</ul>
+</td>
+</tr>
+<tr class="row-odd"><td><p>actions</p></td>
+<td><ul class="simple">
+<li></li>
+</ul>
+</td>
+</tr>
+<tr class="row-even"><td><p>action_form</p></td>
+<td><p>unfold.forms.ActionForm</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="shopware-shopwaresettings">
+<h3>shopware.ShopwareSettings<a class="headerlink" href="#shopware-shopwaresettings" title="Link to this heading">¶</a></h3>
+<ul class="simple">
+<li><p>Python: <code class="docutils literal notranslate"><span class="pre">shopware.models.ShopwareSettings</span></code></p></li>
+<li><p>DB-Tabelle: <code class="docutils literal notranslate"><span class="pre">shopware_shopwaresettings</span></code></p></li>
+<li><p>Verbose Name: <code class="docutils literal notranslate"><span class="pre">Shopware</span> <span class="pre">Konfiguration</span></code></p></li>
+<li><p>Verbose Name Plural: <code class="docutils literal notranslate"><span class="pre">Shopware</span> <span class="pre">Konfigurationen</span></code></p></li>
+<li><p>Default Ordering: <code class="docutils literal notranslate"><span class="pre">-</span></code></p></li>
+</ul>
+<section id="id39">
+<h4>Felder<a class="headerlink" href="#id39" title="Link to this heading">¶</a></h4>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Typ</p></th>
+<th class="head"><p>Optionen</p></th>
+<th class="head"><p>Details</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>id</p></td>
+<td><p>BigAutoField</p></td>
+<td><p>pk, unique, blank</p></td>
+<td><p>verbose=ID</p></td>
+</tr>
+<tr class="row-odd"><td><p>created_at</p></td>
+<td><p>DateTimeField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Angelegt am</p></td>
+</tr>
+<tr class="row-even"><td><p>updated_at</p></td>
+<td><p>DateTimeField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Aktualisiert am</p></td>
+</tr>
+<tr class="row-odd"><td><p>name</p></td>
+<td><p>CharField</p></td>
+<td><p>unique</p></td>
+<td><p>verbose=Bezeichnung, max_length=100</p></td>
+</tr>
+<tr class="row-even"><td><p>sales_channel_id</p></td>
+<td><p>CharField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Verkaufskanal-ID, max_length=255</p></td>
+</tr>
+<tr class="row-odd"><td><p>tax_high_id</p></td>
+<td><p>CharField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Steuer-ID hoch, max_length=255</p></td>
+</tr>
+<tr class="row-even"><td><p>tax_low_id</p></td>
+<td><p>CharField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Steuer-ID niedrig, max_length=255</p></td>
+</tr>
+<tr class="row-odd"><td><p>currency_id</p></td>
+<td><p>CharField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Waehrungs-ID, max_length=255</p></td>
+</tr>
+<tr class="row-even"><td><p>rule_id_price</p></td>
+<td><p>CharField</p></td>
+<td><p>blank</p></td>
+<td><p>verbose=Preisregel-ID, max_length=255</p></td>
+</tr>
+<tr class="row-odd"><td><p>price_factor</p></td>
+<td><p>DecimalField</p></td>
+<td><p>default=1.0</p></td>
+<td><p>verbose=Preisfaktor, decimal=10/4</p></td>
+</tr>
+<tr class="row-even"><td><p>is_default</p></td>
+<td><p>BooleanField</p></td>
+<td><p>default=False</p></td>
+<td><p>verbose=Standardkanal</p></td>
+</tr>
+<tr class="row-odd"><td><p>is_active</p></td>
+<td><p>BooleanField</p></td>
+<td><p>default=True</p></td>
+<td><p>verbose=Aktiv</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="id40">
+<h4>Admin-Konfiguration<a class="headerlink" href="#id40" title="Link to this heading">¶</a></h4>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Aspekt</p></th>
+<th class="head"><p>Wert</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Admin-Klasse</p></td>
+<td><p>shopware.admin.ShopwareSettingsAdmin</p></td>
+</tr>
+<tr class="row-odd"><td><p>list_display</p></td>
+<td><p>name, sales_channel_id, is_default, price_factor, is_active</p></td>
+</tr>
+<tr class="row-even"><td><p>list_filter</p></td>
+<td><p>(‚is_default‘, &lt;class ‚unfold.contrib.filters.admin.choice_filters.BooleanRadioFilter‘&gt;), (‚is_active‘, &lt;class ‚unfold.contrib.filters.admin.choice_filters.BooleanRadioFilter‘&gt;)</p></td>
+</tr>
+<tr class="row-odd"><td><p>search_fields</p></td>
+<td><p>name, sales_channel_id</p></td>
+</tr>
+<tr class="row-even"><td><p>readonly_fields</p></td>
+<td><p>created_at, updated_at</p></td>
+</tr>
+<tr class="row-odd"><td><p>ordering</p></td>
+<td><p>-created_at</p></td>
+</tr>
+<tr class="row-even"><td><p>list_select_related</p></td>
+<td><p>False</p></td>
+</tr>
+<tr class="row-odd"><td><p>list_per_page</p></td>
+<td><p>100</p></td>
+</tr>
+<tr class="row-even"><td><p>inlines</p></td>
+<td><ul class="simple">
+<li></li>
+</ul>
+</td>
+</tr>
+<tr class="row-odd"><td><p>actions</p></td>
+<td><ul class="simple">
+<li></li>
+</ul>
+</td>
+</tr>
+<tr class="row-even"><td><p>action_form</p></td>
+<td><p>unfold.forms.ActionForm</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+</section>
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../index.html">GC-Bridge-4</a></h1>
+
+
+
+
+
+
+
+
+
+<search id="searchbox" style="display: none" role="search">
+    <div class="searchformwrapper">
+    <form class="search" action="../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Search"/>
+      <input type="submit" value="Los" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script><h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Inhalte</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../einleitung.html">Einleitung</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../erste_schritte.html">Erste Schritte</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../microtech_rulebuilder_feldkatalog.html">Microtech Rulebuilder mit Feldkatalog (Schritt fuer Schritt)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../operator_checkliste.html">Operator-Checkliste (1 Seite)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../workflows.html">Workflows</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../betrieb_technik.html">Betrieb und Technik</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../stoerung_nicht_erreichbar.html">Stoerung: Seite nicht erreichbar</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Referenz</a><ul class="current">
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Model- und Admin-Inventar</a></li>
+</ul>
+</li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../index.html">Documentation overview</a><ul>
+  <li><a href="index.html">Referenz</a><ul>
+      <li>Previous: <a href="index.html" title="vorheriges Kapitel">Referenz</a></li>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 9.1.0</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+      
+      |
+      <a href="../_sources/reference/models_und_admins_generated.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>
