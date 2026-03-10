@@ -94,6 +94,14 @@ class Command(BaseCommand):
                     if result.rule_debug.payment_position_amount is not None
                     else ""
                 ),
+                "dataset_actions_total": result.rule_debug.dataset_actions_total,
+                "dataset_actions_applied": result.rule_debug.dataset_actions_applied,
+                "dataset_set_field_requested": result.rule_debug.dataset_set_field_requested,
+                "dataset_set_field_applied": result.rule_debug.dataset_set_field_applied,
+                "dataset_create_position_requested": result.rule_debug.dataset_create_position_requested,
+                "dataset_create_position_applied": result.rule_debug.dataset_create_position_applied,
+                "dataset_created_position_erp_nrs": list(result.rule_debug.dataset_created_position_erp_nrs),
+                "dataset_actions_note": result.rule_debug.dataset_actions_note,
                 "log_file": str(log_path),
             }
             logger.info("{}", json.dumps(payload, ensure_ascii=True, indent=2, sort_keys=True))

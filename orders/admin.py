@@ -172,14 +172,19 @@ class OrderAdmin(BaseAdmin):
         else:
             rule_label = f"ID {rule_debug.rule_id}"
 
-        payment_state = "angelegt" if rule_debug.payment_position_added else "nicht angelegt"
+        created_erp_nrs = ", ".join(rule_debug.dataset_created_position_erp_nrs) or "-"
         message = (
-            f"Regel-Debug: {rule_label}. Zahlungs-Zusatzposition {payment_state}. "
-            f"Grund: {rule_debug.payment_position_reason}"
+            f"Regel-Debug: {rule_label}. Dataset-Aktionen angewendet "
+            f"{rule_debug.dataset_actions_applied}/{rule_debug.dataset_actions_total}. "
+            f"Zusatzpositionen angelegt {rule_debug.dataset_create_position_applied}/"
+            f"{rule_debug.dataset_create_position_requested} (ERP-Nr: {created_erp_nrs})."
         )
-        if rule_debug.payment_position_requested and not rule_debug.payment_position_added:
+        if rule_debug.dataset_actions_note:
+            message = f"{message} Hinweise: {rule_debug.dataset_actions_note}"
+
+        if rule_debug.dataset_actions_total > 0 and rule_debug.dataset_actions_applied < rule_debug.dataset_actions_total:
             return message, messages.WARNING
-        if rule_debug.payment_position_added:
+        if rule_debug.dataset_actions_applied > 0:
             return message, messages.SUCCESS
         return message, messages.INFO
 

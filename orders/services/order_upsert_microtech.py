@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
 
@@ -47,6 +47,26 @@ class OrderRuleDebugInfo:
     payment_position_reason: str
     payment_position_erp_nr: str
     payment_position_amount: Decimal | None = None
+    dataset_actions_total: int = 0
+    dataset_actions_applied: int = 0
+    dataset_set_field_requested: int = 0
+    dataset_set_field_applied: int = 0
+    dataset_create_position_requested: int = 0
+    dataset_create_position_applied: int = 0
+    dataset_created_position_erp_nrs: tuple[str, ...] = ()
+    dataset_actions_note: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class DatasetActionDebugInfo:
+    total: int = 0
+    applied: int = 0
+    set_field_requested: int = 0
+    set_field_applied: int = 0
+    create_position_requested: int = 0
+    create_position_applied: int = 0
+    created_position_erp_nrs: tuple[str, ...] = ()
+    note: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -109,19 +129,40 @@ class OrderUpsertMicrotechService(BaseService):
         )
         self._add_positions(order=order, so_vorgang=so_vorgang, erp=erp)
         self._add_shipping_position(order=order, so_vorgang=so_vorgang)
-        self._apply_rule_dataset_actions(order=order, so_vorgang=so_vorgang, resolved_rule=resolved_rule)
-        rule_debug = self._add_payment_position(
+        dataset_debug = self._apply_rule_dataset_actions(
             order=order,
             so_vorgang=so_vorgang,
             resolved_rule=resolved_rule,
         )
+        payment_debug = self._add_payment_position(
+            order=order,
+            so_vorgang=so_vorgang,
+            resolved_rule=resolved_rule,
+        )
+        rule_debug = replace(
+            payment_debug,
+            dataset_actions_total=dataset_debug.total,
+            dataset_actions_applied=dataset_debug.applied,
+            dataset_set_field_requested=dataset_debug.set_field_requested,
+            dataset_set_field_applied=dataset_debug.set_field_applied,
+            dataset_create_position_requested=dataset_debug.create_position_requested,
+            dataset_create_position_applied=dataset_debug.create_position_applied,
+            dataset_created_position_erp_nrs=dataset_debug.created_position_erp_nrs,
+            dataset_actions_note=dataset_debug.note,
+        )
         logger.info(
-            "Order {} rule debug: rule_id={}, rule_name='{}', payment_position_requested={}, "
-            "payment_position_added={}, payment_position_erp_nr='{}', payment_position_amount='{}', "
-            "reason='{}'.",
+            "Order {} rule debug: rule_id={}, rule_name='{}', dataset_actions_total={}, "
+            "dataset_actions_applied={}, create_position_requested={}, create_position_applied={}, "
+            "created_position_erp_nrs='{}', payment_position_requested={}, payment_position_added={}, "
+            "payment_position_erp_nr='{}', payment_position_amount='{}', reason='{}'.",
             order.order_number,
             rule_debug.rule_id,
             rule_debug.rule_name,
+            rule_debug.dataset_actions_total,
+            rule_debug.dataset_actions_applied,
+            rule_debug.dataset_create_position_requested,
+            rule_debug.dataset_create_position_applied,
+            ",".join(rule_debug.dataset_created_position_erp_nrs),
             rule_debug.payment_position_requested,
             rule_debug.payment_position_added,
             rule_debug.payment_position_erp_nr,
@@ -447,15 +488,29 @@ class OrderUpsertMicrotechService(BaseService):
         order: Order,
         so_vorgang,
         resolved_rule: ResolvedOrderRule,
-    ) -> None:
+    ) -> DatasetActionDebugInfo:
         if not resolved_rule.dataset_actions:
-            return
+            return DatasetActionDebugInfo(note="Keine Dataset-Aktionen in der Regel vorhanden.")
 
         created_extra_position = False
+        total = 0
+        applied = 0
+        set_field_requested = 0
+        set_field_applied = 0
+        create_position_requested = 0
+        create_position_applied = 0
+        created_erp_nrs: list[str] = []
+        notes: list[str] = []
+
         for action in resolved_rule.dataset_actions:
+            total += 1
             if action.action_type == MicrotechOrderRuleAction.ActionType.CREATE_EXTRA_POSITION:
+                create_position_requested += 1
                 so_vorgang.Positionen.Add(1, DEFAULT_UNIT, action.target_value)
                 created_extra_position = True
+                create_position_applied += 1
+                applied += 1
+                created_erp_nrs.append(action.target_value)
                 logger.info(
                     "Order {}: created extra position with ERP-Nr '{}'.",
                     order.order_number,
@@ -464,6 +519,7 @@ class OrderUpsertMicrotechService(BaseService):
                 continue
 
             if action.action_type != MicrotechOrderRuleAction.ActionType.SET_FIELD:
+                notes.append(f"unknown action_type={action.action_type}")
                 logger.warning(
                     "Order {}: unknown dataset action_type '{}', skipping.",
                     order.order_number,
@@ -471,6 +527,7 @@ class OrderUpsertMicrotechService(BaseService):
                 )
                 continue
 
+            set_field_requested += 1
             if self._is_vorgang_dataset_action(action):
                 written = self._set_dataset_field(
                     dataset=so_vorgang.DataSet,
@@ -478,16 +535,21 @@ class OrderUpsertMicrotechService(BaseService):
                     value=action.target_value,
                 )
                 if not written:
+                    notes.append(f"set_field failed: Vorgang.{action.dataset_field_name}")
                     logger.warning(
                         "Order {}: failed to set Vorgang field '{}' to '{}'.",
                         order.order_number,
                         action.dataset_field_name,
                         action.target_value,
                     )
+                else:
+                    set_field_applied += 1
+                    applied += 1
                 continue
 
             if self._is_vorgang_position_dataset_action(action):
                 if not created_extra_position:
+                    notes.append("VorgangPosition set_field skipped: no extra position created")
                     logger.warning(
                         "Order {}: action on VorgangPosition skipped because no extra position was created.",
                         order.order_number,
@@ -502,7 +564,10 @@ class OrderUpsertMicrotechService(BaseService):
                 )
                 if written:
                     position_dataset.Post()
+                    set_field_applied += 1
+                    applied += 1
                 else:
+                    notes.append(f"set_field failed: VorgangPosition.{action.dataset_field_name}")
                     logger.warning(
                         "Order {}: failed to set VorgangPosition field '{}' to '{}'.",
                         order.order_number,
@@ -511,11 +576,26 @@ class OrderUpsertMicrotechService(BaseService):
                     )
                 continue
 
+            notes.append(
+                f"unsupported dataset: {action.dataset_source_identifier or action.dataset_name}"
+            )
             logger.warning(
                 "Order {}: dataset action for unsupported dataset '{}' ignored.",
                 order.order_number,
                 action.dataset_source_identifier or action.dataset_name,
             )
+
+        note = "; ".join(notes[:3]).strip()
+        return DatasetActionDebugInfo(
+            total=total,
+            applied=applied,
+            set_field_requested=set_field_requested,
+            set_field_applied=set_field_applied,
+            create_position_requested=create_position_requested,
+            create_position_applied=create_position_applied,
+            created_position_erp_nrs=tuple(created_erp_nrs),
+            note=note,
+        )
 
     @staticmethod
     def _is_vorgang_dataset_action(action: ResolvedDatasetAction) -> bool:
