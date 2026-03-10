@@ -17,6 +17,7 @@ CORE_DATASET_SELECTORS: tuple[str, ...] = (
     "Vorgang - Vorgange",
     "VorgangArten - Vorgangsarten",
     "VorgangPosition - Vorgangspositionen",
+    "Artikel - Artikel",
 )
 
 

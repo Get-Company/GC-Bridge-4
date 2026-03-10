@@ -16,6 +16,5 @@ deploy/caddy/caddy.exe
 /docs/build/
 COM_Aktiv_Kompendium.pdf
 COM_Aktiv_Kompendium_overview.txt
-FELD_25.LST
 codex_log.md
 database.sql
