@@ -3,7 +3,7 @@ Model- und Admin-Inventar
 
 Diese Seite wird automatisch aus dem Django-Projekt erzeugt und deckt alle lokalen Apps, Models und registrierten Admin-Klassen ab.
 
-Generiert am: 2026-03-03 09:05:56 UTC
+Generiert am: 2026-03-10 09:24:26 UTC
 
 core
 ----
@@ -262,6 +262,188 @@ Admin-Konfiguration
 microtech
 ---------
 
+microtech.MicrotechDatasetCatalog
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* Python: ``microtech.models.MicrotechDatasetCatalog``
+* DB-Tabelle: ``microtech_microtechdatasetcatalog``
+* Verbose Name: ``Microtech Dataset``
+* Verbose Name Plural: ``Microtech Datasets``
+* Default Ordering: ``priority, name, id``
+
+Felder
+^^^^^^
+
+.. list-table::
+   :header-rows: 1
+
+   * - Feld
+     - Typ
+     - Optionen
+     - Details
+   * - id
+     - BigAutoField
+     - pk, unique, blank
+     - verbose=ID
+   * - created_at
+     - DateTimeField
+     - blank
+     - verbose=Angelegt am
+   * - updated_at
+     - DateTimeField
+     - blank
+     - verbose=Aktualisiert am
+   * - code
+     - CharField
+     - unique
+     - verbose=Code, max_length=64
+   * - name
+     - CharField
+     - -
+     - verbose=Dataset Name, max_length=255
+   * - description
+     - CharField
+     - blank
+     - verbose=Bezeichnung, max_length=255
+   * - source_identifier
+     - CharField
+     - unique
+     - verbose=Source Identifier, max_length=255
+   * - is_active
+     - BooleanField
+     - default=True
+     - verbose=Aktiv
+   * - priority
+     - PositiveIntegerField
+     - default=100
+     - verbose=Prioritaet
+
+Admin-Konfiguration
+^^^^^^^^^^^^^^^^^^^
+
+.. list-table::
+   :header-rows: 1
+
+   * - Aspekt
+     - Wert
+   * - Admin-Klasse
+     - microtech.admin.MicrotechDatasetCatalogAdmin
+   * - list_display
+     - priority, name, description, code, is_active, updated_at
+   * - list_filter
+     - is_active
+   * - search_fields
+     - code, name, description, source_identifier
+   * - readonly_fields
+     - created_at, updated_at
+   * - ordering
+     - priority, name, id
+   * - list_select_related
+     - False
+   * - list_per_page
+     - 100
+   * - inlines
+     - -
+   * - actions
+     - -
+   * - action_form
+     - unfold.forms.ActionForm
+
+microtech.MicrotechDatasetField
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* Python: ``microtech.models.MicrotechDatasetField``
+* DB-Tabelle: ``microtech_microtechdatasetfield``
+* Verbose Name: ``Microtech Dataset Feld``
+* Verbose Name Plural: ``Microtech Dataset Felder``
+* Default Ordering: ``dataset__priority, dataset_id, priority, field_name, id``
+
+Felder
+^^^^^^
+
+.. list-table::
+   :header-rows: 1
+
+   * - Feld
+     - Typ
+     - Optionen
+     - Details
+   * - id
+     - BigAutoField
+     - pk, unique, blank
+     - verbose=ID
+   * - created_at
+     - DateTimeField
+     - blank
+     - verbose=Angelegt am
+   * - updated_at
+     - DateTimeField
+     - blank
+     - verbose=Aktualisiert am
+   * - dataset
+     - ForeignKey
+     - db_index
+     - relation=microtech.MicrotechDatasetCatalog, verbose=Dataset
+   * - field_name
+     - CharField
+     - -
+     - verbose=Feldname, max_length=128
+   * - label
+     - CharField
+     - blank
+     - verbose=Bezeichnung, max_length=255
+   * - field_type
+     - CharField
+     - blank
+     - verbose=Feldtyp, max_length=64
+   * - is_calc_field
+     - BooleanField
+     - default=False
+     - verbose=Berechnetes Feld
+   * - can_access
+     - BooleanField
+     - default=True
+     - verbose=Lesbar
+   * - is_active
+     - BooleanField
+     - default=True
+     - verbose=Aktiv
+   * - priority
+     - PositiveIntegerField
+     - default=100
+     - verbose=Prioritaet
+
+Admin-Konfiguration
+^^^^^^^^^^^^^^^^^^^
+
+.. list-table::
+   :header-rows: 1
+
+   * - Aspekt
+     - Wert
+   * - Admin-Klasse
+     - microtech.admin.MicrotechDatasetFieldAdmin
+   * - list_display
+     - priority, dataset, field_name, field_type, is_calc_field, can_access, is_active, updated_at
+   * - list_filter
+     - is_active, is_calc_field, can_access, field_type, dataset
+   * - search_fields
+     - field_name, label, field_type, dataset__name, dataset__description
+   * - readonly_fields
+     - created_at, updated_at
+   * - ordering
+     - dataset__priority, dataset__name, priority, field_name, id
+   * - list_select_related
+     - False
+   * - list_per_page
+     - 100
+   * - inlines
+     - -
+   * - actions
+     - -
+   * - action_form
+     - unfold.forms.ActionForm
+
 microtech.MicrotechOrderRule
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -387,7 +569,7 @@ Felder
    * - target_field
      - CharField
      - -
-     - choices=11, verbose=Target Feld, max_length=64
+     - verbose=Target Feld, max_length=64
    * - target_value
      - CharField
      - blank
@@ -403,6 +585,109 @@ Admin-Konfiguration
      - Wert
    * - Registrierung
      - Kein ModelAdmin registriert
+
+microtech.MicrotechOrderRuleActionTarget
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* Python: ``microtech.models.MicrotechOrderRuleActionTarget``
+* DB-Tabelle: ``microtech_microtechorderruleactiontarget``
+* Verbose Name: ``Microtech Bestellregel Target Feld``
+* Verbose Name Plural: ``Microtech Bestellregel Target Felder``
+* Default Ordering: ``priority, id``
+
+Felder
+^^^^^^
+
+.. list-table::
+   :header-rows: 1
+
+   * - Feld
+     - Typ
+     - Optionen
+     - Details
+   * - id
+     - BigAutoField
+     - pk, unique, blank
+     - verbose=ID
+   * - created_at
+     - DateTimeField
+     - blank
+     - verbose=Angelegt am
+   * - updated_at
+     - DateTimeField
+     - blank
+     - verbose=Aktualisiert am
+   * - code
+     - CharField
+     - unique
+     - verbose=Code, max_length=64
+   * - name
+     - CharField
+     - -
+     - verbose=Name, max_length=255
+   * - engine_target_field
+     - CharField
+     - -
+     - choices=11, verbose=Engine Target Feld, max_length=64
+   * - value_type
+     - CharField
+     - default=string
+     - choices=5, verbose=Wertetyp, max_length=32
+   * - enum_values
+     - CharField
+     - blank
+     - verbose=Enum Werte (kommagetrennt), max_length=255
+   * - dataset_field
+     - ForeignKey
+     - db_index, null, blank
+     - relation=microtech.MicrotechDatasetField, verbose=Dataset Feld (Katalog)
+   * - hint
+     - CharField
+     - blank
+     - verbose=Hinweis, max_length=255
+   * - example
+     - CharField
+     - blank
+     - verbose=Beispiel, max_length=255
+   * - is_active
+     - BooleanField
+     - default=True
+     - verbose=Aktiv
+   * - priority
+     - PositiveIntegerField
+     - default=100
+     - verbose=Prioritaet
+
+Admin-Konfiguration
+^^^^^^^^^^^^^^^^^^^
+
+.. list-table::
+   :header-rows: 1
+
+   * - Aspekt
+     - Wert
+   * - Admin-Klasse
+     - microtech.admin.MicrotechOrderRuleActionTargetAdmin
+   * - list_display
+     - priority, name, code, engine_target_field, dataset_field, value_type, is_active, updated_at
+   * - list_filter
+     - is_active, value_type, engine_target_field, dataset_field__dataset
+   * - search_fields
+     - code, name, hint, example
+   * - readonly_fields
+     - created_at, updated_at
+   * - ordering
+     - priority, id
+   * - list_select_related
+     - False
+   * - list_per_page
+     - 100
+   * - inlines
+     - -
+   * - actions
+     - -
+   * - action_form
+     - unfold.forms.ActionForm
 
 microtech.MicrotechOrderRuleCondition
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -450,11 +735,11 @@ Felder
    * - source_field
      - CharField
      - -
-     - choices=9, verbose=Source Feld, max_length=64
+     - verbose=Source Feld, max_length=64
    * - operator
      - CharField
      - default=eq
-     - choices=4, verbose=Operator, max_length=16
+     - verbose=Operator, max_length=16
    * - expected_value
      - CharField
      - blank
@@ -470,6 +755,196 @@ Admin-Konfiguration
      - Wert
    * - Registrierung
      - Kein ModelAdmin registriert
+
+microtech.MicrotechOrderRuleConditionSource
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* Python: ``microtech.models.MicrotechOrderRuleConditionSource``
+* DB-Tabelle: ``microtech_microtechorderruleconditionsource``
+* Verbose Name: ``Microtech Bestellregel Source Feld``
+* Verbose Name Plural: ``Microtech Bestellregel Source Felder``
+* Default Ordering: ``priority, id``
+
+Felder
+^^^^^^
+
+.. list-table::
+   :header-rows: 1
+
+   * - Feld
+     - Typ
+     - Optionen
+     - Details
+   * - id
+     - BigAutoField
+     - pk, unique, blank
+     - verbose=ID
+   * - created_at
+     - DateTimeField
+     - blank
+     - verbose=Angelegt am
+   * - updated_at
+     - DateTimeField
+     - blank
+     - verbose=Aktualisiert am
+   * - code
+     - CharField
+     - unique
+     - verbose=Code, max_length=64
+   * - name
+     - CharField
+     - -
+     - verbose=Name, max_length=255
+   * - engine_source_field
+     - CharField
+     - -
+     - choices=9, verbose=Engine Source Feld, max_length=64
+   * - value_type
+     - CharField
+     - default=string
+     - choices=4, verbose=Wertetyp, max_length=32
+   * - dataset_field
+     - ForeignKey
+     - db_index, null, blank
+     - relation=microtech.MicrotechDatasetField, verbose=Dataset Feld (Katalog)
+   * - hint
+     - CharField
+     - blank
+     - verbose=Hinweis, max_length=255
+   * - example
+     - CharField
+     - blank
+     - verbose=Beispiel, max_length=255
+   * - is_active
+     - BooleanField
+     - default=True
+     - verbose=Aktiv
+   * - priority
+     - PositiveIntegerField
+     - default=100
+     - verbose=Prioritaet
+   * - operators
+     - ManyToManyField
+     - blank
+     - relation=microtech.MicrotechOrderRuleOperator, verbose=Erlaubte Operatoren
+
+Admin-Konfiguration
+^^^^^^^^^^^^^^^^^^^
+
+.. list-table::
+   :header-rows: 1
+
+   * - Aspekt
+     - Wert
+   * - Admin-Klasse
+     - microtech.admin.MicrotechOrderRuleConditionSourceAdmin
+   * - list_display
+     - priority, name, code, engine_source_field, dataset_field, value_type, is_active, updated_at
+   * - list_filter
+     - is_active, value_type, engine_source_field, dataset_field__dataset
+   * - search_fields
+     - code, name, hint, example
+   * - readonly_fields
+     - created_at, updated_at
+   * - ordering
+     - priority, id
+   * - list_select_related
+     - False
+   * - list_per_page
+     - 100
+   * - inlines
+     - -
+   * - actions
+     - -
+   * - action_form
+     - unfold.forms.ActionForm
+
+microtech.MicrotechOrderRuleOperator
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* Python: ``microtech.models.MicrotechOrderRuleOperator``
+* DB-Tabelle: ``microtech_microtechorderruleoperator``
+* Verbose Name: ``Microtech Bestellregel Operator``
+* Verbose Name Plural: ``Microtech Bestellregel Operatoren``
+* Default Ordering: ``priority, id``
+
+Felder
+^^^^^^
+
+.. list-table::
+   :header-rows: 1
+
+   * - Feld
+     - Typ
+     - Optionen
+     - Details
+   * - id
+     - BigAutoField
+     - pk, unique, blank
+     - verbose=ID
+   * - created_at
+     - DateTimeField
+     - blank
+     - verbose=Angelegt am
+   * - updated_at
+     - DateTimeField
+     - blank
+     - verbose=Aktualisiert am
+   * - code
+     - CharField
+     - unique
+     - verbose=Code, max_length=64
+   * - name
+     - CharField
+     - -
+     - verbose=Name, max_length=255
+   * - engine_operator
+     - CharField
+     - default=eq
+     - choices=4, verbose=Engine Operator, max_length=16
+   * - hint
+     - CharField
+     - blank
+     - verbose=Hinweis, max_length=255
+   * - is_active
+     - BooleanField
+     - default=True
+     - verbose=Aktiv
+   * - priority
+     - PositiveIntegerField
+     - default=100
+     - verbose=Prioritaet
+
+Admin-Konfiguration
+^^^^^^^^^^^^^^^^^^^
+
+.. list-table::
+   :header-rows: 1
+
+   * - Aspekt
+     - Wert
+   * - Admin-Klasse
+     - microtech.admin.MicrotechOrderRuleOperatorAdmin
+   * - list_display
+     - priority, name, code, engine_operator, is_active, updated_at
+   * - list_filter
+     - is_active, engine_operator
+   * - search_fields
+     - code, name, hint
+   * - readonly_fields
+     - created_at, updated_at
+   * - ordering
+     - priority, id
+   * - list_select_related
+     - False
+   * - list_per_page
+     - 100
+   * - inlines
+     - -
+   * - actions
+     - -
+   * - action_form
+     - unfold.forms.ActionForm
 
 microtech.MicrotechSettings
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
