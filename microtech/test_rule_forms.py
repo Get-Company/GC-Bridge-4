@@ -32,6 +32,8 @@ class MicrotechOrderRuleFormsTest(TestCase):
 
         self.assertIn("django_field", form.fields)
         self.assertIn("operator", form.fields)
+        self.assertIn("rulebuilder-operator-autocomplete", form.fields["operator"].widget.attrs.get("class", ""))
+        self.assertIn("data-operator-autocomplete-url", form.fields["operator"].widget.attrs)
 
     def test_condition_form_accepts_equals_alias(self):
         form = MicrotechOrderRuleConditionForm(

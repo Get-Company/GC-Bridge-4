@@ -2,7 +2,13 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
-from microtech.models import MicrotechDatasetCatalog, MicrotechDatasetField
+from microtech.models import (
+    MicrotechDatasetCatalog,
+    MicrotechDatasetField,
+    MicrotechOrderRuleDjangoField,
+    MicrotechOrderRuleOperator,
+)
+from microtech.rule_builder import sync_django_field_catalog
 
 
 class MicrotechOrderRuleAdminAutocompleteTest(TestCase):
@@ -14,6 +20,7 @@ class MicrotechOrderRuleAdminAutocompleteTest(TestCase):
             password="secret123",
         )
         self.client.force_login(self.admin_user)
+        sync_django_field_catalog()
         dataset = MicrotechDatasetCatalog.objects.create(
             code="vorgang_vorgange",
             name="Vorgang",
@@ -28,6 +35,23 @@ class MicrotechOrderRuleAdminAutocompleteTest(TestCase):
             field_type="Integer",
             priority=10,
         )
+        for priority, code, name in (
+            (10, "equals", "="),
+            (20, "contains", "enthaelt"),
+            (30, "is_empty", "ist leer"),
+            (40, "is_not_empty", "ist nicht leer"),
+            (50, "ne", "!="),
+            (60, "gt", ">"),
+        ):
+            MicrotechOrderRuleOperator.objects.get_or_create(
+                code=code,
+                defaults={
+                    "name": name,
+                    "engine_operator": "eq" if code == "equals" else code,
+                    "priority": priority,
+                    "is_active": True,
+                },
+            )
 
     def test_add_view_renders_unfold_autocomplete_fields(self):
         response = self.client.get(reverse("admin:microtech_microtechorderrule_add"))
@@ -40,7 +64,26 @@ class MicrotechOrderRuleAdminAutocompleteTest(TestCase):
         self.assertIn("admin-autocomplete", content)
         self.assertIn('data-app-label="microtech"', content)
         self.assertIn('data-field-name="django_field"', content)
-        self.assertIn('data-field-name="operator"', content)
         self.assertIn('data-field-name="dataset_field"', content)
+        self.assertIn("rulebuilder-operator-autocomplete", content)
+        self.assertIn("/admin/microtech/microtechorderrule/operator-autocomplete/", content)
         self.assertNotIn("tabular-table", content)
         self.assertIn("stacked", content)
+
+    def test_operator_autocomplete_is_filtered_by_selected_django_field(self):
+        django_field_id = MicrotechOrderRuleDjangoField.objects.get(field_path="payment_method").pk
+
+        response = self.client.get(
+            reverse("admin:microtech_orderrule_operator_autocomplete"),
+            {"django_field_id": django_field_id},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        rendered = " ".join(item.get("text", "") for item in payload.get("results", []))
+        self.assertIn("equals", rendered)
+        self.assertIn("contains", rendered)
+        self.assertIn("is_empty", rendered)
+        self.assertIn("is_not_empty", rendered)
+        self.assertIn("ne", rendered)
+        self.assertNotIn("gt", rendered)

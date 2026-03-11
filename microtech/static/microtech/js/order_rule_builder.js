@@ -67,6 +67,60 @@
 
   const VALUELESS_OPERATORS = ["is_empty", "is_not_empty"];
 
+  function operatorMatchesField(operatorValue, fieldDef) {
+    const operator = operatorsByValue()[String(operatorValue || "")] || null;
+    if (!operator || !fieldDef || !Array.isArray(fieldDef.allowed_operator_codes)) return false;
+    return fieldDef.allowed_operator_codes.includes(operator.code);
+  }
+
+  function initOperatorAutocomplete(operatorSelect, djangoFieldId, fieldDef) {
+    const $ = getJQuery();
+    if (!$ || !operatorSelect) return;
+
+    const $select = $(operatorSelect);
+    const baseUrl = operatorSelect.dataset.operatorAutocompleteUrl || "";
+    if (!baseUrl) return;
+    const url = djangoFieldId ? `${baseUrl}?django_field_id=${encodeURIComponent(djangoFieldId)}` : baseUrl;
+
+    if (operatorSelect.dataset.operatorAutocompleteUrlActive === url && $select.hasClass("select2-hidden-accessible")) {
+      return;
+    }
+
+    operatorSelect.dataset.operatorAutocompleteUrlActive = url;
+
+    if (!operatorMatchesField(operatorSelect.value, fieldDef)) {
+      operatorSelect.value = "";
+      $select.find("option").not('[value=""]').remove();
+    }
+
+    if ($select.hasClass("select2-hidden-accessible")) {
+      $select.select2("destroy");
+    }
+
+    $select.select2({
+      theme: "admin-autocomplete",
+      width: "100%",
+      allowClear: true,
+      placeholder: operatorSelect.dataset.placeholder || "",
+      ajax: {
+        url,
+        dataType: "json",
+        delay: 250,
+        cache: true,
+        data: function (params) {
+          return {
+            term: params.term,
+            page: params.page,
+            django_field_id: djangoFieldId || "",
+          };
+        },
+        processResults: function (data) {
+          return data || { results: [], pagination: { more: false } };
+        },
+      },
+    });
+  }
+
   function updateExpectedValueVisibility(operatorSelect, expectedInput) {
     if (!operatorSelect || !expectedInput) return;
     const operator = operatorsByValue()[String(operatorSelect.value || "")] || null;
@@ -82,6 +136,7 @@
     if (!pathInput || !operatorSelect || !expectedInput || !RULE_META) return;
 
     const fieldDef = djangoFieldByValue(pathInput.value);
+    initOperatorAutocomplete(operatorSelect, pathInput.value, fieldDef);
 
     if (!fieldDef) {
       expectedInput.placeholder = "";

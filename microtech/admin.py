@@ -25,6 +25,7 @@ from microtech.rule_builder import (
     get_django_field_defs,
     get_operator_defs,
 )
+from microtech.views.autocomplete import MicrotechOrderRuleOperatorAutocompleteView
 
 
 class SingletonAdmin(BaseAdmin):
@@ -84,7 +85,7 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
             "expected_value",
             "value_example",
         )
-        autocomplete_fields = ("django_field", "operator")
+        autocomplete_fields = ("django_field",)
         readonly_fields = BaseStackedInline.readonly_fields + ("value_example",)
         extra = 0
 
@@ -137,6 +138,11 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
                 "rule-builder-meta/",
                 "microtech_orderrule_builder_meta",
                 self.rule_builder_meta_view,
+            ),
+            (
+                "operator-autocomplete/",
+                "microtech_orderrule_operator_autocomplete",
+                MicrotechOrderRuleOperatorAutocompleteView.as_view(),
             ),
         )
 

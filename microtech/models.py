@@ -295,7 +295,7 @@ class MicrotechOrderRuleOperator(BaseModel):
         ordering = ("priority", "id")
 
     def __str__(self) -> str:
-        return f"{self.priority} | {self.name} ({self.code})"
+        return f"{self.name} - ({self.code})"
 
 
 class MicrotechOrderRuleDjangoField(BaseModel):

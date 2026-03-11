@@ -3,8 +3,12 @@ from __future__ import annotations
 from django.db.models import Q
 from django.http import HttpResponseForbidden
 
-from microtech.models import MicrotechDatasetField, MicrotechOrderRuleDjangoField
-from microtech.rule_builder import sync_django_field_catalog
+from microtech.models import (
+    MicrotechDatasetField,
+    MicrotechOrderRuleDjangoField,
+    MicrotechOrderRuleOperator,
+)
+from microtech.rule_builder import get_django_field_map, sync_django_field_catalog
 from unfold.views import BaseAutocompleteView
 
 
@@ -56,4 +60,46 @@ class MicrotechDatasetFieldAutocompleteView(BaseAutocompleteView):
             | Q(field_type__icontains=query)
             | Q(dataset__name__icontains=query)
             | Q(dataset__description__icontains=query)
+        )
+
+
+class MicrotechOrderRuleOperatorAutocompleteView(BaseAutocompleteView):
+    def dispatch(self, request, *args, **kwargs):
+        model_admin = kwargs.get("model_admin")
+        if model_admin and not model_admin.has_view_permission(request):
+            return HttpResponseForbidden("Zugriff verweigert.")
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_queryset(self):
+        query = str(self.request.GET.get("term") or "").strip()
+        django_field_id = str(self.request.GET.get("django_field_id") or "").strip()
+        queryset = (
+            MicrotechOrderRuleOperator.objects
+            .filter(is_active=True)
+            .order_by("priority", "id")
+        )
+
+        allowed_codes: set[str] = set()
+        if django_field_id.isdigit():
+            django_field = (
+                MicrotechOrderRuleDjangoField.objects
+                .filter(pk=int(django_field_id), is_active=True)
+                .first()
+            )
+            if django_field:
+                field_def = get_django_field_map().get(django_field.field_path)
+                if field_def:
+                    allowed_codes = set(field_def.allowed_operator_codes)
+
+        if allowed_codes:
+            queryset = queryset.filter(code__in=allowed_codes)
+        else:
+            queryset = queryset.none()
+
+        if not query:
+            return queryset
+        return queryset.filter(
+            Q(code__icontains=query)
+            | Q(name__icontains=query)
+            | Q(hint__icontains=query)
         )

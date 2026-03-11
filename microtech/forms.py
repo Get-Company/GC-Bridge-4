@@ -4,6 +4,7 @@ from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
 from django import forms
+from django.urls import reverse_lazy
 
 from microtech.models import (
     MicrotechDatasetCatalog,
@@ -99,11 +100,26 @@ class MicrotechOrderRuleConditionForm(forms.ModelForm):
             if selected_operator:
                 self.initial["operator"] = selected_operator.pk
 
+        selected_operator_id = _to_str(
+            self.data.get(self.add_prefix("operator"))
+            or self.initial.get("operator")
+            or getattr(self.instance, "operator_id", "")
+        )
         self.fields["operator"].queryset = (
             MicrotechOrderRuleOperator.objects
-            .filter(is_active=True)
+            .filter(is_active=True, pk=int(selected_operator_id))
             .order_by("priority", "id")
+        ) if selected_operator_id.isdigit() else MicrotechOrderRuleOperator.objects.none()
+        self.fields["operator"].widget.attrs["class"] = " ".join(
+            part for part in (
+                self.fields["operator"].widget.attrs.get("class", ""),
+                "rulebuilder-operator-autocomplete",
+            ) if part
         )
+        self.fields["operator"].widget.attrs["data-operator-autocomplete-url"] = reverse_lazy(
+            "admin:microtech_orderrule_operator_autocomplete"
+        )
+        self.fields["operator"].widget.attrs["data-placeholder"] = "Operator suchen..."
         self.fields["expected_value"].help_text = (
             "Freitextwert. Format haengt vom gewaehlen Django-Feldtyp ab."
         )
