@@ -14,13 +14,10 @@ from microtech.models import (
     MicrotechOrderRule,
     MicrotechOrderRuleAction,
     MicrotechOrderRuleCondition,
+    MicrotechOrderRuleDjangoField,
     MicrotechOrderRuleDjangoFieldPolicy,
     MicrotechOrderRuleOperator,
     MicrotechSettings,
-)
-from microtech.views import (
-    MicrotechDatasetFieldAutocompleteView,
-    MicrotechOrderRuleDjangoFieldAutocompleteView,
 )
 from microtech.rule_builder import (
     get_dataset_defs,
@@ -82,11 +79,12 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
         fields = (
             "is_active",
             "priority",
-            "django_field_path",
+            "django_field",
             "operator_code",
             "expected_value",
             "value_example",
         )
+        autocomplete_fields = ("django_field",)
         readonly_fields = BaseTabularInline.readonly_fields + ("value_example",)
         extra = 0
 
@@ -106,6 +104,7 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
             "dataset_field",
             "target_value",
         )
+        autocomplete_fields = ("dataset_field",)
         extra = 0
 
     list_display = (
@@ -125,28 +124,10 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
     inlines = (ConditionInline, ActionInline)
 
     class Media:
-        js = (
-            "admin/js/vendor/jquery/jquery.js",
-            "admin/js/vendor/select2/select2.full.js",
-            "admin/js/jquery.init.js",
-            "unfold/js/select2.init.js",
-            "microtech/js/order_rule_builder.js",
-        )
+        js = ("microtech/js/order_rule_builder.js",)
         css = {
-            "all": (
-                "admin/css/vendor/select2/select2.css",
-                "admin/css/autocomplete.css",
-                "microtech/css/order_rule_builder.css",
-            ),
+            "all": ("microtech/css/order_rule_builder.css",),
         }
-
-    def get_formset_kwargs(self, request, obj, inline, prefix):
-        kwargs = super().get_formset_kwargs(request, obj, inline, prefix)
-        kwargs["form_kwargs"] = {
-            **kwargs.get("form_kwargs", {}),
-            "request": request,
-        }
-        return kwargs
 
     def get_custom_urls(self):
         urls = super().get_custom_urls()
@@ -156,16 +137,6 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
                 "rule-builder-meta/",
                 "microtech_orderrule_builder_meta",
                 self.rule_builder_meta_view,
-            ),
-            (
-                "django-field-autocomplete/",
-                "microtech_orderrule_django_field_autocomplete",
-                MicrotechOrderRuleDjangoFieldAutocompleteView.as_view(),
-            ),
-            (
-                "dataset-field-autocomplete/",
-                "microtech_dataset_field_autocomplete",
-                MicrotechDatasetFieldAutocompleteView.as_view(),
             ),
         )
 
@@ -246,6 +217,23 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
                     "Operatoren werden feldtypbasiert gefiltert und optional ueber Feld-Policies eingeschraenkt. "
                     "Aktionen waehlen Dataset und Dataset-Feld."
                 ),
+            },
+        ),
+    )
+
+
+@admin.register(MicrotechOrderRuleDjangoField)
+class MicrotechOrderRuleDjangoFieldAdmin(BaseAdmin):
+    list_display = ("priority", "label", "field_path", "value_kind", "is_active", "updated_at")
+    list_editable = ("is_active",)
+    search_fields = ("field_path", "label", "hint", "example")
+    list_filter = ("is_active", "value_kind")
+    ordering = ("priority", "field_path", "id")
+    fieldsets = (
+        (
+            "Django Feldkatalog",
+            {
+                "fields": ("is_active", "priority", "field_path", "label", "value_kind", "hint", "example"),
             },
         ),
     )

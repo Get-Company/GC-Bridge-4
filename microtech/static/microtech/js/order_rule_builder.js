@@ -104,7 +104,7 @@
   }
 
   function updateConditionRow(row) {
-    const pathInput = row.querySelector("select[name$='-django_field_path'], input[name$='-django_field_path']");
+    const pathInput = row.querySelector("select[name$='-django_field'], input[name$='-django_field']");
     const operatorSelect = row.querySelector("select[name$='-operator_code']");
     const expectedInput = row.querySelector("input[name$='-expected_value']");
     if (!pathInput || !operatorSelect || !expectedInput || !RULE_META) return;
@@ -166,7 +166,7 @@
     row.dataset.ruleBuilderBound = "1";
     initEnhancedSelects(row);
 
-    const pathInput = row.querySelector("select[name$='-django_field_path'], input[name$='-django_field_path']");
+    const pathInput = row.querySelector("select[name$='-django_field'], input[name$='-django_field']");
     const datasetSelect = row.querySelector("select[name$='-dataset']");
     const datasetFieldSelect = row.querySelector("select[name$='-dataset_field']");
     const actionTypeSelect = row.querySelector("select[name$='-action_type']");
