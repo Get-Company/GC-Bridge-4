@@ -20,6 +20,7 @@ class MicrotechOrderRuleFormsTest(TestCase):
         self.assertIsInstance(field, UnfoldAdminAutocompleteModelChoiceField)
         self.assertIn("admin-autocomplete", widget.attrs.get("class", ""))
         self.assertIn("data-ajax--url", widget.attrs)
+        self.assertEqual(field.queryset.count(), 0)
         self.assertIn("min-width: 28rem", widget.attrs.get("style", ""))
 
     def test_condition_form_accepts_equals_alias(self):
@@ -141,5 +142,6 @@ class MicrotechOrderRuleFormsTest(TestCase):
 
         self.assertIsInstance(field, UnfoldAdminAutocompleteModelChoiceField)
         self.assertIn("data-ajax--url", widget.attrs)
+        self.assertEqual(field.queryset.count(), 0)
         self.assertIn("min-width: 40rem", widget.attrs.get("style", ""))
         self.assertEqual(widget.attrs.get("data-placeholder"), "Dataset Feld suchen...")

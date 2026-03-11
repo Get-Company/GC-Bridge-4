@@ -2,6 +2,8 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
+from microtech.models import MicrotechDatasetCatalog, MicrotechDatasetField
+
 
 class MicrotechOrderRuleAdminAutocompleteTest(TestCase):
     def setUp(self):
@@ -12,6 +14,20 @@ class MicrotechOrderRuleAdminAutocompleteTest(TestCase):
             password="secret123",
         )
         self.client.force_login(self.admin_user)
+        dataset = MicrotechDatasetCatalog.objects.create(
+            code="vorgang_vorgange",
+            name="Vorgang",
+            description="Vorgange",
+            source_identifier="Vorgang - Vorgange",
+            priority=10,
+        )
+        MicrotechDatasetField.objects.create(
+            dataset=dataset,
+            field_name="ZahlArt",
+            label="Zahlungsart",
+            field_type="Integer",
+            priority=10,
+        )
 
     def test_add_view_renders_unfold_autocomplete_fields(self):
         response = self.client.get(reverse("admin:microtech_microtechorderrule_add"))
@@ -23,3 +39,5 @@ class MicrotechOrderRuleAdminAutocompleteTest(TestCase):
         self.assertIn("admin-autocomplete", content)
         self.assertIn("microtechorderrule/django-field-autocomplete/", content)
         self.assertIn("microtechorderrule/dataset-field-autocomplete/", content)
+        self.assertNotIn(">ZahlArt<", content)
+        self.assertNotIn(">payment_method<", content)

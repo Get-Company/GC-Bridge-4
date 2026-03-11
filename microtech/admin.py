@@ -130,6 +130,14 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
             "all": ("microtech/css/order_rule_builder.css",),
         }
 
+    def get_formset_kwargs(self, request, obj, inline, prefix):
+        kwargs = super().get_formset_kwargs(request, obj, inline, prefix)
+        kwargs["form_kwargs"] = {
+            **kwargs.get("form_kwargs", {}),
+            "request": request,
+        }
+        return kwargs
+
     def get_custom_urls(self):
         urls = super().get_custom_urls()
         return (

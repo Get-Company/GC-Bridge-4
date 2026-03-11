@@ -79,7 +79,8 @@ class MicrotechOrderRuleConditionForm(forms.ModelForm):
         model = MicrotechOrderRuleCondition
         fields = ("is_active", "priority", "django_field_path", "operator_code", "expected_value")
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, request=None, **kwargs):
+        self.request = request
         super().__init__(*args, **kwargs)
         sync_django_field_catalog()
         selected_path = _to_str(
@@ -87,11 +88,18 @@ class MicrotechOrderRuleConditionForm(forms.ModelForm):
             or self.initial.get("django_field_path")
             or getattr(self.instance, "django_field_path", "")
         )
+        selected_catalog = None
         if selected_path.isdigit():
-            selected_path = _to_str(
+            selected_catalog = (
                 MicrotechOrderRuleDjangoField.objects
                 .filter(pk=int(selected_path), is_active=True)
-                .values_list("field_path", flat=True)
+                .first()
+            )
+            selected_path = _to_str(getattr(selected_catalog, "field_path", ""))
+        elif selected_path:
+            selected_catalog = (
+                MicrotechOrderRuleDjangoField.objects
+                .filter(field_path=selected_path, is_active=True)
                 .first()
             )
         selected_operator = _to_str(
@@ -99,19 +107,10 @@ class MicrotechOrderRuleConditionForm(forms.ModelForm):
             or self.initial.get("operator_code")
             or getattr(self.instance, "operator_code", "")
         )
-        selected_catalog = (
-            MicrotechOrderRuleDjangoField.objects
-            .filter(field_path=selected_path, is_active=True)
-            .first()
-        )
         original_field = self.fields["django_field_path"]
         self.fields["django_field_path"] = UnfoldAdminAutocompleteModelChoiceField(
             url_path="admin:microtech_orderrule_django_field_autocomplete",
-            queryset=(
-                MicrotechOrderRuleDjangoField.objects
-                .filter(is_active=True)
-                .order_by("priority", "label", "id")
-            ),
+            queryset=self._django_field_queryset(selected_catalog),
             required=original_field.required,
             label=original_field.label,
             help_text=original_field.help_text,
@@ -126,6 +125,21 @@ class MicrotechOrderRuleConditionForm(forms.ModelForm):
         self.fields["expected_value"].help_text = (
             "Freitextwert. Format haengt vom gewaehlen Django-Feldtyp ab."
         )
+
+    def _django_field_queryset(self, selected_catalog: MicrotechOrderRuleDjangoField | None):
+        base_queryset = (
+            MicrotechOrderRuleDjangoField.objects
+            .filter(is_active=True)
+            .order_by("priority", "label", "id")
+        )
+        if self.request and self.request.method == "POST":
+            selected_value = _to_str(self.data.get(self.add_prefix("django_field_path")))
+            if selected_value.isdigit():
+                return base_queryset.filter(pk=int(selected_value))
+            return base_queryset.none()
+        if selected_catalog:
+            return base_queryset.filter(pk=selected_catalog.pk)
+        return base_queryset.none()
 
     def clean(self):
         cleaned_data = super().clean()
@@ -192,7 +206,8 @@ class MicrotechOrderRuleActionForm(forms.ModelForm):
         model = MicrotechOrderRuleAction
         fields = ("is_active", "priority", "action_type", "dataset", "dataset_field", "target_value")
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, request=None, **kwargs):
+        self.request = request
         super().__init__(*args, **kwargs)
         dataset_field_id = _to_str(
             self.data.get(self.add_prefix("dataset_field"))
@@ -211,7 +226,7 @@ class MicrotechOrderRuleActionForm(forms.ModelForm):
 
         dataset_field = (
             MicrotechDatasetField.objects
-            .filter(pk=int(dataset_field_id))
+            .filter(pk=int(dataset_field_id), is_active=True, dataset__is_active=True)
             .select_related("dataset")
             .first()
             if dataset_field_id.isdigit()
@@ -220,12 +235,7 @@ class MicrotechOrderRuleActionForm(forms.ModelForm):
         original_dataset_field = self.fields["dataset_field"]
         self.fields["dataset_field"] = UnfoldAdminAutocompleteModelChoiceField(
             url_path="admin:microtech_dataset_field_autocomplete",
-            queryset=(
-                MicrotechDatasetField.objects
-                .filter(is_active=True, dataset__is_active=True)
-                .select_related("dataset")
-                .order_by("dataset__priority", "dataset__name", "priority", "field_name", "id")
-            ),
+            queryset=self._dataset_field_queryset(dataset_field),
             required=original_dataset_field.required,
             label=original_dataset_field.label,
             help_text=original_dataset_field.help_text,
@@ -245,6 +255,22 @@ class MicrotechOrderRuleActionForm(forms.ModelForm):
         )
         self.fields["dataset_field"].widget.attrs["style"] = dataset_field_style
         self.fields["dataset_field"].widget.attrs["data-placeholder"] = "Dataset Feld suchen..."
+
+    def _dataset_field_queryset(self, selected_dataset_field: MicrotechDatasetField | None):
+        base_queryset = (
+            MicrotechDatasetField.objects
+            .filter(is_active=True, dataset__is_active=True)
+            .select_related("dataset")
+            .order_by("dataset__priority", "dataset__name", "priority", "field_name", "id")
+        )
+        if self.request and self.request.method == "POST":
+            selected_value = _to_str(self.data.get(self.add_prefix("dataset_field")))
+            if selected_value.isdigit():
+                return base_queryset.filter(pk=int(selected_value))
+            return base_queryset.none()
+        if selected_dataset_field:
+            return base_queryset.filter(pk=selected_dataset_field.pk)
+        return base_queryset.none()
 
     def clean(self):
         cleaned_data = super().clean()
