@@ -4,15 +4,16 @@ from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
 from django import forms
-from unfold.widgets import UnfoldAdminSelect2Widget
+from unfold.fields import UnfoldAdminAutocompleteModelChoiceField
 
 from microtech.models import (
     MicrotechDatasetCatalog,
     MicrotechDatasetField,
     MicrotechOrderRuleAction,
     MicrotechOrderRuleCondition,
+    MicrotechOrderRuleDjangoField,
 )
-from microtech.rule_builder import get_django_field_map, get_operator_defs
+from microtech.rule_builder import get_django_field_map, get_operator_defs, sync_django_field_catalog
 
 
 _BOOL_TRUE_VALUES = {"1", "true", "yes", "on", "ja"}
@@ -65,17 +66,6 @@ def _operator_choices_for_path(field_path: str, selected: str = "") -> list[tupl
     return choices
 
 
-def _django_field_choices(selected: str = "") -> list[tuple[str, str]]:
-    field_map = get_django_field_map()
-    choices = sorted(
-        ((item.path, item.label) for item in field_map.values()),
-        key=lambda row: row[1].lower(),
-    )
-    if selected and selected not in {code for code, _ in choices}:
-        choices.append((selected, selected))
-    return choices
-
-
 def _merge_style(existing: str, additions: str) -> str:
     base = existing.strip()
     extra = additions.strip()
@@ -91,24 +81,45 @@ class MicrotechOrderRuleConditionForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        sync_django_field_catalog()
         selected_path = _to_str(
             self.data.get(self.add_prefix("django_field_path"))
             or self.initial.get("django_field_path")
             or getattr(self.instance, "django_field_path", "")
         )
+        if selected_path.isdigit():
+            selected_path = _to_str(
+                MicrotechOrderRuleDjangoField.objects
+                .filter(pk=int(selected_path), is_active=True)
+                .values_list("field_path", flat=True)
+                .first()
+            )
         selected_operator = _to_str(
             self.data.get(self.add_prefix("operator_code"))
             or self.initial.get("operator_code")
             or getattr(self.instance, "operator_code", "")
         )
-
-        self.fields["django_field_path"].widget = UnfoldAdminSelect2Widget(
-            attrs={
-                "data-placeholder": "Django Feldpfad suchen...",
-                "style": "min-width: 28rem; width: 100%;",
-            },
-            choices=_django_field_choices(selected_path),
+        selected_catalog = (
+            MicrotechOrderRuleDjangoField.objects
+            .filter(field_path=selected_path, is_active=True)
+            .first()
         )
+        original_field = self.fields["django_field_path"]
+        self.fields["django_field_path"] = UnfoldAdminAutocompleteModelChoiceField(
+            url_path="admin:microtech_orderrule_django_field_autocomplete",
+            queryset=(
+                MicrotechOrderRuleDjangoField.objects
+                .filter(is_active=True)
+                .order_by("priority", "label", "id")
+            ),
+            required=original_field.required,
+            label=original_field.label,
+            help_text=original_field.help_text,
+        )
+        self.fields["django_field_path"].widget.attrs["data-placeholder"] = "Django Feldpfad suchen..."
+        self.fields["django_field_path"].widget.attrs["style"] = "min-width: 28rem; width: 100%;"
+        if not self.is_bound and selected_catalog:
+            self.initial["django_field_path"] = selected_catalog.pk
         self.fields["operator_code"].widget = forms.Select(
             choices=_operator_choices_for_path(selected_path, selected_operator)
         )
@@ -118,7 +129,9 @@ class MicrotechOrderRuleConditionForm(forms.ModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
-        field_path = _to_str(cleaned_data.get("django_field_path"))
+        selected_field = cleaned_data.get("django_field_path")
+        field_path = _to_str(getattr(selected_field, "field_path", selected_field))
+        cleaned_data["django_field_path"] = field_path
         operator_code = _to_str(cleaned_data.get("operator_code"))
         expected_value = _to_str(cleaned_data.get("expected_value"))
 
@@ -186,18 +199,6 @@ class MicrotechOrderRuleActionForm(forms.ModelForm):
             or self.initial.get("dataset_field")
             or getattr(self.instance, "dataset_field_id", "")
         )
-        selected_dataset_id = _to_str(
-            self.data.get(self.add_prefix("dataset"))
-            or self.initial.get("dataset")
-            or getattr(self.instance, "dataset_id", "")
-        )
-        if not selected_dataset_id and dataset_field_id.isdigit():
-            selected_dataset_id = _to_str(
-                MicrotechDatasetField.objects
-                .filter(pk=int(dataset_field_id))
-                .values_list("dataset_id", flat=True)
-                .first()
-            )
 
         if "dataset" in self.fields:
             self.fields["dataset"].queryset = (
@@ -208,20 +209,29 @@ class MicrotechOrderRuleActionForm(forms.ModelForm):
             self.fields["dataset"].required = False
             self.fields["dataset"].widget = forms.HiddenInput()
 
-        if selected_dataset_id:
-            self.fields["dataset_field"].queryset = (
-                MicrotechDatasetField.objects
-                .filter(is_active=True, dataset_id=selected_dataset_id, dataset__is_active=True)
-                .select_related("dataset")
-                .order_by("priority", "id")
-            )
-        else:
-            self.fields["dataset_field"].queryset = (
+        dataset_field = (
+            MicrotechDatasetField.objects
+            .filter(pk=int(dataset_field_id))
+            .select_related("dataset")
+            .first()
+            if dataset_field_id.isdigit()
+            else None
+        )
+        original_dataset_field = self.fields["dataset_field"]
+        self.fields["dataset_field"] = UnfoldAdminAutocompleteModelChoiceField(
+            url_path="admin:microtech_dataset_field_autocomplete",
+            queryset=(
                 MicrotechDatasetField.objects
                 .filter(is_active=True, dataset__is_active=True)
                 .select_related("dataset")
                 .order_by("dataset__priority", "dataset__name", "priority", "field_name", "id")
-            )
+            ),
+            required=original_dataset_field.required,
+            label=original_dataset_field.label,
+            help_text=original_dataset_field.help_text,
+        )
+        if not self.is_bound and dataset_field:
+            self.initial["dataset_field"] = dataset_field.pk
 
         self.fields["target_value"].help_text = (
             "Bei Aktionstyp 'create_extra_position' enthaelt target_value die ERP-Nr der Zusatzposition."

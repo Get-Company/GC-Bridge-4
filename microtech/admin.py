@@ -18,6 +18,10 @@ from microtech.models import (
     MicrotechOrderRuleOperator,
     MicrotechSettings,
 )
+from microtech.views import (
+    MicrotechDatasetFieldAutocompleteView,
+    MicrotechOrderRuleDjangoFieldAutocompleteView,
+)
 from microtech.rule_builder import (
     get_dataset_defs,
     get_dataset_field_defs,
@@ -102,7 +106,6 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
             "dataset_field",
             "target_value",
         )
-        autocomplete_fields = ("dataset_field",)
         extra = 0
 
     list_display = (
@@ -136,6 +139,16 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
                 "microtech_orderrule_builder_meta",
                 self.rule_builder_meta_view,
             ),
+            (
+                "django-field-autocomplete/",
+                "microtech_orderrule_django_field_autocomplete",
+                MicrotechOrderRuleDjangoFieldAutocompleteView.as_view(),
+            ),
+            (
+                "dataset-field-autocomplete/",
+                "microtech_dataset_field_autocomplete",
+                MicrotechDatasetFieldAutocompleteView.as_view(),
+            ),
         )
 
     def rule_builder_meta_view(self, request, **kwargs):
@@ -154,6 +167,7 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
             ],
             "django_fields": [
                 {
+                    "id": item.catalog_id,
                     "path": item.path,
                     "label": item.label,
                     "value_kind": item.value_kind,

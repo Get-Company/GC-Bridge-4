@@ -1,16 +1,24 @@
 from django.test import TestCase
+from unfold.fields import UnfoldAdminAutocompleteModelChoiceField
 
 from microtech.forms import MicrotechOrderRuleActionForm, MicrotechOrderRuleConditionForm
-from microtech.models import MicrotechDatasetCatalog, MicrotechDatasetField, MicrotechOrderRuleAction
+from microtech.models import MicrotechDatasetCatalog, MicrotechDatasetField, MicrotechOrderRuleAction, MicrotechOrderRuleDjangoField
+from microtech.rule_builder import sync_django_field_catalog
 
 
 class MicrotechOrderRuleFormsTest(TestCase):
+    def _field_catalog_id(self, field_path: str) -> int:
+        sync_django_field_catalog()
+        return MicrotechOrderRuleDjangoField.objects.get(field_path=field_path).pk
+
     def test_condition_form_uses_unfold_autocomplete_widget_with_width(self):
         form = MicrotechOrderRuleConditionForm()
 
-        widget = form.fields["django_field_path"].widget
+        field = form.fields["django_field_path"]
+        widget = field.widget
 
-        self.assertIn("unfold-admin-autocomplete", widget.attrs.get("class", ""))
+        self.assertIsInstance(field, UnfoldAdminAutocompleteModelChoiceField)
+        self.assertIn("admin-autocomplete", widget.attrs.get("class", ""))
         self.assertIn("min-width: 28rem", widget.attrs.get("style", ""))
 
     def test_condition_form_accepts_equals_alias(self):
@@ -18,7 +26,7 @@ class MicrotechOrderRuleFormsTest(TestCase):
             data={
                 "is_active": True,
                 "priority": 10,
-                "django_field_path": "payment_method",
+                "django_field_path": self._field_catalog_id("payment_method"),
                 "operator_code": "equals",
                 "expected_value": "paypal",
             }
@@ -31,7 +39,7 @@ class MicrotechOrderRuleFormsTest(TestCase):
             data={
                 "is_active": True,
                 "priority": 10,
-                "django_field_path": "payment_method",
+                "django_field_path": self._field_catalog_id("payment_method"),
                 "operator_code": "contains",
                 "expected_value": "paypal",
             }
@@ -44,7 +52,7 @@ class MicrotechOrderRuleFormsTest(TestCase):
             data={
                 "is_active": True,
                 "priority": 10,
-                "django_field_path": "customer__is_gross",
+                "django_field_path": self._field_catalog_id("customer__is_gross"),
                 "operator_code": "contains",
                 "expected_value": "true",
             }
@@ -127,7 +135,9 @@ class MicrotechOrderRuleFormsTest(TestCase):
     def test_action_form_expands_dataset_field_widget_width(self):
         form = MicrotechOrderRuleActionForm()
 
-        widget = form.fields["dataset_field"].widget
+        field = form.fields["dataset_field"]
+        widget = field.widget
 
+        self.assertIsInstance(field, UnfoldAdminAutocompleteModelChoiceField)
         self.assertIn("min-width: 40rem", widget.attrs.get("style", ""))
         self.assertEqual(widget.attrs.get("data-placeholder"), "Dataset Feld suchen...")

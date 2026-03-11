@@ -282,6 +282,24 @@ class MicrotechOrderRuleOperator(BaseModel):
         return f"{self.priority} | {self.name} ({self.code})"
 
 
+class MicrotechOrderRuleDjangoField(BaseModel):
+    field_path = models.CharField(max_length=255, unique=True, verbose_name=_("Django Feldpfad"))
+    label = models.CharField(max_length=255, verbose_name=_("Label"))
+    value_kind = models.CharField(max_length=32, verbose_name=_("Wertetyp"))
+    hint = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Hinweis"))
+    example = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Beispiel"))
+    is_active = models.BooleanField(default=True, verbose_name=_("Aktiv"))
+    priority = models.PositiveIntegerField(default=100, verbose_name=_("Prioritaet"))
+
+    class Meta:
+        verbose_name = _("Microtech Django Feldkatalog")
+        verbose_name_plural = _("Microtech Django Feldkatalog")
+        ordering = ("priority", "field_path", "id")
+
+    def __str__(self) -> str:
+        return f"{self.label} [{self.field_path}]"
+
+
 class MicrotechOrderRuleDjangoFieldPolicy(BaseModel):
     field_path = models.CharField(max_length=255, unique=True, verbose_name=_("Django Feldpfad"))
     label_override = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Label Override"))

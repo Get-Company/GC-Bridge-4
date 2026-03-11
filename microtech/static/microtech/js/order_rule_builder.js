@@ -12,9 +12,9 @@
     if (!$ || !root) return;
 
     const $root = $(root);
-    const customAutocomplete = $root.is(".unfold-admin-autocomplete")
+    const customAutocomplete = $root.is(".unfold-admin-autocomplete") && !$root.is(".admin-autocomplete")
       ? $root
-      : $root.find(".unfold-admin-autocomplete");
+      : $root.find(".unfold-admin-autocomplete").not(".admin-autocomplete");
     const modelAutocomplete = $root.is(".admin-autocomplete")
       ? $root
       : $root.find(".admin-autocomplete");
@@ -60,9 +60,10 @@
     return map;
   }
 
-  function djangoFieldByPath(path) {
+  function djangoFieldByValue(value) {
     if (!RULE_META || !Array.isArray(RULE_META.django_fields)) return null;
-    return RULE_META.django_fields.find((item) => item.path === path) || null;
+    const needle = String(value || "");
+    return RULE_META.django_fields.find((item) => String(item.id || item.path) === needle || item.path === needle) || null;
   }
 
   function datasetFieldById(idValue) {
@@ -121,7 +122,7 @@
     const expectedInput = row.querySelector("input[name$='-expected_value']");
     if (!pathInput || !operatorSelect || !expectedInput || !RULE_META) return;
 
-    const fieldDef = djangoFieldByPath(pathInput.value);
+    const fieldDef = djangoFieldByValue(pathInput.value);
     const currentOperator = operatorSelect.value;
 
     if (!fieldDef) {

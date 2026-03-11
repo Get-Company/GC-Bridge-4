@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from django.db import OperationalError, ProgrammingError
 from django.db.models import Field
@@ -8,6 +8,7 @@ from django.db.models import Field
 from microtech.models import (
     MicrotechDatasetCatalog,
     MicrotechDatasetField,
+    MicrotechOrderRuleDjangoField,
     MicrotechOrderRuleDjangoFieldPolicy,
     MicrotechOrderRuleOperator,
 )
@@ -24,6 +25,7 @@ class OperatorDef:
 
 @dataclass(frozen=True, slots=True)
 class DjangoFieldDef:
+    catalog_id: int | None
     path: str
     label: str
     value_kind: str
@@ -72,6 +74,14 @@ def _db_has_rule_builder_tables() -> bool:
         MicrotechOrderRuleDjangoFieldPolicy.objects.exists()
         MicrotechDatasetCatalog.objects.exists()
         MicrotechDatasetField.objects.exists()
+        return True
+    except (OperationalError, ProgrammingError):
+        return False
+
+
+def _db_has_django_field_catalog_table() -> bool:
+    try:
+        MicrotechOrderRuleDjangoField.objects.exists()
         return True
     except (OperationalError, ProgrammingError):
         return False
@@ -193,6 +203,7 @@ def _build_base_django_field_defs() -> list[DjangoFieldDef]:
         value_kind = _field_value_kind(field)
         base_defs.append(
             DjangoFieldDef(
+                catalog_id=None,
                 path=path,
                 label=f"Order - {label} ({path})",
                 value_kind=value_kind,
@@ -215,6 +226,7 @@ def _build_base_django_field_defs() -> list[DjangoFieldDef]:
             rel_title = rel_name.replace("_", " ").title()
             base_defs.append(
                 DjangoFieldDef(
+                    catalog_id=None,
                     path=path,
                     label=f"{rel_title} - {label} ({path})",
                     value_kind=value_kind,
@@ -229,7 +241,7 @@ def _build_base_django_field_defs() -> list[DjangoFieldDef]:
     return list(unique_by_path.values())
 
 
-def get_django_field_defs() -> list[DjangoFieldDef]:
+def _build_effective_django_field_defs() -> list[DjangoFieldDef]:
     base_defs = _build_base_django_field_defs()
     if not _db_has_rule_builder_tables():
         return sorted(base_defs, key=lambda item: item.path)
@@ -270,6 +282,7 @@ def get_django_field_defs() -> list[DjangoFieldDef]:
 
         defs.append(
             DjangoFieldDef(
+                catalog_id=None,
                 path=item.path,
                 label=label,
                 value_kind=item.value_kind,
@@ -280,6 +293,70 @@ def get_django_field_defs() -> list[DjangoFieldDef]:
         )
 
     return sorted(defs, key=lambda row: row.label.lower())
+
+
+def sync_django_field_catalog() -> dict[str, int]:
+    defs = _build_effective_django_field_defs()
+    if not _db_has_django_field_catalog_table():
+        return {}
+
+    active_paths = {item.path for item in defs}
+    existing = {
+        row.field_path: row
+        for row in MicrotechOrderRuleDjangoField.objects.all()
+    }
+
+    for index, item in enumerate(defs, start=1):
+        defaults = {
+            "label": item.label,
+            "value_kind": item.value_kind,
+            "hint": item.hint,
+            "example": item.example,
+            "is_active": True,
+            "priority": index * 10,
+        }
+        row = existing.get(item.path)
+        if row is None:
+            MicrotechOrderRuleDjangoField.objects.create(
+                field_path=item.path,
+                **defaults,
+            )
+            continue
+
+        changed = False
+        for key, value in defaults.items():
+            if getattr(row, key) != value:
+                setattr(row, key, value)
+                changed = True
+        if changed:
+            row.save(update_fields=[*defaults.keys()])
+
+    if active_paths:
+        (
+            MicrotechOrderRuleDjangoField.objects
+            .exclude(field_path__in=active_paths)
+            .filter(is_active=True)
+            .update(is_active=False)
+        )
+    else:
+        MicrotechOrderRuleDjangoField.objects.filter(is_active=True).update(is_active=False)
+
+    return {
+        row.field_path: row.id
+        for row in MicrotechOrderRuleDjangoField.objects
+        .filter(field_path__in=active_paths, is_active=True)
+    }
+
+
+def get_django_field_defs() -> list[DjangoFieldDef]:
+    defs = _build_effective_django_field_defs()
+    catalog_ids = sync_django_field_catalog()
+    if not catalog_ids:
+        return defs
+    return [
+        replace(item, catalog_id=catalog_ids.get(item.path))
+        for item in defs
+    ]
 
 
 def get_django_field_map() -> dict[str, DjangoFieldDef]:
@@ -351,5 +428,6 @@ __all__ = [
     "get_django_field_map",
     "get_operator_defs",
     "get_operator_engine_map",
+    "sync_django_field_catalog",
     "resolve_django_field_value",
 ]
