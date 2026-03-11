@@ -126,6 +126,14 @@ class MicrotechOrderRuleCondition(BaseModel):
         blank=True,
         verbose_name=_("Django Feld"),
     )
+    operator = models.ForeignKey(
+        "MicrotechOrderRuleOperator",
+        on_delete=models.SET_NULL,
+        related_name="rule_conditions",
+        null=True,
+        blank=True,
+        verbose_name=_("Operator"),
+    )
     is_active = models.BooleanField(default=True, verbose_name=_("Aktiv"))
     priority = models.PositiveIntegerField(default=100, verbose_name=_("Prioritaet"))
     django_field_path = models.CharField(

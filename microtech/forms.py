@@ -11,6 +11,7 @@ from microtech.models import (
     MicrotechOrderRuleAction,
     MicrotechOrderRuleCondition,
     MicrotechOrderRuleDjangoField,
+    MicrotechOrderRuleOperator,
 )
 from microtech.rule_builder import get_django_field_map, get_operator_defs, sync_django_field_catalog
 
@@ -76,7 +77,7 @@ def _merge_style(existing: str, additions: str) -> str:
 class MicrotechOrderRuleConditionForm(forms.ModelForm):
     class Meta:
         model = MicrotechOrderRuleCondition
-        fields = ("is_active", "priority", "django_field", "operator_code", "expected_value")
+        fields = ("is_active", "priority", "django_field", "operator", "expected_value")
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -89,25 +90,19 @@ class MicrotechOrderRuleConditionForm(forms.ModelForm):
             )
             if selected_catalog:
                 self.initial["django_field"] = selected_catalog.pk
+        if not getattr(self.instance, "operator_id", None) and getattr(self.instance, "operator_code", ""):
+            selected_operator = (
+                MicrotechOrderRuleOperator.objects
+                .filter(code=self.instance.operator_code, is_active=True)
+                .first()
+            )
+            if selected_operator:
+                self.initial["operator"] = selected_operator.pk
 
-        selected_field_id = _to_str(
-            self.data.get(self.add_prefix("django_field"))
-            or self.initial.get("django_field")
-            or getattr(self.instance, "django_field_id", "")
-        )
-        selected_path = _to_str(
-            MicrotechOrderRuleDjangoField.objects
-            .filter(pk=int(selected_field_id), is_active=True)
-            .values_list("field_path", flat=True)
-            .first()
-        ) if selected_field_id.isdigit() else ""
-        selected_operator = _to_str(
-            self.data.get(self.add_prefix("operator_code"))
-            or self.initial.get("operator_code")
-            or getattr(self.instance, "operator_code", "")
-        )
-        self.fields["operator_code"].widget = forms.Select(
-            choices=_operator_choices_for_path(selected_path, selected_operator)
+        self.fields["operator"].queryset = (
+            MicrotechOrderRuleOperator.objects
+            .filter(is_active=True)
+            .order_by("priority", "id")
         )
         self.fields["expected_value"].help_text = (
             "Freitextwert. Format haengt vom gewaehlen Django-Feldtyp ab."
@@ -116,9 +111,11 @@ class MicrotechOrderRuleConditionForm(forms.ModelForm):
     def clean(self):
         cleaned_data = super().clean()
         selected_field = cleaned_data.get("django_field")
+        selected_operator = cleaned_data.get("operator")
         field_path = _to_str(getattr(selected_field, "field_path", ""))
         cleaned_data["django_field_path"] = field_path
-        operator_code = _to_str(cleaned_data.get("operator_code"))
+        operator_code = _to_str(getattr(selected_operator, "code", ""))
+        cleaned_data["operator_code"] = operator_code
         expected_value = _to_str(cleaned_data.get("expected_value"))
 
         if not selected_field or not field_path:
@@ -134,10 +131,14 @@ class MicrotechOrderRuleConditionForm(forms.ModelForm):
             self.add_error("django_field", "Unbekannter Django-Feldpfad. Bitte einen Wert aus dem Autocomplete verwenden.")
             return cleaned_data
 
+        if not selected_operator or not operator_code:
+            self.add_error("operator", "Unbekannter Operator. Bitte einen Wert aus dem Autocomplete verwenden.")
+            return cleaned_data
+
         allowed_operators = set(field_def.allowed_operator_codes)
         if operator_code not in allowed_operators:
             allowed = ", ".join(sorted(allowed_operators))
-            self.add_error("operator_code", f"Operator fuer dieses Feld nicht erlaubt. Erlaubt: {allowed}.")
+            self.add_error("operator", f"Operator fuer dieses Feld nicht erlaubt. Erlaubt: {allowed}.")
             return cleaned_data
 
         value_kind = field_def.value_kind
@@ -178,6 +179,7 @@ class MicrotechOrderRuleConditionForm(forms.ModelForm):
 
     def save(self, commit=True):
         self.instance.django_field_path = _to_str(self.cleaned_data.get("django_field_path"))
+        self.instance.operator_code = _to_str(self.cleaned_data.get("operator_code"))
         return super().save(commit=commit)
 
 

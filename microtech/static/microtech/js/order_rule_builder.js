@@ -42,20 +42,13 @@
     return `${base}rule-builder-meta/`;
   }
 
-  function operatorLabelMap() {
+  function operatorsByValue() {
     const map = {};
     if (!RULE_META || !Array.isArray(RULE_META.operators)) return map;
     RULE_META.operators.forEach((op) => {
-      if (op && op.code) map[op.code] = op.name || op.code;
-    });
-    return map;
-  }
-
-  function operatorsByCode() {
-    const map = {};
-    if (!RULE_META || !Array.isArray(RULE_META.operators)) return map;
-    RULE_META.operators.forEach((op) => {
-      if (op && op.code) map[op.code] = op;
+      if (!op) return;
+      if (op.code) map[op.code] = op;
+      if (op.id) map[String(op.id)] = op;
     });
     return map;
   }
@@ -72,55 +65,31 @@
     return RULE_META.dataset_fields.find((item) => String(item.id) === id) || null;
   }
 
-  function rebuildOperatorOptions(operatorSelect, allowedCodes, current) {
-    const byCode = operatorsByCode();
-    operatorSelect.innerHTML = "";
-
-    const options = (allowedCodes && allowedCodes.length > 0)
-      ? allowedCodes
-      : Object.keys(byCode);
-
-    options.forEach((code) => {
-      const option = document.createElement("option");
-      option.value = code;
-      option.textContent = (byCode[code] && (byCode[code].name || byCode[code].code)) || code;
-      operatorSelect.appendChild(option);
-    });
-
-    if (current && options.includes(current)) {
-      operatorSelect.value = current;
-    } else if (options.length > 0) {
-      operatorSelect.value = options[0];
-    }
-  }
-
   const VALUELESS_OPERATORS = ["is_empty", "is_not_empty"];
 
   function updateExpectedValueVisibility(operatorSelect, expectedInput) {
     if (!operatorSelect || !expectedInput) return;
-    const hide = VALUELESS_OPERATORS.includes(operatorSelect.value);
+    const operator = operatorsByValue()[String(operatorSelect.value || "")] || null;
+    const hide = operator ? VALUELESS_OPERATORS.includes(operator.code) : false;
     expectedInput.style.display = hide ? "none" : "";
     if (hide) expectedInput.value = "";
   }
 
   function updateConditionRow(row) {
     const pathInput = row.querySelector("select[name$='-django_field'], input[name$='-django_field']");
-    const operatorSelect = row.querySelector("select[name$='-operator_code']");
+    const operatorSelect = row.querySelector("select[name$='-operator']");
     const expectedInput = row.querySelector("input[name$='-expected_value']");
     if (!pathInput || !operatorSelect || !expectedInput || !RULE_META) return;
 
     const fieldDef = djangoFieldByValue(pathInput.value);
-    const currentOperator = operatorSelect.value;
 
     if (!fieldDef) {
-      rebuildOperatorOptions(operatorSelect, [], currentOperator);
       expectedInput.placeholder = "";
       expectedInput.title = "";
       updateExpectedValueVisibility(operatorSelect, expectedInput);
       return;
     }
 
-    rebuildOperatorOptions(operatorSelect, fieldDef.allowed_operator_codes || [], currentOperator);
     expectedInput.placeholder = fieldDef.example || "";
     expectedInput.title = fieldDef.hint || "";
     updateExpectedValueVisibility(operatorSelect, expectedInput);
@@ -179,7 +148,7 @@
       updateConditionRow(row);
     }
 
-    const operatorSelect = row.querySelector("select[name$='-operator_code']");
+    const operatorSelect = row.querySelector("select[name$='-operator']");
     const expectedInput = row.querySelector("input[name$='-expected_value']");
     if (operatorSelect && expectedInput) {
       operatorSelect.addEventListener("change", () => updateExpectedValueVisibility(operatorSelect, expectedInput));

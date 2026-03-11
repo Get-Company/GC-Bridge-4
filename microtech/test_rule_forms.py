@@ -1,6 +1,12 @@
 from django.test import TestCase
 from microtech.forms import MicrotechOrderRuleActionForm, MicrotechOrderRuleConditionForm
-from microtech.models import MicrotechDatasetCatalog, MicrotechDatasetField, MicrotechOrderRuleAction, MicrotechOrderRuleDjangoField
+from microtech.models import (
+    MicrotechDatasetCatalog,
+    MicrotechDatasetField,
+    MicrotechOrderRuleAction,
+    MicrotechOrderRuleDjangoField,
+    MicrotechOrderRuleOperator,
+)
 from microtech.rule_builder import sync_django_field_catalog
 
 
@@ -9,11 +15,23 @@ class MicrotechOrderRuleFormsTest(TestCase):
         sync_django_field_catalog()
         return MicrotechOrderRuleDjangoField.objects.get(field_path=field_path).pk
 
+    def _operator_id(self, code: str, name: str | None = None) -> int:
+        operator, _ = MicrotechOrderRuleOperator.objects.get_or_create(
+            code=code,
+            defaults={
+                "name": name or code,
+                "engine_operator": "eq" if code in {"eq", "equals"} else code,
+                "priority": 10,
+                "is_active": True,
+            },
+        )
+        return operator.pk
+
     def test_condition_form_uses_catalog_relation_field(self):
         form = MicrotechOrderRuleConditionForm()
 
         self.assertIn("django_field", form.fields)
-        self.assertNotIn("django_field_path", form.fields)
+        self.assertIn("operator", form.fields)
 
     def test_condition_form_accepts_equals_alias(self):
         form = MicrotechOrderRuleConditionForm(
@@ -21,7 +39,7 @@ class MicrotechOrderRuleFormsTest(TestCase):
                 "is_active": True,
                 "priority": 10,
                 "django_field": self._field_catalog_id("payment_method"),
-                "operator_code": "equals",
+                "operator": self._operator_id("equals", "="),
                 "expected_value": "paypal",
             }
         )
@@ -34,7 +52,7 @@ class MicrotechOrderRuleFormsTest(TestCase):
                 "is_active": True,
                 "priority": 10,
                 "django_field": self._field_catalog_id("payment_method"),
-                "operator_code": "contains",
+                "operator": self._operator_id("contains", "enthaelt"),
                 "expected_value": "paypal",
             }
         )
@@ -47,13 +65,13 @@ class MicrotechOrderRuleFormsTest(TestCase):
                 "is_active": True,
                 "priority": 10,
                 "django_field": self._field_catalog_id("customer__is_gross"),
-                "operator_code": "contains",
+                "operator": self._operator_id("contains", "enthaelt"),
                 "expected_value": "true",
             }
         )
 
         self.assertFalse(form.is_valid())
-        self.assertIn("operator_code", form.errors)
+        self.assertIn("operator", form.errors)
         self.assertNotIn("django_field", form.errors)
 
     def test_action_form_validates_set_field_dataset_binding(self):

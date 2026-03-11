@@ -80,11 +80,11 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
             "is_active",
             "priority",
             "django_field",
-            "operator_code",
+            "operator",
             "expected_value",
             "value_example",
         )
-        autocomplete_fields = ("django_field",)
+        autocomplete_fields = ("django_field", "operator")
         readonly_fields = BaseStackedInline.readonly_fields + ("value_example",)
         extra = 0
 
@@ -147,12 +147,13 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
             "ok": True,
             "operators": [
                 {
+                    "id": item.id,
                     "code": item.code,
                     "name": item.name,
                     "engine_operator": item.engine_operator,
                     "hint": item.hint,
                 }
-                for item in get_operator_defs()
+                for item in MicrotechOrderRuleOperator.objects.filter(is_active=True).order_by("priority", "id")
             ],
             "django_fields": [
                 {
