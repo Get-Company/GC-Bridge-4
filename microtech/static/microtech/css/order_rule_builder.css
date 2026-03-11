@@ -1,0 +1,16 @@
+.inline-group .tabular th.column-django_field_path,
+.inline-group .tabular td.field-django_field_path {
+  min-width: 28rem;
+}
+
+.inline-group .tabular th.column-dataset_field,
+.inline-group .tabular td.field-dataset_field {
+  min-width: 40rem;
+  width: 40%;
+}
+
+.inline-group .tabular td.field-django_field_path .select2-container,
+.inline-group .tabular td.field-dataset_field .select2-container {
+  min-width: 100%;
+  width: 100% !important;
+}

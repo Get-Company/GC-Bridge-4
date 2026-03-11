@@ -76,6 +76,14 @@ def _django_field_choices(selected: str = "") -> list[tuple[str, str]]:
     return choices
 
 
+def _merge_style(existing: str, additions: str) -> str:
+    base = existing.strip()
+    extra = additions.strip()
+    if base and not base.endswith(";"):
+        base = f"{base};"
+    return " ".join(part for part in (base, extra) if part).strip()
+
+
 class MicrotechOrderRuleConditionForm(forms.ModelForm):
     class Meta:
         model = MicrotechOrderRuleCondition
@@ -95,7 +103,10 @@ class MicrotechOrderRuleConditionForm(forms.ModelForm):
         )
 
         self.fields["django_field_path"].widget = UnfoldAdminSelect2Widget(
-            attrs={"data-placeholder": "Django Feldpfad suchen..."},
+            attrs={
+                "data-placeholder": "Django Feldpfad suchen...",
+                "style": "min-width: 28rem; width: 100%;",
+            },
             choices=_django_field_choices(selected_path),
         )
         self.fields["operator_code"].widget = forms.Select(
@@ -218,6 +229,12 @@ class MicrotechOrderRuleActionForm(forms.ModelForm):
         self.fields["dataset_field"].help_text = (
             "Suche ueber alle aktiven Dataset-Felder. Das Dataset wird automatisch aus der Auswahl abgeleitet."
         )
+        dataset_field_style = _merge_style(
+            self.fields["dataset_field"].widget.attrs.get("style", ""),
+            "min-width: 40rem; width: 100%;",
+        )
+        self.fields["dataset_field"].widget.attrs["style"] = dataset_field_style
+        self.fields["dataset_field"].widget.attrs["data-placeholder"] = "Dataset Feld suchen..."
 
     def clean(self):
         cleaned_data = super().clean()

@@ -123,6 +123,9 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
 
     class Media:
         js = ("microtech/js/order_rule_builder.js",)
+        css = {
+            "all": ("microtech/css/order_rule_builder.css",),
+        }
 
     def get_custom_urls(self):
         urls = super().get_custom_urls()

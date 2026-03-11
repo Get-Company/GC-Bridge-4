@@ -5,6 +5,14 @@ from microtech.models import MicrotechDatasetCatalog, MicrotechDatasetField, Mic
 
 
 class MicrotechOrderRuleFormsTest(TestCase):
+    def test_condition_form_uses_unfold_autocomplete_widget_with_width(self):
+        form = MicrotechOrderRuleConditionForm()
+
+        widget = form.fields["django_field_path"].widget
+
+        self.assertIn("unfold-admin-autocomplete", widget.attrs.get("class", ""))
+        self.assertIn("min-width: 28rem", widget.attrs.get("style", ""))
+
     def test_condition_form_accepts_equals_alias(self):
         form = MicrotechOrderRuleConditionForm(
             data={
@@ -115,3 +123,11 @@ class MicrotechOrderRuleFormsTest(TestCase):
 
         self.assertTrue(form.is_valid(), msg=form.errors.as_json())
         self.assertEqual(form.cleaned_data["dataset"], dataset)
+
+    def test_action_form_expands_dataset_field_widget_width(self):
+        form = MicrotechOrderRuleActionForm()
+
+        widget = form.fields["dataset_field"].widget
+
+        self.assertIn("min-width: 40rem", widget.attrs.get("style", ""))
+        self.assertEqual(widget.attrs.get("data-placeholder"), "Dataset Feld suchen...")

@@ -3,6 +3,36 @@
 
   let RULE_META = null;
 
+  function getJQuery() {
+    return window.django && window.django.jQuery ? window.django.jQuery : null;
+  }
+
+  function initEnhancedSelects(root) {
+    const $ = getJQuery();
+    if (!$ || !root) return;
+
+    const $root = $(root);
+    const customAutocomplete = $root.is(".unfold-admin-autocomplete")
+      ? $root
+      : $root.find(".unfold-admin-autocomplete");
+    const modelAutocomplete = $root.is(".admin-autocomplete")
+      ? $root
+      : $root.find(".admin-autocomplete");
+
+    if (typeof $.fn.djangoCustomSelect2 === "function") {
+      customAutocomplete.djangoCustomSelect2();
+    }
+
+    if (typeof $.fn.djangoAdminSelect2 === "function") {
+      modelAutocomplete
+        .not("[name*=__prefix__]")
+        .filter(function () {
+          return !$(this).hasClass("select2-hidden-accessible");
+        })
+        .djangoAdminSelect2();
+    }
+  }
+
   function buildMetaUrl() {
     const path = window.location.pathname;
     const marker = "/microtechorderrule/";
@@ -189,6 +219,7 @@
       return;
     }
     row.dataset.ruleBuilderBound = "1";
+    initEnhancedSelects(row);
 
     const pathInput = row.querySelector("select[name$='-django_field_path'], input[name$='-django_field_path']");
     const datasetSelect = row.querySelector("select[name$='-dataset']");
@@ -270,6 +301,7 @@
 
   async function init() {
     await loadMeta();
+    initEnhancedSelects(document.body);
     bindAllRows();
     bindFormsetAddedEvents();
     observeInlineRows();
