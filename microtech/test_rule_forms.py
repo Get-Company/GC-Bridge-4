@@ -5,6 +5,19 @@ from microtech.models import MicrotechDatasetCatalog, MicrotechDatasetField, Mic
 
 
 class MicrotechOrderRuleFormsTest(TestCase):
+    def test_condition_form_accepts_equals_alias(self):
+        form = MicrotechOrderRuleConditionForm(
+            data={
+                "is_active": True,
+                "priority": 10,
+                "django_field_path": "payment_method",
+                "operator_code": "equals",
+                "expected_value": "paypal",
+            }
+        )
+
+        self.assertTrue(form.is_valid(), msg=form.errors.as_json())
+
     def test_condition_form_accepts_django_field_path(self):
         form = MicrotechOrderRuleConditionForm(
             data={

@@ -12,6 +12,7 @@ from microtech.models import (
     MicrotechOrderRuleDjangoFieldPolicy,
     MicrotechOrderRuleOperator,
 )
+from microtech.rule_builder import get_operator_defs
 
 
 class MicrotechDatasetFieldImportCommandTest(TestCase):
@@ -121,3 +122,26 @@ class MicrotechDjangoFieldPolicyTest(TestCase):
         policy.allowed_operators.add(operator)
 
         self.assertEqual(policy.allowed_operators.count(), 1)
+
+    def test_operator_defs_append_equals_alias_when_db_rows_exist(self):
+        MicrotechOrderRuleOperator.objects.create(
+            code="eq",
+            name="==",
+            engine_operator=MicrotechOrderRuleOperator.EngineOperator.EQUALS,
+            priority=10,
+            is_active=True,
+        )
+        MicrotechOrderRuleOperator.objects.create(
+            code="ne",
+            name="<>",
+            engine_operator=MicrotechOrderRuleOperator.EngineOperator.NOT_EQUALS,
+            priority=20,
+            is_active=True,
+        )
+
+        operator_map = {item.code: item for item in get_operator_defs()}
+
+        self.assertIn("equals", operator_map)
+        self.assertEqual(operator_map["equals"].name, "=")
+        self.assertEqual(operator_map["equals"].engine_operator, "eq")
+        self.assertEqual(operator_map["ne"].name, "!=")

@@ -130,6 +130,30 @@ class OrderRuleResolverDynamicRulesTest(TestCase):
         self.assertEqual(resolved.dataset_actions[1].dataset_field_name, "ZahlArt")
         self.assertEqual(resolved.dataset_actions[1].target_value, "22")
 
+    def test_equals_alias_matches_like_eq(self):
+        order = self._create_order(
+            api_id="A1-EQUALS",
+            shipping_country="AT",
+        )
+
+        rule = MicrotechOrderRule.objects.create(
+            name="AT via equals alias",
+            priority=1,
+            is_active=True,
+            condition_logic=MicrotechOrderRule.ConditionLogic.ALL,
+        )
+        MicrotechOrderRuleCondition.objects.create(
+            rule=rule,
+            django_field_path="shipping_address__country_code",
+            operator_code="equals",
+            expected_value="AT",
+            priority=1,
+        )
+
+        resolved = OrderRuleResolverService().resolve_for_order(order=order)
+
+        self.assertEqual(resolved.rule_id, rule.id)
+
     def test_invalid_django_field_path_does_not_match_and_fallback_rule_wins(self):
         order = self._create_order(api_id="A2")
 

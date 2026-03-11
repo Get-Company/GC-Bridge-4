@@ -53,8 +53,9 @@ class DatasetFieldDef:
 
 
 DEFAULT_OPERATOR_DEFS: tuple[OperatorDef, ...] = (
+    OperatorDef(code="equals", name="=", engine_operator="eq"),
     OperatorDef(code="eq", name="==", engine_operator="eq"),
-    OperatorDef(code="ne", name="<>", engine_operator="ne"),
+    OperatorDef(code="ne", name="!=", engine_operator="ne"),
     OperatorDef(code="contains", name="enthaelt", engine_operator="contains"),
     OperatorDef(code="gt", name=">", engine_operator="gt"),
     OperatorDef(code="lt", name="<", engine_operator="lt"),
@@ -79,6 +80,17 @@ def _db_has_rule_builder_tables() -> bool:
 def get_operator_defs() -> list[OperatorDef]:
     if not _db_has_rule_builder_tables():
         return list(DEFAULT_OPERATOR_DEFS)
+
+    def _normalize_operator_def(item: OperatorDef) -> OperatorDef:
+        if item.code == "ne" and item.name in {"", "<>"}:
+            return OperatorDef(
+                code=item.code,
+                name="!=",
+                engine_operator=item.engine_operator,
+                hint=item.hint,
+            )
+        return item
+
     rows = list(
         MicrotechOrderRuleOperator.objects
         .filter(is_active=True)
@@ -86,7 +98,7 @@ def get_operator_defs() -> list[OperatorDef]:
     )
     if not rows:
         return list(DEFAULT_OPERATOR_DEFS)
-    return [
+    db_defs = [
         OperatorDef(
             code=str(row.code).strip(),
             name=str(row.name).strip() or str(row.code).strip(),
@@ -96,6 +108,14 @@ def get_operator_defs() -> list[OperatorDef]:
         for row in rows
         if str(row.code).strip()
     ]
+    existing_codes = {item.code for item in db_defs}
+    merged_defs = [_normalize_operator_def(item) for item in db_defs]
+    merged_defs.extend(
+        _normalize_operator_def(item)
+        for item in DEFAULT_OPERATOR_DEFS
+        if item.code not in existing_codes
+    )
+    return merged_defs
 
 
 def get_operator_engine_map() -> dict[str, str]:
@@ -127,10 +147,10 @@ def _field_value_kind(field: Field) -> str:
 
 def _default_operator_codes(value_kind: str) -> tuple[str, ...]:
     if value_kind in {"int", "decimal", "date", "datetime"}:
-        return ("eq", "ne", "gt", "lt", "is_empty", "is_not_empty")
+        return ("equals", "eq", "ne", "gt", "lt", "is_empty", "is_not_empty")
     if value_kind == "bool":
-        return ("eq", "ne", "is_empty", "is_not_empty")
-    return ("eq", "ne", "contains", "is_empty", "is_not_empty")
+        return ("equals", "eq", "ne", "is_empty", "is_not_empty")
+    return ("equals", "eq", "ne", "contains", "is_empty", "is_not_empty")
 
 
 def _default_example(value_kind: str) -> str:
