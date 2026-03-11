@@ -125,9 +125,19 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
     inlines = (ConditionInline, ActionInline)
 
     class Media:
-        js = ("microtech/js/order_rule_builder.js",)
+        js = (
+            "admin/js/vendor/jquery/jquery.js",
+            "admin/js/vendor/select2/select2.full.js",
+            "admin/js/jquery.init.js",
+            "unfold/js/select2.init.js",
+            "microtech/js/order_rule_builder.js",
+        )
         css = {
-            "all": ("microtech/css/order_rule_builder.css",),
+            "all": (
+                "admin/css/vendor/select2/select2.css",
+                "admin/css/autocomplete.css",
+                "microtech/css/order_rule_builder.css",
+            ),
         }
 
     def get_formset_kwargs(self, request, obj, inline, prefix):

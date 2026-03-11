@@ -39,5 +39,7 @@ class MicrotechOrderRuleAdminAutocompleteTest(TestCase):
         self.assertIn("admin-autocomplete", content)
         self.assertIn("microtechorderrule/django-field-autocomplete/", content)
         self.assertIn("microtechorderrule/dataset-field-autocomplete/", content)
+        self.assertIn("admin/js/vendor/select2/select2.full.js", content)
+        self.assertIn("unfold/js/select2.init.js", content)
         self.assertNotIn(">ZahlArt<", content)
         self.assertNotIn(">payment_method<", content)
