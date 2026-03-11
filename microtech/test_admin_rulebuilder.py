@@ -40,3 +40,5 @@ class MicrotechOrderRuleAdminAutocompleteTest(TestCase):
         self.assertIn('data-app-label="microtech"', content)
         self.assertIn('data-field-name="django_field"', content)
         self.assertIn('data-field-name="dataset_field"', content)
+        self.assertNotIn("tabular-table", content)
+        self.assertIn("stacked", content)

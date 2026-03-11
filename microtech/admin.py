@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.http import HttpResponseRedirect, JsonResponse
 from django.urls import reverse
 
-from core.admin import BaseAdmin, BaseTabularInline
+from core.admin import BaseAdmin, BaseStackedInline
 from microtech.forms import (
     MicrotechOrderRuleActionForm,
     MicrotechOrderRuleConditionForm,
@@ -73,7 +73,7 @@ class MicrotechSettingsAdmin(SingletonAdmin):
 
 @admin.register(MicrotechOrderRule)
 class MicrotechOrderRuleAdmin(BaseAdmin):
-    class ConditionInline(BaseTabularInline):
+    class ConditionInline(BaseStackedInline):
         model = MicrotechOrderRuleCondition
         form = MicrotechOrderRuleConditionForm
         fields = (
@@ -85,7 +85,7 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
             "value_example",
         )
         autocomplete_fields = ("django_field",)
-        readonly_fields = BaseTabularInline.readonly_fields + ("value_example",)
+        readonly_fields = BaseStackedInline.readonly_fields + ("value_example",)
         extra = 0
 
         @admin.display(description="Beispiel")
@@ -94,7 +94,7 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
                 return "-"
             return condition_example_for_field(obj.django_field_path)
 
-    class ActionInline(BaseTabularInline):
+    class ActionInline(BaseStackedInline):
         model = MicrotechOrderRuleAction
         form = MicrotechOrderRuleActionForm
         fields = (
