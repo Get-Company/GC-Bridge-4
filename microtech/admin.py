@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.db import models
 from django.http import HttpResponseRedirect, JsonResponse
 from django.urls import reverse
 
@@ -326,6 +327,21 @@ class MicrotechDatasetFieldAdmin(BaseAdmin):
     list_editable = ("is_active",)
     search_fields = ("field_name", "label", "field_type", "dataset__name", "dataset__description")
     list_filter = ("is_active", "is_calc_field", "can_access", "field_type", "dataset")
+
+    def get_search_results(self, request, queryset, search_term):
+        # Support "Dataset.Field" search (e.g. "Vorgang.Such")
+        if "." in search_term:
+            parts = search_term.split(".", 1)
+            dataset_term = parts[0].strip()
+            field_term = parts[1].strip()
+            qs = queryset.filter(dataset__name__icontains=dataset_term)
+            if field_term:
+                qs = qs.filter(
+                    models.Q(field_name__icontains=field_term)
+                    | models.Q(label__icontains=field_term)
+                )
+            return qs, False
+        return super().get_search_results(request, queryset, search_term)
     ordering = ("dataset__priority", "dataset__name", "priority", "field_name", "id")
     autocomplete_fields = ("dataset",)
     fieldsets = (

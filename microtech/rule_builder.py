@@ -177,6 +177,37 @@ def _default_example(value_kind: str) -> str:
     return "paypal"
 
 
+def _real_examples() -> dict[str, str]:
+    """Fetch real example values from the most recent order."""
+    try:
+        order = (
+            Order.objects
+            .select_related("customer", "billing_address", "shipping_address")
+            .order_by("-id")
+            .first()
+        )
+    except Exception:
+        return {}
+    if order is None:
+        return {}
+    examples: dict[str, str] = {}
+    for path, _field, _label in _iter_field_defs_for_model(model=Order):
+        val = resolve_django_field_value(order=order, path=path)
+        if val is not None and str(val) != "":
+            examples[path] = str(val)
+    for rel_name in _ALLOWED_RELATIONS:
+        prefix = f"{rel_name}__"
+        rel_obj = getattr(order, rel_name, None)
+        if rel_obj is None:
+            continue
+        rel_model = type(rel_obj)
+        for path, _field, _label in _iter_field_defs_for_model(model=rel_model, prefix=prefix):
+            val = resolve_django_field_value(order=order, path=path)
+            if val is not None and str(val) != "":
+                examples[path] = str(val)
+    return examples
+
+
 def _iter_field_defs_for_model(*, model, prefix: str = "") -> list[tuple[str, Field, str]]:
     defs: list[tuple[str, Field, str]] = []
     for field in model._meta.concrete_fields:
@@ -198,6 +229,7 @@ def _iter_field_defs_for_model(*, model, prefix: str = "") -> list[tuple[str, Fi
 
 def _build_base_django_field_defs() -> list[DjangoFieldDef]:
     base_defs: list[DjangoFieldDef] = []
+    examples = _real_examples()
 
     for path, field, label in _iter_field_defs_for_model(model=Order):
         value_kind = _field_value_kind(field)
@@ -208,7 +240,7 @@ def _build_base_django_field_defs() -> list[DjangoFieldDef]:
                 label=f"Order - {label} ({path})",
                 value_kind=value_kind,
                 allowed_operator_codes=_default_operator_codes(value_kind),
-                example=_default_example(value_kind),
+                example=examples.get(path, _default_example(value_kind)),
             )
         )
 
@@ -231,7 +263,7 @@ def _build_base_django_field_defs() -> list[DjangoFieldDef]:
                     label=f"{rel_title} - {label} ({path})",
                     value_kind=value_kind,
                     allowed_operator_codes=_default_operator_codes(value_kind),
-                    example=_default_example(value_kind),
+                    example=examples.get(path, _default_example(value_kind)),
                 )
             )
 
