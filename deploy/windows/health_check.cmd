@@ -69,12 +69,10 @@ if errorlevel 1 (call :err "manage.py check - Fehler gefunden") else (call :ok "
 if errorlevel 1 (call :warn "Unangewandte Migrationen vorhanden!") else (call :ok "Migrationen - aktuell")
 
 :: Admin-Seite mit eingeloggtem User testen (faengt 500er die nur bei Login auftreten)
-"%PYTHON%" -c "import django,os;os.environ.setdefault('DJANGO_SETTINGS_MODULE','GC_Bridge_4.settings');django.setup();from django.test import Client;from django.contrib.auth import get_user_model;u=get_user_model().objects.filter(is_superuser=True).first();c=Client();c.force_login(u) if u else None;r=c.get('/admin/');print(r.status_code);exit(0 if r.status_code<400 else 1)" > "%TEMP%\hc_admin.txt" 2> "%TEMP%\hc_admin_err.txt"
+"%PYTHON%" "%APP_DIR%\deploy\windows\admin_test.py" > "%TEMP%\hc_admin.txt" 2>&1
 if errorlevel 1 (
-    set /p ADMIN_STATUS=<"%TEMP%\hc_admin.txt"
-    call :err "Django Admin (eingeloggt) - HTTP !ADMIN_STATUS!"
-    call :log "       Traceback:"
-    for /f "usebackq delims=" %%L in ("%TEMP%\hc_admin_err.txt") do call :log "       %%L"
+    call :err "Django Admin (eingeloggt) - Fehler!"
+    for /f "usebackq delims=" %%L in ("%TEMP%\hc_admin.txt") do call :log "       %%L"
 ) else (
     call :ok "Django Admin (eingeloggt) - HTTP 200"
 )

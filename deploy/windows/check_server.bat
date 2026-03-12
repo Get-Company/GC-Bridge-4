@@ -59,11 +59,14 @@ for %%S in ("actions.runner.Get-Company-GC-Bridge-4.GC-Bridge-v4") do (
 echo.
 
 echo --- Geplante Aufgaben ---
-for %%T in ("GC-Bridge-Microtech-Worker" "GC-Bridge-Uvicorn" "GC-Bridge-Caddy" "GC-Bridge Scheduled Product Sync") do (
+for %%T in ("GC-Bridge-Microtech-Worker" "GC-Bridge-Uvicorn" "GC-Bridge-Caddy") do (
     echo.
     echo Aufgabe: %%~T
     schtasks /Query /TN %%~T /V /FO LIST 2>&1
 )
+echo.
+echo Aufgabe: GC-Bridge Scheduled Product Sync
+schtasks /Query /TN "GC-Bridge Scheduled Product Sync" /V /FO LIST 2>&1
 echo.
 
 echo --- Ports pruefen (8000, 4711, 8080, 8081) ---
@@ -82,11 +85,9 @@ echo.
 
 echo --- Django Admin-Test (eingeloggt) ---
 pushd "%PROJECT_ROOT%"
-"%PROJECT_ROOT%\.venv\Scripts\python.exe" -c "import django,os;os.environ.setdefault('DJANGO_SETTINGS_MODULE','GC_Bridge_4.settings');django.setup();from django.test import Client;from django.contrib.auth import get_user_model;u=get_user_model().objects.filter(is_superuser=True).first();c=Client();c.force_login(u) if u else None;r=c.get('/admin/');print(f'Status: {r.status_code}');exit(0 if r.status_code<400 else 1)" 2>&1
+"%PROJECT_ROOT%\.venv\Scripts\python.exe" "%PROJECT_ROOT%\deploy\windows\admin_test.py" 2>&1
 if errorlevel 1 (
-    echo [FEHLER] Admin-Seite liefert Fehler!
-    echo          Traceback mit DEBUG=True:
-    "%PROJECT_ROOT%\.venv\Scripts\python.exe" -c "import django,os;os.environ.setdefault('DJANGO_SETTINGS_MODULE','GC_Bridge_4.settings');os.environ['DJANGO_DEBUG']='1';django.setup();from django.test import Client;from django.contrib.auth import get_user_model;u=get_user_model().objects.filter(is_superuser=True).first();c=Client();c.force_login(u) if u else None;r=c.get('/admin/');[print(l) for l in r.content.decode('utf-8','replace').splitlines() if 'Error' in l or 'Exception' in l or 'Traceback' in l or 'File ' in l or 'line ' in l]" 2>&1
+    echo [FEHLER] Admin-Seite liefert Fehler! Siehe Ausgabe oben.
 ) else (
     echo [OK]    Admin-Seite (eingeloggt) - HTTP 200
 )
