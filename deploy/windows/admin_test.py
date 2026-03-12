@@ -27,21 +27,27 @@ if not user:
 client = Client()
 client.force_login(user)
 
-try:
-    response = client.get("/admin/")
-    print(f"Status: {response.status_code}")
-    if response.status_code >= 400:
+PAGES = [
+    "/admin/",
+    "/admin/microtech/microtechorderrule/",
+]
+
+ok = True
+for url in PAGES:
+    try:
+        response = client.get(url)
+        status = response.status_code
+        print(f"{url} -> {status}")
+        if status >= 400:
+            ok = False
+            content = response.content.decode("utf-8", "replace")
+            # Truncate to first 3000 chars to keep output readable
+            print(content[:3000])
+            print()
+    except Exception:
+        ok = False
+        print(f"{url} -> EXCEPTION:")
+        traceback.print_exc()
         print()
-        content = response.content.decode("utf-8", "replace")
-        # Show relevant error lines from Django debug page
-        for line in content.splitlines():
-            stripped = line.strip()
-            if any(kw in stripped for kw in [
-                "Exception", "Error", "Traceback", "raise ",
-            ]):
-                print(stripped)
-        sys.exit(1)
-except Exception:
-    print("[FEHLER] Exception beim Admin-Aufruf:")
-    traceback.print_exc()
-    sys.exit(1)
+
+sys.exit(0 if ok else 1)
