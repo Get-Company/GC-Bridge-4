@@ -16,7 +16,6 @@ from microtech.models import (
     MicrotechOrderRuleAction,
     MicrotechOrderRuleCondition,
     MicrotechOrderRuleDjangoField,
-    MicrotechOrderRuleDjangoFieldPolicy,
     MicrotechOrderRuleOperator,
     MicrotechSettings,
 )
@@ -24,7 +23,6 @@ from microtech.rule_builder import (
     get_dataset_defs,
     get_dataset_field_defs,
     get_django_field_defs,
-    get_operator_defs,
 )
 from microtech.views.autocomplete import MicrotechOrderRuleOperatorAutocompleteView
 
@@ -168,7 +166,6 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
                     "path": item.path,
                     "label": item.label,
                     "value_kind": item.value_kind,
-                    "allowed_operator_codes": list(item.allowed_operator_codes),
                     "hint": item.hint,
                     "example": item.example,
                 }
@@ -263,36 +260,6 @@ class MicrotechOrderRuleOperatorAdmin(BaseAdmin):
         ),
     )
 
-
-@admin.register(MicrotechOrderRuleDjangoFieldPolicy)
-class MicrotechOrderRuleDjangoFieldPolicyAdmin(BaseAdmin):
-    list_display = (
-        "priority",
-        "field_path",
-        "label_override",
-        "is_active",
-        "updated_at",
-    )
-    list_editable = ("is_active",)
-    search_fields = ("field_path", "label_override", "hint")
-    list_filter = ("is_active",)
-    ordering = ("priority", "id")
-    filter_horizontal = ("allowed_operators",)
-    fieldsets = (
-        (
-            "Django Bedingungsfeld",
-            {
-                "fields": (
-                    "is_active",
-                    "priority",
-                    "field_path",
-                    "label_override",
-                    "allowed_operators",
-                    "hint",
-                ),
-            },
-        ),
-    )
 
 
 @admin.register(MicrotechDatasetCatalog)

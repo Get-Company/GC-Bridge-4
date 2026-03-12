@@ -54,13 +54,8 @@ def _parse_bool_text(value: str) -> str | None:
 
 
 def _operator_choices_for_path(field_path: str, selected: str = "") -> list[tuple[str, str]]:
-    field_map = get_django_field_map()
     operator_defs = get_operator_defs()
-    labels = {item.code: item.name or item.code for item in operator_defs}
-
-    field_def = field_map.get(field_path)
-    allowed_codes = tuple(field_def.allowed_operator_codes) if field_def else tuple(labels.keys())
-    choices = [(code, labels.get(code, code)) for code in allowed_codes]
+    choices = [(item.code, item.name or item.code) for item in operator_defs]
 
     if selected and selected not in {code for code, _ in choices}:
         choices.append((selected, selected))
@@ -149,12 +144,6 @@ class MicrotechOrderRuleConditionForm(forms.ModelForm):
 
         if not selected_operator or not operator_code:
             self.add_error("operator", "Unbekannter Operator. Bitte einen Wert aus dem Autocomplete verwenden.")
-            return cleaned_data
-
-        allowed_operators = set(field_def.allowed_operator_codes)
-        if operator_code not in allowed_operators:
-            allowed = ", ".join(sorted(allowed_operators))
-            self.add_error("operator", f"Operator fuer dieses Feld nicht erlaubt. Erlaubt: {allowed}.")
             return cleaned_data
 
         value_kind = field_def.value_kind

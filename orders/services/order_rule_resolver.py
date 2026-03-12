@@ -209,18 +209,6 @@ class OrderRuleResolverService(BaseService):
                 evaluations.append(False)
                 continue
 
-            allowed_operators = set(getattr(field_def, "allowed_operator_codes", ()) or ())
-            if operator_code not in allowed_operators:
-                logger.warning(
-                    "Order {}: condition {} uses disallowed operator '{}' for field '{}'.",
-                    order_label,
-                    condition.pk,
-                    operator_code,
-                    field_path,
-                )
-                evaluations.append(False)
-                continue
-
             engine_operator = _to_str(operator_engine_map.get(operator_code)) or operator_code
             actual_value = resolve_django_field_value(order=order, path=field_path)
             expected_raw = _to_str(condition.expected_value)

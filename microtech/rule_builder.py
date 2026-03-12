@@ -9,7 +9,6 @@ from microtech.models import (
     MicrotechDatasetCatalog,
     MicrotechDatasetField,
     MicrotechOrderRuleDjangoField,
-    MicrotechOrderRuleDjangoFieldPolicy,
     MicrotechOrderRuleOperator,
 )
 from orders.models import Order
@@ -29,7 +28,6 @@ class DjangoFieldDef:
     path: str
     label: str
     value_kind: str
-    allowed_operator_codes: tuple[str, ...]
     hint: str = ""
     example: str = ""
 
@@ -71,7 +69,6 @@ _ALLOWED_RELATIONS: tuple[str, ...] = ("customer", "billing_address", "shipping_
 def _db_has_rule_builder_tables() -> bool:
     try:
         MicrotechOrderRuleOperator.objects.exists()
-        MicrotechOrderRuleDjangoFieldPolicy.objects.exists()
         MicrotechDatasetCatalog.objects.exists()
         MicrotechDatasetField.objects.exists()
         return True
@@ -155,14 +152,6 @@ def _field_value_kind(field: Field) -> str:
     return "string"
 
 
-def _default_operator_codes(value_kind: str) -> tuple[str, ...]:
-    if value_kind in {"int", "decimal", "date", "datetime"}:
-        return ("equals", "eq", "ne", "gt", "lt", "is_empty", "is_not_empty")
-    if value_kind == "bool":
-        return ("equals", "eq", "ne", "is_empty", "is_not_empty")
-    return ("equals", "eq", "ne", "contains", "is_empty", "is_not_empty")
-
-
 def _default_example(value_kind: str) -> str:
     if value_kind == "bool":
         return "true"
@@ -239,7 +228,6 @@ def _build_base_django_field_defs() -> list[DjangoFieldDef]:
                 path=path,
                 label=f"Order - {label} ({path})",
                 value_kind=value_kind,
-                allowed_operator_codes=_default_operator_codes(value_kind),
                 example=examples.get(path, _default_example(value_kind)),
             )
         )
@@ -262,7 +250,6 @@ def _build_base_django_field_defs() -> list[DjangoFieldDef]:
                     path=path,
                     label=f"{rel_title} - {label} ({path})",
                     value_kind=value_kind,
-                    allowed_operator_codes=_default_operator_codes(value_kind),
                     example=examples.get(path, _default_example(value_kind)),
                 )
             )
@@ -275,56 +262,7 @@ def _build_base_django_field_defs() -> list[DjangoFieldDef]:
 
 def _build_effective_django_field_defs() -> list[DjangoFieldDef]:
     base_defs = _build_base_django_field_defs()
-    if not _db_has_rule_builder_tables():
-        return sorted(base_defs, key=lambda item: item.path)
-
-    policies = {
-        row.field_path: row
-        for row in MicrotechOrderRuleDjangoFieldPolicy.objects
-        .prefetch_related("allowed_operators")
-        .order_by("priority", "id")
-    }
-
-    defs: list[DjangoFieldDef] = []
-    for item in base_defs:
-        policy = policies.get(item.path)
-        if policy and not policy.is_active:
-            continue
-
-        allowed_codes = set(item.allowed_operator_codes)
-        if policy:
-            policy_codes = {
-                str(op.code).strip()
-                for op in policy.allowed_operators.filter(is_active=True)
-                if str(op.code).strip()
-            }
-            if policy_codes:
-                allowed_codes = allowed_codes.intersection(policy_codes)
-
-        if not allowed_codes:
-            continue
-
-        label = item.label
-        hint = ""
-        if policy:
-            label_override = str(policy.label_override or "").strip()
-            if label_override:
-                label = f"{label_override} ({item.path})"
-            hint = str(policy.hint or "").strip()
-
-        defs.append(
-            DjangoFieldDef(
-                catalog_id=None,
-                path=item.path,
-                label=label,
-                value_kind=item.value_kind,
-                allowed_operator_codes=tuple(sorted(allowed_codes)),
-                hint=hint,
-                example=item.example,
-            )
-        )
-
-    return sorted(defs, key=lambda row: row.label.lower())
+    return sorted(base_defs, key=lambda item: item.label.lower())
 
 
 def sync_django_field_catalog() -> dict[str, int]:

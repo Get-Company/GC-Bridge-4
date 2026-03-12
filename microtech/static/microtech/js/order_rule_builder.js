@@ -69,8 +69,7 @@
 
   function operatorMatchesField(operatorValue, fieldDef) {
     const operator = operatorsByValue()[String(operatorValue || "")] || null;
-    if (!operator || !fieldDef || !Array.isArray(fieldDef.allowed_operator_codes)) return false;
-    return fieldDef.allowed_operator_codes.includes(operator.code);
+    return !!(operator && fieldDef);
   }
 
   function initOperatorAutocomplete(operatorSelect, djangoFieldId, fieldDef) {
@@ -80,7 +79,7 @@
     const $select = $(operatorSelect);
     const baseUrl = operatorSelect.dataset.operatorAutocompleteUrl || "";
     if (!baseUrl) return;
-    const url = djangoFieldId ? `${baseUrl}?django_field_id=${encodeURIComponent(djangoFieldId)}` : baseUrl;
+    const url = baseUrl;
 
     if (operatorSelect.dataset.operatorAutocompleteUrlActive === url && $select.hasClass("select2-hidden-accessible")) {
       return;
