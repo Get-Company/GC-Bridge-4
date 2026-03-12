@@ -35,7 +35,7 @@ PAGES = [
 ok = True
 for url in PAGES:
     try:
-        response = client.get(url)
+        response = client.get(url, SERVER_NAME="127.0.0.1")
         status = response.status_code
         print(f"{url} -> {status}")
         if status >= 400:
