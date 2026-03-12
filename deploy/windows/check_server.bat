@@ -80,6 +80,19 @@ netsh advfirewall firewall show rule name=all dir=in | findstr /I "GC-Bridge"
 if errorlevel 1 echo   (keine GC-Bridge Regeln gefunden)
 echo.
 
+echo --- Django Admin-Test (eingeloggt) ---
+pushd "%PROJECT_ROOT%"
+"%PROJECT_ROOT%\.venv\Scripts\python.exe" -c "import django,os;os.environ.setdefault('DJANGO_SETTINGS_MODULE','GC_Bridge_4.settings');django.setup();from django.test import Client;from django.contrib.auth import get_user_model;u=get_user_model().objects.filter(is_superuser=True).first();c=Client();c.force_login(u) if u else None;r=c.get('/admin/');print(f'Status: {r.status_code}');exit(0 if r.status_code<400 else 1)" 2>&1
+if errorlevel 1 (
+    echo [FEHLER] Admin-Seite liefert Fehler!
+    echo          Traceback mit DEBUG=True:
+    "%PROJECT_ROOT%\.venv\Scripts\python.exe" -c "import django,os;os.environ.setdefault('DJANGO_SETTINGS_MODULE','GC_Bridge_4.settings');os.environ['DJANGO_DEBUG']='1';django.setup();from django.test import Client;from django.contrib.auth import get_user_model;u=get_user_model().objects.filter(is_superuser=True).first();c=Client();c.force_login(u) if u else None;r=c.get('/admin/');[print(l) for l in r.content.decode('utf-8','replace').splitlines() if 'Error' in l or 'Exception' in l or 'Traceback' in l or 'File ' in l or 'line ' in l]" 2>&1
+) else (
+    echo [OK]    Admin-Seite (eingeloggt) - HTTP 200
+)
+popd
+echo.
+
 echo --- Logdateien ---
 if not exist "%LOGDIR%" (
     echo [INFO] Logverzeichnis existiert nicht: %LOGDIR%
@@ -89,6 +102,7 @@ if not exist "%LOGDIR%" (
     for %%L in (
         uvicorn.out.log
         uvicorn.err.log
+        deploy.log
         caddy-runtime.log
         caddy-access.log
     ) do (
@@ -103,30 +117,10 @@ if not exist "%LOGDIR%" (
 )
 echo.
 
-echo --- Schnelltest: Uvicorn starten (5 Sekunden) ---
-echo Starte Uvicorn zum Testen...
-pushd "%PROJECT_ROOT%"
-set "DJANGO_SETTINGS_MODULE=GC_Bridge_4.settings"
-set "DJANGO_DEBUG=0"
-start "" /B "%PROJECT_ROOT%\.venv\Scripts\python.exe" -m uvicorn GC_Bridge_4.asgi:application --host 127.0.0.1 --port 8000 --workers 1 > "%LOGDIR%\check-uvicorn.log" 2>&1
-set "UVICORN_PID="
-timeout /t 3 /nobreak >nul
-for /f "tokens=5" %%I in ('netstat -ano ^| findstr /R /C:":8000 .*LISTENING"') do set "UVICORN_PID=%%I"
-if defined UVICORN_PID (
-    echo [OK]    Uvicorn laeuft auf Port 8000 (PID %UVICORN_PID%)
-    echo         Teste HTTP-Antwort...
-    powershell -NoProfile -Command "try { $r = Invoke-WebRequest -Uri http://127.0.0.1:8000/admin/ -UseBasicParsing -TimeoutSec 5; Write-Host '[OK]    HTTP Status:' $r.StatusCode } catch { Write-Host '[FEHLER]' $_.Exception.Message }"
-    taskkill /PID %UVICORN_PID% /F >nul 2>&1
-) else (
-    echo [FEHLER] Uvicorn konnte nicht gestartet werden.
-    echo          Pruefe %LOGDIR%\check-uvicorn.log
-    if exist "%LOGDIR%\check-uvicorn.log" (
-        echo.
-        echo === check-uvicorn.log ===
-        type "%LOGDIR%\check-uvicorn.log"
-    )
-)
-popd
+echo --- Schnelltest: HTTP-Erreichbarkeit ---
+echo Teste HTTP-Antwort (kein Uvicorn-Neustart)...
+powershell -NoProfile -Command "try { $r = Invoke-WebRequest -Uri 'http://127.0.0.1:8000/' -UseBasicParsing -TimeoutSec 5 -MaximumRedirection 0; Write-Host '[OK]    HTTP' $r.StatusCode } catch { if ($_.Exception.Response) { $sc = [int]$_.Exception.Response.StatusCode; Write-Host '[INFO]  HTTP' $sc } else { Write-Host '[FEHLER]' $_.Exception.Message } }"
+powershell -NoProfile -Command "try { $r = Invoke-WebRequest -Uri 'http://127.0.0.1:4711/' -UseBasicParsing -TimeoutSec 5 -MaximumRedirection 0; Write-Host '[OK]    HTTP' $r.StatusCode '(Caddy)' } catch { if ($_.Exception.Response) { $sc = [int]$_.Exception.Response.StatusCode; Write-Host '[INFO]  HTTP' $sc '(Caddy)' } else { Write-Host '[FEHLER]' $_.Exception.Message } }"
 echo.
 
 echo ================================================================

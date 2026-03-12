@@ -44,15 +44,17 @@ netstat -ano | findstr /R /C:":4711 .*LISTENING" > nul 2>&1
 if errorlevel 1 (call :err "Port 4711 - Caddy NICHT aktiv") else (call :ok "Port 4711 - Caddy aktiv")
 
 :: ============================================================
-:: 3. HTTP Checks
+:: 3. HTTP Checks (ohne Redirect-Following fuer echten Status)
 :: ============================================================
 call :section "HTTP CHECKS"
 
-powershell -NoProfile -Command "try { $r = Invoke-WebRequest -Uri 'http://127.0.0.1:8000/admin/' -UseBasicParsing -TimeoutSec 5; if ($r.StatusCode -eq 200) { exit 0 } else { exit 1 } } catch { exit 1 }" > nul 2>&1
-if errorlevel 1 (call :err "http://127.0.0.1:8000/admin/ nicht erreichbar") else (call :ok "http://127.0.0.1:8000/admin/ - HTTP 200")
+powershell -NoProfile -Command "try { $r = Invoke-WebRequest -Uri 'http://127.0.0.1:8000/' -UseBasicParsing -TimeoutSec 5 -MaximumRedirection 0; Write-Host $r.StatusCode; exit 0 } catch { if ($_.Exception.Response) { Write-Host ([int]$_.Exception.Response.StatusCode); exit ([int]$_.Exception.Response.StatusCode) } else { exit 1 } }" > "%TEMP%\hc_8000.txt" 2>&1
+set /p HC_8000=<"%TEMP%\hc_8000.txt"
+if "!HC_8000!"=="200" (call :ok "http://127.0.0.1:8000/ - HTTP 200") else if "!HC_8000!"=="302" (call :ok "http://127.0.0.1:8000/ - HTTP 302 (Redirect)") else (call :err "http://127.0.0.1:8000/ - HTTP !HC_8000!")
 
-powershell -NoProfile -Command "try { $r = Invoke-WebRequest -Uri 'http://127.0.0.1:4711/admin/' -UseBasicParsing -TimeoutSec 5; if ($r.StatusCode -eq 200) { exit 0 } else { exit 1 } } catch { exit 1 }" > nul 2>&1
-if errorlevel 1 (call :err "http://127.0.0.1:4711/admin/ nicht erreichbar") else (call :ok "http://127.0.0.1:4711/admin/ - HTTP 200")
+powershell -NoProfile -Command "try { $r = Invoke-WebRequest -Uri 'http://127.0.0.1:4711/' -UseBasicParsing -TimeoutSec 5 -MaximumRedirection 0; Write-Host $r.StatusCode; exit 0 } catch { if ($_.Exception.Response) { Write-Host ([int]$_.Exception.Response.StatusCode); exit ([int]$_.Exception.Response.StatusCode) } else { exit 1 } }" > "%TEMP%\hc_4711.txt" 2>&1
+set /p HC_4711=<"%TEMP%\hc_4711.txt"
+if "!HC_4711!"=="200" (call :ok "http://127.0.0.1:4711/ - HTTP 200") else if "!HC_4711!"=="302" (call :ok "http://127.0.0.1:4711/ - HTTP 302 (Redirect)") else (call :err "http://127.0.0.1:4711/ - HTTP !HC_4711!")
 
 :: ============================================================
 :: 4. Django
@@ -65,6 +67,17 @@ if errorlevel 1 (call :err "manage.py check - Fehler gefunden") else (call :ok "
 
 "%PYTHON%" manage.py migrate --check > nul 2>&1
 if errorlevel 1 (call :warn "Unangewandte Migrationen vorhanden!") else (call :ok "Migrationen - aktuell")
+
+:: Admin-Seite mit eingeloggtem User testen (faengt 500er die nur bei Login auftreten)
+"%PYTHON%" -c "import django,os;os.environ.setdefault('DJANGO_SETTINGS_MODULE','GC_Bridge_4.settings');django.setup();from django.test import Client;from django.contrib.auth import get_user_model;u=get_user_model().objects.filter(is_superuser=True).first();c=Client();c.force_login(u) if u else None;r=c.get('/admin/');print(r.status_code);exit(0 if r.status_code<400 else 1)" > "%TEMP%\hc_admin.txt" 2> "%TEMP%\hc_admin_err.txt"
+if errorlevel 1 (
+    set /p ADMIN_STATUS=<"%TEMP%\hc_admin.txt"
+    call :err "Django Admin (eingeloggt) - HTTP !ADMIN_STATUS!"
+    call :log "       Traceback:"
+    for /f "usebackq delims=" %%L in ("%TEMP%\hc_admin_err.txt") do call :log "       %%L"
+) else (
+    call :ok "Django Admin (eingeloggt) - HTTP 200"
+)
 popd
 
 :: ============================================================
@@ -125,6 +138,18 @@ if errorlevel 1 (
 :: 8. Logdateien auf Fehler pruefen (letzte 200 Zeilen)
 :: ============================================================
 call :section "LOGS (letzte 200 Zeilen)"
+
+:: uvicorn.out.log separat auf 500-Eintraege pruefen
+if exist "%APP_DIR%\tmp\logs\uvicorn.out.log" (
+    for /f "tokens=*" %%C in ('powershell -NoProfile -Command "(Get-Content \"%APP_DIR%\tmp\logs\uvicorn.out.log\" -Tail 200 | Where-Object { $_ -match \"500 Internal Server Error\" } | Measure-Object).Count"') do set "CNT500=%%C"
+    if !CNT500! gtr 0 (
+        call :err "uvicorn.out.log - !CNT500! Eintraege mit '500 Internal Server Error' in den letzten 200 Zeilen"
+    ) else (
+        call :ok "uvicorn.out.log - keine 500er"
+    )
+) else (
+    call :warn "uvicorn.out.log - Datei nicht vorhanden"
+)
 
 for %%L in (uvicorn.err.log caddy.err.log deploy.log) do (
     if exist "%APP_DIR%\tmp\logs\%%L" (
