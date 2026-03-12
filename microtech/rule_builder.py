@@ -180,20 +180,23 @@ def _real_examples() -> dict[str, str]:
     if order is None:
         return {}
     examples: dict[str, str] = {}
-    for path, _field, _label in _iter_field_defs_for_model(model=Order):
-        val = resolve_django_field_value(order=order, path=path)
-        if val is not None and str(val) != "":
-            examples[path] = str(val)
-    for rel_name in _ALLOWED_RELATIONS:
-        prefix = f"{rel_name}__"
-        rel_obj = getattr(order, rel_name, None)
-        if rel_obj is None:
-            continue
-        rel_model = type(rel_obj)
-        for path, _field, _label in _iter_field_defs_for_model(model=rel_model, prefix=prefix):
+    try:
+        for path, _field, _label in _iter_field_defs_for_model(model=Order):
             val = resolve_django_field_value(order=order, path=path)
             if val is not None and str(val) != "":
                 examples[path] = str(val)
+        for rel_name in _ALLOWED_RELATIONS:
+            prefix = f"{rel_name}__"
+            rel_obj = getattr(order, rel_name, None)
+            if rel_obj is None:
+                continue
+            rel_model = type(rel_obj)
+            for path, _field, _label in _iter_field_defs_for_model(model=rel_model, prefix=prefix):
+                val = resolve_django_field_value(order=order, path=path)
+                if val is not None and str(val) != "":
+                    examples[path] = str(val)
+    except Exception:
+        pass
     return examples
 
 
