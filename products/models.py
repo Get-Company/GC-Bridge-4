@@ -93,6 +93,18 @@ class Product(BaseModel):
     unit = models.CharField(max_length=255, null=True, blank=True, verbose_name=_("Einheit"))
     min_purchase = models.IntegerField(null=True, blank=True, verbose_name=_("Mindestabnahme"))
     purchase_unit = models.IntegerField(null=True, blank=True, verbose_name=_("Kaufeinheit"))
+    customs_tariff_number = models.CharField(
+        max_length=32, blank=True, default="",
+        verbose_name=_("Statistische Warennummer"),
+    )
+    weight_gross = models.DecimalField(
+        max_digits=10, decimal_places=4, null=True, blank=True,
+        verbose_name=_("Bruttogewicht (kg)"),
+    )
+    weight_net = models.DecimalField(
+        max_digits=10, decimal_places=4, null=True, blank=True,
+        verbose_name=_("Nettogewicht (kg)"),
+    )
     tax = models.ForeignKey(
         Tax,
         on_delete=models.PROTECT,

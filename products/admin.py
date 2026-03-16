@@ -283,7 +283,7 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
     change_form_show_cancel_button = BaseAdmin.change_form_show_cancel_button
     list_filter_sheet = BaseAdmin.list_filter_sheet
     list_horizontal_scrollbar_top = BaseAdmin.list_horizontal_scrollbar_top
-    list_display = ("erp_nr", "name", "is_active", "created_at")
+    list_display = ("erp_nr", "name", "customs_tariff_number", "is_active", "created_at")
     search_fields = ("erp_nr", "sku", "name")
     list_filter = [
         ("is_active", BooleanRadioFilter),

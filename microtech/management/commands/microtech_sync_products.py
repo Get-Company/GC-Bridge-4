@@ -301,6 +301,9 @@ class Command(BaseCommand):
         product.description = artikel_service.get_description()
         product.description_short = artikel_service.get_description_short()
         product.sort_order = _to_int(artikel_service.get_sort_order()) or product.sort_order
+        product.customs_tariff_number = artikel_service.get_customs_tariff_number()
+        product.weight_gross = artikel_service.get_weight_gross()
+        product.weight_net = artikel_service.get_weight_net()
         product.tax = self._resolve_product_tax(
             artikel_service=artikel_service,
             tax_map=tax_map,

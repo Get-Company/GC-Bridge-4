@@ -96,6 +96,30 @@ class MicrotechArtikelService(MicrotechDatasetService):
 
         return None
 
+    def get_bez3(self) -> str:
+        return self.get_field("Bez3") or ""
+
+    def get_customs_tariff_number(self) -> str:
+        match = re.search(r"stat\.Warennr\.?\s*(\d+)", self.get_bez3())
+        return match.group(1) if match else ""
+
+    def get_weight_gross(self) -> Decimal | None:
+        return self._parse_weight(self.get_bez3(), "brutto")
+
+    def get_weight_net(self) -> Decimal | None:
+        return self._parse_weight(self.get_bez3(), "netto")
+
+    @staticmethod
+    def _parse_weight(text: str, label: str) -> Decimal | None:
+        match = re.search(rf"{label}:\s*([\d,.]+)\s*kg", text, re.IGNORECASE)
+        if not match:
+            return None
+        value = match.group(1).replace(",", ".")
+        try:
+            return Decimal(value)
+        except (InvalidOperation, ValueError):
+            return None
+
     @staticmethod
     def _parse_tax_rate(value) -> Decimal | None:
         if value in (None, ""):
