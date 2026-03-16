@@ -16,6 +16,7 @@ from microtech.models import (
     MicrotechOrderRuleAction,
     MicrotechOrderRuleCondition,
     MicrotechOrderRuleDjangoField,
+    MicrotechOrderRuleDjangoFieldPolicy,
     MicrotechOrderRuleOperator,
     MicrotechSettings,
 )
@@ -260,6 +261,31 @@ class MicrotechOrderRuleOperatorAdmin(BaseAdmin):
         ),
     )
 
+
+
+@admin.register(MicrotechOrderRuleDjangoFieldPolicy)
+class MicrotechOrderRuleDjangoFieldPolicyAdmin(BaseAdmin):
+    list_display = ("priority", "field_path", "label_override", "is_active", "updated_at")
+    list_editable = ("is_active",)
+    search_fields = ("field_path", "label_override", "hint")
+    list_filter = ("is_active",)
+    ordering = ("priority", "field_path", "id")
+    filter_horizontal = ("allowed_operators",)
+    fieldsets = (
+        (
+            "Django Bedingungsfeld Policy",
+            {
+                "fields": (
+                    "is_active",
+                    "priority",
+                    "field_path",
+                    "label_override",
+                    "hint",
+                    "allowed_operators",
+                ),
+            },
+        ),
+    )
 
 
 @admin.register(MicrotechDatasetCatalog)
