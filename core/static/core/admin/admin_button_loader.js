@@ -1,9 +1,44 @@
 (function () {
   "use strict";
 
-  const LOADER_TARGET_CLASS = "gc-admin-button-loader-target";
   const LOADER_ACTIVE_CLASS = "gc-admin-button-loader-active";
+  const LOADER_INLINE_CLASS = "gc-admin-button-loader-inline";
   const SUBMIT_BUTTON_SELECTOR = 'button[type="submit"]';
+
+  function createLoaderElement() {
+    const loader = document.createElement("span");
+    loader.className = LOADER_INLINE_CLASS;
+    loader.setAttribute("aria-hidden", "true");
+    return loader;
+  }
+
+  function getInsertionReference(element) {
+    let child = element.firstElementChild;
+    let lastLeadingIcon = null;
+
+    while (child && child.classList.contains("material-symbols-outlined")) {
+      lastLeadingIcon = child;
+      child = child.nextElementSibling;
+    }
+
+    return lastLeadingIcon;
+  }
+
+  function insertLoaderElement(element) {
+    if (element.querySelector(`.${LOADER_INLINE_CLASS}`)) {
+      return;
+    }
+
+    const loader = createLoaderElement();
+    const reference = getInsertionReference(element);
+
+    if (reference) {
+      reference.insertAdjacentElement("afterend", loader);
+      return;
+    }
+
+    element.prepend(loader);
+  }
 
   function activateButtonLoader(element) {
     if (!element || element.dataset.gcAdminButtonLoaderActive === "true") {
@@ -11,7 +46,8 @@
     }
 
     element.dataset.gcAdminButtonLoaderActive = "true";
-    element.classList.add(LOADER_TARGET_CLASS, LOADER_ACTIVE_CLASS);
+    insertLoaderElement(element);
+    element.classList.add(LOADER_ACTIVE_CLASS);
     element.setAttribute("aria-busy", "true");
 
     if ("disabled" in element) {
