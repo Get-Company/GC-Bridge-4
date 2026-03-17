@@ -4,11 +4,6 @@
   const LOADER_TARGET_CLASS = "gc-admin-button-loader-target";
   const LOADER_ACTIVE_CLASS = "gc-admin-button-loader-active";
   const SUBMIT_BUTTON_SELECTOR = 'button[type="submit"]';
-  const LINK_SELECTOR = [
-    "#submit-row a[href]",
-    "a.addlink",
-    '#content a[href][class*="cursor-pointer"]',
-  ].join(", ");
 
   function activateButtonLoader(element) {
     if (!element || element.dataset.gcAdminButtonLoaderActive === "true") {
@@ -33,7 +28,7 @@
   }
 
   function shouldHandleLink(link, event) {
-    if (!link || !link.matches(LINK_SELECTOR) || link.dataset.adminLoader === "off") {
+    if (!link || link.dataset.adminLoader === "off") {
       return false;
     }
 
@@ -54,7 +49,23 @@
       return false;
     }
 
-    return true;
+    if (link.classList.contains("addlink")) {
+      return true;
+    }
+
+    if (link.closest("#submit-row")) {
+      return true;
+    }
+
+    if (link.closest(".field-actions_holder")) {
+      return true;
+    }
+
+    if (link.classList.contains("cursor-pointer")) {
+      return true;
+    }
+
+    return false;
   }
 
   document.addEventListener("submit", function (event) {
