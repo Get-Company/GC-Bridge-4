@@ -1,0 +1,33 @@
+@keyframes gc-admin-button-loader-spin {
+    to {
+        transform: translate(-50%, -50%) rotate(360deg);
+    }
+}
+
+.gc-admin-button-loader-target {
+    position: relative;
+}
+
+.gc-admin-button-loader-active {
+    pointer-events: none;
+}
+
+.gc-admin-button-loader-active::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0.95rem;
+    height: 0.95rem;
+    margin: 0;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 9999px;
+    transform: translate(-50%, -50%);
+    animation: gc-admin-button-loader-spin 0.7s linear infinite;
+    z-index: 1;
+}
+
+.gc-admin-button-loader-active > * {
+    opacity: 0.25;
+}

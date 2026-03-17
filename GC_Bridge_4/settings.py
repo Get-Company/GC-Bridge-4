@@ -215,6 +215,12 @@ UNFOLD = {
     "SHOW_HISTORY": True,
     "SHOW_VIEW_ON_SITE": False,
     "SHOW_BACK_BUTTON": False,
+    "STYLES": [
+        "core.unfold.admin_button_loader_style",
+    ],
+    "SCRIPTS": [
+        "core.unfold.admin_button_loader_script",
+    ],
     "ENVIRONMENT": "core.unfold.environment_callback",
     "DASHBOARD_CALLBACK": "core.dashboard.dashboard_callback",
     "EXTENSIONS": {
