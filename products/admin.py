@@ -505,8 +505,8 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
             self.message_user(request, "Keine Produkte ausgewaehlt.", level=messages.WARNING)
             return
         try:
-            call_command("microtech_sync_products", *erp_nrs, no_wait=True)
-            self.message_user(request, f"{len(erp_nrs)} Produkt(e) fuer Microtech-Sync eingereiht.")
+            call_command("microtech_sync_products", *erp_nrs)
+            self.message_user(request, f"{len(erp_nrs)} Produkt(e) von Microtech synchronisiert.")
         except Exception as exc:
             self._log_admin_error(
                 request,
@@ -525,8 +525,8 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
             self.message_user(request, "Produkt nicht gefunden.", level=messages.ERROR)
             return self._redirect_to_change_page(object_id)
         try:
-            call_command("microtech_sync_products", product.erp_nr, no_wait=True)
-            self.message_user(request, f"Produkt {product.erp_nr} fuer Microtech-Sync eingereiht.")
+            call_command("microtech_sync_products", product.erp_nr)
+            self.message_user(request, f"Produkt {product.erp_nr} von Microtech synchronisiert.")
         except Exception as exc:
             self._log_admin_error(
                 request,

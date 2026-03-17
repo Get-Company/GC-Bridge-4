@@ -218,6 +218,37 @@ class OrderUpsertRuleDebugTest(SimpleTestCase):
         self.assertEqual(debug.rule_id, 1)
         self.assertEqual(debug.rule_name, "Fallback")
 
+    def test_build_export_metadata_text_contains_tariff_and_weights(self):
+        text = OrderUpsertMicrotechService._build_export_metadata_text(
+            customs_tariff_number="1234.56",
+            weight_gross=Decimal("1.2500"),
+            weight_net=Decimal("1.1000"),
+        )
+
+        self.assertEqual(
+            text,
+            "Statistische Warennummer: 1234.56\nGewicht brutto: 1,25 kg\nGewicht netto: 1,1 kg",
+        )
+
+    def test_append_export_metadata_to_position_name_only_for_swiss_orders(self):
+        text = OrderUpsertMicrotechService._append_export_metadata_to_position_name(
+            "Artikel A",
+            "Statistische Warennummer: 1234\nGewicht brutto: 2 kg",
+            append_customs_metadata=True,
+        )
+
+        self.assertEqual(
+            text,
+            "Artikel A\nStatistische Warennummer: 1234\nGewicht brutto: 2 kg",
+        )
+
+        unchanged = OrderUpsertMicrotechService._append_export_metadata_to_position_name(
+            "Artikel A",
+            "Statistische Warennummer: 1234",
+            append_customs_metadata=False,
+        )
+        self.assertEqual(unchanged, "Artikel A")
+
     def test_duplicate_create_extra_position_actions_are_applied_once_per_erp_nr(self):
         calls: list[tuple[int, str, str]] = []
 

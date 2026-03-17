@@ -79,6 +79,8 @@ class MicrotechOrderDefaults:
 class OrderUpsertMicrotechService(BaseService):
     model = Order
 
+    _SWISS_COUNTRY_CODES = {"CH", "CHE", "SCHWEIZ", "SWITZERLAND", "SUISSE", "SVIZZERA"}
+
     def upsert_order(self, order: Order, *, erp: Any | None = None) -> OrderUpsertResult:
         if not isinstance(order, Order):
             raise TypeError("order must be an instance of Order.")
@@ -385,6 +387,8 @@ class OrderUpsertMicrotechService(BaseService):
         article_name_cache: dict[str, str] = {}
         article_raw_unit_cache: dict[str, str] = {}
         product_unit_map = self._build_product_unit_map(details)
+        product_export_text_map = self._build_product_export_text_map(details)
+        append_customs_metadata = self._has_swiss_billing_address(order)
 
         for detail in details:
             erp_nr = (detail.erp_nr or "").strip()
@@ -409,6 +413,8 @@ class OrderUpsertMicrotechService(BaseService):
                 erp_nr=erp_nr,
                 artikel_service=artikel_service,
                 article_name_cache=article_name_cache,
+                product_export_text_map=product_export_text_map,
+                append_customs_metadata=append_customs_metadata,
             )
 
             so_vorgang.Positionen.Add(quantity, unit, erp_nr)
@@ -438,6 +444,30 @@ class OrderUpsertMicrotechService(BaseService):
             .values_list("erp_nr", "unit")
         )
         return {str(erp_nr).strip(): str(unit).strip() for erp_nr, unit in rows if erp_nr and unit}
+
+    @classmethod
+    def _build_product_export_text_map(cls, details: list[OrderDetail]) -> dict[str, str]:
+        erp_nrs = {(detail.erp_nr or "").strip() for detail in details if (detail.erp_nr or "").strip()}
+        if not erp_nrs:
+            return {}
+
+        rows = (
+            Product.objects
+            .filter(erp_nr__in=erp_nrs)
+            .values_list("erp_nr", "customs_tariff_number", "weight_gross", "weight_net")
+        )
+        result: dict[str, str] = {}
+        for erp_nr, customs_tariff_number, weight_gross, weight_net in rows:
+            if not erp_nr:
+                continue
+            export_text = cls._build_export_metadata_text(
+                customs_tariff_number=customs_tariff_number,
+                weight_gross=weight_gross,
+                weight_net=weight_net,
+            )
+            if export_text:
+                result[str(erp_nr).strip()] = export_text
+        return result
 
     @staticmethod
     def _resolve_position_unit(
@@ -470,6 +500,12 @@ class OrderUpsertMicrotechService(BaseService):
     def _requires_microtech_base_price(unit: str) -> bool:
         normalized = (unit or "").strip().replace(" ", "")
         return normalized.startswith("%")
+
+    @classmethod
+    def _has_swiss_billing_address(cls, order: Order) -> bool:
+        billing_address = getattr(order, "billing_address", None)
+        country_code = str(getattr(billing_address, "country_code", "") or "").strip().upper()
+        return country_code in cls._SWISS_COUNTRY_CODES
 
     def _add_shipping_position(self, *, order: Order, so_vorgang) -> None:
         if not order.shipping_costs or order.shipping_costs <= Decimal("0"):
@@ -832,14 +868,24 @@ class OrderUpsertMicrotechService(BaseService):
         erp_nr: str,
         artikel_service: MicrotechArtikelService,
         article_name_cache: dict[str, str],
+        product_export_text_map: dict[str, str],
+        append_customs_metadata: bool,
     ) -> str:
         detail_name = (detail.name or "").strip()
         if detail_name:
-            return detail_name
+            return OrderUpsertMicrotechService._append_export_metadata_to_position_name(
+                detail_name,
+                product_export_text_map.get(erp_nr, ""),
+                append_customs_metadata=append_customs_metadata,
+            )
 
         cached_name = article_name_cache.get(erp_nr)
         if cached_name is not None:
-            return cached_name
+            return OrderUpsertMicrotechService._append_export_metadata_to_position_name(
+                cached_name,
+                product_export_text_map.get(erp_nr, ""),
+                append_customs_metadata=append_customs_metadata,
+            )
 
         article_name = ""
         try:
@@ -853,7 +899,51 @@ class OrderUpsertMicrotechService(BaseService):
             )
 
         article_name_cache[erp_nr] = article_name
-        return article_name
+        return OrderUpsertMicrotechService._append_export_metadata_to_position_name(
+            article_name,
+            product_export_text_map.get(erp_nr, ""),
+            append_customs_metadata=append_customs_metadata,
+        )
+
+    @staticmethod
+    def _append_export_metadata_to_position_name(
+        position_name: str,
+        export_metadata_text: str,
+        *,
+        append_customs_metadata: bool,
+    ) -> str:
+        base_name = (position_name or "").strip()
+        metadata = (export_metadata_text or "").strip()
+        if not append_customs_metadata or not metadata:
+            return base_name
+        if not base_name:
+            return metadata
+        return f"{base_name}\n{metadata}"
+
+    @classmethod
+    def _build_export_metadata_text(
+        cls,
+        *,
+        customs_tariff_number: str | None,
+        weight_gross: Decimal | None,
+        weight_net: Decimal | None,
+    ) -> str:
+        parts: list[str] = []
+        tariff_number = str(customs_tariff_number or "").strip()
+        if tariff_number:
+            parts.append(f"Statistische Warennummer: {tariff_number}")
+        if weight_gross is not None:
+            parts.append(f"Gewicht brutto: {cls._format_export_weight(weight_gross)} kg")
+        if weight_net is not None:
+            parts.append(f"Gewicht netto: {cls._format_export_weight(weight_net)} kg")
+        return "\n".join(parts)
+
+    @staticmethod
+    def _format_export_weight(value: Decimal) -> str:
+        normalized = format(value.normalize(), "f")
+        if "." in normalized:
+            normalized = normalized.rstrip("0").rstrip(".")
+        return normalized.replace(".", ",")
 
     @staticmethod
     def _set_vorgang_field(*, so_vorgang, field_name: str, value: str | int) -> None:
