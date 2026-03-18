@@ -28,3 +28,11 @@ class MicrotechSwissCustomsFieldMappingTest(TestCase):
 
         mapping.refresh_from_db()
         self.assertEqual(mapping.static_value, "MANUAL-OVERRIDE")
+
+    def test_static_value_strips_html_on_save(self):
+        mapping = MicrotechSwissCustomsFieldMapping.objects.get(portal_field="parcelNumbers")
+        mapping.static_value = "<div>de</div>"
+        mapping.save(update_fields=["static_value", "updated_at"])
+
+        mapping.refresh_from_db()
+        self.assertEqual(mapping.static_value, "de")

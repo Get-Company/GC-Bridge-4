@@ -253,6 +253,8 @@ class CustomerUpsertMicrotechService(BaseService):
             adresse_service.set_field("AdrNr", erp_nr)
 
         adresse_service.set_field("Status", "GC-SW6 Webshop Kunde")
+        adresse_service.set_field("EMail1", shipping.email or customer.email)
+        adresse_service.set_field("Tel", shipping.phone)
         if customer.vat_id:
             adresse_service.set_field("UStIdNr", customer.vat_id)
         adresse_service.set_field("UStKat", self._resolve_ustkat(shipping.country_code, customer.vat_id))

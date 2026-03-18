@@ -1,6 +1,7 @@
 import uuid
 
 from django.db import models
+from django.utils.html import strip_tags
 from django.utils.translation import gettext_lazy as _
 
 from core.models import BaseModel
@@ -112,7 +113,7 @@ class MicrotechSwissCustomsFieldMapping(BaseModel):
         default="",
         verbose_name=_("Quellpfad / Resolver"),
     )
-    static_value = models.TextField(blank=True, default="", verbose_name=_("Statischer Wert"))
+    static_value = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Statischer Wert"))
     value_kind = models.CharField(max_length=32, blank=True, default="text", verbose_name=_("Wertetyp"))
     is_required = models.BooleanField(default=False, verbose_name=_("Pflichtfeld"))
     help_text = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Hinweis"))
@@ -127,10 +128,14 @@ class MicrotechSwissCustomsFieldMapping(BaseModel):
     def __str__(self) -> str:
         return f"{self.portal_field} [{self.source_type}]"
 
+    def save(self, *args, **kwargs):
+        self.static_value = strip_tags(self.static_value or "").strip()
+        super().save(*args, **kwargs)
+
     @property
     def source_preview(self) -> str:
         if self.source_type == self.SourceType.STATIC:
-            return self.static_value
+            return strip_tags(self.static_value or "").strip()
         return self.source_path
 
     @classmethod

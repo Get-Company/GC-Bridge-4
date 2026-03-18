@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
+from django.utils.html import strip_tags
 from django.utils.text import get_valid_filename
 
 from core.services import BaseService
@@ -215,7 +216,7 @@ class SwissCustomsCsvExportService(BaseService):
         source_path = _to_str(mapping.source_path)
 
         if source_type == MicrotechSwissCustomsFieldMapping.SourceType.STATIC:
-            return mapping.static_value
+            return strip_tags(mapping.static_value or "").strip()
         if source_type == MicrotechSwissCustomsFieldMapping.SourceType.ORDER:
             return _resolve_attr_path(context.order, source_path)
         if source_type == MicrotechSwissCustomsFieldMapping.SourceType.CUSTOMER:
