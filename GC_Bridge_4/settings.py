@@ -357,6 +357,11 @@ UNFOLD = {
                         "link": reverse_lazy("admin:microtech_microtechdatasetfield_changelist"),
                     },
                     {
+                        "title": _("Schweiz Zoll Mapping"),
+                        "icon": "description",
+                        "link": reverse_lazy("admin:microtech_microtechswisscustomsfieldmapping_changelist"),
+                    },
+                    {
                         "title": _("Queue"),
                         "icon": "pending_actions",
                         "link": reverse_lazy("admin:microtech_queue"),
