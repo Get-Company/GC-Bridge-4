@@ -4,6 +4,7 @@ from typing import Any
 
 from django.contrib import admin, messages
 from django.http import HttpResponseRedirect
+from django.http import HttpResponse
 from django.http import JsonResponse
 from django.template.loader import render_to_string
 from django.urls import reverse
@@ -21,7 +22,7 @@ from core.admin import BaseAdmin, BaseTabularInline
 from loguru import logger
 from microtech.services import microtech_connection
 from orders.models import Order, OrderDetail
-from orders.services import OrderSyncService, OrderUpsertMicrotechService
+from orders.services import OrderSyncService, OrderUpsertMicrotechService, SwissCustomsCsvExportService
 from orders.services.order_upsert_microtech import OrderRuleDebugInfo
 from shopware.services import OrderService
 from shopware.services.order import DEFAULT_TRANSITION_ACTIONS
@@ -129,8 +130,8 @@ class OrderAdmin(BaseAdmin):
     inlines = (OrderDetailInline,)
     actions_list = ("sync_open_orders_from_shopware_list",)
     actions = ("sync_open_orders_from_shopware",)
-    actions_row = ("upsert_to_microtech_row",)
-    actions_detail = ("upsert_to_microtech_detail",)
+    actions_row = ("upsert_to_microtech_row", "export_swiss_customs_csv_row")
+    actions_detail = ("upsert_to_microtech_detail", "export_swiss_customs_csv_detail")
     list_fullwidth = True
 
     def get_queryset(self, request):
@@ -228,6 +229,26 @@ class OrderAdmin(BaseAdmin):
         self.message_user(request, rule_message, level=rule_level)
         self.message_user(request, f"Detail-Log: {log_path}", level=messages.INFO)
 
+    def _export_swiss_customs_csv(self, request, object_id: str) -> HttpResponse | None:
+        order = self.get_object(request, object_id)
+        if not order:
+            self.message_user(request, "Bestellung nicht gefunden.", level=messages.ERROR)
+            return None
+
+        try:
+            export = SwissCustomsCsvExportService().export_order(order)
+        except Exception as exc:
+            self.message_user(
+                request,
+                f"Zoll-CSV Export fehlgeschlagen: {exc}",
+                level=messages.ERROR,
+            )
+            return None
+
+        response = HttpResponse(export.content.encode("utf-8-sig"), content_type="text/csv; charset=utf-8")
+        response["Content-Disposition"] = f'attachment; filename="{export.filename}"'
+        return response
+
     def get_custom_urls(self):
         urls = super().get_custom_urls()
         return (
@@ -265,6 +286,28 @@ class OrderAdmin(BaseAdmin):
     )
     def upsert_to_microtech_row(self, request, object_id: str):
         self._run_microtech_upsert(request, object_id)
+        return self._redirect_to_changelist()
+
+    @action(
+        description="Zoll-CSV exportieren",
+        icon="download",
+        variant=ActionVariant.PRIMARY,
+    )
+    def export_swiss_customs_csv_detail(self, request, object_id: str):
+        response = self._export_swiss_customs_csv(request, object_id)
+        if response is not None:
+            return response
+        return self._redirect_to_change_page(object_id)
+
+    @action(
+        description="Zoll-CSV",
+        icon="download",
+        variant=ActionVariant.PRIMARY,
+    )
+    def export_swiss_customs_csv_row(self, request, object_id: str):
+        response = self._export_swiss_customs_csv(request, object_id)
+        if response is not None:
+            return response
         return self._redirect_to_changelist()
 
     def _run_open_order_sync(self, request) -> None:

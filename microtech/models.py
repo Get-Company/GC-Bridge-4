@@ -4,6 +4,7 @@ from django.db import models
 from django.utils.translation import gettext_lazy as _
 
 from core.models import BaseModel
+from microtech.customs_fields import DEFAULT_SWISS_CUSTOMS_FIELD_DEFINITIONS
 
 
 class MicrotechJob(BaseModel):
@@ -64,6 +65,91 @@ class MicrotechSettings(BaseModel):
     def load(cls) -> "MicrotechSettings":
         obj, _ = cls.objects.get_or_create(pk=1)
         return obj
+
+
+class MicrotechSwissCustomsFieldMapping(BaseModel):
+    class Section(models.TextChoices):
+        SHIPMENT = "shipment", _("Sendung")
+        EXPORTER_ADDRESS = "exporter_address", _("Exporteur Adresse")
+        EXPORTER_CONTACT = "exporter_contact", _("Exporteur Kontakt")
+        EXPORTER_CUSTOMS = "exporter_customs", _("Exporteur Zolldaten")
+        IMPORTER_ADDRESS = "importer_address", _("Importeur Adresse")
+        IMPORTER_CONTACT = "importer_contact", _("Importeur Kontakt")
+        IMPORTER_CUSTOMS = "importer_customs", _("Importeur Zolldaten")
+        CONSIGNEE_ADDRESS = "consignee_address", _("Empfaenger Adresse")
+        CONSIGNEE_CONTACT = "consignee_contact", _("Empfaenger Kontakt")
+        INVOICE = "invoice", _("Rechnung")
+        LINE_ITEM = "line_item", _("Position")
+        LINE_ITEM_PREFERENCE = "line_item_preference", _("Position Praeferenz")
+        LINE_ITEM_NATIONAL_CUSTOMS = "line_item_national_customs", _("Position nationale Zolldaten")
+
+    class SourceType(models.TextChoices):
+        STATIC = "static", _("Statischer Wert")
+        ORDER = "order", _("Bestellung")
+        CUSTOMER = "customer", _("Kunde")
+        BILLING_ADDRESS = "billing_address", _("Rechnungsadresse")
+        SHIPPING_ADDRESS = "shipping_address", _("Lieferadresse")
+        ORDER_DETAIL = "order_detail", _("Bestellposition")
+        PRODUCT = "product", _("Produkt")
+        COMPUTED = "computed", _("Berechneter Resolver")
+
+    portal_field = models.CharField(max_length=255, unique=True, verbose_name=_("Portal Feld"))
+    section = models.CharField(
+        max_length=48,
+        choices=Section.choices,
+        default=Section.SHIPMENT,
+        verbose_name=_("Bereich"),
+    )
+    source_type = models.CharField(
+        max_length=32,
+        choices=SourceType.choices,
+        default=SourceType.STATIC,
+        verbose_name=_("Quelltyp"),
+    )
+    source_path = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        verbose_name=_("Quellpfad / Resolver"),
+    )
+    static_value = models.TextField(blank=True, default="", verbose_name=_("Statischer Wert"))
+    value_kind = models.CharField(max_length=32, blank=True, default="text", verbose_name=_("Wertetyp"))
+    is_required = models.BooleanField(default=False, verbose_name=_("Pflichtfeld"))
+    help_text = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Hinweis"))
+    is_active = models.BooleanField(default=True, verbose_name=_("Aktiv"))
+    priority = models.PositiveIntegerField(default=100, verbose_name=_("Prioritaet"))
+
+    class Meta:
+        verbose_name = _("Microtech Schweiz Zoll Feldmapping")
+        verbose_name_plural = _("Microtech Schweiz Zoll Feldmappings")
+        ordering = ("priority", "portal_field", "id")
+
+    def __str__(self) -> str:
+        return f"{self.portal_field} [{self.source_type}]"
+
+    @property
+    def source_preview(self) -> str:
+        if self.source_type == self.SourceType.STATIC:
+            return self.static_value
+        return self.source_path
+
+    @classmethod
+    def ensure_defaults(cls) -> None:
+        for priority, definition in enumerate(DEFAULT_SWISS_CUSTOMS_FIELD_DEFINITIONS, start=10):
+            cls.objects.get_or_create(
+                portal_field=definition.portal_field,
+                defaults={
+                    "section": definition.section,
+                    "source_type": definition.source_type,
+                    "source_path": definition.source_path,
+                    "static_value": definition.static_value,
+                    "value_kind": definition.value_kind,
+                    "is_required": definition.is_required,
+                    "help_text": definition.help_text,
+                    "priority": priority,
+                    "is_active": True,
+                },
+            )
 
 
 class MicrotechOrderRule(BaseModel):

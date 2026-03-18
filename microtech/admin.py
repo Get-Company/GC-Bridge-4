@@ -19,6 +19,7 @@ from microtech.models import (
     MicrotechOrderRuleDjangoFieldPolicy,
     MicrotechOrderRuleOperator,
     MicrotechSettings,
+    MicrotechSwissCustomsFieldMapping,
 )
 from microtech.rule_builder import (
     get_dataset_defs,
@@ -70,6 +71,54 @@ class MicrotechSettingsAdmin(SingletonAdmin):
             },
         ),
     )
+
+
+@admin.register(MicrotechSwissCustomsFieldMapping)
+class MicrotechSwissCustomsFieldMappingAdmin(BaseAdmin):
+    list_display = (
+        "priority",
+        "portal_field",
+        "section",
+        "source_type",
+        "source_preview_short",
+        "is_required",
+        "is_active",
+        "updated_at",
+    )
+    list_editable = ("is_active",)
+    search_fields = ("portal_field", "source_path", "static_value", "help_text")
+    list_filter = ("is_active", "section", "source_type", "is_required", "value_kind")
+    ordering = ("priority", "portal_field", "id")
+    fieldsets = (
+        (
+            "Zollportal Feldmapping",
+            {
+                "fields": (
+                    "is_active",
+                    "priority",
+                    "portal_field",
+                    "section",
+                    "source_type",
+                    "source_path",
+                    "static_value",
+                    "value_kind",
+                    "is_required",
+                    "help_text",
+                ),
+                "description": (
+                    "Mapping der GLS-/Schweiz-Zollfelder auf statische Werte oder Quellen aus dem neuen Django-Projekt. "
+                    "Bei 'computed' steht im Quellpfad ein Resolver-Key fuer spaetere Aufloesung."
+                ),
+            },
+        ),
+    )
+
+    @admin.display(description="Quelle / Wert")
+    def source_preview_short(self, obj):
+        value = (obj.source_preview or "").strip()
+        if len(value) > 80:
+            return f"{value[:77]}..."
+        return value
 
 
 @admin.register(MicrotechOrderRule)
