@@ -85,6 +85,23 @@ class OrderUpsertMicrotechService(BaseService):
     _TEXT_FIELD_TYPES = frozenset({"Blob", "Info", "Memo"})
     _STRING_FIELD_TYPES = frozenset({"WideString", "String", "UnicodeString", "Date", "DateTime"})
 
+    def refresh_erp_order_id(self, order: Order, *, erp: Any | None = None) -> str:
+        if not isinstance(order, Order):
+            raise TypeError("order must be an instance of Order.")
+
+        if erp is None:
+            with microtech_connection() as erp_connection:
+                return self.refresh_erp_order_id(order, erp=erp_connection)
+
+        vorgang_service = MicrotechVorgangService(erp=erp)
+        beleg_nr = self._find_existing_beleg_nr(order=order, vorgang_service=vorgang_service)
+        if beleg_nr:
+            self._persist_erp_order_id(order=order, erp_order_id=beleg_nr)
+            return beleg_nr
+
+        self._clear_erp_order_id(order=order)
+        return ""
+
     def upsert_order(self, order: Order, *, erp: Any | None = None) -> OrderUpsertResult:
         if not isinstance(order, Order):
             raise TypeError("order must be an instance of Order.")
