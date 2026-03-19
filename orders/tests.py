@@ -291,3 +291,33 @@ class OrderUpsertRuleDebugTest(SimpleTestCase):
         self.assertEqual(debug.create_position_requested, 3)
         self.assertEqual(debug.create_position_applied, 2)
         self.assertEqual(debug.created_position_erp_nrs, ("P", "Q"))
+
+    def test_set_dataset_field_uses_integer_writer_for_integer_catalog_type(self):
+        field = SimpleNamespace(FieldType="", AsInteger=None, AsString=None, AsFloat=None, Text=None)
+        dataset = SimpleNamespace(Fields=SimpleNamespace(Item=lambda name: field))
+
+        written = OrderUpsertMicrotechService._set_dataset_field(
+            dataset=dataset,
+            field_name="ZahlArt",
+            value="22",
+            field_type_hint="Integer",
+        )
+
+        self.assertTrue(written)
+        self.assertEqual(field.AsInteger, 22)
+        self.assertIsNone(field.AsString)
+
+    def test_set_dataset_field_uses_string_writer_for_unicode_catalog_type(self):
+        field = SimpleNamespace(FieldType="", AsInteger=None, AsString=None, AsFloat=None, Text=None)
+        dataset = SimpleNamespace(Fields=SimpleNamespace(Item=lambda name: field))
+
+        written = OrderUpsertMicrotechService._set_dataset_field(
+            dataset=dataset,
+            field_name="KuBez",
+            value="PayPal Gebuehr",
+            field_type_hint="UnicodeString",
+        )
+
+        self.assertTrue(written)
+        self.assertEqual(field.AsString, "PayPal Gebuehr")
+        self.assertIsNone(field.AsInteger)

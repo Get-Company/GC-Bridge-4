@@ -4,6 +4,7 @@ from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
 from django import forms
+from django.db.models import Q
 from django.urls import reverse_lazy
 
 from microtech.models import (
@@ -14,7 +15,11 @@ from microtech.models import (
     MicrotechOrderRuleDjangoField,
     MicrotechOrderRuleOperator,
 )
-from microtech.rule_builder import get_django_field_map, get_operator_defs, sync_django_field_catalog
+from microtech.rule_builder import (
+    get_allowed_operator_codes,
+    get_django_field_map,
+    sync_django_field_catalog,
+)
 
 
 _BOOL_TRUE_VALUES = {"1", "true", "yes", "on", "ja"}
@@ -53,23 +58,6 @@ def _parse_bool_text(value: str) -> str | None:
     return None
 
 
-def _operator_choices_for_path(field_path: str, selected: str = "") -> list[tuple[str, str]]:
-    operator_defs = get_operator_defs()
-    choices = [(item.code, item.name or item.code) for item in operator_defs]
-
-    if selected and selected not in {code for code, _ in choices}:
-        choices.append((selected, selected))
-    return choices
-
-
-def _merge_style(existing: str, additions: str) -> str:
-    base = existing.strip()
-    extra = additions.strip()
-    if base and not base.endswith(";"):
-        base = f"{base};"
-    return " ".join(part for part in (base, extra) if part).strip()
-
-
 class MicrotechOrderRuleConditionForm(forms.ModelForm):
     class Meta:
         model = MicrotechOrderRuleCondition
@@ -95,16 +83,33 @@ class MicrotechOrderRuleConditionForm(forms.ModelForm):
             if selected_operator:
                 self.initial["operator"] = selected_operator.pk
 
+        selected_field_id = _to_str(
+            self.data.get(self.add_prefix("django_field"))
+            or self.initial.get("django_field")
+            or getattr(self.instance, "django_field_id", "")
+        )
+        allowed_operator_codes = get_allowed_operator_codes(
+            django_field_id=int(selected_field_id),
+        ) if selected_field_id.isdigit() else set()
         selected_operator_id = _to_str(
             self.data.get(self.add_prefix("operator"))
             or self.initial.get("operator")
             or getattr(self.instance, "operator_id", "")
         )
-        self.fields["operator"].queryset = (
-            MicrotechOrderRuleOperator.objects
-            .filter(is_active=True, pk=int(selected_operator_id))
-            .order_by("priority", "id")
-        ) if selected_operator_id.isdigit() else MicrotechOrderRuleOperator.objects.none()
+        operator_queryset = MicrotechOrderRuleOperator.objects.filter(is_active=True)
+        if allowed_operator_codes:
+            operator_queryset = operator_queryset.filter(code__in=allowed_operator_codes)
+        else:
+            operator_queryset = operator_queryset.none()
+        if selected_operator_id.isdigit():
+            operator_queryset = (
+                MicrotechOrderRuleOperator.objects
+                .filter(Q(pk=int(selected_operator_id)) | Q(pk__in=operator_queryset.values("pk")))
+                .order_by("priority", "id")
+            )
+        else:
+            operator_queryset = operator_queryset.order_by("priority", "id")
+        self.fields["operator"].queryset = operator_queryset
         self.fields["operator"].widget.attrs["class"] = " ".join(
             part for part in (
                 self.fields["operator"].widget.attrs.get("class", ""),
@@ -144,6 +149,10 @@ class MicrotechOrderRuleConditionForm(forms.ModelForm):
 
         if not selected_operator or not operator_code:
             self.add_error("operator", "Unbekannter Operator. Bitte einen Wert aus dem Autocomplete verwenden.")
+            return cleaned_data
+        allowed_operator_codes = get_allowed_operator_codes(field_path=field_path)
+        if operator_code not in allowed_operator_codes:
+            self.add_error("operator", "Operator ist fuer diesen Django-Feldtyp nicht erlaubt.")
             return cleaned_data
 
         value_kind = field_def.value_kind

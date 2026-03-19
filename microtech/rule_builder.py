@@ -9,6 +9,7 @@ from microtech.models import (
     MicrotechDatasetCatalog,
     MicrotechDatasetField,
     MicrotechOrderRuleDjangoField,
+    MicrotechOrderRuleDjangoFieldPolicy,
     MicrotechOrderRuleOperator,
 )
 from orders.models import Order
@@ -64,6 +65,14 @@ DEFAULT_OPERATOR_DEFS: tuple[OperatorDef, ...] = (
 )
 
 _ALLOWED_RELATIONS: tuple[str, ...] = ("customer", "billing_address", "shipping_address")
+_ALLOWED_ENGINE_OPERATORS_BY_VALUE_KIND: dict[str, frozenset[str]] = {
+    "string": frozenset({"eq", "ne", "contains", "is_empty", "is_not_empty"}),
+    "int": frozenset({"eq", "ne", "gt", "lt", "is_empty", "is_not_empty"}),
+    "decimal": frozenset({"eq", "ne", "gt", "lt", "is_empty", "is_not_empty"}),
+    "bool": frozenset({"eq", "ne", "is_empty", "is_not_empty"}),
+    "date": frozenset({"eq", "ne", "gt", "lt", "is_empty", "is_not_empty"}),
+    "datetime": frozenset({"eq", "ne", "gt", "lt", "is_empty", "is_not_empty"}),
+}
 
 
 def _db_has_rule_builder_tables() -> bool:
@@ -79,6 +88,14 @@ def _db_has_rule_builder_tables() -> bool:
 def _db_has_django_field_catalog_table() -> bool:
     try:
         MicrotechOrderRuleDjangoField.objects.exists()
+        return True
+    except (OperationalError, ProgrammingError):
+        return False
+
+
+def _db_has_django_field_policy_table() -> bool:
+    try:
+        MicrotechOrderRuleDjangoFieldPolicy.objects.exists()
         return True
     except (OperationalError, ProgrammingError):
         return False
@@ -265,7 +282,32 @@ def _build_base_django_field_defs() -> list[DjangoFieldDef]:
 
 def _build_effective_django_field_defs() -> list[DjangoFieldDef]:
     base_defs = _build_base_django_field_defs()
-    return sorted(base_defs, key=lambda item: item.label.lower())
+    if not _db_has_django_field_policy_table():
+        return sorted(base_defs, key=lambda item: item.label.lower())
+
+    policies = {
+        row.field_path: row
+        for row in MicrotechOrderRuleDjangoFieldPolicy.objects
+        .filter(is_active=True)
+        .order_by("priority", "id")
+    }
+    effective_defs: list[DjangoFieldDef] = []
+    for item in base_defs:
+        policy = policies.get(item.path)
+        if policy is None:
+            effective_defs.append(item)
+            continue
+
+        label_override = str(policy.label_override or "").strip()
+        hint = str(policy.hint or "").strip() or item.hint
+        effective_defs.append(
+            replace(
+                item,
+                label=label_override or item.label,
+                hint=hint,
+            )
+        )
+    return sorted(effective_defs, key=lambda item: item.label.lower())
 
 
 def sync_django_field_catalog() -> dict[str, int]:
@@ -336,6 +378,62 @@ def get_django_field_map() -> dict[str, DjangoFieldDef]:
     return {item.path: item for item in get_django_field_defs()}
 
 
+def get_allowed_operator_codes(*, field_path: str = "", django_field_id: int | None = None) -> set[str]:
+    resolved_field_path = str(field_path or "").strip()
+    if not resolved_field_path and django_field_id and _db_has_django_field_catalog_table():
+        resolved_field_path = str(
+            MicrotechOrderRuleDjangoField.objects
+            .filter(pk=django_field_id, is_active=True)
+            .values_list("field_path", flat=True)
+            .first()
+            or ""
+        ).strip()
+
+    all_operator_codes = {
+        str(item.code).strip()
+        for item in get_operator_defs()
+        if str(item.code).strip()
+    }
+    if not resolved_field_path:
+        return all_operator_codes
+
+    field_def = get_django_field_map().get(resolved_field_path)
+    if field_def is None:
+        return set()
+
+    allowed_engines = _ALLOWED_ENGINE_OPERATORS_BY_VALUE_KIND.get(
+        str(field_def.value_kind or "").strip().lower(),
+        _ALLOWED_ENGINE_OPERATORS_BY_VALUE_KIND["string"],
+    )
+    allowed_codes = {
+        str(item.code).strip()
+        for item in get_operator_defs()
+        if str(item.code).strip() and str(item.engine_operator).strip() in allowed_engines
+    }
+
+    if not _db_has_django_field_policy_table():
+        return allowed_codes
+
+    policy = (
+        MicrotechOrderRuleDjangoFieldPolicy.objects
+        .filter(field_path=resolved_field_path, is_active=True)
+        .prefetch_related("allowed_operators")
+        .order_by("priority", "id")
+        .first()
+    )
+    if policy is None:
+        return allowed_codes
+
+    policy_codes = {
+        str(operator.code).strip()
+        for operator in policy.allowed_operators.filter(is_active=True)
+        if str(operator.code).strip()
+    }
+    if not policy_codes:
+        return allowed_codes
+    return allowed_codes & policy_codes
+
+
 def get_dataset_defs() -> list[DatasetDef]:
     if not _db_has_rule_builder_tables():
         return []
@@ -395,6 +493,7 @@ __all__ = [
     "DatasetFieldDef",
     "DjangoFieldDef",
     "OperatorDef",
+    "get_allowed_operator_codes",
     "get_dataset_defs",
     "get_dataset_field_defs",
     "get_django_field_defs",

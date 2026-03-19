@@ -5,6 +5,7 @@ from microtech.models import (
     MicrotechDatasetField,
     MicrotechOrderRuleAction,
     MicrotechOrderRuleDjangoField,
+    MicrotechOrderRuleDjangoFieldPolicy,
     MicrotechOrderRuleOperator,
 )
 from microtech.rule_builder import sync_django_field_catalog
@@ -75,6 +76,31 @@ class MicrotechOrderRuleFormsTest(TestCase):
         self.assertFalse(form.is_valid())
         self.assertIn("operator", form.errors)
         self.assertNotIn("django_field", form.errors)
+
+    def test_condition_form_rejects_operator_blocked_by_field_policy(self):
+        equals_id = self._operator_id("eq", "==")
+        contains_id = self._operator_id("contains", "enthaelt")
+        policy = MicrotechOrderRuleDjangoFieldPolicy.objects.create(
+            field_path="payment_method",
+            label_override="Zahlungsart",
+            hint="Nur exakte Vergleiche",
+            priority=10,
+            is_active=True,
+        )
+        policy.allowed_operators.add(MicrotechOrderRuleOperator.objects.get(pk=equals_id))
+
+        form = MicrotechOrderRuleConditionForm(
+            data={
+                "is_active": True,
+                "priority": 10,
+                "django_field": self._field_catalog_id("payment_method"),
+                "operator": contains_id,
+                "expected_value": "paypal",
+            }
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("operator", form.errors)
 
     def test_action_form_validates_set_field_dataset_binding(self):
         dataset = MicrotechDatasetCatalog.objects.create(

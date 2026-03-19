@@ -80,6 +80,10 @@ class OrderUpsertMicrotechService(BaseService):
     model = Order
 
     _SWISS_COUNTRY_CODES = {"CH", "CHE", "SCHWEIZ", "SWITZERLAND", "SUISSE", "SVIZZERA"}
+    _INTEGER_FIELD_TYPES = frozenset({"Integer", "Byte", "AutoInc", "Boolean", "SmallInt"})
+    _FLOAT_FIELD_TYPES = frozenset({"Float", "Double", "Currency"})
+    _TEXT_FIELD_TYPES = frozenset({"Blob", "Info", "Memo"})
+    _STRING_FIELD_TYPES = frozenset({"WideString", "String", "UnicodeString", "Date", "DateTime"})
 
     def upsert_order(self, order: Order, *, erp: Any | None = None) -> OrderUpsertResult:
         if not isinstance(order, Order):
@@ -578,6 +582,7 @@ class OrderUpsertMicrotechService(BaseService):
                     dataset=so_vorgang.DataSet,
                     field_name=action.dataset_field_name,
                     value=action.target_value,
+                    field_type_hint=action.dataset_field_type,
                 )
                 if not written:
                     notes.append(f"set_field failed: Vorgang.{action.dataset_field_name}")
@@ -606,6 +611,7 @@ class OrderUpsertMicrotechService(BaseService):
                     dataset=position_dataset,
                     field_name=action.dataset_field_name,
                     value=action.target_value,
+                    field_type_hint=action.dataset_field_type,
                 )
                 if written:
                     position_dataset.Post()
@@ -823,17 +829,36 @@ class OrderUpsertMicrotechService(BaseService):
         return False
 
     @staticmethod
-    def _set_dataset_field(*, dataset, field_name: str, value: object) -> bool:
+    def _resolve_dataset_write_kind(*, live_field_type: object, field_type_hint: str = "") -> str:
+        for raw_type in (live_field_type, field_type_hint):
+            field_type = str(raw_type or "").strip()
+            if not field_type:
+                continue
+            if field_type in OrderUpsertMicrotechService._INTEGER_FIELD_TYPES:
+                return "integer"
+            if field_type in OrderUpsertMicrotechService._FLOAT_FIELD_TYPES:
+                return "float"
+            if field_type in OrderUpsertMicrotechService._TEXT_FIELD_TYPES:
+                return "text"
+            if field_type in OrderUpsertMicrotechService._STRING_FIELD_TYPES:
+                return "string"
+        return "string"
+
+    @staticmethod
+    def _set_dataset_field(*, dataset, field_name: str, value: object, field_type_hint: str = "") -> bool:
         try:
             field = dataset.Fields.Item(field_name)
         except Exception:
             return False
 
-        field_type = str(getattr(field, "FieldType", "") or "")
+        write_kind = OrderUpsertMicrotechService._resolve_dataset_write_kind(
+            live_field_type=getattr(field, "FieldType", ""),
+            field_type_hint=field_type_hint,
+        )
         text_value = str(value)
 
         try:
-            if field_type in {"Integer", "Byte", "AutoInc", "Boolean", "SmallInt"}:
+            if write_kind == "integer":
                 normalized = text_value.strip().lower()
                 if normalized in {"1", "true", "yes", "on", "ja"}:
                     field.AsInteger = 1
@@ -844,16 +869,12 @@ class OrderUpsertMicrotechService(BaseService):
                 field.AsInteger = int(text_value)
                 return True
 
-            if field_type in {"Float", "Double"}:
+            if write_kind == "float":
                 field.AsFloat = float(text_value.replace(",", "."))
                 return True
 
-            if field_type in {"Blob", "Info"}:
+            if write_kind == "text":
                 field.Text = text_value
-                return True
-
-            if field_type in {"Date", "DateTime"}:
-                field.AsString = text_value
                 return True
 
             field.AsString = text_value

@@ -12,12 +12,13 @@
     if (!$ || !root) return;
 
     const $root = $(root);
+    const operatorSelector = ".rulebuilder-operator-autocomplete";
     const customAutocomplete = $root.is(".unfold-admin-autocomplete") && !$root.is(".admin-autocomplete")
-      ? $root
-      : $root.find(".unfold-admin-autocomplete").not(".admin-autocomplete");
+      ? $root.not(operatorSelector)
+      : $root.find(".unfold-admin-autocomplete").not(`.admin-autocomplete, ${operatorSelector}`);
     const modelAutocomplete = $root.is(".admin-autocomplete")
-      ? $root
-      : $root.find(".admin-autocomplete");
+      ? $root.not(operatorSelector)
+      : $root.find(".admin-autocomplete").not(operatorSelector);
 
     if (typeof $.fn.djangoCustomSelect2 === "function") {
       customAutocomplete.djangoCustomSelect2();
@@ -80,12 +81,18 @@
     const baseUrl = operatorSelect.dataset.operatorAutocompleteUrl || "";
     if (!baseUrl) return;
     const url = baseUrl;
+    const activeFieldId = String(djangoFieldId || "");
 
-    if (operatorSelect.dataset.operatorAutocompleteUrlActive === url && $select.hasClass("select2-hidden-accessible")) {
+    if (
+      operatorSelect.dataset.operatorAutocompleteUrlActive === url
+      && operatorSelect.dataset.operatorAutocompleteFieldIdActive === activeFieldId
+      && $select.hasClass("select2-hidden-accessible")
+    ) {
       return;
     }
 
     operatorSelect.dataset.operatorAutocompleteUrlActive = url;
+    operatorSelect.dataset.operatorAutocompleteFieldIdActive = activeFieldId;
 
     if (!operatorMatchesField(operatorSelect.value, fieldDef)) {
       operatorSelect.value = "";

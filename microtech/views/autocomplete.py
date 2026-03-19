@@ -8,7 +8,7 @@ from microtech.models import (
     MicrotechOrderRuleDjangoField,
     MicrotechOrderRuleOperator,
 )
-from microtech.rule_builder import sync_django_field_catalog
+from microtech.rule_builder import get_allowed_operator_codes, sync_django_field_catalog
 from unfold.views import BaseAutocompleteView
 
 
@@ -78,6 +78,10 @@ class MicrotechOrderRuleOperatorAutocompleteView(BaseAutocompleteView):
             .filter(is_active=True)
             .order_by("priority", "id")
         )
+        if not django_field_id.isdigit():
+            return queryset.none()
+        allowed_codes = get_allowed_operator_codes(django_field_id=int(django_field_id))
+        queryset = queryset.filter(code__in=allowed_codes)
 
         if not query:
             return queryset
