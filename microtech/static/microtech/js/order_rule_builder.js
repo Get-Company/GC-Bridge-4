@@ -12,13 +12,12 @@
     if (!$ || !root) return;
 
     const $root = $(root);
-    const operatorSelector = ".rulebuilder-operator-autocomplete";
     const customAutocomplete = $root.is(".unfold-admin-autocomplete") && !$root.is(".admin-autocomplete")
-      ? $root.not(operatorSelector)
-      : $root.find(".unfold-admin-autocomplete").not(`.admin-autocomplete, ${operatorSelector}`);
+      ? $root
+      : $root.find(".unfold-admin-autocomplete").not(".admin-autocomplete");
     const modelAutocomplete = $root.is(".admin-autocomplete")
-      ? $root.not(operatorSelector)
-      : $root.find(".admin-autocomplete").not(operatorSelector);
+      ? $root
+      : $root.find(".admin-autocomplete");
 
     if (typeof $.fn.djangoCustomSelect2 === "function") {
       customAutocomplete.djangoCustomSelect2();
@@ -73,58 +72,69 @@
     return !!(operator && fieldDef);
   }
 
-  function initOperatorAutocomplete(operatorSelect, djangoFieldId, fieldDef) {
+  function getConditionFieldIdForOperator(element) {
+    const row = element.closest("tr.form-row, .inline-related");
+    if (!row) return "";
+    const fieldInput = row.querySelector("select[name$='-django_field'], input[name$='-django_field']");
+    return fieldInput ? String(fieldInput.value || "") : "";
+  }
+
+  function initOperatorAutocomplete(operatorSelect) {
     const $ = getJQuery();
     if (!$ || !operatorSelect) return;
 
     const $select = $(operatorSelect);
-    const baseUrl = operatorSelect.dataset.operatorAutocompleteUrl || "";
-    if (!baseUrl) return;
-    const url = baseUrl;
-    const activeFieldId = String(djangoFieldId || "");
-
-    if (
-      operatorSelect.dataset.operatorAutocompleteUrlActive === url
-      && operatorSelect.dataset.operatorAutocompleteFieldIdActive === activeFieldId
-      && $select.hasClass("select2-hidden-accessible")
-    ) {
-      return;
-    }
-
-    operatorSelect.dataset.operatorAutocompleteUrlActive = url;
-    operatorSelect.dataset.operatorAutocompleteFieldIdActive = activeFieldId;
-
-    if (!operatorMatchesField(operatorSelect.value, fieldDef)) {
-      operatorSelect.value = "";
-      $select.find("option").not('[value=""]').remove();
-    }
-
     if ($select.hasClass("select2-hidden-accessible")) {
       $select.select2("destroy");
     }
 
-    $select.select2({
-      theme: "admin-autocomplete",
-      width: "100%",
-      allowClear: true,
-      placeholder: operatorSelect.dataset.placeholder || "",
-      ajax: {
-        url,
-        dataType: "json",
-        delay: 250,
-        cache: true,
-        data: function (params) {
-          return {
-            term: params.term,
-            page: params.page,
-            django_field_id: djangoFieldId || "",
-          };
-        },
-        processResults: function (data) {
-          return data || { results: [], pagination: { more: false } };
-        },
-      },
-    });
+    $select.djangoAdminSelect2();
+  }
+
+  function patchAdminAutocomplete() {
+    const $ = getJQuery();
+    if (!$ || typeof $.fn.djangoAdminSelect2 !== "function" || $.fn.djangoAdminSelect2.__ruleBuilderPatched) return;
+
+    const original = $.fn.djangoAdminSelect2;
+
+    $.fn.djangoAdminSelect2 = function () {
+      const $elements = $(this);
+      const $operatorElements = $elements.filter(".rulebuilder-operator-autocomplete");
+      const $defaultElements = $elements.not(".rulebuilder-operator-autocomplete");
+
+      if ($defaultElements.length) {
+        original.call($defaultElements);
+      }
+
+      $operatorElements.each(function (_index, element) {
+        if (element.id && element.id.indexOf("__prefix__") >= 0) {
+          return;
+        }
+
+        if ($(element).hasClass("select2-hidden-accessible")) {
+          $(element).select2("destroy");
+        }
+
+        $(element).select2({
+          ajax: {
+            data: (params) => {
+              return {
+                term: params.term,
+                page: params.page,
+                app_label: element.dataset.appLabel,
+                model_name: element.dataset.modelName,
+                field_name: element.dataset.fieldName,
+                django_field_id: getConditionFieldIdForOperator(element),
+              };
+            },
+          },
+        });
+      });
+
+      return this;
+    };
+
+    $.fn.djangoAdminSelect2.__ruleBuilderPatched = true;
   }
 
   function updateExpectedValueVisibility(operatorSelect, expectedInput) {
@@ -142,7 +152,14 @@
     if (!pathInput || !operatorSelect || !expectedInput || !RULE_META) return;
 
     const fieldDef = djangoFieldByValue(pathInput.value);
-    initOperatorAutocomplete(operatorSelect, pathInput.value, fieldDef);
+    if (!operatorMatchesField(operatorSelect.value, fieldDef)) {
+      operatorSelect.value = "";
+      const $ = getJQuery();
+      if ($) {
+        $(operatorSelect).find("option").not('[value=""]').remove();
+      }
+    }
+    initOperatorAutocomplete(operatorSelect);
 
     if (!fieldDef) {
       expectedInput.placeholder = "";
@@ -276,6 +293,7 @@
 
   async function init() {
     await loadMeta();
+    patchAdminAutocomplete();
     initEnhancedSelects(document.body);
     bindAllRows();
     bindFormsetAddedEvents();

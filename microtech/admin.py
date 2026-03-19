@@ -134,7 +134,7 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
             "expected_value",
             "value_example",
         )
-        autocomplete_fields = ("django_field",)
+        autocomplete_fields = ("django_field", "operator")
         readonly_fields = BaseStackedInline.readonly_fields + ("value_example",)
         extra = 0
 

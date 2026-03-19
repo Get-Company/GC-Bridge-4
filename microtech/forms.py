@@ -111,14 +111,9 @@ class MicrotechOrderRuleConditionForm(forms.ModelForm):
             operator_queryset = operator_queryset.order_by("priority", "id")
         self.fields["operator"].queryset = operator_queryset
         existing_classes = str(self.fields["operator"].widget.attrs.get("class", "")).split()
-        cleaned_classes = [
-            item
-            for item in existing_classes
-            if item not in {"admin-autocomplete", "unfold-admin-autocomplete"}
-        ]
-        if "rulebuilder-operator-autocomplete" not in cleaned_classes:
-            cleaned_classes.append("rulebuilder-operator-autocomplete")
-        self.fields["operator"].widget.attrs["class"] = " ".join(cleaned_classes).strip()
+        if "rulebuilder-operator-autocomplete" not in existing_classes:
+            existing_classes.append("rulebuilder-operator-autocomplete")
+        self.fields["operator"].widget.attrs["class"] = " ".join(existing_classes).strip()
         self.fields["operator"].widget.attrs["data-operator-autocomplete-url"] = reverse_lazy(
             "admin:microtech_orderrule_operator_autocomplete"
         )
