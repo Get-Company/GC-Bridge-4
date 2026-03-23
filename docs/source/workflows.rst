@@ -107,12 +107,12 @@ Eine fachliche Regel im Admin konfigurieren und mit einer Testbestellung verifiz
 Beispielregel
 ^^^^^^^^^^^^^
 
-Wenn ``payment_method`` den Text ``paypal`` enthaelt und
-``shipping_address__country_code`` gleich ``AT`` ist:
+Wenn die Zahlungsart den Text ``paypal`` enthaelt und
+das Lieferland gleich ``AT`` ist:
 
 1. Zusatzposition mit ERP-Nr ``P`` erzeugen
-2. Im Dataset ``Vorgang`` das Feld ``ZahlArt`` auf ``22`` setzen
-3. Im Dataset ``VorgangPosition`` das Feld ``KuBez`` auf ``PayPal Gebuehr`` setzen
+2. Vorgangsfeld ``ZahlArt`` auf ``22`` setzen
+3. Feld der Zusatzposition ``KuBez`` auf ``PayPal Gebuehr`` setzen
 
 Schritte im Admin
 ^^^^^^^^^^^^^^^^^
@@ -134,19 +134,19 @@ Schritte im Admin
 
 4. Bedingungen in der Regel
 
-- ``django_field_path = payment_method``
-- ``operator_code = contains``
+- Feld: ``payment_method``
+- Operator: ``contains``
 - ``expected_value = paypal``
 
-- ``django_field_path = shipping_address__country_code``
-- ``operator_code = eq``
+- Feld: ``shipping_address__country_code``
+- Operator: ``eq``
 - ``expected_value = AT``
 
 5. Aktionen in der Regel
 
-- ``action_type = create_extra_position``, ``target_value = P``
-- ``action_type = set_field``, ``dataset = Vorgang``, ``dataset_field = ZahlArt``, ``target_value = 22``
-- ``action_type = set_field``, ``dataset = VorgangPosition``, ``dataset_field = KuBez``, ``target_value = PayPal Gebuehr``
+- ``ui_action = Zusatzposition anlegen``, ``target_value = P``
+- ``ui_action = Vorgangsfeld setzen``, ``dataset_field = ZahlArt``, ``target_value = 22``
+- ``ui_action = Feld der Zusatzposition setzen``, ``dataset_field = KuBez``, ``target_value = PayPal Gebuehr``
 
 Testbefehl
 ^^^^^^^^^^

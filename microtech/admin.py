@@ -1,6 +1,7 @@
 from django.contrib import admin
 from django.db import models
 from django.http import HttpResponseRedirect, JsonResponse
+from django.utils.html import format_html
 from django.urls import reverse
 
 from core.admin import BaseAdmin, BaseStackedInline
@@ -22,11 +23,16 @@ from microtech.models import (
     MicrotechSwissCustomsFieldMapping,
 )
 from microtech.rule_builder import (
+    get_allowed_operator_codes,
     get_dataset_defs,
     get_dataset_field_defs,
     get_django_field_defs,
+    get_rule_action_target_defs,
 )
-from microtech.views.autocomplete import MicrotechOrderRuleOperatorAutocompleteView
+from microtech.views.autocomplete import (
+    MicrotechDatasetFieldAutocompleteView,
+    MicrotechOrderRuleOperatorAutocompleteView,
+)
 
 
 class SingletonAdmin(BaseAdmin):
@@ -137,11 +143,13 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
         autocomplete_fields = ("django_field", "operator")
         readonly_fields = BaseStackedInline.readonly_fields + ("value_example",)
         extra = 0
+        verbose_name = "Bedingung"
+        verbose_name_plural = "Wann greift die Regel?"
 
         @admin.display(description="Beispiel")
         def value_example(self, obj):
             if not obj:
-                return "-"
+                return "Waehle zuerst ein Feld. Der Beispielwert folgt automatisch."
             return condition_example_for_field(obj.django_field_path)
 
     class ActionInline(BaseStackedInline):
@@ -150,12 +158,26 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
         fields = (
             "is_active",
             "priority",
-            "action_type",
+            "ui_action",
             "dataset_field",
             "target_value",
+            "action_context_preview",
         )
         autocomplete_fields = ("dataset_field",)
+        readonly_fields = BaseStackedInline.readonly_fields + ("action_context_preview",)
         extra = 0
+        verbose_name = "Aktion"
+        verbose_name_plural = "Was soll in Microtech passieren?"
+
+        @admin.display(description="Zielkontext")
+        def action_context_preview(self, obj):
+            if not obj:
+                return "Waehle zuerst eine fachliche Aktion."
+            if obj.action_type == MicrotechOrderRuleAction.ActionType.CREATE_EXTRA_POSITION:
+                return "Legt eine Zusatzposition an. Zielwert = ERP-Nr der Position."
+            if obj.dataset_field_id and obj.dataset_id:
+                return obj.dataset_field.display_label
+            return "Waehle ein passendes Microtech-Zielfeld."
 
     list_display = (
         "priority",
@@ -172,6 +194,7 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
     )
     ordering = ("priority", "id")
     inlines = (ConditionInline, ActionInline)
+    readonly_fields = BaseAdmin.readonly_fields + ("live_rule_summary",)
 
     class Media:
         js = ("microtech/js/order_rule_builder.js",)
@@ -192,6 +215,11 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
                 "operator-autocomplete/",
                 "microtech_orderrule_operator_autocomplete",
                 MicrotechOrderRuleOperatorAutocompleteView.as_view(),
+            ),
+            (
+                "dataset-field-autocomplete/",
+                "microtech_orderrule_dataset_field_autocomplete",
+                MicrotechDatasetFieldAutocompleteView.as_view(),
             ),
         )
 
@@ -218,8 +246,25 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
                     "value_kind": item.value_kind,
                     "hint": item.hint,
                     "example": item.example,
+                    "input_type": item.input_type,
+                    "accepts_date_only": item.accepts_date_only,
+                    "allowed_operator_codes": sorted(
+                        get_allowed_operator_codes(field_path=item.path, django_field_id=item.catalog_id)
+                    ),
                 }
                 for item in get_django_field_defs()
+            ],
+            "action_targets": [
+                {
+                    "code": item.code,
+                    "label": item.label,
+                    "action_type": item.action_type,
+                    "dataset_source_identifiers": list(item.dataset_source_identifiers),
+                    "dataset_names": list(item.dataset_names),
+                    "target_value_label": item.target_value_label,
+                    "target_value_help": item.target_value_help,
+                }
+                for item in get_rule_action_target_defs()
             ],
             "datasets": [
                 {
@@ -246,32 +291,54 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
         }
         return JsonResponse(payload)
 
+    @admin.display(description="Live-Zusammenfassung")
+    def live_rule_summary(self, obj):
+        return format_html(
+            """
+            <section class="rulebuilder-summary-card" id="rulebuilder-live-summary" aria-live="polite">
+              <h3 class="rulebuilder-summary-title">Regel-Zusammenfassung</h3>
+              <p class="rulebuilder-summary-text">
+                Noch keine vollstaendige Regel. Waehle Bedingungen und Aktionen, dann erscheint hier die Klartext-Zusammenfassung.
+              </p>
+              <ul class="rulebuilder-summary-warnings" id="rulebuilder-summary-warnings"></ul>
+            </section>
+            """
+        )
+
     fieldsets = (
         (
-            "Regel",
+            "Grundregel",
             {
                 "fields": ("name", "is_active", "priority", "condition_logic"),
+                "description": (
+                    "Prioritaet steuert die Reihenfolge. Die erste passende aktive Regel gewinnt."
+                ),
             },
         ),
         (
-            "Bedingungen",
+            "Wann greift die Regel?",
             {
                 "fields": (),
                 "description": (
-                    "Bedingungen werden ausschliesslich ueber die Inline-Tabelle gepflegt. "
+                    "Definiere die Ausloeser in Fachsprache. "
                     "Ohne aktive Bedingungen gilt die Regel als globaler Fallback."
                 ),
             },
         ),
         (
-            "Hinweise fuer Rulebuilder",
+            "Was soll in Microtech passieren?",
             {
                 "fields": (),
                 "description": (
-                    "Bedingungsfelder werden ueber Django-Feldpfade (Autocomplete) gewaehlt. "
-                    "Operatoren werden feldtypbasiert gefiltert und optional ueber Feld-Policies eingeschraenkt. "
-                    "Aktionen waehlen Dataset und Dataset-Feld."
+                    "Waehle fachliche Aktionen. Das technische Ziel-Dataset wird im Hintergrund gefuehrt."
                 ),
+            },
+        ),
+        (
+            "Klartext-Vorschau",
+            {
+                "fields": ("live_rule_summary",),
+                "description": "Die Vorschau aktualisiert sich waehrend der Bearbeitung.",
             },
         ),
     )

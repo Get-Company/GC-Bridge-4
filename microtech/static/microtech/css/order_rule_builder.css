@@ -1,16 +1,64 @@
 .inline-group .tabular th.column-django_field_path,
-.inline-group .tabular td.field-django_field_path {
+.inline-group .tabular td.field-django_field_path,
+.inline-group .stacked .field-django_field {
   min-width: 28rem;
 }
 
+.inline-group .tabular th.column-ui_action,
+.inline-group .tabular td.field-ui_action,
+.inline-group .stacked .field-ui_action {
+  min-width: 18rem;
+}
+
 .inline-group .tabular th.column-dataset_field,
-.inline-group .tabular td.field-dataset_field {
+.inline-group .tabular td.field-dataset_field,
+.inline-group .stacked .field-dataset_field {
   min-width: 40rem;
   width: 40%;
 }
 
 .inline-group .tabular td.field-django_field_path .select2-container,
-.inline-group .tabular td.field-dataset_field .select2-container {
+.inline-group .tabular td.field-dataset_field .select2-container,
+.inline-group .stacked .field-django_field .select2-container,
+.inline-group .stacked .field-dataset_field .select2-container {
   min-width: 100%;
   width: 100% !important;
+}
+
+.rulebuilder-summary-card {
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 1rem;
+  padding: 1rem 1.25rem;
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.96), rgba(241, 245, 249, 0.92));
+}
+
+.rulebuilder-summary-title {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.rulebuilder-summary-text {
+  margin: 0;
+  line-height: 1.55;
+}
+
+.rulebuilder-summary-warnings {
+  margin: 0.75rem 0 0;
+  padding-left: 1.1rem;
+  color: #b91c1c;
+}
+
+.rulebuilder-hidden-input {
+  display: none !important;
+}
+
+.rulebuilder-bool-select {
+  width: 100%;
+  min-height: 2.5rem;
+}
+
+.field-action_context_preview .readonly {
+  line-height: 1.45;
+  color: rgba(15, 23, 42, 0.74);
 }

@@ -299,9 +299,17 @@ class MicrotechDatasetField(BaseModel):
             )
         ]
 
-    def __str__(self) -> str:
+    @property
+    def display_label(self) -> str:
         dataset_name = self.dataset.name if self.dataset_id else "?"
-        return f"{dataset_name}.{self.field_name}"
+        base = f"{dataset_name}.{self.field_name}"
+        label = str(self.label or "").strip()
+        if label:
+            return f"{base} - {label}"
+        return base
+
+    def __str__(self) -> str:
+        return self.display_label
 
 
 class MicrotechOrderRuleAction(BaseModel):

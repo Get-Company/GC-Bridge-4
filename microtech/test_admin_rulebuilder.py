@@ -35,6 +35,36 @@ class MicrotechOrderRuleAdminAutocompleteTest(TestCase):
             field_type="Integer",
             priority=10,
         )
+        MicrotechDatasetField.objects.create(
+            dataset=dataset,
+            field_name="CalcFoo",
+            label="Berechnet",
+            field_type="Integer",
+            is_calc_field=True,
+            priority=20,
+        )
+        MicrotechDatasetField.objects.create(
+            dataset=dataset,
+            field_name="ReadOnlyFoo",
+            label="Nur Lesen",
+            field_type="Integer",
+            can_access=False,
+            priority=30,
+        )
+        position_dataset = MicrotechDatasetCatalog.objects.create(
+            code="vorgangposition_vorgangspositionen",
+            name="VorgangPosition",
+            description="Vorgangspositionen",
+            source_identifier="VorgangPosition - Vorgangspositionen",
+            priority=20,
+        )
+        MicrotechDatasetField.objects.create(
+            dataset=position_dataset,
+            field_name="KuBez",
+            label="Kurzbezeichnung",
+            field_type="UnicodeString",
+            priority=10,
+        )
         for priority, code, name in (
             (10, "equals", "="),
             (20, "contains", "enthaelt"),
@@ -60,13 +90,17 @@ class MicrotechOrderRuleAdminAutocompleteTest(TestCase):
         content = response.content.decode("utf-8")
         self.assertIn('name="conditions-__prefix__-django_field"', content)
         self.assertIn('name="conditions-__prefix__-operator"', content)
+        self.assertIn('name="actions-__prefix__-ui_action"', content)
         self.assertIn('name="actions-__prefix__-dataset_field"', content)
         self.assertIn("admin-autocomplete", content)
         self.assertIn('data-app-label="microtech"', content)
         self.assertIn('data-field-name="django_field"', content)
         self.assertIn('data-field-name="dataset_field"', content)
         self.assertIn("rulebuilder-operator-autocomplete", content)
+        self.assertIn("rulebuilder-dataset-field-autocomplete", content)
         self.assertIn("/admin/microtech/microtechorderrule/operator-autocomplete/", content)
+        self.assertIn("/admin/microtech/microtechorderrule/dataset-field-autocomplete/", content)
+        self.assertIn("Regel-Zusammenfassung", content)
         self.assertNotIn("tabular-table", content)
         self.assertIn("stacked", content)
 
@@ -87,3 +121,45 @@ class MicrotechOrderRuleAdminAutocompleteTest(TestCase):
         self.assertIn("is_not_empty", rendered)
         self.assertIn("ne", rendered)
         self.assertNotIn("gt", rendered)
+
+    def test_dataset_field_autocomplete_is_filtered_by_action_target(self):
+        response = self.client.get(
+            reverse("admin:microtech_orderrule_dataset_field_autocomplete"),
+            {"action_target": "set_vorgang_field"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        rendered = " ".join(item.get("text", "") for item in payload.get("results", []))
+        self.assertIn("Vorgang.ZahlArt - Zahlungsart", rendered)
+        self.assertNotIn("CalcFoo", rendered)
+        self.assertNotIn("ReadOnlyFoo", rendered)
+        self.assertNotIn("KuBez", rendered)
+
+    def test_dataset_field_autocomplete_supports_dataset_dot_field_search(self):
+        response = self.client.get(
+            reverse("admin:microtech_orderrule_dataset_field_autocomplete"),
+            {
+                "action_target": "set_vorgang_field",
+                "term": "Vorgang.ZahlArt",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        rendered = " ".join(item.get("text", "") for item in payload.get("results", []))
+        self.assertIn("Vorgang.ZahlArt - Zahlungsart", rendered)
+
+    def test_dataset_field_autocomplete_supports_label_search(self):
+        response = self.client.get(
+            reverse("admin:microtech_orderrule_dataset_field_autocomplete"),
+            {
+                "action_target": "set_vorgang_field",
+                "term": "Zahlungsart",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        rendered = " ".join(item.get("text", "") for item in payload.get("results", []))
+        self.assertIn("Vorgang.ZahlArt - Zahlungsart", rendered)

@@ -4,8 +4,9 @@ Microtech Rulebuilder mit Feldkatalog (Schritt fuer Schritt)
 Ziel
 ----
 
-Diese Anleitung beschreibt den aktuellen Rulebuilder-Stand auf Basis von Django-Feldpfaden
-(Bedingungen) und Microtech-Dataset-Feldern (Aktionen).
+Diese Anleitung beschreibt den aktuellen Rulebuilder-Stand. Intern arbeitet er weiterhin
+mit Django-Feldpfaden (Bedingungen) und Microtech-Dataset-Feldern (Aktionen), die UI fuehrt
+aber fachlicher durch den Ablauf ``Wenn ... dann ...``.
 
 Durchgehendes Beispiel (wird in allen Abschnitten verwendet)
 -------------------------------------------------------------
@@ -252,18 +253,18 @@ In der Regel unterhalb des Regelkopfs.
      - Reihenfolge innerhalb der Regel.
      - ``10``
    * - ``django_field_path``
-     - Django-Feldpfad (Textfeld mit Autocomplete).
+     - Intern gespeicherter Django-Feldpfad. In der UI wird ein lesbares Feldlabel angeboten.
      - ``shipping_address__country_code``
    * - ``operator_code``
      - Operator aus Dropdown, automatisch feldtypgefiltert.
      - ``eq``
    * - ``expected_value``
-     - Vergleichswert als Text.
+     - Vergleichswert. Die UI passt Eingabehilfe und Eingabetyp an den Feldtyp an.
      - ``AT``
 
 Hinweis:
 
-- Die Auswahl ``django_field_path`` steuert, welche Operatoren erlaubt sind.
+- Die Auswahl des Feldes steuert, welche Operatoren erlaubt sind.
 - Typbeispiele:
   - Textfeld: ``eq``, ``contains``
   - Zahl/Datum: ``eq``, ``gt``, ``lt``
@@ -286,14 +287,17 @@ In der Regel unterhalb der Bedingungen.
    * - ``priority``
      - Reihenfolge der Ausfuehrung.
      - ``10``
+   * - ``ui_action``
+     - Fachliche Aktion in der UI.
+     - ``Vorgangsfeld setzen``
    * - ``action_type``
-     - Aktionstyp (`set_field` oder `create_extra_position`).
+     - Intern gespeicherter Aktionstyp.
      - ``set_field``
    * - ``dataset``
-     - Ziel-Dataset fuer `set_field`.
+     - Internes Ziel-Dataset fuer `set_field`.
      - ``Vorgang - Vorgange``
    * - ``dataset_field``
-     - Ziel-Feld, gefiltert nach gewaehltem Dataset.
+     - Ziel-Feld, gefiltert nach der fachlichen Aktion.
      - ``ZahlArt``
    * - ``target_value``
      - Zu schreibender Wert oder ERP-Nr bei `create_extra_position`.
@@ -301,8 +305,10 @@ In der Regel unterhalb der Bedingungen.
 
 Wichtig:
 
-- Bei ``create_extra_position`` muessen ``dataset`` und ``dataset_field`` leer sein.
-- Bei ``set_field`` muessen ``dataset`` und ``dataset_field`` gesetzt sein.
+- Bei ``Zusatzposition anlegen`` wird nur die ERP-Nr eingegeben.
+- Bei ``Vorgangsfeld setzen`` werden nur Felder aus ``Vorgang`` angeboten.
+- Bei ``Feld der Zusatzposition setzen`` werden nur Felder aus ``VorgangPosition`` angeboten.
+- Fuer Felder der Zusatzposition sollte auch eine Aktion ``Zusatzposition anlegen`` in derselben Regel vorhanden sein.
 
 Durchgehendes Beispiel: komplette Umsetzung im Admin
 ----------------------------------------------------
@@ -358,22 +364,20 @@ Bedingung B:
 Aktion A (zusaetzliche Position):
 
 - ``priority``: ``10``
-- ``action_type``: ``create_extra_position``
+- ``ui_action``: ``Zusatzposition anlegen``
 - ``target_value``: ``P``
 
 Aktion B (Vorgang-Feld setzen):
 
 - ``priority``: ``20``
-- ``action_type``: ``set_field``
-- ``dataset``: ``Vorgang - Vorgange``
+- ``ui_action``: ``Vorgangsfeld setzen``
 - ``dataset_field``: ``ZahlArt``
 - ``target_value``: ``22``
 
 Aktion C (Feld auf der neu erstellten VorgangPosition setzen):
 
 - ``priority``: ``30``
-- ``action_type``: ``set_field``
-- ``dataset``: ``VorgangPosition - Vorgangspositionen``
+- ``ui_action``: ``Feld der Zusatzposition setzen``
 - ``dataset_field``: ``KuBez``
 - ``target_value``: ``PayPal Gebuehr``
 

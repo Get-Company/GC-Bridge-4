@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 
 from django.db import OperationalError, ProgrammingError
-from django.db.models import Field
+from django.db.models import Field, Q
 
 from microtech.models import (
     MicrotechDatasetCatalog,
@@ -31,6 +31,8 @@ class DjangoFieldDef:
     value_kind: str
     hint: str = ""
     example: str = ""
+    input_type: str = ""
+    accepts_date_only: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,6 +55,18 @@ class DatasetFieldDef:
     is_calc_field: bool
 
 
+@dataclass(frozen=True, slots=True)
+class RuleActionTargetDef:
+    code: str
+    label: str
+    action_type: str
+    dataset_codes: tuple[str, ...] = ()
+    dataset_source_identifiers: tuple[str, ...] = ()
+    dataset_names: tuple[str, ...] = ()
+    target_value_label: str = ""
+    target_value_help: str = ""
+
+
 DEFAULT_OPERATOR_DEFS: tuple[OperatorDef, ...] = (
     OperatorDef(code="equals", name="=", engine_operator="eq"),
     OperatorDef(code="eq", name="==", engine_operator="eq"),
@@ -72,6 +86,60 @@ _ALLOWED_ENGINE_OPERATORS_BY_VALUE_KIND: dict[str, frozenset[str]] = {
     "bool": frozenset({"eq", "ne", "is_empty", "is_not_empty"}),
     "date": frozenset({"eq", "ne", "gt", "lt", "is_empty", "is_not_empty"}),
     "datetime": frozenset({"eq", "ne", "gt", "lt", "is_empty", "is_not_empty"}),
+}
+
+RULE_ACTION_TARGET_CREATE_EXTRA_POSITION = "create_extra_position"
+RULE_ACTION_TARGET_VORGANG_FIELD = "set_vorgang_field"
+RULE_ACTION_TARGET_VORGANG_POSITION_FIELD = "set_vorgang_position_field"
+
+DEFAULT_RULE_ACTION_TARGET_DEFS: tuple[RuleActionTargetDef, ...] = (
+    RuleActionTargetDef(
+        code=RULE_ACTION_TARGET_CREATE_EXTRA_POSITION,
+        label="Zusatzposition anlegen",
+        action_type="create_extra_position",
+        target_value_label="ERP-Nr",
+        target_value_help="ERP-Nr der anzulegenden Zusatzposition, z. B. P.",
+    ),
+    RuleActionTargetDef(
+        code=RULE_ACTION_TARGET_VORGANG_FIELD,
+        label="Vorgangsfeld setzen",
+        action_type="set_field",
+        dataset_codes=("vorgang_vorgange",),
+        dataset_source_identifiers=("Vorgang - Vorgange",),
+        dataset_names=("Vorgang",),
+        target_value_label="Zielwert",
+        target_value_help="Wert, der in das Feld des Vorgangs geschrieben wird.",
+    ),
+    RuleActionTargetDef(
+        code=RULE_ACTION_TARGET_VORGANG_POSITION_FIELD,
+        label="Feld der Zusatzposition setzen",
+        action_type="set_field",
+        dataset_codes=("vorgangposition_vorgangspositionen",),
+        dataset_source_identifiers=("VorgangPosition - Vorgangspositionen",),
+        dataset_names=("VorgangPosition",),
+        target_value_label="Zielwert",
+        target_value_help="Wert, der in das Feld der neu erzeugten Zusatzposition geschrieben wird.",
+    ),
+)
+
+_DJANGO_FIELD_UI_OVERRIDES: dict[str, dict[str, object]] = {
+    "purchase_date": {
+        "label": "Bestelldatum",
+        "hint": "Vergleich auch nur mit Datum moeglich, z. B. 2026-03-23.",
+        "example": "2026-03-23",
+        "input_type": "date",
+        "accepts_date_only": True,
+    },
+    "billing_address__country_code": {
+        "label": "Rechnungsland",
+        "hint": "ISO-Laendercode, z. B. CH, DE oder AT.",
+        "example": "CH",
+    },
+    "shipping_address__country_code": {
+        "label": "Lieferland",
+        "hint": "ISO-Laendercode, z. B. CH, DE oder AT.",
+        "example": "CH",
+    },
 }
 
 
@@ -146,6 +214,130 @@ def get_operator_engine_map() -> dict[str, str]:
     return {item.code: item.engine_operator for item in get_operator_defs()}
 
 
+def get_rule_action_target_defs() -> list[RuleActionTargetDef]:
+    return list(DEFAULT_RULE_ACTION_TARGET_DEFS)
+
+
+def get_rule_action_target_map() -> dict[str, RuleActionTargetDef]:
+    return {item.code: item for item in get_rule_action_target_defs()}
+
+
+def get_rule_action_target_choices() -> tuple[tuple[str, str], ...]:
+    return tuple((item.code, item.label) for item in get_rule_action_target_defs())
+
+
+def resolve_rule_action_target(
+    *,
+    action_type: str = "",
+    dataset: MicrotechDatasetCatalog | None = None,
+    dataset_field: MicrotechDatasetField | None = None,
+) -> str:
+    normalized_action_type = str(action_type or "").strip()
+    if normalized_action_type == "create_extra_position":
+        return RULE_ACTION_TARGET_CREATE_EXTRA_POSITION
+    if normalized_action_type != "set_field":
+        return ""
+
+    source_identifier = str(
+        getattr(dataset_field.dataset if getattr(dataset_field, "dataset_id", None) else dataset, "source_identifier", "") or ""
+    ).strip()
+    dataset_code = str(
+        getattr(dataset_field.dataset if getattr(dataset_field, "dataset_id", None) else dataset, "code", "") or ""
+    ).strip()
+    dataset_name = str(
+        getattr(dataset_field.dataset if getattr(dataset_field, "dataset_id", None) else dataset, "name", "") or ""
+    ).strip()
+    normalized_code = dataset_code.lower()
+    normalized_source = source_identifier.lower()
+    normalized_name = dataset_name.lower()
+
+    for item in get_rule_action_target_defs():
+        if item.action_type != "set_field":
+            continue
+        allowed_codes = {value.strip().lower() for value in item.dataset_codes}
+        allowed_sources = {value.strip().lower() for value in item.dataset_source_identifiers}
+        allowed_names = {value.strip().lower() for value in item.dataset_names}
+        if normalized_code in allowed_codes or normalized_source in allowed_sources or normalized_name in allowed_names:
+            return item.code
+    return ""
+
+
+def get_allowed_dataset_source_identifiers_for_action_target(action_target: str) -> tuple[str, ...]:
+    definition = get_rule_action_target_map().get(str(action_target or "").strip())
+    if definition is None:
+        return ()
+    return definition.dataset_source_identifiers
+
+
+def get_allowed_dataset_names_for_action_target(action_target: str) -> tuple[str, ...]:
+    definition = get_rule_action_target_map().get(str(action_target or "").strip())
+    if definition is None:
+        return ()
+    return definition.dataset_names
+
+
+def is_dataset_field_allowed_for_action_target(
+    *,
+    dataset_field: MicrotechDatasetField | None,
+    action_target: str,
+) -> bool:
+    if dataset_field is None:
+        return False
+    resolved_target = resolve_rule_action_target(
+        action_type="set_field",
+        dataset=dataset_field.dataset if getattr(dataset_field, "dataset_id", None) else None,
+        dataset_field=dataset_field,
+    )
+    return resolved_target == str(action_target or "").strip()
+
+
+def filter_dataset_field_queryset_for_action_target(queryset, *, action_target: str):
+    normalized_target = str(action_target or "").strip()
+    if not normalized_target:
+        return queryset.none()
+
+    if normalized_target == RULE_ACTION_TARGET_CREATE_EXTRA_POSITION:
+        return queryset.none()
+
+    allowed_sources = get_allowed_dataset_source_identifiers_for_action_target(normalized_target)
+    allowed_names = get_allowed_dataset_names_for_action_target(normalized_target)
+    definition = get_rule_action_target_map().get(normalized_target)
+    allowed_codes = tuple(getattr(definition, "dataset_codes", ()) or ())
+    if not allowed_sources and not allowed_names and not allowed_codes:
+        return queryset.none()
+
+    predicate = Q()
+    if allowed_codes:
+        code_predicate = Q()
+        for code in allowed_codes:
+            code_predicate |= Q(dataset__code__iexact=code)
+        predicate |= code_predicate
+    if allowed_sources:
+        source_predicate = Q()
+        for source in allowed_sources:
+            source_predicate |= Q(dataset__source_identifier__iexact=source)
+        predicate |= source_predicate
+    if allowed_names:
+        name_predicate = Q()
+        for name in allowed_names:
+            name_predicate |= Q(dataset__name__iexact=name)
+        predicate |= name_predicate
+    if not predicate.children:
+        return queryset.none()
+    return queryset.filter(predicate, can_access=True, is_calc_field=False)
+
+
+def get_dataset_field_queryset_for_action_target(*, action_target: str):
+    queryset = (
+        MicrotechDatasetField.objects
+        .filter(is_active=True, dataset__is_active=True, can_access=True, is_calc_field=False)
+        .select_related("dataset")
+        .order_by("dataset__priority", "dataset__name", "priority", "field_name", "id")
+    )
+    filtered = filter_dataset_field_queryset_for_action_target(queryset, action_target=action_target)
+    return filtered.order_by("dataset__priority", "dataset__name", "priority", "field_name", "id")
+
+
 def _field_value_kind(field: Field) -> str:
     python_type = field.get_internal_type()
     if python_type in {"BooleanField", "NullBooleanField"}:
@@ -181,6 +373,20 @@ def _default_example(value_kind: str) -> str:
     if value_kind == "datetime":
         return "2026-01-31T12:30:00"
     return "paypal"
+
+
+def _apply_django_field_ui_override(item: DjangoFieldDef) -> DjangoFieldDef:
+    override = _DJANGO_FIELD_UI_OVERRIDES.get(item.path)
+    if not override:
+        return item
+    return replace(
+        item,
+        label=str(override.get("label") or item.label),
+        hint=str(override.get("hint") or item.hint),
+        example=str(override.get("example") or item.example),
+        input_type=str(override.get("input_type") or item.input_type),
+        accepts_date_only=bool(override.get("accepts_date_only", item.accepts_date_only)),
+    )
 
 
 def _real_examples() -> dict[str, str]:
@@ -276,7 +482,7 @@ def _build_base_django_field_defs() -> list[DjangoFieldDef]:
 
     unique_by_path: dict[str, DjangoFieldDef] = {}
     for item in base_defs:
-        unique_by_path[item.path] = item
+        unique_by_path[item.path] = _apply_django_field_ui_override(item)
     return list(unique_by_path.values())
 
 
@@ -493,13 +699,26 @@ __all__ = [
     "DatasetFieldDef",
     "DjangoFieldDef",
     "OperatorDef",
+    "RuleActionTargetDef",
+    "RULE_ACTION_TARGET_CREATE_EXTRA_POSITION",
+    "RULE_ACTION_TARGET_VORGANG_FIELD",
+    "RULE_ACTION_TARGET_VORGANG_POSITION_FIELD",
+    "filter_dataset_field_queryset_for_action_target",
     "get_allowed_operator_codes",
+    "get_allowed_dataset_names_for_action_target",
+    "get_allowed_dataset_source_identifiers_for_action_target",
     "get_dataset_defs",
+    "get_dataset_field_queryset_for_action_target",
     "get_dataset_field_defs",
     "get_django_field_defs",
     "get_django_field_map",
     "get_operator_defs",
     "get_operator_engine_map",
+    "get_rule_action_target_choices",
+    "get_rule_action_target_defs",
+    "get_rule_action_target_map",
+    "is_dataset_field_allowed_for_action_target",
+    "resolve_rule_action_target",
     "sync_django_field_catalog",
     "resolve_django_field_value",
 ]
