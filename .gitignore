@@ -17,3 +17,13 @@ COM_Aktiv_Kompendium.pdf
 COM_Aktiv_Kompendium_overview.txt
 codex_log.md
 database.sql
+
+# RuFlo local runtime state
+/.swarm/
+/.claude/settings.local.json
+/.claude/memory.db
+/.claude/agent-memory/
+/.claude-flow/learning/
+/.claude-flow/metrics/
+/.claude-flow/security/
+/.claude-flow/swarm/
