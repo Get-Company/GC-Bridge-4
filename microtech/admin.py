@@ -176,7 +176,13 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
             if obj.action_type == MicrotechOrderRuleAction.ActionType.CREATE_EXTRA_POSITION:
                 return "Legt eine Zusatzposition an. Zielwert = ERP-Nr der Position."
             if obj.dataset_field_id and obj.dataset_id:
-                return obj.dataset_field.display_label
+                try:
+                    dataset_field = obj.dataset_field
+                except Exception:
+                    return "Gespeichertes Zielfeld konnte nicht mehr aufgeloest werden."
+                if dataset_field is None:
+                    return "Gespeichertes Zielfeld konnte nicht mehr aufgeloest werden."
+                return dataset_field.display_label
             return "Waehle ein passendes Microtech-Zielfeld."
 
     list_display = (

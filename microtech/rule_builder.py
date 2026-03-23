@@ -226,6 +226,15 @@ def get_rule_action_target_choices() -> tuple[tuple[str, str], ...]:
     return tuple((item.code, item.label) for item in get_rule_action_target_defs())
 
 
+def _safe_dataset_for_dataset_field(dataset_field: MicrotechDatasetField | None) -> MicrotechDatasetCatalog | None:
+    if dataset_field is None or not getattr(dataset_field, "dataset_id", None):
+        return None
+    try:
+        return dataset_field.dataset
+    except MicrotechDatasetCatalog.DoesNotExist:
+        return None
+
+
 def resolve_rule_action_target(
     *,
     action_type: str = "",
@@ -238,14 +247,15 @@ def resolve_rule_action_target(
     if normalized_action_type != "set_field":
         return ""
 
+    resolved_dataset = _safe_dataset_for_dataset_field(dataset_field) or dataset
     source_identifier = str(
-        getattr(dataset_field.dataset if getattr(dataset_field, "dataset_id", None) else dataset, "source_identifier", "") or ""
+        getattr(resolved_dataset, "source_identifier", "") or ""
     ).strip()
     dataset_code = str(
-        getattr(dataset_field.dataset if getattr(dataset_field, "dataset_id", None) else dataset, "code", "") or ""
+        getattr(resolved_dataset, "code", "") or ""
     ).strip()
     dataset_name = str(
-        getattr(dataset_field.dataset if getattr(dataset_field, "dataset_id", None) else dataset, "name", "") or ""
+        getattr(resolved_dataset, "name", "") or ""
     ).strip()
     normalized_code = dataset_code.lower()
     normalized_source = source_identifier.lower()
@@ -285,7 +295,7 @@ def is_dataset_field_allowed_for_action_target(
         return False
     resolved_target = resolve_rule_action_target(
         action_type="set_field",
-        dataset=dataset_field.dataset if getattr(dataset_field, "dataset_id", None) else None,
+        dataset=_safe_dataset_for_dataset_field(dataset_field),
         dataset_field=dataset_field,
     )
     return resolved_target == str(action_target or "").strip()

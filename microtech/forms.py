@@ -65,6 +65,13 @@ def _parse_bool_text(value: str) -> str | None:
     return None
 
 
+def _safe_related(value):
+    try:
+        return value
+    except Exception:
+        return None
+
+
 def _condition_input_attrs(
     *,
     value_kind: str,
@@ -343,12 +350,12 @@ class MicrotechOrderRuleActionForm(forms.ModelForm):
         )
         inferred_ui_action = resolve_rule_action_target(
             action_type=selected_action_type,
-            dataset=getattr(self.instance, "dataset", None),
-            dataset_field=selected_dataset_field or getattr(self.instance, "dataset_field", None),
+            dataset=_safe_related(getattr(self.instance, "dataset", None)),
+            dataset_field=selected_dataset_field or _safe_related(getattr(self.instance, "dataset_field", None)),
         )
         has_legacy_instance_action = (
             selected_action_type == MicrotechOrderRuleAction.ActionType.SET_FIELD
-            and bool(selected_dataset_field or getattr(self.instance, "dataset_field", None))
+            and bool(selected_dataset_field or _safe_related(getattr(self.instance, "dataset_field", None)))
             and not inferred_ui_action
         )
         selected_ui_action = _to_str(

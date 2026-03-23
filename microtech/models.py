@@ -301,7 +301,12 @@ class MicrotechDatasetField(BaseModel):
 
     @property
     def display_label(self) -> str:
-        dataset_name = self.dataset.name if self.dataset_id else "?"
+        dataset_name = "?"
+        if self.dataset_id:
+            try:
+                dataset_name = self.dataset.name
+            except MicrotechDatasetCatalog.DoesNotExist:
+                dataset_name = "?"
         base = f"{dataset_name}.{self.field_name}"
         label = str(self.label or "").strip()
         if label:
