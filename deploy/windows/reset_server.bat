@@ -39,7 +39,7 @@ for %%S in ("GC-Bridge-Uvicorn" "Caddy") do (
 
 echo.
 echo [INFO] Entferne geplante Aufgaben...
-for %%T in ("GC-Bridge-Microtech-Worker" "GC-Bridge-Uvicorn" "GC-Bridge-Caddy" "GC-Bridge Scheduled Product Sync" "GC-Bridge-Start-Uvicorn" "GC-Bridge-Start-Caddy") do (
+for %%T in ("GC-Bridge-Log-Prune" "GC-Bridge-Microtech-Worker" "GC-Bridge-Uvicorn" "GC-Bridge-Caddy" "GC-Bridge Scheduled Product Sync" "GC-Bridge-Start-Uvicorn" "GC-Bridge-Start-Caddy") do (
     schtasks /Query /TN %%~T >nul 2>&1
     if not errorlevel 1 (
         schtasks /Delete /TN %%~T /F >nul 2>&1

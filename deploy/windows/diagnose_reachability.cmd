@@ -21,6 +21,7 @@ set "WARNINGS=0"
 set "PYTHON_OK=1"
 set "CADDY_BIN_OK=1"
 set "CADDY_CFG_OK=1"
+set "LOG_PRUNE_TASK_OK=1"
 set "UVICORN_TASK_OK=1"
 set "CADDY_TASK_OK=1"
 set "MICROTECH_WORKER_TASK_OK=1"
@@ -57,6 +58,14 @@ if exist "%APP_DIR%\deploy\caddy\Caddyfile" (
 )
 
 call :section "SCHEDULED TASKS"
+schtasks /Query /TN "GC-Bridge-Log-Prune" >nul 2>&1
+if errorlevel 1 (
+    set "LOG_PRUNE_TASK_OK=0"
+    call :warn "Task GC-Bridge-Log-Prune fehlt"
+) else (
+    call :ok "Task GC-Bridge-Log-Prune registriert"
+)
+
 schtasks /Query /TN "GC-Bridge-Microtech-Worker" >nul 2>&1
 if errorlevel 1 (
     set "MICROTECH_WORKER_TASK_OK=0"

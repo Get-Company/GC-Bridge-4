@@ -74,6 +74,14 @@ if errorlevel 1 (
     exit /b 1
 )
 
+:: --- Log-Prune-Task sicherstellen ---
+echo [%DATE% %TIME%] Ensuring GC-Bridge-Log-Prune task... >> "%LOG_FILE%"
+call deploy\windows\ensure-log-prune-task.cmd >> "%LOG_FILE%" 2>&1
+if errorlevel 1 (
+    echo [%DATE% %TIME%] ERROR: ensure-log-prune-task failed >> "%LOG_FILE%"
+    exit /b 1
+)
+
 :: --- Uvicorn neustarten ---
 echo [%DATE% %TIME%] Restarting Uvicorn... >> "%LOG_FILE%"
 powershell -Command "Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }"  >> "%LOG_FILE%" 2>&1

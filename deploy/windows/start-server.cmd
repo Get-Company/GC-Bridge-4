@@ -16,6 +16,15 @@ set "ERR=0"
 
 echo [INFO] Starte GC-Bridge Dienste...
 
+echo [INFO] -> Stelle Task GC-Bridge-Log-Prune sicher und starte ihn
+call "%APP_DIR%\deploy\windows\ensure-log-prune-task.cmd"
+if errorlevel 1 (
+    echo [ERROR] Task GC-Bridge-Log-Prune konnte nicht sichergestellt/gestartet werden.
+    set "ERR=1"
+)
+
+timeout /t 2 /nobreak >nul
+
 echo [INFO] -> Stelle Task GC-Bridge-Microtech-Worker sicher und starte ihn
 call "%APP_DIR%\deploy\windows\ensure-microtech-worker-task.cmd"
 if errorlevel 1 (

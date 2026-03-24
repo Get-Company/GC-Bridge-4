@@ -91,6 +91,12 @@ for %%T in ("GC-Bridge-Uvicorn" "GC-Bridge-Caddy") do (
     schtasks /Query /TN %%T > nul 2>&1
     if errorlevel 1 (call :err "Task %%~T - nicht gefunden") else (call :ok "Task %%~T - registriert")
 )
+schtasks /Query /TN "GC-Bridge-Log-Prune" > nul 2>&1
+if errorlevel 1 (
+    call :warn "Task GC-Bridge-Log-Prune - nicht gefunden"
+) else (
+    call :ok "Task GC-Bridge-Log-Prune - registriert"
+)
 schtasks /Query /TN "GC-Bridge-Microtech-Worker" > nul 2>&1
 if errorlevel 1 (
     call :err "Task GC-Bridge-Microtech-Worker - nicht gefunden"

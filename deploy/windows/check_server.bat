@@ -59,7 +59,7 @@ for %%S in ("actions.runner.Get-Company-GC-Bridge-4.GC-Bridge-v4") do (
 echo.
 
 echo --- Geplante Aufgaben ---
-for %%T in ("GC-Bridge-Microtech-Worker" "GC-Bridge-Uvicorn" "GC-Bridge-Caddy") do (
+for %%T in ("GC-Bridge-Log-Prune" "GC-Bridge-Microtech-Worker" "GC-Bridge-Uvicorn" "GC-Bridge-Caddy") do (
     echo.
     echo Aufgabe: %%~T
     schtasks /Query /TN %%~T /V /FO LIST 2>&1
