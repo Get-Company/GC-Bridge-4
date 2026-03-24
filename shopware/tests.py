@@ -43,6 +43,7 @@ class ProductMediaSyncServiceTest(SimpleTestCase):
     @patch.object(ProductService, "request_post")
     def test_upload_media_from_url_uses_shopware_upload_endpoint(self, mock_request_post):
         service = ProductService.__new__(ProductService)
+        service.delete_conflicting_media_by_filename = MagicMock(return_value=0)
 
         ProductService.upload_media_from_url(
             service,
@@ -56,3 +57,58 @@ class ProductMediaSyncServiceTest(SimpleTestCase):
             payload={"url": "https://cdn.example.com/img/bild.png"},
             additional_query_params={"extension": "png", "fileName": "bild"},
         )
+
+    @patch.object(ProductService, "request_post")
+    def test_upload_media_from_url_retries_after_duplicate_filename_conflict(self, mock_request_post):
+        service = ProductService.__new__(ProductService)
+        service.delete_conflicting_media_by_filename = MagicMock(return_value=1)
+        mock_request_post.side_effect = [
+            RuntimeError("Shopware request failed (409): CONTENT__MEDIA_DUPLICATED_FILE_NAME"),
+            {"ok": True},
+        ]
+
+        result = ProductService.upload_media_from_url(
+            service,
+            media_id="media-2",
+            file_name="bild.jpg",
+            source_url="https://cdn.example.com/img/bild.jpg",
+        )
+
+        self.assertEqual(result, {"ok": True})
+        self.assertEqual(service.delete_conflicting_media_by_filename.call_count, 2)
+        mock_request_post.assert_called_with(
+            "/_action/media/media-2/upload",
+            payload={"url": "https://cdn.example.com/img/bild.jpg"},
+            additional_query_params={"extension": "jpg", "fileName": "bild"},
+        )
+
+    @patch.object(ProductService, "request_delete")
+    @patch.object(ProductService, "request_post")
+    def test_delete_conflicting_media_by_filename_removes_other_media_ids(self, mock_request_post, mock_request_delete):
+        service = ProductService.__new__(ProductService)
+        mock_request_post.return_value = {
+            "data": [
+                {"id": "media-1"},
+                {"id": "media-2"},
+            ]
+        }
+
+        deleted = ProductService.delete_conflicting_media_by_filename(
+            service,
+            file_name="bild",
+            extension="jpg",
+            exclude_media_id="media-1",
+        )
+
+        self.assertEqual(deleted, 1)
+        mock_request_post.assert_called_once_with(
+            "/search/media",
+            payload={
+                "filter": [
+                    {"type": "equals", "field": "fileName", "value": "bild"},
+                    {"type": "equals", "field": "fileExtension", "value": "jpg"},
+                ],
+                "limit": 50,
+            },
+        )
+        mock_request_delete.assert_called_once_with("/media/media-2")

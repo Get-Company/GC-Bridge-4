@@ -164,16 +164,87 @@ class ProductService(Shopware6Service):
 
         return len(set(product_media_ids))
 
+    def find_media_ids_by_filename(
+        self,
+        *,
+        file_name: str,
+        extension: str,
+    ) -> list[str]:
+        payload = {
+            "filter": [
+                {
+                    "type": "equals",
+                    "field": "fileName",
+                    "value": file_name,
+                },
+                {
+                    "type": "equals",
+                    "field": "fileExtension",
+                    "value": extension,
+                },
+            ],
+            "limit": 50,
+        }
+        result = self.request_post("/search/media", payload=payload)
+        return [
+            media_id
+            for media_id in (self._entity_id(row) for row in (result or {}).get("data", []))
+            if media_id
+        ]
+
+    def delete_media_by_ids(self, media_ids: list[str]) -> int:
+        deleted = 0
+        for media_id in sorted({str(value).strip() for value in media_ids if str(value).strip()}):
+            self.request_delete(f"{self.media_base_path}/{media_id}")
+            deleted += 1
+        return deleted
+
+    def delete_conflicting_media_by_filename(
+        self,
+        *,
+        file_name: str,
+        extension: str,
+        exclude_media_id: str,
+    ) -> int:
+        media_ids = [
+            media_id
+            for media_id in self.find_media_ids_by_filename(file_name=file_name, extension=extension)
+            if media_id != exclude_media_id
+        ]
+        return self.delete_media_by_ids(media_ids)
+
     def upload_media_from_url(self, *, media_id: str, file_name: str, source_url: str) -> Any:
         base_name, extension = ProductMediaSyncService.split_file_name(file_name)
-        return self.request_post(
-            f"/_action/media/{media_id}/upload",
-            payload={"url": source_url},
-            additional_query_params={
-                "extension": extension,
-                "fileName": base_name,
-            },
+        self.delete_conflicting_media_by_filename(
+            file_name=base_name,
+            extension=extension,
+            exclude_media_id=media_id,
         )
+        try:
+            return self.request_post(
+                f"/_action/media/{media_id}/upload",
+                payload={"url": source_url},
+                additional_query_params={
+                    "extension": extension,
+                    "fileName": base_name,
+                },
+            )
+        except RuntimeError as exc:
+            if not self._is_duplicate_media_filename_error(exc):
+                raise
+            self.delete_conflicting_media_by_filename(
+                file_name=base_name,
+                extension=extension,
+                exclude_media_id=media_id,
+            )
+            return self.request_post(
+                f"/_action/media/{media_id}/upload",
+                payload={"url": source_url},
+                additional_query_params={
+                    "extension": extension,
+                    "fileName": base_name,
+                },
+            )
 
     def create(self, payload: dict) -> Any:
         return self.request_post(self.base_path, payload=payload)
@@ -205,6 +276,11 @@ class ProductService(Shopware6Service):
         if isinstance(attributes, dict) and attributes.get("id"):
             return str(attributes["id"]).strip()
         return ""
+
+    @staticmethod
+    def _is_duplicate_media_filename_error(exc: Exception) -> bool:
+        message = str(exc)
+        return "CONTENT__MEDIA_DUPLICATED_FILE_NAME" in message
 
 
 __all__ = ["ProductService"]
