@@ -12,12 +12,16 @@ setlocal EnableExtensions EnableDelayedExpansion
 :: ============================================================
 
 for %%I in ("%~dp0..\..") do set "APP_DIR=%%~fI"
-set "LOG_FILE=%APP_DIR%\tmp\logs\health_check.log"
 set "PYTHON=%APP_DIR%\.venv\Scripts\python.exe"
 set "ERRORS=0"
 set "WARNINGS=0"
 
 if not exist "%APP_DIR%\tmp\logs" mkdir "%APP_DIR%\tmp\logs"
+call "%APP_DIR%\deploy\windows\prune-logs.cmd" 14 >nul 2>&1
+for /f %%I in ('powershell -NoProfile -Command "(Get-Date).ToString('yyyy-MM-dd')"') do set "DATESTAMP=%%I"
+set "HEALTH_LOG_DIR=%APP_DIR%\tmp\logs\weekly\health_check"
+if not exist "%HEALTH_LOG_DIR%" mkdir "%HEALTH_LOG_DIR%"
+set "LOG_FILE=%HEALTH_LOG_DIR%\health_check.%DATESTAMP%.log"
 
 call :header "GC-Bridge Health Check  %date% %time%"
 
@@ -137,30 +141,28 @@ if errorlevel 1 (
 :: ============================================================
 call :section "LOGS (letzte 200 Zeilen)"
 
-:: uvicorn.out.log separat auf 500-Eintraege pruefen
-if exist "%APP_DIR%\tmp\logs\uvicorn.out.log" (
-    for /f "tokens=*" %%C in ('powershell -NoProfile -Command "(Get-Content \"%APP_DIR%\tmp\logs\uvicorn.out.log\" -Tail 200 | Where-Object { $_ -match \"500 Internal Server Error\" } | Measure-Object).Count"') do set "CNT500=%%C"
+call :resolve_latest_log "%APP_DIR%\tmp\logs\daily\uvicorn" "uvicorn.out.*.log" UVICORN_OUT_LOG
+call :resolve_latest_log "%APP_DIR%\tmp\logs\weekly\uvicorn" "uvicorn.err.*.log" UVICORN_ERR_LOG
+call :resolve_latest_log "%APP_DIR%\tmp\logs\weekly\caddy" "caddy.err.*.log" CADDY_ERR_LOG
+call :resolve_latest_log "%APP_DIR%\tmp\logs\monthly\deploy" "deploy.*.log" DEPLOY_LOG
+call :resolve_latest_log "%APP_DIR%\tmp\logs\weekly\health_check" "health_check.*.log" HEALTH_CHECK_LOG
+
+:: Der taegliche Uvicorn-stdout ist die beste Quelle fuer 500er aus dem laufenden Webprozess.
+if defined UVICORN_OUT_LOG (
+    for /f "tokens=*" %%C in ('powershell -NoProfile -Command "(Get-Content \"%UVICORN_OUT_LOG%\" -Tail 200 | Where-Object { $_ -match \"500 Internal Server Error\" } | Measure-Object).Count"') do set "CNT500=%%C"
     if !CNT500! gtr 0 (
-        call :err "uvicorn.out.log - !CNT500! Eintraege mit '500 Internal Server Error' in den letzten 200 Zeilen"
+        call :err "uvicorn.out - !CNT500! Eintraege mit '500 Internal Server Error' in den letzten 200 Zeilen"
     ) else (
-        call :ok "uvicorn.out.log - keine 500er"
+        call :ok "uvicorn.out - keine 500er"
     )
 ) else (
-    call :warn "uvicorn.out.log - Datei nicht vorhanden"
+    call :warn "uvicorn.out - keine aktuelle Datei gefunden"
 )
 
-for %%L in (uvicorn.err.log caddy.err.log deploy.log) do (
-    if exist "%APP_DIR%\tmp\logs\%%L" (
-        for /f "tokens=*" %%C in ('powershell -NoProfile -Command "(Get-Content \"%APP_DIR%\tmp\logs\%%L\" -Tail 200 | Where-Object { $_ -match \"ERROR\" } | Measure-Object).Count"') do set "CNT=%%C"
-        if !CNT! gtr 0 (
-            call :warn "%%L - !CNT! ERROR-Eintraege in den letzten 200 Zeilen"
-        ) else (
-            call :ok "%%L - keine Fehler"
-        )
-    ) else (
-        call :warn "%%L - Datei nicht vorhanden"
-    )
-)
+call :check_log_for_errors "%UVICORN_ERR_LOG%" "uvicorn.err"
+call :check_log_for_errors "%CADDY_ERR_LOG%" "caddy.err"
+call :check_log_for_errors "%DEPLOY_LOG%" "deploy"
+call :check_log_for_errors "%HEALTH_CHECK_LOG%" "health_check"
 
 :: ============================================================
 :: Zusammenfassung
@@ -205,6 +207,24 @@ goto :eof
 schtasks /Query /TN "%~1" /V /FO LIST | findstr /I /C:"Running" /C:"Wird ausgef" > nul 2>&1
 if not errorlevel 1 exit /b 0
 exit /b 1
+
+:resolve_latest_log
+set "%~3="
+for /f "usebackq delims=" %%P in (`powershell -NoProfile -Command "$dir='%~1'; $pattern='%~2'; if (Test-Path $dir) { $file=Get-ChildItem -Path $dir -File -Filter $pattern | Sort-Object LastWriteTime -Descending | Select-Object -First 1; if ($file) { Write-Host $file.FullName } }"`) do set "%~3=%%P"
+goto :eof
+
+:check_log_for_errors
+if "%~1"=="" (
+    call :warn "%~2 - Datei nicht vorhanden"
+    goto :eof
+)
+for /f "tokens=*" %%C in ('powershell -NoProfile -Command "(Get-Content \"%~1\" -Tail 200 | Where-Object { $_ -match \"ERROR\" } | Measure-Object).Count"') do set "CNT=%%C"
+if !CNT! gtr 0 (
+    call :warn "%~2 - !CNT! ERROR-Eintraege in den letzten 200 Zeilen"
+) else (
+    call :ok "%~2 - keine Fehler"
+)
+goto :eof
 
 :log
 echo %~1

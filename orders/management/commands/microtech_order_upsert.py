@@ -6,6 +6,7 @@ from pathlib import Path
 from django.core.management.base import BaseCommand, CommandError
 from loguru import logger
 
+from core.logging import add_managed_file_sink
 from microtech.services import microtech_connection
 from orders.models import Order
 from orders.services import OrderUpsertMicrotechService
@@ -35,24 +36,18 @@ class Command(BaseCommand):
 
     @staticmethod
     def _add_file_sink(log_file: str) -> tuple[int, Path]:
-        path = Path(log_file)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        sink_id = logger.add(
-            str(path),
-            level="DEBUG",
-            enqueue=False,
-            backtrace=True,
-            diagnose=True,
+        return add_managed_file_sink(
+            log_name="microtech_order_upsert",
+            category="monthly",
+            log_file=log_file,
             rotation="10 MB",
-            retention="14 days",
-            encoding="utf-8",
+            diagnose=True,
         )
-        return sink_id, path
 
     def handle(self, *args, **options):
         order_number = (options.get("order_number") or "").strip()
         order_id = options.get("id")
-        log_file = (options.get("log_file") or "").strip() or "tmp/logs/microtech_order_upsert.log"
+        log_file = (options.get("log_file") or "").strip()
         sink_id, log_path = self._add_file_sink(log_file)
 
         logger.info("Starting Microtech order upsert run. log_file={}", log_path)

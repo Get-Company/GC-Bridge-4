@@ -100,21 +100,11 @@ if not exist "%LOGDIR%" (
 ) else (
     echo Logverzeichnis: %LOGDIR%
     echo.
-    for %%L in (
-        uvicorn.out.log
-        uvicorn.err.log
-        deploy.log
-        caddy-runtime.log
-        caddy-access.log
-    ) do (
-        if exist "%LOGDIR%\%%L" (
-            echo === Letzte 20 Zeilen: %%L ===
-            powershell -NoProfile -Command "Get-Content '%LOGDIR%\%%L' -Tail 20" 2>&1
-            echo.
-        ) else (
-            echo [LEER]  %%L existiert nicht
-        )
-    )
+    call :show_latest_log "%LOGDIR%\daily\uvicorn" "uvicorn.out.*.log" "uvicorn.out"
+    call :show_latest_log "%LOGDIR%\weekly\uvicorn" "uvicorn.err.*.log" "uvicorn.err"
+    call :show_latest_log "%LOGDIR%\weekly\caddy" "caddy.err.*.log" "caddy.err"
+    call :show_latest_log "%LOGDIR%\monthly\deploy" "deploy.*.log" "deploy"
+    call :show_latest_log "%LOGDIR%\weekly\health_check" "health_check.*.log" "health_check"
 )
 echo.
 
@@ -131,3 +121,16 @@ echo    check_server.bat > diagnose.txt 2>&1
 echo ================================================================
 
 endlocal
+goto :eof
+
+:show_latest_log
+set "LATEST_LOG="
+for /f "usebackq delims=" %%P in (`powershell -NoProfile -Command "$dir='%~1'; $pattern='%~2'; if (Test-Path $dir) { $file=Get-ChildItem -Path $dir -File -Filter $pattern | Sort-Object LastWriteTime -Descending | Select-Object -First 1; if ($file) { Write-Host $file.FullName } }"`) do set "LATEST_LOG=%%P"
+if defined LATEST_LOG (
+    echo === Letzte 20 Zeilen: %~3 ===
+    powershell -NoProfile -Command "Get-Content '%LATEST_LOG%' -Tail 20" 2>&1
+    echo.
+) else (
+    echo [LEER]  %~3 existiert nicht
+)
+goto :eof

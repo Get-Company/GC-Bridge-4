@@ -55,9 +55,17 @@ def env_list(name: str, default: str = "") -> list[str]:
     return [item.strip() for item in os.getenv(name, default).split(",") if item.strip()]
 
 
+LOGS_ROOT = Path(os.getenv("LOGS_ROOT", "tmp/logs"))
+if not LOGS_ROOT.is_absolute():
+    LOGS_ROOT = BASE_DIR / LOGS_ROOT
+
+LOG_RETENTION_DAILY = os.getenv("LOG_RETENTION_DAILY", "8 days").strip() or "8 days"
+LOG_RETENTION_WEEKLY = os.getenv("LOG_RETENTION_WEEKLY", "6 weeks").strip() or "6 weeks"
+LOG_RETENTION_MONTHLY = os.getenv("LOG_RETENTION_MONTHLY", "13 months").strip() or "13 months"
+
 ADMIN_LOG_READER_FILES = env_list(
     "ADMIN_LOG_READER_FILES",
-    f"{BASE_DIR / 'logs' / 'scheduled_product_sync.log'},{BASE_DIR / 'logs' / 'django.log'}",
+    "",
 )
 
 

@@ -19,6 +19,7 @@ from unfold.enums import ActionVariant
 from unfold.sections import TemplateSection
 
 from core.admin import BaseAdmin, BaseTabularInline
+from core.logging import add_managed_file_sink
 from loguru import logger
 from microtech.services import microtech_connection
 from orders.models import Order, OrderDetail
@@ -150,19 +151,12 @@ class OrderAdmin(BaseAdmin):
 
     @staticmethod
     def _add_upsert_file_sink() -> tuple[int, Path]:
-        log_path = Path("tmp/logs/microtech_order_upsert.log")
-        log_path.parent.mkdir(parents=True, exist_ok=True)
-        sink_id = logger.add(
-            str(log_path),
-            level="DEBUG",
-            enqueue=False,
-            backtrace=True,
-            diagnose=True,
+        return add_managed_file_sink(
+            log_name="microtech_order_upsert",
+            category="monthly",
             rotation="10 MB",
-            retention="14 days",
-            encoding="utf-8",
+            diagnose=True,
         )
-        return sink_id, log_path
 
     @staticmethod
     def _format_rule_debug_message(rule_debug: OrderRuleDebugInfo) -> tuple[str, int]:

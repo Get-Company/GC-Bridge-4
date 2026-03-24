@@ -10,6 +10,13 @@ setlocal
 cd /d %~dp0\..\.. || exit /b 1
 if not exist tmp\logs mkdir tmp\logs
 call deploy\windows\prune-logs.cmd 14 >nul 2>&1
+for /f %%I in ('powershell -NoProfile -Command "(Get-Date).ToString('yyyy-MM-dd')"') do set "DATESTAMP=%%I"
+set "UVICORN_OUT_DIR=tmp\logs\daily\uvicorn"
+set "UVICORN_ERR_DIR=tmp\logs\weekly\uvicorn"
+if not exist "%UVICORN_OUT_DIR%" mkdir "%UVICORN_OUT_DIR%"
+if not exist "%UVICORN_ERR_DIR%" mkdir "%UVICORN_ERR_DIR%"
+set "UVICORN_OUT_LOG=%UVICORN_OUT_DIR%\uvicorn.out.%DATESTAMP%.log"
+set "UVICORN_ERR_LOG=%UVICORN_ERR_DIR%\uvicorn.err.%DATESTAMP%.log"
 
 if "%GC_BRIDGE_PUBLIC_PORT%"=="" set GC_BRIDGE_PUBLIC_PORT=4711
 if "%GC_BRIDGE_LAN_IP%"=="" set GC_BRIDGE_LAN_IP=10.0.0.5
@@ -22,14 +29,14 @@ if "%DJANGO_USE_X_FORWARDED_HOST%"=="" set DJANGO_USE_X_FORWARDED_HOST=1
 if "%DJANGO_USE_X_FORWARDED_PROTO%"=="" set DJANGO_USE_X_FORWARDED_PROTO=0
 
 if not exist .venv\Scripts\python.exe (
-    echo [%date% %time%] python.exe nicht gefunden >> tmp\logs\uvicorn.err.log
+    echo [%date% %time%] python.exe nicht gefunden >> "%UVICORN_ERR_LOG%"
     exit /b 2
 )
 
-echo [%date% %time%] Uvicorn startet... >> tmp\logs\uvicorn.err.log
-.venv\Scripts\python.exe -m uvicorn GC_Bridge_4.asgi:application --host 127.0.0.1 --port 8000 --workers 1 >> tmp\logs\uvicorn.out.log 2>> tmp\logs\uvicorn.err.log
+echo [%date% %time%] Uvicorn startet... >> "%UVICORN_ERR_LOG%"
+.venv\Scripts\python.exe -m uvicorn GC_Bridge_4.asgi:application --host 127.0.0.1 --port 8000 --workers 1 >> "%UVICORN_OUT_LOG%" 2>> "%UVICORN_ERR_LOG%"
 
 set "RC=%ERRORLEVEL%"
-echo [%date% %time%] Uvicorn beendet mit Code %RC% >> tmp\logs\uvicorn.err.log
+echo [%date% %time%] Uvicorn beendet mit Code %RC% >> "%UVICORN_ERR_LOG%"
 
 endlocal & exit /b %RC%

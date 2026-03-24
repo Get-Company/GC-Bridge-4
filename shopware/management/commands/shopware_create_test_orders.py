@@ -12,6 +12,7 @@ from uuid import uuid4
 from django.core.management.base import BaseCommand, CommandError
 from loguru import logger
 
+from core.logging import add_managed_file_sink
 from shopware.services import Shopware6Service
 
 STOREFRONT_TYPE_ID = "8a243080f92e4c719546314b577cf82b"
@@ -135,7 +136,7 @@ class Command(BaseCommand):
         )
         parser.add_argument(
             "--log-file",
-            default="tmp/logs/shopware_create_test_orders.log",
+            default="",
             help="File path for detailed command log.",
         )
         parser.add_argument(
@@ -146,19 +147,13 @@ class Command(BaseCommand):
 
     @staticmethod
     def _add_file_sink(log_file: str) -> tuple[int, Path]:
-        path = Path(log_file)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        sink_id = logger.add(
-            str(path),
-            level="DEBUG",
-            enqueue=False,
-            backtrace=True,
-            diagnose=True,
+        return add_managed_file_sink(
+            log_name="shopware_create_test_orders",
+            category="monthly",
+            log_file=log_file,
             rotation="10 MB",
-            retention="14 days",
-            encoding="utf-8",
+            diagnose=True,
         )
-        return sink_id, path
 
     def handle(self, *args, **options):
         sink_id, log_path = self._add_file_sink(options["log_file"])

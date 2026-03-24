@@ -8,9 +8,12 @@ setlocal EnableExtensions EnableDelayedExpansion
 :: ============================================================
 
 for %%I in ("%~dp0..\..") do set "APP_DIR=%%~fI"
-set "LOG_FILE=%APP_DIR%\tmp\logs\diagnose_reachability.log"
-
 if not exist "%APP_DIR%\tmp\logs" mkdir "%APP_DIR%\tmp\logs"
+call "%APP_DIR%\deploy\windows\prune-logs.cmd" 14 >nul 2>&1
+for /f %%I in ('powershell -NoProfile -Command "(Get-Date).ToString('yyyy-MM-dd')"') do set "DATESTAMP=%%I"
+set "DIAG_LOG_DIR=%APP_DIR%\tmp\logs\weekly\diagnose_reachability"
+if not exist "%DIAG_LOG_DIR%" mkdir "%DIAG_LOG_DIR%"
+set "LOG_FILE=%DIAG_LOG_DIR%\diagnose_reachability.%DATESTAMP%.log"
 
 set "ERRORS=0"
 set "WARNINGS=0"
@@ -167,17 +170,17 @@ if "%UVICORN_PORT_OK%"=="0" (
 )
 
 if "%UVICORN_HTTP_OK%"=="0" (
-    call :hint "Uvicorn-Port ist offen, aber Django antwortet nicht. Pruefe tmp\\logs\\uvicorn.err.log auf Tracebacks."
+    call :hint "Uvicorn-Port ist offen, aber Django antwortet nicht. Pruefe tmp\\logs\\weekly\\uvicorn\\uvicorn.err.<datum>.log auf Tracebacks."
     goto :actions
 )
 
 if "%CADDY_PORT_OK%"=="0" (
-    call :hint "Caddy laeuft nicht. Pruefe deploy\\caddy\\caddy.exe und tmp\\logs\\caddy.err.log."
+    call :hint "Caddy laeuft nicht. Pruefe deploy\\caddy\\caddy.exe und tmp\\logs\\weekly\\caddy\\caddy.err.<datum>.log."
     goto :actions
 )
 
 if "%CADDY_HTTP_OK%"=="0" (
-    call :hint "Caddy-Port ist offen, aber Reverse Proxy antwortet nicht korrekt. Pruefe deploy\\caddy\\Caddyfile und caddy.err.log."
+    call :hint "Caddy-Port ist offen, aber Reverse Proxy antwortet nicht korrekt. Pruefe deploy\\caddy\\Caddyfile und die neuesten caddy.err-Logs."
     goto :actions
 )
 
@@ -193,7 +196,7 @@ call :section "SCHNELL-AKTIONEN"
 call :log "1) Starten: deploy\\windows\\start-server.cmd"
 call :log "2) Vollcheck: deploy\\windows\\health_check.cmd"
 call :log "3) Tieferer Dump: deploy\\windows\\check_server.bat > diagnose.txt 2>&1"
-call :log "4) Logs: tmp\\logs\\uvicorn.err.log und tmp\\logs\\caddy.err.log"
+call :log "4) Logs: tmp\\logs\\weekly\\uvicorn\\ und tmp\\logs\\weekly\\caddy\\"
 
 call :header "ERGEBNIS: !ERRORS! Fehler / !WARNINGS! Warnungen"
 call :log "Logdatei: %LOG_FILE%"

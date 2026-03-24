@@ -8,7 +8,6 @@ setlocal
 :: ============================================================
 
 set "APP_DIR=D:\GC-Bridge-4"
-set "LOG_FILE=%APP_DIR%\tmp\logs\deploy.log"
 
 cd /d "%APP_DIR%" || (
     echo [%DATE% %TIME%] ERROR: Cannot cd to %APP_DIR%
@@ -17,6 +16,10 @@ cd /d "%APP_DIR%" || (
 
 if not exist tmp\logs mkdir tmp\logs
 call deploy\windows\prune-logs.cmd 14 >nul 2>&1
+for /f %%I in ('powershell -NoProfile -Command "(Get-Date).ToString('yyyy-MM-dd')"') do set "DATESTAMP=%%I"
+set "DEPLOY_LOG_DIR=%APP_DIR%\tmp\logs\monthly\deploy"
+if not exist "%DEPLOY_LOG_DIR%" mkdir "%DEPLOY_LOG_DIR%"
+set "LOG_FILE=%DEPLOY_LOG_DIR%\deploy.%DATESTAMP%.log"
 
 echo [%DATE% %TIME%] ============================== >> "%LOG_FILE%"
 echo [%DATE% %TIME%] Deploying %DEPLOY_TAG% >> "%LOG_FILE%"

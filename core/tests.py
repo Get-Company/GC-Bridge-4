@@ -1,10 +1,27 @@
+from datetime import datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from django.test import SimpleTestCase, override_settings
 
+from core.logging import build_managed_log_path
 from core.log_reader import get_allowed_log_files, tail_log_file
 from core.services import CommandRuntimeService
+
+
+class ManagedLoggingTest(SimpleTestCase):
+    def test_build_managed_log_path_uses_retention_directory(self):
+        with TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            logs_root = base_dir / "tmp" / "logs"
+            with override_settings(BASE_DIR=base_dir, LOGS_ROOT=logs_root):
+                path = build_managed_log_path(
+                    "deploy",
+                    category="monthly",
+                    now=datetime(2026, 3, 24, 15, 30),
+                )
+
+            self.assertEqual(path, logs_root / "monthly" / "deploy" / "deploy.2026-03-24.log")
 
 
 class LogReaderUtilsTest(SimpleTestCase):
@@ -19,18 +36,26 @@ class LogReaderUtilsTest(SimpleTestCase):
         with TemporaryDirectory() as tmp_dir:
             base_dir = Path(tmp_dir)
             logs_dir = base_dir / "logs"
+            managed_logs_dir = base_dir / "tmp" / "logs" / "weekly" / "shopware"
             logs_dir.mkdir(parents=True, exist_ok=True)
+            managed_logs_dir.mkdir(parents=True, exist_ok=True)
             (logs_dir / "service_a.log").write_text("a\n", encoding="utf-8")
             (logs_dir / "service_b.log").write_text("b\n", encoding="utf-8")
+            (managed_logs_dir / "shopware.2026-03-24.log").write_text("c\n", encoding="utf-8")
 
             configured = str(base_dir / "custom.log")
-            with override_settings(BASE_DIR=base_dir, ADMIN_LOG_READER_FILES=[configured]):
+            with override_settings(
+                BASE_DIR=base_dir,
+                LOGS_ROOT=base_dir / "tmp" / "logs",
+                ADMIN_LOG_READER_FILES=[configured],
+            ):
                 files = get_allowed_log_files()
 
             file_strings = {str(path) for path in files}
             self.assertIn(configured, file_strings)
             self.assertIn(str(logs_dir / "service_a.log"), file_strings)
             self.assertIn(str(logs_dir / "service_b.log"), file_strings)
+            self.assertIn(str(managed_logs_dir / "shopware.2026-03-24.log"), file_strings)
 
 
 class CommandRuntimeServiceTest(SimpleTestCase):
