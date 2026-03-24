@@ -285,6 +285,7 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
     list_filter_sheet = BaseAdmin.list_filter_sheet
     list_horizontal_scrollbar_top = BaseAdmin.list_horizontal_scrollbar_top
     list_display = ("image_preview", "erp_nr", "name", "customs_tariff_number", "is_active", "created_at")
+    ordering = ("-is_active", "erp_nr")
     search_fields = ("erp_nr", "sku", "name")
     list_filter = [
         ("is_active", BooleanRadioFilter),

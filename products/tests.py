@@ -228,6 +228,9 @@ class ScheduledProductSyncCommandTest(TestCase):
 
 @override_settings(MICROTECH_IMAGE_BASE_URL="https://cdn.example.com/img/")
 class ProductImageAdminAndSyncTest(TestCase):
+    def test_product_admin_orders_by_status_then_erp_number(self):
+        self.assertEqual(ProductAdmin.ordering, ("-is_active", "erp_nr"))
+
     def test_image_preview_uses_first_ordered_image(self):
         product = Product.objects.create(erp_nr="A-4000", name="Mit Bild")
         second = Image.objects.create(path="second.png")
