@@ -2,6 +2,7 @@ from datetime import timedelta
 from decimal import Decimal
 from unittest.mock import MagicMock, call, patch
 
+from django.contrib import messages
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth import get_user_model
 from django.test import RequestFactory, TestCase, override_settings
@@ -125,6 +126,32 @@ class ProductAdminSpecialPriceActionTest(TestCase):
         self.assertIsNone(self.price.special_price)
         self.assertIsNone(self.price.special_start_date)
         self.assertIsNone(self.price.special_end_date)
+
+    def test_sync_to_shopware_bulk_handles_service_initialization_error(self):
+        request = self.factory.post(
+            "/admin/products/product/",
+            data={
+                "action": "sync_to_shopware",
+            },
+        )
+        request.user = self.user
+
+        admin_instance = ProductAdmin(Product, AdminSite())
+        sent_messages = []
+        admin_instance.message_user = lambda _request, message, level=messages.INFO: sent_messages.append(
+            (message, level)
+        )
+
+        with (
+            patch("products.admin.ProductService", side_effect=RuntimeError("kaputt")),
+            patch.object(admin_instance, "_log_admin_error") as mock_log,
+        ):
+            admin_instance.sync_to_shopware(request, Product.objects.filter(pk=self.product.pk))
+
+        mock_log.assert_called_once()
+        self.assertEqual(len(sent_messages), 1)
+        self.assertIn("Sync fehlgeschlagen: kaputt", sent_messages[0][0])
+        self.assertEqual(sent_messages[0][1], messages.ERROR)
 
 
 class ScheduledProductSyncCommandTest(TestCase):

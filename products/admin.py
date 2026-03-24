@@ -642,8 +642,20 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
         variant=ActionVariant.PRIMARY,
     )
     def sync_to_shopware(self, request, queryset):
-        service = ProductService()
-        success_count, error_count, error_messages = self._sync_products_bulk(queryset, service, request=request)
+        try:
+            service = ProductService()
+            success_count, error_count, error_messages = self._sync_products_bulk(queryset, service, request=request)
+        except Exception as exc:
+            self._log_admin_error(
+                request,
+                f"Shopware sync fehlgeschlagen: {exc}",
+            )
+            self.message_user(
+                request,
+                f"Sync fehlgeschlagen: {exc} — Details im Produkt-Verlauf (History).",
+                level=messages.ERROR,
+            )
+            return
         if success_count:
             self.message_user(request, f"{success_count} Produkt(e) synchronisiert.")
         if error_count:
