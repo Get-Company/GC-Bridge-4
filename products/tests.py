@@ -231,6 +231,9 @@ class ProductImageAdminAndSyncTest(TestCase):
     def test_product_admin_orders_by_status_then_erp_number(self):
         self.assertEqual(ProductAdmin.ordering, ("-is_active", "erp_nr"))
 
+    def test_product_admin_uses_all_list_display_fields_as_links(self):
+        self.assertEqual(ProductAdmin.list_display_links, ProductAdmin.list_display)
+
     def test_image_preview_uses_first_ordered_image(self):
         product = Product.objects.create(erp_nr="A-4000", name="Mit Bild")
         second = Image.objects.create(path="second.png")
@@ -242,6 +245,7 @@ class ProductImageAdminAndSyncTest(TestCase):
 
         self.assertIn("first.jpg", html)
         self.assertIn("cdn.example.com/img", html)
+        self.assertIn('loading="lazy"', html)
 
     def test_sync_products_bulk_includes_media_payload_and_cover(self):
         product = Product.objects.create(

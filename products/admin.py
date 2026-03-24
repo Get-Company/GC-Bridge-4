@@ -285,6 +285,7 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
     list_filter_sheet = BaseAdmin.list_filter_sheet
     list_horizontal_scrollbar_top = BaseAdmin.list_horizontal_scrollbar_top
     list_display = ("image_preview", "erp_nr", "name", "customs_tariff_number", "is_active", "created_at")
+    list_display_links = list_display
     ordering = ("-is_active", "erp_nr")
     search_fields = ("erp_nr", "sku", "name")
     list_filter = [
@@ -382,7 +383,7 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
         if not image or not image.url:
             return ""
         return format_html(
-            '<img src="{}" style="width:50px;height:50px;object-fit:cover;border-radius:4px;" />',
+            '<img src="{}" loading="lazy" style="width:50px;height:50px;object-fit:cover;border-radius:4px;" />',
             image.url,
         )
 
