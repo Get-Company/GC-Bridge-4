@@ -202,9 +202,13 @@ class MicrotechDatasetService(BaseService):
     def _find_image_filename_in_path(image_link_or_path: str | None) -> str | None:
         if not image_link_or_path:
             return None
-        match = re.search(r"[\w-]+\.(jpg|jpeg|png|gif|webp)", image_link_or_path, re.IGNORECASE)
+        cleaned = str(image_link_or_path).split("?", 1)[0].split("#", 1)[0].strip().strip('"').strip("'")
+        filename = cleaned.replace("\\", "/").rstrip("/").split("/")[-1]
+        if re.search(r"\.(jpg|jpeg|png|gif|webp)$", filename, re.IGNORECASE):
+            return filename
+        match = re.search(r"[^/\\\\]+\.(jpg|jpeg|png|gif|webp)", cleaned, re.IGNORECASE)
         if match:
-            return match.group(0)
+            return match.group(0).replace("\\", "/").split("/")[-1]
         return None
 
     def edit(self) -> None:

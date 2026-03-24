@@ -29,7 +29,19 @@ if ENV_FILE.exists():
         key, value = line.split("=", 1)
         os.environ.setdefault(key, value.strip().strip('"').strip("'"))
 
-CDN_PREFIX = os.getenv("CDN_PREFIX", "")
+def env_url(name: str, default: str = "") -> str:
+    value = os.getenv(name, default).strip()
+    if not value:
+        return ""
+    return f"{value.rstrip('/')}/"
+
+
+CDN_PREFIX = env_url("CDN_PREFIX")
+MICROTECH_IMAGE_BASE_URL = env_url(
+    "MICROTECH_IMAGE_BASE_URL",
+    f"{CDN_PREFIX}img/" if CDN_PREFIX else "",
+)
+SHOPWARE_PRODUCT_MEDIA_FOLDER_ID = os.getenv("SHOPWARE_PRODUCT_MEDIA_FOLDER_ID", "").strip()
 
 
 def env_bool(name: str, default: bool = False) -> bool:

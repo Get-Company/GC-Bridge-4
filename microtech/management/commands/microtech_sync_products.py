@@ -10,7 +10,7 @@ from microtech.services.artikel import MicrotechArtikelService
 from microtech.services.lager import MicrotechLagerService
 from core.admin_utils import log_admin_change
 from microtech.services import microtech_connection
-from products.models import Image, Price, Product, Storage, Tax
+from products.models import Image, Price, Product, ProductImage, Storage, Tax
 from shopware.models import ShopwareSettings
 
 TAX_19_RATE = Decimal("19.00")
@@ -37,6 +37,18 @@ def _to_int(value):
         return int(value)
     except (TypeError, ValueError):
         return None
+
+
+def _unique_preserve_order(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        normalized = str(value or "").strip()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        result.append(normalized)
+    return result
 
 
 def _apply_factor(value: Decimal | None, factor: Decimal) -> Decimal | None:
@@ -370,13 +382,22 @@ class Command(BaseCommand):
                         },
                     )
 
-        image_names = artikel_service.get_image_list()
+        image_names = _unique_preserve_order(artikel_service.get_image_list())
         if image_names:
             existing = {img.path: img for img in Image.objects.filter(path__in=image_names)}
             missing = [Image(path=name) for name in image_names if name not in existing]
             if missing:
                 Image.objects.bulk_create(missing, ignore_conflicts=True)
                 existing = {img.path: img for img in Image.objects.filter(path__in=image_names)}
-            product.images.set(list(existing.values()))
+            ordered_images = [existing[name] for name in image_names if name in existing]
+            product.images.set(ordered_images)
+            ProductImage.objects.filter(product=product).exclude(image__path__in=image_names).delete()
+            for order, image in enumerate(ordered_images, start=1):
+                ProductImage.objects.update_or_create(
+                    product=product,
+                    image=image,
+                    defaults={"order": order},
+                )
         else:
+            ProductImage.objects.filter(product=product).delete()
             product.images.clear()

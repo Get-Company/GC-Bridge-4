@@ -5,10 +5,11 @@ from django import forms
 from django.contrib import admin, messages
 from django.contrib.contenttypes.models import ContentType
 from django.core.management import call_command
-from django.db.models import Case, IntegerField, Value, When
+from django.db.models import Case, IntegerField, Prefetch, Value, When
 from django.http import HttpResponseRedirect
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.html import format_html
 from modeltranslation.admin import TabbedTranslationAdmin
 
 from unfold.contrib.filters.admin import (
@@ -24,8 +25,8 @@ from unfold.forms import ActionForm as UnfoldActionForm
 from core.admin import BaseAdmin, BaseStackedInline, BaseTabularInline
 from core.admin_utils import log_admin_change
 from shopware.models import ShopwareSettings
-from shopware.services import ProductService
-from .models import Category, Price, Product, Storage, Tax
+from shopware.services import ProductMediaSyncService, ProductService
+from .models import Category, Price, Product, ProductImage, Storage, Tax
 
 DEFAULT_TAX_ID = "d391e13bdd95404a885f4ad28ea218e0"
 REDUCED_TAX_ID = "be66a53eae3a49829f4a8c5959535501"
@@ -283,7 +284,7 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
     change_form_show_cancel_button = BaseAdmin.change_form_show_cancel_button
     list_filter_sheet = BaseAdmin.list_filter_sheet
     list_horizontal_scrollbar_top = BaseAdmin.list_horizontal_scrollbar_top
-    list_display = ("erp_nr", "name", "customs_tariff_number", "is_active", "created_at")
+    list_display = ("image_preview", "erp_nr", "name", "customs_tariff_number", "is_active", "created_at")
     search_fields = ("erp_nr", "sku", "name")
     list_filter = [
         ("is_active", BooleanRadioFilter),
@@ -301,6 +302,16 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
         "clear_special_price_for_channel",
     )
     actions_detail = ("sync_from_microtech_detail", "sync_to_shopware_detail")
+
+    def get_queryset(self, request):
+        queryset = super().get_queryset(request)
+        return queryset.prefetch_related(
+            Prefetch(
+                "product_images",
+                queryset=ProductImage.objects.select_related("image").order_by("order", "id"),
+                to_attr="ordered_product_images",
+            )
+        )
 
     def _redirect_to_change_page(self, object_id: str) -> HttpResponseRedirect:
         change_url = reverse("admin:products_product_change", args=(object_id,))
@@ -326,18 +337,63 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
             return timezone.make_aware(value, timezone.get_current_timezone())
         return value
 
+    @staticmethod
+    def _prefetch_sync_queryset(products):
+        if hasattr(products, "select_related"):
+            products = products.select_related("tax")
+        if hasattr(products, "prefetch_related"):
+            products = products.prefetch_related(
+                Prefetch(
+                    "product_images",
+                    queryset=ProductImage.objects.select_related("image").order_by("order", "id"),
+                    to_attr="ordered_product_images",
+                )
+            )
+        if hasattr(products, "only"):
+            products = products.only("id", "erp_nr", "sku", "name", "description", "is_active", "tax_id", "tax__shopware_id")
+        return products
+
+    @staticmethod
+    def _append_media_payload(
+        *,
+        product: Product,
+        effective_sku: str,
+        payload: dict,
+        media_sync_service: ProductMediaSyncService,
+        media_entities: dict[str, dict],
+        media_uploads: dict[str, dict],
+    ) -> None:
+        product_media, product_media_entities, product_media_uploads = media_sync_service.get_product_media_payload(
+            product=product,
+            product_id=effective_sku,
+        )
+        if product_media:
+            payload["media"] = product_media
+            payload["coverId"] = product_media[0]["id"]
+        for entity in product_media_entities:
+            media_entities[entity["id"]] = entity
+        for upload in product_media_uploads:
+            media_uploads[upload["media_id"]] = upload
+
+    @admin.display(description="Bild")
+    def image_preview(self, obj: Product):
+        image = obj.first_image
+        if not image or not image.url:
+            return ""
+        return format_html(
+            '<img src="{}" style="width:50px;height:50px;object-fit:cover;border-radius:4px;" />',
+            image.url,
+        )
+
     def _sync_products_bulk(self, products, service: ProductService, request=None) -> tuple[int, int, list[str]]:
         success_count = 0
         error_count = 0
         error_messages: list[str] = []
         batch_size = 50
+        media_sync_service = ProductMediaSyncService()
         channels = list(ShopwareSettings.objects.filter(is_active=True))
         default_channel = next((ch for ch in channels if ch.is_default), None)
-        if hasattr(products, "select_related"):
-            products = products.select_related("tax")
-        if hasattr(products, "only"):
-            products = products.only("id", "erp_nr", "sku", "name", "description", "is_active", "tax_id", "tax__shopware_id")
-        products = list(products)
+        products = list(self._prefetch_sync_queryset(products))
 
         for offset in range(0, len(products), batch_size):
             batch = products[offset : offset + batch_size]
@@ -347,6 +403,8 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
             payloads = []
             payload_products: list[Product] = []
             fallback_products: list[Product] = []
+            media_entities: dict[str, dict] = {}
+            media_uploads: dict[str, dict] = {}
             for product in batch:
                 effective_sku = product.sku
                 if not effective_sku:
@@ -441,6 +499,16 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
                 if prices_payload:
                     payload["prices"] = prices_payload
 
+                if effective_sku:
+                    self._append_media_payload(
+                        product=product,
+                        effective_sku=effective_sku,
+                        payload=payload,
+                        media_sync_service=media_sync_service,
+                        media_entities=media_entities,
+                        media_uploads=media_uploads,
+                    )
+
                 payloads.append(payload)
                 payload_products.append(product)
 
@@ -455,22 +523,52 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
                         product_ids=cleanup_product_ids,
                         rule_ids=cleanup_rule_ids,
                     )
+                if cleanup_product_ids:
+                    service.purge_product_media_by_product_ids(product_ids=cleanup_product_ids)
+                media_sync_service.sync_media_assets(
+                    product_service=service,
+                    media_entities=list(media_entities.values()),
+                    media_uploads=list(media_uploads.values()),
+                )
                 service.bulk_upsert(payloads)
                 success_count += len(payload_products)
 
                 if fallback_products:
                     refreshed_map = service.get_sku_map([product.erp_nr for product in fallback_products])
+                    fallback_media_payloads: list[dict] = []
+                    fallback_media_entities: dict[str, dict] = {}
+                    fallback_media_uploads: dict[str, dict] = {}
+                    resolved_fallback_ids: list[str] = []
                     for product in fallback_products:
                         resolved_sku = refreshed_map.get(product.erp_nr)
                         if resolved_sku:
                             product.sku = resolved_sku
                             product.save(update_fields=["sku"])
+                            resolved_fallback_ids.append(resolved_sku)
+                            fallback_payload = {"id": resolved_sku, "productNumber": product.erp_nr}
+                            self._append_media_payload(
+                                product=product,
+                                effective_sku=resolved_sku,
+                                payload=fallback_payload,
+                                media_sync_service=media_sync_service,
+                                media_entities=fallback_media_entities,
+                                media_uploads=fallback_media_uploads,
+                            )
+                            fallback_media_payloads.append(fallback_payload)
                             continue
                         error_count += 1
                         msg = f"SKU konnte nach Fallback-Upsert nicht aufgeloest werden fuer Artikelnr. {product.erp_nr}"
                         error_messages.append(msg)
                         if request:
                             self._log_admin_error(request, msg, obj=product)
+                    if resolved_fallback_ids:
+                        service.purge_product_media_by_product_ids(product_ids=resolved_fallback_ids)
+                        media_sync_service.sync_media_assets(
+                            product_service=service,
+                            media_entities=list(fallback_media_entities.values()),
+                            media_uploads=list(fallback_media_uploads.values()),
+                        )
+                        service.bulk_upsert(fallback_media_payloads)
             except Exception as exc:
                 error_count += len(payload_products)
                 msg = str(exc)

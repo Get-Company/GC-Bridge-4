@@ -1,15 +1,15 @@
 from datetime import timedelta
 from decimal import Decimal
-from unittest.mock import call, patch
+from unittest.mock import MagicMock, call, patch
 
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth import get_user_model
-from django.test import RequestFactory, TestCase
+from django.test import RequestFactory, TestCase, override_settings
 from django.utils import timezone
 
 from products.admin import PriceActionForm, PriceAdmin, ProductAdmin
 from products.management.commands.scheduled_product_sync import Command as ScheduledProductSyncCommand
-from products.models import Price, Product
+from products.models import Image, Price, Product, ProductImage
 from shopware.models import ShopwareSettings
 
 
@@ -224,3 +224,48 @@ class ScheduledProductSyncCommandTest(TestCase):
                 microtech_price=Decimal("10.50"),
             )
         )
+
+
+@override_settings(MICROTECH_IMAGE_BASE_URL="https://cdn.example.com/img/")
+class ProductImageAdminAndSyncTest(TestCase):
+    def test_image_preview_uses_first_ordered_image(self):
+        product = Product.objects.create(erp_nr="A-4000", name="Mit Bild")
+        second = Image.objects.create(path="second.png")
+        first = Image.objects.create(path="first.jpg")
+        ProductImage.objects.create(product=product, image=second, order=2)
+        ProductImage.objects.create(product=product, image=first, order=1)
+
+        html = ProductAdmin(Product, AdminSite()).image_preview(product)
+
+        self.assertIn("first.jpg", html)
+        self.assertIn("cdn.example.com/img", html)
+
+    def test_sync_products_bulk_includes_media_payload_and_cover(self):
+        product = Product.objects.create(
+            erp_nr="A-4001",
+            sku="shopware-product-1",
+            name="Mit Shopware Bild",
+        )
+        first = Image.objects.create(path="cover.jpg")
+        second = Image.objects.create(path="gallery.png")
+        ProductImage.objects.create(product=product, image=first, order=1)
+        ProductImage.objects.create(product=product, image=second, order=2)
+
+        service = MagicMock()
+        service.get_sku_map.return_value = {}
+
+        success_count, error_count, _ = ProductAdmin(Product, AdminSite())._sync_products_bulk(
+            Product.objects.filter(pk=product.pk),
+            service,
+        )
+
+        self.assertEqual(success_count, 1)
+        self.assertEqual(error_count, 0)
+        service.bulk_upsert_media.assert_called_once()
+        service.purge_product_media_by_product_ids.assert_called_once_with(product_ids=["shopware-product-1"])
+
+        product_payload = service.bulk_upsert.call_args.args[0][0]
+        self.assertEqual(product_payload["id"], "shopware-product-1")
+        self.assertEqual(len(product_payload["media"]), 2)
+        self.assertEqual(product_payload["coverId"], product_payload["media"][0]["id"])
+        self.assertEqual([item["position"] for item in product_payload["media"]], [1, 2])

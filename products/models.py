@@ -58,16 +58,27 @@ class Image(BaseModel):
         ordering = ("id",)
 
     @property
+    def filename(self) -> str:
+        return self._extract_filename(self.path)
+
+    @property
     def url(self) -> str:
         from django.conf import settings
 
-        prefix = getattr(settings, "CDN_PREFIX", "")
-        if prefix:
-            return f"{prefix.rstrip('/')}/{self.path.lstrip('/')}"
+        base_url = getattr(settings, "MICROTECH_IMAGE_BASE_URL", "") or getattr(settings, "CDN_PREFIX", "")
+        filename = self.filename
+        if base_url and filename:
+            return f"{base_url.rstrip('/')}/{filename.lstrip('/')}"
         return self.path
 
     def __str__(self) -> str:
         return self.alt_text or self.path
+
+    @staticmethod
+    def _extract_filename(value: str | None) -> str:
+        if not value:
+            return ""
+        return str(value).replace("\\", "/").rstrip("/").split("/")[-1]
 
 
 class Product(BaseModel):
@@ -122,6 +133,49 @@ class Product(BaseModel):
 
     def __str__(self) -> str:
         return f"{self.erp_nr} - {self.name}"
+
+    def get_ordered_product_images(self) -> list["ProductImage"]:
+        if hasattr(self, "ordered_product_images"):
+            return [product_image for product_image in self.ordered_product_images if product_image.image_id]
+        return list(self.product_images.select_related("image").order_by("order", "id"))
+
+    def get_images(self) -> list[Image]:
+        return [product_image.image for product_image in self.get_ordered_product_images() if product_image.image]
+
+    @property
+    def first_image(self) -> Image | None:
+        images = self.get_images()
+        return images[0] if images else None
+
+
+class ProductImage(BaseModel):
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE,
+        related_name="product_images",
+        verbose_name=_("Produkt"),
+    )
+    image = models.ForeignKey(
+        Image,
+        on_delete=models.CASCADE,
+        related_name="product_images",
+        verbose_name=_("Bild"),
+    )
+    order = models.PositiveIntegerField(default=1, verbose_name=_("Reihenfolge"))
+
+    class Meta:
+        verbose_name = _("Produktbild")
+        verbose_name_plural = _("Produktbilder")
+        ordering = ("product", "order", "id")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("product", "image"),
+                name="unique_product_image_assignment",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.product.erp_nr} | {self.order} | {self.image.path}"
 
 
 class Price(BaseModel):

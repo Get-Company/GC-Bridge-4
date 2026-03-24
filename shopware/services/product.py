@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from .product_media import ProductMediaSyncService
 from shopware.services.shopware6 import Shopware6Service
 
 
@@ -11,6 +12,9 @@ class ProductService(Shopware6Service):
     search_path = "/search/product"
     product_price_search_path = "/search/product-price"
     product_price_base_path = "/product-price"
+    product_media_search_path = "/search/product-media"
+    product_media_base_path = "/product-media"
+    media_base_path = "/media"
     bulk_sync_path = "/_action/sync"
 
     def get(self, product_id: str) -> Any:
@@ -68,6 +72,9 @@ class ProductService(Shopware6Service):
         }
         return self.request_post(self.bulk_sync_path, payload=sync_payload)
 
+    def bulk_upsert_media(self, payload: list[dict]) -> Any:
+        return self.bulk_upsert(payload, entity_name="media")
+
     def purge_product_prices_by_product_and_rule(self, *, product_ids: list[str], rule_ids: list[str]) -> int:
         product_ids = [str(value).strip() for value in (product_ids or []) if str(value).strip()]
         rule_ids = [str(value).strip() for value in (rule_ids or []) if str(value).strip()]
@@ -115,6 +122,58 @@ class ProductService(Shopware6Service):
             self.request_delete(f"{self.product_price_base_path}/{price_id}")
 
         return len(set(price_ids))
+
+    def purge_product_media_by_product_ids(self, *, product_ids: list[str]) -> int:
+        product_ids = [str(value).strip() for value in (product_ids or []) if str(value).strip()]
+        if not product_ids:
+            return 0
+
+        product_values = "|".join(sorted(set(product_ids)))
+        page = 1
+        limit = 500
+        product_media_ids: list[str] = []
+
+        while True:
+            payload = {
+                "filter": [
+                    {
+                        "type": "equalsAny",
+                        "field": "productId",
+                        "value": product_values,
+                    }
+                ],
+                "limit": limit,
+                "page": page,
+            }
+            result = self.request_post(self.product_media_search_path, payload=payload)
+            rows = (result or {}).get("data", []) or []
+            if not rows:
+                break
+
+            for row in rows:
+                row_id = self._entity_id(row)
+                if row_id:
+                    product_media_ids.append(row_id)
+
+            if len(rows) < limit:
+                break
+            page += 1
+
+        for product_media_id in sorted(set(product_media_ids)):
+            self.request_delete(f"{self.product_media_base_path}/{product_media_id}")
+
+        return len(set(product_media_ids))
+
+    def upload_media_from_url(self, *, media_id: str, file_name: str, source_url: str) -> Any:
+        base_name, extension = ProductMediaSyncService.split_file_name(file_name)
+        return self.request_post(
+            f"/_action/media/{media_id}/upload",
+            payload={"url": source_url},
+            additional_query_params={
+                "extension": extension,
+                "fileName": base_name,
+            },
+        )
 
     def create(self, payload: dict) -> Any:
         return self.request_post(self.base_path, payload=payload)

@@ -7,11 +7,12 @@ import sys
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.core.management.base import BaseCommand, CommandError
+from django.db.models import Prefetch
 from core.admin_utils import log_admin_change
 from core.services import CommandRuntimeService
-from products.models import Price, Product, Storage
+from products.models import Price, Product, ProductImage, Storage
 from shopware.models import ShopwareSettings
-from shopware.services import ProductService
+from shopware.services import ProductMediaSyncService, ProductService
 
 DEFAULT_TAX_ID = "d391e13bdd95404a885f4ad28ea218e0"
 REDUCED_TAX_ID = "be66a53eae3a49829f4a8c5959535501"
@@ -163,6 +164,44 @@ def _resolve_tax_id(product: Product) -> str:
     return DEFAULT_TAX_ID
 
 
+def _prefetch_sync_queryset(products):
+    if hasattr(products, "select_related"):
+        products = products.select_related("tax")
+    if hasattr(products, "prefetch_related"):
+        products = products.prefetch_related(
+            Prefetch(
+                "product_images",
+                queryset=ProductImage.objects.select_related("image").order_by("order", "id"),
+                to_attr="ordered_product_images",
+            )
+        )
+    if hasattr(products, "only"):
+        products = products.only("id", "erp_nr", "sku", "name", "description", "is_active", "tax_id", "tax__shopware_id")
+    return products
+
+
+def _append_media_payload(
+    *,
+    product: Product,
+    effective_sku: str,
+    payload: dict,
+    media_sync_service: ProductMediaSyncService,
+    media_entities: dict[str, dict],
+    media_uploads: dict[str, dict],
+) -> None:
+    product_media, product_media_entities, product_media_uploads = media_sync_service.get_product_media_payload(
+        product=product,
+        product_id=effective_sku,
+    )
+    if product_media:
+        payload["media"] = product_media
+        payload["coverId"] = product_media[0]["id"]
+    for entity in product_media_entities:
+        media_entities[entity["id"]] = entity
+    for upload in product_media_uploads:
+        media_uploads[upload["media_id"]] = upload
+
+
 class Command(BaseCommand):
     help = "Sync products from Django to Shopware6 (updates only)."
 
@@ -209,12 +248,13 @@ class Command(BaseCommand):
             if not erp_nrs and not sync_all:
                 raise CommandError("Bitte ERP-Nummern angeben oder --all verwenden.")
 
-            qs = Product.objects.select_related("tax").all() if sync_all else Product.objects.select_related("tax").filter(erp_nr__in=erp_nrs)
-            qs = qs.only("id", "erp_nr", "sku", "name", "description", "is_active", "tax_id", "tax__shopware_id")
+            qs = Product.objects.all() if sync_all else Product.objects.filter(erp_nr__in=erp_nrs)
+            qs = _prefetch_sync_queryset(qs)
             if limit:
                 qs = qs[:limit]
 
             service = ProductService()
+            media_sync_service = ProductMediaSyncService()
             admin_user_id = _get_admin_user_id()
             content_type_id = ContentType.objects.get_for_model(Product).id if admin_user_id else None
             channels = list(ShopwareSettings.objects.filter(is_active=True))
@@ -237,6 +277,8 @@ class Command(BaseCommand):
                 payloads = []
                 payload_products: list[Product] = []
                 fallback_products: list[Product] = []
+                media_entities: dict[str, dict] = {}
+                media_uploads: dict[str, dict] = {}
                 for product in batch:
                     effective_sku = product.sku
                     if not effective_sku:
@@ -337,6 +379,16 @@ class Command(BaseCommand):
 
                     if prices_payload:
                         payload["prices"] = prices_payload
+
+                    if effective_sku:
+                        _append_media_payload(
+                            product=product,
+                            effective_sku=effective_sku,
+                            payload=payload,
+                            media_sync_service=media_sync_service,
+                            media_entities=media_entities,
+                            media_uploads=media_uploads,
+                        )
                     payloads.append(payload)
                     payload_products.append(product)
 
@@ -351,14 +403,36 @@ class Command(BaseCommand):
                             product_ids=cleanup_product_ids,
                             rule_ids=cleanup_rule_ids,
                         )
+                    if cleanup_product_ids:
+                        service.purge_product_media_by_product_ids(product_ids=cleanup_product_ids)
+                    media_sync_service.sync_media_assets(
+                        product_service=service,
+                        media_entities=list(media_entities.values()),
+                        media_uploads=list(media_uploads.values()),
+                    )
                     service.bulk_upsert(payloads)
                     if fallback_products:
                         refreshed_map = service.get_sku_map([product.erp_nr for product in fallback_products])
+                        fallback_media_payloads: list[dict] = []
+                        fallback_media_entities: dict[str, dict] = {}
+                        fallback_media_uploads: dict[str, dict] = {}
+                        resolved_fallback_ids: list[str] = []
                         for product in fallback_products:
                             resolved_sku = refreshed_map.get(product.erp_nr)
                             if resolved_sku:
                                 product.sku = resolved_sku
                                 product.save(update_fields=["sku"])
+                                resolved_fallback_ids.append(resolved_sku)
+                                fallback_payload = {"id": resolved_sku, "productNumber": product.erp_nr}
+                                _append_media_payload(
+                                    product=product,
+                                    effective_sku=resolved_sku,
+                                    payload=fallback_payload,
+                                    media_sync_service=media_sync_service,
+                                    media_entities=fallback_media_entities,
+                                    media_uploads=fallback_media_uploads,
+                                )
+                                fallback_media_payloads.append(fallback_payload)
                                 continue
                             _log_admin_error(
                                 admin_user_id=admin_user_id,
@@ -370,6 +444,14 @@ class Command(BaseCommand):
                                 object_id=str(product.pk),
                                 object_repr=f"Product {product.erp_nr}",
                             )
+                        if resolved_fallback_ids:
+                            service.purge_product_media_by_product_ids(product_ids=resolved_fallback_ids)
+                            media_sync_service.sync_media_assets(
+                                product_service=service,
+                                media_entities=list(fallback_media_entities.values()),
+                                media_uploads=list(fallback_media_uploads.values()),
+                            )
+                            service.bulk_upsert(fallback_media_payloads)
                 except Exception as exc:
                     for product in payload_products:
                         _log_admin_error(
