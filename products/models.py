@@ -82,6 +82,12 @@ class Image(BaseModel):
 
 
 class Product(BaseModel):
+    shopware_image_sync_hash = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        verbose_name=_("Shopware Bild-Sync-Hash"),
+    )
     sku = models.CharField(
         max_length=64,
         unique=True,

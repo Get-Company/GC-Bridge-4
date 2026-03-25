@@ -12,6 +12,7 @@ from products.admin import PriceActionForm, PriceAdmin, ProductAdmin
 from products.management.commands.scheduled_product_sync import Command as ScheduledProductSyncCommand
 from products.models import Image, Price, Product, ProductImage
 from shopware.models import ShopwareSettings
+from shopware.services.product_media import ProductMediaSyncService
 
 
 class PriceAdminActionTest(TestCase):
@@ -303,3 +304,33 @@ class ProductImageAdminAndSyncTest(TestCase):
         self.assertEqual(len(product_payload["media"]), 2)
         self.assertEqual(product_payload["coverId"], product_payload["media"][0]["id"])
         self.assertEqual([item["position"] for item in product_payload["media"]], [1, 2])
+        product.refresh_from_db()
+        self.assertTrue(product.shopware_image_sync_hash)
+
+    def test_sync_products_bulk_skips_unchanged_media_uploads(self):
+        product = Product.objects.create(
+            erp_nr="A-4002",
+            sku="shopware-product-2",
+            name="Unveraendertes Bild",
+        )
+        image = Image.objects.create(path="cover-stable.jpg")
+        ProductImage.objects.create(product=product, image=image, order=1)
+        product.shopware_image_sync_hash = ProductMediaSyncService().build_media_sync_hash(product=product)
+        product.save(update_fields=["shopware_image_sync_hash", "updated_at"])
+
+        service = MagicMock()
+        service.get_sku_map.return_value = {}
+
+        success_count, error_count, _ = ProductAdmin(Product, AdminSite())._sync_products_bulk(
+            Product.objects.filter(pk=product.pk),
+            service,
+        )
+
+        self.assertEqual(success_count, 1)
+        self.assertEqual(error_count, 0)
+        service.purge_product_media_by_product_ids.assert_not_called()
+        service.bulk_upsert_media.assert_not_called()
+
+        product_payload = service.bulk_upsert.call_args.args[0][0]
+        self.assertEqual(product_payload["id"], "shopware-product-2")
+        self.assertNotIn("media", product_payload)

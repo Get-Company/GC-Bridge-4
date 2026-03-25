@@ -1,7 +1,10 @@
 from unittest.mock import MagicMock, patch
 
-from django.test import SimpleTestCase
+from django.core.management.base import CommandError
+from django.test import SimpleTestCase, TestCase
 
+from products.models import Product
+from shopware.management.commands.shopware_force_product_image_uploads import Command as ForceProductImageUploadsCommand
 from shopware.services.product import ProductService
 from shopware.services.product_media import ProductMediaSyncService
 from shopware.services.shopware6 import InvalidTokenError, Shopware6Service
@@ -112,3 +115,46 @@ class ProductMediaSyncServiceTest(SimpleTestCase):
             },
         )
         mock_request_delete.assert_called_once_with("/media/media-2")
+
+
+class ForceProductImageUploadsCommandTest(TestCase):
+    @patch("shopware.management.commands.shopware_force_product_image_uploads.call_command")
+    def test_handle_resets_hashes_and_runs_shopware_sync_for_all(self, mock_call_command):
+        Product.objects.create(erp_nr="A-5001", shopware_image_sync_hash="hash-1")
+        Product.objects.create(erp_nr="A-5002", shopware_image_sync_hash="hash-2")
+
+        cmd = ForceProductImageUploadsCommand()
+        cmd.handle(all=True, limit=25, batch_size=10, erp_nrs=[])
+
+        self.assertEqual(Product.objects.exclude(shopware_image_sync_hash="").count(), 0)
+        mock_call_command.assert_called_once_with(
+            "shopware_sync_products",
+            all=True,
+            limit=25,
+            batch_size=10,
+        )
+
+    @patch("shopware.management.commands.shopware_force_product_image_uploads.call_command")
+    def test_handle_resets_selected_hashes_and_runs_shopware_sync_for_selection(self, mock_call_command):
+        target = Product.objects.create(erp_nr="A-5003", shopware_image_sync_hash="hash-3")
+        untouched = Product.objects.create(erp_nr="A-5004", shopware_image_sync_hash="hash-4")
+
+        cmd = ForceProductImageUploadsCommand()
+        cmd.handle(all=False, limit=None, batch_size=50, erp_nrs=["A-5003"])
+
+        target.refresh_from_db()
+        untouched.refresh_from_db()
+        self.assertEqual(target.shopware_image_sync_hash, "")
+        self.assertEqual(untouched.shopware_image_sync_hash, "hash-4")
+        mock_call_command.assert_called_once_with(
+            "shopware_sync_products",
+            "A-5003",
+            limit=None,
+            batch_size=50,
+        )
+
+    def test_handle_requires_selection_or_all(self):
+        cmd = ForceProductImageUploadsCommand()
+
+        with self.assertRaises(CommandError):
+            cmd.handle(all=False, limit=None, batch_size=50, erp_nrs=[])

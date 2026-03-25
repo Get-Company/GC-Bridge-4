@@ -176,7 +176,17 @@ def _prefetch_sync_queryset(products):
             )
         )
     if hasattr(products, "only"):
-        products = products.only("id", "erp_nr", "sku", "name", "description", "is_active", "tax_id", "tax__shopware_id")
+        products = products.only(
+            "id",
+            "erp_nr",
+            "sku",
+            "name",
+            "description",
+            "is_active",
+            "shopware_image_sync_hash",
+            "tax_id",
+            "tax__shopware_id",
+        )
     return products
 
 
@@ -279,6 +289,8 @@ class Command(BaseCommand):
                 fallback_products: list[Product] = []
                 media_entities: dict[str, dict] = {}
                 media_uploads: dict[str, dict] = {}
+                media_sync_hashes: list[tuple[Product, str]] = []
+                cleanup_media_product_ids: list[str] = []
                 for product in batch:
                     effective_sku = product.sku
                     if not effective_sku:
@@ -381,14 +393,18 @@ class Command(BaseCommand):
                         payload["prices"] = prices_payload
 
                     if effective_sku:
-                        _append_media_payload(
-                            product=product,
-                            effective_sku=effective_sku,
-                            payload=payload,
-                            media_sync_service=media_sync_service,
-                            media_entities=media_entities,
-                            media_uploads=media_uploads,
-                        )
+                        media_sync_hash = media_sync_service.build_media_sync_hash(product=product)
+                        if media_sync_service.has_media_changed(product=product, media_sync_hash=media_sync_hash):
+                            cleanup_media_product_ids.append(effective_sku)
+                            media_sync_hashes.append((product, media_sync_hash))
+                            _append_media_payload(
+                                product=product,
+                                effective_sku=effective_sku,
+                                payload=payload,
+                                media_sync_service=media_sync_service,
+                                media_entities=media_entities,
+                                media_uploads=media_uploads,
+                            )
                     payloads.append(payload)
                     payload_products.append(product)
 
@@ -403,36 +419,43 @@ class Command(BaseCommand):
                             product_ids=cleanup_product_ids,
                             rule_ids=cleanup_rule_ids,
                         )
-                    if cleanup_product_ids:
-                        service.purge_product_media_by_product_ids(product_ids=cleanup_product_ids)
+                    if cleanup_media_product_ids:
+                        service.purge_product_media_by_product_ids(product_ids=cleanup_media_product_ids)
                     media_sync_service.sync_media_assets(
                         product_service=service,
                         media_entities=list(media_entities.values()),
                         media_uploads=list(media_uploads.values()),
                     )
                     service.bulk_upsert(payloads)
+                    for synced_product, media_sync_hash in media_sync_hashes:
+                        synced_product.shopware_image_sync_hash = media_sync_hash
+                        synced_product.save(update_fields=["shopware_image_sync_hash", "updated_at"])
                     if fallback_products:
                         refreshed_map = service.get_sku_map([product.erp_nr for product in fallback_products])
                         fallback_media_payloads: list[dict] = []
                         fallback_media_entities: dict[str, dict] = {}
                         fallback_media_uploads: dict[str, dict] = {}
+                        fallback_media_sync_hashes: list[tuple[Product, str]] = []
                         resolved_fallback_ids: list[str] = []
                         for product in fallback_products:
                             resolved_sku = refreshed_map.get(product.erp_nr)
                             if resolved_sku:
                                 product.sku = resolved_sku
                                 product.save(update_fields=["sku"])
-                                resolved_fallback_ids.append(resolved_sku)
-                                fallback_payload = {"id": resolved_sku, "productNumber": product.erp_nr}
-                                _append_media_payload(
-                                    product=product,
-                                    effective_sku=resolved_sku,
-                                    payload=fallback_payload,
-                                    media_sync_service=media_sync_service,
-                                    media_entities=fallback_media_entities,
-                                    media_uploads=fallback_media_uploads,
-                                )
-                                fallback_media_payloads.append(fallback_payload)
+                                media_sync_hash = media_sync_service.build_media_sync_hash(product=product)
+                                if media_sync_service.has_media_changed(product=product, media_sync_hash=media_sync_hash):
+                                    resolved_fallback_ids.append(resolved_sku)
+                                    fallback_media_sync_hashes.append((product, media_sync_hash))
+                                    fallback_payload = {"id": resolved_sku, "productNumber": product.erp_nr}
+                                    _append_media_payload(
+                                        product=product,
+                                        effective_sku=resolved_sku,
+                                        payload=fallback_payload,
+                                        media_sync_service=media_sync_service,
+                                        media_entities=fallback_media_entities,
+                                        media_uploads=fallback_media_uploads,
+                                    )
+                                    fallback_media_payloads.append(fallback_payload)
                                 continue
                             _log_admin_error(
                                 admin_user_id=admin_user_id,
@@ -452,6 +475,9 @@ class Command(BaseCommand):
                                 media_uploads=list(fallback_media_uploads.values()),
                             )
                             service.bulk_upsert(fallback_media_payloads)
+                            for synced_product, media_sync_hash in fallback_media_sync_hashes:
+                                synced_product.shopware_image_sync_hash = media_sync_hash
+                                synced_product.save(update_fields=["shopware_image_sync_hash", "updated_at"])
                 except Exception as exc:
                     for product in payload_products:
                         _log_admin_error(
