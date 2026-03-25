@@ -5,6 +5,7 @@ import os
 from typing import TYPE_CHECKING
 
 from django.conf import settings
+from loguru import logger
 
 from core.services import BaseService
 
@@ -77,15 +78,38 @@ class ProductMediaSyncService(BaseService):
         product_service: "ProductService",
         media_entities: list[dict],
         media_uploads: list[dict],
+        log_uploads: bool = False,
     ) -> None:
         if media_entities:
             product_service.bulk_upsert_media(media_entities)
         for upload in media_uploads:
-            product_service.upload_media_from_url(
-                media_id=upload["media_id"],
-                file_name=upload["file_name"],
-                source_url=upload["source_url"],
-            )
+            if log_uploads:
+                logger.info(
+                    "Shopware image upload start: media_id={} file_name={} source_url={}",
+                    upload["media_id"],
+                    upload["file_name"],
+                    upload["source_url"],
+                )
+            try:
+                product_service.upload_media_from_url(
+                    media_id=upload["media_id"],
+                    file_name=upload["file_name"],
+                    source_url=upload["source_url"],
+                )
+            except Exception:
+                if log_uploads:
+                    logger.exception(
+                        "Shopware image upload failed: media_id={} file_name={}",
+                        upload["media_id"],
+                        upload["file_name"],
+                    )
+                raise
+            if log_uploads:
+                logger.info(
+                    "Shopware image upload ok: media_id={} file_name={}",
+                    upload["media_id"],
+                    upload["file_name"],
+                )
 
     @staticmethod
     def build_media_id(file_name: str) -> str:

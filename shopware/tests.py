@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 from django.core.management.base import CommandError
 from django.test import SimpleTestCase, TestCase
 
-from products.models import Product
+from products.models import Image, Product, ProductImage
 from shopware.management.commands.shopware_force_product_image_uploads import Command as ForceProductImageUploadsCommand
 from shopware.services.product import ProductService
 from shopware.services.product_media import ProductMediaSyncService
@@ -124,7 +124,7 @@ class ForceProductImageUploadsCommandTest(TestCase):
         Product.objects.create(erp_nr="A-5002", shopware_image_sync_hash="hash-2")
 
         cmd = ForceProductImageUploadsCommand()
-        cmd.handle(all=True, limit=25, batch_size=10, erp_nrs=[])
+        cmd.handle(all=True, limit=25, batch_size=10, erp_nrs=[], only_with_images=False, log_images=False)
 
         self.assertEqual(Product.objects.exclude(shopware_image_sync_hash="").count(), 0)
         mock_call_command.assert_called_once_with(
@@ -132,6 +132,8 @@ class ForceProductImageUploadsCommandTest(TestCase):
             all=True,
             limit=25,
             batch_size=10,
+            only_with_images=False,
+            log_images=False,
         )
 
     @patch("shopware.management.commands.shopware_force_product_image_uploads.call_command")
@@ -140,7 +142,7 @@ class ForceProductImageUploadsCommandTest(TestCase):
         untouched = Product.objects.create(erp_nr="A-5004", shopware_image_sync_hash="hash-4")
 
         cmd = ForceProductImageUploadsCommand()
-        cmd.handle(all=False, limit=None, batch_size=50, erp_nrs=["A-5003"])
+        cmd.handle(all=False, limit=None, batch_size=50, erp_nrs=["A-5003"], only_with_images=False, log_images=False)
 
         target.refresh_from_db()
         untouched.refresh_from_db()
@@ -151,10 +153,35 @@ class ForceProductImageUploadsCommandTest(TestCase):
             "A-5003",
             limit=None,
             batch_size=50,
+            only_with_images=False,
+            log_images=False,
+        )
+
+    @patch("shopware.management.commands.shopware_force_product_image_uploads.call_command")
+    def test_handle_only_with_images_filters_reset_queryset_and_passes_flags(self, mock_call_command):
+        with_image = Product.objects.create(erp_nr="A-5005", shopware_image_sync_hash="hash-5")
+        without_image = Product.objects.create(erp_nr="A-5006", shopware_image_sync_hash="hash-6")
+        image = Image.objects.create(path="batch-cover.jpg")
+        ProductImage.objects.create(product=with_image, image=image, order=1)
+
+        cmd = ForceProductImageUploadsCommand()
+        cmd.handle(all=True, limit=10, batch_size=10, erp_nrs=[], only_with_images=True, log_images=True)
+
+        with_image.refresh_from_db()
+        without_image.refresh_from_db()
+        self.assertEqual(with_image.shopware_image_sync_hash, "")
+        self.assertEqual(without_image.shopware_image_sync_hash, "hash-6")
+        mock_call_command.assert_called_once_with(
+            "shopware_sync_products",
+            all=True,
+            limit=10,
+            batch_size=10,
+            only_with_images=True,
+            log_images=True,
         )
 
     def test_handle_requires_selection_or_all(self):
         cmd = ForceProductImageUploadsCommand()
 
         with self.assertRaises(CommandError):
-            cmd.handle(all=False, limit=None, batch_size=50, erp_nrs=[])
+            cmd.handle(all=False, limit=None, batch_size=50, erp_nrs=[], only_with_images=False, log_images=False)

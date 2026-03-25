@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from decimal import Decimal
 import sys
 
@@ -8,6 +9,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.core.management.base import BaseCommand, CommandError
 from django.db.models import Prefetch
+from loguru import logger
 from core.admin_utils import log_admin_change
 from core.services import CommandRuntimeService
 from products.models import Price, Product, ProductImage, Storage
@@ -212,6 +214,16 @@ def _append_media_payload(
         media_uploads[upload["media_id"]] = upload
 
 
+def _image_names_for_product(product: Product) -> list[str]:
+    result: list[str] = []
+    for product_image in product.get_ordered_product_images():
+        image = product_image.image
+        if not image:
+            continue
+        result.append(image.filename or image.path)
+    return result
+
+
 class Command(BaseCommand):
     help = "Sync products from Django to Shopware6 (updates only)."
 
@@ -238,12 +250,24 @@ class Command(BaseCommand):
             default=50,
             help="Batch-Groesse fuer Shopware6 Sync (Default: 50).",
         )
+        parser.add_argument(
+            "--only-with-images",
+            action="store_true",
+            help="Nur Produkte mit mindestens einem Bild synchronisieren.",
+        )
+        parser.add_argument(
+            "--log-images",
+            action="store_true",
+            help="Schreibt aussagekraeftige Batch- und Produktlogs fuer den Bild-Sync.",
+        )
 
     def handle(self, *args, **options):
         erp_nrs = [nr.strip() for nr in options.get("erp_nrs") or [] if nr.strip()]
         sync_all = options.get("all", False)
         limit = options.get("limit")
         batch_size = options.get("batch_size") or 50
+        only_with_images = options.get("only_with_images", False)
+        log_images = options.get("log_images", False)
 
         runtime = CommandRuntimeService().start(
             command_name="shopware_sync_products",
@@ -252,6 +276,8 @@ class Command(BaseCommand):
                 "mode": "all" if sync_all else "selected",
                 "limit": limit,
                 "batch_size": batch_size,
+                "only_with_images": only_with_images,
+                "log_images": log_images,
             },
         )
         try:
@@ -259,6 +285,8 @@ class Command(BaseCommand):
                 raise CommandError("Bitte ERP-Nummern angeben oder --all verwenden.")
 
             qs = Product.objects.all() if sync_all else Product.objects.filter(erp_nr__in=erp_nrs)
+            if only_with_images:
+                qs = qs.filter(product_images__isnull=False).distinct()
             qs = _prefetch_sync_queryset(qs)
             if limit:
                 qs = qs[:limit]
@@ -275,12 +303,21 @@ class Command(BaseCommand):
             runtime.update(stage="prepare", total_products=total_products)
             for offset in range(0, total_products, batch_size):
                 batch = products[offset : offset + batch_size]
+                batch_no = (offset // batch_size) + 1
                 runtime.update(
                     stage="sync_batch",
                     processed=offset,
                     total_products=total_products,
                     current_batch_size=len(batch),
                 )
+                if log_images:
+                    logger.info(
+                        "Shopware image sync batch {}/{} start: size={} products={}",
+                        batch_no,
+                        (total_products + batch_size - 1) // batch_size if total_products else 0,
+                        len(batch),
+                        [product.erp_nr for product in batch],
+                    )
                 missing = [p.erp_nr for p in batch if not p.sku]
                 sku_map = service.get_sku_map(missing) if missing else {}
 
@@ -393,8 +430,19 @@ class Command(BaseCommand):
                         payload["prices"] = prices_payload
 
                     if effective_sku:
+                        image_names = _image_names_for_product(product)
                         media_sync_hash = media_sync_service.build_media_sync_hash(product=product)
-                        if media_sync_service.has_media_changed(product=product, media_sync_hash=media_sync_hash):
+                        media_changed = media_sync_service.has_media_changed(product=product, media_sync_hash=media_sync_hash)
+                        if log_images:
+                            logger.info(
+                                "Shopware image sync product erp_nr={} sku={} image_count={} changed={} images={}",
+                                product.erp_nr,
+                                effective_sku,
+                                len(image_names),
+                                media_changed,
+                                image_names,
+                            )
+                        if media_changed:
                             cleanup_media_product_ids.append(effective_sku)
                             media_sync_hashes.append((product, media_sync_hash))
                             _append_media_payload(
@@ -420,13 +468,63 @@ class Command(BaseCommand):
                             rule_ids=cleanup_rule_ids,
                         )
                     if cleanup_media_product_ids:
+                        if log_images:
+                            logger.info(
+                                "Shopware image sync batch {} cleanup existing media relations for products={}",
+                                batch_no,
+                                cleanup_media_product_ids,
+                            )
                         service.purge_product_media_by_product_ids(product_ids=cleanup_media_product_ids)
+                    if log_images:
+                        media_product_payloads = [
+                            {
+                                "erp_nr": product.erp_nr,
+                                "sku": payload.get("id"),
+                                "images": _image_names_for_product(product),
+                                "media_relations": [
+                                    {
+                                        "id": relation.get("id"),
+                                        "mediaId": relation.get("mediaId"),
+                                        "position": relation.get("position"),
+                                    }
+                                    for relation in (payload.get("media") or [])
+                                ],
+                                "coverId": payload.get("coverId"),
+                            }
+                            for product, payload in zip(payload_products, payloads, strict=False)
+                            if payload.get("media")
+                        ]
+                        logger.info(
+                            "Shopware image sync batch {} upload stage: uploads={} products_with_media={}",
+                            batch_no,
+                            len(media_uploads),
+                            [item["erp_nr"] for item in media_product_payloads],
+                        )
+                        logger.info(
+                            "Shopware image sync batch {} media payload summary={}",
+                            batch_no,
+                            json.dumps(media_product_payloads, ensure_ascii=True),
+                        )
                     media_sync_service.sync_media_assets(
                         product_service=service,
                         media_entities=list(media_entities.values()),
                         media_uploads=list(media_uploads.values()),
+                        log_uploads=log_images,
                     )
+                    if log_images:
+                        logger.info(
+                            "Shopware image sync batch {} product upsert start: payload_products={} products_with_media={}",
+                            batch_no,
+                            [payload.get("productNumber") for payload in payloads],
+                            [payload.get("productNumber") for payload in payloads if payload.get("media")],
+                        )
                     service.bulk_upsert(payloads)
+                    if log_images:
+                        logger.info(
+                            "Shopware image sync batch {} product upsert ok: payload_products={}",
+                            batch_no,
+                            [payload.get("productNumber") for payload in payloads],
+                        )
                     for synced_product, media_sync_hash in media_sync_hashes:
                         synced_product.shopware_image_sync_hash = media_sync_hash
                         synced_product.save(update_fields=["shopware_image_sync_hash", "updated_at"])
@@ -442,8 +540,22 @@ class Command(BaseCommand):
                             if resolved_sku:
                                 product.sku = resolved_sku
                                 product.save(update_fields=["sku"])
+                                image_names = _image_names_for_product(product)
                                 media_sync_hash = media_sync_service.build_media_sync_hash(product=product)
-                                if media_sync_service.has_media_changed(product=product, media_sync_hash=media_sync_hash):
+                                media_changed = media_sync_service.has_media_changed(
+                                    product=product,
+                                    media_sync_hash=media_sync_hash,
+                                )
+                                if log_images:
+                                    logger.info(
+                                        "Shopware image sync fallback product erp_nr={} sku={} image_count={} changed={} images={}",
+                                        product.erp_nr,
+                                        resolved_sku,
+                                        len(image_names),
+                                        media_changed,
+                                        image_names,
+                                    )
+                                if media_changed:
                                     resolved_fallback_ids.append(resolved_sku)
                                     fallback_media_sync_hashes.append((product, media_sync_hash))
                                     fallback_payload = {"id": resolved_sku, "productNumber": product.erp_nr}
@@ -468,17 +580,44 @@ class Command(BaseCommand):
                                 object_repr=f"Product {product.erp_nr}",
                             )
                         if resolved_fallback_ids:
+                            if log_images:
+                                logger.info(
+                                    "Shopware image sync fallback batch {} cleanup existing media relations for products={}",
+                                    batch_no,
+                                    resolved_fallback_ids,
+                                )
                             service.purge_product_media_by_product_ids(product_ids=resolved_fallback_ids)
                             media_sync_service.sync_media_assets(
                                 product_service=service,
                                 media_entities=list(fallback_media_entities.values()),
                                 media_uploads=list(fallback_media_uploads.values()),
+                                log_uploads=log_images,
                             )
+                            if log_images:
+                                logger.info(
+                                    "Shopware image sync fallback batch {} product upsert start: payload_products={}",
+                                    batch_no,
+                                    [payload.get("productNumber") for payload in fallback_media_payloads],
+                                )
                             service.bulk_upsert(fallback_media_payloads)
+                            if log_images:
+                                logger.info(
+                                    "Shopware image sync fallback batch {} product upsert ok: payload_products={}",
+                                    batch_no,
+                                    [payload.get("productNumber") for payload in fallback_media_payloads],
+                                )
                             for synced_product, media_sync_hash in fallback_media_sync_hashes:
                                 synced_product.shopware_image_sync_hash = media_sync_hash
                                 synced_product.save(update_fields=["shopware_image_sync_hash", "updated_at"])
                 except Exception as exc:
+                    if log_images:
+                        logger.exception(
+                            "Shopware image sync batch {} failed: payload_products={} products_with_media={} cleanup_media_products={}",
+                            batch_no,
+                            [payload.get("productNumber") for payload in payloads],
+                            [payload.get("productNumber") for payload in payloads if payload.get("media")],
+                            cleanup_media_product_ids,
+                        )
                     for product in payload_products:
                         _log_admin_error(
                             admin_user_id=admin_user_id,
