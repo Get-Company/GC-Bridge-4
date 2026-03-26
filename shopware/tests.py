@@ -2,8 +2,10 @@ from unittest.mock import MagicMock, patch
 
 from django.core.management.base import CommandError
 from django.test import SimpleTestCase, TestCase
+from django.utils import timezone
 
 from products.models import Image, Product, ProductImage
+from shopware.management.commands.shopware_sync_products import Command as ShopwareSyncProductsCommand
 from shopware.management.commands.shopware_force_product_image_uploads import Command as ForceProductImageUploadsCommand
 from shopware.services.product import ProductService
 from shopware.services.product_media import ProductMediaSyncService
@@ -115,6 +117,72 @@ class ProductMediaSyncServiceTest(SimpleTestCase):
             },
         )
         mock_request_delete.assert_called_once_with("/media/media-2")
+
+
+class ProductMediaSyncHashRegressionTest(TestCase):
+    def test_hash_stays_stable_when_only_updated_at_changes(self):
+        product = Product.objects.create(erp_nr="A-6001", sku="shopware-product-6001", name="Hash Stabil")
+        image = Image.objects.create(path="stable-cover.jpg")
+        product_image = ProductImage.objects.create(product=product, image=image, order=1)
+
+        first_hash = ProductMediaSyncService().build_media_sync_hash(product=product)
+
+        product_image.updated_at = timezone.now()
+        product_image.save(update_fields=["updated_at"])
+        product.refresh_from_db()
+        second_hash = ProductMediaSyncService().build_media_sync_hash(product=product)
+
+        self.assertEqual(first_hash, second_hash)
+
+    def test_hash_changes_when_image_order_changes(self):
+        product = Product.objects.create(erp_nr="A-6002", sku="shopware-product-6002", name="Hash Reihenfolge")
+        first = Image.objects.create(path="first-cover.jpg")
+        second = Image.objects.create(path="second-cover.jpg")
+        first_relation = ProductImage.objects.create(product=product, image=first, order=1)
+        second_relation = ProductImage.objects.create(product=product, image=second, order=2)
+
+        first_hash = ProductMediaSyncService().build_media_sync_hash(product=product)
+
+        first_relation.order = 2
+        first_relation.save(update_fields=["order"])
+        second_relation.order = 1
+        second_relation.save(update_fields=["order"])
+        product.refresh_from_db()
+        second_hash = ProductMediaSyncService().build_media_sync_hash(product=product)
+
+        self.assertNotEqual(first_hash, second_hash)
+
+
+class ShopwareSyncProductsCommandBatchTest(TestCase):
+    @patch("shopware.management.commands.shopware_sync_products.CommandRuntimeService.start")
+    @patch("shopware.management.commands.shopware_sync_products.ProductService")
+    def test_handle_separates_missing_sku_products_from_main_upsert_batch(
+        self,
+        product_service_factory,
+        mock_runtime_start,
+    ):
+        runtime = MagicMock()
+        mock_runtime_start.return_value = runtime
+
+        service = MagicMock()
+        service.get_sku_map.return_value = {}
+        product_service_factory.return_value = service
+
+        Product.objects.create(erp_nr="A-7001", sku="sku-1", name="Mit SKU")
+        Product.objects.create(erp_nr="A-7002", name="Ohne SKU")
+
+        cmd = ShopwareSyncProductsCommand()
+        cmd.handle(erp_nrs=[], all=True, limit=2, batch_size=10, only_with_images=False, log_images=False)
+
+        self.assertEqual(service.bulk_upsert.call_count, 2)
+        main_payloads = service.bulk_upsert.call_args_list[0].args[0]
+        fallback_payloads = service.bulk_upsert.call_args_list[1].args[0]
+
+        self.assertEqual([payload["productNumber"] for payload in main_payloads], ["A-7001"])
+        self.assertEqual(main_payloads[0]["id"], "sku-1")
+        self.assertEqual([payload["productNumber"] for payload in fallback_payloads], ["A-7002"])
+        self.assertNotIn("id", fallback_payloads[0])
+        runtime.close.assert_called_once()
 
 
 class ForceProductImageUploadsCommandTest(TestCase):

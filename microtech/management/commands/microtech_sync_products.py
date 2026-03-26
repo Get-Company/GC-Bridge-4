@@ -392,12 +392,18 @@ class Command(BaseCommand):
             ordered_images = [existing[name] for name in image_names if name in existing]
             product.images.set(ordered_images)
             ProductImage.objects.filter(product=product).exclude(image__path__in=image_names).delete()
+            existing_relations = {
+                relation.image_id: relation
+                for relation in ProductImage.objects.filter(product=product, image__path__in=image_names)
+            }
             for order, image in enumerate(ordered_images, start=1):
-                ProductImage.objects.update_or_create(
-                    product=product,
-                    image=image,
-                    defaults={"order": order},
-                )
+                relation = existing_relations.get(image.id)
+                if relation is None:
+                    ProductImage.objects.create(product=product, image=image, order=order)
+                    continue
+                if relation.order != order:
+                    relation.order = order
+                    relation.save(update_fields=["order"])
         else:
             ProductImage.objects.filter(product=product).delete()
             product.images.clear()

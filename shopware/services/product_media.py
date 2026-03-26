@@ -16,22 +16,17 @@ if TYPE_CHECKING:
 
 class ProductMediaSyncService(BaseService):
     def build_media_sync_hash(self, *, product: "Product") -> str:
-        file_names: list[str] = []
-        last_media_change = None
+        media_fingerprint_parts: list[str] = []
 
         for product_image in product.get_ordered_product_images():
             image = product_image.image
             if not image:
                 continue
 
-            file_names.append(image.filename or image.path or "")
-            for candidate in (getattr(product_image, "updated_at", None), getattr(image, "updated_at", None)):
-                if candidate and (last_media_change is None or candidate > last_media_change):
-                    last_media_change = candidate
+            media_fingerprint_parts.append(f"{product_image.order}:{image.path or image.filename or ''}")
 
-        fingerprint = "|".join(file_names)
-        last_media_change_value = last_media_change.isoformat() if last_media_change else ""
-        return hashlib.sha256(f"{fingerprint}::{last_media_change_value}".encode("utf-8")).hexdigest()
+        fingerprint = "|".join(media_fingerprint_parts)
+        return hashlib.sha256(fingerprint.encode("utf-8")).hexdigest()
 
     @staticmethod
     def has_media_changed(*, product: "Product", media_sync_hash: str) -> bool:

@@ -1,6 +1,6 @@
 from datetime import timedelta
 from decimal import Decimal
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import call, patch
 
 from django.contrib import messages
 from django.contrib.admin.sites import AdminSite
@@ -12,7 +12,6 @@ from products.admin import PriceActionForm, PriceAdmin, ProductAdmin
 from products.management.commands.scheduled_product_sync import Command as ScheduledProductSyncCommand
 from products.models import Image, Price, Product, ProductImage
 from shopware.models import ShopwareSettings
-from shopware.services.product_media import ProductMediaSyncService
 
 
 class PriceAdminActionTest(TestCase):
@@ -128,7 +127,8 @@ class ProductAdminSpecialPriceActionTest(TestCase):
         self.assertIsNone(self.price.special_start_date)
         self.assertIsNone(self.price.special_end_date)
 
-    def test_sync_to_shopware_bulk_handles_service_initialization_error(self):
+    @patch("products.admin.call_command", side_effect=RuntimeError("kaputt"))
+    def test_sync_to_shopware_bulk_handles_command_error(self, mock_call_command):
         request = self.factory.post(
             "/admin/products/product/",
             data={
@@ -143,12 +143,10 @@ class ProductAdminSpecialPriceActionTest(TestCase):
             (message, level)
         )
 
-        with (
-            patch("products.admin.ProductService", side_effect=RuntimeError("kaputt")),
-            patch.object(admin_instance, "_log_admin_error") as mock_log,
-        ):
+        with patch.object(admin_instance, "_log_admin_error") as mock_log:
             admin_instance.sync_to_shopware(request, Product.objects.filter(pk=self.product.pk))
 
+        mock_call_command.assert_called_once_with("shopware_sync_products", self.product.erp_nr)
         mock_log.assert_called_once()
         self.assertEqual(len(sent_messages), 1)
         self.assertIn("Sync fehlgeschlagen: kaputt", sent_messages[0][0])
@@ -275,62 +273,28 @@ class ProductImageAdminAndSyncTest(TestCase):
         self.assertIn("cdn.example.com/img", html)
         self.assertIn('loading="lazy"', html)
 
-    def test_sync_products_bulk_includes_media_payload_and_cover(self):
-        product = Product.objects.create(
-            erp_nr="A-4001",
-            sku="shopware-product-1",
-            name="Mit Shopware Bild",
-        )
-        first = Image.objects.create(path="cover.jpg")
-        second = Image.objects.create(path="gallery.png")
-        ProductImage.objects.create(product=product, image=first, order=1)
-        ProductImage.objects.create(product=product, image=second, order=2)
+    @patch("products.admin.call_command")
+    def test_sync_products_bulk_delegates_to_shopware_command(self, mock_call_command):
+        product = Product.objects.create(erp_nr="A-4001", sku="shopware-product-1", name="Mit Shopware Bild")
 
-        service = MagicMock()
-        service.get_sku_map.return_value = {}
-
-        success_count, error_count, _ = ProductAdmin(Product, AdminSite())._sync_products_bulk(
-            Product.objects.filter(pk=product.pk),
-            service,
+        success_count, error_count, error_messages = ProductAdmin(Product, AdminSite())._sync_products_bulk(
+            Product.objects.filter(pk=product.pk)
         )
 
         self.assertEqual(success_count, 1)
         self.assertEqual(error_count, 0)
-        service.bulk_upsert_media.assert_called_once()
-        service.purge_product_media_by_product_ids.assert_called_once_with(product_ids=["shopware-product-1"])
+        self.assertEqual(error_messages, [])
+        mock_call_command.assert_called_once_with("shopware_sync_products", "A-4001")
 
-        product_payload = service.bulk_upsert.call_args.args[0][0]
-        self.assertEqual(product_payload["id"], "shopware-product-1")
-        self.assertEqual(len(product_payload["media"]), 2)
-        self.assertEqual(product_payload["coverId"], product_payload["media"][0]["id"])
-        self.assertEqual([item["position"] for item in product_payload["media"]], [1, 2])
-        product.refresh_from_db()
-        self.assertTrue(product.shopware_image_sync_hash)
+    @patch("products.admin.call_command", side_effect=RuntimeError("sync kaputt"))
+    def test_sync_products_bulk_returns_error_when_command_fails(self, mock_call_command):
+        product = Product.objects.create(erp_nr="A-4002", sku="shopware-product-2", name="Fehlerbild")
 
-    def test_sync_products_bulk_skips_unchanged_media_uploads(self):
-        product = Product.objects.create(
-            erp_nr="A-4002",
-            sku="shopware-product-2",
-            name="Unveraendertes Bild",
-        )
-        image = Image.objects.create(path="cover-stable.jpg")
-        ProductImage.objects.create(product=product, image=image, order=1)
-        product.shopware_image_sync_hash = ProductMediaSyncService().build_media_sync_hash(product=product)
-        product.save(update_fields=["shopware_image_sync_hash", "updated_at"])
-
-        service = MagicMock()
-        service.get_sku_map.return_value = {}
-
-        success_count, error_count, _ = ProductAdmin(Product, AdminSite())._sync_products_bulk(
-            Product.objects.filter(pk=product.pk),
-            service,
+        success_count, error_count, error_messages = ProductAdmin(Product, AdminSite())._sync_products_bulk(
+            [product]
         )
 
-        self.assertEqual(success_count, 1)
-        self.assertEqual(error_count, 0)
-        service.purge_product_media_by_product_ids.assert_not_called()
-        service.bulk_upsert_media.assert_not_called()
-
-        product_payload = service.bulk_upsert.call_args.args[0][0]
-        self.assertEqual(product_payload["id"], "shopware-product-2")
-        self.assertNotIn("media", product_payload)
+        self.assertEqual(success_count, 0)
+        self.assertEqual(error_count, 1)
+        self.assertEqual(error_messages, ["sync kaputt"])
+        mock_call_command.assert_called_once_with("shopware_sync_products", "A-4002")

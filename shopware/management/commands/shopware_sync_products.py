@@ -324,6 +324,7 @@ class Command(BaseCommand):
                 payloads = []
                 payload_products: list[Product] = []
                 fallback_products: list[Product] = []
+                fallback_payloads: list[dict] = []
                 media_entities: dict[str, dict] = {}
                 media_uploads: dict[str, dict] = {}
                 media_sync_hashes: list[tuple[Product, str]] = []
@@ -349,8 +350,6 @@ class Command(BaseCommand):
                     }
                     if effective_sku:
                         payload["id"] = effective_sku
-                    else:
-                        fallback_products.append(product)
                     if product.name:
                         payload["name"] = product.name
                     if product.description is not None:
@@ -453,10 +452,14 @@ class Command(BaseCommand):
                                 media_entities=media_entities,
                                 media_uploads=media_uploads,
                             )
-                    payloads.append(payload)
-                    payload_products.append(product)
+                        payloads.append(payload)
+                        payload_products.append(product)
+                        continue
 
-                if not payloads:
+                    fallback_products.append(product)
+                    fallback_payloads.append(payload)
+
+                if not payloads and not fallback_payloads:
                     continue
 
                 try:
@@ -475,7 +478,7 @@ class Command(BaseCommand):
                                 cleanup_media_product_ids,
                             )
                         service.purge_product_media_by_product_ids(product_ids=cleanup_media_product_ids)
-                    if log_images:
+                    if log_images and payloads:
                         media_product_payloads = [
                             {
                                 "erp_nr": product.erp_nr,
@@ -505,30 +508,60 @@ class Command(BaseCommand):
                             batch_no,
                             json.dumps(media_product_payloads, ensure_ascii=True),
                         )
-                    media_sync_service.sync_media_assets(
-                        product_service=service,
-                        media_entities=list(media_entities.values()),
-                        media_uploads=list(media_uploads.values()),
-                        log_uploads=log_images,
-                    )
-                    if log_images:
-                        logger.info(
-                            "Shopware image sync batch {} product upsert start: payload_products={} products_with_media={}",
-                            batch_no,
-                            [payload.get("productNumber") for payload in payloads],
-                            [payload.get("productNumber") for payload in payloads if payload.get("media")],
+                    if payloads:
+                        media_sync_service.sync_media_assets(
+                            product_service=service,
+                            media_entities=list(media_entities.values()),
+                            media_uploads=list(media_uploads.values()),
+                            log_uploads=log_images,
                         )
-                    service.bulk_upsert(payloads)
-                    if log_images:
-                        logger.info(
-                            "Shopware image sync batch {} product upsert ok: payload_products={}",
-                            batch_no,
-                            [payload.get("productNumber") for payload in payloads],
-                        )
+                        if log_images:
+                            logger.info(
+                                "Shopware image sync batch {} product upsert start: payload_products={} products_with_media={}",
+                                batch_no,
+                                [payload.get("productNumber") for payload in payloads],
+                                [payload.get("productNumber") for payload in payloads if payload.get("media")],
+                            )
+                        service.bulk_upsert(payloads)
+                        if log_images:
+                            logger.info(
+                                "Shopware image sync batch {} product upsert ok: payload_products={}",
+                                batch_no,
+                                [payload.get("productNumber") for payload in payloads],
+                            )
                     for synced_product, media_sync_hash in media_sync_hashes:
                         synced_product.shopware_image_sync_hash = media_sync_hash
                         synced_product.save(update_fields=["shopware_image_sync_hash", "updated_at"])
                     if fallback_products:
+                        try:
+                            if log_images:
+                                logger.info(
+                                    "Shopware image sync fallback create batch {} start: payload_products={}",
+                                    batch_no,
+                                    [payload.get("productNumber") for payload in fallback_payloads],
+                                )
+                            service.bulk_upsert(fallback_payloads)
+                            if log_images:
+                                logger.info(
+                                    "Shopware image sync fallback create batch {} ok: payload_products={}",
+                                    batch_no,
+                                    [payload.get("productNumber") for payload in fallback_payloads],
+                                )
+                        except Exception as exc:
+                            if log_images:
+                                logger.exception(
+                                    "Shopware image sync fallback create batch {} failed: payload_products={}",
+                                    batch_no,
+                                    [payload.get("productNumber") for payload in fallback_payloads],
+                                )
+                            for product in fallback_products:
+                                _log_admin_error(
+                                    admin_user_id=admin_user_id,
+                                    content_type_id=content_type_id,
+                                    message=f"Shopware fallback create failed for {product.erp_nr}: {exc}",
+                                    object_id=str(product.pk),
+                                    object_repr=f"Product {product.erp_nr}",
+                                )
                         refreshed_map = service.get_sku_map([product.erp_nr for product in fallback_products])
                         fallback_media_payloads: list[dict] = []
                         fallback_media_entities: dict[str, dict] = {}
