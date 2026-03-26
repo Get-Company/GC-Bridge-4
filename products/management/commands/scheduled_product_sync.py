@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
 from django.core.management import call_command
 from django.core.management.base import BaseCommand
 from django.utils import timezone
+from loguru import logger
 
+from core.logging import add_managed_file_sink
 from core.services import CommandRuntimeService
 from microtech.services import MicrotechExpiredSpecialSyncService, microtech_connection
 
@@ -36,11 +39,28 @@ class Command(BaseCommand):
                 "Standard ist AUS, um versehentliche Preisfaktor-Fehler zu vermeiden."
             ),
         )
+        parser.add_argument(
+            "--log-file",
+            type=str,
+            default="",
+            help="Optionaler Pfad fuer den detaillierten Scheduler-Log. Standard ist der verwaltete Loguru-Pfad.",
+        )
+
+    @staticmethod
+    def _add_file_sink(log_file: str) -> tuple[int, Path]:
+        return add_managed_file_sink(
+            log_name="scheduled_product_sync",
+            category="weekly",
+            log_file=log_file or None,
+            diagnose=True,
+        )
 
     def handle(self, *args, **options):
         limit = options.get("limit")
         include_inactive = not options.get("exclude_inactive", False)
         write_base_price_back = options.get("write_base_price_back", False)
+        log_file = (options.get("log_file") or "").strip()
+        sink_id, log_path = self._add_file_sink(log_file)
 
         runtime = CommandRuntimeService().start(
             command_name="scheduled_product_sync",
@@ -49,9 +69,17 @@ class Command(BaseCommand):
                 "limit": limit,
                 "include_inactive": include_inactive,
                 "write_base_price_back": write_base_price_back,
+                "log_file": str(log_path),
             },
         )
         try:
+            logger.info(
+                "Scheduled product sync started. limit={} include_inactive={} write_base_price_back={} log_file={}",
+                limit,
+                include_inactive,
+                write_base_price_back,
+                log_path,
+            )
             runtime.update(stage="1/4 microtech_to_django")
             self.stdout.write("1/4 Microtech -> Django import starten")
             call_command(
@@ -65,6 +93,11 @@ class Command(BaseCommand):
             runtime.update(stage="2/4 clear_expired_specials")
             self.stdout.write("2/4 Abgelaufene Sonderpreise in Django bereinigen")
             expired_count, affected_product_ids = self._clear_expired_specials(now=timezone.now())
+            logger.info(
+                "Scheduled product sync cleared expired specials. expired_count={} affected_products={}",
+                expired_count,
+                len(affected_product_ids),
+            )
             self.stdout.write(
                 f"Abgelaufene Sonderpreise bereinigt: {expired_count} Preiszeile(n), "
                 f"{len(affected_product_ids)} Produkt(e)."
@@ -75,6 +108,11 @@ class Command(BaseCommand):
             updated_microtech, skipped_price_writes = self._sync_expired_specials_to_microtech(
                 affected_product_ids,
                 write_base_price_back=write_base_price_back,
+            )
+            logger.info(
+                "Scheduled product sync updated Microtech. updated_products={} skipped_price_writes={}",
+                updated_microtech,
+                skipped_price_writes,
             )
             if write_base_price_back:
                 self.stdout.write(
@@ -95,8 +133,13 @@ class Command(BaseCommand):
                 all=True,
                 limit=limit,
             )
+            logger.info("Scheduled product sync finished successfully. log_file={}", log_path)
             self.stdout.write(self.style.SUCCESS("Scheduled Product Sync erfolgreich abgeschlossen."))
+        except Exception:
+            logger.exception("Scheduled product sync failed. log_file={}", log_path)
+            raise
         finally:
+            logger.remove(sink_id)
             runtime.close()
 
     @staticmethod

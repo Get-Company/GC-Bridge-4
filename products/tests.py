@@ -1,3 +1,4 @@
+from pathlib import Path
 from datetime import timedelta
 from decimal import Decimal
 from unittest.mock import call, patch
@@ -234,6 +235,28 @@ class ScheduledProductSyncCommandTest(TestCase):
 
         mock_sync_microtech.assert_called_once_with(set(), write_base_price_back=True)
         self.assertEqual(mock_call_command.call_count, 2)
+
+    @patch("products.management.commands.scheduled_product_sync.logger")
+    @patch("products.management.commands.scheduled_product_sync.call_command")
+    def test_handle_uses_managed_scheduler_log_sink(self, mock_call_command, mock_logger):
+        cmd = ScheduledProductSyncCommand()
+        log_path = Path("/tmp/logs/weekly/scheduled_product_sync/scheduled_product_sync.2026-03-26.log")
+        with (
+            patch.object(cmd, "_add_file_sink", return_value=(99, log_path)),
+            patch.object(cmd, "_clear_expired_specials", return_value=(0, set())),
+            patch.object(cmd, "_sync_expired_specials_to_microtech", return_value=(0, 0)),
+        ):
+            cmd.handle(limit=5, exclude_inactive=False, write_base_price_back=False, log_file="")
+
+        mock_logger.info.assert_any_call(
+            "Scheduled product sync started. limit={} include_inactive={} write_base_price_back={} log_file={}",
+            5,
+            True,
+            False,
+            log_path,
+        )
+        mock_logger.info.assert_any_call("Scheduled product sync finished successfully. log_file={}", log_path)
+        mock_logger.remove.assert_called_once_with(99)
 
     def test_is_suspicious_price_ratio_detects_factor_100(self):
         self.assertTrue(
