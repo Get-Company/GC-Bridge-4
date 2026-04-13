@@ -8,3 +8,5 @@ django-modeltranslation>=0.19.19
 sphinx>=8.2.3
 uvicorn>=0.41.0
 whitenoise>=6.0.0
+django-nested-admin>=4.0.0
+requests>=2.0.0
