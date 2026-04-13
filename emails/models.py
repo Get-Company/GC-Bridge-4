@@ -1,8 +1,10 @@
+from decimal import Decimal
+
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
 from core.models import BaseModel
-from products.models import Product
+from products.models import Price, Product
 
 
 class Email(BaseModel):
@@ -58,13 +60,13 @@ class EmailSectionProduct(BaseModel):
         related_name="email_section_products",
         verbose_name=_("Produkt"),
     )
-    special_price = models.DecimalField(
-        max_digits=10,
+    special_percentage = models.DecimalField(
+        max_digits=5,
         decimal_places=2,
         null=True,
         blank=True,
-        verbose_name=_("Sonderpreis"),
-        help_text=_("Überschreibt den regulären Preis des Produkts für diese E-Mail."),
+        verbose_name=_("Rabatt (%)"),
+        help_text=_("Prozentualer Rabatt auf den Standardpreis für diese E-Mail, z.B. 10.00 für 10%."),
     )
     position = models.PositiveIntegerField(default=0, db_index=True, verbose_name=_("Position"))
 
@@ -76,10 +78,12 @@ class EmailSectionProduct(BaseModel):
     def __str__(self) -> str:
         return str(self.product)
 
-    def get_display_price(self):
-        if self.special_price is not None:
-            return self.special_price
+    def get_display_price(self) -> Decimal | None:
         price_obj = self.product.prices.filter(sales_channel__isnull=True).first()
-        if price_obj:
-            return price_obj.price
-        return None
+        if not price_obj:
+            return None
+        if self.special_percentage:
+            return Price._round_up_5ct(
+                price_obj.price * (Decimal("100") - self.special_percentage) / Decimal("100")
+            )
+        return price_obj.price

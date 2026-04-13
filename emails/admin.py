@@ -16,7 +16,7 @@ from .models import Email, EmailSection, EmailSectionProduct
 class EmailSectionProductInline(nested_admin.NestedTabularInline, UnfoldTabularInline):
     model = EmailSectionProduct
     extra = 1
-    fields = ("product", "special_price", "position")
+    fields = ("product", "special_percentage", "position")
     sortable_field_name = "position"
     tab = True
 
