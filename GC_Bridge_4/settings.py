@@ -107,6 +107,8 @@ INSTALLED_APPS = [
     'products.apps.ProductsConfig',
     'shopware.apps.ShopwareConfig',
     'microtech.apps.MicrotechConfig',
+    'emails.apps.EmailsConfig',
+    'nested_admin',
 ]
 
 MIDDLEWARE = [
@@ -389,6 +391,18 @@ UNFOLD = {
                 ],
             },
             {
+                "title": _("E-Mails"),
+                "separator": True,
+                "collapsible": True,
+                "items": [
+                    {
+                        "title": _("E-Mails"),
+                        "icon": "mail",
+                        "link": reverse_lazy("admin:emails_email_changelist"),
+                    },
+                ],
+            },
+            {
                 "title": _("Verwaltung"),
                 "separator": True,
                 "collapsible": True,
@@ -422,3 +436,8 @@ UNFOLD = {
         ],
     },
 }
+
+# MJML API
+MJML_BASE_URL = "https://api.mjml.io/v1/render"
+MJML_APP_ID = os.environ.get("MJML_APP_ID", "")
+MJML_SECRET = os.environ.get("MJML_SECRET", "")

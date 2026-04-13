@@ -1,0 +1,54 @@
+<mjml>
+  <mj-head>
+    <mj-attributes>
+      <mj-all font-family="Arial, sans-serif" />
+      <mj-text font-size="14px" color="#333333" line-height="1.6" />
+    </mj-attributes>
+    <mj-style>
+      .product-price { font-size: 18px; font-weight: bold; color: #c00; }
+      .section-header { font-size: 20px; font-weight: bold; border-bottom: 2px solid #eeeeee; padding-bottom: 6px; }
+    </mj-style>
+  </mj-head>
+  <mj-body background-color="#f4f4f4">
+
+    {% if email.introduction %}
+    <mj-section background-color="#ffffff" padding="20px 30px">
+      <mj-column>
+        <mj-text>{{ email.introduction|linebreaksbr }}</mj-text>
+      </mj-column>
+    </mj-section>
+    {% endif %}
+
+    {% for section in sections %}
+
+      {% if section.header %}
+      <mj-section background-color="#ffffff" padding="16px 30px 4px 30px">
+        <mj-column>
+          <mj-text css-class="section-header">{{ section.header }}</mj-text>
+        </mj-column>
+      </mj-section>
+      {% endif %}
+
+      {% for sp in section.section_products.all %}
+      <mj-section background-color="#ffffff" padding="12px 30px">
+        <mj-column width="30%">
+          {% if sp.product.first_image %}
+          <mj-image src="{{ sp.product.first_image.url }}" alt="{{ sp.product.name }}" padding="0" />
+          {% endif %}
+        </mj-column>
+        <mj-column width="70%">
+          <mj-text font-size="16px" font-weight="bold">{{ sp.product.name }}</mj-text>
+          <mj-text font-size="12px" color="#666666">Art.-Nr.: {{ sp.product.erp_nr }}</mj-text>
+          {% with price=sp.get_display_price %}
+          {% if price %}
+          <mj-text css-class="product-price">{{ price }} €</mj-text>
+          {% endif %}
+          {% endwith %}
+        </mj-column>
+      </mj-section>
+      {% endfor %}
+
+    {% endfor %}
+
+  </mj-body>
+</mjml>
