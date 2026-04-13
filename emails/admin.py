@@ -1,11 +1,11 @@
 import requests
 from django.conf import settings
 from django.contrib import admin, messages
+from django.db import models
 from django.template.loader import render_to_string
 from django.urls import path, reverse
 from django.utils.html import format_html
 from django.http import HttpResponseRedirect
-import nested_admin
 from unfold.admin import ModelAdmin as UnfoldModelAdmin
 from unfold.admin import TabularInline as UnfoldTabularInline
 from unfold.admin import StackedInline as UnfoldStackedInline
@@ -13,27 +13,35 @@ from unfold.admin import StackedInline as UnfoldStackedInline
 from .models import Email, EmailSection, EmailSectionProduct
 
 
-class EmailSectionProductInline(nested_admin.NestedTabularInline, UnfoldTabularInline):
-    model = EmailSectionProduct
-    extra = 1
-    fields = ("product", "special_percentage", "special_price")
-    readonly_fields = ("special_price",)
-    autocomplete_fields = ("product",)
-    sortable_field_name = "position"
-    tab = True
-
-
-class EmailSectionInline(nested_admin.NestedStackedInline, UnfoldStackedInline):
+class EmailSectionInline(UnfoldStackedInline):
     model = EmailSection
     extra = 1
-    fields = ("header",)
-    sortable_field_name = "position"
+    fields = ("header", "position")
+    ordering = ("position",)
     tab = True
-    inlines = [EmailSectionProductInline]
+
+
+class EmailSectionProductInline(UnfoldTabularInline):
+    model = EmailSectionProduct
+    extra = 1
+    fields = ("section", "product", "special_percentage", "special_price")
+    readonly_fields = ("special_price",)
+    autocomplete_fields = ("product",)
+    ordering = ("section__position", "position")
+    tab = True
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "section":
+            object_id = request.resolver_match.kwargs.get("object_id")
+            if object_id:
+                kwargs["queryset"] = EmailSection.objects.filter(email_id=object_id).order_by("position")
+            else:
+                kwargs["queryset"] = EmailSection.objects.none()
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
 @admin.register(Email)
-class EmailAdmin(nested_admin.NestedModelAdmin, UnfoldModelAdmin):
+class EmailAdmin(UnfoldModelAdmin):
     compressed_fields = True
     warn_unsaved_form = True
     change_form_show_cancel_button = True
@@ -41,7 +49,7 @@ class EmailAdmin(nested_admin.NestedModelAdmin, UnfoldModelAdmin):
     search_fields = ("name", "subject")
     fields = ("name", "subject", "introduction", "render_mjml_button", "html_display")
     readonly_fields = ("created_at", "updated_at", "render_mjml_button", "html_display")
-    inlines = [EmailSectionInline]
+    inlines = [EmailSectionInline, EmailSectionProductInline]
 
     def get_urls(self):
         urls = super().get_urls()

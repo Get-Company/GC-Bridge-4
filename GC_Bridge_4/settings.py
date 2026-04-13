@@ -108,7 +108,6 @@ INSTALLED_APPS = [
     'shopware.apps.ShopwareConfig',
     'microtech.apps.MicrotechConfig',
     'emails.apps.EmailsConfig',
-    'nested_admin',
 ]
 
 MIDDLEWARE = [
