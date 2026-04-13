@@ -6,31 +6,39 @@ from django.urls import path, reverse
 from django.utils.html import format_html
 from django.http import HttpResponseRedirect
 import nested_admin
+from unfold.admin import ModelAdmin as UnfoldModelAdmin
+from unfold.admin import TabularInline as UnfoldTabularInline
+from unfold.admin import StackedInline as UnfoldStackedInline
 
 from .models import Email, EmailSection, EmailSectionProduct
 
 
-class EmailSectionProductInline(nested_admin.NestedTabularInline):
+class EmailSectionProductInline(nested_admin.NestedTabularInline, UnfoldTabularInline):
     model = EmailSectionProduct
     extra = 1
     fields = ("product", "special_price", "position")
     sortable_field_name = "position"
+    tab = True
 
 
-class EmailSectionInline(nested_admin.NestedStackedInline):
+class EmailSectionInline(nested_admin.NestedStackedInline, UnfoldStackedInline):
     model = EmailSection
     extra = 1
     fields = ("header", "position")
     sortable_field_name = "position"
+    tab = True
     inlines = [EmailSectionProductInline]
 
 
 @admin.register(Email)
-class EmailAdmin(nested_admin.NestedModelAdmin):
+class EmailAdmin(nested_admin.NestedModelAdmin, UnfoldModelAdmin):
+    compressed_fields = True
+    warn_unsaved_form = True
+    change_form_show_cancel_button = True
     list_display = ("name", "subject")
     search_fields = ("name", "subject")
     fields = ("name", "subject", "introduction", "render_mjml_button", "html_display")
-    readonly_fields = ("render_mjml_button", "html_display")
+    readonly_fields = ("created_at", "updated_at", "render_mjml_button", "html_display")
     inlines = [EmailSectionInline]
 
     def get_urls(self):
