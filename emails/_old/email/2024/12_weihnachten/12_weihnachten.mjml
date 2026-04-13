@@ -1,0 +1,1191 @@
+<mjml>
+    <mj-font href=""/>
+    <!-- Head -->
+    <mj-head>
+        <mj-include path="..\..\template\head.mjml"/>
+    </mj-head>
+
+    <!-- Body -->
+    <mj-body>
+        <mj-raw>
+            <!-- Company Header -->
+        </mj-raw>
+
+        <!-- View online -->
+        <mj-include path="..\..\template\view_online.mjml"/>
+
+        <!-- Navigation -->
+        <mj-include path="..\..\template\nav_items_shop.mjml"/>
+
+        <!-- Header-Logo -->
+        <mj-include path="..\..\template\header_logo.mjml"/>
+
+
+        <!-- Title -->
+        <mj-section padding="20px" background-color="#ffffff">
+            <mj-column>
+                <mj-text align="center" color="#ff9933" font-weight="400" line-height="50px">
+                    <p class="dancing-title">
+                        ...... ja, is den scho Weihnachten?
+                    </p>
+                </mj-text>
+            </mj-column>
+        </mj-section>
+
+        <!-- Salutation -->
+        <mj-section background-color="#ffffff">
+            <mj-column>
+                <mj-text>
+                    <p>
+                        Hallo
+
+                        {if:anrede~Herr} Herr {/if}
+                        {if:anrede~Frau} Frau {/if}
+                        {subtag:name},
+                    </p>
+                </mj-text>
+            </mj-column>
+            <mj-column>
+                <mj-text align="right">
+                    <p>
+                        Ihre Kunden-Nr.: {subtag:adrnr}
+                    </p>
+                </mj-text>
+            </mj-column>
+        </mj-section>
+
+        <!-- Intro Text -->
+        <mj-section background-color="#ffffff">
+            <mj-column>
+                <mj-text line-height="26px">
+                    <p>
+                        in wenigen Tagen ist Weihnachten und kurz darauf steht schon das neue Jahr vor der Tür.
+                        Wir möchten uns an dieser Stelle für das von Ihnen entgegengebrachte Vertrauen und
+                        die tolle Zusammenarbeit recht herzlich bedanken.
+                    </p>
+                    <p>
+                        Wieder war dieses Jahr für uns alle geprägt von unvorstellbaren Ereignissen und
+                        Herausforderungen.
+                    </p>
+                    <p>
+                        Wir sind uns sicher, dass wir mit vereinten Kräften auch diese Herausforderung meistern werden
+                        und alles seinen gewohnten Gang gehen wird. Wenn auch in einer etwas anderen Form,
+                        der Mensch wächst mit seinen Aufgaben. Insofern sehen wir zuversichtlich in die Zukunft.
+                    </p>
+                    <p>
+                        Wir wünschen Ihnen, Ihren Familien und Freunden eine besinnliche Weihnachtszeit
+                        und für das Jahr 2025 viel Gesundheit, persönlichen und geschäftlichen Erfolg.
+                    </p>
+                </mj-text>
+            </mj-column>
+        </mj-section>
+        <mj-section background-color="#ffffff">
+            <mj-column>
+                <mj-text line-height="26px">
+
+                    <p class="dancing-title">
+                        <strong> ... und bleiben Sie xsund!</strong>
+                    </p>
+
+                </mj-text>
+            </mj-column>
+        </mj-section>
+
+        <mj-wrapper>
+        <!-- Weihnachten -->
+        <mj-include path="..\..\template\weihnachten.mjml"/>
+
+        <mj-section>
+            <mj-column>
+                <mj-text>
+                        <h2 align="right" style="color: #ff9933; font-weight:400; line-height:40px">
+                            Ihr Classei-Team
+                        </h2>
+                </mj-text>
+            </mj-column>
+        </mj-section>
+
+        <!-- Danksagung verschiedene Sprachen -->
+        <mj-section background-color="#ffffff">
+            <mj-column>
+                <mj-text line-height="26px">
+                    <p>
+                        We sincerely thank you for your partnership and trust over the past year.
+                        Wishing you a joyful holiday season and a successful new year 2025.
+                    </p>
+                    <hr/>
+                    <p>
+                        Nous vous remercions chaleureusement pour votre confiance et votre collaboration tout au long de l’année.
+                        Nous vous souhaitons de très belles fêtes de fin d’année et nos meilleurs vœux pour une excellente année 2025.
+                    </p>
+                    <hr/>
+                    <p>
+                        Grazie di cuore per la vostra collaborazione e fiducia durante il 2024.
+                        Vi auguriamo un sereno Natale e un felice anno nuovo ricco di soddisfazioni!
+                    </p>
+                </mj-text>
+            </mj-column>
+        </mj-section>
+        </mj-wrapper>
+
+        <mj-wrapper>
+            
+            <mj-section>
+    <mj-column>
+        <mj-text align="center" line-height="40px">
+            <h2 style="font-size: 30px; color: #ff9933">Schenken Sie Ordnung</h2>
+        </mj-text>
+    </mj-column>
+</mj-section>
+            
+        </mj-wrapper>
+        <!-- Products -->
+        
+
+        
+
+        <mj-wrapper>
+    <!-- Product Head -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text>
+                <a style="text-decoration: None; color:#000000" target="_blank"
+                   href="https://www.classei-shop.com/search?sSearch=900000">
+                    <h4>
+                        <span style="font-size:30px; font-weight:bold; line-height: 45px; display: block">
+                            
+                            900000 Basic-Set
+                            
+                        </span>
+                    </h4>
+                </a>
+            </mj-text>
+        </mj-column>
+    </mj-section>
+    <!-- Product Body -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text line-height="26px">
+                <p>für den schnellen Einstieg</p><p><strong>Das Basic-Set beinhaltet:</strong><br>1 Kunststoff-Box, hellgrau (ArtNr. 104014)<br>1 Rückenschild, klein (ArtNr. 404100)<br>1 Sichttasche (ArtNr. 442050)<br>1 Mappenstütze (ArtNr. 574370)<br>30 Standard-Mappen, hellgelb, 130 g/m² (ArtNr. 204113)<br>20 Standard-Mappen, hellgelb, 170 g/m² (ArtNr. 204116)<br>5 Dehn-Mappen, hellgelb, 230 g/m² (ArtNr. 214123)<br>2 Bogen Quick-Tabs, weiß, 58 mm breit (ArtNr. 581000)<br>1 Bogen Quick-Tabs, gelb, 58 mm breit (ArtNr. 581001)<br>1 Folienschreiber (ArtNr. 450313), sowie eine ausführliche Anleitung<br></p>
+            </mj-text>
+            <mj-button padding="20px 0 0 0"
+                    href="https://www.classei-shop.com/search?sSearch=900000">
+                - Mehr Infos zum Artikel -
+            </mj-button>
+
+            
+            <mj-text align="center" padding-top="20px">
+                <h4 style="color: #ff9933; font-size: 24px; line-height: 40px">
+                    <strong>Preis</strong>
+                    42,00 €
+                </h4>
+            </mj-text>
+            
+
+            <mj-text align="center" padding="0px">
+                <p style="font-size: 14px;">
+                    <!-- Verkaufseinheit -->
+                    pro
+                        
+                        Stck
+                        
+                    <br/>
+                    
+                    <!-- Versandkosten True/False -->
+                    
+                    <span style="font-size: 12px">- * zuzgl. Versandkosten -</span>
+                    
+                    <br/>
+                    zuzgl. Mwst.
+                </p>
+            </mj-text>
+        </mj-column>
+        <mj-column>
+            
+            
+
+            
+
+            
+
+            
+
+            
+
+            
+            <mj-carousel>
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=900000"
+                                   src="https://assets.classei.de/img/900000.jpg"
+                                   alt="für den schnellen EinstiegDas Basic-Set beinhaltet:1 Kunststoff-Box, hellgrau (ArtNr. 104014)1 Rückenschild, klein (ArtNr. 404100)1 Sichttasche (ArtNr. 442050)1 Mappenstütze (ArtNr. 574370)30 Standard-Mappen, hellgelb, 130 g/m² (ArtNr. 204113)20 Standard-Mappen, hellgelb, 170 g/m² (ArtNr. 204116)5 Dehn-Mappen, hellgelb, 230 g/m² (ArtNr. 214123)2 Bogen Quick-Tabs, weiß, 58 mm breit (ArtNr. 581000)1 Bogen Quick-Tabs, gelb, 58 mm breit (ArtNr. 581001)1 Folienschreiber (ArtNr. 450313), sowie eine ausführliche Anleitung"/>
+                
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=900000"
+                                   src="https://assets.classei.de/img/900000-chf.jpg"
+                                   alt="für den schnellen EinstiegDas Basic-Set beinhaltet:1 Kunststoff-Box, hellgrau (ArtNr. 104014)1 Rückenschild, klein (ArtNr. 404100)1 Sichttasche (ArtNr. 442050)1 Mappenstütze (ArtNr. 574370)30 Standard-Mappen, hellgelb, 130 g/m² (ArtNr. 204113)20 Standard-Mappen, hellgelb, 170 g/m² (ArtNr. 204116)5 Dehn-Mappen, hellgelb, 230 g/m² (ArtNr. 214123)2 Bogen Quick-Tabs, weiß, 58 mm breit (ArtNr. 581000)1 Bogen Quick-Tabs, gelb, 58 mm breit (ArtNr. 581001)1 Folienschreiber (ArtNr. 450313), sowie eine ausführliche Anleitung"/>
+                
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=900000"
+                                   src="https://assets.classei.de/img/beispiel_orga-tabs.jpg"
+                                   alt="für den schnellen EinstiegDas Basic-Set beinhaltet:1 Kunststoff-Box, hellgrau (ArtNr. 104014)1 Rückenschild, klein (ArtNr. 404100)1 Sichttasche (ArtNr. 442050)1 Mappenstütze (ArtNr. 574370)30 Standard-Mappen, hellgelb, 130 g/m² (ArtNr. 204113)20 Standard-Mappen, hellgelb, 170 g/m² (ArtNr. 204116)5 Dehn-Mappen, hellgelb, 230 g/m² (ArtNr. 214123)2 Bogen Quick-Tabs, weiß, 58 mm breit (ArtNr. 581000)1 Bogen Quick-Tabs, gelb, 58 mm breit (ArtNr. 581001)1 Folienschreiber (ArtNr. 450313), sowie eine ausführliche Anleitung"/>
+                
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=900000"
+                                   src="https://assets.classei.de/img/beispiel_schreibtisch.jpg"
+                                   alt="für den schnellen EinstiegDas Basic-Set beinhaltet:1 Kunststoff-Box, hellgrau (ArtNr. 104014)1 Rückenschild, klein (ArtNr. 404100)1 Sichttasche (ArtNr. 442050)1 Mappenstütze (ArtNr. 574370)30 Standard-Mappen, hellgelb, 130 g/m² (ArtNr. 204113)20 Standard-Mappen, hellgelb, 170 g/m² (ArtNr. 204116)5 Dehn-Mappen, hellgelb, 230 g/m² (ArtNr. 214123)2 Bogen Quick-Tabs, weiß, 58 mm breit (ArtNr. 581000)1 Bogen Quick-Tabs, gelb, 58 mm breit (ArtNr. 581001)1 Folienschreiber (ArtNr. 450313), sowie eine ausführliche Anleitung"/>
+                
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=900000"
+                                   src="https://assets.classei.de/img/beispiel_schrank_schublade.jpg"
+                                   alt="für den schnellen EinstiegDas Basic-Set beinhaltet:1 Kunststoff-Box, hellgrau (ArtNr. 104014)1 Rückenschild, klein (ArtNr. 404100)1 Sichttasche (ArtNr. 442050)1 Mappenstütze (ArtNr. 574370)30 Standard-Mappen, hellgelb, 130 g/m² (ArtNr. 204113)20 Standard-Mappen, hellgelb, 170 g/m² (ArtNr. 204116)5 Dehn-Mappen, hellgelb, 230 g/m² (ArtNr. 214123)2 Bogen Quick-Tabs, weiß, 58 mm breit (ArtNr. 581000)1 Bogen Quick-Tabs, gelb, 58 mm breit (ArtNr. 581001)1 Folienschreiber (ArtNr. 450313), sowie eine ausführliche Anleitung"/>
+                
+                
+            </mj-carousel>
+            
+        </mj-column>
+    </mj-section>
+
+    <!-- Product Footer - only fpr special prices-->
+    
+</mj-wrapper>
+
+        
+
+        
+
+        <mj-wrapper>
+    <!-- Product Head -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text>
+                <a style="text-decoration: None; color:#000000" target="_blank"
+                   href="https://www.classei-shop.com/search?sSearch=900001">
+                    <h4>
+                        <span style="font-size:30px; font-weight:bold; line-height: 45px; display: block">
+                            
+                            900001 Business-Set
+                            
+                        </span>
+                    </h4>
+                </a>
+            </mj-text>
+        </mj-column>
+    </mj-section>
+    <!-- Product Body -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text line-height="26px">
+                <p>Sofort mit der Ordnung starten ohne lange zu überlegen</p>
+<p>
+<strong>Das Business-Set beinhaltet:</strong><br/>
+3 Kunststoffboxen, lichtgrau mit Griffleisten,<br />
+170 verschiedenen Orga-Mappen,<br/>
+Sammler, Dehnsammler, <br/>
+6 verschied. Farben
+Quick-Tabs, Mappenstütze, Leitkarten, Folienschreiber und Zubehör
+</p>
+            </mj-text>
+            <mj-button padding="20px 0 0 0"
+                    href="https://www.classei-shop.com/search?sSearch=900001">
+                - Mehr Infos zum Artikel -
+            </mj-button>
+
+            
+            <mj-text align="center" padding-top="20px">
+                <h4 style="color: #ff9933; font-size: 24px; line-height: 40px">
+                    <strong>Preis</strong>
+                    145,00 €
+                </h4>
+            </mj-text>
+            
+
+            <mj-text align="center" padding="0px">
+                <p style="font-size: 14px;">
+                    <!-- Verkaufseinheit -->
+                    pro
+                        
+                        Set
+                        
+                    <br/>
+                    
+                    <!-- Versandkosten True/False -->
+                    
+                    <span style="font-size:14px; color: #ff9933">- kostenloser Versand -</span>
+                    
+                    <br/>
+                    zuzgl. Mwst.
+                </p>
+            </mj-text>
+        </mj-column>
+        <mj-column>
+            
+            
+
+            
+
+            
+
+            
+
+            
+
+            
+            <mj-carousel>
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=900001"
+                                   src="https://assets.classei.de/img/900001.jpg"
+                                   alt="für den schnellen EinstiegDas Business-Set beinhaltet:3 Kunststoff-Boxen, hellgrau (ArtNr. 104014)6 Hängeleisten, hellgrau (ArtNr. 180014)3 Rückenschilder, klein (ArtNr. 404100)3 Sichttaschen (ArtNr. 442050)1 Sammler, grün (ArtNr. 144150)1 Dehn-Sammler (ArtNr. 134050)1 Mappenstütze (ArtNr. 574370)100 Standard-Mappen, hellgelb, 120 g/m² (ArtNr. 204113)50 Standard-Mappen, hellgelb, 170 g/m² (ArtNr. 204116)15 Dehn-Mappen, hellgelb, 230 g/m² (ArtNr. 214123)5 Klarsicht-Kombi-Mappen, hellgelb, mit Hülle, 130 g/m² (ArtNr. 224413)5 Leitkarten, für DIN A4 (ArtNr. 504032)2 Bogen Quick-Tabs, weiß, 58 mm breit (ArtNr. 581000)1 Bogen Quick-Tabs, gelb, 58 mm breit (ArtNr. 581001)1 Bogen Quick-Tabs, rot, 58 mm breit (ArtNr. 581002)1 Bogen Quick-Tabs, blau, 58 mm breit (ArtNr. 581003)1 Bogen Quick-Tabs, orange, 58 mm breit (ArtNr. 581004)1 Bogen Quick-Tabs, rosa, 58 mm breit (ArtNr. 581005)1 Bogen Big-Tabs, weiß, 70 mm breit (ArtNr. 701500)2 Bogen Schutz-Tabs für 58 mm breite Tabs (ArtNr. 605000)1 Archiv-Box, weiß (ArtNr. 104522)5 Metallheftzungen mit Deckschiene (ArtNr. 420010)2 Fenster-Reiter, Klebefuß, einseitig, 50 mm breit (ArtNr. 410050)1 Folienschreiber (ArtNr. 450313), sowie eine ausführliche Anleitung"/>
+                
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=900001"
+                                   src="https://assets.classei.de/img/900001-chf.jpg"
+                                   alt="für den schnellen EinstiegDas Business-Set beinhaltet:3 Kunststoff-Boxen, hellgrau (ArtNr. 104014)6 Hängeleisten, hellgrau (ArtNr. 180014)3 Rückenschilder, klein (ArtNr. 404100)3 Sichttaschen (ArtNr. 442050)1 Sammler, grün (ArtNr. 144150)1 Dehn-Sammler (ArtNr. 134050)1 Mappenstütze (ArtNr. 574370)100 Standard-Mappen, hellgelb, 120 g/m² (ArtNr. 204113)50 Standard-Mappen, hellgelb, 170 g/m² (ArtNr. 204116)15 Dehn-Mappen, hellgelb, 230 g/m² (ArtNr. 214123)5 Klarsicht-Kombi-Mappen, hellgelb, mit Hülle, 130 g/m² (ArtNr. 224413)5 Leitkarten, für DIN A4 (ArtNr. 504032)2 Bogen Quick-Tabs, weiß, 58 mm breit (ArtNr. 581000)1 Bogen Quick-Tabs, gelb, 58 mm breit (ArtNr. 581001)1 Bogen Quick-Tabs, rot, 58 mm breit (ArtNr. 581002)1 Bogen Quick-Tabs, blau, 58 mm breit (ArtNr. 581003)1 Bogen Quick-Tabs, orange, 58 mm breit (ArtNr. 581004)1 Bogen Quick-Tabs, rosa, 58 mm breit (ArtNr. 581005)1 Bogen Big-Tabs, weiß, 70 mm breit (ArtNr. 701500)2 Bogen Schutz-Tabs für 58 mm breite Tabs (ArtNr. 605000)1 Archiv-Box, weiß (ArtNr. 104522)5 Metallheftzungen mit Deckschiene (ArtNr. 420010)2 Fenster-Reiter, Klebefuß, einseitig, 50 mm breit (ArtNr. 410050)1 Folienschreiber (ArtNr. 450313), sowie eine ausführliche Anleitung"/>
+                
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=900001"
+                                   src="https://assets.classei.de/img/beispiel_orga-tabs.jpg"
+                                   alt="für den schnellen EinstiegDas Business-Set beinhaltet:3 Kunststoff-Boxen, hellgrau (ArtNr. 104014)6 Hängeleisten, hellgrau (ArtNr. 180014)3 Rückenschilder, klein (ArtNr. 404100)3 Sichttaschen (ArtNr. 442050)1 Sammler, grün (ArtNr. 144150)1 Dehn-Sammler (ArtNr. 134050)1 Mappenstütze (ArtNr. 574370)100 Standard-Mappen, hellgelb, 120 g/m² (ArtNr. 204113)50 Standard-Mappen, hellgelb, 170 g/m² (ArtNr. 204116)15 Dehn-Mappen, hellgelb, 230 g/m² (ArtNr. 214123)5 Klarsicht-Kombi-Mappen, hellgelb, mit Hülle, 130 g/m² (ArtNr. 224413)5 Leitkarten, für DIN A4 (ArtNr. 504032)2 Bogen Quick-Tabs, weiß, 58 mm breit (ArtNr. 581000)1 Bogen Quick-Tabs, gelb, 58 mm breit (ArtNr. 581001)1 Bogen Quick-Tabs, rot, 58 mm breit (ArtNr. 581002)1 Bogen Quick-Tabs, blau, 58 mm breit (ArtNr. 581003)1 Bogen Quick-Tabs, orange, 58 mm breit (ArtNr. 581004)1 Bogen Quick-Tabs, rosa, 58 mm breit (ArtNr. 581005)1 Bogen Big-Tabs, weiß, 70 mm breit (ArtNr. 701500)2 Bogen Schutz-Tabs für 58 mm breite Tabs (ArtNr. 605000)1 Archiv-Box, weiß (ArtNr. 104522)5 Metallheftzungen mit Deckschiene (ArtNr. 420010)2 Fenster-Reiter, Klebefuß, einseitig, 50 mm breit (ArtNr. 410050)1 Folienschreiber (ArtNr. 450313), sowie eine ausführliche Anleitung"/>
+                
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=900001"
+                                   src="https://assets.classei.de/img/beispiel_schreibtisch.jpg"
+                                   alt="für den schnellen EinstiegDas Business-Set beinhaltet:3 Kunststoff-Boxen, hellgrau (ArtNr. 104014)6 Hängeleisten, hellgrau (ArtNr. 180014)3 Rückenschilder, klein (ArtNr. 404100)3 Sichttaschen (ArtNr. 442050)1 Sammler, grün (ArtNr. 144150)1 Dehn-Sammler (ArtNr. 134050)1 Mappenstütze (ArtNr. 574370)100 Standard-Mappen, hellgelb, 120 g/m² (ArtNr. 204113)50 Standard-Mappen, hellgelb, 170 g/m² (ArtNr. 204116)15 Dehn-Mappen, hellgelb, 230 g/m² (ArtNr. 214123)5 Klarsicht-Kombi-Mappen, hellgelb, mit Hülle, 130 g/m² (ArtNr. 224413)5 Leitkarten, für DIN A4 (ArtNr. 504032)2 Bogen Quick-Tabs, weiß, 58 mm breit (ArtNr. 581000)1 Bogen Quick-Tabs, gelb, 58 mm breit (ArtNr. 581001)1 Bogen Quick-Tabs, rot, 58 mm breit (ArtNr. 581002)1 Bogen Quick-Tabs, blau, 58 mm breit (ArtNr. 581003)1 Bogen Quick-Tabs, orange, 58 mm breit (ArtNr. 581004)1 Bogen Quick-Tabs, rosa, 58 mm breit (ArtNr. 581005)1 Bogen Big-Tabs, weiß, 70 mm breit (ArtNr. 701500)2 Bogen Schutz-Tabs für 58 mm breite Tabs (ArtNr. 605000)1 Archiv-Box, weiß (ArtNr. 104522)5 Metallheftzungen mit Deckschiene (ArtNr. 420010)2 Fenster-Reiter, Klebefuß, einseitig, 50 mm breit (ArtNr. 410050)1 Folienschreiber (ArtNr. 450313), sowie eine ausführliche Anleitung"/>
+                
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=900001"
+                                   src="https://assets.classei.de/img/beispiel_schrank_schublade.jpg"
+                                   alt="für den schnellen EinstiegDas Business-Set beinhaltet:3 Kunststoff-Boxen, hellgrau (ArtNr. 104014)6 Hängeleisten, hellgrau (ArtNr. 180014)3 Rückenschilder, klein (ArtNr. 404100)3 Sichttaschen (ArtNr. 442050)1 Sammler, grün (ArtNr. 144150)1 Dehn-Sammler (ArtNr. 134050)1 Mappenstütze (ArtNr. 574370)100 Standard-Mappen, hellgelb, 120 g/m² (ArtNr. 204113)50 Standard-Mappen, hellgelb, 170 g/m² (ArtNr. 204116)15 Dehn-Mappen, hellgelb, 230 g/m² (ArtNr. 214123)5 Klarsicht-Kombi-Mappen, hellgelb, mit Hülle, 130 g/m² (ArtNr. 224413)5 Leitkarten, für DIN A4 (ArtNr. 504032)2 Bogen Quick-Tabs, weiß, 58 mm breit (ArtNr. 581000)1 Bogen Quick-Tabs, gelb, 58 mm breit (ArtNr. 581001)1 Bogen Quick-Tabs, rot, 58 mm breit (ArtNr. 581002)1 Bogen Quick-Tabs, blau, 58 mm breit (ArtNr. 581003)1 Bogen Quick-Tabs, orange, 58 mm breit (ArtNr. 581004)1 Bogen Quick-Tabs, rosa, 58 mm breit (ArtNr. 581005)1 Bogen Big-Tabs, weiß, 70 mm breit (ArtNr. 701500)2 Bogen Schutz-Tabs für 58 mm breite Tabs (ArtNr. 605000)1 Archiv-Box, weiß (ArtNr. 104522)5 Metallheftzungen mit Deckschiene (ArtNr. 420010)2 Fenster-Reiter, Klebefuß, einseitig, 50 mm breit (ArtNr. 410050)1 Folienschreiber (ArtNr. 450313), sowie eine ausführliche Anleitung"/>
+                
+                
+            </mj-carousel>
+            
+        </mj-column>
+    </mj-section>
+
+    <!-- Product Footer - only fpr special prices-->
+    
+</mj-wrapper>
+
+        
+
+        
+
+        <mj-wrapper>
+    <!-- Product Head -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text>
+                <a style="text-decoration: None; color:#000000" target="_blank"
+                   href="https://www.classei-shop.com/search?sSearch=900002">
+                    <h4>
+                        <span style="font-size:30px; font-weight:bold; line-height: 45px; display: block">
+                            
+                            900002 Business-Set-Pro
+                            
+                        </span>
+                    </h4>
+                </a>
+            </mj-text>
+        </mj-column>
+    </mj-section>
+    <!-- Product Body -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text line-height="26px">
+                6 Kunststoffboxen, lichtgrau mit Griffleisten, 250 verschied. Orga-Mappen,
+<br>10 Multifunktionsmappen, 3 Sammler, 
+<br>3 Dehnsammler, 7 verschied. Farben
+Quick-Tabs, 
+<br />2 Mappenstützen, 10 Leitkarten, Archivbox, Terminmappen-Set (1-31, Jan-Dez),
+Folienschreiber und <strong>viel Zubehör!</strong>
+            </mj-text>
+            <mj-button padding="20px 0 0 0"
+                    href="https://www.classei-shop.com/search?sSearch=900002">
+                - Mehr Infos zum Artikel -
+            </mj-button>
+
+            
+            <mj-text align="center" padding-top="20px">
+                <h4 style="color: #ff9933; font-size: 24px; line-height: 40px">
+                    <strong>Preis</strong>
+                    359,00 €
+                </h4>
+            </mj-text>
+            
+
+            <mj-text align="center" padding="0px">
+                <p style="font-size: 14px;">
+                    <!-- Verkaufseinheit -->
+                    pro
+                        
+                        Stck
+                        
+                    <br/>
+                    
+                    <!-- Versandkosten True/False -->
+                    
+                    <span style="font-size:14px; color: #ff9933">- kostenloser Versand -</span>
+                    
+                    <br/>
+                    zuzgl. Mwst.
+                </p>
+            </mj-text>
+        </mj-column>
+        <mj-column>
+            
+            
+
+            
+
+            
+
+            
+
+            
+
+            
+            <mj-carousel>
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=900002"
+                                   src="https://assets.classei.de/img/900002.jpg"
+                                   alt="für den schnellen EinstiegDas Business-Set-Pro beinhaltet:6 Kunststoff-Boxen, hellgrau (ArtNr. 104014)12 Hängeleisten, hellgrau (ArtNr. 180014)6 Rückenschilder, klein (ArtNr. 404100)6 Sichttaschen (ArtNr. 442050)3 Sammler, grün (ArtNr. 144150)3 Dehn-Sammler (ArtNr. 134050)2 Mappenstützen (ArtNr. 574370)50 Standard-Mappen, hellgelb, 120 g/m² (ArtNr. 204113)150 Standard-Mappen, hellgelb, 170 g/m² (ArtNr. 204116)30 Dehn-Mappen, hellgelb, 230 g/m² (ArtNr. 214123)15 Klarsicht-Kombi-Mappen, hellgelb, mit Hülle, 130 g/m² (ArtNr. 224413)10 Multifunktions-Mappen, mit Schiebe-Reiter, transparent (ArtNr. 204462)5 Multifach-Mappen, 3F, hellgelb, 230 g/m² (ArtNr. 254326)10 Leitkarten, für DIN A4 (ArtNr. 504032)2 Bogen Quick-Tabs, weiß, 58 mm breit (ArtNr. 581000)2 Bogen Quick-Tabs, gelb, 58 mm breit (ArtNr. 581001)2 Bogen Quick-Tabs, rot, 58 mm breit (ArtNr. 581002)2 Bogen Quick-Tabs, blau, 58 mm breit (ArtNr. 581003)2 Bogen Quick-Tabs, orange, 58 mm breit (ArtNr. 581004)2 Bogen Quick-Tabs, rosa, 58 mm breit (ArtNr. 581005)2 Bogen Quick-Tabs, grün, 58 mm breit (ArtNr. 581006)1 Bogen Big-Tabs, weiß, 70 mm breit (ArtNr. 701500)5 Bogen Schutz-Tabs für 58 mm breite Tabs (ArtNr. 605000)5 Archiv-Boxen, weiß (ArtNr. 104522)10 Metallheftzungen mit Deckschiene (ArtNr. 420010)20 Einklebetaschen, für CDs (ArtNr. 440153)6 Fenster-Reiter, Klebefuß, einseitig, 75 mm breit (ArtNr. 410150)1 Folienschreiber (ArtNr. 450313)31 Tagesmappen (1-31)12 Monatsmappen (Jan-Dez), sowie eine ausführliche Anleitung"/>
+                
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=900002"
+                                   src="https://assets.classei.de/img/900002-chf.jpg"
+                                   alt="für den schnellen EinstiegDas Business-Set-Pro beinhaltet:6 Kunststoff-Boxen, hellgrau (ArtNr. 104014)12 Hängeleisten, hellgrau (ArtNr. 180014)6 Rückenschilder, klein (ArtNr. 404100)6 Sichttaschen (ArtNr. 442050)3 Sammler, grün (ArtNr. 144150)3 Dehn-Sammler (ArtNr. 134050)2 Mappenstützen (ArtNr. 574370)50 Standard-Mappen, hellgelb, 120 g/m² (ArtNr. 204113)150 Standard-Mappen, hellgelb, 170 g/m² (ArtNr. 204116)30 Dehn-Mappen, hellgelb, 230 g/m² (ArtNr. 214123)15 Klarsicht-Kombi-Mappen, hellgelb, mit Hülle, 130 g/m² (ArtNr. 224413)10 Multifunktions-Mappen, mit Schiebe-Reiter, transparent (ArtNr. 204462)5 Multifach-Mappen, 3F, hellgelb, 230 g/m² (ArtNr. 254326)10 Leitkarten, für DIN A4 (ArtNr. 504032)2 Bogen Quick-Tabs, weiß, 58 mm breit (ArtNr. 581000)2 Bogen Quick-Tabs, gelb, 58 mm breit (ArtNr. 581001)2 Bogen Quick-Tabs, rot, 58 mm breit (ArtNr. 581002)2 Bogen Quick-Tabs, blau, 58 mm breit (ArtNr. 581003)2 Bogen Quick-Tabs, orange, 58 mm breit (ArtNr. 581004)2 Bogen Quick-Tabs, rosa, 58 mm breit (ArtNr. 581005)2 Bogen Quick-Tabs, grün, 58 mm breit (ArtNr. 581006)1 Bogen Big-Tabs, weiß, 70 mm breit (ArtNr. 701500)5 Bogen Schutz-Tabs für 58 mm breite Tabs (ArtNr. 605000)5 Archiv-Boxen, weiß (ArtNr. 104522)10 Metallheftzungen mit Deckschiene (ArtNr. 420010)20 Einklebetaschen, für CDs (ArtNr. 440153)6 Fenster-Reiter, Klebefuß, einseitig, 75 mm breit (ArtNr. 410150)1 Folienschreiber (ArtNr. 450313)31 Tagesmappen (1-31)12 Monatsmappen (Jan-Dez), sowie eine ausführliche Anleitung"/>
+                
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=900002"
+                                   src="https://assets.classei.de/img/beispiel_orga-tabs.jpg"
+                                   alt="für den schnellen EinstiegDas Business-Set-Pro beinhaltet:6 Kunststoff-Boxen, hellgrau (ArtNr. 104014)12 Hängeleisten, hellgrau (ArtNr. 180014)6 Rückenschilder, klein (ArtNr. 404100)6 Sichttaschen (ArtNr. 442050)3 Sammler, grün (ArtNr. 144150)3 Dehn-Sammler (ArtNr. 134050)2 Mappenstützen (ArtNr. 574370)50 Standard-Mappen, hellgelb, 120 g/m² (ArtNr. 204113)150 Standard-Mappen, hellgelb, 170 g/m² (ArtNr. 204116)30 Dehn-Mappen, hellgelb, 230 g/m² (ArtNr. 214123)15 Klarsicht-Kombi-Mappen, hellgelb, mit Hülle, 130 g/m² (ArtNr. 224413)10 Multifunktions-Mappen, mit Schiebe-Reiter, transparent (ArtNr. 204462)5 Multifach-Mappen, 3F, hellgelb, 230 g/m² (ArtNr. 254326)10 Leitkarten, für DIN A4 (ArtNr. 504032)2 Bogen Quick-Tabs, weiß, 58 mm breit (ArtNr. 581000)2 Bogen Quick-Tabs, gelb, 58 mm breit (ArtNr. 581001)2 Bogen Quick-Tabs, rot, 58 mm breit (ArtNr. 581002)2 Bogen Quick-Tabs, blau, 58 mm breit (ArtNr. 581003)2 Bogen Quick-Tabs, orange, 58 mm breit (ArtNr. 581004)2 Bogen Quick-Tabs, rosa, 58 mm breit (ArtNr. 581005)2 Bogen Quick-Tabs, grün, 58 mm breit (ArtNr. 581006)1 Bogen Big-Tabs, weiß, 70 mm breit (ArtNr. 701500)5 Bogen Schutz-Tabs für 58 mm breite Tabs (ArtNr. 605000)5 Archiv-Boxen, weiß (ArtNr. 104522)10 Metallheftzungen mit Deckschiene (ArtNr. 420010)20 Einklebetaschen, für CDs (ArtNr. 440153)6 Fenster-Reiter, Klebefuß, einseitig, 75 mm breit (ArtNr. 410150)1 Folienschreiber (ArtNr. 450313)31 Tagesmappen (1-31)12 Monatsmappen (Jan-Dez), sowie eine ausführliche Anleitung"/>
+                
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=900002"
+                                   src="https://assets.classei.de/img/beispiel_schreibtisch.jpg"
+                                   alt="für den schnellen EinstiegDas Business-Set-Pro beinhaltet:6 Kunststoff-Boxen, hellgrau (ArtNr. 104014)12 Hängeleisten, hellgrau (ArtNr. 180014)6 Rückenschilder, klein (ArtNr. 404100)6 Sichttaschen (ArtNr. 442050)3 Sammler, grün (ArtNr. 144150)3 Dehn-Sammler (ArtNr. 134050)2 Mappenstützen (ArtNr. 574370)50 Standard-Mappen, hellgelb, 120 g/m² (ArtNr. 204113)150 Standard-Mappen, hellgelb, 170 g/m² (ArtNr. 204116)30 Dehn-Mappen, hellgelb, 230 g/m² (ArtNr. 214123)15 Klarsicht-Kombi-Mappen, hellgelb, mit Hülle, 130 g/m² (ArtNr. 224413)10 Multifunktions-Mappen, mit Schiebe-Reiter, transparent (ArtNr. 204462)5 Multifach-Mappen, 3F, hellgelb, 230 g/m² (ArtNr. 254326)10 Leitkarten, für DIN A4 (ArtNr. 504032)2 Bogen Quick-Tabs, weiß, 58 mm breit (ArtNr. 581000)2 Bogen Quick-Tabs, gelb, 58 mm breit (ArtNr. 581001)2 Bogen Quick-Tabs, rot, 58 mm breit (ArtNr. 581002)2 Bogen Quick-Tabs, blau, 58 mm breit (ArtNr. 581003)2 Bogen Quick-Tabs, orange, 58 mm breit (ArtNr. 581004)2 Bogen Quick-Tabs, rosa, 58 mm breit (ArtNr. 581005)2 Bogen Quick-Tabs, grün, 58 mm breit (ArtNr. 581006)1 Bogen Big-Tabs, weiß, 70 mm breit (ArtNr. 701500)5 Bogen Schutz-Tabs für 58 mm breite Tabs (ArtNr. 605000)5 Archiv-Boxen, weiß (ArtNr. 104522)10 Metallheftzungen mit Deckschiene (ArtNr. 420010)20 Einklebetaschen, für CDs (ArtNr. 440153)6 Fenster-Reiter, Klebefuß, einseitig, 75 mm breit (ArtNr. 410150)1 Folienschreiber (ArtNr. 450313)31 Tagesmappen (1-31)12 Monatsmappen (Jan-Dez), sowie eine ausführliche Anleitung"/>
+                
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=900002"
+                                   src="https://assets.classei.de/img/beispiel_schrank_schublade.jpg"
+                                   alt="für den schnellen EinstiegDas Business-Set-Pro beinhaltet:6 Kunststoff-Boxen, hellgrau (ArtNr. 104014)12 Hängeleisten, hellgrau (ArtNr. 180014)6 Rückenschilder, klein (ArtNr. 404100)6 Sichttaschen (ArtNr. 442050)3 Sammler, grün (ArtNr. 144150)3 Dehn-Sammler (ArtNr. 134050)2 Mappenstützen (ArtNr. 574370)50 Standard-Mappen, hellgelb, 120 g/m² (ArtNr. 204113)150 Standard-Mappen, hellgelb, 170 g/m² (ArtNr. 204116)30 Dehn-Mappen, hellgelb, 230 g/m² (ArtNr. 214123)15 Klarsicht-Kombi-Mappen, hellgelb, mit Hülle, 130 g/m² (ArtNr. 224413)10 Multifunktions-Mappen, mit Schiebe-Reiter, transparent (ArtNr. 204462)5 Multifach-Mappen, 3F, hellgelb, 230 g/m² (ArtNr. 254326)10 Leitkarten, für DIN A4 (ArtNr. 504032)2 Bogen Quick-Tabs, weiß, 58 mm breit (ArtNr. 581000)2 Bogen Quick-Tabs, gelb, 58 mm breit (ArtNr. 581001)2 Bogen Quick-Tabs, rot, 58 mm breit (ArtNr. 581002)2 Bogen Quick-Tabs, blau, 58 mm breit (ArtNr. 581003)2 Bogen Quick-Tabs, orange, 58 mm breit (ArtNr. 581004)2 Bogen Quick-Tabs, rosa, 58 mm breit (ArtNr. 581005)2 Bogen Quick-Tabs, grün, 58 mm breit (ArtNr. 581006)1 Bogen Big-Tabs, weiß, 70 mm breit (ArtNr. 701500)5 Bogen Schutz-Tabs für 58 mm breite Tabs (ArtNr. 605000)5 Archiv-Boxen, weiß (ArtNr. 104522)10 Metallheftzungen mit Deckschiene (ArtNr. 420010)20 Einklebetaschen, für CDs (ArtNr. 440153)6 Fenster-Reiter, Klebefuß, einseitig, 75 mm breit (ArtNr. 410150)1 Folienschreiber (ArtNr. 450313)31 Tagesmappen (1-31)12 Monatsmappen (Jan-Dez), sowie eine ausführliche Anleitung"/>
+                
+                
+            </mj-carousel>
+            
+        </mj-column>
+    </mj-section>
+
+    <!-- Product Footer - only fpr special prices-->
+    
+</mj-wrapper>
+
+        
+
+        
+            
+            <mj-section>
+    <mj-column>
+        <mj-text align="center" line-height="40px">
+            <h2 style="font-size: 30px; color: #ff9933">Aktion 15% <strong>nur bis 19.12.2024</strong></h2>
+        </mj-text>
+    </mj-column>
+</mj-section>
+            
+        
+
+        <mj-wrapper>
+    <!-- Product Head -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text>
+                <a style="text-decoration: None; color:#000000" target="_blank"
+                   href="https://www.classei-shop.com/search?sSearch=900043">
+                    <h4>
+                        <span style="font-size:30px; font-weight:bold; line-height: 45px; display: block">
+                            
+                            900043 Terminmappen-Set 1
+                            
+                        </span>
+                    </h4>
+                </a>
+            </mj-text>
+        </mj-column>
+    </mj-section>
+    <!-- Product Body -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text line-height="26px">
+                <p>43 Mappen untergliedert in 31 Tages- und 12 Monatsmappen und stehen für eine perfekte Wiedervorlage. </p>
+<p>
+1 Kunstoffbox, lichtgrau, 
+<br>31 Tages-Mappen (1-31),
+<br />12 Monats-Mappen (Jan-Dez),
+<br>1 Mappenstütze
+</p>
+            </mj-text>
+            <mj-button padding="20px 0 0 0"
+                    href="https://www.classei-shop.com/search?sSearch=900043">
+                - Mehr Infos zum Artikel -
+            </mj-button>
+
+            
+
+            <mj-text align="center" padding="0px">
+                <p style="font-size: 14px;">
+                    <!-- Verkaufseinheit -->
+                    pro
+                        
+                        Set
+                        
+                    <br/>
+                    
+                    <!-- Versandkosten True/False -->
+                    
+                    <span style="font-size: 12px">- * zuzgl. Versandkosten -</span>
+                    
+                    <br/>
+                    zuzgl. Mwst.
+                </p>
+            </mj-text>
+        </mj-column>
+        <mj-column>
+            
+            
+
+            
+
+            
+
+            
+
+            
+            <mj-carousel>
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=900043"
+                                   src="https://assets.classei.de/img/900043.jpg"
+                                   alt="In diesem Video zeigen wir wie einfach es ist, alle Termine, mit 31 Mappen für Tage und 12 Mappen für die Monate, im Überblick zu behalten. Alle. Immer.Für die schnelle Terminierung mit 43 Mappen - 43 FoldersDas Terminmappen-Set 1 beinhaltet:1 Kunststoff-Box, hellgrau (ArtNr. 104014)1 Mappenstütze (ArtNr. 574370)31 Standard-Mappen, hellgelb, 170 g/m² (ArtNr. 204116), fertig bereitert mit Daten-Tabs, Eindruck: 1-31, orange, 29 mm breit (inklusive Schutzfolie)12 Standard-Mappen, hellgelb, 170 g/m² (ArtNr. 204116), fertig bereitert mit Daten-Tabs, Eindruck: Jan-Dez, weiß, 29 mm breit (inklusive Schutzfolie)"/>
+                
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=900043"
+                                   src="https://assets.classei.de/img/beispiel_orga-tabs.jpg"
+                                   alt="In diesem Video zeigen wir wie einfach es ist, alle Termine, mit 31 Mappen für Tage und 12 Mappen für die Monate, im Überblick zu behalten. Alle. Immer.Für die schnelle Terminierung mit 43 Mappen - 43 FoldersDas Terminmappen-Set 1 beinhaltet:1 Kunststoff-Box, hellgrau (ArtNr. 104014)1 Mappenstütze (ArtNr. 574370)31 Standard-Mappen, hellgelb, 170 g/m² (ArtNr. 204116), fertig bereitert mit Daten-Tabs, Eindruck: 1-31, orange, 29 mm breit (inklusive Schutzfolie)12 Standard-Mappen, hellgelb, 170 g/m² (ArtNr. 204116), fertig bereitert mit Daten-Tabs, Eindruck: Jan-Dez, weiß, 29 mm breit (inklusive Schutzfolie)"/>
+                
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=900043"
+                                   src="https://assets.classei.de/img/beispiel_schreibtisch.jpg"
+                                   alt="In diesem Video zeigen wir wie einfach es ist, alle Termine, mit 31 Mappen für Tage und 12 Mappen für die Monate, im Überblick zu behalten. Alle. Immer.Für die schnelle Terminierung mit 43 Mappen - 43 FoldersDas Terminmappen-Set 1 beinhaltet:1 Kunststoff-Box, hellgrau (ArtNr. 104014)1 Mappenstütze (ArtNr. 574370)31 Standard-Mappen, hellgelb, 170 g/m² (ArtNr. 204116), fertig bereitert mit Daten-Tabs, Eindruck: 1-31, orange, 29 mm breit (inklusive Schutzfolie)12 Standard-Mappen, hellgelb, 170 g/m² (ArtNr. 204116), fertig bereitert mit Daten-Tabs, Eindruck: Jan-Dez, weiß, 29 mm breit (inklusive Schutzfolie)"/>
+                
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=900043"
+                                   src="https://assets.classei.de/img/beispiel_schrank_schublade.jpg"
+                                   alt="In diesem Video zeigen wir wie einfach es ist, alle Termine, mit 31 Mappen für Tage und 12 Mappen für die Monate, im Überblick zu behalten. Alle. Immer.Für die schnelle Terminierung mit 43 Mappen - 43 FoldersDas Terminmappen-Set 1 beinhaltet:1 Kunststoff-Box, hellgrau (ArtNr. 104014)1 Mappenstütze (ArtNr. 574370)31 Standard-Mappen, hellgelb, 170 g/m² (ArtNr. 204116), fertig bereitert mit Daten-Tabs, Eindruck: 1-31, orange, 29 mm breit (inklusive Schutzfolie)12 Standard-Mappen, hellgelb, 170 g/m² (ArtNr. 204116), fertig bereitert mit Daten-Tabs, Eindruck: Jan-Dez, weiß, 29 mm breit (inklusive Schutzfolie)"/>
+                
+                
+            </mj-carousel>
+            
+        </mj-column>
+    </mj-section>
+
+    <!-- Product Footer - only fpr special prices-->
+    
+    <mj-section background-color="#ffffff">
+        <!-- Listenpreis -->
+        <mj-column padding="0" width="25%">
+            <mj-text align="left" padding="0" line-height="40px">
+                Listenpreis:
+                <br/>
+                <span style="text-decoration: line-through">
+                    59,00 €
+                </span>
+            </mj-text>
+        </mj-column>
+        <!-- Angebotspreis -->
+        <mj-column padding="0" width="40%">
+            <mj-text align="center" padding="0" font-size="30px" line-height="40px" font-weight="bold">
+                Aktionspreis:
+            <br/>
+                <span style="color:#ff9933">
+                    50,15 €
+                </span>
+            </mj-text>
+        </mj-column>
+        <!-- Nachlass in Prozent -->
+        <mj-column padding="0" width="35%">
+            <mj-text align="right" padding="0" font-size="30px" line-height="40px" font-weight="bold"
+                     color="#ff9933">
+                - 15 %
+            </mj-text>
+        </mj-column>
+    </mj-section>
+    
+</mj-wrapper>
+
+        
+
+        
+
+        <mj-wrapper>
+    <!-- Product Head -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text>
+                <a style="text-decoration: None; color:#000000" target="_blank"
+                   href="https://www.classei-shop.com/search?sSearch=900050">
+                    <h4>
+                        <span style="font-size:30px; font-weight:bold; line-height: 45px; display: block">
+                            
+                            900050 Terminmappen-Set Pro
+                            
+                        </span>
+                    </h4>
+                </a>
+            </mj-text>
+        </mj-column>
+    </mj-section>
+    <!-- Product Body -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text line-height="26px">
+                <p>Termine und Aufgaben verfolgen mit Preisvorteil</p>
+<p><strong>Das Set beinhaltet:</strong><br/>
+1 Acrylglas-Box, glasklar<br>
+31 Tages-Mappen &quot;Elegance&quot; (1-31)<br>
+12 Monats-Mappen &quot;Elegance&quot; (Jan-Dez)<br>
+5 Multifunktions-Mappen mit Fensterreiter, bedruckt mit Lesen, Telefonieren, Bearbeiten, Erledigen, Besprechen</p>
+            </mj-text>
+            <mj-button padding="20px 0 0 0"
+                    href="https://www.classei-shop.com/search?sSearch=900050">
+                - Mehr Infos zum Artikel -
+            </mj-button>
+
+            
+
+            <mj-text align="center" padding="0px">
+                <p style="font-size: 14px;">
+                    <!-- Verkaufseinheit -->
+                    pro
+                        
+                        Set
+                        
+                    <br/>
+                    
+                    <!-- Versandkosten True/False -->
+                    
+                    <span style="font-size:14px; color: #ff9933">- kostenloser Versand -</span>
+                    
+                    <br/>
+                    zuzgl. Mwst.
+                </p>
+            </mj-text>
+        </mj-column>
+        <mj-column>
+            
+            
+
+            
+
+            
+
+            
+
+            
+            <mj-carousel>
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=900050"
+                                   src="https://assets.classei.de/img/900050.jpg"
+                                   alt="In diesem Video zeigen wir wie einfach es ist, alle Termine im Überblick zu behalten. Alle. Immer.für umfangreiche TerminierungDas Terminmappen-Set Pro beinhaltet1 Acrylglas-Box, glasklar, 16 cm tief (ArtNr. 104070)31 Elegance-Mappen, weiss, 250 g/m² (ArtNr. 204045/00), fertig bereitert mit Daten-Tabs, Eindruck: 1-31, orange, 29 mm breit (inklusive Schutzfolie)12 Elegance-Mappen, weiss, 250 g/m² (ArtNr. 204045/00), fertig bereitert mit Daten-Tabs, Eindruck: Jan-Dez, weiß, 29 mm breit (inklusive Schutzfolie)5 Multifunktions-Mappen, mit Schiebereiter, transluzent (ArtNr. 204462), fertig bereitert mit Beschriftungs-Schildern, rosa, 58 mm breit, bedruckt mit Lesen, Telefonieren, Bearbeiten, Erledigen, Besprechen"/>
+                
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=900050"
+                                   src="https://assets.classei.de/img/beispiel_orga-tabs.jpg"
+                                   alt="In diesem Video zeigen wir wie einfach es ist, alle Termine im Überblick zu behalten. Alle. Immer.für umfangreiche TerminierungDas Terminmappen-Set Pro beinhaltet1 Acrylglas-Box, glasklar, 16 cm tief (ArtNr. 104070)31 Elegance-Mappen, weiss, 250 g/m² (ArtNr. 204045/00), fertig bereitert mit Daten-Tabs, Eindruck: 1-31, orange, 29 mm breit (inklusive Schutzfolie)12 Elegance-Mappen, weiss, 250 g/m² (ArtNr. 204045/00), fertig bereitert mit Daten-Tabs, Eindruck: Jan-Dez, weiß, 29 mm breit (inklusive Schutzfolie)5 Multifunktions-Mappen, mit Schiebereiter, transluzent (ArtNr. 204462), fertig bereitert mit Beschriftungs-Schildern, rosa, 58 mm breit, bedruckt mit Lesen, Telefonieren, Bearbeiten, Erledigen, Besprechen"/>
+                
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=900050"
+                                   src="https://assets.classei.de/img/beispiel_schreibtisch.jpg"
+                                   alt="In diesem Video zeigen wir wie einfach es ist, alle Termine im Überblick zu behalten. Alle. Immer.für umfangreiche TerminierungDas Terminmappen-Set Pro beinhaltet1 Acrylglas-Box, glasklar, 16 cm tief (ArtNr. 104070)31 Elegance-Mappen, weiss, 250 g/m² (ArtNr. 204045/00), fertig bereitert mit Daten-Tabs, Eindruck: 1-31, orange, 29 mm breit (inklusive Schutzfolie)12 Elegance-Mappen, weiss, 250 g/m² (ArtNr. 204045/00), fertig bereitert mit Daten-Tabs, Eindruck: Jan-Dez, weiß, 29 mm breit (inklusive Schutzfolie)5 Multifunktions-Mappen, mit Schiebereiter, transluzent (ArtNr. 204462), fertig bereitert mit Beschriftungs-Schildern, rosa, 58 mm breit, bedruckt mit Lesen, Telefonieren, Bearbeiten, Erledigen, Besprechen"/>
+                
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=900050"
+                                   src="https://assets.classei.de/img/beispiel_schrank_schublade.jpg"
+                                   alt="In diesem Video zeigen wir wie einfach es ist, alle Termine im Überblick zu behalten. Alle. Immer.für umfangreiche TerminierungDas Terminmappen-Set Pro beinhaltet1 Acrylglas-Box, glasklar, 16 cm tief (ArtNr. 104070)31 Elegance-Mappen, weiss, 250 g/m² (ArtNr. 204045/00), fertig bereitert mit Daten-Tabs, Eindruck: 1-31, orange, 29 mm breit (inklusive Schutzfolie)12 Elegance-Mappen, weiss, 250 g/m² (ArtNr. 204045/00), fertig bereitert mit Daten-Tabs, Eindruck: Jan-Dez, weiß, 29 mm breit (inklusive Schutzfolie)5 Multifunktions-Mappen, mit Schiebereiter, transluzent (ArtNr. 204462), fertig bereitert mit Beschriftungs-Schildern, rosa, 58 mm breit, bedruckt mit Lesen, Telefonieren, Bearbeiten, Erledigen, Besprechen"/>
+                
+                
+            </mj-carousel>
+            
+        </mj-column>
+    </mj-section>
+
+    <!-- Product Footer - only fpr special prices-->
+    
+    <mj-section background-color="#ffffff">
+        <!-- Listenpreis -->
+        <mj-column padding="0" width="25%">
+            <mj-text align="left" padding="0" line-height="40px">
+                Listenpreis:
+                <br/>
+                <span style="text-decoration: line-through">
+                    229,00 €
+                </span>
+            </mj-text>
+        </mj-column>
+        <!-- Angebotspreis -->
+        <mj-column padding="0" width="40%">
+            <mj-text align="center" padding="0" font-size="30px" line-height="40px" font-weight="bold">
+                Aktionspreis:
+            <br/>
+                <span style="color:#ff9933">
+                    194,65 €
+                </span>
+            </mj-text>
+        </mj-column>
+        <!-- Nachlass in Prozent -->
+        <mj-column padding="0" width="35%">
+            <mj-text align="right" padding="0" font-size="30px" line-height="40px" font-weight="bold"
+                     color="#ff9933">
+                - 15 %
+            </mj-text>
+        </mj-column>
+    </mj-section>
+    
+</mj-wrapper>
+
+        
+
+        
+
+        <mj-wrapper>
+    <!-- Product Head -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text>
+                <a style="text-decoration: None; color:#000000" target="_blank"
+                   href="https://www.classei-shop.com/search?sSearch=910000">
+                    <h4>
+                        <span style="font-size:30px; font-weight:bold; line-height: 45px; display: block">
+                            
+                            910000 Schreibtisch-Set (ZPM)
+                            
+                        </span>
+                    </h4>
+                </a>
+            </mj-text>
+        </mj-column>
+    </mj-section>
+    <!-- Product Body -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text line-height="26px">
+                <p>
+Alle Termine und Projekte im Überblick halten.
+</p>
+<p>
+<strong>Das Schreibtisch-Set beinhaltet:</strong>
+<br>1 Acrylglas-Planständer (ArtNr. 584470)
+<br>3 Plantafeln (ArtNr. 626026) mit Fenster-Reiter (Tages-, Wochen-, Monatsplan)
+<br>1 Blattständer (ArtNr. 586170) mit <br/>
+100 Planblätter (ArtNr. 806008)
+</p>
+            </mj-text>
+            <mj-button padding="20px 0 0 0"
+                    href="https://www.classei-shop.com/search?sSearch=910000">
+                - Mehr Infos zum Artikel -
+            </mj-button>
+
+            
+
+            <mj-text align="center" padding="0px">
+                <p style="font-size: 14px;">
+                    <!-- Verkaufseinheit -->
+                    pro
+                        
+                        Set
+                        
+                    <br/>
+                    
+                    <!-- Versandkosten True/False -->
+                    
+                    <span style="font-size:14px; color: #ff9933">- kostenloser Versand -</span>
+                    
+                    <br/>
+                    zuzgl. Mwst.
+                </p>
+            </mj-text>
+        </mj-column>
+        <mj-column>
+            
+            
+
+            
+
+            
+
+            
+            <mj-carousel>
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=910000"
+                                   src="https://assets.classei.de/img/910000.jpg"
+                                   alt="So einfach funktioniert ZPM: In diesem Video zeigen wir wie einfach es ist, alle Aufgaben und Termine permanent im Überblick zu behalten. Mit dem Set sofort startklar.Das Schreibtisch-Set beinhaltet:1 Acrylglas-Planständer mit Mappenfach (ArtNr. 584470)3 Plantafeln (ArtNr. 626026) mit Fenster-Reiter (Tages-, Wochen-, Monatsplan),diese können jederzeit ausgetauscht und mit individuellen Begriffen, wie z.B. Projekt 1,2,3 verwendet werden1 Acrylglas-Blattständer (ArtNr. 586170) mit 100 Planblätter (ArtNr. 806008)"/>
+                
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=910000"
+                                   src="https://assets.classei.de/img/910000_02.jpg"
+                                   alt="So einfach funktioniert ZPM: In diesem Video zeigen wir wie einfach es ist, alle Aufgaben und Termine permanent im Überblick zu behalten. Mit dem Set sofort startklar.Das Schreibtisch-Set beinhaltet:1 Acrylglas-Planständer mit Mappenfach (ArtNr. 584470)3 Plantafeln (ArtNr. 626026) mit Fenster-Reiter (Tages-, Wochen-, Monatsplan),diese können jederzeit ausgetauscht und mit individuellen Begriffen, wie z.B. Projekt 1,2,3 verwendet werden1 Acrylglas-Blattständer (ArtNr. 586170) mit 100 Planblätter (ArtNr. 806008)"/>
+                
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=910000"
+                                   src="https://assets.classei.de/img/910000_03.jpg"
+                                   alt="So einfach funktioniert ZPM: In diesem Video zeigen wir wie einfach es ist, alle Aufgaben und Termine permanent im Überblick zu behalten. Mit dem Set sofort startklar.Das Schreibtisch-Set beinhaltet:1 Acrylglas-Planständer mit Mappenfach (ArtNr. 584470)3 Plantafeln (ArtNr. 626026) mit Fenster-Reiter (Tages-, Wochen-, Monatsplan),diese können jederzeit ausgetauscht und mit individuellen Begriffen, wie z.B. Projekt 1,2,3 verwendet werden1 Acrylglas-Blattständer (ArtNr. 586170) mit 100 Planblätter (ArtNr. 806008)"/>
+                
+                
+            </mj-carousel>
+            
+        </mj-column>
+    </mj-section>
+
+    <!-- Product Footer - only fpr special prices-->
+    
+    <mj-section background-color="#ffffff">
+        <!-- Listenpreis -->
+        <mj-column padding="0" width="25%">
+            <mj-text align="left" padding="0" line-height="40px">
+                Listenpreis:
+                <br/>
+                <span style="text-decoration: line-through">
+                    135,00 €
+                </span>
+            </mj-text>
+        </mj-column>
+        <!-- Angebotspreis -->
+        <mj-column padding="0" width="40%">
+            <mj-text align="center" padding="0" font-size="30px" line-height="40px" font-weight="bold">
+                Aktionspreis:
+            <br/>
+                <span style="color:#ff9933">
+                    114,75 €
+                </span>
+            </mj-text>
+        </mj-column>
+        <!-- Nachlass in Prozent -->
+        <mj-column padding="0" width="35%">
+            <mj-text align="right" padding="0" font-size="30px" line-height="40px" font-weight="bold"
+                     color="#ff9933">
+                - 15 %
+            </mj-text>
+        </mj-column>
+    </mj-section>
+    
+</mj-wrapper>
+
+        
+
+
+
+        <!-- Order form Contact -->
+        <mj-include path="..\..\template\contact_table.mjml"/>
+
+        <!-- Order form Products -->
+        <mj-wrapper padding="0px">
+            <mj-section css-class="section_white" padding="0px" background-color="#ffffff">
+                <mj-column>
+                    <mj-table css-class="contact_table">
+                        
+                        <tr style="border-bottom: 1px dotted #ff9933; margin: 10px 0 10px 0" >
+    <td width="10%">__x</td>
+    <td width="35%" style="color: #ff9933; font-weight: bold; font-size: 12px; line-height:1">
+        900000 Basic-Set
+    </td>
+    <td width="55%" align="right">
+        <mj-text  align="right" font-size="14px">
+
+            
+                Listenpreis: 42,00 € netto
+            
+            <br/>
+            <!-- Verkaufseinheit -->
+            pro
+                
+            <b>Stck</b>
+                
+
+            <br/>
+            
+            <!-- Versandkosten True/False -->
+            
+                <span style="font-size: 12px">- * zuzgl. Versandkosten - zuzgl. Mwst. - </span>
+            
+
+        </mj-text>
+    </td>
+</tr>
+                        
+                        <tr style="border-bottom: 1px dotted #ff9933; margin: 10px 0 10px 0" >
+    <td width="10%">__x</td>
+    <td width="35%" style="color: #ff9933; font-weight: bold; font-size: 12px; line-height:1">
+        900001 Business-Set
+    </td>
+    <td width="55%" align="right">
+        <mj-text  align="right" font-size="14px">
+
+            
+                Listenpreis: 145,00 € netto
+            
+            <br/>
+            <!-- Verkaufseinheit -->
+            pro
+                
+            <b>Set</b>
+                
+
+            <br/>
+            
+            <!-- Versandkosten True/False -->
+            
+                <span style="font-size:14px; color: #ff9933">- kostenloser Versand - zuzgl. Mwst. - </span>
+            
+
+        </mj-text>
+    </td>
+</tr>
+                        
+                        <tr style="border-bottom: 1px dotted #ff9933; margin: 10px 0 10px 0" >
+    <td width="10%">__x</td>
+    <td width="35%" style="color: #ff9933; font-weight: bold; font-size: 12px; line-height:1">
+        900002 Business-Set-Pro
+    </td>
+    <td width="55%" align="right">
+        <mj-text  align="right" font-size="14px">
+
+            
+                Listenpreis: 359,00 € netto
+            
+            <br/>
+            <!-- Verkaufseinheit -->
+            pro
+                
+            <b>Stck</b>
+                
+
+            <br/>
+            
+            <!-- Versandkosten True/False -->
+            
+                <span style="font-size:14px; color: #ff9933">- kostenloser Versand - zuzgl. Mwst. - </span>
+            
+
+        </mj-text>
+    </td>
+</tr>
+                        
+                        <tr style="border-bottom: 1px dotted #ff9933; margin: 10px 0 10px 0" >
+    <td width="10%">__x</td>
+    <td width="35%" style="color: #ff9933; font-weight: bold; font-size: 12px; line-height:1">
+        900043 Terminmappen-Set 1
+    </td>
+    <td width="55%" align="right">
+        <mj-text  align="right" font-size="14px">
+
+            
+                Listenpreis:
+                <span style="text-decoration: line-through">
+                    59,00 €
+                </span> netto
+                <br />
+                <span style="color: #ff9933;">
+                    Aktionspreis: 50,15 €
+                </span> netto
+                
+            <br/>
+            <!-- Verkaufseinheit -->
+            pro
+                
+            <b>Set</b>
+                
+
+            <br/>
+            
+            <!-- Versandkosten True/False -->
+            
+                <span style="font-size: 12px">- * zuzgl. Versandkosten - zuzgl. Mwst. - </span>
+            
+
+        </mj-text>
+    </td>
+</tr>
+                        
+                        <tr style="border-bottom: 1px dotted #ff9933; margin: 10px 0 10px 0" >
+    <td width="10%">__x</td>
+    <td width="35%" style="color: #ff9933; font-weight: bold; font-size: 12px; line-height:1">
+        900050 Terminmappen-Set Pro
+    </td>
+    <td width="55%" align="right">
+        <mj-text  align="right" font-size="14px">
+
+            
+                Listenpreis:
+                <span style="text-decoration: line-through">
+                    229,00 €
+                </span> netto
+                <br />
+                <span style="color: #ff9933;">
+                    Aktionspreis: 194,65 €
+                </span> netto
+                
+            <br/>
+            <!-- Verkaufseinheit -->
+            pro
+                
+            <b>Set</b>
+                
+
+            <br/>
+            
+            <!-- Versandkosten True/False -->
+            
+                <span style="font-size:14px; color: #ff9933">- kostenloser Versand - zuzgl. Mwst. - </span>
+            
+
+        </mj-text>
+    </td>
+</tr>
+                        
+                        <tr style="border-bottom: 1px dotted #ff9933; margin: 10px 0 10px 0" >
+    <td width="10%">__x</td>
+    <td width="35%" style="color: #ff9933; font-weight: bold; font-size: 12px; line-height:1">
+        910000 Schreibtisch-Set (ZPM)
+    </td>
+    <td width="55%" align="right">
+        <mj-text  align="right" font-size="14px">
+
+            
+                Listenpreis:
+                <span style="text-decoration: line-through">
+                    135,00 €
+                </span> netto
+                <br />
+                <span style="color: #ff9933;">
+                    Aktionspreis: 114,75 €
+                </span> netto
+                
+            <br/>
+            <!-- Verkaufseinheit -->
+            pro
+                
+            <b>Set</b>
+                
+
+            <br/>
+            
+            <!-- Versandkosten True/False -->
+            
+                <span style="font-size:14px; color: #ff9933">- kostenloser Versand - zuzgl. Mwst. - </span>
+            
+
+        </mj-text>
+    </td>
+</tr>
+                        
+                    </mj-table>
+                </mj-column>
+            </mj-section>
+        </mj-wrapper>
+
+
+        <mj-section css-class="section_white" padding="0px" background-color="#ffffff">
+            <!-- Blog Content -->
+            <mj-column>
+                {autocontent:25-| max:1|
+                order:created,DESC|
+                type:intro|link|author| pict:resized|
+                maxwidth:150|
+                maxheight:150| invert| format:TOP_LEFT|
+                template:tagcontent.php}
+            </mj-column>
+        </mj-section>
+
+        <!-- Rechtliches -->
+        <mj-section background-color="#ffffff">
+            <mj-column>
+                <mj-text font-size="12px" line-height="16px">
+                    <!-- Terms -->
+                    <p>
+
+                        * Versandkostenfrei ab Warenwert
+                        99,00 € netto. Warenwert
+                        unter 99,00 € netto Versandkosten
+                        5,95 € netto.&nbsp;
+
+                        |
+                        <a style="text-decoration: None; color: #ff9933"
+                           href="https://www.classei-shop.com/Versandinformationen?sPartner=email"
+                           target="_blank">Nähere Infos zu
+                            Versandkosten&nbsp;
+                        </a>
+                        15% Aktion gültig bis 19.12.2024. Aktion nur gültig in Deutschland und Österreich.
+
+                    </p>
+
+
+                    <!-- Impressum -->
+                    <p>
+                        Classei-Organisation - Egon Heimann
+                        GmbH | Staudacher Str. 7e | 83250
+                        Marquartstein | Deutschland<br>Fon:
+                        +49
+                        (0)8641 97 59 0 |
+                        Fax +49 (0)8641 97 59 20 | E-Mail:
+                        <a style="text-decoration: None; color: #ff9933" href="mailto:info@classei.de">
+                            Info
+                        </a>
+                        // Internet:
+                        <a href="https://www.classei.de">Classei.de</a>
+                    </p>
+
+
+                    <!-- Unsubscribe -->
+                    <p>
+                        Sie erhalten diese E-Mail, weil Sie
+                        unser Kunde/Interessent sind oder
+                        wir schon Kontakt hatten. Wenn Sie
+                        keine
+                        Informationen mehr erhalten möchten,
+                        welche wir relativ selten
+                        verschicken, tragen Sie sich bitte
+                        <span>
+                            {modify}hier{/modify}
+                        </span>
+                        aus.
+                    </p>
+                </mj-text>
+            </mj-column>
+        </mj-section>
+
+    </mj-body>
+</mjml>

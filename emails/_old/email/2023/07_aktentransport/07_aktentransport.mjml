@@ -1,0 +1,1005 @@
+<mjml>
+    <mj-head>
+        <mj-font name="Roboto Black" href="https://assets.classei.de/fonts/Roboto-Black.ttf" />
+<mj-font name="Roboto Black Italic" href="https://assets.classei.de/fonts/Roboto-BlackItalic.ttf" />
+<mj-font name="Roboto Bold" href="https://assets.classei.de/fonts/Roboto-Bold.ttf" />
+<mj-font name="Roboto Bold Italic" href="https://assets.classei.de/fonts/Roboto-BoldItalic.ttf" />
+<mj-font name="Roboto Italic" href="https://assets.classei.de/fonts/Roboto-Italic.ttf" />
+<mj-font name="Roboto Light" href="https://assets.classei.de/fonts/Roboto-Light.ttf" />
+<mj-font name="Roboto Light Italic" href="https://assets.classei.de/fonts/Roboto-LightItalic.ttf" />
+<mj-font name="Roboto Medium" href="https://assets.classei.de/fonts/Roboto-Medium.ttf" />
+<mj-font name="Roboto Medium Italic" href="https://assets.classei.de/fonts/Roboto-MediumItalic.ttf" />
+<mj-font name="Roboto" href="https://assets.classei.de/fonts/Roboto-Regular.ttf" />
+<mj-font name="Roboto Thin" href="https://assets.classei.de/fonts/Roboto-Thin.ttf" />
+<mj-font name="Roboto Thin Italic" href="https://assets.classei.de/fonts/Roboto-ThinItalic.ttf" />
+
+<mj-style>
+    @font-face {
+        font-family: 'Roboto';
+        src: url('https://assets.classei.de/fonts/Roboto-Regular.ttf');
+        font-weight: normal;
+        font-style: normal;
+    }
+    body {
+        font-family: 'Roboto', sans-serif !important;
+    }
+</mj-style>
+<mj-attributes>
+    <mj-all
+            font-family="Roboto, Arial, sans-serif"
+            font-size="16px"
+            line-height="20px"
+    />
+    <mj-body
+            background-color="#f3f3f3"
+    />
+    <mj-section
+            padding="20px"
+            background-color="#ffffff"
+    />
+    <mj-text
+            font-family="Roboto, Arial, sans-serif"
+            font-size="16px"
+            line-height="20px"
+            padding="0"
+    />
+    <mj-button
+            font-family="Roboto, Arial"
+            background-color="#ff9933"
+            color="white"
+            font-weight="bold"
+            padding="0"
+    />
+
+</mj-attributes>
+<mj-preview>
+    <!-- TODO Add mail preview -->
+</mj-preview>
+    </mj-head>
+
+    <!-- Body -->
+    <mj-body>
+        
+        <mj-raw>
+            <!-- Company Header -->
+        </mj-raw>
+
+        <!-- View online -->
+        <mj-section background-color="#ffffff" padding="0">
+    <mj-column padding="0">
+        <mj-text font-size="12px" color="#000000" padding="0"  align="center">
+            <a style="text-decoration: None; color: #000000" href="{readonline|template:notemplate}{/readonline}" target="_blank" padding="0">
+                <strong> Hier Online ansehen </strong> - Falls die E-Mail nicht korrekt dargestellt wird
+            </a>
+        </mj-text>
+    </mj-column>
+</mj-section>
+
+        <!-- Navigation -->
+        <mj-section background-color="#ff9933" padding="5px 0">
+    <mj-column>
+        <mj-navbar base-url="https://www.classei-shop.com/" hamburger="hamburger" ico-color="#ffffff">
+            <mj-navbar-link padding="0px 10px" color="#ffffff" font-weight="bold" href="Orga-Mappen?sPartner=email">ORGA-MAPPEN</mj-navbar-link>
+            <mj-navbar-link padding="0px 10px" color="#ffffff" font-weight="bold" href="Orga-Tabs?sPartner=email">ORGA-TABS</mj-navbar-link>
+            <mj-navbar-link padding="0px 10px" color="#ffffff" font-weight="bold" href="Orga-Boxen?sPartner=email">ORGA-BOXEN</mj-navbar-link>
+            <mj-navbar-link padding="0px 10px" color="#ffffff" font-weight="bold" href="Fertig-Sets?sPartner=email">FERTIG-SETS</mj-navbar-link>
+        </mj-navbar>
+    </mj-column>
+</mj-section>
+
+        <!-- Header-Logo -->
+        <mj-section padding="0">
+        <mj-column padding="0">
+                <mj-image
+                        width="600px"
+                        src="https://www.classei.de/index.php?option=com_joomgallery&amp;view=image&amp;format=raw&amp;id=355&amp;type=orig"
+                        href="https://www.classei-shop.com"
+                        padding="0"
+                />
+        </mj-column>
+</mj-section>
+
+        <!-- Title -->
+        
+        <mj-section padding="20px" background-color="#ffffff">
+    <mj-column>
+        <mj-text>
+            <h1 align="center" style="color: #ff9933; font-weight:400; line-height:40px">
+                Classei Akten transportieren
+            </h1>
+            <h1 align="right" style="color: #8a8a8a; font-weight:400; line-height:36px">
+                <small>
+                    ...einfach, praktisch und funktionell
+                </small>
+            </h1>
+        </mj-text>
+    </mj-column>
+</mj-section>
+        
+
+        <!-- Salutation -->
+        <<mj-section>
+    <mj-column>
+        <mj-text>
+            Hallo
+
+            {if:anrede~Herr} Herr {/if}
+            {if:anrede~Frau} Frau {/if}
+            {subtag:name},
+        </mj-text>
+    </mj-column>
+    <mj-column>
+        <mj-text align="right">
+            <p>
+                Ihre Kunden-Nr.: {subtag:adrnr}
+            </p>
+        </mj-text>
+    </mj-column>
+</mj-section>
+
+        <!-- Intro -->
+        <mj-section>
+            <mj-column>
+                <mj-text>
+                    <p>
+                        möchten Sie Ihre Akten zu Besprechungen, Kundenbesuchen oder Vorträgen sicher verstaut mitnehmen? Kein Problem –
+                        auch hier bietet Classei eine Vielfalt von Transportmöglichkeiten. Angefangen von der <span class="orange">neuen, eleganten
+                        Leder/Nylon-Aktentasche</span> bis hin zum Konferenz-Koffer, in dem eine komplett gefüllte Orga-Box und Notebook oder
+                        Tablet Platz finden.
+                    </p>
+                </mj-text>
+            </mj-column>
+        </mj-section>
+
+        <mj-wrapper padding="20px 0 0 0">
+            <!-- Subheader ZPM -->
+            
+            <mj-section>
+    <mj-column>
+        <mj-text align="center" line-height="40px">
+            <h2 style="font-size: 30px; color: #ff9933">Aktentaschen</h2>
+        </mj-text>
+    </mj-column>
+</mj-section>
+            
+        </mj-wrapper>
+
+        <!-- Products -->
+        
+        <mj-wrapper>
+    <!-- Product Head -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text>
+                <a style="text-decoration: None; color:#000000" target="_blank"
+                   href="https://www.classei-shop.com/search?sSearch=594130">
+                    <h4>
+                        <span style="font-size:30px; font-weight:bold; line-height: 45px; display: block">
+                            
+                            
+                            594130 Aktentasche Style, Lede [...]
+                            
+                        </span>
+                    </h4>
+                </a>
+            </mj-text>
+        </mj-column>
+    </mj-section>
+    <!-- Product Body -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text>
+                <p>Elegante Aktentasche aus mattem, strapazierfähigem Nylon und hochwertiger Rindleder-Klappe  
+mit praktischem Magnetverschluss im trendigen Matt-Design. Für die Mitnahme und Transport von 
+Orga-Mappen, Notebook oder sonstigen Akten im DIN A4-Format. Organizer-Rückfach mit 
+Reisverschluss für separaten Zugriff.</p>
+<p>
+<b>Material:</b> strapazierfähiges Nylon und hochwertige Rindleder-Klappe  <br>
+<b>Innen-Maße:</b> <br />
+<b>Breite:</b> 325 mm<br />
+<b>Höhe: </b> 240 mm<br />
+<b>Tiefe: </b> 40 mm<br />
+<b>Farbe:</b> schwarz-matt<br />
+<br>
+Lieferung: Ohne Inhalt</p>
+            </mj-text>
+            <mj-button
+                    href="https://www.classei-shop.com/search?sSearch=594130">
+                - Mehr Infos zum Artikel -
+            </mj-button>
+
+            
+            <mj-text align="center" padding-top="20px">
+                <h4 style="color: #ff9933; font-size: 24px; line-height: 40px">
+                    <strong>Preis</strong>
+                    49,90 €
+                </h4>
+            </mj-text>
+            
+
+            <mj-text align="center" padding="0px">
+                <p style="font-size: 14px;">
+                    <!-- Verkaufseinheit -->
+                    pro
+                    <strong>
+                        
+                        Stck
+                        
+                    </strong>
+                    <br/>
+                    
+                    <!-- Versandkosten True/False -->
+                    
+                    <span style="font-size: 12px">- * zuzgl. Versandkosten -</span>
+                    
+                    <br/>
+                    zuzgl. Mwst.
+                </p>
+            </mj-text>
+        </mj-column>
+        <mj-column>
+            <mj-carousel>
+                
+                    
+                        <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=594130"
+                                           src="https://assets.classei.de/img/594130.jpg"
+                                           alt="Beispiel"/>
+                    
+
+                
+                    
+                        <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=594130"
+                                           src="https://assets.classei.de/img/594130_02.jpg"
+                                           alt="Beispiel"/>
+                    
+
+                
+                    
+                        <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=594130"
+                                           src="https://assets.classei.de/img/594130_03.jpg"
+                                           alt="Beispiel"/>
+                    
+
+                
+                    
+                        <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=594130"
+                                           src="https://assets.classei.de/img/594130_04.jpg"
+                                           alt="Beispiel"/>
+                    
+
+                
+            </mj-carousel>
+        </mj-column>
+    </mj-section>
+
+    <!-- Product Footer - only fpr special prices-->
+    
+</mj-wrapper>
+        
+
+        
+        <mj-wrapper>
+    <!-- Product Head -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text>
+                <a style="text-decoration: None; color:#000000" target="_blank"
+                   href="https://www.classei-shop.com/search?sSearch=594120">
+                    <h4>
+                        <span style="font-size:30px; font-weight:bold; line-height: 45px; display: block">
+                            
+                            
+                            594120 GO-Box | Aktentaschen-S [...]
+                            
+                        </span>
+                    </h4>
+                </a>
+            </mj-text>
+        </mj-column>
+    </mj-section>
+    <!-- Product Body -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text>
+                <p>GO-Box im Aktentaschen-Stil mit praktischem Steckverschluss für die Mitnahme und Transport von Orga-Mappen oder sonstigen Akten im DIN A4-Format. Aus extra starkem und stabilem PP, transluzent im edlen Matt-Design.</p>
+<p>
+<b>Material:</b> extra starkes PP, transluzent im edlen Matt-Design<br>
+<b>Innen-Maße:</b> <br />
+<b>Breite:</b> 320 mm<br />
+<b>Höhe: </b> 240 mm<br />
+<b>Tiefe: </b> 25 mm<br />
+<b>Farbe:</b> transparent<br>
+<br>
+Lieferung: Ohne Inhalt</p>
+            </mj-text>
+            <mj-button
+                    href="https://www.classei-shop.com/search?sSearch=594120">
+                - Mehr Infos zum Artikel -
+            </mj-button>
+
+            
+            <mj-text align="center" padding-top="20px">
+                <h4 style="color: #ff9933; font-size: 24px; line-height: 40px">
+                    <strong>Preis</strong>
+                    7,20 €
+                </h4>
+            </mj-text>
+            
+
+            <mj-text align="center" padding="0px">
+                <p style="font-size: 14px;">
+                    <!-- Verkaufseinheit -->
+                    pro
+                    <strong>
+                        
+                        Stck
+                        
+                    </strong>
+                    <br/>
+                    
+                    <!-- Versandkosten True/False -->
+                    
+                    <span style="font-size: 12px">- * zuzgl. Versandkosten -</span>
+                    
+                    <br/>
+                    zuzgl. Mwst.
+                </p>
+            </mj-text>
+        </mj-column>
+        <mj-column>
+            <mj-carousel>
+                
+                    
+                        <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=594120"
+                                           src="https://assets.classei.de/img/594120.jpg"
+                                           alt="Beispiel"/>
+                    
+
+                
+                    
+                        <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=594120"
+                                           src="https://assets.classei.de/img/594120_02.jpg"
+                                           alt="Beispiel"/>
+                    
+
+                
+                    
+                        <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=594120"
+                                           src="https://assets.classei.de/img/594120_03.jpg"
+                                           alt="Beispiel"/>
+                    
+
+                
+                    
+                        <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=594120"
+                                           src="https://assets.classei.de/img/594120_04.jpg"
+                                           alt="Beispiel"/>
+                    
+
+                
+            </mj-carousel>
+        </mj-column>
+    </mj-section>
+
+    <!-- Product Footer - only fpr special prices-->
+    
+</mj-wrapper>
+        
+
+        
+        <mj-wrapper>
+    <!-- Product Head -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text>
+                <a style="text-decoration: None; color:#000000" target="_blank"
+                   href="https://www.classei-shop.com/search?sSearch=594110">
+                    <h4>
+                        <span style="font-size:30px; font-weight:bold; line-height: 45px; display: block">
+                            
+                            
+                            594110 GO-Box | Aktentaschen-S [...]
+                            
+                        </span>
+                    </h4>
+                </a>
+            </mj-text>
+        </mj-column>
+    </mj-section>
+    <!-- Product Body -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text>
+                <p>GO-Box im Aktentaschen-Stil mit praktischem Steckverschluss für die Mitnahme und Transport von Orga-Mappen oder sonstigen Akten im DIN A4-Format. Aus extra starkem und stabilem PP, transluzent im edlen Matt-Design.
+</p>
+<p>
+<b>Material:</b> extra starkes PP, transparent im edlen Matt-Design<br>
+<b>Innen-Maße:</b> <br />
+<b>Breite: </b> 325 mm <br />
+<b>Höhe: </b> 245 mm <br />
+<b>Tiefe: </b> 45 mm<br/>
+<b>Farbe:</b> transluzent<br>
+<br>
+Lieferung: Ohne Inhalt</p>
+            </mj-text>
+            <mj-button
+                    href="https://www.classei-shop.com/search?sSearch=594110">
+                - Mehr Infos zum Artikel -
+            </mj-button>
+
+            
+            <mj-text align="center" padding-top="20px">
+                <h4 style="color: #ff9933; font-size: 24px; line-height: 40px">
+                    <strong>Preis</strong>
+                    7,85 €
+                </h4>
+            </mj-text>
+            
+
+            <mj-text align="center" padding="0px">
+                <p style="font-size: 14px;">
+                    <!-- Verkaufseinheit -->
+                    pro
+                    <strong>
+                        
+                        Stck
+                        
+                    </strong>
+                    <br/>
+                    
+                    <!-- Versandkosten True/False -->
+                    
+                    <span style="font-size: 12px">- * zuzgl. Versandkosten -</span>
+                    
+                    <br/>
+                    zuzgl. Mwst.
+                </p>
+            </mj-text>
+        </mj-column>
+        <mj-column>
+            <mj-carousel>
+                
+                    
+                    
+
+                
+                    
+                        <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=594110"
+                                           src="https://assets.classei.de/img/594110_02.jpg"
+                                           alt="Beispiel"/>
+                    
+
+                
+                    
+                        <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=594110"
+                                           src="https://assets.classei.de/img/594110_03.jpg"
+                                           alt="Beispiel"/>
+                    
+
+                
+                    
+                        <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=594110"
+                                           src="https://assets.classei.de/img/594110_04.jpg"
+                                           alt="Beispiel"/>
+                    
+
+                
+            </mj-carousel>
+        </mj-column>
+    </mj-section>
+
+    <!-- Product Footer - only fpr special prices-->
+    
+</mj-wrapper>
+        
+
+        <mj-wrapper padding="20px 0 0 0">
+            <!-- Subheader ZPM -->
+            
+            <mj-section>
+    <mj-column>
+        <mj-text align="center" line-height="40px">
+            <h2 style="font-size: 30px; color: #ff9933">GO-Koffer</h2>
+        </mj-text>
+    </mj-column>
+</mj-section>
+            
+        </mj-wrapper>
+
+        
+        <mj-wrapper>
+    <!-- Product Head -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text>
+                <a style="text-decoration: None; color:#000000" target="_blank"
+                   href="https://www.classei-shop.com/search?sSearch=594101">
+                    <h4>
+                        <span style="font-size:30px; font-weight:bold; line-height: 45px; display: block">
+                            
+                            
+                            594101 GO-Koffer für 1 Sammler [...]
+                            
+                        </span>
+                    </h4>
+                </a>
+            </mj-text>
+        </mj-column>
+    </mj-section>
+    <!-- Product Body -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text>
+                <p>Ideal für den Transport von Classei-Unterlagen zu Meetings,<br>
+kompakt, leicht und handlich, aus schlagfestem Polypropylen,<br>
+mit integriertem Tragegriff und Klappverschlüssen,<br>
+strukturierte Oberfläche, Stellfüße für guten Stand
+</p><p>
+<b>Innen-Maße:</b> <br />
+<b>Breite:</b> 340 mm<br />
+<b>Höhe: </b> 250 mm<br />
+<b>Tiefe: </b> 53 mm<br />
+<b>Farbe:</b> schwarz<br />
+<b>Gewicht:</b> 600g</p>
+<p>
+Geeignet für Sammler mit Mappen<br>
+<br>
+Lieferung: Ohne Inhalt</p>
+            </mj-text>
+            <mj-button
+                    href="https://www.classei-shop.com/search?sSearch=594101">
+                - Mehr Infos zum Artikel -
+            </mj-button>
+
+            
+            <mj-text align="center" padding-top="20px">
+                <h4 style="color: #ff9933; font-size: 24px; line-height: 40px">
+                    <strong>Preis</strong>
+                    24,80 €
+                </h4>
+            </mj-text>
+            
+
+            <mj-text align="center" padding="0px">
+                <p style="font-size: 14px;">
+                    <!-- Verkaufseinheit -->
+                    pro
+                    <strong>
+                        
+                        Stck
+                        
+                    </strong>
+                    <br/>
+                    
+                    <!-- Versandkosten True/False -->
+                    
+                    <span style="font-size: 12px">- * zuzgl. Versandkosten -</span>
+                    
+                    <br/>
+                    zuzgl. Mwst.
+                </p>
+            </mj-text>
+        </mj-column>
+        <mj-column>
+            <mj-carousel>
+                
+                    
+                    
+
+                
+                    
+                        <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=594101"
+                                           src="https://assets.classei.de/img/594101_02.jpg"
+                                           alt="Beispiel"/>
+                    
+
+                
+            </mj-carousel>
+        </mj-column>
+    </mj-section>
+
+    <!-- Product Footer - only fpr special prices-->
+    
+</mj-wrapper>
+        
+
+        
+        <mj-wrapper>
+    <!-- Product Head -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text>
+                <a style="text-decoration: None; color:#000000" target="_blank"
+                   href="https://www.classei-shop.com/search?sSearch=594102">
+                    <h4>
+                        <span style="font-size:30px; font-weight:bold; line-height: 45px; display: block">
+                            
+                            
+                            594102 GO-Koffer für 1 Orga-Bo [...]
+                            
+                        </span>
+                    </h4>
+                </a>
+            </mj-text>
+        </mj-column>
+    </mj-section>
+    <!-- Product Body -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text>
+                <p>Ideal für den Transport von Classei-Unterlagen zu Meetings,<br>
+kompakt, leicht und handlich, aus schlagfestem Polypropylen,<br>
+mit integriertem Tragegriff und Klappverschlüssen,<br>
+strukturierte Oberfläche, Stellfüße für guten Stand<br>
+</p><p>
+<b>Innen-Maße:</b><br />
+<b>Breite:</b> 365 mm<br />
+<b>Höhe: </b> 245 mm<br />
+<b>Tiefe: </b> 105 mm<br />
+<b>Farbe:</b> schwarz<br />
+<b>Gewicht:</b> 900g</p>
+<p>
+Geeignet für Orga-Box mit Mappen<br>
+<br>
+Lieferung: Ohne Inhalt</p>
+            </mj-text>
+            <mj-button
+                    href="https://www.classei-shop.com/search?sSearch=594102">
+                - Mehr Infos zum Artikel -
+            </mj-button>
+
+            
+            <mj-text align="center" padding-top="20px">
+                <h4 style="color: #ff9933; font-size: 24px; line-height: 40px">
+                    <strong>Preis</strong>
+                    31,00 €
+                </h4>
+            </mj-text>
+            
+
+            <mj-text align="center" padding="0px">
+                <p style="font-size: 14px;">
+                    <!-- Verkaufseinheit -->
+                    pro
+                    <strong>
+                        
+                        Stck
+                        
+                    </strong>
+                    <br/>
+                    
+                    <!-- Versandkosten True/False -->
+                    
+                    <span style="font-size: 12px">- * zuzgl. Versandkosten -</span>
+                    
+                    <br/>
+                    zuzgl. Mwst.
+                </p>
+            </mj-text>
+        </mj-column>
+        <mj-column>
+            <mj-carousel>
+                
+                    
+                    
+
+                
+                    
+                        <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=594102"
+                                           src="https://assets.classei.de/img/594102_02.jpg"
+                                           alt="Beispiel"/>
+                    
+
+                
+            </mj-carousel>
+        </mj-column>
+    </mj-section>
+
+    <!-- Product Footer - only fpr special prices-->
+    
+</mj-wrapper>
+        
+
+        <!-- Order form Contact -->
+        <mj-wrapper>
+    <!-- Head Order Form -->
+    <mj-section>
+        <mj-column>
+            <mj-text align="left" color="#000000" line-height="44px">
+                <h2 style="font-size: 34px; color: #ff9933" >Bestellformular</h2>
+            </mj-text>
+            <mj-text align="center">
+                <p style="font-size: 24px">Einfach Antworten und Anzahl eingeben</p>
+            </mj-text>
+            <mj-text align="right" color="#ff9933" font-size="24px" line-height="34px">
+                <p>oder schnell anrufen:<br/>+49 (0)8641 97 59 0
+                </p>
+            </mj-text>
+        </mj-column>
+    </mj-section>
+
+    <!-- Kontaktdaten -->
+    <mj-section>
+        <mj-column padding="0">
+            <mj-text>
+                <p style="font-weight: bold;">Stimmen ihre Daten noch? Bitte berichtigen Sie:</p>
+            </mj-text>
+            <mj-table css-class="contact_table" line-height="40px" padding="10">
+                <tr>
+                    <td width="20%" class="ct_text">Vorname:</td>
+                    <td width="40%" class="ct_value">{subtag:vorname}</td>
+                    <td width="40%" style="border-bottom: 1px dotted #000000" class="ct_user">&nbsp;</td>
+                </tr>
+                <tr>
+                    <td class="ct_text">Nachname:</td>
+                    <td class="ct_value">{subtag:name}</td>
+                    <td style="border-bottom: 1px dotted #000000" class="ct_user">&nbsp;</td>
+                </tr>
+                <tr>
+                    <td class="ct_text">Firma:</td>
+                    <td class="ct_value">{subtag:firma}</td>
+                    <td style="border-bottom: 1px dotted #000000" class="ct_user">&nbsp;</td>
+                </tr>
+                <tr>
+                    <td class="ct_text">Strasse:</td>
+                    <td class="ct_value">{subtag:strasse}</td>
+                    <td style="border-bottom: 1px dotted #000000" class="ct_user">&nbsp;</td>
+                </tr>
+                <tr>
+                    <td class="ct_text">PLZ/Ort:</td>
+                    <td class="ct_value">{subtag:plzort}</td>
+                    <td style="border-bottom: 1px dotted #000000" class="ct_user">&nbsp;</td>
+                </tr>
+                <tr>
+                    <td class="ct_text">Fon:</td>
+                    <td class="ct_value">{subtag:fon}</td>
+                    <td style="border-bottom: 1px dotted #000000" class="ct_user">&nbsp;</td>
+                </tr>
+                <tr>
+                    <td class="ct_text">E-Mail:</td>
+                    <td class="ct_value">{subtag:email}</td>
+                    <td style="border-bottom: 1px dotted #000000" class="ct_user">&nbsp;</td>
+                </tr>
+            </mj-table>
+        </mj-column>
+    </mj-section>
+
+</mj-wrapper>
+
+        <!-- Order form Products -->
+        <mj-section>
+            <mj-column padding="0">
+                <mj-table padding="0">
+                    
+                    <tr style="border-bottom: 1px dotted #ff9933; margin: 10px 0 10px 0" >
+    <td width="10%">__x</td>
+    <td width="35%" style="color: #ff9933; font-weight: bold; font-size: 12px; line-height:1">
+        594130 Aktentasche Style, Leder | Nylon
+    </td>
+    <td width="55%" align="right">
+        <mj-text  align="right" font-size="14px">
+
+            
+                Listenpreis: 49,90 € netto
+            
+            <br/>
+            <!-- Verkaufseinheit -->
+            pro
+            <strong>
+                
+                Stck
+                
+            </strong>
+
+            <br/>
+            
+            <!-- Versandkosten True/False -->
+            
+                <span style="font-size: 12px">- * zuzgl. Versandkosten - zuzgl. Mwst. - </span>
+            
+
+        </mj-text>
+    </td>
+</tr>
+                    
+                    <tr style="border-bottom: 1px dotted #ff9933; margin: 10px 0 10px 0" >
+    <td width="10%">__x</td>
+    <td width="35%" style="color: #ff9933; font-weight: bold; font-size: 12px; line-height:1">
+        594120 GO-Box | Aktentaschen-Stil, 25
+    </td>
+    <td width="55%" align="right">
+        <mj-text  align="right" font-size="14px">
+
+            
+                Listenpreis: 7,20 € netto
+            
+            <br/>
+            <!-- Verkaufseinheit -->
+            pro
+            <strong>
+                
+                Stck
+                
+            </strong>
+
+            <br/>
+            
+            <!-- Versandkosten True/False -->
+            
+                <span style="font-size: 12px">- * zuzgl. Versandkosten - zuzgl. Mwst. - </span>
+            
+
+        </mj-text>
+    </td>
+</tr>
+                    
+                    <tr style="border-bottom: 1px dotted #ff9933; margin: 10px 0 10px 0" >
+    <td width="10%">__x</td>
+    <td width="35%" style="color: #ff9933; font-weight: bold; font-size: 12px; line-height:1">
+        594110 GO-Box | Aktentaschen-Stil, 45
+    </td>
+    <td width="55%" align="right">
+        <mj-text  align="right" font-size="14px">
+
+            
+                Listenpreis: 7,85 € netto
+            
+            <br/>
+            <!-- Verkaufseinheit -->
+            pro
+            <strong>
+                
+                Stck
+                
+            </strong>
+
+            <br/>
+            
+            <!-- Versandkosten True/False -->
+            
+                <span style="font-size: 12px">- * zuzgl. Versandkosten - zuzgl. Mwst. - </span>
+            
+
+        </mj-text>
+    </td>
+</tr>
+                    
+                    <tr style="border-bottom: 1px dotted #ff9933; margin: 10px 0 10px 0" >
+    <td width="10%">__x</td>
+    <td width="35%" style="color: #ff9933; font-weight: bold; font-size: 12px; line-height:1">
+        594101 GO-Koffer für 1 Sammler, PP, schwarz
+    </td>
+    <td width="55%" align="right">
+        <mj-text  align="right" font-size="14px">
+
+            
+                Listenpreis: 24,80 € netto
+            
+            <br/>
+            <!-- Verkaufseinheit -->
+            pro
+            <strong>
+                
+                Stck
+                
+            </strong>
+
+            <br/>
+            
+            <!-- Versandkosten True/False -->
+            
+                <span style="font-size: 12px">- * zuzgl. Versandkosten - zuzgl. Mwst. - </span>
+            
+
+        </mj-text>
+    </td>
+</tr>
+                    
+                    <tr style="border-bottom: 1px dotted #ff9933; margin: 10px 0 10px 0" >
+    <td width="10%">__x</td>
+    <td width="35%" style="color: #ff9933; font-weight: bold; font-size: 12px; line-height:1">
+        594102 GO-Koffer für 1 Orga-Box, PP, schwarz
+    </td>
+    <td width="55%" align="right">
+        <mj-text  align="right" font-size="14px">
+
+            
+                Listenpreis: 31,00 € netto
+            
+            <br/>
+            <!-- Verkaufseinheit -->
+            pro
+            <strong>
+                
+                Stck
+                
+            </strong>
+
+            <br/>
+            
+            <!-- Versandkosten True/False -->
+            
+                <span style="font-size: 12px">- * zuzgl. Versandkosten - zuzgl. Mwst. - </span>
+            
+
+        </mj-text>
+    </td>
+</tr>
+                    
+                </mj-table>
+            </mj-column>
+        </mj-section>
+
+        <!-- Blog Content -->
+        <mj-section>
+    <mj-column>
+        <mj-raw>
+        {autocontent:25-| max:1|
+        order:created,DESC|
+        type:intro|link|author| pict:resized|
+        maxwidth:150|
+        maxheight:150| invert| format:TOP_LEFT|
+        template:tagcontent.php}
+        </mj-raw>
+    </mj-column>
+</mj-section>
+
+        <!-- Rechtliches -->
+        <mj-section>
+    <mj-column>
+        <mj-text font-size="10px" line-height="16px">
+            <!-- Terms -->
+            <p>
+
+                * Versandkostenfrei ab Warenwert
+                99,00 € netto. Warenwert
+                unter 99,00 € netto Versandkosten
+                5,95 € netto.&nbsp;Nur gültig mit deutscher Lieferadresse
+                |
+                <a style="text-decoration: None; color: #ff9933"
+                   href="https://www.classei-shop.com/Versandinformationen?sPartner=email"
+                   target="_blank">Nähere Infos zu
+                    Versandkosten&nbsp;hier
+                </a>
+                
+
+
+            </p>
+
+
+            <!-- Impressum -->
+            <p>
+                Classei-Organisation - Egon Heimann
+                GmbH | Staudacher Str. 7e | 83250
+                Marquartstein | Deutschland<br>Fon:
+                +49
+                (0)8641 97 59 0 |
+                Fax +49 (0)8641 97 59 20 | E-Mail:
+                <a style="text-decoration: None; color: #ff9933" href="mailto:info@classei.de">
+                    Info
+                </a>
+                // Internet:
+                <a href="https://www.classei.de">Classei.de</a>
+            </p>
+
+
+            <!-- Unsubscribe -->
+            <p>
+                Sie erhalten diese E-Mail, weil Sie
+                unser Kunde/Interessent sind oder
+                wir schon Kontakt hatten. Wenn Sie
+                keine
+                Informationen mehr erhalten möchten,
+                welche wir relativ selten
+                verschicken, tragen Sie sich bitte
+                <span>
+                    {modify}hier{/modify}
+                </span>
+                aus.
+            </p>
+        </mj-text>
+    </mj-column>
+</mj-section>
+        
+    </mj-body>
+</mjml>

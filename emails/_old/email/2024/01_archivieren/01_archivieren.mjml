@@ -1,0 +1,832 @@
+<mjml>
+    <mj-font href=""/>
+    <!-- Head -->
+    <mj-head>
+        <mj-include path="..\..\template\head.mjml"/>
+    </mj-head>
+
+    <!-- Body -->
+    <mj-body>
+        <mj-raw>
+            <!-- Company Header -->
+        </mj-raw>
+
+        <!-- View online -->
+        <mj-include path="..\..\template\view_online.mjml"/>
+
+        <!-- Navigation -->
+        <mj-include path="..\..\template\nav_items_shop.mjml"/>
+
+        <!-- Header-Logo -->
+        <mj-include path="..\..\template\header_logo.mjml"/>
+
+        <!-- Title -->
+        <mj-section padding="20px" background-color="#ffffff">
+            <mj-column>
+                <mj-text>
+                    <h1 align="center" style="color: #ff9933; font-weight:400; line-height:40px">
+                        Unterlagen archivieren
+                    </h1>
+                    <h1 align="right" style="color: #8a8a8a; font-weight:400; line-height:36px">
+                        <small>
+                            ...und ganz schnell Platz schaffen
+                        </small>
+                    </h1>
+                </mj-text>
+            </mj-column>
+        </mj-section>
+
+        <!-- Salutation -->
+        <mj-section background-color="#ffffff">
+            <mj-column>
+                <mj-text>
+                    <p>
+                        Hallo
+
+                        {if:anrede~Herr} Herr {/if}
+                        {if:anrede~Frau} Frau {/if}
+                        {subtag:name},
+                    </p>
+                </mj-text>
+            </mj-column>
+            <mj-column>
+                <mj-text align="right">
+                    <p>
+                        Ihre Kunden-Nr.: {subtag:adrnr}
+                    </p>
+                </mj-text>
+            </mj-column>
+        </mj-section>
+
+        <!-- Intro Text -->
+        <mj-section background-color="#ffffff">
+            <mj-column>
+                <mj-text line-height="26px">
+                    <p>
+                        wie jedes Jahr gilt am Ende: „Geschäftsunterlagen archivieren und sichern“
+                    </p>
+                    <p>
+                        Für alle betrieblichen Unterlagen, erledigte Projekte oder alte Akten, die im alltäglichen
+                        Geschäft keine Rolle mehr spielen, aber trotzdem noch aufbewahrt werden müssen, bietet Classei
+                        eine Vielfalt an Archivierungs-Kartons. Sie sind einfach aufzustellen, stapelbar und gut zu
+                        kennzeichnen – für den Fall, dass die Schriftstücke doch noch einmal benötigt werden.
+                    </p>
+                    <p>
+                        <strong>Tipp:</strong>
+                        Trauen Sie sich ruhig zu, Ihre alten Akten gut auszumisten, doch im Zweifel lieber zu
+                        viele als zu wenige Akten aufbewahren. Denn im Fall der Fälle, sind die entsprechenden
+                        Original-Dokumente nötig - mit Classei kein Problem.
+                    </p>
+                </mj-text>
+                <mj-text line-height="26px" align="center">
+                    <p>
+                        <strong>Info:</strong> Classei Ratgeber Archivierung von
+                        <a href="https://www.classei.de/de/service/blog/87-archivierung-von-unterlagen-teil-1.html?utm_source=newsletter_203&utm_medium=email&utm_campaign=classei-schnelles-und-einfaches-archivieren&acm=34517_203">
+                            Unterlagen Teil 1
+                        </a>
+                        <br/>
+                        oder
+                        <a href="https://www.ihk.de/hamburg/produktmarken/beratung-service/recht-und-steuern/steuerrecht/abgabenrecht/aufbewahrungsfristen-geschaeftsunterlagen-1157174">
+                        IHK Hamburg - Aufbewahrungsfristen
+                        </a>
+                    </p>
+                </mj-text>
+            </mj-column>
+        </mj-section>
+
+
+        <!-- Products -->
+        
+        <mj-wrapper>
+    <!-- Product Head -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text>
+                <a style="text-decoration: None; color:#000000" target="_blank"
+                   href="https://www.classei-shop.com/search?sSearch=104522">
+                    <h4>
+                        <span style="font-size:30px; font-weight:bold; line-height: 45px; display: block">
+                            
+                            104522 Archivboxen weiß
+                            
+                        </span>
+                    </h4>
+                </a>
+            </mj-text>
+        </mj-column>
+    </mj-section>
+    <!-- Product Body -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text line-height="26px">
+                Einfaches, leichtgängiges Aufstellen mit 
+Schnappverschluss für sofortiges Einstellen
+der Mappen. Mit sicherem Staubdeckel
+und Rückenschilddruck.
+<br><br>
+<b>Material:</b> Karton/Feinwelle<br>
+<b>Farbe:</b> weiß<br>
+<b>Breite:</b> 330 mm<br>
+<b>Höhe:</b> 245 mm<br>
+<b>Tiefe:</b> 105 mm
+            </mj-text>
+            <mj-button padding="20px 0 0 0"
+                    href="https://www.classei-shop.com/search?sSearch=104522">
+                - Mehr Infos zum Artikel -
+            </mj-button>
+
+            
+            <mj-text align="center" padding-top="20px">
+                <h4 style="color: #ff9933; font-size: 24px; line-height: 40px">
+                    <strong>Preis</strong>
+                    3,25 €
+                </h4>
+            </mj-text>
+            
+
+            <mj-text align="center" padding="0px">
+                <p style="font-size: 14px;">
+                    <!-- Verkaufseinheit -->
+                    pro
+                        
+                        Stck
+                        
+                    <br/>
+                    
+                    <!-- Versandkosten True/False -->
+                    
+                    <span style="font-size: 12px">- * zuzgl. Versandkosten -</span>
+                    
+                    <br/>
+                    zuzgl. Mwst.
+                </p>
+            </mj-text>
+        </mj-column>
+        <mj-column>
+            
+            
+
+            
+
+            
+
+            
+
+            
+            <mj-carousel>
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=104522"
+                                   src="https://assets.classei.de/img/104522.jpg"
+                                   alt="zur Archivierung (Altablage) und staubgeschützten Aufbewahrung von Orga-Mappen oder sonstigem SchriftgutSie hat eine verschließbare, leicht zu öffnende Klappe. Sie wird flach geliefert und ist mit wenigen Handgriffen aufgestellt. Mit Rückenschild-AufdruckMaterial: Karton/FeinwelleFarbe: weißBreite: 330 mmHöhe: 245 mmTiefe: 105 mm"/>
+                
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=104522"
+                                   src="https://assets.classei.de/img/900001.jpg"
+                                   alt="zur Archivierung (Altablage) und staubgeschützten Aufbewahrung von Orga-Mappen oder sonstigem SchriftgutSie hat eine verschließbare, leicht zu öffnende Klappe. Sie wird flach geliefert und ist mit wenigen Handgriffen aufgestellt. Mit Rückenschild-AufdruckMaterial: Karton/FeinwelleFarbe: weißBreite: 330 mmHöhe: 245 mmTiefe: 105 mm"/>
+                
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=104522"
+                                   src="https://assets.classei.de/img/beispiel_schreibtisch.jpg"
+                                   alt="zur Archivierung (Altablage) und staubgeschützten Aufbewahrung von Orga-Mappen oder sonstigem SchriftgutSie hat eine verschließbare, leicht zu öffnende Klappe. Sie wird flach geliefert und ist mit wenigen Handgriffen aufgestellt. Mit Rückenschild-AufdruckMaterial: Karton/FeinwelleFarbe: weißBreite: 330 mmHöhe: 245 mmTiefe: 105 mm"/>
+                
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=104522"
+                                   src="https://assets.classei.de/img/beispiel_schrank_schublade.jpg"
+                                   alt="zur Archivierung (Altablage) und staubgeschützten Aufbewahrung von Orga-Mappen oder sonstigem SchriftgutSie hat eine verschließbare, leicht zu öffnende Klappe. Sie wird flach geliefert und ist mit wenigen Handgriffen aufgestellt. Mit Rückenschild-AufdruckMaterial: Karton/FeinwelleFarbe: weißBreite: 330 mmHöhe: 245 mmTiefe: 105 mm"/>
+                
+                
+            </mj-carousel>
+            
+        </mj-column>
+    </mj-section>
+
+    <!-- Product Footer - only fpr special prices-->
+    
+</mj-wrapper>
+        
+        <mj-wrapper>
+    <!-- Product Head -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text>
+                <a style="text-decoration: None; color:#000000" target="_blank"
+                   href="https://www.classei-shop.com/search?sSearch=104521">
+                    <h4>
+                        <span style="font-size:30px; font-weight:bold; line-height: 45px; display: block">
+                            
+                            104521 Archivboxen braun
+                            
+                        </span>
+                    </h4>
+                </a>
+            </mj-text>
+        </mj-column>
+    </mj-section>
+    <!-- Product Body -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text line-height="26px">
+                Einfaches, leichtgängiges Aufstellen mit 
+Schnappverschluss für sofortiges Einstellen
+der Mappen. Mit sicherem Staubdeckel,
+ohne Rückenschilddruck.
+<br><br>
+<strong>Material:</strong> Karton/Feinwelle<br>
+<strong>Farbe:</strong> naturbraun<br>
+<strong>Breite:</strong> 330 mm<br>
+<strong>Höhe:</strong> 245 mm<br>
+<strong>Tiefe:</strong> 150 mm
+            </mj-text>
+            <mj-button padding="20px 0 0 0"
+                    href="https://www.classei-shop.com/search?sSearch=104521">
+                - Mehr Infos zum Artikel -
+            </mj-button>
+
+            
+            <mj-text align="center" padding-top="20px">
+                <h4 style="color: #ff9933; font-size: 24px; line-height: 40px">
+                    <strong>Preis</strong>
+                    2,40 €
+                </h4>
+            </mj-text>
+            
+
+            <mj-text align="center" padding="0px">
+                <p style="font-size: 14px;">
+                    <!-- Verkaufseinheit -->
+                    pro
+                        
+                        Stck
+                        
+                    <br/>
+                    
+                    <!-- Versandkosten True/False -->
+                    
+                    <span style="font-size: 12px">- * zuzgl. Versandkosten -</span>
+                    
+                    <br/>
+                    zuzgl. Mwst.
+                </p>
+            </mj-text>
+        </mj-column>
+        <mj-column>
+            
+            
+
+            
+
+            
+
+            
+
+            
+            <mj-carousel>
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=104521"
+                                   src="https://assets.classei.de/img/104521.jpg"
+                                   alt="zur Archivierung (Altablage) und staubgeschützten Aufbewahrung von Orga-Mappen oder sonstigem SchriftgutSie hat eine verschließbare, leicht zu öffnende Klappe. Sie wird flach geliefert und ist mit wenigen Handgriffen aufgestellt.Material: FeinwelleFarbe: braunBreite: 330 mmHöhe: 245 mmTiefe: 150 mm"/>
+                
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=104521"
+                                   src="https://assets.classei.de/img/900001.jpg"
+                                   alt="zur Archivierung (Altablage) und staubgeschützten Aufbewahrung von Orga-Mappen oder sonstigem SchriftgutSie hat eine verschließbare, leicht zu öffnende Klappe. Sie wird flach geliefert und ist mit wenigen Handgriffen aufgestellt.Material: FeinwelleFarbe: braunBreite: 330 mmHöhe: 245 mmTiefe: 150 mm"/>
+                
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=104521"
+                                   src="https://assets.classei.de/img/beispiel_schreibtisch.jpg"
+                                   alt="zur Archivierung (Altablage) und staubgeschützten Aufbewahrung von Orga-Mappen oder sonstigem SchriftgutSie hat eine verschließbare, leicht zu öffnende Klappe. Sie wird flach geliefert und ist mit wenigen Handgriffen aufgestellt.Material: FeinwelleFarbe: braunBreite: 330 mmHöhe: 245 mmTiefe: 150 mm"/>
+                
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=104521"
+                                   src="https://assets.classei.de/img/beispiel_schrank_schublade.jpg"
+                                   alt="zur Archivierung (Altablage) und staubgeschützten Aufbewahrung von Orga-Mappen oder sonstigem SchriftgutSie hat eine verschließbare, leicht zu öffnende Klappe. Sie wird flach geliefert und ist mit wenigen Handgriffen aufgestellt.Material: FeinwelleFarbe: braunBreite: 330 mmHöhe: 245 mmTiefe: 150 mm"/>
+                
+                
+            </mj-carousel>
+            
+        </mj-column>
+    </mj-section>
+
+    <!-- Product Footer - only fpr special prices-->
+    
+</mj-wrapper>
+        
+        <mj-wrapper>
+    <!-- Product Head -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text>
+                <a style="text-decoration: None; color:#000000" target="_blank"
+                   href="https://www.classei-shop.com/search?sSearch=104051">
+                    <h4>
+                        <span style="font-size:30px; font-weight:bold; line-height: 45px; display: block">
+                            
+                            104051 Orgaboxen, Karton, weiß
+                            
+                        </span>
+                    </h4>
+                </a>
+            </mj-text>
+        </mj-column>
+    </mj-section>
+    <!-- Product Body -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text line-height="26px">
+                <p>aus Karton (Microwellpappe) - mit Rückenschildaufdruck auf Vorder- und Rückseite und Schnappverschluss für sofortiges Einstellen
+der Mappen. Offen - ohne Staubdeckel.
+</p>
+<p>
+<strong>Material:</strong> Karton/Feinwelle<br>
+<strong>Farbe:</strong> weiß<br>
+<strong>Breite:</strong> 325 mm<br>
+<strong>Höhe:</strong> 220 mm<br>
+<strong>Tiefe:</strong> 105 mm
+</p>
+            </mj-text>
+            <mj-button padding="20px 0 0 0"
+                    href="https://www.classei-shop.com/search?sSearch=104051">
+                - Mehr Infos zum Artikel -
+            </mj-button>
+
+            
+            <mj-text align="center" padding-top="20px">
+                <h4 style="color: #ff9933; font-size: 24px; line-height: 40px">
+                    <strong>Preis</strong>
+                    4,20 €
+                </h4>
+            </mj-text>
+            
+
+            <mj-text align="center" padding="0px">
+                <p style="font-size: 14px;">
+                    <!-- Verkaufseinheit -->
+                    pro
+                        
+                        Stck
+                        
+                    <br/>
+                    
+                    <!-- Versandkosten True/False -->
+                    
+                    <span style="font-size: 12px">- * zuzgl. Versandkosten -</span>
+                    
+                    <br/>
+                    zuzgl. Mwst.
+                </p>
+            </mj-text>
+        </mj-column>
+        <mj-column>
+            
+            
+
+            
+
+            
+
+            
+
+            
+
+            
+            <mj-carousel>
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=104051"
+                                   src="https://assets.classei.de/img/104051.jpg"
+                                   alt="Dienen zum Abstellen von Orga-Mappen. Sie wird flach geliefert und benötigt daher wenig Lagerraum. Vorder- und Rückseite mit Rückenschildaufdruck. Im Handumdrehen ist sie durch den leicht bedienbaren Blitzbodenverschluss aufgestellt - siehe Video unten.Produkt-News: Orga Box im neuen Look mit dezentem Design-Druck. Durch zusätzliche Einschlagklappen jetzt viel stabiler, da die Box ausgesteift wird. Sollten Sie eine neutrale weiße Ansicht bevorzugen, drehen Sie die Box einfach um - siehe Bild 3 Material: Microwell-KartonFarbe: weiß mit DruckBreite: 325 mmHöhe: 220 mmTiefe: 105 mm So einfach ist die Karton-Box aufgestellt: Ihr Browser kann dieses Video nicht wiedergeben. Dieser Film zeigt den einfachen Aufbau der Karton-Box. Hier können Sie den Clip ansehenhttps://www.classei-shop.com/media/video/eb/15/2d/104051_aufstellen.mp4 abrufen."/>
+                
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=104051"
+                                   src="https://assets.classei.de/img/104051_02.jpg"
+                                   alt="Dienen zum Abstellen von Orga-Mappen. Sie wird flach geliefert und benötigt daher wenig Lagerraum. Vorder- und Rückseite mit Rückenschildaufdruck. Im Handumdrehen ist sie durch den leicht bedienbaren Blitzbodenverschluss aufgestellt - siehe Video unten.Produkt-News: Orga Box im neuen Look mit dezentem Design-Druck. Durch zusätzliche Einschlagklappen jetzt viel stabiler, da die Box ausgesteift wird. Sollten Sie eine neutrale weiße Ansicht bevorzugen, drehen Sie die Box einfach um - siehe Bild 3 Material: Microwell-KartonFarbe: weiß mit DruckBreite: 325 mmHöhe: 220 mmTiefe: 105 mm So einfach ist die Karton-Box aufgestellt: Ihr Browser kann dieses Video nicht wiedergeben. Dieser Film zeigt den einfachen Aufbau der Karton-Box. Hier können Sie den Clip ansehenhttps://www.classei-shop.com/media/video/eb/15/2d/104051_aufstellen.mp4 abrufen."/>
+                
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=104051"
+                                   src="https://assets.classei.de/img/104051_03.jpg"
+                                   alt="Dienen zum Abstellen von Orga-Mappen. Sie wird flach geliefert und benötigt daher wenig Lagerraum. Vorder- und Rückseite mit Rückenschildaufdruck. Im Handumdrehen ist sie durch den leicht bedienbaren Blitzbodenverschluss aufgestellt - siehe Video unten.Produkt-News: Orga Box im neuen Look mit dezentem Design-Druck. Durch zusätzliche Einschlagklappen jetzt viel stabiler, da die Box ausgesteift wird. Sollten Sie eine neutrale weiße Ansicht bevorzugen, drehen Sie die Box einfach um - siehe Bild 3 Material: Microwell-KartonFarbe: weiß mit DruckBreite: 325 mmHöhe: 220 mmTiefe: 105 mm So einfach ist die Karton-Box aufgestellt: Ihr Browser kann dieses Video nicht wiedergeben. Dieser Film zeigt den einfachen Aufbau der Karton-Box. Hier können Sie den Clip ansehenhttps://www.classei-shop.com/media/video/eb/15/2d/104051_aufstellen.mp4 abrufen."/>
+                
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=104051"
+                                   src="https://assets.classei.de/img/104051_04.jpg"
+                                   alt="Dienen zum Abstellen von Orga-Mappen. Sie wird flach geliefert und benötigt daher wenig Lagerraum. Vorder- und Rückseite mit Rückenschildaufdruck. Im Handumdrehen ist sie durch den leicht bedienbaren Blitzbodenverschluss aufgestellt - siehe Video unten.Produkt-News: Orga Box im neuen Look mit dezentem Design-Druck. Durch zusätzliche Einschlagklappen jetzt viel stabiler, da die Box ausgesteift wird. Sollten Sie eine neutrale weiße Ansicht bevorzugen, drehen Sie die Box einfach um - siehe Bild 3 Material: Microwell-KartonFarbe: weiß mit DruckBreite: 325 mmHöhe: 220 mmTiefe: 105 mm So einfach ist die Karton-Box aufgestellt: Ihr Browser kann dieses Video nicht wiedergeben. Dieser Film zeigt den einfachen Aufbau der Karton-Box. Hier können Sie den Clip ansehenhttps://www.classei-shop.com/media/video/eb/15/2d/104051_aufstellen.mp4 abrufen."/>
+                
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=104051"
+                                   src="https://assets.classei.de/img/104051_05.jpg"
+                                   alt="Dienen zum Abstellen von Orga-Mappen. Sie wird flach geliefert und benötigt daher wenig Lagerraum. Vorder- und Rückseite mit Rückenschildaufdruck. Im Handumdrehen ist sie durch den leicht bedienbaren Blitzbodenverschluss aufgestellt - siehe Video unten.Produkt-News: Orga Box im neuen Look mit dezentem Design-Druck. Durch zusätzliche Einschlagklappen jetzt viel stabiler, da die Box ausgesteift wird. Sollten Sie eine neutrale weiße Ansicht bevorzugen, drehen Sie die Box einfach um - siehe Bild 3 Material: Microwell-KartonFarbe: weiß mit DruckBreite: 325 mmHöhe: 220 mmTiefe: 105 mm So einfach ist die Karton-Box aufgestellt: Ihr Browser kann dieses Video nicht wiedergeben. Dieser Film zeigt den einfachen Aufbau der Karton-Box. Hier können Sie den Clip ansehenhttps://www.classei-shop.com/media/video/eb/15/2d/104051_aufstellen.mp4 abrufen."/>
+                
+                
+            </mj-carousel>
+            
+        </mj-column>
+    </mj-section>
+
+    <!-- Product Footer - only fpr special prices-->
+    
+</mj-wrapper>
+        
+        <mj-wrapper>
+    <!-- Product Head -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text>
+                <a style="text-decoration: None; color:#000000" target="_blank"
+                   href="https://www.classei-shop.com/search?sSearch=104523">
+                    <h4>
+                        <span style="font-size:30px; font-weight:bold; line-height: 45px; display: block">
+                            
+                            104523 Flach-Archivboxen, weiß
+                            
+                        </span>
+                    </h4>
+                </a>
+            </mj-text>
+        </mj-column>
+    </mj-section>
+    <!-- Product Body -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text line-height="26px">
+                zur Archivierung (Altablage) und staubgeschützten Aufbewahrung von Orga-Mappen oder sonstigem Schriftgut. Einfaches, leichtgängiges Aufstellen für sofortiges Einlegen der Mappen oder DIN A4 Unterlagen. Mit sicherem Staubdeckelverschluss.
+<br><br>
+<strong>Material:</strong> Karton/Feinwelle<br>
+<strong>Farbe:</strong> weiß<br>
+<strong>Breite:</strong> 335 mm<br>
+<strong>Höhe:</strong> 40 mm<br>
+<strong>Tiefe:</strong> 250 mm
+            </mj-text>
+            <mj-button padding="20px 0 0 0"
+                    href="https://www.classei-shop.com/search?sSearch=104523">
+                - Mehr Infos zum Artikel -
+            </mj-button>
+
+            
+            <mj-text align="center" padding-top="20px">
+                <h4 style="color: #ff9933; font-size: 24px; line-height: 40px">
+                    <strong>Preis</strong>
+                    2,55 €
+                </h4>
+            </mj-text>
+            
+
+            <mj-text align="center" padding="0px">
+                <p style="font-size: 14px;">
+                    <!-- Verkaufseinheit -->
+                    pro
+                        
+                        Stck
+                        
+                    <br/>
+                    
+                    <!-- Versandkosten True/False -->
+                    
+                    <span style="font-size: 12px">- * zuzgl. Versandkosten -</span>
+                    
+                    <br/>
+                    zuzgl. Mwst.
+                </p>
+            </mj-text>
+        </mj-column>
+        <mj-column>
+            
+            
+            <mj-image href="https://www.classei-shop.com/search?sSearch=104523"
+                      src="https://assets.classei.de/img/104523.jpg"
+                      alt="zur Archivierung (Altablage) und staubgeschützten Aufbewahrung von Orga-Mappen oder sonstigem SchriftgutSie hat eine verschließbare, leicht zu öffnende Klappe. Sie wird flach geliefert und ist mit wenigen Handgriffen aufgestellt.Material: VollpappeFarbe: weißBreite: 335 mmHöhe: 250 mmTiefe: 40 mml"/>
+            
+        </mj-column>
+    </mj-section>
+
+    <!-- Product Footer - only fpr special prices-->
+    
+</mj-wrapper>
+        
+        <mj-wrapper>
+    <!-- Product Head -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text>
+                <a style="text-decoration: None; color:#000000" target="_blank"
+                   href="https://www.classei-shop.com/search?sSearch=404000">
+                    <h4>
+                        <span style="font-size:30px; font-weight:bold; line-height: 45px; display: block">
+                            
+                            
+                            404000 Rückenschilder 85x150 m [...]
+                            
+                        </span>
+                    </h4>
+                </a>
+            </mj-text>
+        </mj-column>
+    </mj-section>
+    <!-- Product Body -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text line-height="26px">
+                Selbstklebend und für alle Kartonboxen
+<br>
+<strong>Erhältlich im 12er Pack</strong><br><br>
+<strong>Material:</strong> Haftpapier<br>
+<strong>Farbe:</strong> weiß<br>
+<strong>Breite:</strong> 85 mm<br>
+<strong>Höhe:</strong> 150 mm
+            </mj-text>
+            <mj-button padding="20px 0 0 0"
+                    href="https://www.classei-shop.com/search?sSearch=404000">
+                - Mehr Infos zum Artikel -
+            </mj-button>
+
+            
+            <mj-text align="center" padding-top="20px">
+                <h4 style="color: #ff9933; font-size: 24px; line-height: 40px">
+                    <strong>Preis</strong>
+                    48,00 €
+                </h4>
+            </mj-text>
+            
+
+            <mj-text align="center" padding="0px">
+                <p style="font-size: 14px;">
+                    <!-- Verkaufseinheit -->
+                    pro
+                        
+                        100 St.
+                        
+                    <br/>
+                    
+                    <!-- Mindestbestellwert und Bestellschritte ? -->
+                    <span style="font-size: 12px;">
+                        | Mind. Best. Menge: 12 | Best. Schritt: 12
+                    </span>
+                    <br/>
+                    
+                    <!-- Versandkosten True/False -->
+                    
+                    <span style="font-size: 12px">- * zuzgl. Versandkosten -</span>
+                    
+                    <br/>
+                    zuzgl. Mwst.
+                </p>
+            </mj-text>
+        </mj-column>
+        <mj-column>
+            
+            
+            <mj-image href="https://www.classei-shop.com/search?sSearch=404000"
+                      src="https://assets.classei.de/img/404000.jpg"
+                      alt="zur Kennzeichnung der Karton-BoxenEs ist selbstklebend, wird direkt auf die Seiten-(Rücken-)fläche aufgeklebt und lässt sich wie üblich beschriften oder mit EDV-Druck bedrucken.Breite: 85 mmHöhe: 150 mml"/>
+            
+        </mj-column>
+    </mj-section>
+
+    <!-- Product Footer - only fpr special prices-->
+    
+</mj-wrapper>
+        
+
+        <!-- Order form Contact -->
+        <mj-include path="..\..\template\contact_table.mjml"/>
+
+        <!-- Order form Products -->
+        <mj-wrapper padding="0px">
+            <mj-section css-class="section_white" padding="0px" background-color="#ffffff">
+                <mj-column>
+                    <mj-table css-class="contact_table">
+                        
+                        <tr>
+                            <td width="10%">__x</td>
+                            <td width="45%" style="color: #ff9933; font-weight: bold; font-size: 12px; line-height:1">
+                                104522 Archivboxen weiß
+                            </td>
+                            <td width="45%" class="ct_text">
+                                <mj-text align="left" padding="0px">
+                                    <p style="font-size: 14px;">
+                                        Listenpreis
+                                        
+                                        3,25
+                                        
+                                        € netto:
+                                        <br/>
+                                        pro
+                                        
+                                        Stck
+                                        
+                                        <br/>
+
+                                        <!-- Versandkosten ? -->
+                                        
+                                        - zuzgl. Versandkosten - zuzgl. Ust. -
+                                        
+                                    </p>
+                                </mj-text>
+                            </td>
+                        </tr>
+                        
+                        <tr>
+                            <td width="10%">__x</td>
+                            <td width="45%" style="color: #ff9933; font-weight: bold; font-size: 12px; line-height:1">
+                                104521 Archivboxen braun
+                            </td>
+                            <td width="45%" class="ct_text">
+                                <mj-text align="left" padding="0px">
+                                    <p style="font-size: 14px;">
+                                        Listenpreis
+                                        
+                                        2,40
+                                        
+                                        € netto:
+                                        <br/>
+                                        pro
+                                        
+                                        Stck
+                                        
+                                        <br/>
+
+                                        <!-- Versandkosten ? -->
+                                        
+                                        - zuzgl. Versandkosten - zuzgl. Ust. -
+                                        
+                                    </p>
+                                </mj-text>
+                            </td>
+                        </tr>
+                        
+                        <tr>
+                            <td width="10%">__x</td>
+                            <td width="45%" style="color: #ff9933; font-weight: bold; font-size: 12px; line-height:1">
+                                104051 Orgaboxen, Karton, weiß
+                            </td>
+                            <td width="45%" class="ct_text">
+                                <mj-text align="left" padding="0px">
+                                    <p style="font-size: 14px;">
+                                        Listenpreis
+                                        
+                                        4,20
+                                        
+                                        € netto:
+                                        <br/>
+                                        pro
+                                        
+                                        Stck
+                                        
+                                        <br/>
+
+                                        <!-- Versandkosten ? -->
+                                        
+                                        - zuzgl. Versandkosten - zuzgl. Ust. -
+                                        
+                                    </p>
+                                </mj-text>
+                            </td>
+                        </tr>
+                        
+                        <tr>
+                            <td width="10%">__x</td>
+                            <td width="45%" style="color: #ff9933; font-weight: bold; font-size: 12px; line-height:1">
+                                104523 Flach-Archivboxen, weiß
+                            </td>
+                            <td width="45%" class="ct_text">
+                                <mj-text align="left" padding="0px">
+                                    <p style="font-size: 14px;">
+                                        Listenpreis
+                                        
+                                        2,55
+                                        
+                                        € netto:
+                                        <br/>
+                                        pro
+                                        
+                                        Stck
+                                        
+                                        <br/>
+
+                                        <!-- Versandkosten ? -->
+                                        
+                                        - zuzgl. Versandkosten - zuzgl. Ust. -
+                                        
+                                    </p>
+                                </mj-text>
+                            </td>
+                        </tr>
+                        
+                        <tr>
+                            <td width="10%">__x</td>
+                            <td width="45%" style="color: #ff9933; font-weight: bold; font-size: 12px; line-height:1">
+                                404000 Rückenschilder 85x150 mm
+                            </td>
+                            <td width="45%" class="ct_text">
+                                <mj-text align="left" padding="0px">
+                                    <p style="font-size: 14px;">
+                                        Listenpreis
+                                        
+                                        48,00
+                                        
+                                        € netto:
+                                        <br/>
+                                        pro
+                                        
+                                        100 St.
+                                        
+                                        <br/>
+
+                                        <!-- Versandkosten ? -->
+                                        
+                                        - zuzgl. Versandkosten - zuzgl. Ust. -
+                                        
+                                    </p>
+                                </mj-text>
+                            </td>
+                        </tr>
+                        
+                    </mj-table>
+                </mj-column>
+            </mj-section>
+        </mj-wrapper>
+
+        <mj-wrapper>
+            <mj-section css-class="section_white" padding="0px" background-color="#ffffff">
+                <!-- Blog Content -->
+                <mj-column>
+                    {autocontent:25-| max:1|
+                    order:created,DESC|
+                    type:intro|link|author| pict:resized|
+                    maxwidth:150|
+                    maxheight:150| invert| format:TOP_LEFT|
+                    template:tagcontent.php}
+                </mj-column>
+            </mj-section>
+
+            <!-- Rechtliches -->
+            <mj-section css-class="section_white" paading="0px" background-color="#ffffff">
+                <mj-column>
+                    <mj-text font-size="12px" line-height="16px">
+                        <!-- Terms -->
+                        <p>
+
+                            * Versandkostenfrei ab Warenwert
+                            99,00 € netto. Warenwert
+                            unter 99,00 € netto Versandkosten
+                            5,95 € netto.&nbsp;
+
+                            |
+                            <a style="text-decoration: None; color: #ff9933"
+                               href="https://www.classei-shop.com/Versandinformationen?sPartner=email"
+                               target="_blank">Nähere Infos zu
+                                Versandkosten&nbsp;
+                            </a>
+
+
+                        </p>
+
+
+                        <!-- Impressum -->
+                        <p>
+                            Classei-Organisation - Egon Heimann
+                            GmbH | Staudacher Str. 7e | 83250
+                            Marquartstein | Deutschland<br>Fon:
+                            +49
+                            (0)8641 97 59 0 |
+                            Fax +49 (0)8641 97 59 20 | E-Mail:
+                            <a style="text-decoration: None; color: #ff9933" href="mailto:info@classei.de">
+                                Info
+                            </a>
+                            // Internet:
+                            <a href="https://www.classei.de">Classei.de</a>
+                        </p>
+
+
+                        <!-- Unsubscribe -->
+                        <p>
+                            Sie erhalten diese E-Mail, weil Sie
+                            unser Kunde/Interessent sind oder
+                            wir schon Kontakt hatten. Wenn Sie
+                            keine
+                            Informationen mehr erhalten möchten,
+                            welche wir relativ selten
+                            verschicken, tragen Sie sich bitte
+                            <span>
+                                {modify}hier{/modify}
+                            </span>
+                            aus.
+                        </p>
+                    </mj-text>
+                </mj-column>
+            </mj-section>
+        </mj-wrapper>
+
+    </mj-body>
+</mjml>

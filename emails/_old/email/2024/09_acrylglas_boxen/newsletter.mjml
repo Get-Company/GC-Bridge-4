@@ -1,0 +1,104 @@
+<mjml>
+    <mj-head>
+        {% include "classei/email/template/head.mjml" %}
+    </mj-head>
+
+    <!-- Body -->
+    <mj-body>
+        {% block body %}
+        <mj-raw>
+            <!-- Company Header -->
+        </mj-raw>
+
+        <!-- View online -->
+        {% include "classei/email/template/view_online.mjml" %}
+
+        <!-- Navigation -->
+        {% include "classei/email/template/nav_items_shop.mjml" %}
+
+        <!-- Header-Logo -->
+        {% include "classei/email/template/header_acryl_logo.mjml" %}
+
+        <!-- Title -->
+        {% with
+        h1="Classei Acrylglas-Boxen",
+        h1_small="..... elegant und funktionell"
+        %}
+        {% include "classei/email/template/title_txt.mjml" %}
+        {% endwith %}
+
+        <!-- Salutation -->
+        {% include "classei/email/template/salutation.mjml" %}
+
+        <!-- Intro -->
+        <mj-section>
+            <mj-column width="400px">
+                <mj-text>
+                    <p>
+                        Classei-Ordnung in eleganten Acrylglas-Boxen ist ein Blickfang für jeden Schreibtisch.
+                        Funktionelle und zeitgemäße Ordnung gepaart mit edlem und zeitlosem Design. So macht das
+                        Arbeiten mit dem Classei-System rund um den Schreibtisch noch mehr Spaß.
+                    </p>
+                </mj-text>
+            </mj-column>
+            <mj-column vertical-align="middle" width="150px">
+                <mj-button
+                        height="100%"
+                        vertical-align="middle"
+                        font-family="Roboto"
+                        background-color="#ff9933"
+                        color="white"
+                        font-size="20px"
+                        line-height="30px"
+                >
+                    15% Rabatt
+                </mj-button>
+            </mj-column>
+        </mj-section>
+
+        <mj-wrapper>
+            <!-- Subheader Griff-Hängeleisten -->
+            {% with subheader="Acrylglas-Boxen" %}
+            {% include "classei/email/template/subheader.mjml" %}
+            {% endwith %}
+        </mj-wrapper>
+
+        <!-- Products -->
+        {% with product=products[0] %}
+        {% include "classei/email/template/product.mjml" %}
+        {% endwith %}
+
+        {% with product=products[1] %}
+        {% include "classei/email/template/product.mjml" %}
+        {% endwith %}
+
+        {% with product=products[2] %}
+        {% include "classei/email/template/product.mjml" %}
+        {% endwith %}
+
+        {% with product=products[3] %}
+        {% include "classei/email/template/product.mjml" %}
+        {% endwith %}
+
+        <!-- Order form Contact -->
+        {% include "classei/email/template/contact_table.mjml" %}
+
+        <!-- Order form Products -->
+        <mj-section>
+            <mj-column padding="0">
+                <mj-table padding="0">
+                    {% for product in products %}
+                    {% include "classei/email/template/order_form_product.mjml" %}
+                    {% endfor %}
+                </mj-table>
+            </mj-column>
+        </mj-section>
+
+        <!-- Blog Content -->
+        {% include "classei/email/template/blog_acymailing.mjml" %}
+
+        <!-- Rechtliches -->
+        {% include "classei/email/template/disclaimer.mjml" %}
+        {% endblock %}
+    </mj-body>
+</mjml>

@@ -1,0 +1,242 @@
+<mjml>
+    <mj-font href=""/>
+    <!-- Head -->
+    <mj-head>
+        <mj-include path="..\..\template\head.mjml"/>
+    </mj-head>
+
+    <!-- Body -->
+    <mj-body>
+        <mj-raw>
+            <!-- Company Header -->
+        </mj-raw>
+
+        <!-- View online -->
+        <mj-include path="..\..\template\view_online.mjml"/>
+
+        <!-- Navigation -->
+        <mj-include path="..\..\template\nav_items_shop.mjml"/>
+
+        <!-- Header-Logo -->
+        <mj-include path="..\..\template\header_logo.mjml"/>
+
+
+        <!-- Title -->
+        <mj-section padding="20px" background-color="#ffffff">
+            <mj-column>
+                <mj-text align="center" color="#ff9933" font-weight="400" line-height="50px">
+                    <p class="dancing-title">
+                        ...... ja, is den scho Weihnachten?
+                    </p>
+                </mj-text>
+            </mj-column>
+        </mj-section>
+
+        <!-- Salutation -->
+        <mj-section background-color="#ffffff">
+            <mj-column>
+                <mj-text>
+                    <p>
+                        Hallo
+
+                        {if:anrede~Herr} Herr {/if}
+                        {if:anrede~Frau} Frau {/if}
+                        {subtag:name},
+                    </p>
+                </mj-text>
+            </mj-column>
+            <mj-column>
+                <mj-text align="right">
+                    <p>
+                        Ihre Kunden-Nr.: {subtag:adrnr}
+                    </p>
+                </mj-text>
+            </mj-column>
+        </mj-section>
+
+        <!-- Intro Text -->
+        <mj-section background-color="#ffffff">
+            <mj-column>
+                <mj-text line-height="26px">
+                    <p>
+                        in wenigen Tagen ist Weihnachten und kurz darauf steht schon das neue Jahr vor der Tür.
+                        Wir möchten uns an dieser Stelle für das von Ihnen entgegengebrachte Vertrauen und
+                        die tolle Zusammenarbeit recht herzlich bedanken.
+                    </p>
+                    <p>
+                        Wieder war dieses Jahr für uns alle geprägt von unvorstellbaren Ereignissen und
+                        Herausforderungen.
+                    </p>
+                    <p>
+                        Wir sind uns sicher, dass wir mit vereinten Kräften auch diese Herausforderung meistern werden
+                        und alles seinen gewohnten Gang gehen wird. Wenn auch in einer etwas anderen Form,
+                        der Mensch wächst mit seinen Aufgaben. Insofern sehen wir zuversichtlich in die Zukunft.
+                    </p>
+                    <p>
+                        Wir wünschen Ihnen, Ihren Familien und Freunden eine besinnliche Weihnachtszeit
+                        und für das Jahr 2025 viel Gesundheit, persönlichen und geschäftlichen Erfolg.
+                    </p>
+                </mj-text>
+            </mj-column>
+        </mj-section>
+        <mj-section background-color="#ffffff">
+            <mj-column>
+                <mj-text line-height="26px">
+
+                    <p class="dancing-title">
+                        <strong> ... und bleiben Sie xsund!</strong>
+                    </p>
+
+                </mj-text>
+            </mj-column>
+        </mj-section>
+
+        <mj-wrapper>
+        <!-- Weihnachten -->
+        <mj-include path="..\..\template\weihnachten.mjml"/>
+
+        <mj-section>
+            <mj-column>
+                <mj-text>
+                        <h2 align="right" style="color: #ff9933; font-weight:400; line-height:40px">
+                            Ihr Classei-Team
+                        </h2>
+                </mj-text>
+            </mj-column>
+        </mj-section>
+
+        <!-- Danksagung verschiedene Sprachen -->
+        <mj-section background-color="#ffffff">
+            <mj-column>
+                <mj-text line-height="26px">
+                    <p>
+                        We sincerely thank you for your partnership and trust over the past year.
+                        Wishing you a joyful holiday season and a successful new year 2025.
+                    </p>
+                    <hr/>
+                    <p>
+                        Nous vous remercions chaleureusement pour votre confiance et votre collaboration tout au long de l’année.
+                        Nous vous souhaitons de très belles fêtes de fin d’année et nos meilleurs vœux pour une excellente année 2025.
+                    </p>
+                    <hr/>
+                    <p>
+                        Grazie di cuore per la vostra collaborazione e fiducia durante il 2024.
+                        Vi auguriamo un sereno Natale e un felice anno nuovo ricco di soddisfazioni!
+                    </p>
+                </mj-text>
+            </mj-column>
+        </mj-section>
+        </mj-wrapper>
+
+        <mj-wrapper>
+            {% with
+            subheader='Schenken Sie Ordnung'
+            %}
+            {% include "classei/email/template/subheader.mjml" %}
+            {% endwith %}
+        </mj-wrapper>
+        <!-- Products -->
+        {% for product in products %}
+
+        {% if loop.index == 4 %}
+            {% with
+            subheader='Aktion 15% <strong>nur bis 19.12.2024</strong>'
+            %}
+            {% include "classei/email/template/subheader.mjml" %}
+            {% endwith %}
+        {% endif %}
+
+        {% include "classei/email/template/product.mjml" %}
+
+        {% endfor %}
+
+
+
+        <!-- Order form Contact -->
+        <mj-include path="..\..\template\contact_table.mjml"/>
+
+        <!-- Order form Products -->
+        <mj-wrapper padding="0px">
+            <mj-section css-class="section_white" padding="0px" background-color="#ffffff">
+                <mj-column>
+                    <mj-table css-class="contact_table">
+                        {% for product in products %}
+                        {% include "classei/email/template/order_form_product.mjml" %}
+                        {% endfor %}
+                    </mj-table>
+                </mj-column>
+            </mj-section>
+        </mj-wrapper>
+
+
+        <mj-section css-class="section_white" padding="0px" background-color="#ffffff">
+            <!-- Blog Content -->
+            <mj-column>
+                {autocontent:25-| max:1|
+                order:created,DESC|
+                type:intro|link|author| pict:resized|
+                maxwidth:150|
+                maxheight:150| invert| format:TOP_LEFT|
+                template:tagcontent.php}
+            </mj-column>
+        </mj-section>
+
+        <!-- Rechtliches -->
+        <mj-section background-color="#ffffff">
+            <mj-column>
+                <mj-text font-size="12px" line-height="16px">
+                    <!-- Terms -->
+                    <p>
+
+                        * Versandkostenfrei ab Warenwert
+                        99,00 € netto. Warenwert
+                        unter 99,00 € netto Versandkosten
+                        5,95 € netto.&nbsp;
+
+                        |
+                        <a style="text-decoration: None; color: #ff9933"
+                           href="https://www.classei-shop.com/Versandinformationen?sPartner=email"
+                           target="_blank">Nähere Infos zu
+                            Versandkosten&nbsp;
+                        </a>
+                        15% Aktion gültig bis 19.12.2024. Aktion nur gültig in Deutschland und Österreich.
+
+                    </p>
+
+
+                    <!-- Impressum -->
+                    <p>
+                        Classei-Organisation - Egon Heimann
+                        GmbH | Staudacher Str. 7e | 83250
+                        Marquartstein | Deutschland<br>Fon:
+                        +49
+                        (0)8641 97 59 0 |
+                        Fax +49 (0)8641 97 59 20 | E-Mail:
+                        <a style="text-decoration: None; color: #ff9933" href="mailto:info@classei.de">
+                            Info
+                        </a>
+                        // Internet:
+                        <a href="https://www.classei.de">Classei.de</a>
+                    </p>
+
+
+                    <!-- Unsubscribe -->
+                    <p>
+                        Sie erhalten diese E-Mail, weil Sie
+                        unser Kunde/Interessent sind oder
+                        wir schon Kontakt hatten. Wenn Sie
+                        keine
+                        Informationen mehr erhalten möchten,
+                        welche wir relativ selten
+                        verschicken, tragen Sie sich bitte
+                        <span>
+                            {modify}hier{/modify}
+                        </span>
+                        aus.
+                    </p>
+                </mj-text>
+            </mj-column>
+        </mj-section>
+
+    </mj-body>
+</mjml>

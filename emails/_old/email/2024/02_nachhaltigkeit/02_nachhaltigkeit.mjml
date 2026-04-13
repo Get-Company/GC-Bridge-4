@@ -1,0 +1,1019 @@
+<mjml>
+    <mj-font href=""/>
+    <!-- Head -->
+    <mj-head>
+        <mj-include path="..\..\template\head_green.mjml"/>
+    </mj-head>
+
+    <!-- Body Green: #4F9A11-->
+    <mj-body>
+        <mj-raw>
+            <!-- Company Header -->
+        </mj-raw>
+
+        <!-- View online -->
+        <mj-include path="..\..\template\view_online.mjml"/>
+
+        <!-- Navigation -->
+        <mj-include path="..\..\template\nav_items_shop_green.mjml"/>
+
+        <!-- Header-Logo -->
+        <mj-include path="..\..\template\header_logo.mjml"/>
+
+        <!-- Title -->
+        <mj-section padding="20px" background-color="#ffffff">
+            <mj-column>
+                <mj-text>
+                    <h1 align="center" style="color: #4F9A11; font-weight:400; line-height:40px">
+                        Büro & Nachhaltigkeit, es kann so einfach sein …
+                    </h1>
+                    <h1 align="right" style="color: #8a8a8a; font-weight:400; line-height:36px">
+                        <small>
+                            … den eigenen Büro-Arbeitsalltag im Sinne von Nachhaltigkeit zu gestalten
+                        </small>
+                    </h1>
+                </mj-text>
+            </mj-column>
+        </mj-section>
+
+        <!-- Certs -->
+        <mj-include path="..\..\template\certs_logo_green.mjml"/>
+
+        <!-- Salutation -->
+        <mj-section background-color="#ffffff">
+            <mj-column>
+                <mj-text>
+                    <p>
+                        Hallo
+
+                        {if:anrede~Herr} Herr {/if}
+                        {if:anrede~Frau} Frau {/if}
+                        {subtag:name},
+                    </p>
+                </mj-text>
+            </mj-column>
+            <mj-column>
+                <mj-text align="right">
+                    <p>
+                        Ihre Kunden-Nr.: {subtag:adrnr}
+                    </p>
+                </mj-text>
+            </mj-column>
+        </mj-section>
+
+        <!-- Intro Text -->
+        <mj-wrapper>
+        <mj-section background-color="#ffffff">
+            <mj-column>
+                <mj-text line-height="26px">
+                    <p>
+                        oft sind es nur kleine Veränderungen in der eigenen Arbeitsweise, die mit der Zeit große
+                        Wirkung zeigen, so kann 4R oft ganz leicht angewandt werden:
+                    </p>
+                </mj-text>
+            </mj-column>
+        </mj-section>
+
+        <!-- 4Rs -->
+        <mj-include path="..\..\template\4r.mjml"/>
+
+        <!-- Intro Text - 2. Teil -->
+        <mj-section padding="20px" background-color="#ffffff">
+            <mj-column>
+                <mj-text line-height="26px">
+                    <p>
+                        Jeder kann so seinen Beitrag leisten und dafür sorgen, dass sich auch die zukünftigen
+                        Generationen an der unvergleichlichen Schönheit unseres Planeten erfreuen dürfen. Die
+                        Arbeitsmaterialien, wie Ordnungsmittel & Co. sollten im besten Fall aus Papier, Karton oder
+                        Recyceltem bestehen.
+                    </p>
+                    <p>
+                        Nachfolgend einige Anregungen zum Thema nachhaltiger Büro-Arbeitsplatz, die den Büroalltag
+                        besonders umweltfreundlich gestalten.
+                    </p>
+                </mj-text>
+            </mj-column>
+        </mj-section>
+        </mj-wrapper>
+
+
+        <!-- Products -->
+        
+
+            
+                
+                <mj-wrapper padding="0px">
+    <mj-section css-class="section_white" padding="20px" background-color="#ffffff">
+    <mj-column>
+        <mj-text align="center" line-height="40px">
+            <h2 style="font-size: 30px; color: #4F9A11">Die neue <strong>"100% Recycling"</strong> Box</h2>
+        </mj-text>
+    </mj-column>
+</mj-section>
+</mj-wrapper>
+                
+            
+
+
+        <mj-wrapper>
+    <!-- Product Head -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text>
+                <a style="text-decoration: None; color:#000000" target="_blank"
+                   href="https://www.classei-shop.com/search?sSearch=104016">
+                    <h4>
+                        <span style="font-size:30px; font-weight:bold; line-height: 45px; display: block">
+                            
+                            
+                            104016 Orga-Hartpappebox (FSC® [...]
+                            
+                        </span>
+                    </h4>
+                </a>
+            </mj-text>
+        </mj-column>
+    </mj-section>
+    <!-- Product Body -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text line-height="26px">
+                <p>Dienen zum Abstellen von Orga-Mappen. Bestehend aus stabiler und robuster Recycling-Hartpappe mit Lederprägestruktur (mit Umweltzeichen Blauer Engel sowie FSC®).<br>Sie wird flach geliefert und benötigt daher wenig Lagerraum. Im Handumdrehen ist sie durch den leicht bedienbaren Steckbodenverschluss aufgestellt.</p>
+<p>
+    <b>Material:</b> 100% Rec.-Hartpappe<br/>
+    <b>Farbe:</b> schwarz<br/>
+    <b>Stärke:</b> 1,2 mm<br/>
+    <b>Breite:</b> 325 mm<br/>
+    <b>Höhe:</b> 220 mm<br/>
+    <b>Tiefe:</b> 100 mm
+</p>
+            </mj-text>
+            <mj-button padding="20px 0 0 0"
+                    href="https://www.classei-shop.com/search?sSearch=104016">
+                - Mehr Infos zum Artikel -
+            </mj-button>
+
+            
+            <mj-text align="center" padding-top="20px">
+                <h4 style="color: #4F9A11; font-size: 24px; line-height: 40px">
+                    <strong>Preis</strong>
+                    7,95 €
+                </h4>
+            </mj-text>
+            
+
+            <mj-text align="center" padding="0px">
+                <p style="font-size: 14px;">
+                    <!-- Verkaufseinheit -->
+                    pro
+                        
+                        Stck
+                        
+                    <br/>
+                    
+                    <!-- Versandkosten True/False -->
+                    
+                    <span style="font-size: 12px">- * zuzgl. Versandkosten -</span>
+                    
+                    <br/>
+                    zuzgl. Mwst.
+                </p>
+            </mj-text>
+        </mj-column>
+        <mj-column>
+            
+            
+
+            
+
+            
+
+            
+
+            
+            <mj-carousel>
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=104016"
+                                   src="https://assets.classei.de/img/104016.jpg"
+                                   alt="Dienen zum Abstellen von Orga-Mappen. Bestehend aus stabiler und robuster Recycling-Hartpappe mit Lederprägestruktur (mit Umweltzeichen Blauer Engel sowie FSC®).Sie wird flach geliefert und benötigt daher wenig Lagerraum. Im Handumdrehen ist sie durch den leicht bedienbaren Steckbodenverschluss aufgestellt. Material: 100% Recycling-Hartpappe Farbe: schwarz Stärke: 1,2 mm Breite: 325 mm Höhe: 220 mm Tiefe: 100 mm"/>
+                
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=104016"
+                                   src="https://assets.classei.de/img/104016_02.jpg"
+                                   alt="Dienen zum Abstellen von Orga-Mappen. Bestehend aus stabiler und robuster Recycling-Hartpappe mit Lederprägestruktur (mit Umweltzeichen Blauer Engel sowie FSC®).Sie wird flach geliefert und benötigt daher wenig Lagerraum. Im Handumdrehen ist sie durch den leicht bedienbaren Steckbodenverschluss aufgestellt. Material: 100% Recycling-Hartpappe Farbe: schwarz Stärke: 1,2 mm Breite: 325 mm Höhe: 220 mm Tiefe: 100 mm"/>
+                
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=104016"
+                                   src="https://assets.classei.de/img/104016_03.jpg"
+                                   alt="Dienen zum Abstellen von Orga-Mappen. Bestehend aus stabiler und robuster Recycling-Hartpappe mit Lederprägestruktur (mit Umweltzeichen Blauer Engel sowie FSC®).Sie wird flach geliefert und benötigt daher wenig Lagerraum. Im Handumdrehen ist sie durch den leicht bedienbaren Steckbodenverschluss aufgestellt. Material: 100% Recycling-Hartpappe Farbe: schwarz Stärke: 1,2 mm Breite: 325 mm Höhe: 220 mm Tiefe: 100 mm"/>
+                
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=104016"
+                                   src="https://assets.classei.de/img/104016_04.jpg"
+                                   alt="Dienen zum Abstellen von Orga-Mappen. Bestehend aus stabiler und robuster Recycling-Hartpappe mit Lederprägestruktur (mit Umweltzeichen Blauer Engel sowie FSC®).Sie wird flach geliefert und benötigt daher wenig Lagerraum. Im Handumdrehen ist sie durch den leicht bedienbaren Steckbodenverschluss aufgestellt. Material: 100% Recycling-Hartpappe Farbe: schwarz Stärke: 1,2 mm Breite: 325 mm Höhe: 220 mm Tiefe: 100 mm"/>
+                
+                
+            </mj-carousel>
+            
+        </mj-column>
+    </mj-section>
+
+    <!-- Product Footer - only fpr special prices-->
+    
+</mj-wrapper>
+
+        
+
+            
+                
+                <mj-wrapper padding="0px">
+    <mj-section css-class="section_white" padding="20px" background-color="#ffffff">
+    <mj-column>
+        <mj-text align="center" line-height="40px">
+            <h2 style="font-size: 30px; color: #4F9A11">Die neuen <strong>"100% Recycling"</strong> Mappen</h2>
+        </mj-text>
+    </mj-column>
+</mj-section>
+</mj-wrapper>
+                
+        
+
+
+        <mj-wrapper>
+    <!-- Product Head -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text>
+                <a style="text-decoration: None; color:#000000" target="_blank"
+                   href="https://www.classei-shop.com/search?sSearch=204021">
+                    <h4>
+                        <span style="font-size:30px; font-weight:bold; line-height: 45px; display: block">
+                            
+                            
+                            204021 Orgamappen Recycling (F [...]
+                            
+                        </span>
+                    </h4>
+                </a>
+            </mj-text>
+        </mj-column>
+    </mj-section>
+    <!-- Product Body -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text line-height="26px">
+                nehmen Ihre DIN A4- Dokumente sicher und geschützt auf. Bestehend aus 100% Recycling-Papier 120 g/m²<br><br><b>Material:</b> 100% Rec.-Papier 120 g/m²<br><b>Farbe:</b> weiß<br><b>Blattkapazität:</b> bis 40 bei 80 g Papier<br><b>Außenmaße:</b> B 315 mm x H 225 mm<br>
+            </mj-text>
+            <mj-button padding="20px 0 0 0"
+                    href="https://www.classei-shop.com/search?sSearch=204021">
+                - Mehr Infos zum Artikel -
+            </mj-button>
+
+            
+            <mj-text align="center" padding-top="20px">
+                <h4 style="color: #4F9A11; font-size: 24px; line-height: 40px">
+                    <strong>Preis</strong>
+                    35,95 €
+                </h4>
+            </mj-text>
+            
+
+            <mj-text align="center" padding="0px">
+                <p style="font-size: 14px;">
+                    <!-- Verkaufseinheit -->
+                    pro
+                        
+                        100 St.
+                        
+                    <br/>
+                    
+                    <!-- Mindestbestellwert und Bestellschritte ? -->
+                    <span style="font-size: 12px;">
+                        | Mind. Best. Menge: 50 | Best. Schritt: 10
+                    </span>
+                    <br/>
+                    
+                    <!-- Versandkosten True/False -->
+                    
+                    <span style="font-size: 12px">- * zuzgl. Versandkosten -</span>
+                    
+                    <br/>
+                    zuzgl. Mwst.
+                </p>
+            </mj-text>
+        </mj-column>
+        <mj-column>
+            
+            
+
+            
+
+            
+
+            
+
+            
+            <mj-carousel>
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=204021"
+                                   src="https://assets.classei.de/img/204021.jpg"
+                                   alt="nehmen Ihre DIN A4- Dokumente sicher und geschützt auf. Bestehend aus 100% Recycling-Papier (FSC®) 120 g/m²Eine universelle Organisationsleiste bietet eine Vielfalt an Einsatzmöglichkeiten. Integrierte Seitenklappen schützen Ihre Dokumente gegen Herausfallen und geben der Mappe Standstabilität. Sie ist schon wirtschaftlich bei Aufbewahrung von wenigen Schriftstücken. Daher ist sie ideal für dünne Vorgänge und größere Unterteilungen der Ablage. Das ist wichtig, denn klein gehaltene Vorgänge erhöhen die Ordnungssystematik.Hinweis: Für den normalen Büroeinsatz empfehlen wir Orga-Mappen ab einem Papiergewicht von 120 g/m².Material: 100% Recycling-Papier (FSC®) 120 g/m²Farbe: weißBlattkapazität: bis 40 bei 80 g PapierAußenmaße: B 315 mm x H 225 mm"/>
+                
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=204021"
+                                   src="https://assets.classei.de/img/beispiel_orga-tabs.jpg"
+                                   alt="nehmen Ihre DIN A4- Dokumente sicher und geschützt auf. Bestehend aus 100% Recycling-Papier (FSC®) 120 g/m²Eine universelle Organisationsleiste bietet eine Vielfalt an Einsatzmöglichkeiten. Integrierte Seitenklappen schützen Ihre Dokumente gegen Herausfallen und geben der Mappe Standstabilität. Sie ist schon wirtschaftlich bei Aufbewahrung von wenigen Schriftstücken. Daher ist sie ideal für dünne Vorgänge und größere Unterteilungen der Ablage. Das ist wichtig, denn klein gehaltene Vorgänge erhöhen die Ordnungssystematik.Hinweis: Für den normalen Büroeinsatz empfehlen wir Orga-Mappen ab einem Papiergewicht von 120 g/m².Material: 100% Recycling-Papier (FSC®) 120 g/m²Farbe: weißBlattkapazität: bis 40 bei 80 g PapierAußenmaße: B 315 mm x H 225 mm"/>
+                
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=204021"
+                                   src="https://assets.classei.de/img/beispiel_schreibtisch.jpg"
+                                   alt="nehmen Ihre DIN A4- Dokumente sicher und geschützt auf. Bestehend aus 100% Recycling-Papier (FSC®) 120 g/m²Eine universelle Organisationsleiste bietet eine Vielfalt an Einsatzmöglichkeiten. Integrierte Seitenklappen schützen Ihre Dokumente gegen Herausfallen und geben der Mappe Standstabilität. Sie ist schon wirtschaftlich bei Aufbewahrung von wenigen Schriftstücken. Daher ist sie ideal für dünne Vorgänge und größere Unterteilungen der Ablage. Das ist wichtig, denn klein gehaltene Vorgänge erhöhen die Ordnungssystematik.Hinweis: Für den normalen Büroeinsatz empfehlen wir Orga-Mappen ab einem Papiergewicht von 120 g/m².Material: 100% Recycling-Papier (FSC®) 120 g/m²Farbe: weißBlattkapazität: bis 40 bei 80 g PapierAußenmaße: B 315 mm x H 225 mm"/>
+                
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=204021"
+                                   src="https://assets.classei.de/img/beispiel_schrank_schublade.jpg"
+                                   alt="nehmen Ihre DIN A4- Dokumente sicher und geschützt auf. Bestehend aus 100% Recycling-Papier (FSC®) 120 g/m²Eine universelle Organisationsleiste bietet eine Vielfalt an Einsatzmöglichkeiten. Integrierte Seitenklappen schützen Ihre Dokumente gegen Herausfallen und geben der Mappe Standstabilität. Sie ist schon wirtschaftlich bei Aufbewahrung von wenigen Schriftstücken. Daher ist sie ideal für dünne Vorgänge und größere Unterteilungen der Ablage. Das ist wichtig, denn klein gehaltene Vorgänge erhöhen die Ordnungssystematik.Hinweis: Für den normalen Büroeinsatz empfehlen wir Orga-Mappen ab einem Papiergewicht von 120 g/m².Material: 100% Recycling-Papier (FSC®) 120 g/m²Farbe: weißBlattkapazität: bis 40 bei 80 g PapierAußenmaße: B 315 mm x H 225 mm"/>
+                
+                
+            </mj-carousel>
+            
+        </mj-column>
+    </mj-section>
+
+    <!-- Product Footer - only fpr special prices-->
+    
+</mj-wrapper>
+
+        
+
+            
+
+
+        <mj-wrapper>
+    <!-- Product Head -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text>
+                <a style="text-decoration: None; color:#000000" target="_blank"
+                   href="https://www.classei-shop.com/search?sSearch=204011">
+                    <h4>
+                        <span style="font-size:30px; font-weight:bold; line-height: 45px; display: block">
+                            
+                            
+                            204011 Orgamappen Recycling (F [...]
+                            
+                        </span>
+                    </h4>
+                </a>
+            </mj-text>
+        </mj-column>
+    </mj-section>
+    <!-- Product Body -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text line-height="26px">
+                <p>Sie nehmen Ihre Dokumente sicher auf und besteht aus 170 g/m² stabilem Recycling-Papier. Eine universelle Organisationsleiste bietet eine Vielfalt an Einsatzmöglichkeiten. Integrierte Seitenklappen schützen Ihre Dokumente gegen Herausfallen und geben der Mappe Standstabilität.</p><b>Material:</b>100% Recycling-Papier FSC® 170 g/m²<br><b>Farbe:</b> weiss<br><b>Blattkapazität:</b> bis 80 bei 80 g Papier<br><b>Außenmaße:</b> B 315 mm x H 225 mm
+            </mj-text>
+            <mj-button padding="20px 0 0 0"
+                    href="https://www.classei-shop.com/search?sSearch=204011">
+                - Mehr Infos zum Artikel -
+            </mj-button>
+
+            
+            <mj-text align="center" padding-top="20px">
+                <h4 style="color: #4F9A11; font-size: 24px; line-height: 40px">
+                    <strong>Preis</strong>
+                    54,75 €
+                </h4>
+            </mj-text>
+            
+
+            <mj-text align="center" padding="0px">
+                <p style="font-size: 14px;">
+                    <!-- Verkaufseinheit -->
+                    pro
+                        
+                        100 St.
+                        
+                    <br/>
+                    
+                    <!-- Mindestbestellwert und Bestellschritte ? -->
+                    <span style="font-size: 12px;">
+                        | Mind. Best. Menge: 50 | Best. Schritt: 10
+                    </span>
+                    <br/>
+                    
+                    <!-- Versandkosten True/False -->
+                    
+                    <span style="font-size: 12px">- * zuzgl. Versandkosten -</span>
+                    
+                    <br/>
+                    zuzgl. Mwst.
+                </p>
+            </mj-text>
+        </mj-column>
+        <mj-column>
+            
+            
+
+            
+
+            
+
+            
+
+            
+            <mj-carousel>
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=204011"
+                                   src="https://assets.classei.de/img/204011.jpg"
+                                   alt="nehmen Ihre Dokumente sicher und geschützt auf.Eine universelle Organisationsleiste bietet eine Vielfalt an Einsatzmöglichkeiten. Integrierte Seitenklappen schützen Ihre Dokumente gegen Herausfallen und geben der Mappe Standstabilität. Sie ist schon wirtschaftlich bei Aufbewahrung von wenigen Schriftstücken. Daher ist sie ideal für dünne Vorgänge und größere Unterteilungen der Ablage. Das ist wichtig, denn klein gehaltene Vorgänge erhöhen die Ordnungssystematik. Material: 100% Recycling-Papier FSC® 170 g/m² Farbe: weiss Blattkapazität: bis 80 bei 80 g Papier Außenmaße: B 315 mm x H 225 mm"/>
+                
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=204011"
+                                   src="https://assets.classei.de/img/beispiel_orga-tabs.jpg"
+                                   alt="nehmen Ihre Dokumente sicher und geschützt auf.Eine universelle Organisationsleiste bietet eine Vielfalt an Einsatzmöglichkeiten. Integrierte Seitenklappen schützen Ihre Dokumente gegen Herausfallen und geben der Mappe Standstabilität. Sie ist schon wirtschaftlich bei Aufbewahrung von wenigen Schriftstücken. Daher ist sie ideal für dünne Vorgänge und größere Unterteilungen der Ablage. Das ist wichtig, denn klein gehaltene Vorgänge erhöhen die Ordnungssystematik. Material: 100% Recycling-Papier FSC® 170 g/m² Farbe: weiss Blattkapazität: bis 80 bei 80 g Papier Außenmaße: B 315 mm x H 225 mm"/>
+                
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=204011"
+                                   src="https://assets.classei.de/img/beispiel_schreibtisch.jpg"
+                                   alt="nehmen Ihre Dokumente sicher und geschützt auf.Eine universelle Organisationsleiste bietet eine Vielfalt an Einsatzmöglichkeiten. Integrierte Seitenklappen schützen Ihre Dokumente gegen Herausfallen und geben der Mappe Standstabilität. Sie ist schon wirtschaftlich bei Aufbewahrung von wenigen Schriftstücken. Daher ist sie ideal für dünne Vorgänge und größere Unterteilungen der Ablage. Das ist wichtig, denn klein gehaltene Vorgänge erhöhen die Ordnungssystematik. Material: 100% Recycling-Papier FSC® 170 g/m² Farbe: weiss Blattkapazität: bis 80 bei 80 g Papier Außenmaße: B 315 mm x H 225 mm"/>
+                
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=204011"
+                                   src="https://assets.classei.de/img/beispiel_schrank_schublade.jpg"
+                                   alt="nehmen Ihre Dokumente sicher und geschützt auf.Eine universelle Organisationsleiste bietet eine Vielfalt an Einsatzmöglichkeiten. Integrierte Seitenklappen schützen Ihre Dokumente gegen Herausfallen und geben der Mappe Standstabilität. Sie ist schon wirtschaftlich bei Aufbewahrung von wenigen Schriftstücken. Daher ist sie ideal für dünne Vorgänge und größere Unterteilungen der Ablage. Das ist wichtig, denn klein gehaltene Vorgänge erhöhen die Ordnungssystematik. Material: 100% Recycling-Papier FSC® 170 g/m² Farbe: weiss Blattkapazität: bis 80 bei 80 g Papier Außenmaße: B 315 mm x H 225 mm"/>
+                
+                
+            </mj-carousel>
+            
+        </mj-column>
+    </mj-section>
+
+    <!-- Product Footer - only fpr special prices-->
+    
+</mj-wrapper>
+
+        
+
+            
+
+
+        <mj-wrapper>
+    <!-- Product Head -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text>
+                <a style="text-decoration: None; color:#000000" target="_blank"
+                   href="https://www.classei-shop.com/search?sSearch=214025">
+                    <h4>
+                        <span style="font-size:30px; font-weight:bold; line-height: 45px; display: block">
+                            
+                            
+                            214025 Orga-Dehnmappen Recycli [...]
+                            
+                        </span>
+                    </h4>
+                </a>
+            </mj-text>
+        </mj-column>
+    </mj-section>
+    <!-- Product Body -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text line-height="26px">
+                <p>ist aus stabilem Karton und mit einer Dehnfalte ausgestattet</p>
+<p>Sie passt sich dem wachsenden Inhalt an. Eine Mappe fasst bis zu 200 Blatt Papier. Daher ideal für voluminöse Vorgänge, umfangreiche Verträge, Broschüren oder Prospekte. </p>
+<p>
+<b>Material:</b> Karton Recycling (FSC®) 250 g/m²<br>
+<b>Farbe:</b> weiß<br>
+<b>Blattkapazität:</b> bis 200 bei 80 g Papier<br>
+<b>Außenmaße:</b> B 315 mm x H 225 mm mit 20 mm Dehnfalte
+</p>
+            </mj-text>
+            <mj-button padding="20px 0 0 0"
+                    href="https://www.classei-shop.com/search?sSearch=214025">
+                - Mehr Infos zum Artikel -
+            </mj-button>
+
+            
+            <mj-text align="center" padding-top="20px">
+                <h4 style="color: #4F9A11; font-size: 24px; line-height: 40px">
+                    <strong>Preis</strong>
+                    105,45 €
+                </h4>
+            </mj-text>
+            
+
+            <mj-text align="center" padding="0px">
+                <p style="font-size: 14px;">
+                    <!-- Verkaufseinheit -->
+                    pro
+                        
+                        100 St.
+                        
+                    <br/>
+                    
+                    <!-- Mindestbestellwert und Bestellschritte ? -->
+                    <span style="font-size: 12px;">
+                        | Mind. Best. Menge: 20 | Best. Schritt: 10
+                    </span>
+                    <br/>
+                    
+                    <!-- Versandkosten True/False -->
+                    
+                    <span style="font-size: 12px">- * zuzgl. Versandkosten -</span>
+                    
+                    <br/>
+                    zuzgl. Mwst.
+                </p>
+            </mj-text>
+        </mj-column>
+        <mj-column>
+            
+            
+
+            
+
+            
+
+            
+
+            
+            <mj-carousel>
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=214025"
+                                   src="https://assets.classei.de/img/214025.jpg"
+                                   alt="ist aus stabilem Karton und mit einer Dehnfalte ausgestattet Sie passt sich dem wachsenden Inhalt an. Eine Mappe fasst bis zu 200 Blatt Papier. Daher ideal für voluminöse Vorgänge, umfangreiche Verträge, Broschüren oder Prospekte. Material: Karton Recycling (FSC®) 250 g/m² Farbe: weiß Blattkapazität: bis 200 bei 80 g Papier Außenmaße: B 315 mm x H 225 mm mit 20 mm Dehnfalte"/>
+                
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=214025"
+                                   src="https://assets.classei.de/img/900050.jpg"
+                                   alt="ist aus stabilem Karton und mit einer Dehnfalte ausgestattet Sie passt sich dem wachsenden Inhalt an. Eine Mappe fasst bis zu 200 Blatt Papier. Daher ideal für voluminöse Vorgänge, umfangreiche Verträge, Broschüren oder Prospekte. Material: Karton Recycling (FSC®) 250 g/m² Farbe: weiß Blattkapazität: bis 200 bei 80 g Papier Außenmaße: B 315 mm x H 225 mm mit 20 mm Dehnfalte"/>
+                
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=214025"
+                                   src="https://assets.classei.de/img/beispiel_orga-tabs.jpg"
+                                   alt="ist aus stabilem Karton und mit einer Dehnfalte ausgestattet Sie passt sich dem wachsenden Inhalt an. Eine Mappe fasst bis zu 200 Blatt Papier. Daher ideal für voluminöse Vorgänge, umfangreiche Verträge, Broschüren oder Prospekte. Material: Karton Recycling (FSC®) 250 g/m² Farbe: weiß Blattkapazität: bis 200 bei 80 g Papier Außenmaße: B 315 mm x H 225 mm mit 20 mm Dehnfalte"/>
+                
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=214025"
+                                   src="https://assets.classei.de/img/beispiel_schrank_schublade.jpg"
+                                   alt="ist aus stabilem Karton und mit einer Dehnfalte ausgestattet Sie passt sich dem wachsenden Inhalt an. Eine Mappe fasst bis zu 200 Blatt Papier. Daher ideal für voluminöse Vorgänge, umfangreiche Verträge, Broschüren oder Prospekte. Material: Karton Recycling (FSC®) 250 g/m² Farbe: weiß Blattkapazität: bis 200 bei 80 g Papier Außenmaße: B 315 mm x H 225 mm mit 20 mm Dehnfalte"/>
+                
+                
+            </mj-carousel>
+            
+        </mj-column>
+    </mj-section>
+
+    <!-- Product Footer - only fpr special prices-->
+    
+</mj-wrapper>
+
+        
+
+            
+                
+                <mj-wrapper padding="0px">
+    <mj-section css-class="section_white" padding="20px" background-color="#ffffff">
+    <mj-column>
+        <mj-text align="center" line-height="40px">
+            <h2 style="font-size: 30px; color: #4F9A11">Karton Reiter</h2>
+        </mj-text>
+    </mj-column>
+</mj-section>
+</mj-wrapper>
+                
+
+        
+
+
+        <mj-wrapper>
+    <!-- Product Head -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text>
+                <a style="text-decoration: None; color:#000000" target="_blank"
+                   href="https://www.classei-shop.com/search?sSearch=580004S">
+                    <h4>
+                        <span style="font-size:30px; font-weight:bold; line-height: 45px; display: block">
+                            
+                            
+                            580004S Quick-Tabs Sortiment(F [...]
+                            
+                        </span>
+                    </h4>
+                </a>
+            </mj-text>
+        </mj-column>
+    </mj-section>
+    <!-- Product Body -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text line-height="26px">
+                <p>
+sind selbstklebende Beschriftungsreiter (Set, 5 Bögen) aus stabilem Haftkarton, auf den meisten Laser- und Tintenstrahl-Druckern zu bedrucken
+</p>
+<p>
+<a href="https://www.classei.de/de/service/media-center/classei-online-druck.html" target="_blank">
+<strong>NEU Online-Druck:</strong> kostenlos und ohne Installation</a>
+</p>
+            </mj-text>
+            <mj-button padding="20px 0 0 0"
+                    href="https://www.classei-shop.com/search?sSearch=580004S">
+                - Mehr Infos zum Artikel -
+            </mj-button>
+
+            
+            <mj-text align="center" padding-top="20px">
+                <h4 style="color: #4F9A11; font-size: 24px; line-height: 40px">
+                    <strong>Preis</strong>
+                    13,75 €
+                </h4>
+            </mj-text>
+            
+
+            <mj-text align="center" padding="0px">
+                <p style="font-size: 14px;">
+                    <!-- Verkaufseinheit -->
+                    pro
+                        
+                        Stck
+                        
+                    <br/>
+                    
+                    <!-- Versandkosten True/False -->
+                    
+                    <span style="font-size: 12px">- * zuzgl. Versandkosten -</span>
+                    
+                    <br/>
+                    zuzgl. Mwst.
+                </p>
+            </mj-text>
+        </mj-column>
+        <mj-column>
+            
+            
+
+            
+
+            
+
+            
+
+            
+            <mj-carousel>
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=580004S"
+                                   src="https://assets.classei.de/img/580004s.jpg"
+                                   alt="sind selbstklebende Beschriftungsreiter (Set, 5 Bögen) aus stabilem Haftkarton, auf den meisten Laser- und Tintenstrahl-Druckern zu bedruckenVerwendung für Namen und Begriffe NEU Online-Druck: kostenlos und ohne Installation Material: Haftkarton 250 g/m²Farbe: weißBreite: 58 mmHöhe: 10 mmTabs pro Bogen: 24"/>
+                
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=580004S"
+                                   src="https://assets.classei.de/img/beispiel_quick-tabs.jpg"
+                                   alt="sind selbstklebende Beschriftungsreiter (Set, 5 Bögen) aus stabilem Haftkarton, auf den meisten Laser- und Tintenstrahl-Druckern zu bedruckenVerwendung für Namen und Begriffe NEU Online-Druck: kostenlos und ohne Installation Material: Haftkarton 250 g/m²Farbe: weißBreite: 58 mmHöhe: 10 mmTabs pro Bogen: 24"/>
+                
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=580004S"
+                                   src="https://assets.classei.de/img/beispiel_schreibtisch.jpg"
+                                   alt="sind selbstklebende Beschriftungsreiter (Set, 5 Bögen) aus stabilem Haftkarton, auf den meisten Laser- und Tintenstrahl-Druckern zu bedruckenVerwendung für Namen und Begriffe NEU Online-Druck: kostenlos und ohne Installation Material: Haftkarton 250 g/m²Farbe: weißBreite: 58 mmHöhe: 10 mmTabs pro Bogen: 24"/>
+                
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=580004S"
+                                   src="https://assets.classei.de/img/beispiel_schrank_schublade.jpg"
+                                   alt="sind selbstklebende Beschriftungsreiter (Set, 5 Bögen) aus stabilem Haftkarton, auf den meisten Laser- und Tintenstrahl-Druckern zu bedruckenVerwendung für Namen und Begriffe NEU Online-Druck: kostenlos und ohne Installation Material: Haftkarton 250 g/m²Farbe: weißBreite: 58 mmHöhe: 10 mmTabs pro Bogen: 24"/>
+                
+                
+            </mj-carousel>
+            
+        </mj-column>
+    </mj-section>
+
+    <!-- Product Footer - only fpr special prices-->
+    
+</mj-wrapper>
+
+        
+
+        <!-- Order form Contact -->
+        <mj-include path="..\..\template\contact_table_green.mjml"/>
+
+        <!-- Order form Products -->
+        <mj-wrapper padding="0px">
+            <mj-section css-class="section_white" padding="0px" background-color="#ffffff">
+                <mj-column>
+                    <mj-table css-class="contact_table">
+                        
+                        <tr>
+                            <td width="10%">__x</td>
+                            <td width="45%" style="color: #4F9A11; font-weight: bold; font-size: 12px; line-height:1">
+                                104016 Orga-Hartpappebox (FSC®), schwarz
+                            </td>
+                            <td width="45%" class="ct_text">
+                                <mj-text align="left" padding="0px">
+                                    <p style="font-size: 14px;">
+                                        Listenpreis
+                                        
+                                        7,95
+                                        
+                                        € netto:
+                                        <br/>
+                                        pro
+                                        
+                                        Stck
+                                        
+                                        <br/>
+
+                                        <!-- Versandkosten ? -->
+                                        
+                                        - zuzgl. Versandkosten - zuzgl. Ust. -
+                                        
+                                    </p>
+                                </mj-text>
+                            </td>
+                        </tr>
+                        
+                        <tr>
+                            <td width="10%">__x</td>
+                            <td width="45%" style="color: #4F9A11; font-weight: bold; font-size: 12px; line-height:1">
+                                204021 Orgamappen Recycling (FSC®) 120, weiß
+                            </td>
+                            <td width="45%" class="ct_text">
+                                <mj-text align="left" padding="0px">
+                                    <p style="font-size: 14px;">
+                                        Listenpreis
+                                        
+                                        35,95
+                                        
+                                        € netto:
+                                        <br/>
+                                        pro
+                                        
+                                        100 St.
+                                        
+                                        <br/>
+
+                                        <!-- Versandkosten ? -->
+                                        
+                                        - zuzgl. Versandkosten - zuzgl. Ust. -
+                                        
+                                    </p>
+                                </mj-text>
+                            </td>
+                        </tr>
+                        
+                        <tr>
+                            <td width="10%">__x</td>
+                            <td width="45%" style="color: #4F9A11; font-weight: bold; font-size: 12px; line-height:1">
+                                204011 Orgamappen Recycling (FSC®) 170, weiß
+                            </td>
+                            <td width="45%" class="ct_text">
+                                <mj-text align="left" padding="0px">
+                                    <p style="font-size: 14px;">
+                                        Listenpreis
+                                        
+                                        54,75
+                                        
+                                        € netto:
+                                        <br/>
+                                        pro
+                                        
+                                        100 St.
+                                        
+                                        <br/>
+
+                                        <!-- Versandkosten ? -->
+                                        
+                                        - zuzgl. Versandkosten - zuzgl. Ust. -
+                                        
+                                    </p>
+                                </mj-text>
+                            </td>
+                        </tr>
+                        
+                        <tr>
+                            <td width="10%">__x</td>
+                            <td width="45%" style="color: #4F9A11; font-weight: bold; font-size: 12px; line-height:1">
+                                214025 Orga-Dehnmappen Recycling (FSC®) 250 weiss
+                            </td>
+                            <td width="45%" class="ct_text">
+                                <mj-text align="left" padding="0px">
+                                    <p style="font-size: 14px;">
+                                        Listenpreis
+                                        
+                                        105,45
+                                        
+                                        € netto:
+                                        <br/>
+                                        pro
+                                        
+                                        100 St.
+                                        
+                                        <br/>
+
+                                        <!-- Versandkosten ? -->
+                                        
+                                        - zuzgl. Versandkosten - zuzgl. Ust. -
+                                        
+                                    </p>
+                                </mj-text>
+                            </td>
+                        </tr>
+                        
+                        <tr>
+                            <td width="10%">__x</td>
+                            <td width="45%" style="color: #4F9A11; font-weight: bold; font-size: 12px; line-height:1">
+                                580004S Quick-Tabs Sortiment(Farben 00-04)
+                            </td>
+                            <td width="45%" class="ct_text">
+                                <mj-text align="left" padding="0px">
+                                    <p style="font-size: 14px;">
+                                        Listenpreis
+                                        
+                                        13,75
+                                        
+                                        € netto:
+                                        <br/>
+                                        pro
+                                        
+                                        Stck
+                                        
+                                        <br/>
+
+                                        <!-- Versandkosten ? -->
+                                        
+                                        - zuzgl. Versandkosten - zuzgl. Ust. -
+                                        
+                                    </p>
+                                </mj-text>
+                            </td>
+                        </tr>
+                        
+                    </mj-table>
+                </mj-column>
+            </mj-section>
+        </mj-wrapper>
+
+        <!-- Klimaneutrales Hosting - Domain Factoty -->
+        <mj-wrapper>
+            <mj-section css-class="section_white" padding="20px" background-color="#ffffff">
+                <mj-column>
+                    <mj-text>
+                        <h3 style="color: #4F9A11; font-weight: bold; line-height:36px">
+                            Klimaneutrales Hosting mit Domain Factory
+                        </h3>
+                        <p>
+                            Diese Ziele sind nicht einfach dahergesagt. Durch klimaneutrales Hosting und Strom aus
+                            erneuerbaren Energiequellen gehen wir weit über die EEG Norm hinaus.
+                        </p>
+                    </mj-text>
+                    <mj-image
+                            width="600px"
+                            src="https://www.df.eu/fileadmin/landingPages/klimabericht2017/IMG_BaumPflanzen.jpg"
+                            href="https://www.classei-shop.com"
+                            padding="0"
+                    />
+                </mj-column>
+            </mj-section>
+        </mj-wrapper>
+
+        <!-- Klima Kompensation - GLS -->
+        <mj-wrapper>
+            <mj-section css-class="section_white" padding="20px" background-color="#ffffff">
+                <mj-column>
+                    <mj-text>
+                        <h3 style="color: #4F9A11; font-weight: bold; line-height:36px">
+                            Kompensierung CO2 Emission beim Versand
+                        </h3>
+                        <p>
+                            Kompensierung CO2 Emission beim Versand
+                            Unserem Paketdienst GLS ist es seit 2019 möglich, 100% klimaneutral zu versenden
+                        </p>
+                    </mj-text>
+                    <mj-image
+                            width="600px"
+                            src="https://www.classei.de/index.php?option=com_joomgallery&view=image&format=raw&id=482&type=orig"
+                            href="https://www.classei-shop.com"
+                            padding="0"
+                    />
+                </mj-column>
+            </mj-section>
+        </mj-wrapper>
+
+        <!-- Verpackung Classei -->
+        <mj-wrapper>
+            <mj-section css-class="section_white" padding="20px" background-color="#ffffff">
+                <mj-column>
+                    <mj-text>
+                        <h3 style="color: #4F9A11; font-weight: bold; line-height:36px">
+                            Unsere Vision: 100% recyclingfähig
+                        </h3>
+                        <p>
+                            Unsere Produkte und Verpackungsmaterialien sind weitgehend recyclebar und können einfach in der blauen Papiertonne entsorgt werden. Leider lassen sich Kunststoffe bei Verpackungen noch nicht ganz vermeiden, jedoch achten wir auf gezielten Einsatz.
+                        </p>
+                    </mj-text>
+                    <mj-image
+                            width="600px"
+                            src="https://www.classei.de/index.php?option=com_joomgallery&view=image&format=raw&id=455&type=orig"
+                            href="https://www.classei-shop.com"
+                            padding="0"
+                    />
+                </mj-column>
+            </mj-section>
+        </mj-wrapper>
+
+
+        <mj-wrapper>
+            <mj-section css-class="section_white" padding="0px" background-color="#ffffff">
+                <!-- Blog Content -->
+                <mj-column>
+                    {autocontent:25-| max:1|
+                    order:created,DESC|
+                    type:intro|link|author| pict:resized|
+                    maxwidth:150|
+                    maxheight:150| invert| format:TOP_LEFT|
+                    template:tagcontent.php}
+                </mj-column>
+            </mj-section>
+
+            <!-- Rechtliches -->
+            <mj-section css-class="section_white" padding="0px" background-color="#ffffff">
+                <mj-column>
+                    <mj-text font-size="12px" line-height="16px">
+                        <!-- Terms -->
+                        <p>
+
+                            * Versandkostenfrei ab Warenwert
+                            99,00 € netto. Warenwert
+                            unter 99,00 € netto Versandkosten
+                            5,95 € netto.&nbsp;
+
+                            |
+                            <a style="text-decoration: None; color: #4F9A11"
+                               href="https://www.classei-shop.com/Versandinformationen?sPartner=email"
+                               target="_blank">Nähere Infos zu
+                                Versandkosten&nbsp;
+                            </a>
+
+
+                        </p>
+
+
+                        <!-- Impressum -->
+                        <p>
+                            Classei-Organisation - Egon Heimann
+                            GmbH | Staudacher Str. 7e | 83250
+                            Marquartstein | Deutschland<br>Fon:
+                            +49
+                            (0)8641 97 59 0 |
+                            Fax +49 (0)8641 97 59 20 | E-Mail:
+                            <a style="text-decoration: None; color: #4F9A11" href="mailto:info@classei.de">
+                                Info
+                            </a>
+                            // Internet:
+                            <a href="https://www.classei.de">Classei.de</a>
+                        </p>
+
+
+                        <!-- Unsubscribe -->
+                        <p>
+                            Sie erhalten diese E-Mail, weil Sie
+                            unser Kunde/Interessent sind oder
+                            wir schon Kontakt hatten. Wenn Sie
+                            keine
+                            Informationen mehr erhalten möchten,
+                            welche wir relativ selten
+                            verschicken, tragen Sie sich bitte
+                            <span>
+                                {modify}hier{/modify}
+                            </span>
+                            aus.
+                        </p>
+                    </mj-text>
+                </mj-column>
+            </mj-section>
+        </mj-wrapper>
+
+    </mj-body>
+</mjml>

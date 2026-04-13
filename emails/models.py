@@ -68,6 +68,14 @@ class EmailSectionProduct(BaseModel):
         verbose_name=_("Rabatt (%)"),
         help_text=_("Prozentualer Rabatt auf den Standardpreis für diese E-Mail, z.B. 10.00 für 10%."),
     )
+    special_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        editable=False,
+        verbose_name=_("Berechneter Sonderpreis"),
+    )
     position = models.PositiveIntegerField(default=0, db_index=True, verbose_name=_("Position"))
 
     class Meta:
@@ -78,12 +86,21 @@ class EmailSectionProduct(BaseModel):
     def __str__(self) -> str:
         return str(self.product)
 
+    def save(self, *args, **kwargs):
+        if self.special_percentage and self.product_id:
+            price_obj = self.product.prices.filter(sales_channel__isnull=True).first()
+            if price_obj:
+                self.special_price = Price._round_up_5ct(
+                    price_obj.price * (Decimal("100") - self.special_percentage) / Decimal("100")
+                )
+            else:
+                self.special_price = None
+        else:
+            self.special_price = None
+        super().save(*args, **kwargs)
+
     def get_display_price(self) -> Decimal | None:
+        if self.special_price is not None:
+            return self.special_price
         price_obj = self.product.prices.filter(sales_channel__isnull=True).first()
-        if not price_obj:
-            return None
-        if self.special_percentage:
-            return Price._round_up_5ct(
-                price_obj.price * (Decimal("100") - self.special_percentage) / Decimal("100")
-            )
-        return price_obj.price
+        return price_obj.price if price_obj else None

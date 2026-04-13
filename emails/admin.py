@@ -16,7 +16,9 @@ from .models import Email, EmailSection, EmailSectionProduct
 class EmailSectionProductInline(nested_admin.NestedTabularInline, UnfoldTabularInline):
     model = EmailSectionProduct
     extra = 1
-    fields = ("product", "special_percentage", "position")
+    fields = ("product", "special_percentage", "special_price")
+    readonly_fields = ("special_price",)
+    autocomplete_fields = ("product",)
     sortable_field_name = "position"
     tab = True
 
@@ -24,7 +26,7 @@ class EmailSectionProductInline(nested_admin.NestedTabularInline, UnfoldTabularI
 class EmailSectionInline(nested_admin.NestedStackedInline, UnfoldStackedInline):
     model = EmailSection
     extra = 1
-    fields = ("header", "position")
+    fields = ("header",)
     sortable_field_name = "position"
     tab = True
     inlines = [EmailSectionProductInline]

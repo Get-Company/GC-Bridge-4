@@ -1,0 +1,139 @@
+<mjml>
+    <mj-head>
+        {% include "classei/email/template/head.mjml" %}
+    </mj-head>
+
+    <!-- Body -->
+    <mj-body>
+        {% block body %}
+        <mj-raw>
+            <!-- Company Header -->
+        </mj-raw>
+
+        <!-- View online -->
+        {% include "classei/email/template/view_online.mjml" %}
+
+        <!-- Navigation -->
+        {% include "classei/email/template/nav_items_shop.mjml" %}
+
+        <!-- Header-Logo -->
+        {% include "classei/email/template/header_logo.mjml" %}
+
+        <!-- Title -->
+        {% with
+            alt_text="ZPM-System und nichts wird mehr übersehen",
+            img_src="https://www.classei.de/index.php?option=com_joomgallery&amp;view=image&amp;format=raw&amp;id=356&amp;type=orig"
+        %}
+            {% include "classei/email/template/title_img.mjml" %}
+        {% endwith %}
+
+        <!-- Salutation -->
+        {% include "classei/email/template/salutation.mjml" %}
+
+        <!-- Hinweis Artikel Haarkötter -->
+        <mj-section>
+            <mj-column>
+                <mj-text>
+                    <p>
+                        <em>
+                            <span style="color:#ff9933">"nichts, was eine Steckdose braucht, kann jemals Universalmedium
+                                werden, wodurch digitale Medien komplett
+                                ausscheiden."
+                            </span>
+                        </em>
+                    </p>
+                    <p>
+                        Darauf weißt Kommunikationswissenschaftler Hektor Haarkötter in seinem Interview mit dem
+                        Monopol-Magazin
+                        bereits hin.
+                        <br>
+                        Weiter sagt er:
+                    </p>
+                    <p>
+                        <span class="cite">"Auch wenn wir nicht alle auf ein ausgeklügeltes System zurückgreifen, haben
+                            Zettel für uns genau
+                            diese Funktion:
+                            <br/>
+                            Sie sind eine Erweiterung unseres Denkapparats, die uns mit einem gewissen Abstand sowie aus
+                            einer
+                            anderen Perspektive auf Dinge blicken lassen."
+                        </span>
+                        <br/>
+                        <span class="cite">"Wer im konkreten Moment einen wichtigen Einfall hat, muss ihn in genau
+                            diesem Moment aufschreiben
+                            können."
+                        </span>
+                    </p>
+                    <p>Das volle Interview finden Sie auf:
+                        <a href="https://www.monopol-magazin.de/interview-haarkoetter-im-notizzettel-kommt-unser-denken-zu-sich?utm_source=pocket-newtab-global-de-DE">
+                            Kulturgeschichte
+                            des Post-its
+                        </a>
+                    </p>
+                </mj-text>
+            </mj-column>
+        </mj-section>
+
+        <!-- Subheader genau dafür gibt es ZPM -->
+        {% with subheader="... genau dafür gibt es ZPM" %}
+            {% include "classei/email/template/subheader.mjml" %}
+        {% endwith %}
+
+        <!-- Intro -->
+        <mj-section>
+            <mj-column>
+                <mj-image
+                        href="https://www.classei-shop.com/ZPM-System/Schreibtisch-Set/910000-Schreibtisch-Set-ZPM.html#video"
+                        padding="0"
+                        src="https://www.classei.de/index.php?option=com_joomgallery&amp;view=image&amp;format=raw&amp;id=358&amp;type=img"
+                        alt="ZPM Bild als Link zum Video"/>
+                <mj-text>
+                    <p>
+                        Alle Aufgaben, Termine, Notizen oder gar Ideenblitze werden auf einer Plankarte festgehalten und
+                        systematisch auf einer Plantafel nach Priorität schuppenförmig und übersichtlich angeordnet.
+                    </p>
+                    <p>
+                        Der
+                        <em>
+                            <strong>Clou</strong>
+                        </em>
+                        dabei ist, Sie haben alle Ihre Aktivitäten am Schreibtisch in
+                        mehreren mobilen Plantafeln, nach Themen oder Projekten, im direkten Blickfeld und ist die
+                        ideale Ergänzung zu Ihrer elektronischen Aufgaben- und Terminverwaltung.
+                    </p>
+                </mj-text>
+            </mj-column>
+        </mj-section>
+
+        <!-- Subheader ZPM -->
+        {% with subheader="ZPM: Zeit- & Projektmanagement" %}
+            {% include "classei/email/template/subheader.mjml" %}
+        {% endwith %}
+
+        <!-- Products -->
+        {% for product in products %}
+            {% include "classei/email/template/product.mjml" %}
+        {% endfor %}
+
+        <!-- Order form Contact -->
+        {% include "classei/email/template/contact_table.mjml" %}
+
+        <!-- Order form Products -->
+        <mj-section>
+            <mj-column>
+                <mj-table>
+                    {% for product in products %}
+                    {% include "classei/email/template/order_form_product.mjml" %}
+                    {% endfor %}
+                </mj-table>
+            </mj-column>
+        </mj-section>
+
+        <!-- Blog Content -->
+        {% include "classei/email/template/blog_acymailing.mjml" %}
+
+        <!-- Rechtliches -->
+        {% include "classei/email/template/disclaimer.mjml" %}
+    {% endblock %}
+    </mj-body>
+</mjml>

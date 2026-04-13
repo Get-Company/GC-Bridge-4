@@ -1,0 +1,21 @@
+<mj-section padding="0">
+    <mj-column>
+        <mj-text align="center">
+            <p class="text-center">
+                <strong>Betriebsferien vom 20.12.2024 – 03.01.2025</strong><br/>
+                (letzter Versandtag, 19.12.2024 bis 12 Uhr)
+            </p>
+        </mj-text>
+    </mj-column>
+</mj-section>
+
+<mj-section padding="10px">
+    <mj-column width="580px" padding="0">
+        <mj-image
+                width="400px"
+                src="https://www.classei-shop.com/media/image/3f/a3/04/weihnachten_800x800.jpg"
+                href="https://www.classei-shop.com"
+                padding="0"
+        />
+    </mj-column>
+</mj-section>

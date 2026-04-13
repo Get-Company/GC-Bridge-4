@@ -1,0 +1,852 @@
+<mjml>
+    <mj-head>
+        <mj-font name="Roboto Black" href="https://assets.classei.de/fonts/Roboto-Black.ttf" />
+<mj-font name="Roboto Black Italic" href="https://assets.classei.de/fonts/Roboto-BlackItalic.ttf" />
+<mj-font name="Roboto Bold" href="https://assets.classei.de/fonts/Roboto-Bold.ttf" />
+<mj-font name="Roboto Bold Italic" href="https://assets.classei.de/fonts/Roboto-BoldItalic.ttf" />
+<mj-font name="Roboto Italic" href="https://assets.classei.de/fonts/Roboto-Italic.ttf" />
+<mj-font name="Roboto Light" href="https://assets.classei.de/fonts/Roboto-Light.ttf" />
+<mj-font name="Roboto Light Italic" href="https://assets.classei.de/fonts/Roboto-LightItalic.ttf" />
+<mj-font name="Roboto Medium" href="https://assets.classei.de/fonts/Roboto-Medium.ttf" />
+<mj-font name="Roboto Medium Italic" href="https://assets.classei.de/fonts/Roboto-MediumItalic.ttf" />
+<mj-font name="Roboto" href="https://assets.classei.de/fonts/Roboto-Regular.ttf" />
+<mj-font name="Roboto Thin" href="https://assets.classei.de/fonts/Roboto-Thin.ttf" />
+<mj-font name="Roboto Thin Italic" href="https://assets.classei.de/fonts/Roboto-ThinItalic.ttf" />
+
+<mj-style>
+    @font-face {
+        font-family: 'Roboto';
+        src: url('https://assets.classei.de/fonts/Roboto-Regular.ttf');
+        font-weight: normal;
+        font-style: normal;
+    }
+    body {
+        font-family: 'Roboto', sans-serif !important;
+    }
+</mj-style>
+<mj-attributes>
+    <mj-all
+            font-family="Roboto, Arial, sans-serif"
+            font-size="16px"
+            line-height="20px"
+    />
+    <mj-body
+            background-color="#f3f3f3"
+    />
+    <mj-section
+            padding="20px"
+            background-color="#ffffff"
+    />
+    <mj-text
+            font-family="Roboto, Arial, sans-serif"
+            font-size="16px"
+            line-height="20px"
+            padding="0"
+    />
+    <mj-button
+            font-family="Roboto, Arial"
+            background-color="#ff9933"
+            color="white"
+            font-weight="bold"
+            padding="0"
+    />
+
+</mj-attributes>
+<mj-preview>
+    <!-- TODO Add mail preview -->
+</mj-preview>
+    </mj-head>
+
+    <!-- Body -->
+    <mj-body>
+        
+        <mj-raw>
+            <!-- Company Header -->
+        </mj-raw>
+
+        <!-- View online -->
+        <mj-section background-color="#ffffff" padding="0">
+    <mj-column padding="0">
+        <mj-text font-size="12px" color="#000000" padding="0"  align="center">
+            <a style="text-decoration: None; color: #000000" href="{readonline|template:notemplate}{/readonline}" target="_blank" padding="0">
+                <strong> Hier Online ansehen </strong> - Falls die E-Mail nicht korrekt dargestellt wird
+            </a>
+        </mj-text>
+    </mj-column>
+</mj-section>
+
+        <!-- Navigation -->
+        <mj-section background-color="#ff9933" padding="5px 0">
+    <mj-column>
+        <mj-navbar base-url="https://www.classei-shop.com/" hamburger="hamburger" ico-color="#ffffff">
+            <mj-navbar-link padding="0px 10px" color="#ffffff" font-weight="bold" href="Orga-Mappen?sPartner=email">ORGA-MAPPEN</mj-navbar-link>
+            <mj-navbar-link padding="0px 10px" color="#ffffff" font-weight="bold" href="Orga-Tabs?sPartner=email">ORGA-TABS</mj-navbar-link>
+            <mj-navbar-link padding="0px 10px" color="#ffffff" font-weight="bold" href="Orga-Boxen?sPartner=email">ORGA-BOXEN</mj-navbar-link>
+            <mj-navbar-link padding="0px 10px" color="#ffffff" font-weight="bold" href="Fertig-Sets?sPartner=email">FERTIG-SETS</mj-navbar-link>
+        </mj-navbar>
+    </mj-column>
+</mj-section>
+
+        <!-- Header-Logo -->
+        <mj-section padding="0">
+        <mj-column padding="0">
+                <mj-image
+                        width="600px"
+                        src="https://www.classei.de/index.php?option=com_joomgallery&amp;view=image&amp;format=raw&amp;id=355&amp;type=orig"
+                        href="https://www.classei-shop.com"
+                        padding="0"
+                />
+        </mj-column>
+
+</mj-section>
+
+        <!-- Title -->
+        
+        <mj-section padding="20px" background-color="#ffffff">
+    <mj-column>
+        <mj-text>
+            <h1 align="center" style="color: #ff9933; font-weight:400; line-height:40px">
+                Große Sortimentsbereinigung
+            </h1>
+            <h1 align="right" style="color: #8a8a8a; font-weight:400; line-height:36px">
+                <small>
+                    ... machen Sie Ihr Lager voll.
+                </small>
+            </h1>
+        </mj-text>
+    </mj-column>
+</mj-section>
+        
+
+        <!-- Salutation -->
+        <<mj-section>
+    <mj-column>
+        <mj-text>
+            Hallo
+
+            {if:anrede~Herr} Herr {/if}
+            {if:anrede~Frau} Frau {/if}
+            {subtag:name},
+        </mj-text>
+    </mj-column>
+    <mj-column>
+        <mj-text align="right">
+            <p>
+                Ihre Kunden-Nr.: {subtag:adrnr}
+            </p>
+        </mj-text>
+    </mj-column>
+</mj-section>
+
+
+        <!-- Subheader Wiederablösbare Strip-Tabs -->
+        <mj-wrapper padding="0px">
+            <mj-section css-class="section_white" padding="0px" background-color="#ffffff">
+                <mj-column>
+                    <mj-text align="center" line-height="40px">
+                        <h2 style="font-size: 30px; color: #ff9933">Abverkauf-Rabatt 50 %</h2>
+                    </mj-text>
+                </mj-column>
+            </mj-section>
+        </mj-wrapper>
+
+        <!-- Intro Text -->
+        <mj-section background-color="#ffffff">
+            <mj-column>
+                <mj-text line-height="26px">
+                    <p>
+                        <strong>Exklusiver Lagerabverkauf:</strong>
+                        Elegante Büro-Organisationshelfer jetzt im Aberkauf! Nutzen Sie unsere limitierte Aktion, um
+                        Ihr
+                        Büro mit Stil und Effizienz aufzuwerten. Entdecken Sie unsere <strong>hochwertigen Orgaboxen in
+                        Schwarz</strong>,
+                        <strong>vielseitige Orgamappen</strong>
+                        und <strong>praktische Dehnmappen</strong> – Nutzen Sie jetzt den Rabatt und füllen Sie Ihr eigenes Lager mit unseren stilvollen und funktionalen Bürohelfern. Greifen Sie zu, bevor alles weg ist!
+                    <p style="text-align: center">
+                    </p>
+                </mj-text>
+            </mj-column>
+        </mj-section>
+        <!-- 50 % Rabat Hinweis -->
+        <mj-section>
+            
+            <!-- 104025 Orgaboxen schwarz, Designer-Karton -->
+            <mj-column>
+                <mj-image
+                        width="250px"
+                        src="https://assets.classei.de/img/104025.jpg">
+
+                </mj-image>
+            </mj-column>
+            
+            <!-- 204013 Orgamappen 130 hb -->
+            <mj-column>
+                <mj-image
+                        width="250px"
+                        src="https://assets.classei.de/img/204013.jpg">
+
+                </mj-image>
+            </mj-column>
+            
+            <!-- 214023 Orga-Dehnmappen 230 hb -->
+            <mj-column>
+                <mj-image
+                        width="250px"
+                        src="https://assets.classei.de/img/214023.jpg">
+
+                </mj-image>
+            </mj-column>
+            
+        </mj-section>
+
+        <!-- Products -->
+        
+        <mj-wrapper>
+    <!-- Product Head -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text>
+                <a style="text-decoration: None; color:#000000" target="_blank"
+                   href="https://www.classei-shop.com/search?sSearch=104025">
+                    <h4>
+                        <span style="font-size:30px; font-weight:bold; line-height: 45px; display: block">
+                            
+                            
+                            104025 Orgaboxen schwarz, Desi [...]
+                            
+                        </span>
+                    </h4>
+                </a>
+            </mj-text>
+        </mj-column>
+    </mj-section>
+    <!-- Product Body -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text>
+                <p>
+Dienen zum Abstellen von Orga-Mappen. Diese Box ist <strong>einzigartig</strong>, da es äußerst schwierig ist, dass Material 
+<strong>Designer-Karton mit Rippenprägung</strong> in dieser Form zu verarbeiten.
+</p>
+<p>
+Die offene Welle mit neuem rundem Eingriff verleiht Schlichtheit und Eleganz zugleich und ist 
+zudem stabil mit gutem Stand.	
+</p>
+<p><strong>Material: </strong>Designer-Karton - offene Welle
+<br>
+<strong>Farbe: </strong>schwarz
+<br>
+<strong>Stärke: </strong>1,0 mm
+<br>
+<strong>Breite: </strong>325 mm
+<br>
+<strong>Höhe: </strong>220 mm
+<br>
+<strong>Tiefe: </strong>105 mm
+</p>
+            </mj-text>
+            <mj-button
+                    href="https://www.classei-shop.com/search?sSearch=104025">
+                - Mehr Infos zum Artikel -
+            </mj-button>
+
+            
+
+            <mj-text align="center" padding="0px">
+                <p style="font-size: 14px;">
+                    <!-- Verkaufseinheit -->
+                    pro
+                        
+                        Stck
+                        
+                    <br/>
+                    
+                    <!-- Versandkosten True/False -->
+                    
+                    <span style="font-size: 12px">- * zuzgl. Versandkosten -</span>
+                    
+                    <br/>
+                    zuzgl. Mwst.
+                </p>
+            </mj-text>
+        </mj-column>
+        <mj-column>
+            <mj-carousel>
+                
+                    
+                        <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=104025"
+                                           src="https://assets.classei.de/img/104025.jpg"
+                                           alt="Beispiel"/>
+                    
+
+                
+                    
+                        <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=104025"
+                                           src="https://assets.classei.de/img/104025_02.jpg"
+                                           alt="Beispiel"/>
+                    
+
+                
+            </mj-carousel>
+        </mj-column>
+    </mj-section>
+
+    <!-- Product Footer - only fpr special prices-->
+    
+    <mj-section background-color="#ffffff">
+        <!-- Listenpreis -->
+        <mj-column padding="0" width="25%">
+            <mj-text align="left" padding="0" line-height="40px">
+                Listenpreis:
+                <br/>
+                <span style="text-decoration: line-through">
+                    5,15 €
+                </span>
+            </mj-text>
+        </mj-column>
+        <!-- Angebotspreis -->
+        <mj-column padding="0" width="40%">
+            <mj-text align="center" padding="0" font-size="30px" line-height="40px" font-weight="bold">
+                Aktionspreis:
+            <br/>
+                <span style="color:#ff9933">
+                    2,58 €
+                </span>
+            </mj-text>
+        </mj-column>
+        <!-- Nachlass in Prozent -->
+        <mj-column padding="0" width="35%">
+            <mj-text align="right" padding="0" font-size="30px" line-height="40px" font-weight="bold"
+                     color="#ff9933">
+                - 50 %
+            </mj-text>
+        </mj-column>
+    </mj-section>
+    
+</mj-wrapper>
+        
+        <mj-wrapper>
+    <!-- Product Head -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text>
+                <a style="text-decoration: None; color:#000000" target="_blank"
+                   href="https://www.classei-shop.com/search?sSearch=204013">
+                    <h4>
+                        <span style="font-size:30px; font-weight:bold; line-height: 45px; display: block">
+                            
+                            204013 Orgamappen 130 hb
+                            
+                        </span>
+                    </h4>
+                </a>
+            </mj-text>
+        </mj-column>
+    </mj-section>
+    <!-- Product Body -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text>
+                <p>Eine universelle Organisationsleiste bietet eine Vielfalt an Einsatzmöglichkeiten. Daher ist sie ideal für dünne Vorgänge und größere Unterteilungen der Ablage. Das ist wichtig, denn klein gehaltene Vorgänge erhöhen die Ordnungssystematik.</p>
+<p>
+<b>Material:</b> Recy.- Karton 130 g/m²<br>
+<b>Farbe:</b> hellbraun<br>
+<b>Blattkapazität:</b> bis 80 bei 80 g Papier<br>
+<b>Außenmaße:</b> B 315 mm x H 225 mm
+</p>
+            </mj-text>
+            <mj-button
+                    href="https://www.classei-shop.com/search?sSearch=204013">
+                - Mehr Infos zum Artikel -
+            </mj-button>
+
+            
+
+            <mj-text align="center" padding="0px">
+                <p style="font-size: 14px;">
+                    <!-- Verkaufseinheit -->
+                    pro
+                        
+                        100 St.
+                        
+                    <br/>
+                    
+                    <!-- Mindestbestellwert und Bestellschritte ? -->
+                    <span style="font-size: 12px;">
+                        | Mind. Best. Menge: 50 | Best. Schritt: 10
+                    </span>
+                    <br/>
+                    
+                    <!-- Versandkosten True/False -->
+                    
+                    <span style="font-size: 12px">- * zuzgl. Versandkosten -</span>
+                    
+                    <br/>
+                    zuzgl. Mwst.
+                </p>
+            </mj-text>
+        </mj-column>
+        <mj-column>
+            <mj-carousel>
+                
+                    
+                        <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=204013"
+                                           src="https://assets.classei.de/img/204013.jpg"
+                                           alt="Beispiel"/>
+                    
+
+                
+                    
+                        <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=204013"
+                                           src="https://assets.classei.de/img/beispiel_orga-tabs.jpg"
+                                           alt="Beispiel"/>
+                    
+
+                
+                    
+                        <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=204013"
+                                           src="https://assets.classei.de/img/beispiel_schreibtisch.jpg"
+                                           alt="Beispiel"/>
+                    
+
+                
+                    
+                        <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=204013"
+                                           src="https://assets.classei.de/img/beispiel_schrank_schublade.jpg"
+                                           alt="Beispiel"/>
+                    
+
+                
+            </mj-carousel>
+        </mj-column>
+    </mj-section>
+
+    <!-- Product Footer - only fpr special prices-->
+    
+    <mj-section background-color="#ffffff">
+        <!-- Listenpreis -->
+        <mj-column padding="0" width="25%">
+            <mj-text align="left" padding="0" line-height="40px">
+                Listenpreis:
+                <br/>
+                <span style="text-decoration: line-through">
+                    40,95 €
+                </span>
+            </mj-text>
+        </mj-column>
+        <!-- Angebotspreis -->
+        <mj-column padding="0" width="40%">
+            <mj-text align="center" padding="0" font-size="30px" line-height="40px" font-weight="bold">
+                Aktionspreis:
+            <br/>
+                <span style="color:#ff9933">
+                    20,48 €
+                </span>
+            </mj-text>
+        </mj-column>
+        <!-- Nachlass in Prozent -->
+        <mj-column padding="0" width="35%">
+            <mj-text align="right" padding="0" font-size="30px" line-height="40px" font-weight="bold"
+                     color="#ff9933">
+                - 50 %
+            </mj-text>
+        </mj-column>
+    </mj-section>
+    
+</mj-wrapper>
+        
+        <mj-wrapper>
+    <!-- Product Head -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text>
+                <a style="text-decoration: None; color:#000000" target="_blank"
+                   href="https://www.classei-shop.com/search?sSearch=214023">
+                    <h4>
+                        <span style="font-size:30px; font-weight:bold; line-height: 45px; display: block">
+                            
+                            214023 Orga-Dehnmappen 230 hb
+                            
+                        </span>
+                    </h4>
+                </a>
+            </mj-text>
+        </mj-column>
+    </mj-section>
+    <!-- Product Body -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text>
+                <p>nehmen Ihre DIN A4- Dokumente sicher und geschützt auf. Bestehend aus stabilem Natronkarton und mit einer Dehnfalte ausgestattet.</p>
+<p>
+<b>Material:</b> Recy.- Karton 230 g/m²<br>
+<b>Farbe:</b> hellbraun<br>
+<b>Blattkapazität:</b> bis 200 bei 80 g Papier<br>
+<b>Außenmaße:</b> B 315 mm x H 225 mm mit 20 mm Dehnfalte</p>
+            </mj-text>
+            <mj-button
+                    href="https://www.classei-shop.com/search?sSearch=214023">
+                - Mehr Infos zum Artikel -
+            </mj-button>
+
+            
+
+            <mj-text align="center" padding="0px">
+                <p style="font-size: 14px;">
+                    <!-- Verkaufseinheit -->
+                    pro
+                        
+                        100 St.
+                        
+                    <br/>
+                    
+                    <!-- Mindestbestellwert und Bestellschritte ? -->
+                    <span style="font-size: 12px;">
+                        | Mind. Best. Menge: 20 | Best. Schritt: 10
+                    </span>
+                    <br/>
+                    
+                    <!-- Versandkosten True/False -->
+                    
+                    <span style="font-size: 12px">- * zuzgl. Versandkosten -</span>
+                    
+                    <br/>
+                    zuzgl. Mwst.
+                </p>
+            </mj-text>
+        </mj-column>
+        <mj-column>
+            <mj-carousel>
+                
+                    
+                        <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=214023"
+                                           src="https://assets.classei.de/img/214023.jpg"
+                                           alt="Beispiel"/>
+                    
+
+                
+                    
+                        <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=214023"
+                                           src="https://assets.classei.de/img/beispiel_orga-tabs.jpg"
+                                           alt="Beispiel"/>
+                    
+
+                
+                    
+                        <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=214023"
+                                           src="https://assets.classei.de/img/beispiel_schreibtisch.jpg"
+                                           alt="Beispiel"/>
+                    
+
+                
+                    
+                        <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=214023"
+                                           src="https://assets.classei.de/img/beispiel_schrank_schublade.jpg"
+                                           alt="Beispiel"/>
+                    
+
+                
+            </mj-carousel>
+        </mj-column>
+    </mj-section>
+
+    <!-- Product Footer - only fpr special prices-->
+    
+    <mj-section background-color="#ffffff">
+        <!-- Listenpreis -->
+        <mj-column padding="0" width="25%">
+            <mj-text align="left" padding="0" line-height="40px">
+                Listenpreis:
+                <br/>
+                <span style="text-decoration: line-through">
+                    92,25 €
+                </span>
+            </mj-text>
+        </mj-column>
+        <!-- Angebotspreis -->
+        <mj-column padding="0" width="40%">
+            <mj-text align="center" padding="0" font-size="30px" line-height="40px" font-weight="bold">
+                Aktionspreis:
+            <br/>
+                <span style="color:#ff9933">
+                    46,12 €
+                </span>
+            </mj-text>
+        </mj-column>
+        <!-- Nachlass in Prozent -->
+        <mj-column padding="0" width="35%">
+            <mj-text align="right" padding="0" font-size="30px" line-height="40px" font-weight="bold"
+                     color="#ff9933">
+                - 50 %
+            </mj-text>
+        </mj-column>
+    </mj-section>
+    
+</mj-wrapper>
+        
+
+        <!-- Order form Contact -->
+        <mj-wrapper>
+    <!-- Head Order Form -->
+    <mj-section>
+        <mj-column>
+            <mj-text align="left" color="#000000" line-height="44px">
+                <h2 style="font-size: 34px; color: #ff9933" >Bestellformular</h2>
+            </mj-text>
+            <mj-text align="center">
+                <p style="font-size: 24px">Einfach Antworten und Anzahl eingeben</p>
+            </mj-text>
+            <mj-text align="right" color="#ff9933" font-size="24px" line-height="34px">
+                <p>oder schnell anrufen:<br/>+49 (0)8641 97 59 0
+                </p>
+            </mj-text>
+        </mj-column>
+    </mj-section>
+
+    <!-- Kontaktdaten -->
+    <mj-section>
+        <mj-column padding="0">
+            <mj-text>
+                <p style="font-weight: bold;">Stimmen ihre Daten noch? Bitte berichtigen Sie:</p>
+            </mj-text>
+            <mj-table css-class="contact_table" line-height="40px" padding="10">
+                <tr>
+                    <td width="20%" class="ct_text">Vorname:</td>
+                    <td width="40%" class="ct_value">{subtag:vorname}</td>
+                    <td width="40%" style="border-bottom: 1px dotted #000000" class="ct_user">&nbsp;</td>
+                </tr>
+                <tr>
+                    <td class="ct_text">Nachname:</td>
+                    <td class="ct_value">{subtag:name}</td>
+                    <td style="border-bottom: 1px dotted #000000" class="ct_user">&nbsp;</td>
+                </tr>
+                <tr>
+                    <td class="ct_text">Firma:</td>
+                    <td class="ct_value">{subtag:firma}</td>
+                    <td style="border-bottom: 1px dotted #000000" class="ct_user">&nbsp;</td>
+                </tr>
+                <tr>
+                    <td class="ct_text">Strasse:</td>
+                    <td class="ct_value">{subtag:strasse}</td>
+                    <td style="border-bottom: 1px dotted #000000" class="ct_user">&nbsp;</td>
+                </tr>
+                <tr>
+                    <td class="ct_text">PLZ/Ort:</td>
+                    <td class="ct_value">{subtag:plzort}</td>
+                    <td style="border-bottom: 1px dotted #000000" class="ct_user">&nbsp;</td>
+                </tr>
+                <tr>
+                    <td class="ct_text">Fon:</td>
+                    <td class="ct_value">{subtag:fon}</td>
+                    <td style="border-bottom: 1px dotted #000000" class="ct_user">&nbsp;</td>
+                </tr>
+                <tr>
+                    <td class="ct_text">E-Mail:</td>
+                    <td class="ct_value">{subtag:email}</td>
+                    <td style="border-bottom: 1px dotted #000000" class="ct_user">&nbsp;</td>
+                </tr>
+            </mj-table>
+        </mj-column>
+    </mj-section>
+
+</mj-wrapper>
+
+        <!-- Order form Products -->
+        <mj-section>
+            <mj-column>
+                <mj-table>
+                    
+                    <tr style="border-bottom: 1px dotted #ff9933; margin: 10px 0 10px 0" >
+    <td width="10%">__x</td>
+    <td width="35%" style="color: #ff9933; font-weight: bold; font-size: 12px; line-height:1">
+        104025 Orgaboxen schwarz, Designer-Karton
+    </td>
+    <td width="55%" align="right">
+        <mj-text  align="right" font-size="14px">
+
+            
+                Listenpreis:
+                <span style="text-decoration: line-through">
+                    5,15 €
+                </span> netto
+                <br />
+                <span style="color: #ff9933;">
+                    Aktionspreis: 2,58 €
+                </span> netto
+                
+            <br/>
+            <!-- Verkaufseinheit -->
+            pro
+                
+                Stck
+                
+
+            <br/>
+            
+            <!-- Versandkosten True/False -->
+            
+                <span style="font-size: 12px">- * zuzgl. Versandkosten - zuzgl. Mwst. - </span>
+            
+
+        </mj-text>
+    </td>
+</tr>
+                    
+                    <tr style="border-bottom: 1px dotted #ff9933; margin: 10px 0 10px 0" >
+    <td width="10%">__x</td>
+    <td width="35%" style="color: #ff9933; font-weight: bold; font-size: 12px; line-height:1">
+        204013 Orgamappen 130 hb
+    </td>
+    <td width="55%" align="right">
+        <mj-text  align="right" font-size="14px">
+
+            
+                Listenpreis:
+                <span style="text-decoration: line-through">
+                    40,95 €
+                </span> netto
+                <br />
+                <span style="color: #ff9933;">
+                    Aktionspreis: 20,48 €
+                </span> netto
+                
+            <br/>
+            <!-- Verkaufseinheit -->
+            pro
+                
+                100 St.
+                
+
+            <br/>
+            
+            <!-- Mindestbestellwert und Bestellschritte ? -->
+            <span style="font-size: 12px;">
+                | Mind. Best. Menge: 50 | Best. Schritt: 10
+            </span>
+            <br/>
+            
+            <!-- Versandkosten True/False -->
+            
+                <span style="font-size: 12px">- * zuzgl. Versandkosten - zuzgl. Mwst. - </span>
+            
+
+        </mj-text>
+    </td>
+</tr>
+                    
+                    <tr style="border-bottom: 1px dotted #ff9933; margin: 10px 0 10px 0" >
+    <td width="10%">__x</td>
+    <td width="35%" style="color: #ff9933; font-weight: bold; font-size: 12px; line-height:1">
+        214023 Orga-Dehnmappen 230 hb
+    </td>
+    <td width="55%" align="right">
+        <mj-text  align="right" font-size="14px">
+
+            
+                Listenpreis:
+                <span style="text-decoration: line-through">
+                    92,25 €
+                </span> netto
+                <br />
+                <span style="color: #ff9933;">
+                    Aktionspreis: 46,12 €
+                </span> netto
+                
+            <br/>
+            <!-- Verkaufseinheit -->
+            pro
+                
+                100 St.
+                
+
+            <br/>
+            
+            <!-- Mindestbestellwert und Bestellschritte ? -->
+            <span style="font-size: 12px;">
+                | Mind. Best. Menge: 20 | Best. Schritt: 10
+            </span>
+            <br/>
+            
+            <!-- Versandkosten True/False -->
+            
+                <span style="font-size: 12px">- * zuzgl. Versandkosten - zuzgl. Mwst. - </span>
+            
+
+        </mj-text>
+    </td>
+</tr>
+                    
+                </mj-table>
+            </mj-column>
+        </mj-section>
+
+        <!-- Blog Content
+        <mj-section>
+    <mj-column>
+        <mj-raw>
+        {autocontent:25-| max:1|
+        order:created,DESC|
+        type:intro|link|author| pict:resized|
+        maxwidth:150|
+        maxheight:150| invert| format:TOP_LEFT|
+        template:tagcontent.php}
+        </mj-raw>
+    </mj-column>
+</mj-section>-->
+
+        <!-- Rechtliches -->
+        <mj-section>
+    <mj-column>
+        <mj-text font-size="10px" line-height="16px">
+            <!-- Terms -->
+            <p>
+
+                * <a style="text-decoration: None; color: #ff9933"
+                   href="https://www.classei-shop.com/Versandinformationen?sPartner=email"
+                   target="_blank">Nähere Infos zu
+                    Versandkosten&nbsp;hier
+                </a>
+                
+                    Angebot gültig bis 31.12.2023
+                
+
+
+            </p>
+
+
+            <!-- Impressum -->
+            <p>
+                Classei-Organisation - Egon Heimann
+                GmbH | Staudacher Str. 7e | 83250
+                Marquartstein | Deutschland<br>Fon:
+                +49
+                (0)8641 97 59 0 |
+                Fax +49 (0)8641 97 59 20 | E-Mail:
+                <a style="text-decoration: None; color: #ff9933" href="mailto:info@classei.de">
+                    Info
+                </a>
+                // Internet:
+                <a href="https://www.classei.de">Classei.de</a>
+            </p>
+
+
+            <!-- Unsubscribe -->
+            <p>
+                Sie erhalten diese E-Mail, weil Sie
+                unser Kunde/Interessent sind oder
+                wir schon Kontakt hatten. Wenn Sie
+                keine
+                Informationen mehr erhalten möchten,
+                welche wir relativ selten
+                verschicken, tragen Sie sich bitte
+                <span>
+                    {modify}hier{/modify}
+                </span>
+                aus.
+            </p>
+        </mj-text>
+    </mj-column>
+</mj-section>
+        
+    </mj-body>
+</mjml>

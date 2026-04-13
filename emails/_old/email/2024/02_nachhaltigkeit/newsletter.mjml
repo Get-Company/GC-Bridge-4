@@ -1,0 +1,319 @@
+<mjml>
+    <mj-font href=""/>
+    <!-- Head -->
+    <mj-head>
+        <mj-include path="..\..\template\head_green.mjml"/>
+    </mj-head>
+
+    <!-- Body Green: #4F9A11-->
+    <mj-body>
+        <mj-raw>
+            <!-- Company Header -->
+        </mj-raw>
+
+        <!-- View online -->
+        <mj-include path="..\..\template\view_online.mjml"/>
+
+        <!-- Navigation -->
+        <mj-include path="..\..\template\nav_items_shop_green.mjml"/>
+
+        <!-- Header-Logo -->
+        <mj-include path="..\..\template\header_logo.mjml"/>
+
+        <!-- Title -->
+        <mj-section padding="20px" background-color="#ffffff">
+            <mj-column>
+                <mj-text>
+                    <h1 align="center" style="color: #4F9A11; font-weight:400; line-height:40px">
+                        Büro & Nachhaltigkeit, es kann so einfach sein …
+                    </h1>
+                    <h1 align="right" style="color: #8a8a8a; font-weight:400; line-height:36px">
+                        <small>
+                            … den eigenen Büro-Arbeitsalltag im Sinne von Nachhaltigkeit zu gestalten
+                        </small>
+                    </h1>
+                </mj-text>
+            </mj-column>
+        </mj-section>
+
+        <!-- Certs -->
+        <mj-include path="..\..\template\certs_logo_green.mjml"/>
+
+        <!-- Salutation -->
+        <mj-section background-color="#ffffff">
+            <mj-column>
+                <mj-text>
+                    <p>
+                        Hallo
+
+                        {if:anrede~Herr} Herr {/if}
+                        {if:anrede~Frau} Frau {/if}
+                        {subtag:name},
+                    </p>
+                </mj-text>
+            </mj-column>
+            <mj-column>
+                <mj-text align="right">
+                    <p>
+                        Ihre Kunden-Nr.: {subtag:adrnr}
+                    </p>
+                </mj-text>
+            </mj-column>
+        </mj-section>
+
+        <!-- Intro Text -->
+        <mj-wrapper>
+        <mj-section background-color="#ffffff">
+            <mj-column>
+                <mj-text line-height="26px">
+                    <p>
+                        oft sind es nur kleine Veränderungen in der eigenen Arbeitsweise, die mit der Zeit große
+                        Wirkung zeigen, so kann 4R oft ganz leicht angewandt werden:
+                    </p>
+                </mj-text>
+            </mj-column>
+        </mj-section>
+
+        <!-- 4Rs -->
+        <mj-include path="..\..\template\4r.mjml"/>
+
+        <!-- Intro Text - 2. Teil -->
+        <mj-section padding="20px" background-color="#ffffff">
+            <mj-column>
+                <mj-text line-height="26px">
+                    <p>
+                        Jeder kann so seinen Beitrag leisten und dafür sorgen, dass sich auch die zukünftigen
+                        Generationen an der unvergleichlichen Schönheit unseres Planeten erfreuen dürfen. Die
+                        Arbeitsmaterialien, wie Ordnungsmittel & Co. sollten im besten Fall aus Papier, Karton oder
+                        Recyceltem bestehen.
+                    </p>
+                    <p>
+                        Nachfolgend einige Anregungen zum Thema nachhaltiger Büro-Arbeitsplatz, die den Büroalltag
+                        besonders umweltfreundlich gestalten.
+                    </p>
+                </mj-text>
+            </mj-column>
+        </mj-section>
+        </mj-wrapper>
+
+
+        <!-- Products -->
+        {% for product in products %}
+
+            {% if loop.index == 1 %}
+                {% with
+                subheader='Die neue <strong>"100% Recycling"</strong> Box'
+                %}
+                {% include "classei/email/template/subheader_green.mjml" %}
+                {% endwith %}
+            {% elif loop.index == 2 %}
+                {% with
+        subheader='Die neuen <strong>"100% Recycling"</strong> Mappen'%}
+                {% include "classei/email/template/subheader_green.mjml" %}
+                {% endwith %}
+        {% elif loop.index == 5 %}
+                {% with
+                subheader="Karton Reiter"
+                %}
+                {% include "classei/email/template/subheader_green.mjml" %}
+                {% endwith %}
+
+        {% endif %}
+
+
+        {% include "classei/email/template/product_green.mjml" %}
+
+        {% endfor %}
+
+        <!-- Order form Contact -->
+        <mj-include path="..\..\template\contact_table_green.mjml"/>
+
+        <!-- Order form Products -->
+        <mj-wrapper padding="0px">
+            <mj-section css-class="section_white" padding="0px" background-color="#ffffff">
+                <mj-column>
+                    <mj-table css-class="contact_table">
+                        {% for product in products %}
+                        <tr>
+                            <td width="10%">__x</td>
+                            <td width="45%" style="color: #4F9A11; font-weight: bold; font-size: 12px; line-height:1">
+                                {{product.name}}
+                            </td>
+                            <td width="45%" class="ct_text">
+                                <mj-text align="left" padding="0px">
+                                    <p style="font-size: 14px;">
+                                        Listenpreis
+                                        {% if product.price_rebate %}
+                                        ab: {{ "%.2f"|format( product.prices.price_rebate)|replace('.', ',') }}
+                                        {% else %}
+                                        {{ "%.2f"|format( product.prices.price)|replace('.', ',') }}
+                                        {% endif %}
+                                        € netto:
+                                        <br/>
+                                        pro
+                                        {% if product.factor > 0 %}
+                                        {{ product.factor }} St.
+                                        {% else %}
+                                        {{ product.unit|default('St.') }}
+                                        {% endif %}
+                                        <br/>
+
+                                        <!-- Versandkosten ? -->
+                                        {% if not product.factor and product.prices.price >= 99 %}
+                                        - kostenloser Versand - zuzgl. Ust. -
+                                        <br/>
+                                        {% else %}
+                                        - zuzgl. Versandkosten - zuzgl. Ust. -
+                                        {% endif %}
+                                    </p>
+                                </mj-text>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </mj-table>
+                </mj-column>
+            </mj-section>
+        </mj-wrapper>
+
+        <!-- Klimaneutrales Hosting - Domain Factoty -->
+        <mj-wrapper>
+            <mj-section css-class="section_white" padding="20px" background-color="#ffffff">
+                <mj-column>
+                    <mj-text>
+                        <h3 style="color: #4F9A11; font-weight: bold; line-height:36px">
+                            Klimaneutrales Hosting mit Domain Factory
+                        </h3>
+                        <p>
+                            Diese Ziele sind nicht einfach dahergesagt. Durch klimaneutrales Hosting und Strom aus
+                            erneuerbaren Energiequellen gehen wir weit über die EEG Norm hinaus.
+                        </p>
+                    </mj-text>
+                    <mj-image
+                            width="600px"
+                            src="https://www.df.eu/fileadmin/landingPages/klimabericht2017/IMG_BaumPflanzen.jpg"
+                            href="https://www.classei-shop.com"
+                            padding="0"
+                    />
+                </mj-column>
+            </mj-section>
+        </mj-wrapper>
+
+        <!-- Klima Kompensation - GLS -->
+        <mj-wrapper>
+            <mj-section css-class="section_white" padding="20px" background-color="#ffffff">
+                <mj-column>
+                    <mj-text>
+                        <h3 style="color: #4F9A11; font-weight: bold; line-height:36px">
+                            Kompensierung CO2 Emission beim Versand
+                        </h3>
+                        <p>
+                            Kompensierung CO2 Emission beim Versand
+                            Unserem Paketdienst GLS ist es seit 2019 möglich, 100% klimaneutral zu versenden
+                        </p>
+                    </mj-text>
+                    <mj-image
+                            width="600px"
+                            src="https://www.classei.de/index.php?option=com_joomgallery&view=image&format=raw&id=482&type=orig"
+                            href="https://www.classei-shop.com"
+                            padding="0"
+                    />
+                </mj-column>
+            </mj-section>
+        </mj-wrapper>
+
+        <!-- Verpackung Classei -->
+        <mj-wrapper>
+            <mj-section css-class="section_white" padding="20px" background-color="#ffffff">
+                <mj-column>
+                    <mj-text>
+                        <h3 style="color: #4F9A11; font-weight: bold; line-height:36px">
+                            Unsere Vision: 100% recyclingfähig
+                        </h3>
+                        <p>
+                            Unsere Produkte und Verpackungsmaterialien sind weitgehend recyclebar und können einfach in der blauen Papiertonne entsorgt werden. Leider lassen sich Kunststoffe bei Verpackungen noch nicht ganz vermeiden, jedoch achten wir auf gezielten Einsatz.
+                        </p>
+                    </mj-text>
+                    <mj-image
+                            width="600px"
+                            src="https://www.classei.de/index.php?option=com_joomgallery&view=image&format=raw&id=455&type=orig"
+                            href="https://www.classei-shop.com"
+                            padding="0"
+                    />
+                </mj-column>
+            </mj-section>
+        </mj-wrapper>
+
+
+        <mj-wrapper>
+            <mj-section css-class="section_white" padding="0px" background-color="#ffffff">
+                <!-- Blog Content -->
+                <mj-column>
+                    {autocontent:25-| max:1|
+                    order:created,DESC|
+                    type:intro|link|author| pict:resized|
+                    maxwidth:150|
+                    maxheight:150| invert| format:TOP_LEFT|
+                    template:tagcontent.php}
+                </mj-column>
+            </mj-section>
+
+            <!-- Rechtliches -->
+            <mj-section css-class="section_white" padding="0px" background-color="#ffffff">
+                <mj-column>
+                    <mj-text font-size="12px" line-height="16px">
+                        <!-- Terms -->
+                        <p>
+
+                            * Versandkostenfrei ab Warenwert
+                            99,00 € netto. Warenwert
+                            unter 99,00 € netto Versandkosten
+                            5,95 € netto.&nbsp;
+
+                            |
+                            <a style="text-decoration: None; color: #4F9A11"
+                               href="https://www.classei-shop.com/Versandinformationen?sPartner=email"
+                               target="_blank">Nähere Infos zu
+                                Versandkosten&nbsp;
+                            </a>
+
+
+                        </p>
+
+
+                        <!-- Impressum -->
+                        <p>
+                            Classei-Organisation - Egon Heimann
+                            GmbH | Staudacher Str. 7e | 83250
+                            Marquartstein | Deutschland<br>Fon:
+                            +49
+                            (0)8641 97 59 0 |
+                            Fax +49 (0)8641 97 59 20 | E-Mail:
+                            <a style="text-decoration: None; color: #4F9A11" href="mailto:info@classei.de">
+                                Info
+                            </a>
+                            // Internet:
+                            <a href="https://www.classei.de">Classei.de</a>
+                        </p>
+
+
+                        <!-- Unsubscribe -->
+                        <p>
+                            Sie erhalten diese E-Mail, weil Sie
+                            unser Kunde/Interessent sind oder
+                            wir schon Kontakt hatten. Wenn Sie
+                            keine
+                            Informationen mehr erhalten möchten,
+                            welche wir relativ selten
+                            verschicken, tragen Sie sich bitte
+                            <span>
+                                {modify}hier{/modify}
+                            </span>
+                            aus.
+                        </p>
+                    </mj-text>
+                </mj-column>
+            </mj-section>
+        </mj-wrapper>
+
+    </mj-body>
+</mjml>

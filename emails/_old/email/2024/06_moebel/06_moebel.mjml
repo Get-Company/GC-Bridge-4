@@ -1,0 +1,1059 @@
+<mjml>
+    <mj-head>
+        <mj-font name="Roboto Black" href="https://assets.classei.de/fonts/Roboto-Black.ttf" />
+<mj-font name="Roboto Black Italic" href="https://assets.classei.de/fonts/Roboto-BlackItalic.ttf" />
+<mj-font name="Roboto Bold" href="https://assets.classei.de/fonts/Roboto-Bold.ttf" />
+<mj-font name="Roboto Bold Italic" href="https://assets.classei.de/fonts/Roboto-BoldItalic.ttf" />
+<mj-font name="Roboto Italic" href="https://assets.classei.de/fonts/Roboto-Italic.ttf" />
+<mj-font name="Roboto Light" href="https://assets.classei.de/fonts/Roboto-Light.ttf" />
+<mj-font name="Roboto Light Italic" href="https://assets.classei.de/fonts/Roboto-LightItalic.ttf" />
+<mj-font name="Roboto Medium" href="https://assets.classei.de/fonts/Roboto-Medium.ttf" />
+<mj-font name="Roboto Medium Italic" href="https://assets.classei.de/fonts/Roboto-MediumItalic.ttf" />
+<mj-font name="Roboto" href="https://assets.classei.de/fonts/Roboto-Regular.ttf" />
+<mj-font name="Roboto Thin" href="https://assets.classei.de/fonts/Roboto-Thin.ttf" />
+<mj-font name="Roboto Thin Italic" href="https://assets.classei.de/fonts/Roboto-ThinItalic.ttf" />
+
+<mj-style>
+    @font-face {
+        font-family: 'Roboto';
+        src: url('https://assets.classei.de/fonts/Roboto-Regular.ttf');
+        font-weight: normal;
+        font-style: normal;
+    }
+    body {
+        font-family: 'Roboto', sans-serif !important;
+    }
+</mj-style>
+<mj-attributes>
+    <mj-all
+            font-family="Roboto, Arial, sans-serif"
+            font-size="16px"
+            line-height="20px"
+    />
+    <mj-body
+            background-color="#f3f3f3"
+    />
+    <mj-section
+            padding="20px"
+            background-color="#ffffff"
+    />
+    <mj-text
+            font-family="Roboto, Arial, sans-serif"
+            font-size="16px"
+            line-height="20px"
+            padding="0"
+    />
+    <mj-button
+            font-family="Roboto, Arial"
+            background-color="#ff9933"
+            color="white"
+            font-weight="bold"
+            padding="0"
+    />
+
+</mj-attributes>
+<mj-preview>
+    <!-- TODO Add mail preview -->
+</mj-preview>
+    </mj-head>
+
+    <!-- Body -->
+    <mj-body>
+        
+        <mj-raw>
+            <!-- Company Header -->
+        </mj-raw>
+
+        <!-- View online -->
+        <mj-section background-color="#ffffff" padding="0">
+    <mj-column padding="0">
+        <mj-text font-size="12px" color="#000000" padding="0"  align="center">
+            <a style="text-decoration: None; color: #000000" href="{readonline|template:notemplate}{/readonline}" target="_blank" padding="0">
+                <strong> Hier Online ansehen </strong> - Falls die E-Mail nicht korrekt dargestellt wird
+            </a>
+        </mj-text>
+    </mj-column>
+</mj-section>
+
+        <!-- Navigation -->
+        <mj-section background-color="#ff9933" padding="5px 0">
+    <mj-column>
+        <mj-navbar base-url="https://www.classei-shop.com/" hamburger="hamburger" ico-color="#ffffff">
+            <mj-navbar-link padding="0px 10px" color="#ffffff" font-weight="bold" href="Orga-Mappen?sPartner=email">ORGA-MAPPEN</mj-navbar-link>
+            <mj-navbar-link padding="0px 10px" color="#ffffff" font-weight="bold" href="Orga-Tabs?sPartner=email">ORGA-TABS</mj-navbar-link>
+            <mj-navbar-link padding="0px 10px" color="#ffffff" font-weight="bold" href="Orga-Boxen?sPartner=email">ORGA-BOXEN</mj-navbar-link>
+            <mj-navbar-link padding="0px 10px" color="#ffffff" font-weight="bold" href="Fertig-Sets?sPartner=email">FERTIG-SETS</mj-navbar-link>
+        </mj-navbar>
+    </mj-column>
+</mj-section>
+
+        <!-- Header-Logo -->
+        <mj-section padding="0">
+        <mj-column padding="0">
+                <mj-image
+                        width="600px"
+                        src="https://www.classei.de/index.php?option=com_joomgallery&amp;view=image&amp;format=raw&amp;id=355&amp;type=orig"
+                        href="https://www.classei-shop.com"
+                        padding="0"
+                        alt="Logo der Büroorganisation Classei"
+                />
+        </mj-column>
+
+</mj-section>
+
+        <!-- Title -->
+        
+        <mj-section padding="20px" background-color="#ffffff">
+    <mj-column>
+        <mj-text>
+            <h1 align="center" style="color: #ff9933; font-weight:400; line-height:40px">
+                Funktionalität, zeitloses Design <br/> und Platzwunder
+            </h1>
+            <h1 align="right" style="color: #8a8a8a; font-weight:400; line-height:36px">
+                <small>
+                    ...Classei Orga-Möbel
+                </small>
+            </h1>
+        </mj-text>
+    </mj-column>
+</mj-section>
+        
+
+        <!-- Salutation -->
+        <<mj-section>
+    <mj-column>
+        <mj-text>
+            Hallo
+
+            {if:anrede~Herr} Herr {/if}
+            {if:anrede~Frau} Frau {/if}
+            {subtag:name},
+        </mj-text>
+    </mj-column>
+    <mj-column>
+        <mj-text align="right">
+            <p>
+                Ihre Kunden-Nr.: {subtag:adrnr}
+            </p>
+        </mj-text>
+    </mj-column>
+</mj-section>
+
+        <!-- Intro Text -->
+        <mj-section background-color="#ffffff">
+            <mj-column>
+                <mj-text line-height="26px">
+                    <p>
+                        Classei - Schränke und Möbel sind echte Platzwunder für die Organisation Ihrer Akten. Sie
+                        bringen viel Raumersparnis, perfekte Übersicht und äußerst schnellen Zugriff auf alle Vorgänge
+                        im Büro.
+                        <strong>24h Lieferzeit</strong>
+                        - alle Möbel stehen zum sofortigen Einsatz zur Verfügung!
+                    <p style="text-align: center">
+                    </p>
+                </mj-text>
+            </mj-column>
+        </mj-section>
+
+        <!-- Subheader Wiederablösbare Strip-Tabs -->
+        <mj-wrapper padding="0px">
+            <mj-section css-class="section_white" padding="0px" background-color="#ffffff">
+                <mj-column>
+                    <mj-text align="center" line-height="40px">
+                        <h2 style="font-size: 30px; color: #ff9933">Classata Schrank</h2>
+                    </mj-text>
+                </mj-column>
+            </mj-section>
+        </mj-wrapper>
+
+        <!-- Intro Schrank-->
+        <mj-section background-color="#ffffff">
+            <mj-column>
+                <mj-image padding="0"
+                          src="https://www.classei.de/index.php?option=com_joomgallery&amp;view=image&amp;format=raw&amp;id=368&amp;type=orig"
+                          alt="Der Classata Schrank mit Preis."
+                          href="https://www.classei-shop.com/Orga-Moebel/Classata-Schraenke-Typ-47/730503-Classata-Schrank-47-3-bahnig-5-Schuebe.html#video"
+                />
+            </mj-column>
+        </mj-section>
+
+        <!-- Description Schrank -->
+        <mj-section background-color="#ffffff">
+            <mj-column>
+                <mj-accordion border="1px solid #f3f3f3"
+                              icon-wrapped-url="https://assets.classei.de/img/icons/arrow-down-icon-king-freeicons.png"
+                              icon-unwrapped-url="https://assets.classei.de/img/icons/arrow-up-icon-king-freeicons.png"
+                              padding="0"
+                >
+                    <!-- Direkter Zugriff -->
+                    <mj-accordion-element>
+                        <mj-accordion-title>
+                            <h5>
+                                <span style="color:#ff9933; font-size:16px; font-weight:bold; line-height:40px">
+                                    Direkter Zugriff
+                                </span>
+                            </h5>
+                        </mj-accordion-title>
+                        <mj-accordion-text>
+                            Mit einer Schubladenbewegung haben Sie den Inhalt von 12 Orgaboxen im sofortigen Zugriff.
+                        </mj-accordion-text>
+                    </mj-accordion-element>
+
+                    <!-- Optimale Funktionalität -->
+                    <mj-accordion-element>
+                        <mj-accordion-title>
+                            <h5>
+                                <span style="color:#ff9933; font-size:16px; font-weight:bold; line-height:40px">
+                                    Optimale Funktionalität
+                                </span>
+                            </h5>
+                        </mj-accordion-title>
+                        <mj-accordion-text>
+                            Durch geringe Höhe ist die Bedienung der obersten Schublade
+                            kein Problem. Mühelos erreichen
+                            Sie die hinterste Akte.
+                        </mj-accordion-text>
+
+                    </mj-accordion-element>
+
+                    <!-- Praktisch und handlich -->
+                    <mj-accordion-element>
+                        <mj-accordion-title>
+                            <h5>
+                                <span style="color:#ff9933; font-size:16px; font-weight:bold; line-height:40px">
+                                    Praktisch und handlich
+                                </span>
+                            </h5>
+                        </mj-accordion-title>
+                        <mj-accordion-text>
+                            Einfache Handhabung nach ergonomischen Standpunkten, gewährleisten Ihnen leichtlaufende
+                            Qualitätsstahlkugellager, Teleskopschienen mit 100% - Überauszug.
+                        </mj-accordion-text>
+                    </mj-accordion-element>
+
+                    <!-- Hochwertiges Material -->
+                    <mj-accordion-element>
+                        <mj-accordion-title>
+                            <h5>
+                                <span style="color:#ff9933; font-size:16px; font-weight:bold; line-height:40px">
+                                    Hochwertiges Material
+                                </span>
+                            </h5>
+                        </mj-accordion-title>
+                        <mj-accordion-text>
+                            Hochwertiges Stahlmaterial und perfekte Verarbeitung verleihen dem Schrank zeitlose Eleganz.
+                            <br />
+                            <strong>Breite:</strong> 110mm
+                            <strong>Tiefe:</strong> 470 mm
+                            <strong>Höhe:</strong> 1140mm bzw. 1390mm.
+                        </mj-accordion-text>
+                    </mj-accordion-element>
+
+                </mj-accordion>
+            </mj-column>
+            <mj-column>
+                <mj-image
+                        src="https://www.classei.de/index.php?option=com_joomgallery&amp;view=image&amp;format=raw&amp;id=370&amp;type=img"
+                        alt="Der Classata Schrank im Büro."
+                        href="https://www.classei-shop.com/Orga-Moebel/Classata-Schraenke-Typ-47/730503-Classata-Schrank-47-3-bahnig-5-Schuebe.html"
+                />
+                <mj-image
+                        src="https://www.classei.de/index.php?option=com_joomgallery&amp;view=image&amp;format=raw&amp;id=373&amp;type=img"
+                        alt="Vorderansicht des Classata Schrankes."
+                        href="https://www.classei-shop.com/Orga-Moebel/Classata-Schraenke-Typ-47/730503-Classata-Schrank-47-3-bahnig-5-Schuebe.html"
+                />
+
+            </mj-column>
+        </mj-section>
+        <mj-section background-color="#ffffff" padding="0">
+            <mj-column>
+                <mj-image
+                        src="https://www.classei.de/index.php?option=com_joomgallery&amp;view=image&amp;format=raw&amp;id=372&amp;type=img"
+                        alt="Draufsicht der Schublade des Classata Schrankes."
+                        href="https://www.classei-shop.com/Orga-Moebel/Classata-Schraenke-Typ-47/730503-Classata-Schrank-47-3-bahnig-5-Schuebe.html"
+                />
+            </mj-column>
+            <mj-column>
+                <mj-image
+                        src="https://www.classei.de/index.php?option=com_joomgallery&amp;view=image&amp;format=raw&amp;id=371&amp;type=img"
+                        alt="Der Überauszug des Classata Schrankes."
+                        href="https://www.classei-shop.com/Orga-Moebel/Classata-Schraenke-Typ-47/730503-Classata-Schrank-47-3-bahnig-5-Schuebe.html"
+                />
+            </mj-column>
+            <mj-column>
+                <mj-image
+                        src="https://www.classei.de/index.php?option=com_joomgallery&amp;view=image&amp;format=raw&amp;id=369&amp;type=img"
+                        alt="Der Classata Schrank im Büro."
+                        href="https://www.classei-shop.com/Orga-Moebel/Classata-Schraenke-Typ-47/730503-Classata-Schrank-47-3-bahnig-5-Schuebe.html"
+                />
+            </mj-column>
+        </mj-section>
+
+
+        <!-- Products -->
+        
+            <mj-wrapper>
+    <!-- Product Head -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text>
+                <a style="text-decoration: None; color:#000000" target="_blank"
+                   href="https://www.classei-shop.com/search?sSearch=730503">
+                    <h4>
+                        <span style="font-size:30px; font-weight:bold; line-height: 45px; display: block">
+                            
+                            
+                            730503 Classata-Schrank 47, 3- [...]
+                            
+                        </span>
+                    </h4>
+                </a>
+            </mj-text>
+        </mj-column>
+    </mj-section>
+    <!-- Product Body -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text line-height="26px">
+                <p>Hochwertiges Stahlmaterial und perfekte, ergonomische Verarbeitung geben dem Schrank mit Zentralverschluß zeitlose Eleganz. Leicht laufende Kugellager und Teleskopschienen mit Überauszug gewährleisten einfache Handhabung. </p><p><b>Artikelnummer: </b>730503<br><b>Farbe: </b>lichtgrau</p>
+            </mj-text>
+            <mj-button padding="20px 0 0 0"
+                    href="https://www.classei-shop.com/search?sSearch=730503">
+                - Mehr Infos zum Artikel -
+            </mj-button>
+
+            
+
+            <mj-text align="center" padding="0px">
+                <p style="font-size: 14px;">
+                    <!-- Verkaufseinheit -->
+                    pro
+                        
+                        Stck
+                        
+                    <br/>
+                    
+                    <!-- Versandkosten Frei -->
+                    <span style="font-size:14px; color: #ff9933">- kostenloser Versand -</span>
+                    <br/>
+                    zuzgl. Mwst.
+                </p>
+            </mj-text>
+        </mj-column>
+        <mj-column>
+            
+            
+
+            
+
+            
+
+            
+            <mj-carousel>
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=730503"
+                                   src="https://assets.classei.de/img/730503.jpg"
+                                   alt="Der Classata Schrank: In diesem Video zeigen wir Ihnen die Vorteile dieses massiven aber schmalen Schrankes. Der Schrank bietet viel Platz auf kleinster Fläche mit optimalem Aktenzugriff.Mit einer Tiefe von nur 499 mm ist dieser Schrank hervorragend geeignet für Home-Offices, kleine Büros und schmale Gänge. Hochwertiger Stahl und perfekte, ergonomische Verarbeitung geben dem Schrank zeitlose Eleganz. Leicht laufende Stahlkugellager und Teleskopschienen mit 100 % Überauszug gewährleisten einfache Handhabung. Ein Zentralverschluß mit 2 Schlüssel rundet die Handhabung und Sicherheit ab. Farbe: lichtgrau Anzahl Bahnen pro Schub: 3 Anzahl Schübe: 5 Kapazität: 60 Classei Orga-Boxen Leergewicht: 159 kg Maße außen: Breite: 1083 mm Höhe: 1425 mm Tiefe: 499 mm lichte Schubhöhe: 250 mm Garantie: 2 Jahre (Technische/optische Änderungen vorbehalten - Lieferung ohne Inhalt - Schrank ist nicht zerlegbar) Lieferung: Stückgut-Spedition (vor die erste absperrbare Türe ebenerdig mit Stückgut-Spediteur - 1 Mann) Lieferung frei Verwendungsstelle auf Anfrage Dieser Artikel wird kundenspezifisch gefertigt und ist deshalb vom Umtausch ausgeschloßen."/>
+                
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=730503"
+                                   src="https://assets.classei.de/img/730503_02.jpg"
+                                   alt="Der Classata Schrank: In diesem Video zeigen wir Ihnen die Vorteile dieses massiven aber schmalen Schrankes. Der Schrank bietet viel Platz auf kleinster Fläche mit optimalem Aktenzugriff.Mit einer Tiefe von nur 499 mm ist dieser Schrank hervorragend geeignet für Home-Offices, kleine Büros und schmale Gänge. Hochwertiger Stahl und perfekte, ergonomische Verarbeitung geben dem Schrank zeitlose Eleganz. Leicht laufende Stahlkugellager und Teleskopschienen mit 100 % Überauszug gewährleisten einfache Handhabung. Ein Zentralverschluß mit 2 Schlüssel rundet die Handhabung und Sicherheit ab. Farbe: lichtgrau Anzahl Bahnen pro Schub: 3 Anzahl Schübe: 5 Kapazität: 60 Classei Orga-Boxen Leergewicht: 159 kg Maße außen: Breite: 1083 mm Höhe: 1425 mm Tiefe: 499 mm lichte Schubhöhe: 250 mm Garantie: 2 Jahre (Technische/optische Änderungen vorbehalten - Lieferung ohne Inhalt - Schrank ist nicht zerlegbar) Lieferung: Stückgut-Spedition (vor die erste absperrbare Türe ebenerdig mit Stückgut-Spediteur - 1 Mann) Lieferung frei Verwendungsstelle auf Anfrage Dieser Artikel wird kundenspezifisch gefertigt und ist deshalb vom Umtausch ausgeschloßen."/>
+                
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=730503"
+                                   src="https://assets.classei.de/img/beispiel_schrank_schublade.jpg"
+                                   alt="Der Classata Schrank: In diesem Video zeigen wir Ihnen die Vorteile dieses massiven aber schmalen Schrankes. Der Schrank bietet viel Platz auf kleinster Fläche mit optimalem Aktenzugriff.Mit einer Tiefe von nur 499 mm ist dieser Schrank hervorragend geeignet für Home-Offices, kleine Büros und schmale Gänge. Hochwertiger Stahl und perfekte, ergonomische Verarbeitung geben dem Schrank zeitlose Eleganz. Leicht laufende Stahlkugellager und Teleskopschienen mit 100 % Überauszug gewährleisten einfache Handhabung. Ein Zentralverschluß mit 2 Schlüssel rundet die Handhabung und Sicherheit ab. Farbe: lichtgrau Anzahl Bahnen pro Schub: 3 Anzahl Schübe: 5 Kapazität: 60 Classei Orga-Boxen Leergewicht: 159 kg Maße außen: Breite: 1083 mm Höhe: 1425 mm Tiefe: 499 mm lichte Schubhöhe: 250 mm Garantie: 2 Jahre (Technische/optische Änderungen vorbehalten - Lieferung ohne Inhalt - Schrank ist nicht zerlegbar) Lieferung: Stückgut-Spedition (vor die erste absperrbare Türe ebenerdig mit Stückgut-Spediteur - 1 Mann) Lieferung frei Verwendungsstelle auf Anfrage Dieser Artikel wird kundenspezifisch gefertigt und ist deshalb vom Umtausch ausgeschloßen."/>
+                
+                
+            </mj-carousel>
+            
+        </mj-column>
+    </mj-section>
+
+    <!-- Product Footer - only fpr special prices-->
+    
+    <mj-section background-color="#ffffff">
+        <!-- Listenpreis -->
+        <mj-column padding="0" width="25%">
+            <mj-text align="left" padding="0" line-height="40px">
+                Listenpreis:
+                <br/>
+                <span style="text-decoration: line-through">
+                    1399,00 €
+                </span>
+            </mj-text>
+        </mj-column>
+        <!-- Angebotspreis -->
+        <mj-column padding="0" width="40%">
+            <mj-text align="center" padding="0" font-size="30px" line-height="40px" font-weight="bold">
+                Aktionspreis:
+            <br/>
+                <span style="color:#ff9933">
+                    1189,15 €
+                </span>
+            </mj-text>
+        </mj-column>
+        <!-- Nachlass in Prozent -->
+        <mj-column padding="0" width="35%">
+            <mj-text align="right" padding="0" font-size="30px" line-height="40px" font-weight="bold"
+                     color="#ff9933">
+                - 15 %
+            </mj-text>
+        </mj-column>
+    </mj-section>
+    
+</mj-wrapper>
+        
+            <mj-wrapper>
+    <!-- Product Head -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text>
+                <a style="text-decoration: None; color:#000000" target="_blank"
+                   href="https://www.classei-shop.com/search?sSearch=7510">
+                    <h4>
+                        <span style="font-size:30px; font-weight:bold; line-height: 45px; display: block">
+                            
+                            7510 Classei-Mobil, lichtgrau
+                            
+                        </span>
+                    </h4>
+                </a>
+            </mj-text>
+        </mj-column>
+    </mj-section>
+    <!-- Product Body -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text line-height="26px">
+                <p>Das Classei-Mobil kann bis zu 12 Orga-Boxen fassen: 6 Boxen mit optimalem Direkt-Zugriff von oben, 6 Boxen auf der zweiten Ebene. Durch die leichtgängigen Rollen und die kompakten Ausmaße ist es sehr flexibel und an jedem Arbeitsplatz einsetzbar.</p>
+<p><strong>Maße:</strong><br /><strong>Breite:</strong> 708 mm<br /><strong>Tiefe:</strong> 400 mm<br /><strong>Höhe:</strong> 640 mm<br /><strong>Gewicht:</strong> 18,5 kg<br /><strong>Material:</strong> kunststoffbeschichtete Spanplatten</p>
+<p><strong>Lieferung: </strong>Leichter Selbstmontage-Satz</strong></p>
+            </mj-text>
+            <mj-button padding="20px 0 0 0"
+                    href="https://www.classei-shop.com/search?sSearch=7510">
+                - Mehr Infos zum Artikel -
+            </mj-button>
+
+            
+
+            <mj-text align="center" padding="0px">
+                <p style="font-size: 14px;">
+                    <!-- Verkaufseinheit -->
+                    pro
+                        
+                        Stck
+                        
+                    <br/>
+                    
+                    <!-- Versandkosten Frei -->
+                    <span style="font-size:14px; color: #ff9933">- kostenloser Versand -</span>
+                    <br/>
+                    zuzgl. Mwst.
+                </p>
+            </mj-text>
+        </mj-column>
+        <mj-column>
+            
+            
+
+            
+
+            
+
+            
+            <mj-carousel>
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=7510"
+                                   src="https://assets.classei.de/img/7510.jpg"
+                                   alt="bringt Mobilität ins BüroDas Classei-Mobil kann bis zu 12 Orga-Boxen fassen: 6 Boxen mit optimalem Direkt-Zugriff von oben, 6 Boxen auf der zweiten Ebene (Fachhöhe: 27 cm). Ideal als Beistell-/Unterstell-Wagen für Schreibtische ohne Unterbau. Maße:Breite: 708 mm | Tiefe: 400 mm | Höhe: 640 mmGewicht: 18,5 kgMaterial: kunststoffbeschichtete SpanplattenLieferung: leichter Selbstmontage-Satz"/>
+                
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=7510"
+                                   src="https://assets.classei.de/img/7510S.jpg"
+                                   alt="bringt Mobilität ins BüroDas Classei-Mobil kann bis zu 12 Orga-Boxen fassen: 6 Boxen mit optimalem Direkt-Zugriff von oben, 6 Boxen auf der zweiten Ebene (Fachhöhe: 27 cm). Ideal als Beistell-/Unterstell-Wagen für Schreibtische ohne Unterbau. Maße:Breite: 708 mm | Tiefe: 400 mm | Höhe: 640 mmGewicht: 18,5 kgMaterial: kunststoffbeschichtete SpanplattenLieferung: leichter Selbstmontage-Satz"/>
+                
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=7510"
+                                   src="https://assets.classei.de/img/beispiel_7510_mit_tisch.jpg"
+                                   alt="bringt Mobilität ins BüroDas Classei-Mobil kann bis zu 12 Orga-Boxen fassen: 6 Boxen mit optimalem Direkt-Zugriff von oben, 6 Boxen auf der zweiten Ebene (Fachhöhe: 27 cm). Ideal als Beistell-/Unterstell-Wagen für Schreibtische ohne Unterbau. Maße:Breite: 708 mm | Tiefe: 400 mm | Höhe: 640 mmGewicht: 18,5 kgMaterial: kunststoffbeschichtete SpanplattenLieferung: leichter Selbstmontage-Satz"/>
+                
+                
+            </mj-carousel>
+            
+        </mj-column>
+    </mj-section>
+
+    <!-- Product Footer - only fpr special prices-->
+    
+    <mj-section background-color="#ffffff">
+        <!-- Listenpreis -->
+        <mj-column padding="0" width="25%">
+            <mj-text align="left" padding="0" line-height="40px">
+                Listenpreis:
+                <br/>
+                <span style="text-decoration: line-through">
+                    209,00 €
+                </span>
+            </mj-text>
+        </mj-column>
+        <!-- Angebotspreis -->
+        <mj-column padding="0" width="40%">
+            <mj-text align="center" padding="0" font-size="30px" line-height="40px" font-weight="bold">
+                Aktionspreis:
+            <br/>
+                <span style="color:#ff9933">
+                    177,65 €
+                </span>
+            </mj-text>
+        </mj-column>
+        <!-- Nachlass in Prozent -->
+        <mj-column padding="0" width="35%">
+            <mj-text align="right" padding="0" font-size="30px" line-height="40px" font-weight="bold"
+                     color="#ff9933">
+                - 15 %
+            </mj-text>
+        </mj-column>
+    </mj-section>
+    
+</mj-wrapper>
+        
+            <mj-wrapper>
+    <!-- Product Head -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text>
+                <a style="text-decoration: None; color:#000000" target="_blank"
+                   href="https://www.classei-shop.com/search?sSearch=7510S">
+                    <h4>
+                        <span style="font-size:30px; font-weight:bold; line-height: 45px; display: block">
+                            
+                            
+                            7510S Classei-Mobil mit Orgami [...]
+                            
+                        </span>
+                    </h4>
+                </a>
+            </mj-text>
+        </mj-column>
+    </mj-section>
+    <!-- Product Body -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text line-height="26px">
+                <p>Das Classei-Mobil kann bis zu 12 Orga-Boxen fassen: 6 Boxen mit optimalem Direkt-Zugriff von oben, 6 Boxen auf der zweiten Ebene.</p>
+<p>Inklusive folgender Classei-Organisationsmittel:<br />
+6 Stk. Orga-Boxen lichtgrau<br />
+250 Stk. Orga-Mappen, hg<br />
+je 2 Blatt Quick-Tabs, 5 Farben<br />
+1 Folienschreiber, sw</p>
+<p><strong>Maße:</strong><br /><strong>Breite:</strong> 708 mm<br /><strong>Tiefe:</strong> 400 mm<br /><strong>Höhe:</strong> 640 mm<br /><strong>Gewicht:</strong> 27,7 kg<br /><strong>Material:</strong> kunststoffbeschichtete Spanplatten</p>
+<p><strong>Lieferung: </strong>Leichter Selbstmontage-Satz</strong></p>
+            </mj-text>
+            <mj-button padding="20px 0 0 0"
+                    href="https://www.classei-shop.com/search?sSearch=7510S">
+                - Mehr Infos zum Artikel -
+            </mj-button>
+
+            
+
+            <mj-text align="center" padding="0px">
+                <p style="font-size: 14px;">
+                    <!-- Verkaufseinheit -->
+                    pro
+                        
+                        Stck
+                        
+                    <br/>
+                    
+                    <!-- Versandkosten Frei -->
+                    <span style="font-size:14px; color: #ff9933">- kostenloser Versand -</span>
+                    <br/>
+                    zuzgl. Mwst.
+                </p>
+            </mj-text>
+        </mj-column>
+        <mj-column>
+            
+            
+
+            
+
+            
+
+            
+            <mj-carousel>
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=7510S"
+                                   src="https://assets.classei.de/img/7510S.jpg"
+                                   alt="bringt Mobilität ins BüroDas Classei-Mobil kann bis zu 12 Orga-Boxen fassen: 6 Boxen mit optimalem Direkt-Zugriff von oben, 6 Boxen auf der zweiten Ebene (Fachhöhe: 27 cm). Durch die leichtgängigen Rollen und die kompakten Ausmaße ist es sehr flexibel und an jedem Arbeitsplatz einsetzbar. Ideal als Beistell-/Unterstell-Wagen für Schreibtische ohne Unterbau. Maße: Breite: 708 mm | Tiefe: 400 mm | Höhe: 640 mmGewicht: 27,7 kgMaterial: kunststoffbeschichtete SpanplattenLieferung: leichter Selbstmontage-Satzmit folgenden Classei-Organisationsmitteln:6 Stk. Orga-Boxen, lichtgrau, ArtNr. 104014250 Stk. Orga-Mappen, hellgelb ArtNr. 204113je 2 Blatt Quick-Tabs, ArtNr. 581000-04(weiß, gelb, rot, blau, orange)1 Folienschreiber, sw, ArtNr. 450313"/>
+                
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=7510S"
+                                   src="https://assets.classei.de/img/7510.jpg"
+                                   alt="bringt Mobilität ins BüroDas Classei-Mobil kann bis zu 12 Orga-Boxen fassen: 6 Boxen mit optimalem Direkt-Zugriff von oben, 6 Boxen auf der zweiten Ebene (Fachhöhe: 27 cm). Durch die leichtgängigen Rollen und die kompakten Ausmaße ist es sehr flexibel und an jedem Arbeitsplatz einsetzbar. Ideal als Beistell-/Unterstell-Wagen für Schreibtische ohne Unterbau. Maße: Breite: 708 mm | Tiefe: 400 mm | Höhe: 640 mmGewicht: 27,7 kgMaterial: kunststoffbeschichtete SpanplattenLieferung: leichter Selbstmontage-Satzmit folgenden Classei-Organisationsmitteln:6 Stk. Orga-Boxen, lichtgrau, ArtNr. 104014250 Stk. Orga-Mappen, hellgelb ArtNr. 204113je 2 Blatt Quick-Tabs, ArtNr. 581000-04(weiß, gelb, rot, blau, orange)1 Folienschreiber, sw, ArtNr. 450313"/>
+                
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=7510S"
+                                   src="https://assets.classei.de/img/beispiel_7510_mit_tisch.jpg"
+                                   alt="bringt Mobilität ins BüroDas Classei-Mobil kann bis zu 12 Orga-Boxen fassen: 6 Boxen mit optimalem Direkt-Zugriff von oben, 6 Boxen auf der zweiten Ebene (Fachhöhe: 27 cm). Durch die leichtgängigen Rollen und die kompakten Ausmaße ist es sehr flexibel und an jedem Arbeitsplatz einsetzbar. Ideal als Beistell-/Unterstell-Wagen für Schreibtische ohne Unterbau. Maße: Breite: 708 mm | Tiefe: 400 mm | Höhe: 640 mmGewicht: 27,7 kgMaterial: kunststoffbeschichtete SpanplattenLieferung: leichter Selbstmontage-Satzmit folgenden Classei-Organisationsmitteln:6 Stk. Orga-Boxen, lichtgrau, ArtNr. 104014250 Stk. Orga-Mappen, hellgelb ArtNr. 204113je 2 Blatt Quick-Tabs, ArtNr. 581000-04(weiß, gelb, rot, blau, orange)1 Folienschreiber, sw, ArtNr. 450313"/>
+                
+                
+            </mj-carousel>
+            
+        </mj-column>
+    </mj-section>
+
+    <!-- Product Footer - only fpr special prices-->
+    
+    <mj-section background-color="#ffffff">
+        <!-- Listenpreis -->
+        <mj-column padding="0" width="25%">
+            <mj-text align="left" padding="0" line-height="40px">
+                Listenpreis:
+                <br/>
+                <span style="text-decoration: line-through">
+                    419,00 €
+                </span>
+            </mj-text>
+        </mj-column>
+        <!-- Angebotspreis -->
+        <mj-column padding="0" width="40%">
+            <mj-text align="center" padding="0" font-size="30px" line-height="40px" font-weight="bold">
+                Aktionspreis:
+            <br/>
+                <span style="color:#ff9933">
+                    356,15 €
+                </span>
+            </mj-text>
+        </mj-column>
+        <!-- Nachlass in Prozent -->
+        <mj-column padding="0" width="35%">
+            <mj-text align="right" padding="0" font-size="30px" line-height="40px" font-weight="bold"
+                     color="#ff9933">
+                - 15 %
+            </mj-text>
+        </mj-column>
+    </mj-section>
+    
+</mj-wrapper>
+        
+            <mj-wrapper>
+    <!-- Product Head -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text>
+                <a style="text-decoration: None; color:#000000" target="_blank"
+                   href="https://www.classei-shop.com/search?sSearch=7703">
+                    <h4>
+                        <span style="font-size:30px; font-weight:bold; line-height: 45px; display: block">
+                            
+                            7703 Classei-Auszug, lichtgrau
+                            
+                        </span>
+                    </h4>
+                </a>
+            </mj-text>
+        </mj-column>
+    </mj-section>
+    <!-- Product Body -->
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text line-height="26px">
+                <p>Praktischer Auszug, für alle Möbel geeignet! Der Classei-Auszug kann bis zu 3 Orga-Boxen fassen. Problemlos auf Fachböden in Schränken und Regalen - auch nebeneinander - zu montieren. Der Überauszug ist ideal um mehr Orgaboxen hintereinander zu verstauen, ohne auf die Zugänglichkeit achten zu müssen.</p>
+<p><strong>Tiefe:</strong> 350 mm<br />
+<strong>Breite:</strong> 360 mm<br />
+<strong>Material:</strong> Kunststoffbeschichtete Spanplatten<br /></p>
+<p><strong>Lieferung: </strong>Fertig montiert</strong></p>
+            </mj-text>
+            <mj-button padding="20px 0 0 0"
+                    href="https://www.classei-shop.com/search?sSearch=7703">
+                - Mehr Infos zum Artikel -
+            </mj-button>
+
+            
+
+            <mj-text align="center" padding="0px">
+                <p style="font-size: 14px;">
+                    <!-- Verkaufseinheit -->
+                    pro
+                        
+                        Stck
+                        
+                    <br/>
+                    
+                    <!-- Versandkosten Frei -->
+                    <span style="font-size:14px; color: #ff9933">- kostenloser Versand -</span>
+                    <br/>
+                    zuzgl. Mwst.
+                </p>
+            </mj-text>
+        </mj-column>
+        <mj-column>
+            
+            
+
+            
+
+            
+
+            
+
+            
+            <mj-carousel>
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=7703"
+                                   src="https://assets.classei.de/img/7703.jpg"
+                                   alt="Praktischer Auszug - für alle Möbel geeignetDer Classei-Auszug kann bis zu 3 Orga-Boxen fassen. Problemlos auf Fachböden in Schränken und Regalen zu montieren. Der Überauszug ist ideal um mehr Orgaboxen hintereinander zu verstauen, ohne auf die Zugänglichkeit achten zu müssen. Je nach Fachbodenbreite können mehrere Auszüge nebeneinander montiert werden.Maße:Tiefe: 350 mmBreite: 360 mmMaterial: Kunststoffbeschichtete SpanplattenBelastung: max. 20 kgFachbodenmindesthöhe: 275 mmLieferung: Fertig montiert"/>
+                
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=7703"
+                                   src="https://assets.classei.de/img/7703_02.jpg"
+                                   alt="Praktischer Auszug - für alle Möbel geeignetDer Classei-Auszug kann bis zu 3 Orga-Boxen fassen. Problemlos auf Fachböden in Schränken und Regalen zu montieren. Der Überauszug ist ideal um mehr Orgaboxen hintereinander zu verstauen, ohne auf die Zugänglichkeit achten zu müssen. Je nach Fachbodenbreite können mehrere Auszüge nebeneinander montiert werden.Maße:Tiefe: 350 mmBreite: 360 mmMaterial: Kunststoffbeschichtete SpanplattenBelastung: max. 20 kgFachbodenmindesthöhe: 275 mmLieferung: Fertig montiert"/>
+                
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=7703"
+                                   src="https://assets.classei.de/img/7703_03.jpg"
+                                   alt="Praktischer Auszug - für alle Möbel geeignetDer Classei-Auszug kann bis zu 3 Orga-Boxen fassen. Problemlos auf Fachböden in Schränken und Regalen zu montieren. Der Überauszug ist ideal um mehr Orgaboxen hintereinander zu verstauen, ohne auf die Zugänglichkeit achten zu müssen. Je nach Fachbodenbreite können mehrere Auszüge nebeneinander montiert werden.Maße:Tiefe: 350 mmBreite: 360 mmMaterial: Kunststoffbeschichtete SpanplattenBelastung: max. 20 kgFachbodenmindesthöhe: 275 mmLieferung: Fertig montiert"/>
+                
+                
+                
+                <mj-carousel-image target="https://www.classei-shop.com/search?sSearch=7703"
+                                   src="https://assets.classei.de/img/7703_04.jpg"
+                                   alt="Praktischer Auszug - für alle Möbel geeignetDer Classei-Auszug kann bis zu 3 Orga-Boxen fassen. Problemlos auf Fachböden in Schränken und Regalen zu montieren. Der Überauszug ist ideal um mehr Orgaboxen hintereinander zu verstauen, ohne auf die Zugänglichkeit achten zu müssen. Je nach Fachbodenbreite können mehrere Auszüge nebeneinander montiert werden.Maße:Tiefe: 350 mmBreite: 360 mmMaterial: Kunststoffbeschichtete SpanplattenBelastung: max. 20 kgFachbodenmindesthöhe: 275 mmLieferung: Fertig montiert"/>
+                
+                
+            </mj-carousel>
+            
+        </mj-column>
+    </mj-section>
+
+    <!-- Product Footer - only fpr special prices-->
+    
+    <mj-section background-color="#ffffff">
+        <!-- Listenpreis -->
+        <mj-column padding="0" width="25%">
+            <mj-text align="left" padding="0" line-height="40px">
+                Listenpreis:
+                <br/>
+                <span style="text-decoration: line-through">
+                    89,00 €
+                </span>
+            </mj-text>
+        </mj-column>
+        <!-- Angebotspreis -->
+        <mj-column padding="0" width="40%">
+            <mj-text align="center" padding="0" font-size="30px" line-height="40px" font-weight="bold">
+                Aktionspreis:
+            <br/>
+                <span style="color:#ff9933">
+                    75,65 €
+                </span>
+            </mj-text>
+        </mj-column>
+        <!-- Nachlass in Prozent -->
+        <mj-column padding="0" width="35%">
+            <mj-text align="right" padding="0" font-size="30px" line-height="40px" font-weight="bold"
+                     color="#ff9933">
+                - 15 %
+            </mj-text>
+        </mj-column>
+    </mj-section>
+    
+</mj-wrapper>
+        
+
+        <!-- Order form Contact -->
+        <mj-wrapper>
+    <!-- Head Order Form -->
+    <mj-section>
+        <mj-column>
+            <mj-text align="left" color="#000000" line-height="44px">
+                <h2 style="font-size: 34px; color: #ff9933" >Bestellformular</h2>
+            </mj-text>
+            <mj-text align="center">
+                <p style="font-size: 24px">Einfach Antworten und Anzahl eingeben</p>
+            </mj-text>
+            <mj-text align="right" color="#ff9933" font-size="24px" line-height="34px">
+                <p>oder schnell anrufen:<br/>+49 (0)8641 97 59 0
+                </p>
+            </mj-text>
+        </mj-column>
+    </mj-section>
+
+    <!-- Kontaktdaten -->
+    <mj-section>
+        <mj-column padding="0">
+            <mj-text>
+                <p style="font-weight: bold;">Stimmen ihre Daten noch? Bitte berichtigen Sie:</p>
+            </mj-text>
+            <mj-table css-class="contact_table" line-height="40px" padding="10px">
+                <tr>
+                    <td width="20%" class="ct_text">Vorname:</td>
+                    <td width="40%" class="ct_value">{subtag:vorname}</td>
+                    <td width="40%" style="border-bottom: 1px dotted #000000" class="ct_user">&nbsp;</td>
+                </tr>
+                <tr>
+                    <td class="ct_text">Nachname:</td>
+                    <td class="ct_value">{subtag:name}</td>
+                    <td style="border-bottom: 1px dotted #000000" class="ct_user">&nbsp;</td>
+                </tr>
+                <tr>
+                    <td class="ct_text">Firma:</td>
+                    <td class="ct_value">{subtag:firma}</td>
+                    <td style="border-bottom: 1px dotted #000000" class="ct_user">&nbsp;</td>
+                </tr>
+                <tr>
+                    <td class="ct_text">Strasse:</td>
+                    <td class="ct_value">{subtag:strasse}</td>
+                    <td style="border-bottom: 1px dotted #000000" class="ct_user">&nbsp;</td>
+                </tr>
+                <tr>
+                    <td class="ct_text">PLZ/Ort:</td>
+                    <td class="ct_value">{subtag:plzort}</td>
+                    <td style="border-bottom: 1px dotted #000000" class="ct_user">&nbsp;</td>
+                </tr>
+                <tr>
+                    <td class="ct_text">Fon:</td>
+                    <td class="ct_value">{subtag:fon}</td>
+                    <td style="border-bottom: 1px dotted #000000" class="ct_user">&nbsp;</td>
+                </tr>
+                <tr>
+                    <td class="ct_text">E-Mail:</td>
+                    <td class="ct_value">{subtag:email}</td>
+                    <td style="border-bottom: 1px dotted #000000" class="ct_user">&nbsp;</td>
+                </tr>
+            </mj-table>
+        </mj-column>
+    </mj-section>
+
+</mj-wrapper>
+
+        <!-- Order form Products -->
+        <mj-section>
+            <mj-column>
+                <mj-table>
+                    
+                    <tr style="border-bottom: 1px dotted #ff9933; margin: 10px 0 10px 0" >
+    <td width="10%">__x</td>
+    <td width="35%" style="color: #ff9933; font-weight: bold; font-size: 12px; line-height:1">
+        730503 Classata-Schrank 47, 3-bahnig, 5 Schübe
+    </td>
+    <td width="55%" align="right">
+        <mj-text  align="right" font-size="14px">
+
+            
+                Listenpreis:
+                <span style="text-decoration: line-through">
+                    1399,00 €
+                </span> netto
+                <br />
+                <span style="color: #ff9933;">
+                    Aktionspreis: 1189,15 €
+                </span> netto
+                
+            <br/>
+            <!-- Verkaufseinheit -->
+            pro
+                
+                Stck
+                
+
+            <br/>
+            
+            <!-- Versandkosten True/False -->
+            <span style="font-size:14px; color: #ff9933">- kostenloser Versand - zuzgl. Mwst. - </span>
+
+        </mj-text>
+    </td>
+</tr>
+                    
+                    <tr style="border-bottom: 1px dotted #ff9933; margin: 10px 0 10px 0" >
+    <td width="10%">__x</td>
+    <td width="35%" style="color: #ff9933; font-weight: bold; font-size: 12px; line-height:1">
+        7510 Classei-Mobil, lichtgrau
+    </td>
+    <td width="55%" align="right">
+        <mj-text  align="right" font-size="14px">
+
+            
+                Listenpreis:
+                <span style="text-decoration: line-through">
+                    209,00 €
+                </span> netto
+                <br />
+                <span style="color: #ff9933;">
+                    Aktionspreis: 177,65 €
+                </span> netto
+                
+            <br/>
+            <!-- Verkaufseinheit -->
+            pro
+                
+                Stck
+                
+
+            <br/>
+            
+            <!-- Versandkosten True/False -->
+            <span style="font-size:14px; color: #ff9933">- kostenloser Versand - zuzgl. Mwst. - </span>
+
+        </mj-text>
+    </td>
+</tr>
+                    
+                    <tr style="border-bottom: 1px dotted #ff9933; margin: 10px 0 10px 0" >
+    <td width="10%">__x</td>
+    <td width="35%" style="color: #ff9933; font-weight: bold; font-size: 12px; line-height:1">
+        7510S Classei-Mobil mit Orgamittel
+    </td>
+    <td width="55%" align="right">
+        <mj-text  align="right" font-size="14px">
+
+            
+                Listenpreis:
+                <span style="text-decoration: line-through">
+                    419,00 €
+                </span> netto
+                <br />
+                <span style="color: #ff9933;">
+                    Aktionspreis: 356,15 €
+                </span> netto
+                
+            <br/>
+            <!-- Verkaufseinheit -->
+            pro
+                
+                Stck
+                
+
+            <br/>
+            
+            <!-- Versandkosten True/False -->
+            <span style="font-size:14px; color: #ff9933">- kostenloser Versand - zuzgl. Mwst. - </span>
+
+        </mj-text>
+    </td>
+</tr>
+                    
+                    <tr style="border-bottom: 1px dotted #ff9933; margin: 10px 0 10px 0" >
+    <td width="10%">__x</td>
+    <td width="35%" style="color: #ff9933; font-weight: bold; font-size: 12px; line-height:1">
+        7703 Classei-Auszug, lichtgrau
+    </td>
+    <td width="55%" align="right">
+        <mj-text  align="right" font-size="14px">
+
+            
+                Listenpreis:
+                <span style="text-decoration: line-through">
+                    89,00 €
+                </span> netto
+                <br />
+                <span style="color: #ff9933;">
+                    Aktionspreis: 75,65 €
+                </span> netto
+                
+            <br/>
+            <!-- Verkaufseinheit -->
+            pro
+                
+                Stck
+                
+
+            <br/>
+            
+            <!-- Versandkosten True/False -->
+            <span style="font-size:14px; color: #ff9933">- kostenloser Versand - zuzgl. Mwst. - </span>
+
+        </mj-text>
+    </td>
+</tr>
+                    
+                </mj-table>
+            </mj-column>
+        </mj-section>
+
+        <!-- Blog Content -->
+        <mj-section>
+    <mj-column>
+        <mj-raw>
+        {autocontent:25-| max:1|
+        order:created,DESC|
+        type:intro|link|author| pict:resized|
+        maxwidth:150|
+        maxheight:150| invert| format:TOP_LEFT|
+        template:tagcontent.php}
+        </mj-raw>
+    </mj-column>
+</mj-section>
+
+        <!-- Rechtliches -->
+        <mj-section>
+    <mj-column>
+        <mj-text font-size="10px" line-height="16px">
+            <!-- Terms -->
+            <p>
+
+                * <a style="text-decoration: None; color: #ff9933"
+                   href="https://www.classei-shop.com/Versandinformationen?sPartner=email"
+                   target="_blank">Nähere Infos zu
+                    Versandkosten&nbsp;hier
+                </a>
+                
+                    Angebot gültig bis 31.07.2024
+                
+
+
+            </p>
+
+
+            <!-- Impressum -->
+            <p>
+                Classei-Organisation - Egon Heimann
+                GmbH | Staudacher Str. 7e | 83250
+                Marquartstein | Deutschland<br>Fon:
+                +49
+                (0)8641 97 59 0 |
+                Fax +49 (0)8641 97 59 20 | E-Mail:
+                <a style="text-decoration: None; color: #ff9933" href="mailto:info@classei.de">
+                    Info
+                </a>
+                // Internet:
+                <a href="https://www.classei.de">Classei.de</a>
+            </p>
+
+
+            <!-- Unsubscribe -->
+            <p>
+                Sie erhalten diese E-Mail, weil Sie
+                unser Kunde/Interessent sind oder
+                wir schon Kontakt hatten. Wenn Sie
+                keine
+                Informationen mehr erhalten möchten,
+                welche wir relativ selten
+                verschicken, tragen Sie sich bitte
+                <span>
+                    {modify}hier{/modify}
+                </span>
+                aus.
+            </p>
+        </mj-text>
+    </mj-column>
+</mj-section>
+    
+    </mj-body>
+</mjml>

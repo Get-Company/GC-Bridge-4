@@ -1,0 +1,358 @@
+<mjml>
+    <mj-font href=""/>
+    <!-- Head -->
+    <mj-head>
+        <mj-include path="..\..\template\head.mjml"/>
+    </mj-head>
+
+    <!-- Body -->
+    <mj-body>
+        <mj-raw>
+            <!-- Company Header -->
+        </mj-raw>
+
+        <!-- View online -->
+        <mj-include path="..\..\template\view_online.mjml"/>
+
+        <!-- Navigation -->
+        <mj-include path="..\..\template\nav_items_shop.mjml"/>
+
+        <!-- Header-Logo -->
+        <mj-include path="..\..\template\header_logo.mjml"/>
+
+        <!-- Title -->
+        <mj-section
+                background-color="#ffffff"
+                padding="20px">
+            <mj-column>
+                <mj-text>
+                    <h1 align="center" style="color: #ff9933; font-weight:400; line-height:40px">
+                        ... mehrfach verwendbare Mappen
+                    </h1>
+                    <h1 align="right" style="color: #8a8a8a; font-weight:400; line-height:36px">
+                        <small>
+                            Etikett ablösen und neu beschriften
+                        </small>
+                    </h1>
+                </mj-text>
+            </mj-column>
+        </mj-section>
+
+        <!-- Salutation -->
+        <mj-section background-color="#ffffff">
+            <mj-column padding-right="5px">
+                <mj-text>
+                    <p>
+                        Hallo
+
+                        {if:anrede~Herr} Herr {/if}
+                        {if:anrede~Frau} Frau {/if}
+                        {subtag:name},
+                    </p>
+                </mj-text>
+            </mj-column>
+            <mj-column padding-left="5px">
+                <mj-text align="right">
+                    <p>
+                        Ihre Kunden-Nr.: {subtag:adrnr}
+                    </p>
+                </mj-text>
+            </mj-column>
+        </mj-section>
+
+        <!-- Intro Text -->
+        <mj-section background-color="#ffffff">
+            <mj-column>
+                <mj-text line-height="26px">
+                    <p>
+                        alles muss <span style="color:#ff9933">noch eiliger</span> bearbeitet werden und das
+                        erfordert <span
+                            class="orange">noch schnellere Organisation</span>.
+                        Die neuen Klarsicht-Orgamappen bringen echten Mehrfachnutzen in den Büroalltag mit
+                        Papierdokumenten.
+                        Durch äußerst <span style="color:#ff9933">schnell beschriftete und wiederablösbare Reiter-Etiketten
+                    </span> sind die Mappen hervorragend
+                        für schwebende oder Interim-Vorgänge geeignet. Somit haben Papierstapel keine Chance mehr.
+                    </p>
+                </mj-text>
+
+                <mj-image
+                        padding="0px"
+                        src="https://www.classei.de/index.php?option=com_joomgallery&amp;view=image&amp;format=raw&amp;id=390&amp;type=orig"
+                        alt="Die neue wiederverwendbare Mappe."/>
+            </mj-column>
+        </mj-section>
+
+        <!-- Strip Beispiele -->
+        <mj-section css-class="section_white" background-color="#ffffff">
+            <mj-column padding-right="5px">
+                <mj-text>
+                    <h5 style="color:#ff9933;font-size:20px">Strip anbringen</h5>
+                </mj-text>
+                <mj-image
+                        padding="5px"
+                        src="https://www.classei.de/index.php?option=com_joomgallery&view=image&format=raw&id=443&type=orig"
+                        alt="Die neue wiederverwendbare Mappe."/>
+                <mj-text>
+                    <p>
+                        Die Quick-Strips, welche in 4 Farben erhältlich sind (siehe weiter unten in dieser E-Mail),
+                        können einfach an der erhöhten Rückwand angebracht werden.
+                    </p>
+                </mj-text>
+            </mj-column>
+            <mj-column padding-left="5px">
+                <mj-text>
+                    <h5 style="color:#ff9933;font-size:20px">Strip entfernen</h5>
+                </mj-text>
+                <mj-image
+                        padding="5px"
+                        src="https://www.classei.de/index.php?option=com_joomgallery&view=image&format=raw&id=444&type=orig"
+                        alt="Trotz vielen Mappen, sind die dahinter liegenden Reiter perfekt sichtbar."/>
+                <mj-text>
+                    <p>
+                        Die Strips lassen sich rückstandsfrei wieder ablösen, somit ist die Mappe im Handumdrehen neu
+                        beschriftet.
+                    </p>
+                </mj-text>
+            </mj-column>
+        </mj-section>
+
+        <!-- Sichtbarkeist Beispiel -->
+        <mj-section background-color="#ffffff">
+            <mj-column>
+                <mj-text>
+                    <h5 style="color:#ff9933;font-size:20px">Perfekte Sichtbarkeit</h5>
+                </mj-text>
+                <mj-image
+                        src="https://www.classei.de/index.php?option=com_joomgallery&amp;view=image&amp;format=raw&amp;id=392&amp;type=img"
+                        alt="Trotz vielen Mappen, sind die dahinter liegenden Reiter perfekt sichtbar."/>
+                <mj-text align="justify">
+                    <p>Mehrere hintereinander abgestellte Mappen bieten gewohnte, gute Transparenz und lassen sich
+                        bestens in bestehende Strukturen einfügen. Informationen direkt an den Fingerspitzen.
+                    </p>
+                </mj-text>
+            </mj-column>
+        </mj-section>
+
+        <!-- Product -->
+        {% for product in products %}
+            {% if loop.index == 1 %}
+                <!-- Sub Header Klarsicht Mappen -->
+                <mj-wrapper padding-top="20px" padding-bottom="0px">
+                    <mj-section css-class="section_white" padding="0px" background-color="#ffffff">
+                        <mj-column>
+                            <mj-text align="center" line-height="40px">
+                                <h2 style="font-size: 30px; color: #ff9933">Klarsicht Mappen</h2>
+                            </mj-text>
+                        </mj-column>
+                    </mj-section>
+                </mj-wrapper>
+            {% elif loop.index == 5 %}
+                <!-- Subheader Wiederablösbare Strip-Tabs -->
+                <mj-wrapper padding="0px">
+                    <mj-section css-class="section_white" padding="0px" background-color="#ffffff">
+                        <mj-column>
+                            <mj-text align="center" line-height="40px">
+                                <h2 style="font-size: 30px; color: #ff9933">Wiederablösbare Strip Tabs</h2>
+                            </mj-text>
+                        </mj-column>
+                    </mj-section>
+                </mj-wrapper>
+            {% endif %}
+
+        <!-- Product Head -->
+        <mj-wrapper>
+            <mj-section padding="10px" background-color="#ffffff">
+                <mj-column>
+                    <mj-text>
+                        <!-- Product -->
+                        <h4><span style="font-size:20px; font-weight:bold">{{product.name}}</span></h4>
+                    </mj-text>
+                </mj-column>
+            </mj-section>
+            <!-- Product Body -->
+            <mj-section padding="10px" background-color="#ffffff">
+                <mj-column>
+                    <mj-text>
+                        <p>{{product.description_short}}</p>
+                    </mj-text>
+                    <mj-button>
+                        - Mehr Infos zum Artikel -
+                    </mj-button>
+                </mj-column>
+                <mj-column>
+                    <mj-carousel>
+                        {% for img in product.images %}
+                        <mj-carousel-image src="https://assets.classei.de/img/{{img.name}}.{{img.type}}" alt="Beispiel"/>
+                        {% endfor %}
+                    </mj-carousel>
+                    <mj-text align="center" padding="0px" margin-top="20px">
+                        <h4 style="color: #ff9933; font-size: 24px; line-height: 40px">
+                            <strong>Preis</strong>
+                            {% if product.prices.price_rebate %}
+                            ab: {{ "%.2f"|format(product.prices.price_rebate)|replace('.', ',') }}
+                            {% else %}
+                                : {{ "%.2f"|format(product.prices.price)|replace('.', ',') }}
+                            {% endif %}
+                            €
+                        </h4>
+                    </mj-text>
+                    <mj-text align="center" padding="0px">
+                        <p style="font-size: 14px;">
+                            <!-- Verkaufseinheit -->
+                            pro
+                            <strong>
+                                {% if product.factor > 0 %}
+                                {{ product.factor }} St.
+                                {% else %}
+                                {{ product.unit|default('St.') }}
+                                {% endif %}
+                            </strong>
+
+
+                        <!-- Mindestbestellwert und Bestellschritte ? -->
+                        <span style="font-size: 12px;">
+                            {% if product.min_purchase > 1 and product.purchase_unit > 1 %}
+                                | Mind. Best. Menge: {{ product.min_purchase }} | Best. Schritt: {{ product.purchase_unit }}
+                        </span>
+                            <br />
+                            {% endif %}
+
+                            <!-- Versandkosten ? -->
+                            {% if product.prices.price >= 99 %}
+                            <span style="color: #ff9933; font-weight: bold; font-size: 12px;">- kostenloser Versand - zuzgl.
+                                Mwst.
+                                -
+                            </span>
+                            <br />
+                            {% else %}
+                            - zuzgl. Versandkosten - zuzgl. Mwst. -
+                            {% endif %}
+                        </p>
+                    </mj-text>
+                </mj-column>
+            </mj-section>
+            <!-- Product Footer -->
+            <mj-section padding="10px" background-color="#ffffff">
+
+            </mj-section>
+        </mj-wrapper>
+        {% endfor %}
+
+        <!-- Order form Contact -->
+        <mj-include path="..\..\template\contact_table.mjml"/>
+
+        <!-- Order form Products -->
+        <mj-wrapper padding="0px">
+            <mj-section css-class="section_white" padding="0px" background-color="#ffffff">
+                <mj-column>
+                    <mj-table css-class="contact_table">
+                        {% for product in products %}
+                        <tr>
+                            <td width="10%">__x</td>
+                            <td width="45%"  style="color: #ff9933; font-weight: bold; font-size: 12px; line-height:1">{{product.name}}</td>
+                            <td width="45%" class="ct_text" >
+                                <mj-text align="left" padding="0px">
+                                    <p style="font-size: 14px;">
+                                        Listenpreis
+                                        {% if product.price_rebate %}
+                                            ab: {{ "%.2f"|format(product.prices.price_rebate)|replace('.', ',') }}
+                                        {% else %}
+                                            {{ "%.2f"|format(product.prices.price)|replace('.', ',') }}
+                                        {% endif %}
+                                        € netto:
+                                        <br />
+                                        pro
+                                            {% if product.factor > 0 %}
+                                            {{ product.factor }} St.
+                                            {% else %}
+                                            {{ product.unit|default('St.') }}
+                                            {% endif %}
+                                        <br />
+
+                                        <!-- Versandkosten ? -->
+                                        {% if product.prices.price >= 99 %}
+                                        - kostenloser Versand - zuzgl. Ust. -
+                                        <br />
+                                        {% else %}
+                                        - zuzgl. Versandkosten - zuzgl. Ust. -
+                                        {% endif %}
+                                    </p>
+                                </mj-text>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </mj-table>
+                </mj-column>
+            </mj-section>
+        </mj-wrapper>
+
+        <!-- Blog Content -->
+        <mj-section css-class="section_white" padding="0px" background-color="#ffffff">
+            <mj-column>
+                {autocontent:25-| max:1|
+                order:created,DESC|
+                type:intro|link|author| pict:resized|
+                maxwidth:150|
+                maxheight:150| invert| format:TOP_LEFT|
+                template:tagcontent.php}
+            </mj-column>
+        </mj-section>
+
+        <!-- Rechtliches -->
+        <mj-section css-class="section_white" paading="0px" background-color="#ffffff">
+            <mj-column>
+                <mj-text font-size="12px" line-height="16px" >
+                    <!-- Terms -->
+                    <p>
+
+                        * Versandkostenfrei ab Warenwert
+                        99,00 € netto. Warenwert
+                        unter 99,00 € netto Versandkosten
+                        5,95 € netto.&nbsp;
+
+                        |
+                        <a style="text-decoration: None; color: #ff9933" href="https://www.classei-shop.com/Versandinformationen?sPartner=email"
+                           target="_blank">Nähere Infos zu
+                            Versandkosten&nbsp;
+                        </a>
+
+
+                    </p>
+
+
+                    <!-- Impressum -->
+                    <p>
+                        Classei-Organisation - Egon Heimann
+                        GmbH | Staudacher Str. 7e | 83250
+                        Marquartstein | Deutschland<br>Fon:
+                        +49
+                        (0)8641 97 59 0 |
+                        Fax +49 (0)8641 97 59 20 | E-Mail:
+                        <a style="text-decoration: None; color: #ff9933" href="mailto:info@classei.de">
+                            Info
+                        </a>
+                        // Internet:
+                        <a href="https://www.classei.de">Classei.de</a>
+                    </p>
+
+
+                    <!-- Unsubscribe -->
+                    <p>
+                        Sie erhalten diese E-Mail, weil Sie
+                        unser Kunde/Interessent sind oder
+                        wir schon Kontakt hatten. Wenn Sie
+                        keine
+                        Informationen mehr erhalten möchten,
+                        welche wir relativ selten
+                        verschicken, tragen Sie sich bitte
+                        <span>
+                            {modify}hier{/modify}
+                        </span>
+                        aus.
+                </mj-text>
+            </mj-column>
+        </mj-section>
+
+    </mj-body>
+</mjml>

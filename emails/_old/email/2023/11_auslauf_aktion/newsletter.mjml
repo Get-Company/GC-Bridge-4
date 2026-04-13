@@ -1,0 +1,102 @@
+<mjml>
+    <mj-head>
+        {% include "classei/email/template/head.mjml" %}
+    </mj-head>
+
+    <!-- Body -->
+    <mj-body>
+        {% block body %}
+        <mj-raw>
+            <!-- Company Header -->
+        </mj-raw>
+
+        <!-- View online -->
+        {% include "classei/email/template/view_online.mjml" %}
+
+        <!-- Navigation -->
+        {% include "classei/email/template/nav_items_shop.mjml" %}
+
+        <!-- Header-Logo -->
+        {% include "classei/email/template/header_logo.mjml" %}
+
+        <!-- Title -->
+        {% with
+        h1="Große Sortimentsbereinigung",
+        h1_small="... machen Sie Ihr Lager voll."
+        %}
+        {% include "classei/email/template/title_txt.mjml" %}
+        {% endwith %}
+
+        <!-- Salutation -->
+        {% include "classei/email/template/salutation.mjml" %}
+
+
+        <!-- Subheader Wiederablösbare Strip-Tabs -->
+        <mj-wrapper padding="0px">
+            <mj-section css-class="section_white" padding="0px" background-color="#ffffff">
+                <mj-column>
+                    <mj-text align="center" line-height="40px">
+                        <h2 style="font-size: 30px; color: #ff9933">Abverkauf-Rabatt 50 %</h2>
+                    </mj-text>
+                </mj-column>
+            </mj-section>
+        </mj-wrapper>
+
+        <!-- Intro Text -->
+        <mj-section background-color="#ffffff">
+            <mj-column>
+                <mj-text line-height="26px">
+                    <p>
+                        <strong>Exklusiver Lagerabverkauf:</strong>
+                        Elegante Büro-Organisationshelfer jetzt im Aberkauf! Nutzen Sie unsere limitierte Aktion, um
+                        Ihr
+                        Büro mit Stil und Effizienz aufzuwerten. Entdecken Sie unsere <strong>hochwertigen Orgaboxen in
+                        Schwarz</strong>,
+                        <strong>vielseitige Orgamappen</strong>
+                        und <strong>praktische Dehnmappen</strong> – Nutzen Sie jetzt den Rabatt und füllen Sie Ihr eigenes Lager mit unseren stilvollen und funktionalen Bürohelfern. Greifen Sie zu, bevor alles weg ist!
+                    <p style="text-align: center">
+                    </p>
+                </mj-text>
+            </mj-column>
+        </mj-section>
+        <!-- 50 % Rabat Hinweis -->
+        <mj-section>
+            {% for product in products %}
+            <!-- {{ product.name }} -->
+            <mj-column>
+                <mj-image
+                        width="250px"
+                        src="https://assets.classei.de/img/{{product.images[0].name}}.{{product.images[0].type}}">
+
+                </mj-image>
+            </mj-column>
+            {% endfor %}
+        </mj-section>
+
+        <!-- Products -->
+        {% for product in products %}
+        {% include "classei/email/template/product.mjml" %}
+        {% endfor %}
+
+        <!-- Order form Contact -->
+        {% include "classei/email/template/contact_table.mjml" %}
+
+        <!-- Order form Products -->
+        <mj-section>
+            <mj-column>
+                <mj-table>
+                    {% for product in products %}
+                    {% include "classei/email/template/order_form_product.mjml" %}
+                    {% endfor %}
+                </mj-table>
+            </mj-column>
+        </mj-section>
+
+        <!-- Blog Content
+        {% include "classei/email/template/blog_acymailing.mjml" %}-->
+
+        <!-- Rechtliches -->
+        {% include "classei/email/template/disclaimer.mjml" %}
+        {% endblock %}
+    </mj-body>
+</mjml>

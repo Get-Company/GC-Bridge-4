@@ -1,0 +1,210 @@
+<mjml>
+    <mj-head>
+        {% include "classei/email/template/head.mjml" %}
+    </mj-head>
+
+    <!-- Body -->
+    <mj-body>
+        {% block body %}
+        <mj-raw>
+            <!-- Company Header -->
+        </mj-raw>
+
+        <!-- View online -->
+        {% include "classei/email/template/view_online.mjml" %}
+
+        <!-- Navigation -->
+        {% include "classei/email/template/nav_items_shop.mjml" %}
+
+        <!-- Header-Logo -->
+        {% include "classei/email/template/header_logo.mjml" %}
+
+        <!-- Title -->
+        {% with
+            h1="Funktionalität, zeitloses Design <br/> und Platzwunder",
+            h1_small="...Classei Orga-Möbel"
+        %}
+        {% include "classei/email/template/title_txt.mjml" %}
+        {% endwith %}
+
+        <!-- Salutation -->
+        {% include "classei/email/template/salutation.mjml" %}
+
+        <!-- Intro Text -->
+        <mj-section background-color="#ffffff">
+            <mj-column>
+                <mj-text line-height="26px">
+                    <p>
+                        Classei - Schränke und Möbel sind echte Platzwunder für die Organisation Ihrer Akten. Sie
+                        bringen viel Raumersparnis, perfekte Übersicht und äußerst schnellen Zugriff auf alle Vorgänge
+                        im Büro.
+                        <strong>24h Lieferzeit</strong>
+                        - alle Möbel stehen zum sofortigen Einsatz zur Verfügung!
+                    <p style="text-align: center">
+                    </p>
+                </mj-text>
+            </mj-column>
+        </mj-section>
+
+        <!-- Subheader Wiederablösbare Strip-Tabs -->
+        <mj-wrapper padding="0px">
+            <mj-section css-class="section_white" padding="0px" background-color="#ffffff">
+                <mj-column>
+                    <mj-text align="center" line-height="40px">
+                        <h2 style="font-size: 30px; color: #ff9933">Classata Schrank</h2>
+                    </mj-text>
+                </mj-column>
+            </mj-section>
+        </mj-wrapper>
+
+        <!-- Intro Schrank-->
+        <mj-section background-color="#ffffff">
+            <mj-column>
+                <mj-image padding="0"
+                          src="https://www.classei.de/index.php?option=com_joomgallery&amp;view=image&amp;format=raw&amp;id=368&amp;type=orig"
+                          alt="Der Classata Schrank mit Preis."
+                          href="https://www.classei-shop.com/Orga-Moebel/Classata-Schraenke-Typ-47/730503-Classata-Schrank-47-3-bahnig-5-Schuebe.html#video"
+                />
+            </mj-column>
+        </mj-section>
+
+        <!-- Description Schrank -->
+        <mj-section background-color="#ffffff">
+            <mj-column>
+                <mj-accordion border="1px solid #f3f3f3"
+                              icon-wrapped-url="https://assets.classei.de/img/icons/arrow-down-icon-king-freeicons.png"
+                              icon-unwrapped-url="https://assets.classei.de/img/icons/arrow-up-icon-king-freeicons.png"
+                              padding="0"
+                >
+                    <!-- Direkter Zugriff -->
+                    <mj-accordion-element>
+                        <mj-accordion-title>
+                            <h5>
+                                <span style="color:#ff9933; font-size:16px; font-weight:bold; line-height:40px">
+                                    Direkter Zugriff
+                                </span>
+                            </h5>
+                        </mj-accordion-title>
+                        <mj-accordion-text>
+                            Mit einer Schubladenbewegung haben Sie den Inhalt von 12 Orgaboxen im sofortigen Zugriff.
+                        </mj-accordion-text>
+                    </mj-accordion-element>
+
+                    <!-- Optimale Funktionalität -->
+                    <mj-accordion-element>
+                        <mj-accordion-title>
+                            <h5>
+                                <span style="color:#ff9933; font-size:16px; font-weight:bold; line-height:40px">
+                                    Optimale Funktionalität
+                                </span>
+                            </h5>
+                        </mj-accordion-title>
+                        <mj-accordion-text>
+                            Durch geringe Höhe ist die Bedienung der obersten Schublade
+                            kein Problem. Mühelos erreichen
+                            Sie die hinterste Akte.
+                        </mj-accordion-text>
+
+                    </mj-accordion-element>
+
+                    <!-- Praktisch und handlich -->
+                    <mj-accordion-element>
+                        <mj-accordion-title>
+                            <h5>
+                                <span style="color:#ff9933; font-size:16px; font-weight:bold; line-height:40px">
+                                    Praktisch und handlich
+                                </span>
+                            </h5>
+                        </mj-accordion-title>
+                        <mj-accordion-text>
+                            Einfache Handhabung nach ergonomischen Standpunkten, gewährleisten Ihnen leichtlaufende
+                            Qualitätsstahlkugellager, Teleskopschienen mit 100% - Überauszug.
+                        </mj-accordion-text>
+                    </mj-accordion-element>
+
+                    <!-- Hochwertiges Material -->
+                    <mj-accordion-element>
+                        <mj-accordion-title>
+                            <h5>
+                                <span style="color:#ff9933; font-size:16px; font-weight:bold; line-height:40px">
+                                    Hochwertiges Material
+                                </span>
+                            </h5>
+                        </mj-accordion-title>
+                        <mj-accordion-text>
+                            Hochwertiges Stahlmaterial und perfekte Verarbeitung verleihen dem Schrank zeitlose Eleganz.
+                            <br />
+                            <strong>Breite:</strong> 110mm
+                            <strong>Tiefe:</strong> 470 mm
+                            <strong>Höhe:</strong> 1140mm bzw. 1390mm.
+                        </mj-accordion-text>
+                    </mj-accordion-element>
+
+                </mj-accordion>
+            </mj-column>
+            <mj-column>
+                <mj-image
+                        src="https://www.classei.de/index.php?option=com_joomgallery&amp;view=image&amp;format=raw&amp;id=370&amp;type=img"
+                        alt="Der Classata Schrank im Büro."
+                        href="https://www.classei-shop.com/Orga-Moebel/Classata-Schraenke-Typ-47/730503-Classata-Schrank-47-3-bahnig-5-Schuebe.html"
+                />
+                <mj-image
+                        src="https://www.classei.de/index.php?option=com_joomgallery&amp;view=image&amp;format=raw&amp;id=373&amp;type=img"
+                        alt="Vorderansicht des Classata Schrankes."
+                        href="https://www.classei-shop.com/Orga-Moebel/Classata-Schraenke-Typ-47/730503-Classata-Schrank-47-3-bahnig-5-Schuebe.html"
+                />
+
+            </mj-column>
+        </mj-section>
+        <mj-section background-color="#ffffff" padding="0">
+            <mj-column>
+                <mj-image
+                        src="https://www.classei.de/index.php?option=com_joomgallery&amp;view=image&amp;format=raw&amp;id=372&amp;type=img"
+                        alt="Draufsicht der Schublade des Classata Schrankes."
+                        href="https://www.classei-shop.com/Orga-Moebel/Classata-Schraenke-Typ-47/730503-Classata-Schrank-47-3-bahnig-5-Schuebe.html"
+                />
+            </mj-column>
+            <mj-column>
+                <mj-image
+                        src="https://www.classei.de/index.php?option=com_joomgallery&amp;view=image&amp;format=raw&amp;id=371&amp;type=img"
+                        alt="Der Überauszug des Classata Schrankes."
+                        href="https://www.classei-shop.com/Orga-Moebel/Classata-Schraenke-Typ-47/730503-Classata-Schrank-47-3-bahnig-5-Schuebe.html"
+                />
+            </mj-column>
+            <mj-column>
+                <mj-image
+                        src="https://www.classei.de/index.php?option=com_joomgallery&amp;view=image&amp;format=raw&amp;id=369&amp;type=img"
+                        alt="Der Classata Schrank im Büro."
+                        href="https://www.classei-shop.com/Orga-Moebel/Classata-Schraenke-Typ-47/730503-Classata-Schrank-47-3-bahnig-5-Schuebe.html"
+                />
+            </mj-column>
+        </mj-section>
+
+
+        <!-- Products -->
+        {% for product in products %}
+            {% include "classei/email/template/product_shipping_free.mjml" %}
+        {% endfor %}
+
+        <!-- Order form Contact -->
+        {% include "classei/email/template/contact_table.mjml" %}
+
+        <!-- Order form Products -->
+        <mj-section>
+            <mj-column>
+                <mj-table>
+                    {% for product in products %}
+                    {% include "classei/email/template/order_form_product_shipping_free.mjml" %}
+                    {% endfor %}
+                </mj-table>
+            </mj-column>
+        </mj-section>
+
+        <!-- Blog Content -->
+        {% include "classei/email/template/blog_acymailing.mjml" %}
+
+        <!-- Rechtliches -->
+        {% include "classei/email/template/disclaimer.mjml" %}
+    {% endblock %}
+    </mj-body>
+</mjml>

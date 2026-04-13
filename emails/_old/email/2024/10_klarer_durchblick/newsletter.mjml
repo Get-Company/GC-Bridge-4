@@ -1,0 +1,207 @@
+<mjml>
+    <mj-font href=""/>
+    <!-- Head -->
+    <mj-head>
+        <mj-include path="..\..\template\head.mjml"/>
+    </mj-head>
+
+    <!-- Body -->
+    <mj-body>
+        <mj-raw>
+            <!-- Company Header -->
+        </mj-raw>
+
+        <!-- View online -->
+        <mj-include path="..\..\template\view_online.mjml"/>
+
+        <!-- Navigation -->
+        <mj-include path="..\..\template\nav_items_shop.mjml"/>
+
+        <!-- Header-Logo -->
+        <mj-include path="..\..\template\header_logo.mjml"/>
+
+        <!-- Title -->
+        <mj-section padding="20px" background-color="#ffffff">
+            <mj-column>
+                <mj-text>
+                    <h1 align="center" style="color: #ff9933; font-weight:400; line-height:40px">
+                        Immer klaren Durchblick
+                    </h1>
+                    <h1 align="right" style="color: #8a8a8a; font-weight:400; line-height:36px">
+                        <small>
+                            .... für den Büro-Alltag mit Papier
+                        </small>
+                    </h1>
+                </mj-text>
+            </mj-column>
+        </mj-section>
+
+        <!-- Salutation -->
+        <mj-section background-color="#ffffff">
+            <mj-column>
+                <mj-text>
+                    <p>
+                        Hallo
+
+                        {if:anrede~Herr} Herr {/if}
+                        {if:anrede~Frau} Frau {/if}
+                        {subtag:name},
+                    </p>
+                </mj-text>
+            </mj-column>
+            <mj-column>
+                <mj-text align="right">
+                    <p>
+                        Ihre Kunden-Nr.: {subtag:adrnr}
+                    </p>
+                </mj-text>
+            </mj-column>
+        </mj-section>
+
+        <!-- Intro Text -->
+        <mj-section background-color="#ffffff">
+            <mj-column>
+                <mj-text line-height="26px">
+                    <p>
+                        egal ob wirkungsvoll gestaltetes Titelblatt oder ob Sie wichtige Daten auf Ihren Akten sofort
+                        erkennen möchten. Mit transparenten Ordnungs-Mappen in verschiedensten Ausführungen garantiert
+                        Ihnen Classei immer klare Sicht auf die Vorderseite Ihrer Unterlagen.
+                    </p>
+                    <p>
+                        Mehr Transparenz und immer klaren Durchblick - so macht das Arbeiten mit dem Classei-System rund
+                        um den Schreibtisch noch mehr Spaß.
+                    </p>
+                </mj-text>
+            </mj-column>
+        </mj-section>
+
+
+        <!-- Products -->
+        {% for product in products %}
+            {% include "classei/email/template/product.mjml" %}
+        {% endfor %}
+
+        <!-- Order form Contact -->
+        <mj-include path="..\..\template\contact_table.mjml"/>
+
+        <!-- Order form Products -->
+        <mj-wrapper padding="0px">
+            <mj-section css-class="section_white" padding="0px" background-color="#ffffff">
+                <mj-column>
+                    <mj-table css-class="contact_table">
+                        {% for product in products %}
+                        <tr>
+                            <td width="10%">__x</td>
+                            <td width="45%" style="color: #ff9933; font-weight: bold; font-size: 12px; line-height:1">
+                                {{product.name}}
+                            </td>
+                            <td width="45%" class="ct_text">
+                                <mj-text align="left" padding="0px">
+                                    <p style="font-size: 14px;">
+                                        Listenpreis
+                                        {% if product.price_rebate %}
+                                        ab: {{ "%.2f"|format( product.prices.price_rebate)|replace('.', ',') }}
+                                        {% else %}
+                                        {{ "%.2f"|format( product.prices.price)|replace('.', ',') }}
+                                        {% endif %}
+                                        € netto:
+                                        <br/>
+                                        pro
+                                        {% if product.factor > 0 %}
+                                        {{ product.factor }} St.
+                                        {% else %}
+                                        {{ product.unit|default('St.') }}
+                                        {% endif %}
+                                        <br/>
+
+                                        <!-- Versandkosten ? -->
+                                        {% if not product.factor and product.prices.price >= 99 %}
+                                        - kostenloser Versand - zuzgl. Ust. -
+                                        <br/>
+                                        {% else %}
+                                        - zuzgl. Versandkosten - zuzgl. Ust. -
+                                        {% endif %}
+                                    </p>
+                                </mj-text>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </mj-table>
+                </mj-column>
+            </mj-section>
+        </mj-wrapper>
+
+
+        <mj-wrapper>
+        <mj-section css-class="section_white" padding="0px" background-color="#ffffff">
+            <!-- Blog Content -->
+            <mj-column>
+                {autocontent:25-| max:1|
+                order:created,DESC|
+                type:intro|link|author| pict:resized|
+                maxwidth:150|
+                maxheight:150| invert| format:TOP_LEFT|
+                template:tagcontent.php}
+            </mj-column>
+        </mj-section>
+
+        <!-- Rechtliches -->
+        <mj-section css-class="section_white" paading="0px" background-color="#ffffff">
+            <mj-column>
+                <mj-text font-size="12px" line-height="16px">
+                    <!-- Terms -->
+                    <p>
+
+                        * Versandkostenfrei ab Warenwert
+                        99,00 € netto. Warenwert
+                        unter 99,00 € netto Versandkosten
+                        5,95 € netto.&nbsp;
+
+                        |
+                        <a style="text-decoration: None; color: #ff9933"
+                           href="https://www.classei-shop.com/Versandinformationen?sPartner=email"
+                           target="_blank">Nähere Infos zu
+                            Versandkosten&nbsp;
+                        </a>
+
+
+                    </p>
+
+
+                    <!-- Impressum -->
+                    <p>
+                        Classei-Organisation - Egon Heimann
+                        GmbH | Staudacher Str. 7e | 83250
+                        Marquartstein | Deutschland<br>Fon:
+                        +49
+                        (0)8641 97 59 0 |
+                        Fax +49 (0)8641 97 59 20 | E-Mail:
+                        <a style="text-decoration: None; color: #ff9933" href="mailto:info@classei.de">
+                            Info
+                        </a>
+                        // Internet:
+                        <a href="https://www.classei.de">Classei.de</a>
+                    </p>
+
+
+                    <!-- Unsubscribe -->
+                    <p>
+                        Sie erhalten diese E-Mail, weil Sie
+                        unser Kunde/Interessent sind oder
+                        wir schon Kontakt hatten. Wenn Sie
+                        keine
+                        Informationen mehr erhalten möchten,
+                        welche wir relativ selten
+                        verschicken, tragen Sie sich bitte
+                        <span>
+                            {modify}hier{/modify}
+                        </span>
+                        aus.
+                    </p>
+                </mj-text>
+            </mj-column>
+        </mj-section>
+        </mj-wrapper>
+
+    </mj-body>
+</mjml>

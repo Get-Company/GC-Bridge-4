@@ -1,0 +1,103 @@
+<mjml>
+    <mj-head>
+        {% include "classei/email/template/head.mjml" %}
+    </mj-head>
+
+    <!-- Body -->
+    <mj-body>
+        {% block body %}
+        <mj-raw>
+            <!-- Company Header -->
+        </mj-raw>
+
+        <!-- View online -->
+        {% include "classei/email/template/view_online.mjml" %}
+
+        <!-- Navigation -->
+        {% include "classei/email/template/nav_items_shop.mjml" %}
+
+        <!-- Header-Logo -->
+        {% include "classei/email/template/header_logo.mjml" %}
+
+        <!-- Title -->
+        {% with
+        h1="Classei Akten transportieren",
+        h1_small="...einfach, praktisch und funktionell"
+        %}
+        {% include "classei/email/template/title_txt.mjml" %}
+        {% endwith %}
+
+        <!-- Salutation -->
+        {% include "classei/email/template/salutation.mjml" %}
+
+        <!-- Intro -->
+        <mj-section>
+            <mj-column>
+                <mj-text>
+                    <p>
+                        möchten Sie Ihre Akten zu Besprechungen, Kundenbesuchen oder Vorträgen sicher verstaut mitnehmen? Kein Problem –
+                        auch hier bietet Classei eine Vielfalt von Transportmöglichkeiten. Angefangen von der <span class="orange">neuen, eleganten
+                        Leder/Nylon-Aktentasche</span> bis hin zum Konferenz-Koffer, in dem eine komplett gefüllte Orga-Box und Notebook oder
+                        Tablet Platz finden.
+                    </p>
+                </mj-text>
+            </mj-column>
+        </mj-section>
+
+        <mj-wrapper padding="20px 0 0 0">
+            <!-- Subheader ZPM -->
+            {% with subheader="Aktentaschen" %}
+            {% include "classei/email/template/subheader.mjml" %}
+            {% endwith %}
+        </mj-wrapper>
+
+        <!-- Products -->
+        {% with product=products[0] %}
+        {% include "classei/email/template/product.mjml" %}
+        {% endwith %}
+
+        {% with product=products[1] %}
+        {% include "classei/email/template/product.mjml" %}
+        {% endwith %}
+
+        {% with product=products[2] %}
+        {% include "classei/email/template/product.mjml" %}
+        {% endwith %}
+
+        <mj-wrapper padding="20px 0 0 0">
+            <!-- Subheader ZPM -->
+            {% with subheader="GO-Koffer" %}
+            {% include "classei/email/template/subheader.mjml" %}
+            {% endwith %}
+        </mj-wrapper>
+
+        {% with product=products[3] %}
+        {% include "classei/email/template/product.mjml" %}
+        {% endwith %}
+
+        {% with product=products[4] %}
+        {% include "classei/email/template/product.mjml" %}
+        {% endwith %}
+
+        <!-- Order form Contact -->
+        {% include "classei/email/template/contact_table.mjml" %}
+
+        <!-- Order form Products -->
+        <mj-section>
+            <mj-column padding="0">
+                <mj-table padding="0">
+                    {% for product in products %}
+                    {% include "classei/email/template/order_form_product.mjml" %}
+                    {% endfor %}
+                </mj-table>
+            </mj-column>
+        </mj-section>
+
+        <!-- Blog Content -->
+        {% include "classei/email/template/blog_acymailing.mjml" %}
+
+        <!-- Rechtliches -->
+        {% include "classei/email/template/disclaimer.mjml" %}
+        {% endblock %}
+    </mj-body>
+</mjml>
