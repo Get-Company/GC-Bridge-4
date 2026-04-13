@@ -399,6 +399,11 @@ UNFOLD = {
                         "icon": "mail",
                         "link": reverse_lazy("admin:emails_email_changelist"),
                     },
+                    {
+                        "title": _("Abschnitte"),
+                        "icon": "segment",
+                        "link": reverse_lazy("admin:emails_emailsection_changelist"),
+                    },
                 ],
             },
             {

@@ -13,7 +13,7 @@ from unfold.admin import StackedInline as UnfoldStackedInline
 from .models import Email, EmailSection, EmailSectionProduct
 
 
-class EmailSectionInline(UnfoldStackedInline):
+class EmailSectionInline(UnfoldTabularInline):
     model = EmailSection
     extra = 1
     fields = ("header", "position")
@@ -24,20 +24,20 @@ class EmailSectionInline(UnfoldStackedInline):
 class EmailSectionProductInline(UnfoldTabularInline):
     model = EmailSectionProduct
     extra = 1
-    fields = ("section", "product", "special_percentage", "special_price")
+    fields = ("product", "special_percentage", "special_price", "position")
     readonly_fields = ("special_price",)
     autocomplete_fields = ("product",)
-    ordering = ("section__position", "position")
+    ordering = ("position",)
     tab = True
 
-    def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        if db_field.name == "section":
-            object_id = request.resolver_match.kwargs.get("object_id")
-            if object_id:
-                kwargs["queryset"] = EmailSection.objects.filter(email_id=object_id).order_by("position")
-            else:
-                kwargs["queryset"] = EmailSection.objects.none()
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+@admin.register(EmailSection)
+class EmailSectionAdmin(UnfoldModelAdmin):
+    list_display = ("__str__", "email", "position")
+    list_filter = ("email",)
+    search_fields = ("header", "email__name")
+    fields = ("email", "header", "position")
+    inlines = [EmailSectionProductInline]
 
 
 @admin.register(Email)
@@ -49,7 +49,7 @@ class EmailAdmin(UnfoldModelAdmin):
     search_fields = ("name", "subject")
     fields = ("name", "subject", "introduction", "render_mjml_button", "html_display")
     readonly_fields = ("created_at", "updated_at", "render_mjml_button", "html_display")
-    inlines = [EmailSectionInline, EmailSectionProductInline]
+    inlines = [EmailSectionInline]
 
     def get_urls(self):
         urls = super().get_urls()
