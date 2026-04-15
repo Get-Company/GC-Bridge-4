@@ -437,6 +437,70 @@ class LegacyProductPropertyImportCommandTest(TestCase):
         self.assertEqual(value.group, group)
         self.assertEqual(link.external_key, "legacy-product-property:1001")
 
+    def test_import_fills_missing_name_en_with_base_name_to_avoid_unique_conflicts(self):
+        second_product = Product.objects.create(erp_nr="581002", name="Quick-Tabs rot")
+        command = ImportLegacyProductPropertiesCommand()
+
+        with TemporaryDirectory() as temp_dir:
+            sqlite_path = Path(temp_dir) / "legacy.sqlite3"
+            connection = sqlite3.connect(sqlite_path)
+            try:
+                connection.executescript(
+                    """
+                    CREATE TABLE products_product (
+                        id INTEGER PRIMARY KEY,
+                        erp_nr TEXT NOT NULL
+                    );
+                    CREATE TABLE products_propertygroup (
+                        id INTEGER PRIMARY KEY,
+                        name TEXT,
+                        name_de TEXT,
+                        name_en TEXT
+                    );
+                    CREATE TABLE products_propertyvalue (
+                        id INTEGER PRIMARY KEY,
+                        name TEXT,
+                        name_de TEXT,
+                        name_en TEXT,
+                        group_id INTEGER NOT NULL
+                    );
+                    CREATE TABLE products_productproperty (
+                        id INTEGER PRIMARY KEY,
+                        product_id INTEGER NOT NULL,
+                        value_id INTEGER NOT NULL
+                    );
+                    INSERT INTO products_product (id, erp_nr) VALUES (1, '581001');
+                    INSERT INTO products_product (id, erp_nr) VALUES (2, '581002');
+                    INSERT INTO products_propertygroup (id, name, name_de, name_en) VALUES (11, 'Farbe', 'Farbe', '');
+                    INSERT INTO products_propertyvalue (id, name, name_de, name_en, group_id)
+                    VALUES (201, 'Gelb', 'Gelb', '', 11);
+                    INSERT INTO products_propertyvalue (id, name, name_de, name_en, group_id)
+                    VALUES (202, 'Rot', 'Rot', '', 11);
+                    INSERT INTO products_productproperty (id, product_id, value_id) VALUES (2001, 1, 201);
+                    INSERT INTO products_productproperty (id, product_id, value_id) VALUES (2002, 2, 202);
+                    """
+                )
+                connection.commit()
+            finally:
+                connection.close()
+
+            command.handle(
+                sqlite_path=str(sqlite_path),
+                dump_path="",
+                rebuild_sqlite=False,
+                erp_nrs=[],
+                replace_product_properties=False,
+            )
+
+        imported_values = list(
+            PropertyValue.objects.filter(group__external_key="legacy-property-group:11").order_by("external_key")
+        )
+
+        self.assertEqual([value.name for value in imported_values], ["Gelb", "Rot"])
+        self.assertEqual([value.name_en for value in imported_values], ["Gelb", "Rot"])
+        self.assertTrue(ProductProperty.objects.filter(product=self.product, value=imported_values[0]).exists())
+        self.assertTrue(ProductProperty.objects.filter(product=second_product, value=imported_values[1]).exists())
+
     def test_replace_product_properties_resets_existing_assignments_for_target_products(self):
         manual_group = PropertyGroup.objects.create(name="Manuell", name_de="Manuell")
         manual_value = PropertyValue.objects.create(group=manual_group, name="Alt", name_de="Alt")

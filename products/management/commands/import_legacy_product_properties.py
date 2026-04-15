@@ -179,11 +179,17 @@ class Command(BaseCommand):
 
     @staticmethod
     def _build_name_defaults(*, row: sqlite3.Row, field_prefix: str) -> dict[str, str]:
-        base_name = str(row[f"{field_prefix}_name_de"] or row[f"{field_prefix}_name"] or row[f"{field_prefix}_name_en"] or "").strip()
-        name_en = str(row[f"{field_prefix}_name_en"] or "").strip()
+        base_name = str(
+            row[f"{field_prefix}_name_de"]
+            or row[f"{field_prefix}_name"]
+            or row[f"{field_prefix}_name_en"]
+            or ""
+        ).strip()
+        name_de = str(row[f"{field_prefix}_name_de"] or base_name or "").strip()
+        name_en = str(row[f"{field_prefix}_name_en"] or base_name or "").strip()
         defaults = {
             "name": base_name,
-            "name_de": str(row[f"{field_prefix}_name_de"] or base_name or "").strip(),
+            "name_de": name_de,
             "name_en": name_en,
         }
         return defaults
