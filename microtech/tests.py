@@ -1,3 +1,4 @@
+from datetime import timedelta
 from decimal import Decimal
 from unittest import skipIf
 from unittest.mock import MagicMock
@@ -13,7 +14,7 @@ try:
     from microtech.services.queue import MicrotechQueueService
 except ModuleNotFoundError:  # pragma: no cover - legacy test import compatibility
     MicrotechQueueService = None
-from products.models import Product, ProductImage, Tax
+from products.models import Price, Product, ProductImage, Tax
 from shopware.models import ShopwareSettings
 
 
@@ -113,6 +114,31 @@ class MicrotechSyncProductsCommandTest(TestCase):
             ["second.png", "first.jpg"],
         )
         self.assertEqual([image.path for image in product.get_images()], ["second.png", "first.jpg"])
+
+    def test_sync_preserves_microtech_special_price_without_percentage(self):
+        cmd = MicrotechSyncProductsCommand()
+        artikel_service = self._build_artikel_service(erp_nr="1002", is_active=True)
+        artikel_service.get_price.return_value = Decimal("100.00")
+        artikel_service.get_special_price.return_value = Decimal("79.95")
+        artikel_service.get_special_start_date.return_value = timezone.now() - timedelta(days=2)
+        artikel_service.get_special_end_date.return_value = timezone.now() + timedelta(days=2)
+
+        cmd._sync_current_record(
+            artikel_service,
+            self._build_lager_service(),
+            tax_map={
+                Decimal("19.00"): self.tax_19,
+                Decimal("7.00"): self.tax_7,
+            },
+            preserve_is_active=False,
+        )
+
+        product = Product.objects.get(erp_nr="1002")
+        price = Price.objects.get(product=product, sales_channel__is_default=True)
+
+        self.assertIsNone(price.special_percentage)
+        self.assertEqual(price.special_price, Decimal("79.95"))
+        self.assertTrue(price.is_special_active)
 
 
 class MicrotechArtikelServiceTaxTest(TestCase):

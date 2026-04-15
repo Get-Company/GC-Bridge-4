@@ -373,7 +373,7 @@ class Price(BaseModel):
                     year=year, month=next_month, day=last_day,
                     hour=23, minute=59, second=59, microsecond=0,
                 )
-        elif not self.special_percentage:
+        elif self.special_price is None:
             self.special_price = None
             self.special_start_date = None
             self.special_end_date = None
