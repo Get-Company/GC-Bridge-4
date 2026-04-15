@@ -239,7 +239,7 @@ class ProductImage(BaseModel):
         related_name="product_images",
         verbose_name=_("Bild"),
     )
-    order = models.PositiveIntegerField(default=1, verbose_name=_("Reihenfolge"))
+    order = models.PositiveIntegerField(default=1, db_index=True, verbose_name=_("Reihenfolge"))
 
     class Meta:
         verbose_name = _("Produktbild")

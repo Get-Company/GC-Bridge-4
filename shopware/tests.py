@@ -206,6 +206,22 @@ class ProductMediaSyncHashRegressionTest(TestCase):
 
         self.assertNotEqual(first_hash, second_hash)
 
+    def test_media_payload_follows_product_image_order(self):
+        product = Product.objects.create(erp_nr="A-6003", sku="shopware-product-6003", name="Payload Reihenfolge")
+        later = Image.objects.create(path="later.jpg")
+        first = Image.objects.create(path="first.jpg")
+        ProductImage.objects.create(product=product, image=later, order=2)
+        ProductImage.objects.create(product=product, image=first, order=1)
+
+        media_relations, media_entities, media_uploads = ProductMediaSyncService().get_product_media_payload(
+            product=product,
+            product_id="shopware-product-6003",
+        )
+
+        self.assertEqual([relation["position"] for relation in media_relations], [1, 2])
+        self.assertEqual([upload["file_name"] for upload in media_uploads], ["first.jpg", "later.jpg"])
+        self.assertEqual(len(media_entities), 2)
+
 
 class ShopwareSyncProductsCommandBatchTest(TestCase):
     @patch("shopware.management.commands.shopware_sync_products.CommandRuntimeService.start")

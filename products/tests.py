@@ -325,6 +325,8 @@ class ProductImageAdminAndSyncTest(TestCase):
     def test_product_admin_uses_product_image_inline_and_hides_legacy_images_field(self):
         self.assertIn(ProductImageInline, ProductAdmin.inlines)
         self.assertEqual(ProductAdmin.exclude, ("images",))
+        self.assertEqual(ProductImageInline.ordering_field, "order")
+        self.assertTrue(ProductImageInline.hide_ordering_field)
 
     def test_product_admin_uses_product_property_inline(self):
         self.assertIn(ProductPropertyInline, ProductAdmin.inlines)
