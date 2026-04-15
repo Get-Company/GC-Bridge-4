@@ -39,6 +39,60 @@ class Shopware6ServiceTokenRetryTest(SimpleTestCase):
 
 
 class ProductMediaSyncServiceTest(SimpleTestCase):
+    @patch.object(ProductService, "request_post")
+    def test_get_sku_map_reads_product_number_from_top_level_response(self, mock_request_post):
+        service = ProductService.__new__(ProductService)
+        service.search_path = "/search/product"
+        mock_request_post.return_value = {
+            "data": [
+                {
+                    "id": "shopware-product-900001",
+                    "productNumber": "900001",
+                }
+            ]
+        }
+
+        result = ProductService.get_sku_map(service, ["900001"])
+
+        self.assertEqual(result, {"900001": "shopware-product-900001"})
+        mock_request_post.assert_called_once_with(
+            "/search/product",
+            payload={
+                "filter": [
+                    {
+                        "type": "equalsAny",
+                        "field": "productNumber",
+                        "value": "900001",
+                    }
+                ],
+                "limit": 1,
+            },
+        )
+
+    @patch.object(ProductService, "get_by_number")
+    @patch.object(ProductService, "request_post")
+    def test_get_sku_map_retries_missing_product_numbers_with_single_lookup(
+        self,
+        mock_request_post,
+        mock_get_by_number,
+    ):
+        service = ProductService.__new__(ProductService)
+        service.search_path = "/search/product"
+        mock_request_post.return_value = {"data": []}
+        mock_get_by_number.return_value = {
+            "data": [
+                {
+                    "id": "shopware-product-900002",
+                    "productNumber": "900002",
+                }
+            ]
+        }
+
+        result = ProductService.get_sku_map(service, ["900002"])
+
+        self.assertEqual(result, {"900002": "shopware-product-900002"})
+        mock_get_by_number.assert_called_once_with("900002", limit=1)
+
     def test_split_file_name_extracts_base_name_and_extension(self):
         base_name, extension = ProductMediaSyncService.split_file_name("produkt-bild.JPEG")
 

@@ -38,27 +38,35 @@ class ProductService(Shopware6Service):
         return self.request_post(self.search_path, payload=criteria)
 
     def get_sku_map(self, product_numbers: list[str]) -> dict[str, str]:
-        if not product_numbers:
+        normalized_numbers = sorted({str(value).strip() for value in (product_numbers or []) if str(value).strip()})
+        if not normalized_numbers:
             return {}
         criteria = {
             "filter": [
                 {
                     "type": "equalsAny",
                     "field": "productNumber",
-                    "value": "|".join(product_numbers),
+                    "value": "|".join(normalized_numbers),
                 }
             ],
-            "limit": len(product_numbers),
+            "limit": len(normalized_numbers),
         }
         result = self.request_post(self.search_path, payload=criteria)
-        mapping: dict[str, str] = {}
-        for item in (result or {}).get("data", []):
-            attrs = item.get("attributes") or {}
-            product_number = attrs.get("productNumber")
-            sku = item.get("id")
-            if product_number and sku:
-                mapping[product_number] = sku
+        mapping = self._extract_sku_map(result)
+        missing_numbers = [product_number for product_number in normalized_numbers if product_number not in mapping]
+        for product_number in missing_numbers:
+            resolved_sku = self.find_sku_by_number(product_number)
+            if resolved_sku:
+                mapping[product_number] = resolved_sku
         return mapping
+
+    def find_sku_by_number(self, product_number: str) -> str:
+        product_number = str(product_number).strip()
+        if not product_number:
+            return ""
+        result = self.get_by_number(product_number, limit=1)
+        mapping = self._extract_sku_map(result)
+        return mapping.get(product_number, "")
 
     def bulk_upsert(self, payload: list[dict], *, entity_name: str = "product") -> Any:
         if not payload:
@@ -276,6 +284,28 @@ class ProductService(Shopware6Service):
         if isinstance(attributes, dict) and attributes.get("id"):
             return str(attributes["id"]).strip()
         return ""
+
+    @classmethod
+    def _extract_product_number(cls, row: dict[str, Any]) -> str:
+        if not isinstance(row, dict):
+            return ""
+        product_number = row.get("productNumber")
+        if product_number:
+            return str(product_number).strip()
+        attributes = row.get("attributes") or {}
+        if isinstance(attributes, dict) and attributes.get("productNumber"):
+            return str(attributes["productNumber"]).strip()
+        return ""
+
+    @classmethod
+    def _extract_sku_map(cls, result: Any) -> dict[str, str]:
+        mapping: dict[str, str] = {}
+        for item in (result or {}).get("data", []):
+            product_number = cls._extract_product_number(item)
+            sku = cls._entity_id(item)
+            if product_number and sku:
+                mapping[product_number] = sku
+        return mapping
 
     @staticmethod
     def _is_duplicate_media_filename_error(exc: Exception) -> bool:
