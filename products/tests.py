@@ -1,6 +1,7 @@
 from pathlib import Path
 from datetime import timedelta
 from decimal import Decimal
+from urllib.parse import parse_qs, urlparse
 from unittest.mock import call, patch
 
 from django.contrib import messages
@@ -150,8 +151,28 @@ class ProductAdminSpecialPriceActionTest(TestCase):
         mock_call_command.assert_called_once_with("shopware_sync_products", self.product.erp_nr)
         mock_log.assert_called_once()
         self.assertEqual(len(sent_messages), 1)
-        self.assertIn("Sync fehlgeschlagen: kaputt", sent_messages[0][0])
+        self.assertIn("1 Produkt(e) mit Fehlern: kaputt", sent_messages[0][0])
         self.assertEqual(sent_messages[0][1], messages.ERROR)
+
+    def test_open_ai_description_rewrite_detail_redirects_to_ai_request(self):
+        request = self.factory.post("/admin/products/product/")
+        request.user = self.user
+
+        response = ProductAdmin(Product, AdminSite()).open_ai_description_rewrite_detail(request, str(self.product.pk))
+
+        query = parse_qs(urlparse(response.url).query)
+        self.assertEqual(query["product"], [str(self.product.pk)])
+        self.assertEqual(query["target_field"], ["description_de"])
+
+    def test_open_ai_short_description_rewrite_detail_redirects_to_ai_request(self):
+        request = self.factory.post("/admin/products/product/")
+        request.user = self.user
+
+        response = ProductAdmin(Product, AdminSite()).open_ai_short_description_rewrite_detail(request, str(self.product.pk))
+
+        query = parse_qs(urlparse(response.url).query)
+        self.assertEqual(query["product"], [str(self.product.pk)])
+        self.assertEqual(query["target_field"], ["description_short_de"])
 
 
 class ScheduledProductSyncCommandTest(TestCase):

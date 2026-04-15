@@ -115,6 +115,7 @@ class Command(BaseCommand):
                         "source_field": source_field,
                         "target_field": target_field,
                         "status": status,
+                        "is_archived": status == AIRewriteJob.Status.APPLIED,
                         "source_snapshot": source_snapshot,
                         "rendered_prompt": str(row["rendered_prompt"] or ""),
                         "result_text": result_text,

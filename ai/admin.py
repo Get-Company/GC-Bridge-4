@@ -1,13 +1,72 @@
 from __future__ import annotations
 
+from django import forms
 from django.contrib import admin, messages
-from django.urls import NoReverseMatch, reverse
+from django.http import HttpResponseRedirect
+from django.template.response import TemplateResponse
+from django.urls import NoReverseMatch, path, reverse
 from django.utils.html import format_html
+from unfold.decorators import action
 
 from core.admin import BaseAdmin
 
 from ai.models import AIProviderConfig, AIRewriteJob, AIRewritePrompt
-from ai.services import AIRewriteApplyService
+from ai.services import AIRewriteApplyService, AIRewriteService
+from products.models import Product
+
+
+class ProductChoiceField(forms.ModelChoiceField):
+    def label_from_instance(self, obj: Product) -> str:
+        return f"{obj.erp_nr} · {obj.name}"
+
+
+class PromptChoiceField(forms.ModelChoiceField):
+    def label_from_instance(self, obj: AIRewritePrompt) -> str:
+        return f"{obj.name} · {obj.target_field} · {obj.provider.name}"
+
+
+class AIRewriteJobRequestForm(forms.Form):
+    product = ProductChoiceField(
+        label="Produkt",
+        queryset=Product.objects.order_by("erp_nr"),
+    )
+    target_field = forms.ChoiceField(
+        label="Zielfeld",
+        choices=(),
+    )
+    prompt = PromptChoiceField(
+        label="Prompt",
+        queryset=AIRewritePrompt.objects.none(),
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        prompt_queryset = self._get_product_prompt_queryset()
+        target_fields = list(prompt_queryset.values_list("target_field", flat=True).distinct())
+        self.fields["target_field"].choices = [(field_name, field_name) for field_name in target_fields]
+
+        target_field = self.data.get("target_field") or self.initial.get("target_field") or ""
+        if target_field:
+            prompt_queryset = prompt_queryset.filter(target_field=target_field)
+        self.fields["prompt"].queryset = prompt_queryset
+
+    def clean(self):
+        cleaned_data = super().clean()
+        prompt = cleaned_data.get("prompt")
+        target_field = cleaned_data.get("target_field")
+        if prompt is None or not target_field:
+            return cleaned_data
+        if prompt.target_field != target_field:
+            self.add_error("prompt", "Der Prompt passt nicht zum ausgewaehlten Zielfeld.")
+        return cleaned_data
+
+    @staticmethod
+    def _get_product_prompt_queryset():
+        return AIRewritePrompt.objects.filter(
+            is_active=True,
+            content_type__app_label="products",
+            content_type__model="product",
+        ).select_related("provider").order_by("target_field", "name")
 
 
 @admin.register(AIProviderConfig)
@@ -33,28 +92,37 @@ class AIRewritePromptAdmin(BaseAdmin):
 @admin.register(AIRewriteJob)
 class AIRewriteJobAdmin(BaseAdmin):
     list_display = (
-        "target_object_link",
+        "job_label",
+        "product_link",
         "target_field",
         "prompt",
         "status",
+        "is_archived",
         "requested_by",
         "approved_by",
         "created_at",
     )
+    list_display_links = ("job_label",)
     search_fields = ("object_repr", "source_field", "target_field", "prompt__name", "result_text")
-    list_filter = ("status", "prompt", "provider", "content_type", "created_at")
+    list_filter = ("status", "is_archived", "prompt", "provider", "content_type", "created_at")
     actions = ("approve_selected", "approve_and_apply_selected", "reject_selected")
+    actions_detail = ("apply_rewrite_detail",)
     readonly_fields = BaseAdmin.readonly_fields + (
+        "job_label",
         "target_object_link",
         "source_preview",
+        "current_target_preview",
         "result_preview",
+        "comparison_preview",
     )
     fieldsets = (
         (
             None,
             {
                 "fields": (
+                    "job_label",
                     "status",
+                    "is_archived",
                     "target_object_link",
                     "prompt",
                     "provider",
@@ -68,21 +136,23 @@ class AIRewriteJobAdmin(BaseAdmin):
             },
         ),
         (
-            "Inhalt",
+            "Freigabe",
             {
                 "fields": (
-                    "source_preview",
+                    "comparison_preview",
+                    "current_target_preview",
                     "result_text",
-                    "result_preview",
-                    "rendered_prompt",
-                    "error_message",
                 )
             },
         ),
         (
-            "Technisch",
+            "Kontext",
             {
                 "fields": (
+                    "source_preview",
+                    "result_preview",
+                    "rendered_prompt",
+                    "error_message",
                     "content_type",
                     "object_id",
                     "object_repr",
@@ -92,6 +162,60 @@ class AIRewriteJobAdmin(BaseAdmin):
             },
         ),
     )
+
+    def get_urls(self):
+        return [
+            path(
+                "request/",
+                self.admin_site.admin_view(self.request_rewrite_view),
+                name="ai_airewritejob_request",
+            ),
+        ] + super().get_urls()
+
+    def request_rewrite_view(self, request):
+        initial = {
+            "product": request.GET.get("product", ""),
+            "target_field": request.GET.get("target_field", ""),
+        }
+        form = AIRewriteJobRequestForm(request.POST or None, initial=initial)
+        if request.method == "POST" and form.is_valid():
+            job = AIRewriteService().request_rewrite(
+                content_object=form.cleaned_data["product"],
+                prompt=form.cleaned_data["prompt"],
+                requested_by=request.user,
+            )
+            if job.status == AIRewriteJob.Status.FAILED:
+                self.message_user(
+                    request,
+                    f"Rewrite fehlgeschlagen: {job.error_message}",
+                    level=messages.ERROR,
+                )
+            else:
+                self.message_user(
+                    request,
+                    f"Rewrite-Job fuer {job.object_repr} / {job.target_field} erzeugt.",
+                )
+            change_url = reverse("admin:ai_airewritejob_change", args=(job.pk,))
+            return HttpResponseRedirect(change_url)
+
+        context = {
+            **self.admin_site.each_context(request),
+            "opts": self.model._meta,
+            "title": "AI Rewrite erzeugen",
+            "subtitle": "Produkt und feldgebundenen Prompt auswaehlen",
+            "form": form,
+            "media": self.media + form.media,
+            "changelist_url": reverse("admin:ai_airewritejob_changelist"),
+        }
+        return TemplateResponse(request, "admin/ai/rewrite_job_request.html", context)
+
+    @admin.display(description="Rewrite-Job")
+    def job_label(self, obj: AIRewriteJob):
+        return f"#{obj.pk} · {obj.object_repr or obj.content_type} · {obj.target_field}"
+
+    @admin.display(description="Produkt")
+    def product_link(self, obj: AIRewriteJob):
+        return self.target_object_link(obj)
 
     @admin.display(description="Objekt")
     def target_object_link(self, obj: AIRewriteJob):
@@ -112,12 +236,63 @@ class AIRewriteJobAdmin(BaseAdmin):
             obj.source_snapshot or "",
         )
 
+    @admin.display(description="Aktueller Feldinhalt")
+    def current_target_preview(self, obj: AIRewriteJob):
+        value = ""
+        if obj.content_object is not None and hasattr(obj.content_object, obj.target_field):
+            current_value = getattr(obj.content_object, obj.target_field, "")
+            value = "" if current_value is None else str(current_value)
+        return format_html(
+            '<div style="max-width: 1000px; white-space: pre-wrap;">{}</div>',
+            value,
+        )
+
     @admin.display(description="Ergebnis-Vorschau")
     def result_preview(self, obj: AIRewriteJob):
         return format_html(
             '<div style="max-width: 1000px; white-space: pre-wrap;">{}</div>',
             obj.result_text or "",
         )
+
+    @admin.display(description="Vergleich")
+    def comparison_preview(self, obj: AIRewriteJob):
+        current_value = ""
+        if obj.content_object is not None and hasattr(obj.content_object, obj.target_field):
+            current_raw = getattr(obj.content_object, obj.target_field, "")
+            current_value = "" if current_raw is None else str(current_raw)
+        return format_html(
+            """
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:1400px;">
+              <div style="border:1px solid #d1d5db;border-radius:8px;padding:12px;">
+                <div style="font-weight:600;margin-bottom:8px;">Aktueller Feldinhalt</div>
+                <div style="white-space:pre-wrap;">{}</div>
+              </div>
+              <div style="border:1px solid #d1d5db;border-radius:8px;padding:12px;">
+                <div style="font-weight:600;margin-bottom:8px;">Neuer Text</div>
+                <div style="white-space:pre-wrap;">{}</div>
+              </div>
+            </div>
+            """,
+            current_value,
+            obj.result_text or "",
+        )
+
+    @action(
+        description="Text uebernehmen",
+        icon="task_alt",
+    )
+    def apply_rewrite_detail(self, request, object_id: str):
+        job = self.get_object(request, object_id)
+        if not job:
+            self.message_user(request, "Rewrite-Job nicht gefunden.", level=messages.ERROR)
+            return HttpResponseRedirect(reverse("admin:ai_airewritejob_changelist"))
+        try:
+            AIRewriteApplyService().apply(job=job, approved_by=request.user)
+        except Exception as exc:
+            self.message_user(request, f"Rewrite konnte nicht uebernommen werden: {exc}", level=messages.ERROR)
+        else:
+            self.message_user(request, "Rewrite wurde in das Zielfeld uebernommen und archiviert.")
+        return HttpResponseRedirect(reverse("admin:ai_airewritejob_change", args=(job.pk,)))
 
     @admin.action(description="Freigeben")
     def approve_selected(self, request, queryset):
@@ -158,3 +333,7 @@ class AIRewriteJobAdmin(BaseAdmin):
             updated += 1
         self.message_user(request, f"{updated} Rewrite-Job(s) abgelehnt.")
 
+    @admin.display(description="Neuer Job")
+    def request_link(self):
+        url = reverse("admin:ai_airewritejob_request")
+        return format_html('<a class="button" href="{}">AI Rewrite erzeugen</a>', url)

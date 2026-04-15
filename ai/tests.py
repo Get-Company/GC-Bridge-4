@@ -2,11 +2,19 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
+from django.contrib.admin.sites import AdminSite
+from django.contrib.auth import get_user_model
+from django.contrib.contenttypes.models import ContentType
 from django.core.management.base import CommandError
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, TestCase
+from django.urls import reverse
 
+from ai.admin import AIRewriteJobAdmin, AIRewriteJobRequestForm
+from ai.models import AIProviderConfig, AIRewriteJob, AIRewritePrompt
 from ai.management.commands.import_legacy_ai_rewrites import Command as ImportLegacyAIRewritesCommand
+from ai.services import AIRewriteApplyService
 from ai.services.provider import AIProviderService
+from products.models import Product
 
 
 class AIProviderServiceTest(SimpleTestCase):
@@ -108,3 +116,81 @@ class ImportLegacyAIRewritesCommandTest(SimpleTestCase):
                     dump_path_value="",
                     rebuild_sqlite=False,
                 )
+
+
+class AIRewriteJobAdminTest(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_superuser(
+            username="ai-admin",
+            email="ai-admin@example.com",
+            password="pass",
+        )
+        self.product = Product.objects.create(
+            erp_nr="581001",
+            name="Rewrite Produkt",
+            description_de="<p>Aktueller Inhalt</p>",
+            description_short_de="<p>Kurz aktuell</p>",
+        )
+        self.provider = AIProviderConfig.objects.create(
+            name="Test Provider",
+            model_name="gpt-5-mini",
+        )
+        self.prompt = AIRewritePrompt.objects.create(
+            name="Beschreibung SEO",
+            provider=self.provider,
+            content_type=ContentType.objects.get_for_model(Product),
+            source_field="description_de",
+            target_field="description_de",
+            system_prompt="Bitte umschreiben",
+        )
+        self.short_prompt = AIRewritePrompt.objects.create(
+            name="Kurzbeschreibung",
+            provider=self.provider,
+            content_type=ContentType.objects.get_for_model(Product),
+            source_field="description_short_de",
+            target_field="description_short_de",
+            system_prompt="Bitte kurz umschreiben",
+        )
+        self.job = AIRewriteJob.objects.create(
+            content_type=ContentType.objects.get_for_model(Product),
+            object_id=self.product.pk,
+            object_repr=str(self.product),
+            prompt=self.prompt,
+            provider=self.provider,
+            source_field="description_de",
+            target_field="description_de",
+            source_snapshot="<p>Alter Inhalt</p>",
+            result_text="<p>Neuer Inhalt</p>",
+            requested_by=self.user,
+            status=AIRewriteJob.Status.PENDING_REVIEW,
+        )
+        self.admin_instance = AIRewriteJobAdmin(AIRewriteJob, AdminSite())
+
+    def test_request_form_filters_prompts_by_target_field(self):
+        form = AIRewriteJobRequestForm(initial={"target_field": "description_de"})
+
+        self.assertEqual(list(form.fields["prompt"].queryset), [self.prompt])
+
+    def test_job_list_links_point_to_job_change_view(self):
+        self.assertEqual(self.admin_instance.list_display_links, ("job_label",))
+        self.assertIn("#", self.admin_instance.job_label(self.job))
+
+    def test_product_link_points_to_product_change_view(self):
+        html = self.admin_instance.product_link(self.job)
+
+        self.assertIn(reverse("admin:products_product_change", args=(self.product.pk,)), html)
+        self.assertIn(self.product.erp_nr, html)
+
+    def test_current_target_preview_uses_live_product_field_value(self):
+        html = self.admin_instance.current_target_preview(self.job)
+
+        self.assertIn("Aktueller Inhalt", html)
+
+    def test_apply_service_marks_job_as_archived(self):
+        AIRewriteApplyService().apply(job=self.job, approved_by=self.user)
+
+        self.job.refresh_from_db()
+        self.product.refresh_from_db()
+        self.assertEqual(self.job.status, AIRewriteJob.Status.APPLIED)
+        self.assertTrue(self.job.is_archived)
+        self.assertEqual(self.product.description_de, "<p>Neuer Inhalt</p>")

@@ -1,4 +1,5 @@
 from decimal import Decimal
+from urllib.parse import urlencode
 
 from django import forms
 from django.contrib import admin, messages
@@ -21,8 +22,6 @@ from unfold.decorators import action
 from unfold.enums import ActionVariant
 from unfold.forms import ActionForm as UnfoldActionForm
 
-from ai.models import AIRewriteJob, AIRewritePrompt
-from ai.services import AIRewriteService
 from core.admin import BaseAdmin, BaseStackedInline, BaseTabularInline
 from core.admin_utils import log_admin_change
 from shopware.models import ShopwareSettings
@@ -136,12 +135,6 @@ class ProductSpecialPriceActionForm(UnfoldActionForm):
             attrs={"type": "datetime-local"},
         ),
     )
-    rewrite_prompt = forms.ModelChoiceField(
-        label="AI Prompt",
-        required=False,
-        queryset=AIRewritePrompt.objects.none(),
-    )
-
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["sales_channel"].queryset = ShopwareSettings.objects.filter(is_active=True).order_by(
@@ -153,11 +146,6 @@ class ProductSpecialPriceActionForm(UnfoldActionForm):
             "name",
             "pk",
         )
-        self.fields["rewrite_prompt"].queryset = AIRewritePrompt.objects.filter(
-            is_active=True,
-            content_type__app_label="products",
-            content_type__model="product",
-        ).select_related("provider").order_by("name")
 
 
 class PriceActionForm(UnfoldActionForm):
@@ -216,11 +204,15 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
     actions = (
         "sync_from_microtech",
         "sync_to_shopware",
-        "request_ai_rewrite",
         "set_special_price_for_channel",
         "clear_special_price_for_channel",
     )
-    actions_detail = ("sync_from_microtech_detail", "sync_to_shopware_detail", "request_ai_rewrite_detail")
+    actions_detail = (
+        "sync_from_microtech_detail",
+        "sync_to_shopware_detail",
+        "open_ai_description_rewrite_detail",
+        "open_ai_short_description_rewrite_detail",
+    )
 
     def get_queryset(self, request):
         queryset = super().get_queryset(request)
@@ -249,10 +241,6 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
         form = self.action_form(request.POST)
         form.fields["action"].choices = self.get_action_choices(request)
         return form
-
-    @staticmethod
-    def _get_rewrite_prompt_from_form(form):
-        return form.cleaned_data.get("rewrite_prompt")
 
     @staticmethod
     def _to_aware_datetime(value):
@@ -398,70 +386,39 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
             )
         return self._redirect_to_change_page(object_id)
 
+    def _redirect_to_ai_rewrite_request(self, *, product: Product, target_field: str) -> HttpResponseRedirect:
+        query = urlencode(
+            {
+                "product": product.pk,
+                "target_field": target_field,
+            }
+        )
+        url = reverse("admin:ai_airewritejob_request")
+        return HttpResponseRedirect(f"{url}?{query}")
+
     @action(
-        description="AI Rewrite erzeugen",
+        description="AI Beschreibung umschreiben",
         icon="auto_awesome",
         variant=ActionVariant.INFO,
     )
-    def request_ai_rewrite(self, request, queryset):
-        form = self._build_action_form(request)
-        if not form.is_valid():
-            self.message_user(request, "Bitte einen gueltigen AI Prompt auswaehlen.", level=messages.ERROR)
-            return
-
-        prompt = self._get_rewrite_prompt_from_form(form)
-        if prompt is None:
-            self.message_user(request, "Bitte einen AI Prompt auswaehlen.", level=messages.ERROR)
-            return
-
-        service = AIRewriteService()
-        success_count = 0
-        error_count = 0
-        for product in queryset:
-            job = service.request_rewrite(content_object=product, prompt=prompt, requested_by=request.user)
-            if job.status == AIRewriteJob.Status.FAILED:
-                error_count += 1
-                self.message_user(
-                    request,
-                    f"Rewrite fuer {product.erp_nr} fehlgeschlagen: {job.error_message}",
-                    level=messages.ERROR,
-                )
-                continue
-            success_count += 1
-
-        if success_count:
-            self.message_user(request, f"{success_count} Rewrite-Job(s) erzeugt.")
-        if error_count:
-            self.message_user(request, f"{error_count} Rewrite-Job(s) fehlgeschlagen.", level=messages.WARNING)
-
-    @action(
-        description="AI Rewrite erzeugen",
-        icon="auto_awesome",
-        variant=ActionVariant.INFO,
-    )
-    def request_ai_rewrite_detail(self, request, object_id: str):
+    def open_ai_description_rewrite_detail(self, request, object_id: str):
         product = self.get_object(request, object_id)
         if not product:
             self.message_user(request, "Produkt nicht gefunden.", level=messages.ERROR)
             return self._redirect_to_change_page(object_id)
+        return self._redirect_to_ai_rewrite_request(product=product, target_field="description_de")
 
-        form = self._build_action_form(request)
-        if not form.is_valid():
-            self.message_user(request, "Bitte einen gueltigen AI Prompt auswaehlen.", level=messages.ERROR)
+    @action(
+        description="AI Kurzbeschreibung umschreiben",
+        icon="auto_awesome",
+        variant=ActionVariant.INFO,
+    )
+    def open_ai_short_description_rewrite_detail(self, request, object_id: str):
+        product = self.get_object(request, object_id)
+        if not product:
+            self.message_user(request, "Produkt nicht gefunden.", level=messages.ERROR)
             return self._redirect_to_change_page(object_id)
-
-        prompt = self._get_rewrite_prompt_from_form(form)
-        if prompt is None:
-            self.message_user(request, "Bitte einen AI Prompt auswaehlen.", level=messages.ERROR)
-            return self._redirect_to_change_page(object_id)
-
-        job = AIRewriteService().request_rewrite(content_object=product, prompt=prompt, requested_by=request.user)
-        if job.status == AIRewriteJob.Status.FAILED:
-            self.message_user(request, f"Rewrite fehlgeschlagen: {job.error_message}", level=messages.ERROR)
-            return self._redirect_to_change_page(object_id)
-
-        self.message_user(request, f"Rewrite-Job fuer {product.erp_nr} erzeugt.")
-        return self._redirect_to_change_page(object_id)
+        return self._redirect_to_ai_rewrite_request(product=product, target_field="description_short_de")
 
     @admin.action(description="Sonderpreis fuer Sales-Channel setzen")
     def set_special_price_for_channel(self, request, queryset):

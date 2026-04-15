@@ -171,6 +171,7 @@ class AIRewriteJob(BaseModel):
     rendered_prompt = models.TextField(blank=True, default="", verbose_name=_("Gerenderter Prompt"))
     result_text = models.TextField(blank=True, default="", verbose_name=_("Ergebnis"))
     error_message = models.TextField(blank=True, default="", verbose_name=_("Fehler"))
+    is_archived = models.BooleanField(default=False, db_index=True, verbose_name=_("Archiviert"))
     requested_by = models.ForeignKey(
         get_user_model(),
         on_delete=models.SET_NULL,

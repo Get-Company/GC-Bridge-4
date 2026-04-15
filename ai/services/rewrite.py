@@ -194,6 +194,7 @@ class AIRewriteApplyService(BaseService):
         setattr(content_object, job.target_field, job.result_text)
         content_object.save(update_fields=[job.target_field, "updated_at"])
         job.status = AIRewriteJob.Status.APPLIED
+        job.is_archived = True
         job.approved_by = approved_by
         if not job.approved_at:
             job.approved_at = timezone.now()
@@ -202,6 +203,7 @@ class AIRewriteApplyService(BaseService):
         job.save(
             update_fields=[
                 "status",
+                "is_archived",
                 "approved_by",
                 "approved_at",
                 "applied_at",
@@ -210,4 +212,3 @@ class AIRewriteApplyService(BaseService):
             ]
         )
         return job
-
