@@ -181,10 +181,32 @@ class AIRewriteJobAdminTest(TestCase):
         self.assertIn(reverse("admin:products_product_change", args=(self.product.pk,)), html)
         self.assertIn(self.product.erp_nr, html)
 
-    def test_current_target_preview_uses_live_product_field_value(self):
+    def test_current_target_preview_uses_wysiwyg_style_and_live_product_field_value(self):
         html = self.admin_instance.current_target_preview(self.job)
 
-        self.assertIn("Aktueller Inhalt", html)
+        self.assertIn("trix-content", html)
+        self.assertIn("<p>Aktueller Inhalt</p>", html)
+
+    def test_target_reference_combines_object_and_object_id(self):
+        html = self.admin_instance.target_reference(self.job)
+
+        self.assertIn("Objekt-ID", html)
+        self.assertIn(str(self.product.pk), html)
+        self.assertIn(self.product.erp_nr, html)
+
+    def test_product_inline_preview_shows_product_information(self):
+        html = self.admin_instance.product_inline_preview(self.job)
+
+        self.assertIn("ERP-Nr.", html)
+        self.assertIn(self.product.erp_nr, html)
+        self.assertIn("Rewrite Produkt", html)
+
+    def test_fieldsets_are_grouped_as_tabs_with_metadata_last(self):
+        fieldset_titles = [fieldset[0] for fieldset in self.admin_instance.fieldsets]
+        fieldset_classes = [fieldset[1].get("classes", ()) for fieldset in self.admin_instance.fieldsets]
+
+        self.assertEqual(fieldset_titles, ["Freigabe", "Produkt", "Prompt", "Metadaten"])
+        self.assertTrue(all("tab" in classes for classes in fieldset_classes))
 
     def test_apply_service_marks_job_as_archived(self):
         AIRewriteApplyService().apply(job=self.job, approved_by=self.user)

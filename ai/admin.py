@@ -6,6 +6,8 @@ from django.http import HttpResponseRedirect
 from django.template.response import TemplateResponse
 from django.urls import NoReverseMatch, path, reverse
 from django.utils.html import format_html
+from django.utils.safestring import mark_safe
+from unfold.contrib.forms.widgets import WYSIWYG_CLASSES
 from unfold.decorators import action
 
 from core.admin import BaseAdmin
@@ -109,50 +111,63 @@ class AIRewriteJobAdmin(BaseAdmin):
     actions_detail = ("apply_rewrite_detail",)
     readonly_fields = BaseAdmin.readonly_fields + (
         "job_label",
-        "target_object_link",
+        "target_reference",
+        "product_inline_preview",
         "current_target_preview",
     )
     fieldsets = (
         (
-            None,
+            "Freigabe",
             {
                 "fields": (
-                    "job_label",
                     "status",
                     "is_archived",
-                    "target_object_link",
+                    "current_target_preview",
+                    "result_text",
+                    "error_message",
+                ),
+                "classes": ("tab",),
+                "description": "Aktuellen Feldinhalt gegen den neuen Rewrite pruefen und dann uebernehmen.",
+            },
+        ),
+        (
+            "Produkt",
+            {
+                "fields": (
+                    "target_reference",
+                    "product_inline_preview",
+                ),
+                "classes": ("tab",),
+                "description": "Zielobjekt und die wichtigsten Produktinformationen zum Rewrite-Job.",
+            },
+        ),
+        (
+            "Prompt",
+            {
+                "fields": (
                     "prompt",
                     "provider",
                     "source_field",
                     "target_field",
+                    "rendered_prompt",
+                ),
+                "classes": ("tab",),
+                "description": "Verwendeter Prompt und die Feldzuordnung fuer diesen Rewrite-Job.",
+            },
+        ),
+        (
+            "Metadaten",
+            {
+                "fields": (
                     "requested_by",
                     "approved_by",
                     "approved_at",
                     "applied_at",
-                )
-            },
-        ),
-        (
-            "Freigabe",
-            {
-                "fields": (
-                    "current_target_preview",
-                    "result_text",
-                )
-            },
-        ),
-        (
-            "Kontext",
-            {
-                "fields": (
-                    "rendered_prompt",
-                    "error_message",
-                    "content_type",
-                    "object_id",
-                    "object_repr",
                     "created_at",
                     "updated_at",
-                )
+                ),
+                "classes": ("tab",),
+                "description": "Zeitstempel und Benutzerinformationen zum Freigabeprozess.",
             },
         ),
     )
@@ -223,15 +238,61 @@ class AIRewriteJobAdmin(BaseAdmin):
             return label
         return format_html('<a href="{}">{}</a>', url, label)
 
+    @admin.display(description="Objekt")
+    def target_reference(self, obj: AIRewriteJob):
+        label = obj.object_repr or f"{obj.content_type}:{obj.object_id}"
+        linked_object = self.target_object_link(obj)
+        return format_html(
+            '<div class="flex flex-col gap-1"><div>{}</div><div class="text-xs text-base-500">Objekt-ID: {}</div></div>',
+            linked_object,
+            obj.object_id,
+        )
+
+    @admin.display(description="Produkt")
+    def product_inline_preview(self, obj: AIRewriteJob):
+        product = obj.content_object
+        if not isinstance(product, Product):
+            return "Kein Produkt hinterlegt."
+
+        first_image = product.first_image
+        image_html = ""
+        if first_image and first_image.url:
+            image_html = format_html(
+                '<img src="{}" loading="lazy" style="width:96px;height:96px;object-fit:cover;border-radius:8px;" />',
+                first_image.url,
+            )
+
+        return format_html(
+            """
+            <div style="display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:start;max-width:1100px;">
+              <div>{}</div>
+              <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;">
+                <div><strong>ERP-Nr.</strong><br>{}</div>
+                <div><strong>SKU</strong><br>{}</div>
+                <div><strong>Name</strong><br>{}</div>
+                <div><strong>Status</strong><br>{}</div>
+              </div>
+            </div>
+            """,
+            image_html,
+            product.erp_nr,
+            product.sku or "—",
+            product.name or "—",
+            "Aktiv" if product.is_active else "Inaktiv",
+        )
+
     @admin.display(description="Aktueller Feldinhalt")
     def current_target_preview(self, obj: AIRewriteJob):
         value = ""
         if obj.content_object is not None and hasattr(obj.content_object, obj.target_field):
             current_value = getattr(obj.content_object, obj.target_field, "")
             value = "" if current_value is None else str(current_value)
+        if not value.strip():
+            value = "<p><em>Kein Inhalt vorhanden.</em></p>"
         return format_html(
-            '<div style="max-width: 1000px; white-space: pre-wrap;">{}</div>',
-            value,
+            '<div class="max-w-4xl relative"><div class="trix-content {}">{}</div></div>',
+            " ".join(WYSIWYG_CLASSES),
+            mark_safe(value),
         )
 
     @action(
