@@ -110,10 +110,7 @@ class AIRewriteJobAdmin(BaseAdmin):
     readonly_fields = BaseAdmin.readonly_fields + (
         "job_label",
         "target_object_link",
-        "source_preview",
         "current_target_preview",
-        "result_preview",
-        "comparison_preview",
     )
     fieldsets = (
         (
@@ -139,7 +136,6 @@ class AIRewriteJobAdmin(BaseAdmin):
             "Freigabe",
             {
                 "fields": (
-                    "comparison_preview",
                     "current_target_preview",
                     "result_text",
                 )
@@ -149,8 +145,6 @@ class AIRewriteJobAdmin(BaseAdmin):
             "Kontext",
             {
                 "fields": (
-                    "source_preview",
-                    "result_preview",
                     "rendered_prompt",
                     "error_message",
                     "content_type",
@@ -229,13 +223,6 @@ class AIRewriteJobAdmin(BaseAdmin):
             return label
         return format_html('<a href="{}">{}</a>', url, label)
 
-    @admin.display(description="Quellinhalt")
-    def source_preview(self, obj: AIRewriteJob):
-        return format_html(
-            '<div style="max-width: 1000px; white-space: pre-wrap;">{}</div>',
-            obj.source_snapshot or "",
-        )
-
     @admin.display(description="Aktueller Feldinhalt")
     def current_target_preview(self, obj: AIRewriteJob):
         value = ""
@@ -245,36 +232,6 @@ class AIRewriteJobAdmin(BaseAdmin):
         return format_html(
             '<div style="max-width: 1000px; white-space: pre-wrap;">{}</div>',
             value,
-        )
-
-    @admin.display(description="Ergebnis-Vorschau")
-    def result_preview(self, obj: AIRewriteJob):
-        return format_html(
-            '<div style="max-width: 1000px; white-space: pre-wrap;">{}</div>',
-            obj.result_text or "",
-        )
-
-    @admin.display(description="Vergleich")
-    def comparison_preview(self, obj: AIRewriteJob):
-        current_value = ""
-        if obj.content_object is not None and hasattr(obj.content_object, obj.target_field):
-            current_raw = getattr(obj.content_object, obj.target_field, "")
-            current_value = "" if current_raw is None else str(current_raw)
-        return format_html(
-            """
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:1400px;">
-              <div style="border:1px solid #d1d5db;border-radius:8px;padding:12px;">
-                <div style="font-weight:600;margin-bottom:8px;">Aktueller Feldinhalt</div>
-                <div style="white-space:pre-wrap;">{}</div>
-              </div>
-              <div style="border:1px solid #d1d5db;border-radius:8px;padding:12px;">
-                <div style="font-weight:600;margin-bottom:8px;">Neuer Text</div>
-                <div style="white-space:pre-wrap;">{}</div>
-              </div>
-            </div>
-            """,
-            current_value,
-            obj.result_text or "",
         )
 
     @action(
@@ -332,8 +289,3 @@ class AIRewriteJobAdmin(BaseAdmin):
             service.reject(job=job, approved_by=request.user)
             updated += 1
         self.message_user(request, f"{updated} Rewrite-Job(s) abgelehnt.")
-
-    @admin.display(description="Neuer Job")
-    def request_link(self):
-        url = reverse("admin:ai_airewritejob_request")
-        return format_html('<a class="button" href="{}">AI Rewrite erzeugen</a>', url)
