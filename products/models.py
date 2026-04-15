@@ -142,8 +142,24 @@ class Product(BaseModel):
 
     def get_ordered_product_images(self) -> list["ProductImage"]:
         if hasattr(self, "ordered_product_images"):
-            return [product_image for product_image in self.ordered_product_images if product_image.image_id]
-        return list(self.product_images.select_related("image").order_by("order", "id"))
+            ordered_product_images = [product_image for product_image in self.ordered_product_images if product_image.image_id]
+        else:
+            ordered_product_images = list(self.product_images.select_related("image").order_by("order", "id"))
+
+        # Backward compatibility: older data may still be linked through the legacy images M2M field.
+        known_image_ids = {product_image.image_id for product_image in ordered_product_images if product_image.image_id}
+        fallback_images = self.images.exclude(pk__in=known_image_ids).order_by("id")
+        next_order = max((product_image.order for product_image in ordered_product_images), default=0)
+        for offset, image in enumerate(fallback_images, start=1):
+            ordered_product_images.append(
+                ProductImage(
+                    product=self,
+                    image=image,
+                    order=next_order + offset,
+                )
+            )
+
+        return ordered_product_images
 
     def get_images(self) -> list[Image]:
         return [product_image.image for product_image in self.get_ordered_product_images() if product_image.image]

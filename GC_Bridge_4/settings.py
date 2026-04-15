@@ -101,6 +101,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'ai.apps.AiConfig',
     'core.apps.CoreConfig',
     'customer.apps.CustomerConfig',
     'orders.apps.OrdersConfig',
@@ -322,6 +323,28 @@ UNFOLD = {
                         "title": _("Preise"),
                         "icon": "sell",
                         "link": reverse_lazy("admin:products_price_changelist"),
+                    },
+                ],
+            },
+            {
+                "title": _("AI"),
+                "separator": True,
+                "collapsible": True,
+                "items": [
+                    {
+                        "title": _("Rewrite Jobs"),
+                        "icon": "auto_awesome",
+                        "link": reverse_lazy("admin:ai_airewritejob_changelist"),
+                    },
+                    {
+                        "title": _("Prompts"),
+                        "icon": "prompt_suggestion",
+                        "link": reverse_lazy("admin:ai_airewriteprompt_changelist"),
+                    },
+                    {
+                        "title": _("Provider"),
+                        "icon": "cloud",
+                        "link": reverse_lazy("admin:ai_aiproviderconfig_changelist"),
                     },
                 ],
             },

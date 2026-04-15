@@ -9,7 +9,7 @@ from django.contrib.auth import get_user_model
 from django.test import RequestFactory, TestCase, override_settings
 from django.utils import timezone
 
-from products.admin import PriceActionForm, PriceAdmin, ProductAdmin
+from products.admin import ImageAdmin, PriceActionForm, PriceAdmin, ProductAdmin, ProductImageInline
 from products.management.commands.scheduled_product_sync import Command as ScheduledProductSyncCommand
 from products.models import Image, Price, Product, ProductImage
 from shopware.models import ShopwareSettings
@@ -294,6 +294,51 @@ class ProductImageAdminAndSyncTest(TestCase):
 
         self.assertIn("first.jpg", html)
         self.assertIn("cdn.example.com/img", html)
+        self.assertIn('loading="lazy"', html)
+
+    def test_get_ordered_product_images_includes_legacy_images_field_assignments(self):
+        product = Product.objects.create(erp_nr="A-4003", name="Legacy Bilder")
+        first = Image.objects.create(path="legacy-first.jpg")
+        second = Image.objects.create(path="legacy-second.jpg")
+        product.images.add(first, second)
+
+        ordered = product.get_ordered_product_images()
+
+        self.assertEqual([product_image.image.path for product_image in ordered], ["legacy-first.jpg", "legacy-second.jpg"])
+        self.assertEqual([product_image.order for product_image in ordered], [1, 2])
+
+    def test_get_ordered_product_images_merges_legacy_images_after_explicit_rows(self):
+        product = Product.objects.create(erp_nr="A-4004", name="Gemischte Bilder")
+        explicit = Image.objects.create(path="explicit.jpg")
+        legacy = Image.objects.create(path="legacy.jpg")
+        ProductImage.objects.create(product=product, image=explicit, order=3)
+        product.images.add(explicit, legacy)
+
+        ordered = product.get_ordered_product_images()
+
+        self.assertEqual([product_image.image.path for product_image in ordered], ["explicit.jpg", "legacy.jpg"])
+        self.assertEqual([product_image.order for product_image in ordered], [3, 4])
+
+    def test_product_admin_uses_product_image_inline_and_hides_legacy_images_field(self):
+        self.assertIn(ProductImageInline, ProductAdmin.inlines)
+        self.assertEqual(ProductAdmin.exclude, ("images",))
+
+    def test_product_image_inline_renders_lazy_preview(self):
+        product = Product.objects.create(erp_nr="A-4005", name="Inline Bild")
+        image = Image.objects.create(path="inline.jpg")
+        product_image = ProductImage.objects.create(product=product, image=image, order=1)
+
+        html = ProductImageInline(Product, AdminSite()).image_preview(product_image)
+
+        self.assertIn("inline.jpg", html)
+        self.assertIn('loading="lazy"', html)
+
+    def test_image_admin_renders_lazy_preview(self):
+        image = Image.objects.create(path="admin-image.jpg")
+
+        html = ImageAdmin(Image, AdminSite()).image_preview(image)
+
+        self.assertIn("admin-image.jpg", html)
         self.assertIn('loading="lazy"', html)
 
     @patch("products.admin.call_command")

@@ -21,16 +21,39 @@ from unfold.decorators import action
 from unfold.enums import ActionVariant
 from unfold.forms import ActionForm as UnfoldActionForm
 
+from ai.models import AIRewriteJob, AIRewritePrompt
+from ai.services import AIRewriteService
 from core.admin import BaseAdmin, BaseStackedInline, BaseTabularInline
 from core.admin_utils import log_admin_change
 from shopware.models import ShopwareSettings
-from .models import Category, Price, Product, ProductImage, Storage, Tax
+from .models import Category, Image, Price, Product, ProductImage, Storage, Tax
 
 
 class StorageInline(BaseStackedInline):
     model = Storage
     fields = ("stock", "virtual_stock", "location")
     extra = 0
+
+
+class ProductImageInline(BaseTabularInline):
+    model = ProductImage
+    fields = ("image_preview", "image", "order")
+    readonly_fields = BaseTabularInline.readonly_fields + ("image_preview",)
+    autocomplete_fields = ("image",)
+
+    def get_queryset(self, request):
+        queryset = super().get_queryset(request)
+        return queryset.select_related("image").order_by("order", "id")
+
+    @admin.display(description="Vorschau")
+    def image_preview(self, obj: ProductImage):
+        image = getattr(obj, "image", None)
+        if not image or not image.url:
+            return ""
+        return format_html(
+            '<img src="{}" loading="lazy" style="width:60px;height:60px;object-fit:cover;border-radius:4px;" />',
+            image.url,
+        )
 
 
 class PriceInline(BaseTabularInline):
@@ -113,6 +136,11 @@ class ProductSpecialPriceActionForm(UnfoldActionForm):
             attrs={"type": "datetime-local"},
         ),
     )
+    rewrite_prompt = forms.ModelChoiceField(
+        label="AI Prompt",
+        required=False,
+        queryset=AIRewritePrompt.objects.none(),
+    )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -125,6 +153,11 @@ class ProductSpecialPriceActionForm(UnfoldActionForm):
             "name",
             "pk",
         )
+        self.fields["rewrite_prompt"].queryset = AIRewritePrompt.objects.filter(
+            is_active=True,
+            content_type__app_label="products",
+            content_type__model="product",
+        ).select_related("provider").order_by("name")
 
 
 class PriceActionForm(UnfoldActionForm):
@@ -176,16 +209,18 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
         ("categories", RelatedDropdownFilter),
         ("created_at", RangeDateTimeFilter),
     ]
-    inlines = (StorageInline, PriceInline)
+    inlines = (ProductImageInline, StorageInline, PriceInline)
+    exclude = ("images",)
     filter_horizontal = ("categories",)
     action_form = ProductSpecialPriceActionForm
     actions = (
         "sync_from_microtech",
         "sync_to_shopware",
+        "request_ai_rewrite",
         "set_special_price_for_channel",
         "clear_special_price_for_channel",
     )
-    actions_detail = ("sync_from_microtech_detail", "sync_to_shopware_detail")
+    actions_detail = ("sync_from_microtech_detail", "sync_to_shopware_detail", "request_ai_rewrite_detail")
 
     def get_queryset(self, request):
         queryset = super().get_queryset(request)
@@ -214,6 +249,10 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
         form = self.action_form(request.POST)
         form.fields["action"].choices = self.get_action_choices(request)
         return form
+
+    @staticmethod
+    def _get_rewrite_prompt_from_form(form):
+        return form.cleaned_data.get("rewrite_prompt")
 
     @staticmethod
     def _to_aware_datetime(value):
@@ -357,6 +396,71 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
                 f"Sync fehlgeschlagen: {exc} — Details im Produkt-Verlauf (History).",
                 level=messages.ERROR,
             )
+        return self._redirect_to_change_page(object_id)
+
+    @action(
+        description="AI Rewrite erzeugen",
+        icon="auto_awesome",
+        variant=ActionVariant.INFO,
+    )
+    def request_ai_rewrite(self, request, queryset):
+        form = self._build_action_form(request)
+        if not form.is_valid():
+            self.message_user(request, "Bitte einen gueltigen AI Prompt auswaehlen.", level=messages.ERROR)
+            return
+
+        prompt = self._get_rewrite_prompt_from_form(form)
+        if prompt is None:
+            self.message_user(request, "Bitte einen AI Prompt auswaehlen.", level=messages.ERROR)
+            return
+
+        service = AIRewriteService()
+        success_count = 0
+        error_count = 0
+        for product in queryset:
+            job = service.request_rewrite(content_object=product, prompt=prompt, requested_by=request.user)
+            if job.status == AIRewriteJob.Status.FAILED:
+                error_count += 1
+                self.message_user(
+                    request,
+                    f"Rewrite fuer {product.erp_nr} fehlgeschlagen: {job.error_message}",
+                    level=messages.ERROR,
+                )
+                continue
+            success_count += 1
+
+        if success_count:
+            self.message_user(request, f"{success_count} Rewrite-Job(s) erzeugt.")
+        if error_count:
+            self.message_user(request, f"{error_count} Rewrite-Job(s) fehlgeschlagen.", level=messages.WARNING)
+
+    @action(
+        description="AI Rewrite erzeugen",
+        icon="auto_awesome",
+        variant=ActionVariant.INFO,
+    )
+    def request_ai_rewrite_detail(self, request, object_id: str):
+        product = self.get_object(request, object_id)
+        if not product:
+            self.message_user(request, "Produkt nicht gefunden.", level=messages.ERROR)
+            return self._redirect_to_change_page(object_id)
+
+        form = self._build_action_form(request)
+        if not form.is_valid():
+            self.message_user(request, "Bitte einen gueltigen AI Prompt auswaehlen.", level=messages.ERROR)
+            return self._redirect_to_change_page(object_id)
+
+        prompt = self._get_rewrite_prompt_from_form(form)
+        if prompt is None:
+            self.message_user(request, "Bitte einen AI Prompt auswaehlen.", level=messages.ERROR)
+            return self._redirect_to_change_page(object_id)
+
+        job = AIRewriteService().request_rewrite(content_object=product, prompt=prompt, requested_by=request.user)
+        if job.status == AIRewriteJob.Status.FAILED:
+            self.message_user(request, f"Rewrite fehlgeschlagen: {job.error_message}", level=messages.ERROR)
+            return self._redirect_to_change_page(object_id)
+
+        self.message_user(request, f"Rewrite-Job fuer {product.erp_nr} erzeugt.")
         return self._redirect_to_change_page(object_id)
 
     @admin.action(description="Sonderpreis fuer Sales-Channel setzen")
@@ -515,6 +619,21 @@ class StorageAdmin(BaseAdmin):
         ("stock", RangeNumericFilter),
         ("created_at", RangeDateTimeFilter),
     ]
+
+
+@admin.register(Image)
+class ImageAdmin(BaseAdmin):
+    list_display = ("image_preview", "path", "alt_text", "created_at")
+    search_fields = ("path", "alt_text")
+
+    @admin.display(description="Bild")
+    def image_preview(self, obj: Image):
+        if not obj.url:
+            return ""
+        return format_html(
+            '<img src="{}" loading="lazy" style="width:60px;height:60px;object-fit:cover;border-radius:4px;" />',
+            obj.url,
+        )
 
 
 @admin.register(Category)
