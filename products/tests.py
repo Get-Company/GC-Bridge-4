@@ -1,18 +1,21 @@
 from pathlib import Path
 from datetime import timedelta
 from decimal import Decimal
-from urllib.parse import parse_qs, urlparse
+import sqlite3
+from tempfile import TemporaryDirectory
 from unittest.mock import call, patch
 
 from django.contrib import messages
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth import get_user_model
+from django.core.management.base import CommandError
 from django.test import RequestFactory, TestCase, override_settings
 from django.utils import timezone
 
-from products.admin import ImageAdmin, PriceActionForm, PriceAdmin, ProductAdmin, ProductImageInline
+from products.admin import ImageAdmin, PriceActionForm, PriceAdmin, ProductAdmin, ProductImageInline, ProductPropertyInline
+from products.management.commands.import_legacy_product_properties import Command as ImportLegacyProductPropertiesCommand
 from products.management.commands.scheduled_product_sync import Command as ScheduledProductSyncCommand
-from products.models import Image, Price, Product, ProductImage
+from products.models import Image, Price, Product, ProductImage, ProductProperty, PropertyGroup, PropertyValue
 from shopware.models import ShopwareSettings
 
 
@@ -153,27 +156,6 @@ class ProductAdminSpecialPriceActionTest(TestCase):
         self.assertEqual(len(sent_messages), 1)
         self.assertIn("1 Produkt(e) mit Fehlern: kaputt", sent_messages[0][0])
         self.assertEqual(sent_messages[0][1], messages.ERROR)
-
-    def test_open_ai_description_rewrite_detail_redirects_to_ai_request(self):
-        request = self.factory.post("/admin/products/product/")
-        request.user = self.user
-
-        response = ProductAdmin(Product, AdminSite()).open_ai_description_rewrite_detail(request, str(self.product.pk))
-
-        query = parse_qs(urlparse(response.url).query)
-        self.assertEqual(query["product"], [str(self.product.pk)])
-        self.assertEqual(query["target_field"], ["description_de"])
-
-    def test_open_ai_short_description_rewrite_detail_redirects_to_ai_request(self):
-        request = self.factory.post("/admin/products/product/")
-        request.user = self.user
-
-        response = ProductAdmin(Product, AdminSite()).open_ai_short_description_rewrite_detail(request, str(self.product.pk))
-
-        query = parse_qs(urlparse(response.url).query)
-        self.assertEqual(query["product"], [str(self.product.pk)])
-        self.assertEqual(query["target_field"], ["description_short_de"])
-
 
 class ScheduledProductSyncCommandTest(TestCase):
     def setUp(self):
@@ -344,6 +326,9 @@ class ProductImageAdminAndSyncTest(TestCase):
         self.assertIn(ProductImageInline, ProductAdmin.inlines)
         self.assertEqual(ProductAdmin.exclude, ("images",))
 
+    def test_product_admin_uses_product_property_inline(self):
+        self.assertIn(ProductPropertyInline, ProductAdmin.inlines)
+
     def test_product_image_inline_renders_lazy_preview(self):
         product = Product.objects.create(erp_nr="A-4005", name="Inline Bild")
         image = Image.objects.create(path="inline.jpg")
@@ -387,3 +372,141 @@ class ProductImageAdminAndSyncTest(TestCase):
         self.assertEqual(error_count, 1)
         self.assertEqual(error_messages, ["sync kaputt"])
         mock_call_command.assert_called_once_with("shopware_sync_products", "A-4002")
+
+
+class LegacyProductPropertyImportCommandTest(TestCase):
+    def setUp(self):
+        self.product = Product.objects.create(erp_nr="581001", name="Quick-Tabs gelb")
+
+    def test_imports_legacy_product_properties_from_sqlite(self):
+        command = ImportLegacyProductPropertiesCommand()
+
+        with TemporaryDirectory() as temp_dir:
+            sqlite_path = Path(temp_dir) / "legacy.sqlite3"
+            connection = sqlite3.connect(sqlite_path)
+            try:
+                connection.executescript(
+                    """
+                    CREATE TABLE products_product (
+                        id INTEGER PRIMARY KEY,
+                        erp_nr TEXT NOT NULL
+                    );
+                    CREATE TABLE products_propertygroup (
+                        id INTEGER PRIMARY KEY,
+                        name TEXT,
+                        name_de TEXT,
+                        name_en TEXT
+                    );
+                    CREATE TABLE products_propertyvalue (
+                        id INTEGER PRIMARY KEY,
+                        name TEXT,
+                        name_de TEXT,
+                        name_en TEXT,
+                        group_id INTEGER NOT NULL
+                    );
+                    CREATE TABLE products_productproperty (
+                        id INTEGER PRIMARY KEY,
+                        product_id INTEGER NOT NULL,
+                        value_id INTEGER NOT NULL
+                    );
+                    INSERT INTO products_product (id, erp_nr) VALUES (1, '581001');
+                    INSERT INTO products_propertygroup (id, name, name_de, name_en) VALUES (9, 'Material', 'Material', 'Material');
+                    INSERT INTO products_propertyvalue (id, name, name_de, name_en, group_id)
+                    VALUES (112, 'Beschichteter Karton', 'Beschichteter Karton', 'Coated cardboard', 9);
+                    INSERT INTO products_productproperty (id, product_id, value_id) VALUES (1001, 1, 112);
+                    """
+                )
+                connection.commit()
+            finally:
+                connection.close()
+
+            command.handle(
+                sqlite_path=str(sqlite_path),
+                dump_path="",
+                rebuild_sqlite=False,
+                erp_nrs=[],
+                replace_product_properties=False,
+            )
+
+        group = PropertyGroup.objects.get(external_key="legacy-property-group:9")
+        value = PropertyValue.objects.get(external_key="legacy-property-value:112")
+        link = ProductProperty.objects.get(product=self.product, value=value)
+
+        self.assertEqual(group.name_de, "Material")
+        self.assertEqual(value.name_de, "Beschichteter Karton")
+        self.assertEqual(value.group, group)
+        self.assertEqual(link.external_key, "legacy-product-property:1001")
+
+    def test_replace_product_properties_resets_existing_assignments_for_target_products(self):
+        manual_group = PropertyGroup.objects.create(name="Manuell", name_de="Manuell")
+        manual_value = PropertyValue.objects.create(group=manual_group, name="Alt", name_de="Alt")
+        ProductProperty.objects.create(product=self.product, value=manual_value)
+        command = ImportLegacyProductPropertiesCommand()
+
+        with TemporaryDirectory() as temp_dir:
+            sqlite_path = Path(temp_dir) / "legacy.sqlite3"
+            connection = sqlite3.connect(sqlite_path)
+            try:
+                connection.executescript(
+                    """
+                    CREATE TABLE products_product (
+                        id INTEGER PRIMARY KEY,
+                        erp_nr TEXT NOT NULL
+                    );
+                    CREATE TABLE products_propertygroup (
+                        id INTEGER PRIMARY KEY,
+                        name TEXT,
+                        name_de TEXT,
+                        name_en TEXT
+                    );
+                    CREATE TABLE products_propertyvalue (
+                        id INTEGER PRIMARY KEY,
+                        name TEXT,
+                        name_de TEXT,
+                        name_en TEXT,
+                        group_id INTEGER NOT NULL
+                    );
+                    CREATE TABLE products_productproperty (
+                        id INTEGER PRIMARY KEY,
+                        product_id INTEGER NOT NULL,
+                        value_id INTEGER NOT NULL
+                    );
+                    INSERT INTO products_product (id, erp_nr) VALUES (1, '581001');
+                    INSERT INTO products_propertygroup (id, name, name_de, name_en) VALUES (9, 'Material', 'Material', 'Material');
+                    INSERT INTO products_propertyvalue (id, name, name_de, name_en, group_id)
+                    VALUES (112, 'Beschichteter Karton', 'Beschichteter Karton', 'Coated cardboard', 9);
+                    INSERT INTO products_productproperty (id, product_id, value_id) VALUES (1001, 1, 112);
+                    """
+                )
+                connection.commit()
+            finally:
+                connection.close()
+
+            command.handle(
+                sqlite_path=str(sqlite_path),
+                dump_path="",
+                rebuild_sqlite=False,
+                erp_nrs=["581001"],
+                replace_product_properties=True,
+            )
+
+        self.assertFalse(ProductProperty.objects.filter(product=self.product, value=manual_value).exists())
+        self.assertTrue(
+            ProductProperty.objects.filter(
+                product=self.product,
+                value__external_key="legacy-property-value:112",
+            ).exists()
+        )
+
+    def test_resolve_sqlite_path_raises_when_source_missing(self):
+        command = ImportLegacyProductPropertiesCommand()
+
+        with TemporaryDirectory() as temp_dir:
+            missing_sqlite = Path(temp_dir) / "missing.sqlite3"
+
+            with self.assertRaises(CommandError):
+                command._resolve_sqlite_path(
+                    sqlite_path_value=str(missing_sqlite),
+                    dump_path_value="",
+                    rebuild_sqlite=False,
+                )

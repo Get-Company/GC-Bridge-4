@@ -1,5 +1,4 @@
 from decimal import Decimal
-from urllib.parse import urlencode
 
 from django import forms
 from django.contrib import admin, messages
@@ -25,7 +24,7 @@ from unfold.forms import ActionForm as UnfoldActionForm
 from core.admin import BaseAdmin, BaseStackedInline, BaseTabularInline
 from core.admin_utils import log_admin_change
 from shopware.models import ShopwareSettings
-from .models import Category, Image, Price, Product, ProductImage, Storage, Tax
+from .models import Category, Image, Price, Product, ProductImage, ProductProperty, PropertyGroup, PropertyValue, Storage, Tax
 
 
 class StorageInline(BaseStackedInline):
@@ -102,6 +101,23 @@ class PriceInline(BaseTabularInline):
                 "pk",
             )
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+
+class ProductPropertyInline(BaseTabularInline):
+    model = ProductProperty
+    fields = ("group_name", "value")
+    readonly_fields = BaseTabularInline.readonly_fields + ("group_name",)
+    autocomplete_fields = ("value",)
+
+    def get_queryset(self, request):
+        queryset = super().get_queryset(request)
+        return queryset.select_related("value__group").order_by("value__group__name", "value__name", "id")
+
+    @admin.display(description="Gruppe")
+    def group_name(self, obj: ProductProperty):
+        if not obj.value_id:
+            return ""
+        return obj.value.group.name
 
 
 class ProductSpecialPriceActionForm(UnfoldActionForm):
@@ -197,7 +213,7 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
         ("categories", RelatedDropdownFilter),
         ("created_at", RangeDateTimeFilter),
     ]
-    inlines = (ProductImageInline, StorageInline, PriceInline)
+    inlines = (ProductImageInline, ProductPropertyInline, StorageInline, PriceInline)
     exclude = ("images",)
     filter_horizontal = ("categories",)
     action_form = ProductSpecialPriceActionForm
@@ -210,8 +226,6 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
     actions_detail = (
         "sync_from_microtech_detail",
         "sync_to_shopware_detail",
-        "open_ai_description_rewrite_detail",
-        "open_ai_short_description_rewrite_detail",
     )
 
     def get_queryset(self, request):
@@ -386,40 +400,6 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
             )
         return self._redirect_to_change_page(object_id)
 
-    def _redirect_to_ai_rewrite_request(self, *, product: Product, target_field: str) -> HttpResponseRedirect:
-        query = urlencode(
-            {
-                "product": product.pk,
-                "target_field": target_field,
-            }
-        )
-        url = reverse("admin:ai_airewritejob_request")
-        return HttpResponseRedirect(f"{url}?{query}")
-
-    @action(
-        description="AI Beschreibung umschreiben",
-        icon="auto_awesome",
-        variant=ActionVariant.INFO,
-    )
-    def open_ai_description_rewrite_detail(self, request, object_id: str):
-        product = self.get_object(request, object_id)
-        if not product:
-            self.message_user(request, "Produkt nicht gefunden.", level=messages.ERROR)
-            return self._redirect_to_change_page(object_id)
-        return self._redirect_to_ai_rewrite_request(product=product, target_field="description_de")
-
-    @action(
-        description="AI Kurzbeschreibung umschreiben",
-        icon="auto_awesome",
-        variant=ActionVariant.INFO,
-    )
-    def open_ai_short_description_rewrite_detail(self, request, object_id: str):
-        product = self.get_object(request, object_id)
-        if not product:
-            self.message_user(request, "Produkt nicht gefunden.", level=messages.ERROR)
-            return self._redirect_to_change_page(object_id)
-        return self._redirect_to_ai_rewrite_request(product=product, target_field="description_short_de")
-
     @admin.action(description="Sonderpreis fuer Sales-Channel setzen")
     def set_special_price_for_channel(self, request, queryset):
         form = self._build_action_form(request)
@@ -591,6 +571,19 @@ class ImageAdmin(BaseAdmin):
             '<img src="{}" loading="lazy" style="width:60px;height:60px;object-fit:cover;border-radius:4px;" />',
             obj.url,
         )
+
+
+@admin.register(PropertyGroup)
+class PropertyGroupAdmin(BaseAdmin):
+    list_display = ("name", "external_key", "created_at")
+    search_fields = ("name", "name_de", "name_en", "external_key")
+
+
+@admin.register(PropertyValue)
+class PropertyValueAdmin(BaseAdmin):
+    list_display = ("name", "group", "external_key", "created_at")
+    search_fields = ("name", "name_de", "name_en", "group__name", "group__name_de", "external_key")
+    list_filter = [("group", RelatedDropdownFilter)]
 
 
 @admin.register(Category)

@@ -81,6 +81,56 @@ class Image(BaseModel):
         return str(value).replace("\\", "/").rstrip("/").split("/")[-1]
 
 
+class PropertyGroup(BaseModel):
+    external_key = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        db_index=True,
+        verbose_name=_("Externe Referenz"),
+    )
+    name = models.CharField(max_length=255, verbose_name=_("Name"))
+
+    class Meta:
+        verbose_name = _("Attributgruppe")
+        verbose_name_plural = _("Attributgruppen")
+        ordering = ("name",)
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class PropertyValue(BaseModel):
+    external_key = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        db_index=True,
+        verbose_name=_("Externe Referenz"),
+    )
+    group = models.ForeignKey(
+        PropertyGroup,
+        on_delete=models.CASCADE,
+        related_name="values",
+        verbose_name=_("Attributgruppe"),
+    )
+    name = models.CharField(max_length=255, verbose_name=_("Wert"))
+
+    class Meta:
+        verbose_name = _("Attributwert")
+        verbose_name_plural = _("Attributwerte")
+        ordering = ("group__name", "name")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("group", "name"),
+                name="unique_property_value_per_group",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.group}: {self.name}"
+
+
 class Product(BaseModel):
     shopware_image_sync_hash = models.CharField(
         max_length=64,
@@ -131,6 +181,12 @@ class Product(BaseModel):
     )
     categories = models.ManyToManyField(Category, blank=True, verbose_name=_("Kategorien"))
     images = models.ManyToManyField(Image, blank=True, verbose_name=_("Bilder"))
+    properties = models.ManyToManyField(
+        PropertyValue,
+        through="ProductProperty",
+        blank=True,
+        verbose_name=_("Attribute"),
+    )
 
     class Meta:
         verbose_name = _("Produkt")
@@ -198,6 +254,42 @@ class ProductImage(BaseModel):
 
     def __str__(self) -> str:
         return f"{self.product.erp_nr} | {self.order} | {self.image.path}"
+
+
+class ProductProperty(BaseModel):
+    external_key = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        db_index=True,
+        verbose_name=_("Externe Referenz"),
+    )
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE,
+        related_name="product_properties",
+        verbose_name=_("Produkt"),
+    )
+    value = models.ForeignKey(
+        PropertyValue,
+        on_delete=models.CASCADE,
+        related_name="product_properties",
+        verbose_name=_("Attributwert"),
+    )
+
+    class Meta:
+        verbose_name = _("Produktattribut")
+        verbose_name_plural = _("Produktattribute")
+        ordering = ("product__erp_nr", "value__group__name", "value__name")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("product", "value"),
+                name="unique_product_property_assignment",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.product.erp_nr} | {self.value.group.name}: {self.value.name}"
 
 
 class Price(BaseModel):
