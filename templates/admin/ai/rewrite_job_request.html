@@ -1,18 +1,50 @@
 {% extends "admin/base_site.html" %}
 
+{% block extrahead %}
+  {{ block.super }}
+  {{ form.media }}
+{% endblock %}
+
 {% block content %}
-<div id="content-main">
-  <div class="module" style="max-width: 960px;">
-    <h1>{{ title }}</h1>
-    <p>{{ subtitle }}</p>
-    <form method="post" novalidate>
-      {% csrf_token %}
-      {{ form.as_p }}
-      <div class="submit-row">
-        <input type="submit" value="Rewrite erzeugen" class="default">
-        <a href="{{ changelist_url }}" class="button cancel-link">Zurueck zu den Rewrite Jobs</a>
+<div id="content-main" class="flex flex-col gap-6">
+  <div class="max-w-5xl">
+    <div class="rounded-xl border border-base-200 bg-white px-6 py-6 shadow-sm dark:border-base-800 dark:bg-base-900">
+      <div class="flex flex-col gap-1 border-b border-base-200 pb-5 dark:border-base-800">
+        <h1 class="text-2xl font-semibold text-font-important-light dark:text-font-important-dark">{{ title }}</h1>
+        <p class="text-sm text-font-subtle-light dark:text-font-subtle-dark">{{ subtitle }}</p>
       </div>
-    </form>
+
+      <form method="post" novalidate class="mt-6 flex flex-col gap-6">
+        {% csrf_token %}
+
+        {% if form.non_field_errors %}
+          <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
+            {{ form.non_field_errors }}
+          </div>
+        {% endif %}
+
+        <div class="grid gap-6 lg:grid-cols-2">
+          <div class="lg:col-span-2">
+            {% include "unfold/helpers/field.html" with field=form.product %}
+          </div>
+          <div>
+            {% include "unfold/helpers/field.html" with field=form.target_field %}
+          </div>
+          <div>
+            {% include "unfold/helpers/field.html" with field=form.prompt %}
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-3 border-t border-base-200 pt-5 dark:border-base-800">
+          <button type="submit" class="inline-flex items-center justify-center rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-primary-700">
+            Rewrite erzeugen
+          </button>
+          <a href="{{ changelist_url }}" class="inline-flex items-center justify-center rounded-md border border-base-300 px-4 py-2 text-sm font-medium text-font-default-light transition hover:bg-base-50 dark:border-base-700 dark:text-font-default-dark dark:hover:bg-base-800">
+            Zurueck zu den Rewrite Jobs
+          </a>
+        </div>
+      </form>
+    </div>
   </div>
 </div>
 {% endblock %}

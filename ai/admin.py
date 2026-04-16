@@ -2,13 +2,17 @@ from __future__ import annotations
 
 from django import forms
 from django.contrib import admin, messages
-from django.http import HttpResponseRedirect
-from django.template.response import TemplateResponse
+from django.db.models import Q
+from django.http import HttpResponseForbidden, HttpResponseRedirect
 from django.urls import NoReverseMatch, path, reverse
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
+from django.views.generic import FormView
+from unfold.fields import UnfoldAdminAutocompleteModelChoiceField
 from unfold.contrib.forms.widgets import WYSIWYG_CLASSES
 from unfold.decorators import action
+from unfold.views import BaseAutocompleteView, UnfoldModelAdminViewMixin
+from unfold.widgets import UnfoldAdminSelect2Widget
 
 from core.admin import BaseAdmin
 
@@ -17,12 +21,14 @@ from ai.services import AIRewriteApplyService, AIRewriteService
 from products.models import Product
 
 
-class ProductChoiceField(forms.ModelChoiceField):
+class ProductChoiceField(UnfoldAdminAutocompleteModelChoiceField):
     def label_from_instance(self, obj: Product) -> str:
         return f"{obj.erp_nr} · {obj.name}"
 
 
 class PromptChoiceField(forms.ModelChoiceField):
+    widget = UnfoldAdminSelect2Widget
+
     def label_from_instance(self, obj: AIRewritePrompt) -> str:
         return f"{obj.name} · {obj.target_field} · {obj.provider.name}"
 
@@ -30,27 +36,37 @@ class PromptChoiceField(forms.ModelChoiceField):
 class AIRewriteJobRequestForm(forms.Form):
     product = ProductChoiceField(
         label="Produkt",
-        queryset=Product.objects.order_by("erp_nr"),
+        queryset=Product.objects.none(),
+        url_path="admin:ai_airewritejob_product_autocomplete",
     )
     target_field = forms.ChoiceField(
         label="Zielfeld",
         choices=(),
+        widget=UnfoldAdminSelect2Widget,
     )
     prompt = PromptChoiceField(
         label="Prompt",
         queryset=AIRewritePrompt.objects.none(),
     )
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, request=None, **kwargs):
+        self.request = request
         super().__init__(*args, **kwargs)
+        self._configure_product_queryset()
+
         prompt_queryset = self._get_product_prompt_queryset()
-        target_fields = list(prompt_queryset.values_list("target_field", flat=True).distinct())
+        target_fields = list(
+            prompt_queryset.order_by("target_field").values_list("target_field", flat=True).distinct()
+        )
         self.fields["target_field"].choices = [(field_name, field_name) for field_name in target_fields]
 
         target_field = self.data.get("target_field") or self.initial.get("target_field") or ""
         if target_field:
             prompt_queryset = prompt_queryset.filter(target_field=target_field)
         self.fields["prompt"].queryset = prompt_queryset
+        selected_prompt = self.data.get("prompt") or self.initial.get("prompt") or ""
+        if not selected_prompt and prompt_queryset.count() == 1:
+            self.fields["prompt"].initial = prompt_queryset.first().pk
 
     def clean(self):
         cleaned_data = super().clean()
@@ -69,6 +85,81 @@ class AIRewriteJobRequestForm(forms.Form):
             content_type__app_label="products",
             content_type__model="product",
         ).select_related("provider").order_by("target_field", "name")
+
+    def _configure_product_queryset(self):
+        selected_product = self.data.get("product") or self.initial.get("product") or ""
+        if not selected_product:
+            self.fields["product"].queryset = Product.objects.none()
+            return
+        self.fields["product"].queryset = Product.objects.filter(pk=selected_product).order_by("erp_nr")
+
+
+class ProductAutocompleteView(BaseAutocompleteView):
+    paginate_by = 20
+
+    def dispatch(self, request, *args, **kwargs):
+        model_admin = kwargs.get("model_admin")
+        if model_admin and not model_admin.has_view_permission(request):
+            return HttpResponseForbidden("Zugriff verweigert.")
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_queryset(self):
+        term = str(self.request.GET.get("term") or "").strip()
+        queryset = Product.objects.order_by("erp_nr", "name", "id")
+        if not term:
+            return queryset
+        return queryset.filter(
+            Q(erp_nr__icontains=term)
+            | Q(name__icontains=term)
+            | Q(sku__icontains=term)
+        )
+
+
+class AIRewriteJobRequestView(UnfoldModelAdminViewMixin, FormView):
+    title = "AI Rewrite erzeugen"
+    permission_required = ("ai.add_airewritejob",)
+    template_name = "admin/ai/rewrite_job_request.html"
+    form_class = AIRewriteJobRequestForm
+
+    def get_initial(self):
+        initial = super().get_initial()
+        initial.update(
+            {
+                "product": self.request.GET.get("product", ""),
+                "target_field": self.request.GET.get("target_field", ""),
+            }
+        )
+        return initial
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["request"] = self.request
+        return kwargs
+
+    def form_valid(self, form):
+        job = AIRewriteService().request_rewrite(
+            content_object=form.cleaned_data["product"],
+            prompt=form.cleaned_data["prompt"],
+            requested_by=self.request.user,
+        )
+        if job.status == AIRewriteJob.Status.FAILED:
+            messages.error(self.request, f"Rewrite fehlgeschlagen: {job.error_message}")
+        else:
+            messages.success(
+                self.request,
+                f"Rewrite-Job fuer {job.object_repr} / {job.target_field} erzeugt.",
+            )
+        return HttpResponseRedirect(reverse("admin:ai_airewritejob_change", args=(job.pk,)))
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.update(
+            {
+                "subtitle": "Produkt und feldgebundenen Prompt auswaehlen",
+                "changelist_url": reverse("admin:ai_airewritejob_changelist"),
+            }
+        )
+        return context
 
 
 @admin.register(AIProviderConfig)
@@ -173,50 +264,18 @@ class AIRewriteJobAdmin(BaseAdmin):
     )
 
     def get_urls(self):
+        request_view = self.admin_site.admin_view(
+            AIRewriteJobRequestView.as_view(model_admin=self)
+        )
         return [
+            path("request/", request_view, name="ai_airewritejob_request"),
             path(
-                "request/",
-                self.admin_site.admin_view(self.request_rewrite_view),
-                name="ai_airewritejob_request",
+                "product-autocomplete/",
+                self.admin_site.admin_view(ProductAutocompleteView.as_view()),
+                {"model_admin": self},
+                name="ai_airewritejob_product_autocomplete",
             ),
         ] + super().get_urls()
-
-    def request_rewrite_view(self, request):
-        initial = {
-            "product": request.GET.get("product", ""),
-            "target_field": request.GET.get("target_field", ""),
-        }
-        form = AIRewriteJobRequestForm(request.POST or None, initial=initial)
-        if request.method == "POST" and form.is_valid():
-            job = AIRewriteService().request_rewrite(
-                content_object=form.cleaned_data["product"],
-                prompt=form.cleaned_data["prompt"],
-                requested_by=request.user,
-            )
-            if job.status == AIRewriteJob.Status.FAILED:
-                self.message_user(
-                    request,
-                    f"Rewrite fehlgeschlagen: {job.error_message}",
-                    level=messages.ERROR,
-                )
-            else:
-                self.message_user(
-                    request,
-                    f"Rewrite-Job fuer {job.object_repr} / {job.target_field} erzeugt.",
-                )
-            change_url = reverse("admin:ai_airewritejob_change", args=(job.pk,))
-            return HttpResponseRedirect(change_url)
-
-        context = {
-            **self.admin_site.each_context(request),
-            "opts": self.model._meta,
-            "title": "AI Rewrite erzeugen",
-            "subtitle": "Produkt und feldgebundenen Prompt auswaehlen",
-            "form": form,
-            "media": self.media + form.media,
-            "changelist_url": reverse("admin:ai_airewritejob_changelist"),
-        }
-        return TemplateResponse(request, "admin/ai/rewrite_job_request.html", context)
 
     @admin.display(description="Rewrite-Job")
     def job_label(self, obj: AIRewriteJob):

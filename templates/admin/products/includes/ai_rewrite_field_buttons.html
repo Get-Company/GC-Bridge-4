@@ -1,0 +1,123 @@
+{{ ai_rewrite_field_targets_json|json_script:"product-ai-rewrite-fields" }}
+
+<script>
+  (function () {
+    "use strict";
+
+    function getRewriteConfig() {
+      const node = document.getElementById("product-ai-rewrite-fields");
+      if (!node) {
+        return [];
+      }
+
+      try {
+        return JSON.parse(node.textContent || "[]");
+      } catch (error) {
+        console.warn("AI rewrite field config could not be parsed.", error);
+        return [];
+      }
+    }
+
+    function createButton(config, createUrl) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = [
+        "ml-3",
+        "inline-flex",
+        "items-center",
+        "rounded-md",
+        "border",
+        "border-primary-200",
+        "bg-primary-50",
+        "px-2.5",
+        "py-1",
+        "text-xs",
+        "font-semibold",
+        "tracking-wide",
+        "text-primary-700",
+        "transition",
+        "hover:bg-primary-100",
+        "dark:border-primary-900",
+        "dark:bg-primary-950/40",
+        "dark:text-primary-300",
+      ].join(" ");
+      button.textContent = config.label || "AI";
+      button.title = config.title || "Rewrite fuer dieses Feld anlegen";
+      button.dataset.targetField = config.field;
+      button.dataset.createUrl = createUrl;
+      button.dataset.hasMultiplePrompts = config.hasMultiplePrompts ? "true" : "false";
+      button.addEventListener("click", submitRewriteRequest);
+      return button;
+    }
+
+    function appendButtons() {
+      const createUrl = "{{ ai_rewrite_create_url|escapejs }}";
+      if (!createUrl) {
+        return;
+      }
+
+      for (const config of getRewriteConfig()) {
+        if (!config.field) {
+          continue;
+        }
+
+        const field = document.querySelector(`[name="${CSS.escape(config.field)}"]`);
+        if (!field) {
+          continue;
+        }
+
+        const label = document.querySelector(`label[for="${CSS.escape(field.id)}"]`);
+        const labelContainer = label ? (label.parentElement || label) : null;
+        if (!labelContainer || labelContainer.querySelector("[data-ai-rewrite-button='true']")) {
+          continue;
+        }
+
+        const button = createButton(config, createUrl);
+        button.dataset.aiRewriteButton = "true";
+        labelContainer.classList.add("flex", "items-center", "gap-2", "flex-wrap");
+        labelContainer.appendChild(button);
+      }
+    }
+
+    function submitRewriteRequest(event) {
+      const button = event.currentTarget;
+      if (!(button instanceof HTMLButtonElement)) {
+        return;
+      }
+
+      const csrfInput = document.querySelector("form input[name='csrfmiddlewaretoken']");
+      if (!(csrfInput instanceof HTMLInputElement) || !button.dataset.createUrl) {
+        return;
+      }
+
+      const form = document.createElement("form");
+      form.method = "post";
+      form.action = button.dataset.createUrl;
+
+      const csrfField = document.createElement("input");
+      csrfField.type = "hidden";
+      csrfField.name = "csrfmiddlewaretoken";
+      csrfField.value = csrfInput.value;
+      form.appendChild(csrfField);
+
+      const targetField = document.createElement("input");
+      targetField.type = "hidden";
+      targetField.name = "target_field";
+      targetField.value = button.dataset.targetField || "";
+      form.appendChild(targetField);
+
+      button.disabled = true;
+      button.classList.add("opacity-60");
+
+      document.body.appendChild(form);
+      form.submit();
+    }
+
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", appendButtons);
+      return;
+    }
+
+    appendButtons();
+  })();
+</script>

@@ -165,11 +165,24 @@ class AIRewriteJobAdminTest(TestCase):
             status=AIRewriteJob.Status.PENDING_REVIEW,
         )
         self.admin_instance = AIRewriteJobAdmin(AIRewriteJob, AdminSite())
+        self.client.force_login(self.user)
 
     def test_request_form_filters_prompts_by_target_field(self):
         form = AIRewriteJobRequestForm(initial={"target_field": "description_de"})
 
         self.assertEqual(list(form.fields["prompt"].queryset), [self.prompt])
+
+    def test_request_form_uses_unfold_autocomplete_widgets(self):
+        form = AIRewriteJobRequestForm(
+            initial={
+                "product": self.product.pk,
+                "target_field": "description_de",
+            }
+        )
+
+        self.assertEqual(form.fields["product"].widget.attrs["data-theme"], "admin-autocomplete")
+        self.assertEqual(form.fields["target_field"].widget.attrs["data-theme"], "admin-autocomplete")
+        self.assertEqual(form.fields["prompt"].widget.attrs["data-theme"], "admin-autocomplete")
 
     def test_job_list_links_point_to_job_change_view(self):
         self.assertEqual(self.admin_instance.list_display_links, ("job_label",))
@@ -216,3 +229,61 @@ class AIRewriteJobAdminTest(TestCase):
         self.assertEqual(self.job.status, AIRewriteJob.Status.APPLIED)
         self.assertTrue(self.job.is_archived)
         self.assertEqual(self.product.description_de, "<p>Neuer Inhalt</p>")
+
+    def test_request_view_renders_unfold_widgets(self):
+        response = self.client.get(
+            reverse("admin:ai_airewritejob_request"),
+            {
+                "product": self.product.pk,
+                "target_field": "description_de",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "unfold-admin-autocomplete")
+        self.assertContains(response, "Rewrite erzeugen")
+
+    def test_product_change_view_exposes_ai_field_button_config(self):
+        response = self.client.get(reverse("admin:products_product_change", args=(self.product.pk,)))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "product-ai-rewrite-fields")
+        self.assertContains(response, "description_de")
+        self.assertContains(response, reverse("admin:products_product_request_ai_rewrite", args=(self.product.pk,)))
+
+    @patch("products.admin.AIRewriteService.request_rewrite")
+    def test_product_field_action_creates_job_when_single_prompt(self, mocked_request_rewrite):
+        mocked_request_rewrite.return_value = self.job
+
+        response = self.client.post(
+            reverse("admin:products_product_request_ai_rewrite", args=(self.product.pk,)),
+            {"target_field": "description_de"},
+        )
+
+        self.assertRedirects(response, reverse("admin:ai_airewritejob_change", args=(self.job.pk,)))
+        mocked_request_rewrite.assert_called_once_with(
+            content_object=self.product,
+            prompt=self.prompt,
+            requested_by=self.user,
+        )
+
+    def test_product_field_action_redirects_to_request_page_when_multiple_prompts_exist(self):
+        AIRewritePrompt.objects.create(
+            name="Beschreibung Marktplatz",
+            provider=self.provider,
+            content_type=ContentType.objects.get_for_model(Product),
+            source_field="description_de",
+            target_field="description_de",
+            system_prompt="Alternative Variante",
+        )
+
+        response = self.client.post(
+            reverse("admin:products_product_request_ai_rewrite", args=(self.product.pk,)),
+            {"target_field": "description_de"},
+        )
+
+        self.assertRedirects(
+            response,
+            f"{reverse('admin:ai_airewritejob_request')}?product={self.product.pk}&target_field=description_de",
+            fetch_redirect_response=False,
+        )

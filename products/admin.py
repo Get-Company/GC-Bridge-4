@@ -5,12 +5,14 @@ from django.contrib import admin, messages
 from django.contrib.contenttypes.models import ContentType
 from django.core.management import call_command
 from django.db.models import Case, IntegerField, Prefetch, Value, When
-from django.http import HttpResponseRedirect
-from django.urls import reverse
+from django.http import HttpResponseRedirect, HttpResponseNotAllowed
+from django.urls import path, reverse
 from django.utils import timezone
 from django.utils.html import format_html
 from modeltranslation.admin import TabbedTranslationAdmin
 
+from ai.models import AIRewriteJob, AIRewritePrompt
+from ai.services import AIRewriteService
 from unfold.contrib.filters.admin import (
     BooleanRadioFilter,
     RangeDateTimeFilter,
@@ -229,6 +231,7 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
         "sync_from_microtech_detail",
         "sync_to_shopware_detail",
     )
+    change_form_after_template = "admin/products/includes/ai_rewrite_field_buttons.html"
 
     def get_queryset(self, request):
         queryset = super().get_queryset(request)
@@ -243,6 +246,15 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
     def _redirect_to_change_page(self, object_id: str) -> HttpResponseRedirect:
         change_url = reverse("admin:products_product_change", args=(object_id,))
         return HttpResponseRedirect(change_url)
+
+    def get_urls(self):
+        return [
+            path(
+                "<path:object_id>/request-ai-rewrite/",
+                self.admin_site.admin_view(self.request_ai_rewrite_for_field),
+                name="products_product_request_ai_rewrite",
+            ),
+        ] + super().get_urls()
 
     def _log_admin_error(self, request, message: str, *, obj: Product | None = None) -> None:
         log_admin_change(
@@ -273,6 +285,123 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
             '<img src="{}" loading="lazy" style="width:50px;height:50px;object-fit:cover;border-radius:4px;" />',
             image.url,
         )
+
+    def render_change_form(self, request, context, add=False, change=False, form_url="", obj=None):
+        context = {
+            **context,
+            "ai_rewrite_field_targets_json": self._build_ai_rewrite_field_targets_json(context),
+            "ai_rewrite_create_url": (
+                reverse("admin:products_product_request_ai_rewrite", args=(obj.pk,))
+                if obj and obj.pk
+                else ""
+            ),
+        }
+        return super().render_change_form(
+            request,
+            context,
+            add=add,
+            change=change,
+            form_url=form_url,
+            obj=obj,
+        )
+
+    def _build_ai_rewrite_field_targets_json(self, context) -> list[dict[str, object]]:
+        adminform = context.get("adminform")
+        if adminform is None:
+            return []
+        form_field_names = set(adminform.form.fields.keys())
+        product_content_type = ContentType.objects.get_for_model(Product)
+        prompt_counts: dict[str, int] = {}
+        for target_field in (
+            AIRewritePrompt.objects.filter(
+                is_active=True,
+                content_type=product_content_type,
+                target_field__in=form_field_names,
+            )
+            .order_by("target_field")
+            .values_list("target_field", flat=True)
+        ):
+            prompt_counts[target_field] = prompt_counts.get(target_field, 0) + 1
+        payload = [
+            {
+                "field": field_name,
+                "label": "AI",
+                "title": (
+                    "Rewrite mit Standard-Prompt erzeugen"
+                    if prompt_counts[field_name] == 1
+                    else "Rewrite fuer dieses Feld anlegen"
+                ),
+                "hasMultiplePrompts": prompt_counts[field_name] > 1,
+            }
+            for field_name in sorted(prompt_counts.keys())
+        ]
+        return payload
+
+    def request_ai_rewrite_for_field(self, request, object_id: str):
+        if request.method != "POST":
+            return HttpResponseNotAllowed(["POST"])
+        if not request.user.has_perm("ai.add_airewritejob"):
+            self.message_user(request, "Keine Berechtigung fuer AI Rewrite Jobs.", level=messages.ERROR)
+            return self._redirect_to_change_page(object_id)
+
+        product = self.get_object(request, object_id)
+        if not product:
+            self.message_user(request, "Produkt nicht gefunden.", level=messages.ERROR)
+            return self._redirect_to_change_page(object_id)
+
+        target_field = str(request.POST.get("target_field") or "").strip()
+        if not target_field:
+            self.message_user(request, "Kein Zielfeld uebergeben.", level=messages.ERROR)
+            return self._redirect_to_change_page(object_id)
+
+        product_content_type = ContentType.objects.get_for_model(Product)
+        prompt_queryset = (
+            AIRewritePrompt.objects.filter(
+                is_active=True,
+                content_type=product_content_type,
+                target_field=target_field,
+            )
+            .select_related("provider")
+            .order_by("name", "pk")
+        )
+        prompt_count = prompt_queryset.count()
+
+        if prompt_count == 0:
+            self.message_user(
+                request,
+                f"Kein aktiver AI-Prompt fuer das Feld '{target_field}' vorhanden.",
+                level=messages.ERROR,
+            )
+            return self._redirect_to_change_page(object_id)
+
+        if prompt_count > 1:
+            request_url = reverse("admin:ai_airewritejob_request")
+            return HttpResponseRedirect(
+                f"{request_url}?product={product.pk}&target_field={target_field}"
+            )
+
+        prompt = prompt_queryset.first()
+        if prompt is None:
+            self.message_user(request, "Kein passender Prompt gefunden.", level=messages.ERROR)
+            return self._redirect_to_change_page(object_id)
+
+        job = AIRewriteService().request_rewrite(
+            content_object=product,
+            prompt=prompt,
+            requested_by=request.user,
+        )
+        if job.status == AIRewriteJob.Status.FAILED:
+            self.message_user(
+                request,
+                f"Rewrite fehlgeschlagen: {job.error_message}",
+                level=messages.ERROR,
+            )
+        else:
+            self.message_user(
+                request,
+                f"Rewrite-Job fuer {product.erp_nr} / {target_field} erzeugt.",
+            )
+        return HttpResponseRedirect(reverse("admin:ai_airewritejob_change", args=(job.pk,)))
 
     def _sync_products_bulk(self, products, request=None) -> tuple[int, int, list[str]]:
         erp_nrs = [erp_nr for erp_nr in products.values_list("erp_nr", flat=True)] if hasattr(products, "values_list") else [
