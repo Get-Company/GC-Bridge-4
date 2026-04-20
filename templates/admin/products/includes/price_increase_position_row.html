@@ -5,6 +5,17 @@
     <td class="whitespace-nowrap px-4 py-3 text-sm text-font-default-light dark:text-font-default-dark">{{ item.display_current_rebate_price }}</td>
     <td class="whitespace-nowrap px-4 py-3 text-sm text-font-default-light dark:text-font-default-dark">{{ item.display_unit }}</td>
     <td class="px-4 py-3">
+        <div class="w-32">
+            <div class="relative h-14 w-full rounded-default border border-base-200 bg-base-50/80 px-1 py-1 dark:border-base-800 dark:bg-base-950/50">
+                <canvas
+                    class="js-mini-price-chart h-12 w-full"
+                    data-chart='{{ item.price_chart_data|safe }}'
+                    height="48"
+                ></canvas>
+            </div>
+        </div>
+    </td>
+    <td class="px-4 py-3">
         <input
             type="text"
             inputmode="decimal"

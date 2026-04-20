@@ -1,3 +1,4 @@
+import json
 from decimal import Decimal
 
 from django import forms
@@ -972,6 +973,37 @@ class PriceIncreaseAdmin(BaseAdmin):
         item.save_url = self._positions_save_url(price_increase.pk, item.pk)
         return item
 
+    def _build_price_chart_data(self, item: PriceIncreaseItem, history_entries: list[PriceHistory]) -> str:
+        yearly_prices: dict[int, Decimal] = {}
+        for entry in history_entries:
+            yearly_prices[entry.created_at.year] = entry.price
+
+        current_year = timezone.localdate().year
+        yearly_prices[current_year] = item.current_price
+
+        sorted_years = sorted(yearly_prices.keys())
+        if not sorted_years:
+            sorted_years = [current_year]
+            yearly_prices[current_year] = item.current_price
+
+        background_colors = [
+            "var(--color-base-400)" if year != current_year else "var(--color-primary-600)"
+            for year in sorted_years
+        ]
+        data = {
+            "labels": [str(year) for year in sorted_years],
+            "datasets": [
+                {
+                    "label": "Preisverlauf",
+                    "data": [float(yearly_prices[year]) for year in sorted_years],
+                    "backgroundColor": background_colors,
+                    "borderRadius": 3,
+                    "borderSkipped": False,
+                }
+            ],
+        }
+        return json.dumps(data)
+
     def _get_save_field_label(self, field_name: str) -> str:
         if field_name == "new_price":
             return "Neuer Preis"
@@ -981,16 +1013,32 @@ class PriceIncreaseAdmin(BaseAdmin):
 
     def _build_positions_context(self, request, price_increase: PriceIncrease, search_term: str = "") -> dict:
         search_term = (search_term or "").strip()
-        items = [
-            self._prepare_position_item(price_increase, item)
-            for item in self._get_positions_queryset(price_increase, search_term)
-        ]
+        items = list(self._get_positions_queryset(price_increase, search_term))
+        source_price_ids = [item.source_price_id for item in items if item.source_price_id]
+        history_entries = (
+            PriceHistory.objects.filter(price_entry_id__in=source_price_ids)
+            .only("price_entry_id", "created_at", "price")
+            .order_by("price_entry_id", "created_at", "id")
+        )
+        history_by_price_id: dict[int, list[PriceHistory]] = {}
+        for history_entry in history_entries:
+            history_by_price_id.setdefault(history_entry.price_entry_id, []).append(history_entry)
+
+        prepared_items = []
+        for item in items:
+            item = self._prepare_position_item(price_increase, item)
+            item.price_chart_data = self._build_price_chart_data(
+                item,
+                history_by_price_id.get(item.source_price_id, []),
+            )
+            prepared_items.append(item)
+
         return {
             **self.admin_site.each_context(request),
             "title": f"Preiserhoehungs-Positionen: {price_increase.title}",
             "subtitle": "Asynchrone Listenansicht",
             "price_increase": price_increase,
-            "items": items,
+            "items": prepared_items,
             "search_term": search_term,
             "search_min_length": 3,
             "price_increase_change_url": reverse("admin:products_priceincrease_change", args=(price_increase.pk,)),
@@ -1059,6 +1107,14 @@ class PriceIncreaseAdmin(BaseAdmin):
         field_label = self._get_save_field_label(field_name)
         item.row_status_message = f"{field_label} gespeichert: {old_value or 'leer'} -> {new_value or 'leer'}"
         self._prepare_position_item(price_increase, item)
+        item.price_chart_data = self._build_price_chart_data(
+            item,
+            list(
+                PriceHistory.objects.filter(price_entry_id=item.source_price_id)
+                .only("price_entry_id", "created_at", "price")
+                .order_by("created_at", "id")
+            ),
+        )
 
         log_admin_change(
             user_id=request.user.id,

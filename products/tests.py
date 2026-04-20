@@ -1,5 +1,5 @@
 from pathlib import Path
-from datetime import timedelta
+from datetime import datetime, timedelta
 from decimal import Decimal
 import sqlite3
 from tempfile import TemporaryDirectory
@@ -350,6 +350,18 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
             current_rebate_quantity=5,
             current_rebate_price=Decimal("9.01"),
         )
+        historical_entry = PriceHistory.objects.create(
+            price_entry=self.price,
+            change_type=PriceHistory.ChangeType.UPDATED,
+            changed_fields="imported_history",
+            price=Decimal("8.50"),
+            rebate_quantity=5,
+            rebate_price=Decimal("7.90"),
+        )
+        PriceHistory.objects.filter(pk=historical_entry.pk).update(
+            created_at=timezone.make_aware(datetime(2022, 1, 1, 0, 0, 0)),
+            updated_at=timezone.make_aware(datetime(2022, 1, 1, 0, 0, 0)),
+        )
 
     def test_positions_page_renders_custom_unfold_view(self):
         response = self.client.get(reverse("admin:products_priceincrease_positions", args=(self.price_increase.pk,)))
@@ -373,10 +385,13 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
         self.assertContains(response, "VPE")
         self.assertContains(response, "Rab.Preis")
         self.assertContains(response, "Einht.")
+        self.assertContains(response, "Verlauf")
         self.assertContains(response, "Neuer Preis")
         self.assertContains(response, "neuer Rab.Preis")
         self.assertContains(response, 'placeholder="10,30"', html=False)
         self.assertContains(response, 'placeholder="9,25"', html=False)
+        self.assertContains(response, "js-mini-price-chart")
+        self.assertContains(response, '"labels": ["2022",')
 
     def test_save_endpoint_saves_rounded_target_prices(self):
         response = self.client.post(
