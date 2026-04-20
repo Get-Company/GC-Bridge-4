@@ -968,8 +968,16 @@ class PriceIncreaseAdmin(BaseAdmin):
         item.display_new_rebate_price = self._format_decimal(item.new_rebate_price)
         item.placeholder_new_price = self._format_decimal(item.suggested_price)
         item.placeholder_new_rebate_price = self._format_decimal(item.suggested_rebate_price)
+        item.row_status_message = getattr(item, "row_status_message", "")
         item.save_url = self._positions_save_url(price_increase.pk, item.pk)
         return item
+
+    def _get_save_field_label(self, field_name: str) -> str:
+        if field_name == "new_price":
+            return "Neuer Preis"
+        if field_name == "new_rebate_price":
+            return "neuer Rab.Preis"
+        return field_name
 
     def _build_positions_context(self, request, price_increase: PriceIncrease, search_term: str = "") -> dict:
         search_term = (search_term or "").strip()
@@ -1042,8 +1050,14 @@ class PriceIncreaseAdmin(BaseAdmin):
         if not value_form.is_valid():
             return JsonResponse({"error": "Ungueltiger Preiswert."}, status=400)
 
+        previous_value = getattr(item, field_name)
         setattr(item, field_name, value_form.cleaned_data["value"])
         item.save()
+        item.refresh_from_db()
+        old_value = self._format_decimal(previous_value)
+        new_value = self._format_decimal(getattr(item, field_name))
+        field_label = self._get_save_field_label(field_name)
+        item.row_status_message = f"{field_label} gespeichert: {old_value or 'leer'} -> {new_value or 'leer'}"
         self._prepare_position_item(price_increase, item)
 
         log_admin_change(
@@ -1051,7 +1065,7 @@ class PriceIncreaseAdmin(BaseAdmin):
             content_type_id=ContentType.objects.get_for_model(PriceIncreaseItem).id,
             object_id=str(item.pk),
             object_repr=str(item),
-            message=f"Preiserhoehungs-Position aktualisiert: {field_name}",
+            message=item.row_status_message,
         )
 
         row_html = render_to_string(
@@ -1065,7 +1079,7 @@ class PriceIncreaseAdmin(BaseAdmin):
         )
         return JsonResponse(
             {
-                "message": f"{field_name} gespeichert.",
+                "message": item.row_status_message,
                 "row_html": row_html,
             }
         )

@@ -1,5 +1,5 @@
-<div class="rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
-    <div class="border-b border-gray-200 px-4 py-3 text-sm text-gray-500 dark:border-gray-800 dark:text-gray-400">
+<div class="rounded-default border border-base-200 bg-white shadow-xs dark:border-base-800 dark:bg-base-900">
+    <div class="border-b border-base-200 px-4 py-3 text-sm text-font-subtle-light dark:border-base-800 dark:text-font-subtle-dark">
         {% if search_term %}
             {% if search_term|length < search_min_length %}
                 Bitte mindestens {{ search_min_length }} Zeichen eingeben.
@@ -13,19 +13,20 @@
 
     {% if items %}
         <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-800">
-                <thead class="bg-gray-50 dark:bg-gray-950/50">
+            <table class="min-w-full divide-y divide-base-200 dark:divide-base-800">
+                <thead class="bg-base-50 dark:bg-base-950/50">
                     <tr>
-                        <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">ErpNr</th>
-                        <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Preis</th>
-                        <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">VPE</th>
-                        <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Rab.Preis</th>
-                        <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Einht.</th>
-                        <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Neuer Preis</th>
-                        <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">neuer Rab.Preis</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-font-subtle-light dark:text-font-subtle-dark">ErpNr</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-font-subtle-light dark:text-font-subtle-dark">Preis</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-font-subtle-light dark:text-font-subtle-dark">VPE</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-font-subtle-light dark:text-font-subtle-dark">Rab.Preis</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-font-subtle-light dark:text-font-subtle-dark">Einht.</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-font-subtle-light dark:text-font-subtle-dark">Neuer Preis</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-font-subtle-light dark:text-font-subtle-dark">neuer Rab.Preis</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-font-subtle-light dark:text-font-subtle-dark">Status</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-gray-200 dark:divide-gray-800">
+                <tbody class="divide-y divide-base-200 dark:divide-base-800">
                     {% for item in items %}
                         {% include "admin/products/includes/price_increase_position_row.html" %}
                     {% endfor %}
@@ -33,7 +34,7 @@
             </table>
         </div>
     {% else %}
-        <div class="px-4 py-8 text-sm text-gray-500 dark:text-gray-400">
+        <div class="px-4 py-8 text-sm text-font-subtle-light dark:text-font-subtle-dark">
             Keine Positionen gefunden.
         </div>
     {% endif %}

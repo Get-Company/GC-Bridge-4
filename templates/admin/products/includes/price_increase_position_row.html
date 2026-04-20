@@ -1,14 +1,14 @@
 <tr class="align-top">
-    <td class="whitespace-nowrap px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">{{ item.product.erp_nr }}</td>
-    <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-700 dark:text-gray-300">{{ item.display_current_price }}</td>
-    <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-700 dark:text-gray-300">{{ item.display_current_rebate_quantity }}</td>
-    <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-700 dark:text-gray-300">{{ item.display_current_rebate_price }}</td>
-    <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-700 dark:text-gray-300">{{ item.display_unit }}</td>
+    <td class="whitespace-nowrap px-4 py-3 text-sm font-medium text-font-important-light dark:text-font-important-dark">{{ item.product.erp_nr }}</td>
+    <td class="whitespace-nowrap px-4 py-3 text-sm text-font-default-light dark:text-font-default-dark">{{ item.display_current_price }}</td>
+    <td class="whitespace-nowrap px-4 py-3 text-sm text-font-default-light dark:text-font-default-dark">{{ item.display_current_rebate_quantity }}</td>
+    <td class="whitespace-nowrap px-4 py-3 text-sm text-font-default-light dark:text-font-default-dark">{{ item.display_current_rebate_price }}</td>
+    <td class="whitespace-nowrap px-4 py-3 text-sm text-font-default-light dark:text-font-default-dark">{{ item.display_unit }}</td>
     <td class="px-4 py-3">
         <input
             type="text"
             inputmode="decimal"
-            class="js-position-price-input w-32 rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100 dark:placeholder:text-gray-500"
+            class="js-position-price-input w-32 rounded-default border border-base-200 bg-white px-3 py-2 text-sm text-font-default-light placeholder-font-subtle-light shadow-xs focus:border-primary-600 focus:outline-none focus:ring-2 focus:ring-primary-600/20 dark:border-base-700 dark:bg-base-950 dark:text-font-default-dark dark:placeholder-font-subtle-dark"
             data-field="new_price"
             data-save-url="{{ item.save_url }}"
             value="{{ item.display_new_price }}"
@@ -20,12 +20,21 @@
         <input
             type="text"
             inputmode="decimal"
-            class="js-position-price-input w-32 rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100 dark:placeholder:text-gray-500"
+            class="js-position-price-input w-32 rounded-default border border-base-200 bg-white px-3 py-2 text-sm text-font-default-light placeholder-font-subtle-light shadow-xs focus:border-primary-600 focus:outline-none focus:ring-2 focus:ring-primary-600/20 dark:border-base-700 dark:bg-base-950 dark:text-font-default-dark dark:placeholder-font-subtle-dark"
             data-field="new_rebate_price"
             data-save-url="{{ item.save_url }}"
             value="{{ item.display_new_rebate_price }}"
             placeholder="{{ item.placeholder_new_rebate_price }}"
             {% if is_applied %}disabled{% endif %}
         >
+    </td>
+    <td class="px-4 py-3 text-sm">
+        {% if item.row_status_message %}
+            <span class="inline-flex rounded-default bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-300">
+                {{ item.row_status_message }}
+            </span>
+        {% else %}
+            <span class="text-font-subtle-light dark:text-font-subtle-dark">Noch nichts gespeichert.</span>
+        {% endif %}
     </td>
 </tr>
