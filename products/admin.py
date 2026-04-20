@@ -250,7 +250,7 @@ class PriceIncreaseItemEditForm(forms.ModelForm):
         self.fields["new_price"].required = False
         self.fields["new_rebate_price"].required = False
         self.fields["new_price"].label = "Neuer Preis"
-        self.fields["new_rebate_price"].label = "Neuer Staffelpreis"
+        self.fields["new_rebate_price"].label = "neuer Rab.Preis"
         base_input_classes = (
             "w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm "
             "focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
@@ -1000,9 +1000,9 @@ class PriceIncreaseItemAdmin(BaseAdmin):
         queryset = super().get_queryset(request)
         return queryset.select_related("price_increase", "product", "source_price").order_by(
             "product__erp_nr", "id"
-        )
+        ).filter(product__is_active=True)
 
-    @admin.display(description="Artnr (ERPNR)", ordering="product__erp_nr")
+    @admin.display(description="ErpNr", ordering="product__erp_nr")
     def erp_nr_display(self, obj: PriceIncreaseItem):
         return obj.product.erp_nr
 
@@ -1010,15 +1010,15 @@ class PriceIncreaseItemAdmin(BaseAdmin):
     def price_display(self, obj: PriceIncreaseItem):
         return obj.current_price
 
-    @admin.display(description="Staffelpreis Menge", ordering="current_rebate_quantity")
+    @admin.display(description="VPE", ordering="current_rebate_quantity")
     def rebate_quantity_display(self, obj: PriceIncreaseItem):
         return obj.current_rebate_quantity
 
-    @admin.display(description="Staffelpreis", ordering="current_rebate_price")
+    @admin.display(description="Rab.Preis", ordering="current_rebate_price")
     def rebate_price_display(self, obj: PriceIncreaseItem):
         return obj.current_rebate_price
 
-    @admin.display(description="Einheit", ordering="unit")
+    @admin.display(description="Einht.", ordering="unit")
     def unit_display(self, obj: PriceIncreaseItem):
         return obj.unit
 

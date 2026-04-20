@@ -27,7 +27,7 @@ class PriceIncreaseService(BaseService):
 
         prices = list(
             Price.objects.select_related("product", "sales_channel")
-            .filter(sales_channel=sales_channel)
+            .filter(sales_channel=sales_channel, product__is_active=True)
             .order_by("product__erp_nr", "pk")
         )
         source_price_ids = []

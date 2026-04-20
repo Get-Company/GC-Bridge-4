@@ -680,7 +680,7 @@ class PriceIncreaseItem(BaseModel):
         decimal_places=2,
         null=True,
         blank=True,
-        verbose_name=_("Neuer Staffelpreis (ed)"),
+        verbose_name=_("neuer Rab.Preis"),
     )
 
     class Meta:

@@ -305,13 +305,13 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Artnr (ERPNR)")
+        self.assertContains(response, "ErpNr")
         self.assertContains(response, "Preis")
-        self.assertContains(response, "Staffelpreis Menge")
-        self.assertContains(response, "Staffelpreis")
-        self.assertContains(response, "Einheit")
-        self.assertContains(response, "Neuer Preis (ed)")
-        self.assertContains(response, "Neuer Staffelpreis (ed)")
+        self.assertContains(response, "VPE")
+        self.assertContains(response, "Rab.Preis")
+        self.assertContains(response, "Einht.")
+        self.assertContains(response, "Neuer Preis")
+        self.assertContains(response, "neuer Rab.Preis")
         self.assertContains(response, 'placeholder="10.30"', html=False)
         self.assertContains(response, 'placeholder="9.25"', html=False)
 
@@ -334,6 +334,44 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
         self.item.refresh_from_db()
         self.assertEqual(self.item.new_price, Decimal("10.25"))
         self.assertEqual(self.item.new_rebate_price, Decimal("9.25"))
+
+    def test_item_changelist_only_shows_active_products_sorted_by_erp_nr(self):
+        inactive_product = Product.objects.create(erp_nr="A-1000", name="Inaktiv", unit="Stk", is_active=False)
+        inactive_price = Price.objects.create(
+            product=inactive_product,
+            sales_channel=self.default_channel,
+            price=Decimal("7.00"),
+        )
+        PriceIncreaseItem.objects.create(
+            price_increase=self.price_increase,
+            product=inactive_product,
+            source_price=inactive_price,
+            unit="Stk",
+            current_price=Decimal("7.00"),
+        )
+        later_product = Product.objects.create(erp_nr="A-7000", name="Spaeter", unit="Stk", is_active=True)
+        later_price = Price.objects.create(
+            product=later_product,
+            sales_channel=self.default_channel,
+            price=Decimal("12.00"),
+        )
+        PriceIncreaseItem.objects.create(
+            price_increase=self.price_increase,
+            product=later_product,
+            source_price=later_price,
+            unit="Stk",
+            current_price=Decimal("12.00"),
+        )
+
+        response = self.client.get(
+            f'{reverse("admin:products_priceincreaseitem_changelist")}?price_increase__id__exact={self.price_increase.pk}'
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "A-6000")
+        self.assertContains(response, "A-7000")
+        self.assertNotContains(response, "A-1000")
+        self.assertLess(response.content.decode().find("A-6000"), response.content.decode().find("A-7000"))
 
 
 class ProductAdminSpecialPriceActionTest(TestCase):

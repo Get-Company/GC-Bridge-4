@@ -324,6 +324,11 @@ UNFOLD = {
                         "link": reverse_lazy("admin:products_price_changelist"),
                     },
                     {
+                        "title": _("Preiserhöhungen"),
+                        "icon": "trending_up",
+                        "link": reverse_lazy("admin:products_priceincrease_changelist"),
+                    },
+                    {
                         "title": _("Attributgruppen"),
                         "icon": "category",
                         "link": reverse_lazy("admin:products_propertygroup_changelist"),
