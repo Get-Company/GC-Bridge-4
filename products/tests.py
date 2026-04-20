@@ -289,19 +289,20 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
             current_rebate_price=Decimal("9.01"),
         )
 
-    def test_positions_redirect_opens_filtered_list_view(self):
+    def test_positions_page_renders_custom_unfold_view(self):
         response = self.client.get(reverse("admin:products_priceincrease_positions", args=(self.price_increase.pk,)))
 
-        self.assertEqual(response.status_code, 302)
-        self.assertIn(
-            reverse("admin:products_priceincreaseitem_changelist"),
-            response.headers["Location"],
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Preiserhoehungs-Positionen: Admin View Test")
+        self.assertContains(response, "Positionen aktualisieren liest die aktuellen Basispreise")
+        self.assertContains(
+            response,
+            reverse("admin:products_priceincrease_positions_table", args=(self.price_increase.pk,)),
         )
-        self.assertIn(f"price_increase__id__exact={self.price_increase.pk}", response.headers["Location"])
 
-    def test_item_changelist_renders_expected_columns_and_placeholders(self):
+    def test_positions_table_renders_expected_columns_and_placeholders(self):
         response = self.client.get(
-            f'{reverse("admin:products_priceincreaseitem_changelist")}?price_increase__id__exact={self.price_increase.pk}'
+            reverse("admin:products_priceincrease_positions_table", args=(self.price_increase.pk,))
         )
 
         self.assertEqual(response.status_code, 200)
@@ -312,50 +313,41 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
         self.assertContains(response, "Einht.")
         self.assertContains(response, "Neuer Preis")
         self.assertContains(response, "neuer Rab.Preis")
-        self.assertContains(response, 'placeholder="10.30"', html=False)
-        self.assertContains(response, 'placeholder="9.25"', html=False)
+        self.assertContains(response, 'placeholder="10,30"', html=False)
+        self.assertContains(response, 'placeholder="9,25"', html=False)
 
-    def test_item_changelist_post_saves_rounded_target_prices(self):
+    def test_save_endpoint_saves_rounded_target_prices(self):
         response = self.client.post(
-            f'{reverse("admin:products_priceincreaseitem_changelist")}?price_increase__id__exact={self.price_increase.pk}',
+            reverse("admin:products_priceincrease_position_save", args=(self.price_increase.pk, self.item.pk)),
             data={
-                "form-TOTAL_FORMS": "1",
-                "form-INITIAL_FORMS": "1",
-                "form-MIN_NUM_FORMS": "0",
-                "form-MAX_NUM_FORMS": "1000",
-                "_save": "Speichern",
-                "form-0-id": str(self.item.pk),
-                "form-0-new_price": "10.21",
-                "form-0-new_rebate_price": "9.22",
+                "field": "new_price",
+                "value": "10,21",
             },
         )
 
-        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.status_code, 200)
         self.item.refresh_from_db()
         self.assertEqual(self.item.new_price, Decimal("10.25"))
-        self.assertEqual(self.item.new_rebate_price, Decimal("9.25"))
+        self.assertIsNone(self.item.new_rebate_price)
+        self.assertContains(response, 'value="10,25"', html=False)
+        self.assertContains(response, 'placeholder="9,25"', html=False)
 
-    def test_item_changelist_post_accepts_decimal_comma(self):
+    def test_save_endpoint_accepts_decimal_comma(self):
         response = self.client.post(
-            f'{reverse("admin:products_priceincreaseitem_changelist")}?price_increase__id__exact={self.price_increase.pk}',
+            reverse("admin:products_priceincrease_position_save", args=(self.price_increase.pk, self.item.pk)),
             data={
-                "form-TOTAL_FORMS": "1",
-                "form-INITIAL_FORMS": "1",
-                "form-MIN_NUM_FORMS": "0",
-                "form-MAX_NUM_FORMS": "1000",
-                "_save": "Speichern",
-                "form-0-id": str(self.item.pk),
-                "form-0-new_price": "4,50",
-                "form-0-new_rebate_price": "4,21",
+                "field": "new_rebate_price",
+                "value": "4,21",
             },
         )
 
-        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.status_code, 200)
         self.item.refresh_from_db()
-        self.assertEqual(self.item.new_price, Decimal("4.50"))
+        self.assertIsNone(self.item.new_price)
         self.assertEqual(self.item.new_rebate_price, Decimal("4.25"))
+        self.assertContains(response, 'value="4,25"', html=False)
 
-    def test_item_changelist_only_shows_active_products_sorted_by_erp_nr(self):
+    def test_positions_table_only_shows_active_products_sorted_by_erp_nr(self):
         inactive_product = Product.objects.create(erp_nr="A-1000", name="Inaktiv", unit="Stk", is_active=False)
         inactive_price = Price.objects.create(
             product=inactive_product,
@@ -384,7 +376,7 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
         )
 
         response = self.client.get(
-            f'{reverse("admin:products_priceincreaseitem_changelist")}?price_increase__id__exact={self.price_increase.pk}'
+            reverse("admin:products_priceincrease_positions_table", args=(self.price_increase.pk,))
         )
 
         self.assertEqual(response.status_code, 200)
@@ -393,13 +385,21 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
         self.assertNotContains(response, "A-1000")
         self.assertLess(response.content.decode().find("A-6000"), response.content.decode().find("A-7000"))
 
-    def test_item_changelist_search_requires_three_characters(self):
+    def test_positions_table_search_requires_three_characters(self):
         response = self.client.get(
-            f'{reverse("admin:products_priceincreaseitem_changelist")}?price_increase__id__exact={self.price_increase.pk}&q=A-'
+            f'{reverse("admin:products_priceincrease_positions_table", args=(self.price_increase.pk,))}?q=A-'
         )
 
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, "A-6000")
+
+    def test_positions_table_search_matches_erp_nr_asynchronously(self):
+        response = self.client.get(
+            f'{reverse("admin:products_priceincrease_positions_table", args=(self.price_increase.pk,))}?q=600'
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "A-6000")
 
 
 class ProductAdminSpecialPriceActionTest(TestCase):

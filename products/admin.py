@@ -4,13 +4,15 @@ from django import forms
 from django.contrib import admin, messages
 from django.contrib.contenttypes.models import ContentType
 from django.core.management import call_command
-from django.forms.models import BaseModelFormSet
-from django.db.models import Case, IntegerField, Prefetch, Value, When
-from django.http import HttpResponseRedirect, HttpResponseNotAllowed
+from django.db.models import Case, IntegerField, Prefetch, Q, Value, When
+from django.http import Http404, HttpResponseRedirect, HttpResponseNotAllowed, JsonResponse
+from django.template.loader import render_to_string
+from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils import timezone
 from django.utils.html import format_html
 from modeltranslation.admin import TabbedTranslationAdmin
+from django.views.generic import TemplateView
 
 from ai.models import AIRewriteJob, AIRewritePrompt
 from ai.rewrite_fields import get_rewriteable_product_field_names
@@ -24,6 +26,7 @@ from unfold.contrib.filters.admin import (
 from unfold.decorators import action
 from unfold.enums import ActionVariant
 from unfold.forms import ActionForm as UnfoldActionForm
+from unfold.views import UnfoldModelAdminViewMixin
 
 from core.admin import BaseAdmin, BaseStackedInline, BaseTabularInline
 from core.admin_utils import log_admin_change
@@ -263,11 +266,12 @@ class PriceIncreaseItemEditForm(forms.ModelForm):
         )
         self.fields["new_price"].widget.attrs["class"] = base_input_classes
         self.fields["new_rebate_price"].widget.attrs["class"] = base_input_classes
-        self.fields["new_price"].widget.attrs["placeholder"] = self._format_decimal(self.instance.suggested_price)
-        if self.instance.suggested_rebate_price is not None:
-            self.fields["new_rebate_price"].widget.attrs["placeholder"] = self._format_decimal(
-                self.instance.suggested_rebate_price
-            )
+        if self.instance.price_increase_id and self.instance.current_price is not None:
+            self.fields["new_price"].widget.attrs["placeholder"] = self._format_decimal(self.instance.suggested_price)
+            if self.instance.suggested_rebate_price is not None:
+                self.fields["new_rebate_price"].widget.attrs["placeholder"] = self._format_decimal(
+                    self.instance.suggested_rebate_price
+                )
         if self.instance.price_increase_id and self.instance.price_increase.status == PriceIncrease.Status.APPLIED:
             self.fields["new_price"].disabled = True
             self.fields["new_rebate_price"].disabled = True
@@ -279,12 +283,26 @@ class PriceIncreaseItemEditForm(forms.ModelForm):
         return format(value.quantize(Decimal("0.01")), "f")
 
 
-class PriceIncreaseItemChangeListFormSet(BaseModelFormSet):
-    def _construct_form(self, i, **kwargs):
-        form = super()._construct_form(i, **kwargs)
-        if hasattr(form, "_apply_dynamic_widget_state"):
-            form._apply_dynamic_widget_state()
-        return form
+class PriceIncreaseItemValueForm(forms.Form):
+    value = forms.DecimalField(required=False, localize=True)
+
+
+class PriceIncreasePositionsPageView(UnfoldModelAdminViewMixin, TemplateView):
+    title = "Preiserhoehungs-Positionen"
+    permission_required = ("products.view_priceincrease",)
+    template_name = "admin/products/price_increase_positions.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        price_increase = self.model_admin._get_price_increase_or_404(self.kwargs["object_id"])
+        context.update(
+            self.model_admin._build_positions_context(
+                request=self.request,
+                price_increase=price_increase,
+                search_term=self.request.GET.get("q", ""),
+            )
+        )
+        return context
 
 
 @admin.register(Product)
@@ -873,21 +891,105 @@ class PriceIncreaseAdmin(BaseAdmin):
             return "Nach dem ersten Speichern verfuegbar."
         return format_html(
             '<a class="button" href="{}">Listenansicht bearbeiten</a>',
-            self._item_changelist_url(obj.pk),
+            self._positions_page_url(obj.pk),
         )
 
     def get_urls(self):
+        positions_view = self.admin_site.admin_view(
+            PriceIncreasePositionsPageView.as_view(model_admin=self)
+        )
         return [
             path(
                 "<path:object_id>/positions/",
-                self.admin_site.admin_view(self.positions_view),
+                positions_view,
                 name="products_priceincrease_positions",
+            ),
+            path(
+                "<path:object_id>/positions/table/",
+                self.admin_site.admin_view(self.positions_table_view),
+                name="products_priceincrease_positions_table",
+            ),
+            path(
+                "<path:object_id>/positions/<path:item_id>/save/",
+                self.admin_site.admin_view(self.save_position_value_view),
+                name="products_priceincrease_position_save",
             ),
         ] + super().get_urls()
 
     @staticmethod
-    def _item_changelist_url(object_id: int | str) -> str:
-        return f'{reverse("admin:products_priceincreaseitem_changelist")}?price_increase__id__exact={object_id}'
+    def _positions_page_url(object_id: int | str) -> str:
+        return reverse("admin:products_priceincrease_positions", args=(object_id,))
+
+    @staticmethod
+    def _positions_table_url(object_id: int | str) -> str:
+        return reverse("admin:products_priceincrease_positions_table", args=(object_id,))
+
+    @staticmethod
+    def _positions_save_url(object_id: int | str, item_id: int | str) -> str:
+        return reverse("admin:products_priceincrease_position_save", args=(object_id, item_id))
+
+    @staticmethod
+    def _format_decimal(value: Decimal | None) -> str:
+        if value is None:
+            return ""
+        return format(value.quantize(Decimal("0.01")), "f").replace(".", ",")
+
+    @staticmethod
+    def _format_integer(value) -> str:
+        return "" if value in (None, "") else str(value)
+
+    def _get_price_increase_or_404(self, object_id: int | str) -> PriceIncrease:
+        price_increase = PriceIncrease.objects.select_related("sales_channel").filter(pk=object_id).first()
+        if not price_increase:
+            raise Http404("Preiserhoehung nicht gefunden.")
+        return price_increase
+
+    def _get_positions_queryset(self, price_increase: PriceIncrease, search_term: str = ""):
+        queryset = (
+            price_increase.items.select_related("product", "source_price")
+            .filter(product__is_active=True)
+            .order_by("product__erp_nr", "id")
+        )
+        search_term = (search_term or "").strip()
+        if search_term:
+            if len(search_term) < 3:
+                return queryset.none()
+            queryset = queryset.filter(
+                Q(product__erp_nr__icontains=search_term) | Q(product__name__icontains=search_term)
+            )
+        return queryset
+
+    def _prepare_position_item(self, price_increase: PriceIncrease, item: PriceIncreaseItem) -> PriceIncreaseItem:
+        item.display_current_price = self._format_decimal(item.current_price)
+        item.display_current_rebate_quantity = self._format_integer(item.current_rebate_quantity)
+        item.display_current_rebate_price = self._format_decimal(item.current_rebate_price)
+        item.display_unit = item.unit or ""
+        item.display_new_price = self._format_decimal(item.new_price)
+        item.display_new_rebate_price = self._format_decimal(item.new_rebate_price)
+        item.placeholder_new_price = self._format_decimal(item.suggested_price)
+        item.placeholder_new_rebate_price = self._format_decimal(item.suggested_rebate_price)
+        item.save_url = self._positions_save_url(price_increase.pk, item.pk)
+        return item
+
+    def _build_positions_context(self, request, price_increase: PriceIncrease, search_term: str = "") -> dict:
+        search_term = (search_term or "").strip()
+        items = [
+            self._prepare_position_item(price_increase, item)
+            for item in self._get_positions_queryset(price_increase, search_term)
+        ]
+        return {
+            **self.admin_site.each_context(request),
+            "title": f"Preiserhoehungs-Positionen: {price_increase.title}",
+            "subtitle": "Asynchrone Listenansicht",
+            "price_increase": price_increase,
+            "items": items,
+            "search_term": search_term,
+            "search_min_length": 3,
+            "price_increase_change_url": reverse("admin:products_priceincrease_change", args=(price_increase.pk,)),
+            "price_increase_changelist_url": reverse("admin:products_priceincrease_changelist"),
+            "positions_table_url": self._positions_table_url(price_increase.pk),
+            "is_applied": price_increase.status == PriceIncrease.Status.APPLIED,
+        }
 
     @action(
         description="Positionsliste",
@@ -899,14 +1001,74 @@ class PriceIncreaseAdmin(BaseAdmin):
         if not obj:
             self.message_user(request, "Preiserhoehung nicht gefunden.", level=messages.ERROR)
             return HttpResponseRedirect(reverse("admin:products_priceincrease_changelist"))
-        return HttpResponseRedirect(self._item_changelist_url(obj.pk))
+        return HttpResponseRedirect(self._positions_page_url(obj.pk))
 
-    def positions_view(self, request, object_id: str):
-        obj = self.get_object(request, object_id)
-        if not obj:
-            self.message_user(request, "Preiserhoehung nicht gefunden.", level=messages.ERROR)
-            return HttpResponseRedirect(reverse("admin:products_priceincrease_changelist"))
-        return HttpResponseRedirect(self._item_changelist_url(obj.pk))
+    def positions_table_view(self, request, object_id: str):
+        price_increase = self._get_price_increase_or_404(object_id)
+        context = self._build_positions_context(
+            request=request,
+            price_increase=price_increase,
+            search_term=request.GET.get("q", ""),
+        )
+        return TemplateResponse(
+            request,
+            "admin/products/includes/price_increase_positions_table.html",
+            context,
+        )
+
+    def save_position_value_view(self, request, object_id: str, item_id: str):
+        if request.method != "POST":
+            return HttpResponseNotAllowed(["POST"])
+        if not self.has_change_permission(request):
+            return JsonResponse({"error": "Keine Berechtigung zum Speichern."}, status=403)
+
+        price_increase = self._get_price_increase_or_404(object_id)
+        if price_increase.status == PriceIncrease.Status.APPLIED:
+            return JsonResponse({"error": "Diese Preiserhoehung wurde bereits uebernommen."}, status=400)
+
+        item = (
+            price_increase.items.select_related("product", "source_price")
+            .filter(pk=item_id, product__is_active=True)
+            .first()
+        )
+        if not item:
+            return JsonResponse({"error": "Position nicht gefunden."}, status=404)
+
+        field_name = str(request.POST.get("field") or "").strip()
+        if field_name not in {"new_price", "new_rebate_price"}:
+            return JsonResponse({"error": "Ungueltiges Feld."}, status=400)
+
+        value_form = PriceIncreaseItemValueForm(request.POST)
+        if not value_form.is_valid():
+            return JsonResponse({"error": "Ungueltiger Preiswert."}, status=400)
+
+        setattr(item, field_name, value_form.cleaned_data["value"])
+        item.save()
+        self._prepare_position_item(price_increase, item)
+
+        log_admin_change(
+            user_id=request.user.id,
+            content_type_id=ContentType.objects.get_for_model(PriceIncreaseItem).id,
+            object_id=str(item.pk),
+            object_repr=str(item),
+            message=f"Preiserhoehungs-Position aktualisiert: {field_name}",
+        )
+
+        row_html = render_to_string(
+            "admin/products/includes/price_increase_position_row.html",
+            {
+                "item": item,
+                "price_increase": price_increase,
+                "is_applied": False,
+            },
+            request=request,
+        )
+        return JsonResponse(
+            {
+                "message": f"{field_name} gespeichert.",
+                "row_html": row_html,
+            }
+        )
 
     def save_model(self, request, obj, form, change):
         is_create = obj.pk is None
@@ -962,7 +1124,6 @@ class PriceIncreaseAdmin(BaseAdmin):
 @admin.register(PriceIncreaseItem)
 class PriceIncreaseItemAdmin(BaseAdmin):
     form = PriceIncreaseItemEditForm
-    change_list_template = "admin/products/price_increase_item_change_list.html"
     list_display = (
         "erp_nr_display",
         "price_display",
@@ -972,8 +1133,7 @@ class PriceIncreaseItemAdmin(BaseAdmin):
         "new_price",
         "new_rebate_price",
     )
-    list_display_links = ("erp_nr_display",)
-    list_editable = ("new_price", "new_rebate_price")
+    list_display_links = list_display
     ordering = ("product__erp_nr", "id")
     list_filter = [("price_increase", RelatedDropdownFilter)]
     search_fields = (
@@ -981,7 +1141,6 @@ class PriceIncreaseItemAdmin(BaseAdmin):
         "product__erp_nr",
         "product__name",
     )
-    search_help_text = "Mind. 3 Zeichen fuer automatische Suche"
     list_per_page = 200
     readonly_fields = (
         "price_increase",
@@ -1039,50 +1198,8 @@ class PriceIncreaseItemAdmin(BaseAdmin):
     def unit_display(self, obj: PriceIncreaseItem):
         return obj.unit
 
-    def _get_filtered_price_increase(self, request):
-        object_id = str(request.GET.get("price_increase__id__exact") or "").strip()
-        if not object_id:
-            return None
-        return PriceIncrease.objects.filter(pk=object_id).first()
-
-    def get_list_editable(self, request):
-        price_increase = self._get_filtered_price_increase(request)
-        if price_increase and price_increase.status == PriceIncrease.Status.APPLIED:
-            return ()
-        return super().get_list_editable(request)
-
-    def changelist_view(self, request, extra_context=None):
-        price_increase = self._get_filtered_price_increase(request)
-        extra_context = extra_context or {}
-        if price_increase:
-            extra_context["title"] = f"Preiserhoehungs-Positionen: {price_increase.title}"
-            extra_context["subtitle"] = "Listenansicht"
-            extra_context["price_increase"] = price_increase
-            extra_context["price_increase_change_url"] = reverse(
-                "admin:products_priceincrease_change", args=(price_increase.pk,)
-            )
-            extra_context["price_increase_changelist_url"] = reverse("admin:products_priceincrease_changelist")
-            extra_context["auto_search_min_length"] = 3
-            if price_increase.status == PriceIncrease.Status.APPLIED:
-                self.message_user(
-                    request,
-                    "Diese Preiserhoehung wurde bereits uebernommen und ist in der Listenansicht nur noch lesbar.",
-                    level=messages.WARNING,
-                )
-        return super().changelist_view(request, extra_context)
-
     def has_add_permission(self, request):
         return False
-
-    def get_search_results(self, request, queryset, search_term):
-        search_term = (search_term or "").strip()
-        if search_term and len(search_term) < 3:
-            return queryset.none(), False
-        return super().get_search_results(request, queryset, search_term)
-
-    def get_changelist_formset(self, request, **kwargs):
-        kwargs.setdefault("formset", PriceIncreaseItemChangeListFormSet)
-        return super().get_changelist_formset(request, **kwargs)
 
 
 @admin.register(Storage)

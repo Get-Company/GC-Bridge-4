@@ -1,0 +1,31 @@
+<tr class="align-top">
+    <td class="whitespace-nowrap px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">{{ item.product.erp_nr }}</td>
+    <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-700 dark:text-gray-300">{{ item.display_current_price }}</td>
+    <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-700 dark:text-gray-300">{{ item.display_current_rebate_quantity }}</td>
+    <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-700 dark:text-gray-300">{{ item.display_current_rebate_price }}</td>
+    <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-700 dark:text-gray-300">{{ item.display_unit }}</td>
+    <td class="px-4 py-3">
+        <input
+            type="text"
+            inputmode="decimal"
+            class="js-position-price-input w-32 rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100 dark:placeholder:text-gray-500"
+            data-field="new_price"
+            data-save-url="{{ item.save_url }}"
+            value="{{ item.display_new_price }}"
+            placeholder="{{ item.placeholder_new_price }}"
+            {% if is_applied %}disabled{% endif %}
+        >
+    </td>
+    <td class="px-4 py-3">
+        <input
+            type="text"
+            inputmode="decimal"
+            class="js-position-price-input w-32 rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100 dark:placeholder:text-gray-500"
+            data-field="new_rebate_price"
+            data-save-url="{{ item.save_url }}"
+            value="{{ item.display_new_rebate_price }}"
+            placeholder="{{ item.placeholder_new_rebate_price }}"
+            {% if is_applied %}disabled{% endif %}
+        >
+    </td>
+</tr>
