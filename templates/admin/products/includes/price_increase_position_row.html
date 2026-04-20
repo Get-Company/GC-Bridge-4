@@ -5,14 +5,19 @@
     <td class="whitespace-nowrap px-4 py-3 text-sm text-font-default-light dark:text-font-default-dark">{{ item.display_current_rebate_price }}</td>
     <td class="whitespace-nowrap px-4 py-3 text-sm text-font-default-light dark:text-font-default-dark">{{ item.display_unit }}</td>
     <td class="px-4 py-3">
-        <div class="w-32">
-            <div class="relative h-14 w-full rounded-default border border-base-200 bg-base-50/80 px-1 py-1 dark:border-base-800 dark:bg-base-950/50">
-                <canvas
-                    class="js-mini-price-chart h-12 w-full"
-                    data-chart='{{ item.price_chart_data|safe }}'
-                    height="48"
-                ></canvas>
-            </div>
+        <div class="min-w-28 space-y-1">
+            {% for yearly_price in item.yearly_prices %}
+                <div class="flex items-center justify-between gap-2 text-xs">
+                    <span class="font-medium {% if yearly_price.is_current %}text-primary-700 dark:text-primary-400{% else %}text-font-subtle-light dark:text-font-subtle-dark{% endif %}">
+                        {{ yearly_price.year }}
+                    </span>
+                    <span class="{% if yearly_price.is_current %}font-semibold text-font-important-light dark:text-font-important-dark{% else %}text-font-default-light dark:text-font-default-dark{% endif %}">
+                        {{ yearly_price.price }}
+                    </span>
+                </div>
+            {% empty %}
+                <span class="text-font-subtle-light dark:text-font-subtle-dark">Keine Daten</span>
+            {% endfor %}
         </div>
     </td>
     <td class="px-4 py-3">

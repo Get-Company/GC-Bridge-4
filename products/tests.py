@@ -390,8 +390,8 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
         self.assertContains(response, "neuer Rab.Preis")
         self.assertContains(response, 'placeholder="10,30"', html=False)
         self.assertContains(response, 'placeholder="9,25"', html=False)
-        self.assertContains(response, "js-mini-price-chart")
-        self.assertContains(response, '"labels": ["2022",')
+        self.assertContains(response, "2022")
+        self.assertContains(response, "8,50")
 
     def test_save_endpoint_saves_rounded_target_prices(self):
         response = self.client.post(

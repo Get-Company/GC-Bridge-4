@@ -89,78 +89,6 @@
             let searchTimer = null;
             let searchController = null;
 
-            function initMiniCharts(root) {
-                const chartsRoot = root || document;
-                chartsRoot.querySelectorAll(".js-mini-price-chart").forEach(function (canvas) {
-                    if (canvas.dataset.chartBound === "1") {
-                        return;
-                    }
-                    const rawData = canvas.dataset.chart;
-                    if (!rawData || typeof Chart === "undefined") {
-                        return;
-                    }
-
-                    const parsedData = JSON.parse(rawData);
-                    parsedData.datasets.forEach(function (dataset) {
-                        if (Array.isArray(dataset.backgroundColor)) {
-                            dataset.backgroundColor = dataset.backgroundColor.map(function (color) {
-                                if (color.startsWith("var(")) {
-                                    const cssVar = color.match(/var\((.*?)\)/)[1];
-                                    return getComputedStyle(document.documentElement).getPropertyValue(cssVar).trim();
-                                }
-                                return color;
-                            });
-                        }
-                    });
-
-                    const subtleColor = getComputedStyle(document.documentElement)
-                        .getPropertyValue("--color-font-subtle-light")
-                        .trim() || "#9ca3af";
-                    const gridColor = getComputedStyle(document.documentElement)
-                        .getPropertyValue("--color-base-300")
-                        .trim() || "#d1d5db";
-
-                    new Chart(canvas.getContext("2d"), {
-                        type: "bar",
-                        data: parsedData,
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            animation: false,
-                            plugins: {
-                                legend: { display: false },
-                                tooltip: {
-                                    callbacks: {
-                                        label: function (context) {
-                                            return `Preis: ${String(context.raw).replace(".", ",")} €`;
-                                        }
-                                    }
-                                }
-                            },
-                            scales: {
-                                x: {
-                                    grid: { display: false },
-                                    border: { display: false },
-                                    ticks: {
-                                        color: subtleColor,
-                                        autoSkip: false,
-                                        maxRotation: 0,
-                                        minRotation: 0,
-                                        font: { size: 9 },
-                                    },
-                                },
-                                y: {
-                                    display: false,
-                                    grid: { display: false, color: gridColor },
-                                    border: { display: false },
-                                }
-                            }
-                        }
-                    });
-                    canvas.dataset.chartBound = "1";
-                });
-            }
-
             function getCookie(name) {
                 const cookies = document.cookie ? document.cookie.split(";") : [];
                 for (const rawCookie of cookies) {
@@ -202,7 +130,6 @@
                     }
                     container.innerHTML = await response.text();
                     bindInputs(container);
-                    initMiniCharts(container);
                     if (query && query.length >= minLength) {
                         setStatus(`Suchergebnis fuer "${query}" geladen.`, "success");
                     } else {
@@ -244,7 +171,6 @@
                     }
                     row.outerHTML = payload.row_html;
                     bindInputs(container);
-                    initMiniCharts(container);
                     setStatus(payload.message || "Gespeichert.", "success");
                 } catch (error) {
                     row.classList.remove("opacity-60");
@@ -299,7 +225,6 @@
             });
 
             bindInputs(container);
-            initMiniCharts(container);
         });
     </script>
 {% endblock %}

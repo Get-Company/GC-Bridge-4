@@ -1,4 +1,3 @@
-import json
 from decimal import Decimal
 
 from django import forms
@@ -973,7 +972,7 @@ class PriceIncreaseAdmin(BaseAdmin):
         item.save_url = self._positions_save_url(price_increase.pk, item.pk)
         return item
 
-    def _build_price_chart_data(self, item: PriceIncreaseItem, history_entries: list[PriceHistory]) -> str:
+    def _build_yearly_price_summary(self, item: PriceIncreaseItem, history_entries: list[PriceHistory]) -> list[dict[str, str]]:
         yearly_prices: dict[int, Decimal] = {}
         for entry in history_entries:
             yearly_prices[entry.created_at.year] = entry.price
@@ -986,23 +985,14 @@ class PriceIncreaseAdmin(BaseAdmin):
             sorted_years = [current_year]
             yearly_prices[current_year] = item.current_price
 
-        background_colors = [
-            "var(--color-base-400)" if year != current_year else "var(--color-primary-600)"
+        return [
+            {
+                "year": str(year),
+                "price": self._format_decimal(yearly_prices[year]),
+                "is_current": year == current_year,
+            }
             for year in sorted_years
         ]
-        data = {
-            "labels": [str(year) for year in sorted_years],
-            "datasets": [
-                {
-                    "label": "Preisverlauf",
-                    "data": [float(yearly_prices[year]) for year in sorted_years],
-                    "backgroundColor": background_colors,
-                    "borderRadius": 3,
-                    "borderSkipped": False,
-                }
-            ],
-        }
-        return json.dumps(data)
 
     def _get_save_field_label(self, field_name: str) -> str:
         if field_name == "new_price":
@@ -1027,7 +1017,7 @@ class PriceIncreaseAdmin(BaseAdmin):
         prepared_items = []
         for item in items:
             item = self._prepare_position_item(price_increase, item)
-            item.price_chart_data = self._build_price_chart_data(
+            item.yearly_prices = self._build_yearly_price_summary(
                 item,
                 history_by_price_id.get(item.source_price_id, []),
             )
@@ -1107,7 +1097,7 @@ class PriceIncreaseAdmin(BaseAdmin):
         field_label = self._get_save_field_label(field_name)
         item.row_status_message = f"{field_label} gespeichert: {old_value or 'leer'} -> {new_value or 'leer'}"
         self._prepare_position_item(price_increase, item)
-        item.price_chart_data = self._build_price_chart_data(
+        item.yearly_prices = self._build_yearly_price_summary(
             item,
             list(
                 PriceHistory.objects.filter(price_entry_id=item.source_price_id)
