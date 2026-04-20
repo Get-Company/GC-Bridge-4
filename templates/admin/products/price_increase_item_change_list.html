@@ -1,0 +1,30 @@
+{% extends "admin/change_list.html" %}
+
+{% block extrahead %}
+    {{ block.super }}
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            const form = document.getElementById("changelist-search");
+            const input = document.getElementById("searchbar");
+            if (!form || !input) {
+                return;
+            }
+
+            const minLength = {{ auto_search_min_length|default:3 }};
+            let timerId = null;
+
+            input.addEventListener("input", function () {
+                const value = input.value.trim();
+                window.clearTimeout(timerId);
+
+                if (value.length !== 0 && value.length < minLength) {
+                    return;
+                }
+
+                timerId = window.setTimeout(function () {
+                    form.requestSubmit();
+                }, 300);
+            });
+        });
+    </script>
+{% endblock %}

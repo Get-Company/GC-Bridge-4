@@ -335,6 +335,26 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
         self.assertEqual(self.item.new_price, Decimal("10.25"))
         self.assertEqual(self.item.new_rebate_price, Decimal("9.25"))
 
+    def test_item_changelist_post_accepts_decimal_comma(self):
+        response = self.client.post(
+            f'{reverse("admin:products_priceincreaseitem_changelist")}?price_increase__id__exact={self.price_increase.pk}',
+            data={
+                "form-TOTAL_FORMS": "1",
+                "form-INITIAL_FORMS": "1",
+                "form-MIN_NUM_FORMS": "0",
+                "form-MAX_NUM_FORMS": "1000",
+                "_save": "Speichern",
+                "form-0-id": str(self.item.pk),
+                "form-0-new_price": "4,50",
+                "form-0-new_rebate_price": "4,21",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.new_price, Decimal("4.50"))
+        self.assertEqual(self.item.new_rebate_price, Decimal("4.25"))
+
     def test_item_changelist_only_shows_active_products_sorted_by_erp_nr(self):
         inactive_product = Product.objects.create(erp_nr="A-1000", name="Inaktiv", unit="Stk", is_active=False)
         inactive_price = Price.objects.create(
@@ -372,6 +392,14 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
         self.assertContains(response, "A-7000")
         self.assertNotContains(response, "A-1000")
         self.assertLess(response.content.decode().find("A-6000"), response.content.decode().find("A-7000"))
+
+    def test_item_changelist_search_requires_three_characters(self):
+        response = self.client.get(
+            f'{reverse("admin:products_priceincreaseitem_changelist")}?price_increase__id__exact={self.price_increase.pk}&q=A-'
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "A-6000")
 
 
 class ProductAdminSpecialPriceActionTest(TestCase):

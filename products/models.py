@@ -673,7 +673,7 @@ class PriceIncreaseItem(BaseModel):
         decimal_places=2,
         null=True,
         blank=True,
-        verbose_name=_("Neuer Preis (ed)"),
+        verbose_name=_("Neuer Preis"),
     )
     new_rebate_price = models.DecimalField(
         max_digits=10,

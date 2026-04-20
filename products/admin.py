@@ -4,6 +4,7 @@ from django import forms
 from django.contrib import admin, messages
 from django.contrib.contenttypes.models import ContentType
 from django.core.management import call_command
+from django.forms.models import BaseModelFormSet
 from django.db.models import Case, IntegerField, Prefetch, Value, When
 from django.http import HttpResponseRedirect, HttpResponseNotAllowed
 from django.urls import path, reverse
@@ -241,8 +242,8 @@ class PriceIncreaseItemEditForm(forms.ModelForm):
         model = PriceIncreaseItem
         fields = ("new_price", "new_rebate_price")
         widgets = {
-            "new_price": forms.NumberInput(attrs={"step": "0.01", "inputmode": "decimal"}),
-            "new_rebate_price": forms.NumberInput(attrs={"step": "0.01", "inputmode": "decimal"}),
+            "new_price": forms.TextInput(attrs={"inputmode": "decimal"}),
+            "new_rebate_price": forms.TextInput(attrs={"inputmode": "decimal"}),
         }
 
     def __init__(self, *args, **kwargs):
@@ -251,6 +252,11 @@ class PriceIncreaseItemEditForm(forms.ModelForm):
         self.fields["new_rebate_price"].required = False
         self.fields["new_price"].label = "Neuer Preis"
         self.fields["new_rebate_price"].label = "neuer Rab.Preis"
+        self.fields["new_price"].localize = True
+        self.fields["new_rebate_price"].localize = True
+        self._apply_dynamic_widget_state()
+
+    def _apply_dynamic_widget_state(self):
         base_input_classes = (
             "w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm "
             "focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
@@ -271,6 +277,14 @@ class PriceIncreaseItemEditForm(forms.ModelForm):
         if value is None:
             return ""
         return format(value.quantize(Decimal("0.01")), "f")
+
+
+class PriceIncreaseItemChangeListFormSet(BaseModelFormSet):
+    def _construct_form(self, i, **kwargs):
+        form = super()._construct_form(i, **kwargs)
+        if hasattr(form, "_apply_dynamic_widget_state"):
+            form._apply_dynamic_widget_state()
+        return form
 
 
 @admin.register(Product)
@@ -948,6 +962,7 @@ class PriceIncreaseAdmin(BaseAdmin):
 @admin.register(PriceIncreaseItem)
 class PriceIncreaseItemAdmin(BaseAdmin):
     form = PriceIncreaseItemEditForm
+    change_list_template = "admin/products/price_increase_item_change_list.html"
     list_display = (
         "erp_nr_display",
         "price_display",
@@ -959,12 +974,14 @@ class PriceIncreaseItemAdmin(BaseAdmin):
     )
     list_display_links = ("erp_nr_display",)
     list_editable = ("new_price", "new_rebate_price")
+    ordering = ("product__erp_nr", "id")
     list_filter = [("price_increase", RelatedDropdownFilter)]
     search_fields = (
         "price_increase__title",
         "product__erp_nr",
         "product__name",
     )
+    search_help_text = "Mind. 3 Zeichen fuer automatische Suche"
     list_per_page = 200
     readonly_fields = (
         "price_increase",
@@ -1045,6 +1062,7 @@ class PriceIncreaseItemAdmin(BaseAdmin):
                 "admin:products_priceincrease_change", args=(price_increase.pk,)
             )
             extra_context["price_increase_changelist_url"] = reverse("admin:products_priceincrease_changelist")
+            extra_context["auto_search_min_length"] = 3
             if price_increase.status == PriceIncrease.Status.APPLIED:
                 self.message_user(
                     request,
@@ -1055,6 +1073,16 @@ class PriceIncreaseItemAdmin(BaseAdmin):
 
     def has_add_permission(self, request):
         return False
+
+    def get_search_results(self, request, queryset, search_term):
+        search_term = (search_term or "").strip()
+        if search_term and len(search_term) < 3:
+            return queryset.none(), False
+        return super().get_search_results(request, queryset, search_term)
+
+    def get_changelist_formset(self, request, **kwargs):
+        kwargs.setdefault("formset", PriceIncreaseItemChangeListFormSet)
+        return super().get_changelist_formset(request, **kwargs)
 
 
 @admin.register(Storage)
