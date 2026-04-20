@@ -112,3 +112,8 @@ git push origin v1.2.3
 set DEPLOY_TAG=v1.2.3
 D:\GC-Bridge-4\deploy\windows\update.cmd
 ```
+
+### zugriff auf das alte Projekt GC_Bridge_v3_django: 
+/mnt/daten1tb/python/GC_Bridge_v3_django
+Du hast vollen Zugriff auf das alte Projekt, welches sehr umfangreich war. Du kanns den Code lesen, aber nichts ändern.
+

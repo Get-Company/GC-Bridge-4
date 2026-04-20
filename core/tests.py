@@ -1,10 +1,11 @@
+import os
 from datetime import datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from django.test import SimpleTestCase, override_settings
 
-from core.logging import build_managed_log_path
+from core.logging import build_managed_log_path, cleanup_old_log_files
 from core.log_reader import get_allowed_log_files, tail_log_file
 from core.services import CommandRuntimeService
 
@@ -56,6 +57,64 @@ class LogReaderUtilsTest(SimpleTestCase):
             self.assertIn(str(logs_dir / "service_a.log"), file_strings)
             self.assertIn(str(logs_dir / "service_b.log"), file_strings)
             self.assertIn(str(managed_logs_dir / "shopware.2026-03-24.log"), file_strings)
+
+    def test_get_allowed_log_files_excludes_and_deletes_logs_older_than_one_week(self):
+        with TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            logs_dir = base_dir / "logs"
+            managed_logs_dir = base_dir / "tmp" / "logs" / "weekly" / "shopware"
+            logs_dir.mkdir(parents=True, exist_ok=True)
+            managed_logs_dir.mkdir(parents=True, exist_ok=True)
+
+            stale_legacy = logs_dir / "service_old.log"
+            stale_managed = managed_logs_dir / "shopware.2026-03-01.log"
+            fresh_log = managed_logs_dir / "shopware.2026-03-24.log"
+            stale_legacy.write_text("old\n", encoding="utf-8")
+            stale_managed.write_text("old\n", encoding="utf-8")
+            fresh_log.write_text("new\n", encoding="utf-8")
+
+            stale_timestamp = (datetime.now().timestamp() - (9 * 24 * 60 * 60))
+            os.utime(stale_legacy, (stale_timestamp, stale_timestamp))
+            os.utime(stale_managed, (stale_timestamp, stale_timestamp))
+
+            with override_settings(
+                BASE_DIR=base_dir,
+                LOGS_ROOT=base_dir / "tmp" / "logs",
+                SYSTEM_LOG_RETENTION_DAYS=7,
+            ):
+                files = get_allowed_log_files()
+
+            file_strings = {str(path) for path in files}
+            self.assertNotIn(str(stale_legacy), file_strings)
+            self.assertNotIn(str(stale_managed), file_strings)
+            self.assertIn(str(fresh_log), file_strings)
+            self.assertFalse(stale_legacy.exists())
+            self.assertFalse(stale_managed.exists())
+            self.assertTrue(fresh_log.exists())
+
+    def test_cleanup_old_log_files_returns_deleted_count(self):
+        with TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            managed_logs_dir = base_dir / "tmp" / "logs" / "weekly" / "products"
+            managed_logs_dir.mkdir(parents=True, exist_ok=True)
+            stale_log = managed_logs_dir / "products.2026-03-01.log"
+            fresh_log = managed_logs_dir / "products.2026-03-24.log"
+            stale_log.write_text("old\n", encoding="utf-8")
+            fresh_log.write_text("new\n", encoding="utf-8")
+
+            stale_timestamp = (datetime.now().timestamp() - (10 * 24 * 60 * 60))
+            os.utime(stale_log, (stale_timestamp, stale_timestamp))
+
+            with override_settings(
+                BASE_DIR=base_dir,
+                LOGS_ROOT=base_dir / "tmp" / "logs",
+                SYSTEM_LOG_RETENTION_DAYS=7,
+            ):
+                deleted_count = cleanup_old_log_files()
+
+            self.assertEqual(deleted_count, 1)
+            self.assertFalse(stale_log.exists())
+            self.assertTrue(fresh_log.exists())
 
 
 class CommandRuntimeServiceTest(SimpleTestCase):

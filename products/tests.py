@@ -10,12 +10,25 @@ from django.contrib.admin.sites import AdminSite
 from django.contrib.auth import get_user_model
 from django.core.management.base import CommandError
 from django.test import RequestFactory, TestCase, override_settings
+from django.urls import reverse
 from django.utils import timezone
 
 from products.admin import ImageAdmin, PriceActionForm, PriceAdmin, ProductAdmin, ProductImageInline, ProductPropertyInline
 from products.management.commands.import_legacy_product_properties import Command as ImportLegacyProductPropertiesCommand
 from products.management.commands.scheduled_product_sync import Command as ScheduledProductSyncCommand
-from products.models import Image, Price, Product, ProductImage, ProductProperty, PropertyGroup, PropertyValue
+from products.models import (
+    Image,
+    Price,
+    PriceHistory,
+    PriceIncrease,
+    PriceIncreaseItem,
+    Product,
+    ProductImage,
+    ProductProperty,
+    PropertyGroup,
+    PropertyValue,
+)
+from products.services import PriceIncreaseService
 from shopware.models import ShopwareSettings
 
 
@@ -67,6 +80,260 @@ class PriceAdminActionTest(TestCase):
         self.assertEqual(price.special_price, Decimal("90.00"))
         self.assertTrue(timezone.is_aware(price.special_start_date))
         self.assertTrue(timezone.is_aware(price.special_end_date))
+
+
+class PriceHistoryModelTest(TestCase):
+    def setUp(self):
+        self.channel = ShopwareSettings.objects.create(name="Main", is_active=True, is_default=True)
+        self.product = Product.objects.create(erp_nr="A-1010", name="History Artikel")
+
+    def test_create_writes_initial_history_snapshot(self):
+        price = Price.objects.create(
+            product=self.product,
+            sales_channel=self.channel,
+            price=Decimal("100.00"),
+        )
+
+        history_entries = list(price.history_entries.order_by("created_at", "id"))
+
+        self.assertEqual(len(history_entries), 1)
+        self.assertEqual(history_entries[0].change_type, PriceHistory.ChangeType.CREATED)
+        self.assertEqual(history_entries[0].changed_fields, "price")
+        self.assertEqual(history_entries[0].price, Decimal("100.00"))
+
+    def test_price_update_writes_history_snapshot(self):
+        price = Price.objects.create(
+            product=self.product,
+            sales_channel=self.channel,
+            price=Decimal("100.00"),
+        )
+
+        price.price = Decimal("110.00")
+        price.rebate_quantity = 5
+        price.rebate_price = Decimal("99.95")
+        price.save()
+
+        history_entries = list(price.history_entries.order_by("created_at", "id"))
+
+        self.assertEqual(len(history_entries), 2)
+        self.assertEqual(history_entries[-1].change_type, PriceHistory.ChangeType.UPDATED)
+        self.assertEqual(history_entries[-1].changed_fields, "price, rebate_quantity, rebate_price")
+        self.assertEqual(history_entries[-1].price, Decimal("110.00"))
+        self.assertEqual(history_entries[-1].rebate_quantity, 5)
+        self.assertEqual(history_entries[-1].rebate_price, Decimal("99.95"))
+
+    def test_special_price_update_writes_history_snapshot_with_rounded_value(self):
+        price = Price.objects.create(
+            product=self.product,
+            sales_channel=self.channel,
+            price=Decimal("10.01"),
+        )
+
+        price.special_percentage = Decimal("10.00")
+        price.save()
+
+        latest_history = price.history_entries.order_by("-created_at", "-id").first()
+
+        self.assertIsNotNone(latest_history)
+        self.assertEqual(
+            latest_history.changed_fields,
+            "special_percentage, special_price, special_start_date, special_end_date",
+        )
+        self.assertEqual(latest_history.special_price, Decimal("9.05"))
+
+    def test_save_without_tracked_changes_does_not_write_new_history(self):
+        price = Price.objects.create(
+            product=self.product,
+            sales_channel=self.channel,
+            price=Decimal("100.00"),
+        )
+
+        initial_count = price.history_entries.count()
+        price.save()
+
+        self.assertEqual(price.history_entries.count(), initial_count)
+
+
+class PriceIncreaseServiceTest(TestCase):
+    def setUp(self):
+        self.default_channel = ShopwareSettings.objects.create(name="Default", is_active=True, is_default=True)
+        self.b2b_channel = ShopwareSettings.objects.create(
+            name="B2B",
+            is_active=True,
+            is_default=False,
+            price_factor=Decimal("1.2500"),
+        )
+        self.product = Product.objects.create(erp_nr="A-5000", name="Preisartikel", unit="Stk")
+        self.default_price = Price.objects.create(
+            product=self.product,
+            sales_channel=self.default_channel,
+            price=Decimal("10.00"),
+            rebate_quantity=5,
+            rebate_price=Decimal("9.00"),
+        )
+        self.other_price = Price.objects.create(
+            product=self.product,
+            sales_channel=self.b2b_channel,
+            price=Decimal("12.50"),
+            rebate_quantity=5,
+            rebate_price=Decimal("11.25"),
+        )
+
+    def test_sync_items_creates_positions_only_for_default_channel(self):
+        price_increase = PriceIncrease.objects.create(title="Mai 2026")
+
+        count = PriceIncreaseService().sync_items(price_increase)
+
+        self.assertEqual(count, 1)
+        self.assertEqual(price_increase.items.count(), 1)
+        item = price_increase.items.get()
+        self.assertEqual(item.source_price, self.default_price)
+        self.assertEqual(item.current_price, Decimal("10.00"))
+        self.assertEqual(item.current_rebate_price, Decimal("9.00"))
+        self.assertEqual(item.unit, "Stk")
+
+    def test_suggested_prices_use_general_percentage_and_round_up_to_five_cents(self):
+        price_increase = PriceIncrease.objects.create(title="Juni 2026", general_percentage=Decimal("2.50"))
+        item = PriceIncreaseItem.objects.create(
+            price_increase=price_increase,
+            product=self.product,
+            source_price=self.default_price,
+            unit="Stk",
+            current_price=Decimal("10.01"),
+            current_rebate_quantity=5,
+            current_rebate_price=Decimal("9.01"),
+        )
+
+        self.assertEqual(item.suggested_price, Decimal("10.30"))
+        self.assertEqual(item.suggested_rebate_price, Decimal("9.25"))
+
+    def test_manual_target_prices_are_rounded_up_to_five_cents_on_save(self):
+        price_increase = PriceIncrease.objects.create(title="Juli 2026")
+        item = PriceIncreaseItem.objects.create(
+            price_increase=price_increase,
+            product=self.product,
+            source_price=self.default_price,
+            unit="Stk",
+            current_price=Decimal("10.00"),
+            current_rebate_quantity=5,
+            current_rebate_price=Decimal("9.00"),
+            new_price=Decimal("10.21"),
+            new_rebate_price=Decimal("9.22"),
+        )
+
+        self.assertEqual(item.new_price, Decimal("10.25"))
+        self.assertEqual(item.new_rebate_price, Decimal("9.25"))
+
+    def test_apply_updates_default_price_and_syncs_other_channels_after_commit(self):
+        price_increase = PriceIncrease.objects.create(title="August 2026")
+        item = PriceIncreaseItem.objects.create(
+            price_increase=price_increase,
+            product=self.product,
+            source_price=self.default_price,
+            unit="Stk",
+            current_price=Decimal("10.00"),
+            current_rebate_quantity=5,
+            current_rebate_price=Decimal("9.00"),
+            new_price=Decimal("10.25"),
+            new_rebate_price=Decimal("9.25"),
+        )
+
+        with self.captureOnCommitCallbacks(execute=True):
+            updated = PriceIncreaseService().apply(price_increase)
+
+        self.assertEqual(updated, 1)
+        price_increase.refresh_from_db()
+        self.assertEqual(price_increase.status, PriceIncrease.Status.APPLIED)
+        self.assertIsNotNone(price_increase.applied_at)
+
+        self.default_price.refresh_from_db()
+        self.assertEqual(self.default_price.price, Decimal("10.25"))
+        self.assertEqual(self.default_price.rebate_price, Decimal("9.25"))
+
+        self.other_price.refresh_from_db()
+        self.assertEqual(self.other_price.price, Decimal("12.85"))
+        self.assertEqual(self.other_price.rebate_price, Decimal("11.60"))
+
+        self.assertEqual(
+            self.default_price.history_entries.order_by("-created_at", "-id").first().price,
+            Decimal("10.25"),
+        )
+
+
+class PriceIncreaseItemAdminListViewTest(TestCase):
+    def setUp(self):
+        user_model = get_user_model()
+        self.user = user_model.objects.create_superuser(
+            username="price-admin",
+            email="price-admin@example.com",
+            password="pass",
+        )
+        self.client.force_login(self.user)
+        self.default_channel = ShopwareSettings.objects.create(name="Default", is_active=True, is_default=True)
+        self.product = Product.objects.create(erp_nr="A-6000", name="Admin Artikel", unit="Stk")
+        self.price = Price.objects.create(
+            product=self.product,
+            sales_channel=self.default_channel,
+            price=Decimal("10.01"),
+            rebate_quantity=5,
+            rebate_price=Decimal("9.01"),
+        )
+        self.price_increase = PriceIncrease.objects.create(title="Admin View Test")
+        self.item = PriceIncreaseItem.objects.create(
+            price_increase=self.price_increase,
+            product=self.product,
+            source_price=self.price,
+            unit="Stk",
+            current_price=Decimal("10.01"),
+            current_rebate_quantity=5,
+            current_rebate_price=Decimal("9.01"),
+        )
+
+    def test_positions_redirect_opens_filtered_list_view(self):
+        response = self.client.get(reverse("admin:products_priceincrease_positions", args=(self.price_increase.pk,)))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(
+            reverse("admin:products_priceincreaseitem_changelist"),
+            response.headers["Location"],
+        )
+        self.assertIn(f"price_increase__id__exact={self.price_increase.pk}", response.headers["Location"])
+
+    def test_item_changelist_renders_expected_columns_and_placeholders(self):
+        response = self.client.get(
+            f'{reverse("admin:products_priceincreaseitem_changelist")}?price_increase__id__exact={self.price_increase.pk}'
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Artnr (ERPNR)")
+        self.assertContains(response, "Preis")
+        self.assertContains(response, "Staffelpreis Menge")
+        self.assertContains(response, "Staffelpreis")
+        self.assertContains(response, "Einheit")
+        self.assertContains(response, "Neuer Preis (ed)")
+        self.assertContains(response, "Neuer Staffelpreis (ed)")
+        self.assertContains(response, 'placeholder="10.30"', html=False)
+        self.assertContains(response, 'placeholder="9.25"', html=False)
+
+    def test_item_changelist_post_saves_rounded_target_prices(self):
+        response = self.client.post(
+            f'{reverse("admin:products_priceincreaseitem_changelist")}?price_increase__id__exact={self.price_increase.pk}',
+            data={
+                "form-TOTAL_FORMS": "1",
+                "form-INITIAL_FORMS": "1",
+                "form-MIN_NUM_FORMS": "0",
+                "form-MAX_NUM_FORMS": "1000",
+                "_save": "Speichern",
+                "form-0-id": str(self.item.pk),
+                "form-0-new_price": "10.21",
+                "form-0-new_rebate_price": "9.22",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.new_price, Decimal("10.25"))
+        self.assertEqual(self.item.new_rebate_price, Decimal("9.25"))
 
 
 class ProductAdminSpecialPriceActionTest(TestCase):

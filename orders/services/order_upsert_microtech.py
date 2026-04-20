@@ -94,10 +94,29 @@ class OrderUpsertMicrotechService(BaseService):
                 return self.refresh_erp_order_id(order, erp=erp_connection)
 
         vorgang_service = MicrotechVorgangService(erp=erp)
-        beleg_nr = self._find_existing_beleg_nr(order=order, vorgang_service=vorgang_service)
-        if beleg_nr:
-            self._persist_erp_order_id(order=order, erp_order_id=beleg_nr)
-            return beleg_nr
+        existing_beleg_nr = (order.erp_order_id or "").strip()
+        customer_erp_nr = (order.customer.erp_nr or "").strip() if order.customer else ""
+        order_number = (order.order_number or "").strip()
+
+        if existing_beleg_nr and vorgang_service.find(existing_beleg_nr):
+            self._persist_erp_order_id(order=order, erp_order_id=existing_beleg_nr)
+            return existing_beleg_nr
+
+        if order_number:
+            beleg_nr = self._find_beleg_nr_by_auftr_nr(
+                vorgang_service=vorgang_service,
+                auftr_nr=order_number,
+                customer_erp_nr=customer_erp_nr,
+            )
+            if beleg_nr:
+                logger.info(
+                    "Resolved current BelegNr {} for order {} via AuftrNr={}.",
+                    beleg_nr,
+                    order.order_number,
+                    order_number,
+                )
+                self._persist_erp_order_id(order=order, erp_order_id=beleg_nr)
+                return beleg_nr
 
         self._clear_erp_order_id(order=order)
         return ""

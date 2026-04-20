@@ -2,6 +2,7 @@ import calendar
 from decimal import Decimal, ROUND_UP
 
 from django.db import models
+from django.core.exceptions import ValidationError
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
@@ -293,6 +294,16 @@ class ProductProperty(BaseModel):
 
 
 class Price(BaseModel):
+    TRACKED_HISTORY_FIELDS = (
+        "price",
+        "rebate_quantity",
+        "rebate_price",
+        "special_percentage",
+        "special_price",
+        "special_start_date",
+        "special_end_date",
+    )
+
     product = models.ForeignKey(
         Product,
         on_delete=models.CASCADE,
@@ -358,6 +369,15 @@ class Price(BaseModel):
         return (value / step).to_integral_value(rounding=ROUND_UP) * step
 
     def save(self, *args, **kwargs):
+        previous_state = None
+        is_create = self.pk is None
+        if not is_create:
+            previous_state = (
+                type(self).objects.filter(pk=self.pk)
+                .values(*self.TRACKED_HISTORY_FIELDS)
+                .first()
+            )
+
         if self.special_percentage and self.price:
             self.special_price = self._round_up_5ct(
                 self.price * (Decimal("100") - self.special_percentage) / Decimal("100")
@@ -378,6 +398,31 @@ class Price(BaseModel):
             self.special_start_date = None
             self.special_end_date = None
         super().save(*args, **kwargs)
+        self._create_history_entry(previous_state=previous_state, is_create=is_create)
+
+    def _create_history_entry(self, *, previous_state: dict | None, is_create: bool) -> None:
+        current_state = {field: getattr(self, field) for field in self.TRACKED_HISTORY_FIELDS}
+        changed_fields = [
+            field
+            for field in self.TRACKED_HISTORY_FIELDS
+            if previous_state is None or previous_state.get(field) != current_state.get(field)
+        ]
+
+        if not changed_fields:
+            return
+
+        PriceHistory.objects.create(
+            price_entry=self,
+            change_type=PriceHistory.ChangeType.CREATED if is_create else PriceHistory.ChangeType.UPDATED,
+            changed_fields=", ".join(changed_fields),
+            price=current_state["price"],
+            rebate_quantity=current_state["rebate_quantity"],
+            rebate_price=current_state["rebate_price"],
+            special_percentage=current_state["special_percentage"],
+            special_price=current_state["special_price"],
+            special_start_date=current_state["special_start_date"],
+            special_end_date=current_state["special_end_date"],
+        )
 
     @property
     def is_special_active(self) -> bool:
@@ -456,3 +501,242 @@ class Storage(BaseModel):
         verbose_name = _("Lagerbestand")
         verbose_name_plural = _("Lagerbestaende")
         ordering = ("product",)
+
+
+class PriceHistory(BaseModel):
+    class ChangeType(models.TextChoices):
+        CREATED = "created", _("Angelegt")
+        UPDATED = "updated", _("Aktualisiert")
+
+    price_entry = models.ForeignKey(
+        Price,
+        on_delete=models.CASCADE,
+        related_name="history_entries",
+        verbose_name=_("Preis"),
+    )
+    change_type = models.CharField(
+        max_length=16,
+        choices=ChangeType.choices,
+        default=ChangeType.UPDATED,
+        verbose_name=_("Aenderungstyp"),
+    )
+    changed_fields = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        verbose_name=_("Geaenderte Felder"),
+    )
+    price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name=_("Preis"))
+    rebate_quantity = models.IntegerField(null=True, blank=True, verbose_name=_("Staffelmenge"))
+    rebate_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name=_("Staffelpreis"),
+    )
+    special_percentage = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name=_("Sonderpreis (%)"),
+    )
+    special_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name=_("Sonderpreis"),
+    )
+    special_start_date = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name=_("Sonderpreis ab"),
+    )
+    special_end_date = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name=_("Sonderpreis bis"),
+    )
+
+    class Meta:
+        verbose_name = _("Preis-Historie")
+        verbose_name_plural = _("Preis-Historie")
+        ordering = ("-created_at", "-id")
+
+    def __str__(self) -> str:
+        return f"{self.price_entry} | {self.get_change_type_display()} | {self.created_at:%Y-%m-%d %H:%M:%S}"
+
+
+class PriceIncrease(BaseModel):
+    class Status(models.TextChoices):
+        DRAFT = "draft", _("Entwurf")
+        APPLIED = "applied", _("Uebernommen")
+
+    title = models.CharField(max_length=255, verbose_name=_("Titel"))
+    status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.DRAFT,
+        db_index=True,
+        verbose_name=_("Status"),
+    )
+    sales_channel = models.ForeignKey(
+        ShopwareSettings,
+        on_delete=models.PROTECT,
+        related_name="price_increases",
+        null=True,
+        blank=True,
+        verbose_name=_("Standard-Verkaufskanal"),
+    )
+    general_percentage = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal("2.50"),
+        verbose_name=_("Generelle Erhoehung (%)"),
+    )
+    positions_synced_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name=_("Positionen synchronisiert am"),
+    )
+    applied_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name=_("Uebernommen am"),
+    )
+
+    class Meta:
+        verbose_name = _("Preiserhoehung")
+        verbose_name_plural = _("Preiserhoehungen")
+        ordering = ("-created_at", "-id")
+
+    def __str__(self) -> str:
+        return self.title
+
+    def clean(self):
+        super().clean()
+        if self.sales_channel_id and not self.sales_channel.is_default:
+            raise ValidationError({"sales_channel": _("Es darf nur der Standard-Verkaufskanal verwendet werden.")})
+
+    def save(self, *args, **kwargs):
+        if not self.sales_channel_id:
+            self.sales_channel = ShopwareSettings.objects.filter(is_default=True, is_active=True).order_by("pk").first()
+        super().save(*args, **kwargs)
+
+    @property
+    def position_count(self) -> int:
+        return self.items.count()
+
+
+class PriceIncreaseItem(BaseModel):
+    price_increase = models.ForeignKey(
+        PriceIncrease,
+        on_delete=models.CASCADE,
+        related_name="items",
+        verbose_name=_("Preiserhoehung"),
+    )
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.PROTECT,
+        related_name="price_increase_items",
+        verbose_name=_("Produkt"),
+    )
+    source_price = models.ForeignKey(
+        Price,
+        on_delete=models.PROTECT,
+        related_name="price_increase_items",
+        verbose_name=_("Quellpreis"),
+    )
+    unit = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        verbose_name=_("Einheit"),
+    )
+    current_price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name=_("Aktueller Preis"))
+    current_rebate_quantity = models.IntegerField(
+        null=True,
+        blank=True,
+        verbose_name=_("Aktuelle Staffelmenge"),
+    )
+    current_rebate_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name=_("Aktueller Staffelpreis"),
+    )
+    new_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name=_("Neuer Preis (ed)"),
+    )
+    new_rebate_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name=_("Neuer Staffelpreis (ed)"),
+    )
+
+    class Meta:
+        verbose_name = _("Preiserhoehungs-Position")
+        verbose_name_plural = _("Preiserhoehungs-Positionen")
+        ordering = ("product__erp_nr", "id")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("price_increase", "source_price"),
+                name="unique_price_increase_item_per_source_price",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.price_increase.title} | {self.product.erp_nr}"
+
+    def clean(self):
+        super().clean()
+        if self.source_price_id and self.product_id and self.source_price.product_id != self.product_id:
+            raise ValidationError({"product": _("Produkt und Quellpreis muessen zusammenpassen.")})
+        if (
+            self.source_price_id
+            and self.price_increase_id
+            and self.price_increase.sales_channel_id
+            and self.source_price.sales_channel_id != self.price_increase.sales_channel_id
+        ):
+            raise ValidationError({"source_price": _("Der Quellpreis muss zum Standard-Verkaufskanal der Preiserhoehung gehoeren.")})
+
+    def save(self, *args, **kwargs):
+        if self.new_price is not None:
+            self.new_price = Price._round_up_5ct(Decimal(self.new_price)).quantize(Decimal("0.01"))
+        if self.new_rebate_price is not None:
+            self.new_rebate_price = Price._round_up_5ct(Decimal(self.new_rebate_price)).quantize(Decimal("0.01"))
+        super().save(*args, **kwargs)
+
+    @property
+    def suggested_price(self) -> Decimal:
+        return self._apply_increase(self.current_price)
+
+    @property
+    def suggested_rebate_price(self) -> Decimal | None:
+        if self.current_rebate_price is None:
+            return None
+        return self._apply_increase(self.current_rebate_price)
+
+    @property
+    def effective_new_price(self) -> Decimal:
+        return self.new_price if self.new_price is not None else self.suggested_price
+
+    @property
+    def effective_new_rebate_price(self) -> Decimal | None:
+        if self.current_rebate_price is None:
+            return None
+        return self.new_rebate_price if self.new_rebate_price is not None else self.suggested_rebate_price
+
+    def _apply_increase(self, value: Decimal) -> Decimal:
+        factor = Decimal("1.00") + (self.price_increase.general_percentage / Decimal("100"))
+        increased = Decimal(value) * factor
+        return Price._round_up_5ct(increased).quantize(Decimal("0.01"))

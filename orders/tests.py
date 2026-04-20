@@ -1,5 +1,6 @@
 from decimal import Decimal
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from django.test import SimpleTestCase, TestCase
 
@@ -321,3 +322,33 @@ class OrderUpsertRuleDebugTest(SimpleTestCase):
         self.assertTrue(written)
         self.assertEqual(field.AsString, "PayPal Gebuehr")
         self.assertIsNone(field.AsInteger)
+
+    @patch.object(OrderUpsertMicrotechService, "_clear_erp_order_id")
+    @patch.object(OrderUpsertMicrotechService, "_persist_erp_order_id")
+    @patch.object(OrderUpsertMicrotechService, "_find_beleg_nr_by_auftr_nr", return_value="BN-2000")
+    @patch("orders.services.order_upsert_microtech.MicrotechVorgangService")
+    def test_refresh_erp_order_id_uses_order_number_as_auftr_nr_fallback(
+        self,
+        vorgang_service_cls,
+        find_beleg_nr_by_auftr_nr_mock,
+        persist_erp_order_id_mock,
+        clear_erp_order_id_mock,
+    ):
+        order = Order(
+            api_id="order-1",
+            order_number="SW-10001",
+            erp_order_id="BN-1000",
+        )
+        vorgang_service = vorgang_service_cls.return_value
+        vorgang_service.find.return_value = False
+
+        refreshed = OrderUpsertMicrotechService().refresh_erp_order_id(order, erp=object())
+
+        self.assertEqual(refreshed, "BN-2000")
+        find_beleg_nr_by_auftr_nr_mock.assert_called_once_with(
+            vorgang_service=vorgang_service,
+            auftr_nr="SW-10001",
+            customer_erp_nr="",
+        )
+        persist_erp_order_id_mock.assert_called_once_with(order=order, erp_order_id="BN-2000")
+        clear_erp_order_id_mock.assert_not_called()

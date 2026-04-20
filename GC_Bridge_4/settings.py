@@ -323,6 +323,16 @@ UNFOLD = {
                         "icon": "sell",
                         "link": reverse_lazy("admin:products_price_changelist"),
                     },
+                    {
+                        "title": _("Attributgruppen"),
+                        "icon": "category",
+                        "link": reverse_lazy("admin:products_propertygroup_changelist"),
+                    },
+                    {
+                        "title": _("Attributwerte"),
+                        "icon": "label",
+                        "link": reverse_lazy("admin:products_propertyvalue_changelist"),
+                    },
                 ],
             },
             {

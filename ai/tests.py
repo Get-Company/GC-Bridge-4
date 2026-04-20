@@ -172,6 +172,16 @@ class AIRewriteJobAdminTest(TestCase):
 
         self.assertEqual(list(form.fields["prompt"].queryset), [self.prompt])
 
+    def test_request_form_lists_rewriteable_product_fields_even_without_prompts(self):
+        AIRewritePrompt.objects.all().delete()
+
+        form = AIRewriteJobRequestForm(initial={"target_field": "description_de"})
+
+        target_field_names = [field_name for field_name, _label in form.fields["target_field"].choices]
+        self.assertIn("description_de", target_field_names)
+        self.assertIn("name_de", target_field_names)
+        self.assertEqual(list(form.fields["prompt"].queryset), [])
+
     def test_request_form_uses_unfold_autocomplete_widgets(self):
         form = AIRewriteJobRequestForm(
             initial={
@@ -249,6 +259,7 @@ class AIRewriteJobAdminTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "product-ai-rewrite-fields")
         self.assertContains(response, "description_de")
+        self.assertContains(response, "description_short_de")
         self.assertContains(response, reverse("admin:products_product_request_ai_rewrite", args=(self.product.pk,)))
 
     @patch("products.admin.AIRewriteService.request_rewrite")
@@ -285,5 +296,17 @@ class AIRewriteJobAdminTest(TestCase):
         self.assertRedirects(
             response,
             f"{reverse('admin:ai_airewritejob_request')}?product={self.product.pk}&target_field=description_de",
+            fetch_redirect_response=False,
+        )
+
+    def test_product_field_action_redirects_to_request_page_when_no_prompt_exists(self):
+        response = self.client.post(
+            reverse("admin:products_product_request_ai_rewrite", args=(self.product.pk,)),
+            {"target_field": "name_de"},
+        )
+
+        self.assertRedirects(
+            response,
+            f"{reverse('admin:ai_airewritejob_request')}?product={self.product.pk}&target_field=name_de",
             fetch_redirect_response=False,
         )

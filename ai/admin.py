@@ -17,6 +17,7 @@ from unfold.widgets import UnfoldAdminSelect2Widget
 from core.admin import BaseAdmin
 
 from ai.models import AIProviderConfig, AIRewriteJob, AIRewritePrompt
+from ai.rewrite_fields import get_rewriteable_product_field_choices
 from ai.services import AIRewriteApplyService, AIRewriteService
 from products.models import Product
 
@@ -55,10 +56,7 @@ class AIRewriteJobRequestForm(forms.Form):
         self._configure_product_queryset()
 
         prompt_queryset = self._get_product_prompt_queryset()
-        target_fields = list(
-            prompt_queryset.order_by("target_field").values_list("target_field", flat=True).distinct()
-        )
-        self.fields["target_field"].choices = [(field_name, field_name) for field_name in target_fields]
+        self.fields["target_field"].choices = get_rewriteable_product_field_choices()
 
         target_field = self.data.get("target_field") or self.initial.get("target_field") or ""
         if target_field:
@@ -67,6 +65,8 @@ class AIRewriteJobRequestForm(forms.Form):
         selected_prompt = self.data.get("prompt") or self.initial.get("prompt") or ""
         if not selected_prompt and prompt_queryset.count() == 1:
             self.fields["prompt"].initial = prompt_queryset.first().pk
+        if target_field and not prompt_queryset.exists():
+            self.fields["prompt"].help_text = "Kein aktiver Prompt fuer dieses Zielfeld vorhanden."
 
     def clean(self):
         cleaned_data = super().clean()

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from threading import Lock
 from typing import Any
@@ -30,6 +30,7 @@ PACKAGE_RETENTION = {
 LOG_FORMAT = (
     "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level:<8} | {name}:{function}:{line} | {message}"
 )
+DEFAULT_SYSTEM_LOG_RETENTION_DAYS = 7
 
 _CONFIGURE_LOCK = Lock()
 _CONFIGURED = False
@@ -53,6 +54,56 @@ def get_logs_root() -> Path:
     if configured_path.is_absolute():
         return configured_path
     return _base_dir() / configured_path if str(configured_path).strip() else _base_dir() / "tmp" / "logs"
+
+
+def get_log_retention_days() -> int:
+    configured = getattr(settings, "SYSTEM_LOG_RETENTION_DAYS", DEFAULT_SYSTEM_LOG_RETENTION_DAYS)
+    try:
+        return max(1, int(configured))
+    except (TypeError, ValueError):
+        return DEFAULT_SYSTEM_LOG_RETENTION_DAYS
+
+
+def get_log_directories(*, include_legacy: bool = True) -> list[Path]:
+    directories: list[Path] = []
+    if include_legacy:
+        directories.append(_base_dir() / "logs")
+    directories.append(get_logs_root())
+
+    unique: list[Path] = []
+    seen: set[str] = set()
+    for directory in directories:
+        normalized = str(directory.resolve()) if directory.exists() else str(directory)
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        unique.append(directory)
+    return unique
+
+
+def cleanup_old_log_files(*, retention_days: int | None = None, now: datetime | None = None) -> int:
+    cutoff = (now or datetime.now()) - timedelta(days=retention_days or get_log_retention_days())
+    deleted = 0
+
+    for logs_dir in get_log_directories():
+        if not logs_dir.exists():
+            continue
+        for path in logs_dir.rglob("*.log*"):
+            if not path.is_file():
+                continue
+            try:
+                modified_at = datetime.fromtimestamp(path.stat().st_mtime)
+            except OSError:
+                continue
+            if modified_at >= cutoff:
+                continue
+            try:
+                path.unlink()
+                deleted += 1
+            except OSError:
+                continue
+
+    return deleted
 
 
 def get_retention(category: str) -> str:
@@ -87,6 +138,7 @@ def add_managed_file_sink(
     diagnose: bool = False,
     log_format: str = LOG_FORMAT,
 ) -> tuple[int, Path]:
+    cleanup_old_log_files()
     path = Path(log_file) if log_file else build_managed_log_path(log_name, category=category)
     path.parent.mkdir(parents=True, exist_ok=True)
     sink_id = logger.add(
@@ -152,6 +204,7 @@ def configure_logging() -> None:
 
         logs_root = get_logs_root()
         logs_root.mkdir(parents=True, exist_ok=True)
+        cleanup_old_log_files()
 
         logger.remove()
         logger.add(
