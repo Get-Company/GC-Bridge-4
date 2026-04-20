@@ -3,8 +3,10 @@ from datetime import timedelta
 from decimal import Decimal
 import sqlite3
 from tempfile import TemporaryDirectory
+from tempfile import NamedTemporaryFile
 from unittest.mock import call, patch
 
+from django.core.management import call_command
 from django.contrib import messages
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth import get_user_model
@@ -258,6 +260,66 @@ class PriceIncreaseServiceTest(TestCase):
             self.default_price.history_entries.order_by("-created_at", "-id").first().price,
             Decimal("10.25"),
         )
+
+
+class ImportPriceHistoryCommandTest(TestCase):
+    def setUp(self):
+        self.channel = ShopwareSettings.objects.create(name="Standard", is_active=True, is_default=True)
+        self.product = Product.objects.create(erp_nr="100123", name="Import Artikel")
+        self.price = Price.objects.create(
+            product=self.product,
+            sales_channel=self.channel,
+            price=Decimal("9.99"),
+        )
+
+    def _write_csv(self, content: str) -> str:
+        temp_file = NamedTemporaryFile("w", encoding="utf-8", suffix=".csv", delete=False)
+        temp_file.write(content)
+        temp_file.flush()
+        temp_file.close()
+        self.addCleanup(lambda: Path(temp_file.name).unlink(missing_ok=True))
+        return temp_file.name
+
+    def test_dry_run_validates_without_writing_history(self):
+        csv_path = self._write_csv(
+            "erp_nr;gueltig_ab;preis\n"
+            "100123;2021-01-01;4,50\n"
+        )
+        initial_count = PriceHistory.objects.count()
+
+        call_command("import_price_history", csv_path)
+
+        self.assertEqual(PriceHistory.objects.count(), initial_count)
+
+    def test_commit_imports_history_entry_with_historical_timestamp(self):
+        csv_path = self._write_csv(
+            "erp_nr;gueltig_ab;sales_channel;preis;rebate_quantity;rebate_price\n"
+            "100123;2021-01-01;Standard;4,50;10;4,20\n"
+        )
+
+        call_command("import_price_history", csv_path, "--commit")
+
+        imported_entry = PriceHistory.objects.filter(changed_fields="imported_history").latest("created_at")
+        self.assertEqual(imported_entry.price_entry, self.price)
+        self.assertEqual(imported_entry.price, Decimal("4.50"))
+        self.assertEqual(imported_entry.rebate_quantity, 10)
+        self.assertEqual(imported_entry.rebate_price, Decimal("4.20"))
+        self.assertEqual(imported_entry.created_at.date().isoformat(), "2021-01-01")
+
+    def test_invalid_rows_are_reported_without_aborting_import(self):
+        csv_path = self._write_csv(
+            "erp_nr;gueltig_ab;preis\n"
+            "100123;2021-01-01;4,50\n"
+            "999999;2021-01-01;3,00\n"
+        )
+        error_report = Path("tmp/test_import_price_history_errors.csv").resolve()
+        self.addCleanup(lambda: error_report.unlink(missing_ok=True))
+
+        call_command("import_price_history", csv_path, "--commit", f"--error-report={error_report}")
+
+        self.assertTrue(error_report.exists())
+        self.assertEqual(PriceHistory.objects.filter(changed_fields="imported_history").count(), 1)
+        self.assertIn("999999", error_report.read_text(encoding="utf-8"))
 
 
 class PriceIncreaseItemAdminListViewTest(TestCase):

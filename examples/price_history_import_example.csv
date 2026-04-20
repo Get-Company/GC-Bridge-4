@@ -1,0 +1,5 @@
+erp_nr;gueltig_ab;sales_channel;preis;rebate_quantity;rebate_price;special_percentage;special_price;special_start_date;special_end_date;quelle;kommentar
+100123;2021-01-01;Standard;3,95;;;;;;;Altpreisliste 2021;Jahresstart
+100123;2022-01-01;Standard;4,10;10;3,85;;;;;Altpreisliste 2022;Staffelpreis ab 10
+100123;2023-11-01;Standard;4,30;10;4,05;10,00;3,90;2023-11-01;2023-11-30;Weihnachtsaktion 2023;Sonderpreis November
+100124;2024-03-15;Standard;12,49;;;;;;;ERP Altbestand;Preisupdate nach Lieferantenwechsel
