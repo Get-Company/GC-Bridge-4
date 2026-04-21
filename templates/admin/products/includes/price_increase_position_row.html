@@ -1,4 +1,4 @@
-<tr class="align-top">
+<tr class="align-top js-position-row">
     <td class="whitespace-nowrap px-4 py-3 text-sm font-medium text-font-important-light dark:text-font-important-dark">{{ item.product.erp_nr }}</td>
     <td class="whitespace-nowrap px-4 py-3 text-sm text-font-default-light dark:text-font-default-dark">{{ item.display_current_price }}</td>
     <td class="whitespace-nowrap px-4 py-3 text-sm text-font-default-light dark:text-font-default-dark">{{ item.display_current_rebate_quantity }}</td>
@@ -8,10 +8,10 @@
         <div class="min-w-28 space-y-1">
             {% for yearly_price in item.yearly_prices %}
                 <div class="flex items-center justify-between gap-2 text-xs">
-                    <span class="font-medium {% if yearly_price.is_current %}text-primary-700 dark:text-primary-400{% else %}text-font-subtle-light dark:text-font-subtle-dark{% endif %}">
+                    <span class="font-medium text-font-subtle-light dark:text-font-subtle-dark">
                         {{ yearly_price.year }}
                     </span>
-                    <span class="{% if yearly_price.is_current %}font-semibold text-font-important-light dark:text-font-important-dark{% else %}text-font-default-light dark:text-font-default-dark{% endif %}">
+                    <span class="{% if yearly_price.has_price %}text-font-default-light dark:text-font-default-dark{% else %}text-font-subtle-light dark:text-font-subtle-dark{% endif %}">
                         {{ yearly_price.price }}
                     </span>
                 </div>
@@ -52,5 +52,46 @@
         {% else %}
             <span class="text-font-subtle-light dark:text-font-subtle-dark">Noch nichts gespeichert.</span>
         {% endif %}
+    </td>
+</tr>
+<tr class="js-position-history-row bg-base-50/60 dark:bg-base-950/30">
+    <td colspan="9" class="px-4 pb-4">
+        <details class="rounded-default border border-base-200 bg-white shadow-xs dark:border-base-800 dark:bg-base-900">
+            <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-medium text-font-important-light hover:bg-base-50 dark:text-font-important-dark dark:hover:bg-base-800/40">
+                <span>Gesamter Preisverlauf als Liniendiagramm</span>
+                <span class="text-xs font-normal text-font-subtle-light dark:text-font-subtle-dark">
+                    {{ item.price_history_chart.current_price_year }} aktueller Preis, {{ item.price_history_chart.new_price_year }} neuer Preis
+                </span>
+            </summary>
+            <div class="border-t border-base-200 px-4 py-4 dark:border-base-800">
+                <svg
+                    role="img"
+                    aria-label="Preisverlauf fuer {{ item.product.erp_nr }}"
+                    viewBox="{{ item.price_history_chart.view_box }}"
+                    class="h-64 w-full text-font-default-light dark:text-font-default-dark"
+                    data-price-history-chart="{{ item.product.erp_nr }}"
+                >
+                    <line x1="48" y1="28" x2="48" y2="176" class="stroke-base-300 dark:stroke-base-700" stroke-width="1"></line>
+                    <line x1="48" y1="176" x2="616" y2="176" class="stroke-base-300 dark:stroke-base-700" stroke-width="1"></line>
+                    <text x="6" y="34" class="fill-font-subtle-light text-[11px] dark:fill-font-subtle-dark">{{ item.price_history_chart.max_price }}</text>
+                    <text x="6" y="180" class="fill-font-subtle-light text-[11px] dark:fill-font-subtle-dark">{{ item.price_history_chart.min_price }}</text>
+                    <text x="18" y="104" text-anchor="middle" transform="rotate(-90 18 104)" class="fill-font-subtle-light text-[11px] dark:fill-font-subtle-dark">Preis</text>
+                    <text x="616" y="216" text-anchor="end" class="fill-font-subtle-light text-[11px] dark:fill-font-subtle-dark">Jahr</text>
+                    <path d="{{ item.price_history_chart.path }}" fill="none" class="stroke-primary-600 dark:stroke-primary-400" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path>
+                    {% for point in item.price_history_chart.points %}
+                        <line x1="{{ point.x }}" y1="176" x2="{{ point.x }}" y2="181" class="stroke-base-300 dark:stroke-base-700" stroke-width="1"></line>
+                        <circle
+                            cx="{{ point.x }}"
+                            cy="{{ point.y }}"
+                            r="{% if point.is_new_price %}5{% else %}4{% endif %}"
+                            class="{% if point.is_new_price %}fill-green-600 dark:fill-green-400{% elif point.is_current_price %}fill-primary-700 dark:fill-primary-300{% else %}fill-white stroke-primary-600 dark:fill-base-900 dark:stroke-primary-400{% endif %}"
+                            stroke-width="2"
+                        ></circle>
+                        <text x="{{ point.x }}" y="202" text-anchor="middle" class="fill-font-subtle-light text-[11px] dark:fill-font-subtle-dark">{{ point.year }}</text>
+                        <text x="{{ point.x }}" y="{{ point.y }}" dx="0" dy="-9" text-anchor="middle" class="fill-font-default-light text-[11px] font-semibold dark:fill-font-default-dark">{{ point.price }}</text>
+                    {% endfor %}
+                </svg>
+            </div>
+        </details>
     </td>
 </tr>

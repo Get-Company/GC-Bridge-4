@@ -169,6 +169,10 @@
                     if (!response.ok) {
                         throw new Error(payload.error || "Speichern fehlgeschlagen.");
                     }
+                    const detailRow = row.nextElementSibling;
+                    if (detailRow && detailRow.classList.contains("js-position-history-row")) {
+                        detailRow.remove();
+                    }
                     row.outerHTML = payload.row_html;
                     bindInputs(container);
                     setStatus(payload.message || "Gespeichert.", "success");

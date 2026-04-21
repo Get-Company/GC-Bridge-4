@@ -972,27 +972,105 @@ class PriceIncreaseAdmin(BaseAdmin):
         item.save_url = self._positions_save_url(price_increase.pk, item.pk)
         return item
 
-    def _build_yearly_price_summary(self, item: PriceIncreaseItem, history_entries: list[PriceHistory]) -> list[dict[str, str]]:
+    @staticmethod
+    def _price_timeline_years() -> tuple[int, int]:
+        new_price_year = timezone.localdate().year
+        current_price_year = new_price_year - 1
+        return current_price_year, new_price_year
+
+    @staticmethod
+    def _get_latest_history_price_by_year(history_entries: list[PriceHistory]) -> dict[int, Decimal]:
         yearly_prices: dict[int, Decimal] = {}
-        for entry in history_entries:
+        for entry in sorted(history_entries, key=lambda entry: (entry.created_at, entry.pk or 0)):
             yearly_prices[entry.created_at.year] = entry.price
+        return yearly_prices
 
-        current_year = timezone.localdate().year
-        yearly_prices[current_year] = item.current_price
+    def _build_yearly_price_summary(self, item: PriceIncreaseItem, history_entries: list[PriceHistory]) -> list[dict[str, str]]:
+        current_price_year, _new_price_year = self._price_timeline_years()
+        yearly_prices = self._get_latest_history_price_by_year(history_entries)
+        display_years = range(current_price_year - 3, current_price_year)
 
-        sorted_years = sorted(yearly_prices.keys())
-        if not sorted_years:
-            sorted_years = [current_year]
-            yearly_prices[current_year] = item.current_price
+        summary = []
+        for year in display_years:
+            price = yearly_prices.get(year)
+            summary.append(
+                {
+                    "year": str(year),
+                    "price": self._format_decimal(price) if price is not None else "-",
+                    "has_price": price is not None,
+                }
+            )
+        return summary
 
-        return [
-            {
-                "year": str(year),
-                "price": self._format_decimal(yearly_prices[year]),
-                "is_current": year == current_year,
-            }
-            for year in sorted_years
-        ]
+    def _build_price_history_chart(self, item: PriceIncreaseItem, history_entries: list[PriceHistory]) -> dict:
+        current_price_year, new_price_year = self._price_timeline_years()
+        yearly_prices = {
+            year: price
+            for year, price in self._get_latest_history_price_by_year(history_entries).items()
+            if year < current_price_year
+        }
+        yearly_prices[current_price_year] = item.current_price
+        yearly_prices[new_price_year] = item.effective_new_price
+        sorted_years = sorted(yearly_prices)
+        prices = [yearly_prices[year] for year in sorted_years]
+        min_price = min(prices)
+        max_price = max(prices)
+        price_span = max_price - min_price
+
+        width = 640
+        height = 220
+        left = 48
+        right = 24
+        top = 28
+        bottom = 44
+        plot_width = width - left - right
+        plot_height = height - top - bottom
+        x_step = plot_width / max(len(sorted_years) - 1, 1)
+        middle_y = top + (plot_height / 2)
+
+        points = []
+        for index, year in enumerate(sorted_years):
+            price = yearly_prices[year]
+            x = left + (index * x_step)
+            if price_span:
+                y = top + (float(max_price - price) / float(price_span) * plot_height)
+            else:
+                y = middle_y
+            points.append(
+                {
+                    "year": str(year),
+                    "price": self._format_decimal(price),
+                    "x": f"{x:.2f}",
+                    "y": f"{y:.2f}",
+                    "is_current_price": year == current_price_year,
+                    "is_new_price": year == new_price_year,
+                }
+            )
+
+        path = " ".join(
+            f"{'M' if index == 0 else 'L'} {point['x']} {point['y']}"
+            for index, point in enumerate(points)
+        )
+
+        return {
+            "view_box": f"0 0 {width} {height}",
+            "path": path,
+            "points": points,
+            "min_price": self._format_decimal(min_price),
+            "max_price": self._format_decimal(max_price),
+            "current_price_year": str(current_price_year),
+            "new_price_year": str(new_price_year),
+        }
+
+    def _build_yearly_price_history(
+        self,
+        item: PriceIncreaseItem,
+        history_entries: list[PriceHistory],
+    ) -> tuple[list[dict[str, str]], dict]:
+        return (
+            self._build_yearly_price_summary(item, history_entries),
+            self._build_price_history_chart(item, history_entries),
+        )
 
     def _get_save_field_label(self, field_name: str) -> str:
         if field_name == "new_price":
@@ -1017,7 +1095,7 @@ class PriceIncreaseAdmin(BaseAdmin):
         prepared_items = []
         for item in items:
             item = self._prepare_position_item(price_increase, item)
-            item.yearly_prices = self._build_yearly_price_summary(
+            item.yearly_prices, item.price_history_chart = self._build_yearly_price_history(
                 item,
                 history_by_price_id.get(item.source_price_id, []),
             )
@@ -1097,7 +1175,7 @@ class PriceIncreaseAdmin(BaseAdmin):
         field_label = self._get_save_field_label(field_name)
         item.row_status_message = f"{field_label} gespeichert: {old_value or 'leer'} -> {new_value or 'leer'}"
         self._prepare_position_item(price_increase, item)
-        item.yearly_prices = self._build_yearly_price_summary(
+        item.yearly_prices, item.price_history_chart = self._build_yearly_price_history(
             item,
             list(
                 PriceHistory.objects.filter(price_entry_id=item.source_price_id)

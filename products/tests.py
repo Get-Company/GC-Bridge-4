@@ -15,7 +15,15 @@ from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from products.admin import ImageAdmin, PriceActionForm, PriceAdmin, ProductAdmin, ProductImageInline, ProductPropertyInline
+from products.admin import (
+    ImageAdmin,
+    PriceActionForm,
+    PriceAdmin,
+    PriceIncreaseAdmin,
+    ProductAdmin,
+    ProductImageInline,
+    ProductPropertyInline,
+)
 from products.management.commands.import_legacy_product_properties import Command as ImportLegacyProductPropertiesCommand
 from products.management.commands.scheduled_product_sync import Command as ScheduledProductSyncCommand
 from products.models import (
@@ -350,18 +358,26 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
             current_rebate_quantity=5,
             current_rebate_price=Decimal("9.01"),
         )
+        self._create_history_entry(2021, "7.95")
+        self._create_history_entry(2022, "8.50")
+        self._create_history_entry(2023, "9.10")
+        self._create_history_entry(2024, "9.55")
+
+    def _create_history_entry(self, year: int, price: str) -> PriceHistory:
         historical_entry = PriceHistory.objects.create(
             price_entry=self.price,
             change_type=PriceHistory.ChangeType.UPDATED,
             changed_fields="imported_history",
-            price=Decimal("8.50"),
+            price=Decimal(price),
             rebate_quantity=5,
             rebate_price=Decimal("7.90"),
         )
         PriceHistory.objects.filter(pk=historical_entry.pk).update(
-            created_at=timezone.make_aware(datetime(2022, 1, 1, 0, 0, 0)),
-            updated_at=timezone.make_aware(datetime(2022, 1, 1, 0, 0, 0)),
+            created_at=timezone.make_aware(datetime(year, 1, 1, 0, 0, 0)),
+            updated_at=timezone.make_aware(datetime(year, 1, 1, 0, 0, 0)),
         )
+        historical_entry.refresh_from_db()
+        return historical_entry
 
     def test_positions_page_renders_custom_unfold_view(self):
         response = self.client.get(reverse("admin:products_priceincrease_positions", args=(self.price_increase.pk,)))
@@ -392,6 +408,36 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
         self.assertContains(response, 'placeholder="9,25"', html=False)
         self.assertContains(response, "2022")
         self.assertContains(response, "8,50")
+        self.assertContains(response, "2023")
+        self.assertContains(response, "9,10")
+        self.assertContains(response, "2024")
+        self.assertContains(response, "9,55")
+        self.assertContains(response, "Gesamter Preisverlauf als Liniendiagramm")
+        self.assertContains(response, 'data-price-history-chart="A-6000"', html=False)
+
+    def test_yearly_summary_only_shows_three_years_before_current_price_year(self):
+        admin_instance = PriceIncreaseAdmin(PriceIncrease, AdminSite())
+        history_entries = list(self.price.history_entries.order_by("created_at", "id"))
+
+        summary = admin_instance._build_yearly_price_summary(self.item, history_entries)
+
+        current_price_year = timezone.localdate().year - 1
+        self.assertEqual(
+            [entry["year"] for entry in summary],
+            [str(year) for year in range(current_price_year - 3, current_price_year)],
+        )
+
+    def test_price_history_chart_contains_full_history_current_and_new_price_years(self):
+        admin_instance = PriceIncreaseAdmin(PriceIncrease, AdminSite())
+        history_entries = list(self.price.history_entries.order_by("created_at", "id"))
+
+        chart = admin_instance._build_price_history_chart(self.item, history_entries)
+
+        current_price_year = timezone.localdate().year - 1
+        new_price_year = timezone.localdate().year
+        self.assertEqual(chart["points"][0]["year"], "2021")
+        self.assertIn(str(current_price_year), [point["year"] for point in chart["points"]])
+        self.assertIn(str(new_price_year), [point["year"] for point in chart["points"]])
 
     def test_save_endpoint_saves_rounded_target_prices(self):
         response = self.client.post(
