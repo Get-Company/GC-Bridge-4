@@ -1,6 +1,7 @@
 import calendar
 from decimal import Decimal, ROUND_UP
 
+from django.conf import settings
 from django.db import models
 from django.core.exceptions import ValidationError
 from django.utils import timezone
@@ -681,6 +682,25 @@ class PriceIncreaseItem(BaseModel):
         null=True,
         blank=True,
         verbose_name=_("neuer Rab.Preis"),
+    )
+    last_status_message = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        verbose_name=_("Letzter Status"),
+    )
+    last_changed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        verbose_name=_("Letzte Aenderung durch"),
+    )
+    last_changed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name=_("Letzte Aenderung am"),
     )
 
     class Meta:

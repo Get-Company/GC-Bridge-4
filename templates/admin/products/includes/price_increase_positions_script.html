@@ -1,0 +1,225 @@
+<script>
+    (function () {
+        function setupPositionsEditor(container) {
+            const root = container.closest(".js-price-increase-positions-root") || container.parentElement;
+            const searchInput = root ? root.querySelector(".js-positions-search") : null;
+            const statusBox = root ? root.querySelector(".js-positions-status") : null;
+            if (!container || !searchInput || !statusBox || container.dataset.bound === "1") {
+                return;
+            }
+            container.dataset.bound = "1";
+
+            const tableUrl = container.dataset.tableUrl;
+            const minLength = Number(container.dataset.searchMinLength || "3");
+            let searchTimer = null;
+            let searchController = null;
+
+            function getCookie(name) {
+                const cookies = document.cookie ? document.cookie.split(";") : [];
+                for (const rawCookie of cookies) {
+                    const cookie = rawCookie.trim();
+                    if (cookie.startsWith(name + "=")) {
+                        return decodeURIComponent(cookie.slice(name.length + 1));
+                    }
+                }
+                return "";
+            }
+
+            function setStatus(message, tone) {
+                statusBox.textContent = message || "";
+                statusBox.className = "js-positions-status min-h-6 text-sm";
+                if (tone === "error") {
+                    statusBox.classList.add("text-red-600", "dark:text-red-400");
+                } else if (tone === "success") {
+                    statusBox.classList.add("text-green-600", "dark:text-green-400");
+                } else {
+                    statusBox.classList.add("text-font-subtle-light", "dark:text-font-subtle-dark");
+                }
+            }
+
+            async function loadTable(query) {
+                if (searchController) {
+                    searchController.abort();
+                }
+                searchController = new AbortController();
+                setStatus("Lade Positionen ...", "info");
+                try {
+                    const response = await fetch(`${tableUrl}?q=${encodeURIComponent(query)}`, {
+                        headers: {
+                            "X-Requested-With": "XMLHttpRequest",
+                        },
+                        signal: searchController.signal,
+                    });
+                    if (!response.ok) {
+                        throw new Error("Fehler beim Laden der Positionen.");
+                    }
+                    container.innerHTML = await response.text();
+                    bindInputs(container);
+                    bindHistoryCharts(container);
+                    if (query && query.length >= minLength) {
+                        setStatus(`Suchergebnis fuer "${query}" geladen.`, "success");
+                    } else {
+                        setStatus("", "info");
+                    }
+                } catch (error) {
+                    if (error.name === "AbortError") {
+                        return;
+                    }
+                    setStatus(error.message || "Fehler beim Laden.", "error");
+                }
+            }
+
+            async function saveInput(input) {
+                const row = input.closest("tr");
+                if (!row) {
+                    return;
+                }
+                row.classList.add("opacity-60");
+                input.disabled = true;
+                setStatus("Speichere ...", "info");
+
+                try {
+                    const response = await fetch(input.dataset.saveUrl, {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+                            "X-CSRFToken": getCookie("csrftoken"),
+                            "X-Requested-With": "XMLHttpRequest",
+                        },
+                        body: new URLSearchParams({
+                            field: input.dataset.field,
+                            value: input.value,
+                        }),
+                    });
+                    const payload = await response.json();
+                    if (!response.ok) {
+                        throw new Error(payload.error || "Speichern fehlgeschlagen.");
+                    }
+                    const detailRow = row.nextElementSibling;
+                    if (detailRow && detailRow.classList.contains("js-position-history-row")) {
+                        detailRow.remove();
+                    }
+                    row.outerHTML = payload.row_html;
+                    bindInputs(container);
+                    bindHistoryCharts(container);
+                    setStatus(payload.message || "Gespeichert.", "success");
+                } catch (error) {
+                    row.classList.remove("opacity-60");
+                    input.disabled = false;
+                    input.focus();
+                    setStatus(error.message || "Speichern fehlgeschlagen.", "error");
+                }
+            }
+
+            function resolveCssVar(value) {
+                if (!value || !value.startsWith("var(")) {
+                    return value;
+                }
+                const cssVar = value.match(/var\((.*?)\)/);
+                if (!cssVar) {
+                    return value;
+                }
+                return getComputedStyle(document.documentElement).getPropertyValue(cssVar[1]).trim() || value;
+            }
+
+            function initializeHistoryChart(chart) {
+                if (!window.Chart) {
+                    return;
+                }
+                const existingChart = Chart.getChart ? Chart.getChart(chart) : null;
+                if (existingChart) {
+                    existingChart.resize();
+                    return;
+                }
+                if (!chart.dataset.value) {
+                    return;
+                }
+                const parsedData = JSON.parse(chart.dataset.value);
+                parsedData.datasets.forEach(function (dataset) {
+                    dataset.borderColor = resolveCssVar(dataset.borderColor);
+                    dataset.backgroundColor = resolveCssVar(dataset.backgroundColor);
+                });
+                new Chart(chart.getContext("2d"), {
+                    type: chart.dataset.type || "line",
+                    data: parsedData,
+                    options: chart.dataset.options ? JSON.parse(chart.dataset.options) : {
+                        maintainAspectRatio: false,
+                        responsive: true,
+                    },
+                });
+            }
+
+            function bindHistoryCharts(root) {
+                root.querySelectorAll(".js-position-history-row details").forEach(function (details) {
+                    if (details.dataset.bound === "1") {
+                        return;
+                    }
+                    details.dataset.bound = "1";
+                    details.addEventListener("toggle", function () {
+                        if (!details.open) {
+                            return;
+                        }
+                        details.querySelectorAll("canvas.chart").forEach(initializeHistoryChart);
+                    });
+                });
+            }
+
+            function bindInputs(root) {
+                root.querySelectorAll(".js-position-price-input").forEach(function (input) {
+                    if (input.dataset.bound === "1") {
+                        return;
+                    }
+                    input.dataset.bound = "1";
+                    input.dataset.initialValue = input.value;
+
+                    input.addEventListener("focus", function () {
+                        input.dataset.initialValue = input.value;
+                    });
+
+                    input.addEventListener("keydown", function (event) {
+                        if (event.key === "Enter") {
+                            event.preventDefault();
+                            input.blur();
+                        }
+                    });
+
+                    input.addEventListener("blur", function () {
+                        const initialValue = (input.dataset.initialValue || "").trim();
+                        const currentValue = (input.value || "").trim();
+                        if (initialValue === currentValue) {
+                            return;
+                        }
+                        saveInput(input);
+                    });
+                });
+            }
+
+            searchInput.addEventListener("input", function () {
+                const query = searchInput.value.trim();
+                window.clearTimeout(searchTimer);
+
+                if (query && query.length < minLength) {
+                    setStatus(`Suche startet ab ${minLength} Zeichen.`, "info");
+                    return;
+                }
+
+                searchTimer = window.setTimeout(function () {
+                    loadTable(query);
+                }, 250);
+            });
+
+            searchInput.addEventListener("keydown", function (event) {
+                if (event.key === "Enter") {
+                    event.preventDefault();
+                }
+            });
+
+            bindInputs(container);
+            bindHistoryCharts(container);
+        }
+
+        document.addEventListener("DOMContentLoaded", function () {
+            document.querySelectorAll(".js-positions-table-container").forEach(setupPositionsEditor);
+        });
+    })();
+</script>

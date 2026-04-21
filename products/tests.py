@@ -10,6 +10,7 @@ from django.core.management import call_command
 from django.contrib import messages
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth import get_user_model
+from django.contrib.contenttypes.models import ContentType
 from django.core.management.base import CommandError
 from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
@@ -24,6 +25,7 @@ from products.admin import (
     ProductImageInline,
     ProductPropertyInline,
 )
+from core.admin_utils import log_admin_change
 from products.management.commands.import_legacy_product_properties import Command as ImportLegacyProductPropertiesCommand
 from products.management.commands.scheduled_product_sync import Command as ScheduledProductSyncCommand
 from products.models import (
@@ -390,6 +392,18 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
             reverse("admin:products_priceincrease_positions_table", args=(self.price_increase.pk,)),
         )
 
+    def test_price_increase_change_page_embeds_positions_editor(self):
+        response = self.client.get(reverse("admin:products_priceincrease_change", args=(self.price_increase.pk,)))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Positionen direkt bearbeiten")
+        self.assertContains(response, "A-6000")
+        self.assertContains(response, 'placeholder="10,30"', html=False)
+        self.assertContains(
+            response,
+            reverse("admin:products_priceincrease_positions_table", args=(self.price_increase.pk,)),
+        )
+
     def test_positions_table_renders_expected_columns_and_placeholders(self):
         response = self.client.get(
             reverse("admin:products_priceincrease_positions_table", args=(self.price_increase.pk,))
@@ -476,8 +490,44 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
         self.item.refresh_from_db()
         self.assertEqual(self.item.new_price, Decimal("10.25"))
         self.assertIsNone(self.item.new_rebate_price)
+        self.assertEqual(self.item.last_status_message, "Neuer Preis gespeichert: leer -> 10,25")
+        self.assertEqual(self.item.last_changed_by, self.user)
+        self.assertIsNotNone(self.item.last_changed_at)
         self.assertContains(response, 'value="10,25"', html=False)
         self.assertContains(response, 'placeholder="9,25"', html=False)
+
+    def test_saved_status_is_rendered_after_table_reload_with_user_detail(self):
+        self.item.last_status_message = "Neuer Preis gespeichert: leer -> 10,25"
+        self.item.last_changed_by = self.user
+        self.item.last_changed_at = timezone.make_aware(datetime(2026, 4, 21, 10, 30, 0))
+        self.item.save(update_fields=["last_status_message", "last_changed_by", "last_changed_at"])
+
+        response = self.client.get(
+            reverse("admin:products_priceincrease_positions_table", args=(self.price_increase.pk,))
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Neuer Preis gespeichert: leer -&gt; 10,25")
+        self.assertContains(response, "price-admin")
+        self.assertContains(response, ">info<", html=False)
+
+    def test_positions_table_falls_back_to_latest_admin_log_status(self):
+        log_admin_change(
+            user_id=self.user.id,
+            content_type_id=ContentType.objects.get_for_model(PriceIncreaseItem).id,
+            object_id=str(self.item.pk),
+            object_repr=str(self.item),
+            message="Neuer Preis gespeichert: 4,60 -> 4,70",
+        )
+
+        response = self.client.get(
+            reverse("admin:products_priceincrease_positions_table", args=(self.price_increase.pk,))
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Neuer Preis gespeichert: 4,60 -&gt; 4,70")
+        self.assertContains(response, "price-admin")
+        self.assertContains(response, ">info<", html=False)
 
     def test_save_endpoint_accepts_decimal_comma(self):
         response = self.client.post(

@@ -1,0 +1,9 @@
+{% with ctx=price_increase_positions_inline_context|default:None %}
+    {% if ctx %}
+        {% with price_increase=ctx.price_increase items=ctx.items search_term=ctx.search_term search_min_length=ctx.search_min_length positions_table_url=ctx.positions_table_url is_applied=ctx.is_applied %}
+            {% include "admin/products/includes/price_increase_positions_editor_inner.html" %}
+        {% endwith %}
+    {% else %}
+        {% include "admin/products/includes/price_increase_positions_editor_inner.html" %}
+    {% endif %}
+{% endwith %}

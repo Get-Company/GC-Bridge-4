@@ -3,6 +3,7 @@ from decimal import Decimal
 
 from django import forms
 from django.contrib import admin, messages
+from django.contrib.admin.models import LogEntry
 from django.contrib.contenttypes.models import ContentType
 from django.core.management import call_command
 from django.db.models import Case, IntegerField, Prefetch, Q, Value, When
@@ -830,6 +831,7 @@ class PriceHistoryAdmin(BaseAdmin):
 
 @admin.register(PriceIncrease)
 class PriceIncreaseAdmin(BaseAdmin):
+    change_form_after_template = "admin/products/includes/price_increase_positions_inline.html"
     list_display = (
         "title",
         "status",
@@ -851,7 +853,6 @@ class PriceIncreaseAdmin(BaseAdmin):
         "status",
         "sales_channel",
         "position_count",
-        "positions_editor_link",
         "positions_synced_at",
         "applied_at",
     )
@@ -864,7 +865,6 @@ class PriceIncreaseAdmin(BaseAdmin):
                     "status",
                     "sales_channel",
                     "general_percentage",
-                    "positions_editor_link",
                 )
             },
         ),
@@ -885,15 +885,6 @@ class PriceIncreaseAdmin(BaseAdmin):
     @admin.display(description="Positionen")
     def position_count(self, obj: PriceIncrease):
         return obj.position_count
-
-    @admin.display(description="Positionsliste")
-    def positions_editor_link(self, obj: PriceIncrease | None):
-        if not obj or not obj.pk:
-            return "Nach dem ersten Speichern verfuegbar."
-        return format_html(
-            '<a class="button" href="{}">Listenansicht bearbeiten</a>',
-            self._positions_page_url(obj.pk),
-        )
 
     def get_urls(self):
         positions_view = self.admin_site.admin_view(
@@ -947,7 +938,7 @@ class PriceIncreaseAdmin(BaseAdmin):
 
     def _get_positions_queryset(self, price_increase: PriceIncrease, search_term: str = ""):
         queryset = (
-            price_increase.items.select_related("product", "source_price")
+            price_increase.items.select_related("product", "source_price", "last_changed_by")
             .filter(product__is_active=True)
             .order_by("product__erp_nr", "id")
         )
@@ -969,9 +960,28 @@ class PriceIncreaseAdmin(BaseAdmin):
         item.display_new_rebate_price = self._format_decimal(item.new_rebate_price)
         item.placeholder_new_price = self._format_decimal(item.suggested_price)
         item.placeholder_new_rebate_price = self._format_decimal(item.suggested_rebate_price)
-        item.row_status_message = getattr(item, "row_status_message", "")
+        logged_status_message = getattr(item, "logged_status_message", "")
+        item.row_status_message = getattr(item, "row_status_message", item.last_status_message or logged_status_message)
+        item.row_status_detail = self._build_row_status_detail(item)
         item.save_url = self._positions_save_url(price_increase.pk, item.pk)
         return item
+
+    @staticmethod
+    def _build_row_status_detail(item: PriceIncreaseItem) -> str:
+        message = item.last_status_message or getattr(item, "logged_status_message", "")
+        if not message:
+            return ""
+        if item.last_changed_by_id:
+            user_label = item.last_changed_by.get_username() or str(item.last_changed_by)
+        elif getattr(item, "logged_status_user", None):
+            user_label = item.logged_status_user.get_username() or str(item.logged_status_user)
+        else:
+            user_label = "unbekannter Nutzer"
+        changed_at_value = item.last_changed_at or getattr(item, "logged_status_at", None)
+        if changed_at_value:
+            changed_at = timezone.localtime(changed_at_value).strftime("%d.%m.%Y %H:%M")
+            return f"{message} von {user_label} am {changed_at}"
+        return f"{message} von {user_label}"
 
     @staticmethod
     def _price_timeline_years() -> tuple[int, int]:
@@ -1067,9 +1077,37 @@ class PriceIncreaseAdmin(BaseAdmin):
             return "neuer Rab.Preis"
         return field_name
 
+    @staticmethod
+    def _attach_logged_position_statuses(items: list[PriceIncreaseItem]) -> None:
+        item_ids = [str(item.pk) for item in items if item.pk and not item.last_status_message]
+        if not item_ids:
+            return
+        content_type_id = ContentType.objects.get_for_model(PriceIncreaseItem).id
+        latest_log_entries = (
+            LogEntry.objects.filter(
+                content_type_id=content_type_id,
+                object_id__in=item_ids,
+                change_message__contains=" gespeichert: ",
+            )
+            .select_related("user")
+            .order_by("object_id", "-action_time", "-id")
+        )
+        latest_entry_by_object_id = {}
+        for log_entry in latest_log_entries:
+            latest_entry_by_object_id.setdefault(log_entry.object_id, log_entry)
+
+        for item in items:
+            log_entry = latest_entry_by_object_id.get(str(item.pk))
+            if not log_entry:
+                continue
+            item.logged_status_message = log_entry.change_message
+            item.logged_status_user = log_entry.user
+            item.logged_status_at = log_entry.action_time
+
     def _build_positions_context(self, request, price_increase: PriceIncrease, search_term: str = "") -> dict:
         search_term = (search_term or "").strip()
         items = list(self._get_positions_queryset(price_increase, search_term))
+        self._attach_logged_position_statuses(items)
         source_price_ids = [item.source_price_id for item in items if item.source_price_id]
         history_entries = (
             PriceHistory.objects.filter(price_entry_id__in=source_price_ids)
@@ -1102,6 +1140,40 @@ class PriceIncreaseAdmin(BaseAdmin):
             "positions_table_url": self._positions_table_url(price_increase.pk),
             "is_applied": price_increase.status == PriceIncrease.Status.APPLIED,
         }
+
+    def render_change_form(self, request, context, add=False, change=False, form_url="", obj=None):
+        context = {**context}
+        if obj and obj.pk:
+            positions_context = self._build_positions_context(
+                request=request,
+                price_increase=obj,
+                search_term="",
+            )
+            context.update(
+                {
+                    "price_increase_positions_inline_context": {
+                        key: value
+                        for key, value in positions_context.items()
+                        if key not in {"title", "subtitle"}
+                    },
+                    "price_increase_positions_inline_enabled": True,
+                }
+            )
+        else:
+            context.update(
+                {
+                    "price_increase_positions_inline_context": {},
+                    "price_increase_positions_inline_enabled": False,
+                }
+            )
+        return super().render_change_form(
+            request,
+            context,
+            add=add,
+            change=change,
+            form_url=form_url,
+            obj=obj,
+        )
 
     @action(
         description="Positionsliste",
@@ -1139,7 +1211,7 @@ class PriceIncreaseAdmin(BaseAdmin):
             return JsonResponse({"error": "Diese Preiserhoehung wurde bereits uebernommen."}, status=400)
 
         item = (
-            price_increase.items.select_related("product", "source_price")
+            price_increase.items.select_related("product", "source_price", "last_changed_by")
             .filter(pk=item_id, product__is_active=True)
             .first()
         )
@@ -1161,7 +1233,12 @@ class PriceIncreaseAdmin(BaseAdmin):
         old_value = self._format_decimal(previous_value)
         new_value = self._format_decimal(getattr(item, field_name))
         field_label = self._get_save_field_label(field_name)
-        item.row_status_message = f"{field_label} gespeichert: {old_value or 'leer'} -> {new_value or 'leer'}"
+        status_message = f"{field_label} gespeichert: {old_value or 'leer'} -> {new_value or 'leer'}"
+        item.last_status_message = status_message
+        item.last_changed_by = request.user
+        item.last_changed_at = timezone.now()
+        item.save(update_fields=["last_status_message", "last_changed_by", "last_changed_at", "updated_at"])
+        item.row_status_message = status_message
         self._prepare_position_item(price_increase, item)
         item.yearly_prices, item.price_history_chart = self._build_yearly_price_history(
             item,

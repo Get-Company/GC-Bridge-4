@@ -1,0 +1,4 @@
+{% if price_increase_positions_inline_enabled %}
+    {% include "admin/products/includes/price_increase_positions_editor.html" with inline_mode=True %}
+    {% include "admin/products/includes/price_increase_positions_script.html" %}
+{% endif %}
