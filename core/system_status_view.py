@@ -51,6 +51,7 @@ _WINDOWS_SCHEDULED_TASKS = [
     "GC-Bridge-Uvicorn",
     "GC-Bridge-Caddy",
     "GC-Bridge Scheduled Product Sync",
+    "GC-Bridge-Mappei-Scrape",
 ]
 _WINDOWS_RUNNER_SERVICES = [
     "actions.runner.Get-Company-GC-Bridge-4.GC-Bridge-v4",
