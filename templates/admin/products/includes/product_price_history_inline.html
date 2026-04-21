@@ -1,0 +1,49 @@
+{% if original %}
+    <div class="mt-6 js-inline-admin-formset inline-group">
+        <div class="tabular inline-related last-related">
+            <fieldset class="module relative min-w-0" aria-labelledby="product-price-history-heading">
+                <h2 id="product-price-history-heading" class="mb-3 text-sm font-semibold text-font-important-light dark:text-font-important-dark">
+                    Preis-Historie
+                </h2>
+                <div class="border border-base-200 overflow-x-auto rounded-default shadow-xs dark:border-base-800">
+                    <table class="tabular-table w-full">
+                        <thead class="bg-base-50 dark:bg-base-950/50">
+                            <tr>
+                                <th class="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-font-subtle-light dark:text-font-subtle-dark">Datum</th>
+                                <th class="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-font-subtle-light dark:text-font-subtle-dark">Sales-Channel</th>
+                                <th class="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-font-subtle-light dark:text-font-subtle-dark">Typ</th>
+                                <th class="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-font-subtle-light dark:text-font-subtle-dark">Felder</th>
+                                <th class="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-font-subtle-light dark:text-font-subtle-dark">Preis</th>
+                                <th class="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-font-subtle-light dark:text-font-subtle-dark">VPE</th>
+                                <th class="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-font-subtle-light dark:text-font-subtle-dark">Rab.Preis</th>
+                                <th class="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-font-subtle-light dark:text-font-subtle-dark">Sonder %</th>
+                                <th class="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-font-subtle-light dark:text-font-subtle-dark">Sonderpreis</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-base-200 dark:divide-base-800">
+                            {% for row in product_price_history_rows %}
+                                <tr class="transition-colors hover:bg-base-50 dark:hover:bg-base-800/40">
+                                    <td class="whitespace-nowrap px-3 py-2 text-sm text-font-default-light dark:text-font-default-dark">{{ row.created_at }}</td>
+                                    <td class="whitespace-nowrap px-3 py-2 text-sm text-font-default-light dark:text-font-default-dark">{{ row.sales_channel }}</td>
+                                    <td class="whitespace-nowrap px-3 py-2 text-sm text-font-default-light dark:text-font-default-dark">{{ row.change_type }}</td>
+                                    <td class="px-3 py-2 text-sm text-font-subtle-light dark:text-font-subtle-dark">{{ row.changed_fields }}</td>
+                                    <td class="whitespace-nowrap px-3 py-2 text-right text-sm text-font-default-light dark:text-font-default-dark">{{ row.price }}</td>
+                                    <td class="whitespace-nowrap px-3 py-2 text-right text-sm text-font-default-light dark:text-font-default-dark">{{ row.rebate_quantity }}</td>
+                                    <td class="whitespace-nowrap px-3 py-2 text-right text-sm text-font-default-light dark:text-font-default-dark">{{ row.rebate_price }}</td>
+                                    <td class="whitespace-nowrap px-3 py-2 text-right text-sm text-font-default-light dark:text-font-default-dark">{{ row.special_percentage }}</td>
+                                    <td class="whitespace-nowrap px-3 py-2 text-right text-sm text-font-default-light dark:text-font-default-dark">{{ row.special_price }}</td>
+                                </tr>
+                            {% empty %}
+                                <tr>
+                                    <td colspan="9" class="px-3 py-6 text-sm text-font-subtle-light dark:text-font-subtle-dark">
+                                        Keine Preis-Historie vorhanden.
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </fieldset>
+        </div>
+    </div>
+{% endif %}

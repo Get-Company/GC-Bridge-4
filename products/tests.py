@@ -412,7 +412,7 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
         self.assertContains(response, "9,10")
         self.assertContains(response, "2024")
         self.assertContains(response, "9,55")
-        self.assertContains(response, "Gesamter Preisverlauf als Liniendiagramm")
+        self.assertContains(response, "A-6000 - Admin Artikel")
         self.assertContains(response, 'data-type="line"', html=False)
         self.assertContains(response, "canvas", html=False)
 
@@ -789,6 +789,26 @@ class ProductImageAdminAndSyncTest(TestCase):
 
     def test_product_admin_uses_product_property_inline(self):
         self.assertIn(ProductPropertyInline, ProductAdmin.inlines)
+
+    def test_product_admin_uses_product_change_after_template(self):
+        self.assertEqual(ProductAdmin.change_form_after_template, "admin/products/product_change_after.html")
+
+    def test_product_admin_builds_price_history_rows_for_product(self):
+        channel = ShopwareSettings.objects.create(name="Default", is_active=True, is_default=True)
+        product = Product.objects.create(erp_nr="A-4010", name="Historie")
+        price = Price.objects.create(product=product, sales_channel=channel, price=Decimal("10.00"))
+        price.price = Decimal("11.25")
+        price.rebate_quantity = 5
+        price.rebate_price = Decimal("10.50")
+        price.save()
+
+        rows = ProductAdmin(Product, AdminSite())._build_product_price_history_rows(product)
+
+        self.assertEqual(rows[0]["sales_channel"], "Default")
+        self.assertEqual(rows[0]["price"], "11,25")
+        self.assertEqual(rows[0]["rebate_quantity"], "5")
+        self.assertEqual(rows[0]["rebate_price"], "10,50")
+        self.assertIn("price", rows[0]["changed_fields"])
 
     def test_product_image_inline_renders_lazy_preview(self):
         product = Product.objects.create(erp_nr="A-4005", name="Inline Bild")

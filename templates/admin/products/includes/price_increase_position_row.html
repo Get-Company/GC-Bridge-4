@@ -1,11 +1,11 @@
 {% load unfold %}
-<tr class="align-top js-position-row">
-    <td class="whitespace-nowrap px-4 py-3 text-sm font-medium text-font-important-light dark:text-font-important-dark">{{ item.product.erp_nr }}</td>
-    <td class="whitespace-nowrap px-4 py-3 text-sm text-font-default-light dark:text-font-default-dark">{{ item.display_current_price }}</td>
-    <td class="whitespace-nowrap px-4 py-3 text-sm text-font-default-light dark:text-font-default-dark">{{ item.display_current_rebate_quantity }}</td>
-    <td class="whitespace-nowrap px-4 py-3 text-sm text-font-default-light dark:text-font-default-dark">{{ item.display_current_rebate_price }}</td>
-    <td class="whitespace-nowrap px-4 py-3 text-sm text-font-default-light dark:text-font-default-dark">{{ item.display_unit }}</td>
-    <td class="px-4 py-3">
+<tr class="align-top js-position-row transition-colors group-hover:bg-base-50 dark:group-hover:bg-base-800/40">
+    <td class="whitespace-nowrap rounded-l-default border-l border-t border-base-200 px-4 py-3 text-sm font-medium text-font-important-light dark:border-base-800 dark:text-font-important-dark">{{ item.product.erp_nr }}</td>
+    <td class="whitespace-nowrap border-t border-base-200 px-4 py-3 text-sm text-font-default-light dark:border-base-800 dark:text-font-default-dark">{{ item.display_current_price }}</td>
+    <td class="whitespace-nowrap border-t border-base-200 px-4 py-3 text-sm text-font-default-light dark:border-base-800 dark:text-font-default-dark">{{ item.display_current_rebate_quantity }}</td>
+    <td class="whitespace-nowrap border-t border-base-200 px-4 py-3 text-sm text-font-default-light dark:border-base-800 dark:text-font-default-dark">{{ item.display_current_rebate_price }}</td>
+    <td class="whitespace-nowrap border-t border-base-200 px-4 py-3 text-sm text-font-default-light dark:border-base-800 dark:text-font-default-dark">{{ item.display_unit }}</td>
+    <td class="border-t border-base-200 px-4 py-3 dark:border-base-800">
         <div class="min-w-28 space-y-1">
             {% for yearly_price in item.yearly_prices %}
                 <div class="flex items-center justify-between gap-2 text-xs">
@@ -21,7 +21,7 @@
             {% endfor %}
         </div>
     </td>
-    <td class="px-4 py-3">
+    <td class="border-t border-base-200 px-4 py-3 dark:border-base-800">
         <input
             type="text"
             inputmode="decimal"
@@ -33,7 +33,7 @@
             {% if is_applied %}disabled{% endif %}
         >
     </td>
-    <td class="px-4 py-3">
+    <td class="border-t border-base-200 px-4 py-3 dark:border-base-800">
         <input
             type="text"
             inputmode="decimal"
@@ -45,7 +45,7 @@
             {% if is_applied %}disabled{% endif %}
         >
     </td>
-    <td class="px-4 py-3 text-sm">
+    <td class="rounded-r-default border-r border-t border-base-200 px-4 py-3 text-sm dark:border-base-800">
         {% if item.row_status_message %}
             <span class="inline-flex rounded-default bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-300">
                 {{ item.row_status_message }}
@@ -55,11 +55,11 @@
         {% endif %}
     </td>
 </tr>
-<tr class="js-position-history-row bg-base-50/60 dark:bg-base-950/30">
-    <td colspan="9" class="px-4 pb-4">
-        <details class="rounded-default border border-base-200 bg-white shadow-xs dark:border-base-800 dark:bg-base-900">
+<tr class="js-position-history-row transition-colors group-hover:bg-base-50 dark:group-hover:bg-base-800/40">
+    <td colspan="9" class="rounded-b-default border-x border-b border-base-200 px-4 pb-4 dark:border-base-800">
+        <details class="rounded-default border border-base-200 bg-white shadow-xs transition-colors group-hover:bg-base-50 dark:border-base-800 dark:bg-base-900 dark:group-hover:bg-base-800/40">
             <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-medium text-font-important-light hover:bg-base-50 dark:text-font-important-dark dark:hover:bg-base-800/40">
-                <span>Gesamter Preisverlauf als Liniendiagramm</span>
+                <span>{{ item.product.erp_nr }}{% if item.product.name %} - {{ item.product.name }}{% endif %}</span>
                 <span class="text-xs font-normal text-font-subtle-light dark:text-font-subtle-dark">
                     {{ item.price_history_chart.current_price_year }} aktueller Preis, {{ item.price_history_chart.new_price_year }} neuer Preis
                 </span>
@@ -67,16 +67,6 @@
             <div class="border-t border-base-200 px-4 py-4 dark:border-base-800">
                 {% component "unfold/components/chart/line.html" with class="h-64" data=item.price_history_chart.data height=item.price_history_chart.height %}
                 {% endcomponent %}
-                <div class="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-xs text-font-subtle-light dark:text-font-subtle-dark">
-                    {% for point in item.price_history_chart.points %}
-                        <span>
-                            <span class="{% if point.is_new_price %}font-semibold text-green-700 dark:text-green-400{% elif point.is_current_price %}font-semibold text-primary-700 dark:text-primary-400{% else %}font-medium{% endif %}">
-                                {{ point.year }}
-                            </span>
-                            {{ point.price }}
-                        </span>
-                    {% endfor %}
-                </div>
             </div>
         </details>
     </td>
