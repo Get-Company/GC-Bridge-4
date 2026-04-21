@@ -86,9 +86,18 @@ def _extract_product_header(text: str) -> str:
     return text
 
 
+def _extract_image_url(soup) -> str:
+    """Extract product image URL from og:image meta tag."""
+    og = soup.find("meta", property="og:image")
+    if og and og.get("content"):
+        return og["content"]
+    return ""
+
+
 def _parse_product_page(html: str, url: str) -> dict | None:
     """Parse a product page and return a data dict or None on failure."""
     soup = BeautifulSoup(html, "html.parser")
+    image_url = _extract_image_url(soup)
     text = soup.get_text(separator=" ", strip=True)
     header = _extract_product_header(text)
 
@@ -123,6 +132,7 @@ def _parse_product_page(html: str, url: str) -> dict | None:
             header=header,
             artikelnr=artikelnr,
             url=url,
+            image_url=image_url,
             vpe_menge=vpe_menge,
             vpe_einheit=vpe_einheit,
         )
@@ -131,6 +141,7 @@ def _parse_product_page(html: str, url: str) -> dict | None:
             header=header,
             artikelnr=artikelnr,
             url=url,
+            image_url=image_url,
             vpe_menge=vpe_menge,
             vpe_einheit=vpe_einheit,
         )
@@ -141,6 +152,7 @@ def _parse_without_staffel(
     header: str,
     artikelnr: str,
     url: str,
+    image_url: str,
     vpe_menge: int | None,
     vpe_einheit: str,
 ) -> dict | None:
@@ -157,6 +169,7 @@ def _parse_without_staffel(
     return {
         "artikelnr": artikelnr,
         "url": url,
+        "image_url": image_url,
         "vpe_menge": vpe_menge,
         "vpe_einheit": vpe_einheit,
         "hat_staffel": False,
@@ -174,6 +187,7 @@ def _parse_with_staffel(
     header: str,
     artikelnr: str,
     url: str,
+    image_url: str,
     vpe_menge: int | None,
     vpe_einheit: str,
 ) -> dict | None:
@@ -219,6 +233,7 @@ def _parse_with_staffel(
     return {
         "artikelnr": artikelnr,
         "url": url,
+        "image_url": image_url,
         "vpe_menge": vpe_menge,
         "vpe_einheit": vpe_einheit,
         "hat_staffel": True,
@@ -256,13 +271,18 @@ def run_scraper(
     errors = 0
 
     if single_artikelnr:
-        # Direct URL mode: look up existing product URL or skip sitemap
+        # Try DB first, otherwise search sitemap for matching URL
         try:
             product = MappeiProduct.objects.get(artikelnr=single_artikelnr)
             urls = [product.url] if product.url else []
         except MappeiProduct.DoesNotExist:
-            logger.warning("Single mode: artikelnr {} not found in DB.", single_artikelnr)
-            urls = []
+            logger.info("Single mode: {} not in DB, searching sitemap...", single_artikelnr)
+            suffix = f"/{single_artikelnr}"
+            urls = [u for u in _product_urls_from_sitemap() if u.endswith(suffix)]
+            if not urls:
+                logger.warning("Single mode: no URL found for artikelnr {} in sitemap.", single_artikelnr)
+            else:
+                logger.info("Single mode: found URL {} for artikelnr {}.", urls[0], single_artikelnr)
     else:
         urls = list(_product_urls_from_sitemap())
         logger.info("Scraper found {} product URLs in sitemap.", len(urls))
@@ -283,6 +303,7 @@ def run_scraper(
             artikelnr=artikelnr,
             defaults={
                 "url": data["url"],
+                "image_url": data["image_url"],
                 "vpe_menge": data["vpe_menge"],
                 "vpe_einheit": data["vpe_einheit"],
                 "hat_staffel": data["hat_staffel"],

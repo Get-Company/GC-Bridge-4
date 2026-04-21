@@ -32,6 +32,7 @@ class MappeiPriceSnapshotInline(BaseTabularInline):
 @admin.register(MappeiProduct)
 class MappeiProductAdmin(BaseAdmin):
     list_display = (
+        "product_image_display",
         "artikelnr",
         "name",
         "hat_staffel",
@@ -41,9 +42,18 @@ class MappeiProductAdmin(BaseAdmin):
     )
     list_filter = ("hat_staffel",)
     search_fields = ("artikelnr", "name")
-    readonly_fields = ("last_scraped_at", "artikelnr", "url_link")
-    fields = ("artikelnr", "name", "url_link", "vpe_menge", "vpe_einheit", "hat_staffel", "last_scraped_at")
+    readonly_fields = ("last_scraped_at", "artikelnr", "url_link", "product_image_display")
+    fields = ("artikelnr", "name", "url_link", "product_image_display", "vpe_menge", "vpe_einheit", "hat_staffel", "last_scraped_at")
     inlines = [MappeiPriceSnapshotInline]
+
+    @admin.display(description="")
+    def product_image_display(self, obj):
+        if obj.image_url:
+            return format_html(
+                '<img src="{}" loading="lazy" style="height:48px;width:auto;object-fit:contain;" />',
+                obj.image_url,
+            )
+        return "–"
 
     @admin.display(description=_("Aktueller Preis"))
     def current_price_display(self, obj):

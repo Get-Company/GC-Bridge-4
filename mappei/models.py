@@ -37,6 +37,12 @@ class MappeiProduct(BaseModel):
         default="",
         verbose_name=_("VPE Einheit"),
     )
+    image_url = models.CharField(
+        max_length=512,
+        blank=True,
+        default="",
+        verbose_name=_("Bild-URL"),
+    )
     hat_staffel = models.BooleanField(
         default=False,
         verbose_name=_("Hat Staffelpreise"),
