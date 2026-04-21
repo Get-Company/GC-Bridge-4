@@ -831,7 +831,7 @@ class PriceHistoryAdmin(BaseAdmin):
 
 @admin.register(PriceIncrease)
 class PriceIncreaseAdmin(BaseAdmin):
-    change_form_after_template = "admin/products/includes/price_increase_positions_inline.html"
+    change_form_outer_after_template = "admin/products/includes/price_increase_positions_inline.html"
     list_display = (
         "title",
         "status",
@@ -963,14 +963,12 @@ class PriceIncreaseAdmin(BaseAdmin):
         logged_status_message = getattr(item, "logged_status_message", "")
         item.row_status_message = getattr(item, "row_status_message", item.last_status_message or logged_status_message)
         item.row_status_detail = self._build_row_status_detail(item)
+        item.row_status_meta = self._build_row_status_meta(item)
         item.save_url = self._positions_save_url(price_increase.pk, item.pk)
         return item
 
     @staticmethod
-    def _build_row_status_detail(item: PriceIncreaseItem) -> str:
-        message = item.last_status_message or getattr(item, "logged_status_message", "")
-        if not message:
-            return ""
+    def _get_row_status_user_and_time(item: PriceIncreaseItem):
         if item.last_changed_by_id:
             user_label = item.last_changed_by.get_username() or str(item.last_changed_by)
         elif getattr(item, "logged_status_user", None):
@@ -978,6 +976,25 @@ class PriceIncreaseAdmin(BaseAdmin):
         else:
             user_label = "unbekannter Nutzer"
         changed_at_value = item.last_changed_at or getattr(item, "logged_status_at", None)
+        return user_label, changed_at_value
+
+    @classmethod
+    def _build_row_status_meta(cls, item: PriceIncreaseItem) -> str:
+        message = item.last_status_message or getattr(item, "logged_status_message", "")
+        if not message:
+            return ""
+        user_label, changed_at_value = cls._get_row_status_user_and_time(item)
+        if changed_at_value:
+            changed_at = timezone.localtime(changed_at_value).strftime("%d.%m.%Y %H:%M")
+            return f"von {user_label} am {changed_at}"
+        return f"von {user_label}"
+
+    @classmethod
+    def _build_row_status_detail(cls, item: PriceIncreaseItem) -> str:
+        message = item.last_status_message or getattr(item, "logged_status_message", "")
+        if not message:
+            return ""
+        user_label, changed_at_value = cls._get_row_status_user_and_time(item)
         if changed_at_value:
             changed_at = timezone.localtime(changed_at_value).strftime("%d.%m.%Y %H:%M")
             return f"{message} von {user_label} am {changed_at}"

@@ -509,6 +509,7 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Neuer Preis gespeichert: leer -&gt; 10,25")
         self.assertContains(response, "price-admin")
+        self.assertContains(response, "von price-admin am")
         self.assertContains(response, ">info<", html=False)
 
     def test_positions_table_falls_back_to_latest_admin_log_status(self):
@@ -527,6 +528,7 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Neuer Preis gespeichert: 4,60 -&gt; 4,70")
         self.assertContains(response, "price-admin")
+        self.assertContains(response, "von price-admin am")
         self.assertContains(response, ">info<", html=False)
 
     def test_save_endpoint_accepts_decimal_comma(self):

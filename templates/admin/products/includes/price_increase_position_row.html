@@ -47,12 +47,17 @@
     </td>
     <td class="rounded-r-default border-r border-t border-base-200 px-4 py-3 text-sm dark:border-base-800">
         {% if item.row_status_message %}
-            <span class="inline-flex items-center gap-1.5 rounded-default bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-300">
-                <span>{{ item.row_status_message }}</span>
-                {% if item.row_status_detail %}
-                    <span class="material-symbols-outlined text-sm leading-none" title="{{ item.row_status_detail }}" aria-label="{{ item.row_status_detail }}">info</span>
+            <div class="flex flex-col gap-1">
+                <span class="inline-flex items-center gap-1.5 rounded-default bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-300">
+                    <span>{{ item.row_status_message }}</span>
+                    {% if item.row_status_detail %}
+                        <span class="material-symbols-outlined text-sm leading-none" title="{{ item.row_status_detail }}" aria-label="{{ item.row_status_detail }}">info</span>
+                    {% endif %}
+                </span>
+                {% if item.row_status_meta %}
+                    <span class="px-1 text-xs text-font-subtle-light dark:text-font-subtle-dark">{{ item.row_status_meta }}</span>
                 {% endif %}
-            </span>
+            </div>
         {% else %}
             <span class="text-font-subtle-light dark:text-font-subtle-dark">Noch nichts gespeichert.</span>
         {% endif %}
