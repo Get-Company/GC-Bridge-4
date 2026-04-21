@@ -971,7 +971,7 @@ class PriceIncreaseAdmin(BaseAdmin):
 
     @staticmethod
     def _get_mappei_price_data(item: PriceIncreaseItem) -> dict | None:
-        """Return Mappei comparison price data normalized to our rebate quantity (no factor involved)."""
+        """Return Mappei comparison price data normalized to our rebate quantity."""
         try:
             mapping = MappeiProductMapping.objects.select_related("mappei_product").get(product=item.product)
         except MappeiProductMapping.DoesNotExist:

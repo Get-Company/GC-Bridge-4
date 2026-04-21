@@ -180,14 +180,6 @@ class MappeiProductMapping(BaseModel):
         related_name="mappei_mappings",
         verbose_name=_("Internes Produkt"),
     )
-    factor = models.DecimalField(
-        max_digits=10,
-        decimal_places=4,
-        null=True,
-        blank=True,
-        verbose_name=_("Faktor"),
-        help_text=_("Umrechnungsfaktor Mappei-VPE → interne Einheit. Leer lassen wenn 1:1."),
-    )
 
     class Meta:
         verbose_name = _("Mappei Produkt-Mapping")

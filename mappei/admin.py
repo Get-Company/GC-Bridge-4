@@ -112,7 +112,6 @@ class MappeiPriceSnapshotAdmin(BaseAdmin):
 
 @admin.register(MappeiProductMapping)
 class MappeiProductMappingAdmin(BaseAdmin):
-    list_display = ("mappei_product", "product", "factor")
+    list_display = ("mappei_product", "product")
     search_fields = ("mappei_product__artikelnr", "product__erp_nr", "product__name")
-    autocomplete_fields = ("product",)
-    raw_id_fields = ("mappei_product",)
+    autocomplete_fields = ("mappei_product", "product")
