@@ -94,10 +94,33 @@ def _extract_image_url(soup) -> str:
     return ""
 
 
+def _extract_name(soup) -> str:
+    """Extract product name from h1.product-detail-name."""
+    tag = soup.find("h1", class_="product-detail-name")
+    if tag:
+        return tag.get_text(strip=True)
+    return ""
+
+
+def _extract_description(soup) -> str:
+    """Extract product description from .product-detail-description-text or similar."""
+    for selector in (
+        {"class_": "product-detail-description-text"},
+        {"class_": "product-description"},
+        {"itemprop": "description"},
+    ):
+        tag = soup.find(attrs=selector)
+        if tag:
+            return tag.get_text(separator=" ", strip=True)
+    return ""
+
+
 def _parse_product_page(html: str, url: str) -> dict | None:
     """Parse a product page and return a data dict or None on failure."""
     soup = BeautifulSoup(html, "html.parser")
     image_url = _extract_image_url(soup)
+    name = _extract_name(soup)
+    description = _extract_description(soup)
     text = soup.get_text(separator=" ", strip=True)
     header = _extract_product_header(text)
 
@@ -133,6 +156,8 @@ def _parse_product_page(html: str, url: str) -> dict | None:
             artikelnr=artikelnr,
             url=url,
             image_url=image_url,
+            name=name,
+            description=description,
             vpe_menge=vpe_menge,
             vpe_einheit=vpe_einheit,
         )
@@ -142,6 +167,8 @@ def _parse_product_page(html: str, url: str) -> dict | None:
             artikelnr=artikelnr,
             url=url,
             image_url=image_url,
+            name=name,
+            description=description,
             vpe_menge=vpe_menge,
             vpe_einheit=vpe_einheit,
         )
@@ -153,6 +180,8 @@ def _parse_without_staffel(
     artikelnr: str,
     url: str,
     image_url: str,
+    name: str,
+    description: str,
     vpe_menge: int | None,
     vpe_einheit: str,
 ) -> dict | None:
@@ -170,6 +199,8 @@ def _parse_without_staffel(
         "artikelnr": artikelnr,
         "url": url,
         "image_url": image_url,
+        "name": name,
+        "description": description,
         "vpe_menge": vpe_menge,
         "vpe_einheit": vpe_einheit,
         "hat_staffel": False,
@@ -188,6 +219,8 @@ def _parse_with_staffel(
     artikelnr: str,
     url: str,
     image_url: str,
+    name: str,
+    description: str,
     vpe_menge: int | None,
     vpe_einheit: str,
 ) -> dict | None:
@@ -234,6 +267,8 @@ def _parse_with_staffel(
         "artikelnr": artikelnr,
         "url": url,
         "image_url": image_url,
+        "name": name,
+        "description": description,
         "vpe_menge": vpe_menge,
         "vpe_einheit": vpe_einheit,
         "hat_staffel": True,
@@ -304,6 +339,8 @@ def run_scraper(
             defaults={
                 "url": data["url"],
                 "image_url": data["image_url"],
+                "name": data["name"],
+                "description": data["description"],
                 "vpe_menge": data["vpe_menge"],
                 "vpe_einheit": data["vpe_einheit"],
                 "hat_staffel": data["hat_staffel"],

@@ -339,18 +339,25 @@ UNFOLD = {
                         "icon": "label",
                         "link": reverse_lazy("admin:products_propertyvalue_changelist"),
                     },
+                ],
+            },
+            {
+                "title": _("Mappei"),
+                "separator": True,
+                "collapsible": True,
+                "items": [
                     {
-                        "title": _("Mappei Produkte"),
+                        "title": _("Produkte"),
                         "icon": "store",
                         "link": reverse_lazy("admin:mappei_mappeiproduct_changelist"),
                     },
                     {
-                        "title": _("Mappei Preise"),
+                        "title": _("Preise"),
                         "icon": "price_check",
                         "link": reverse_lazy("admin:mappei_mappeipricesnapshot_changelist"),
                     },
                     {
-                        "title": _("Mappei Mapping"),
+                        "title": _("Mapping"),
                         "icon": "link",
                         "link": reverse_lazy("admin:mappei_mappeiproductmapping_changelist"),
                     },

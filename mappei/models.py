@@ -26,6 +26,11 @@ class MappeiProduct(BaseModel):
         default="",
         verbose_name=_("URL"),
     )
+    description = models.TextField(
+        blank=True,
+        default="",
+        verbose_name=_("Beschreibung"),
+    )
     vpe_menge = models.PositiveIntegerField(
         null=True,
         blank=True,
