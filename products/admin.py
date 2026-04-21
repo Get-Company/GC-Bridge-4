@@ -341,7 +341,7 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
         "sync_from_microtech_detail",
         "sync_to_shopware_detail",
     )
-    change_form_after_template = "admin/products/product_change_after.html"
+    change_form_after_template = "admin/products/includes/ai_rewrite_field_buttons.html"
 
     def get_queryset(self, request):
         queryset = super().get_queryset(request)
@@ -386,16 +386,6 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
             return timezone.make_aware(value, timezone.get_current_timezone())
         return value
 
-    @staticmethod
-    def _format_decimal(value: Decimal | None) -> str:
-        if value is None:
-            return ""
-        return format(value.quantize(Decimal("0.01")), "f").replace(".", ",")
-
-    @staticmethod
-    def _format_integer(value) -> str:
-        return "" if value in (None, "") else str(value)
-
     @admin.display(description="Bild")
     def image_preview(self, obj: Product):
         image = obj.first_image
@@ -415,7 +405,6 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
                 if obj and obj.pk
                 else ""
             ),
-            "product_price_history_rows": self._build_product_price_history_rows(obj),
         }
         return super().render_change_form(
             request,
@@ -425,33 +414,6 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
             form_url=form_url,
             obj=obj,
         )
-
-    def _build_product_price_history_rows(self, obj: Product | None) -> list[dict[str, str]]:
-        if not obj or not obj.pk:
-            return []
-
-        history_entries = (
-            PriceHistory.objects.filter(price_entry__product=obj)
-            .select_related("price_entry__sales_channel")
-            .order_by("-created_at", "-id")
-        )
-        rows = []
-        for entry in history_entries:
-            sales_channel = entry.price_entry.sales_channel.name if entry.price_entry.sales_channel else "default"
-            rows.append(
-                {
-                    "created_at": timezone.localtime(entry.created_at).strftime("%d.%m.%Y %H:%M"),
-                    "sales_channel": sales_channel,
-                    "change_type": entry.get_change_type_display(),
-                    "changed_fields": entry.changed_fields,
-                    "price": self._format_decimal(entry.price),
-                    "rebate_quantity": self._format_integer(entry.rebate_quantity),
-                    "rebate_price": self._format_decimal(entry.rebate_price),
-                    "special_percentage": self._format_decimal(entry.special_percentage),
-                    "special_price": self._format_decimal(entry.special_price),
-                }
-            )
-        return rows
 
     def _build_ai_rewrite_field_targets_json(self, context) -> list[dict[str, object]]:
         adminform = context.get("adminform")
@@ -1021,7 +983,7 @@ class PriceIncreaseAdmin(BaseAdmin):
     def _get_latest_history_price_by_year(history_entries: list[PriceHistory]) -> dict[int, Decimal]:
         yearly_prices: dict[int, Decimal] = {}
         for entry in sorted(history_entries, key=lambda entry: (entry.created_at, entry.pk or 0)):
-            yearly_prices[entry.created_at.year] = entry.price
+            yearly_prices[timezone.localtime(entry.created_at).year] = entry.price
         return yearly_prices
 
     def _build_yearly_price_summary(self, item: PriceIncreaseItem, history_entries: list[PriceHistory]) -> list[dict[str, str]]:

@@ -1,5 +1,5 @@
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone as datetime_timezone
 from decimal import Decimal
 import sqlite3
 from tempfile import TemporaryDirectory
@@ -428,6 +428,27 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
             [str(year) for year in range(current_price_year - 3, current_price_year)],
         )
 
+    def test_yearly_summary_groups_imported_midnight_dates_by_local_year(self):
+        admin_instance = PriceIncreaseAdmin(PriceIncrease, AdminSite())
+        local_midnight = timezone.make_aware(datetime(2024, 1, 1, 0, 0, 0))
+        utc_timestamp = local_midnight.astimezone(datetime_timezone.utc)
+        history_entry = PriceHistory.objects.create(
+            price_entry=self.price,
+            change_type=PriceHistory.ChangeType.UPDATED,
+            changed_fields="imported_history",
+            price=Decimal("9.80"),
+        )
+        PriceHistory.objects.filter(pk=history_entry.pk).update(
+            created_at=utc_timestamp,
+            updated_at=utc_timestamp,
+        )
+        history_entries = list(self.price.history_entries.order_by("created_at", "id"))
+
+        summary = admin_instance._build_yearly_price_summary(self.item, history_entries)
+        price_by_year = {entry["year"]: entry["price"] for entry in summary}
+
+        self.assertEqual(price_by_year["2024"], "9,80")
+
     def test_price_history_chart_contains_full_history_current_and_new_price_years(self):
         admin_instance = PriceIncreaseAdmin(PriceIncrease, AdminSite())
         history_entries = list(self.price.history_entries.order_by("created_at", "id"))
@@ -789,26 +810,6 @@ class ProductImageAdminAndSyncTest(TestCase):
 
     def test_product_admin_uses_product_property_inline(self):
         self.assertIn(ProductPropertyInline, ProductAdmin.inlines)
-
-    def test_product_admin_uses_product_change_after_template(self):
-        self.assertEqual(ProductAdmin.change_form_after_template, "admin/products/product_change_after.html")
-
-    def test_product_admin_builds_price_history_rows_for_product(self):
-        channel = ShopwareSettings.objects.create(name="Default", is_active=True, is_default=True)
-        product = Product.objects.create(erp_nr="A-4010", name="Historie")
-        price = Price.objects.create(product=product, sales_channel=channel, price=Decimal("10.00"))
-        price.price = Decimal("11.25")
-        price.rebate_quantity = 5
-        price.rebate_price = Decimal("10.50")
-        price.save()
-
-        rows = ProductAdmin(Product, AdminSite())._build_product_price_history_rows(product)
-
-        self.assertEqual(rows[0]["sales_channel"], "Default")
-        self.assertEqual(rows[0]["price"], "11,25")
-        self.assertEqual(rows[0]["rebate_quantity"], "5")
-        self.assertEqual(rows[0]["rebate_price"], "10,50")
-        self.assertIn("price", rows[0]["changed_fields"])
 
     def test_product_image_inline_renders_lazy_preview(self):
         product = Product.objects.create(erp_nr="A-4005", name="Inline Bild")

@@ -254,6 +254,29 @@ class ShopwareSyncProductsCommandBatchTest(TestCase):
         self.assertNotIn("id", fallback_payloads[0])
         runtime.close.assert_called_once()
 
+    @patch("shopware.management.commands.shopware_sync_products.CommandRuntimeService.start")
+    @patch("shopware.management.commands.shopware_sync_products.ProductService")
+    def test_handle_uses_erp_number_as_name_fallback_when_product_name_is_blank(
+        self,
+        product_service_factory,
+        mock_runtime_start,
+    ):
+        runtime = MagicMock()
+        mock_runtime_start.return_value = runtime
+
+        service = MagicMock()
+        service.get_sku_map.return_value = {}
+        product_service_factory.return_value = service
+
+        Product.objects.create(erp_nr="A-7003", sku="sku-3", name=None, name_de=None, name_en=None)
+
+        cmd = ShopwareSyncProductsCommand()
+        cmd.handle(erp_nrs=["A-7003"], all=False, limit=None, batch_size=10, only_with_images=False, log_images=False)
+
+        payloads = service.bulk_upsert.call_args.args[0]
+        self.assertEqual(payloads[0]["name"], "A-7003")
+        runtime.close.assert_called_once()
+
 
 class ForceProductImageUploadsCommandTest(TestCase):
     @patch("shopware.management.commands.shopware_force_product_image_uploads.call_command")

@@ -166,6 +166,23 @@ def _resolve_tax_id(product: Product) -> str:
     return DEFAULT_TAX_ID
 
 
+def _first_nonblank(*values) -> str:
+    for value in values:
+        normalized = str(value or "").strip()
+        if normalized:
+            return normalized
+    return ""
+
+
+def _resolve_product_name(product: Product) -> str:
+    return _first_nonblank(
+        getattr(product, "name_de", ""),
+        getattr(product, "name_en", ""),
+        getattr(product, "name", ""),
+        product.erp_nr,
+    )
+
+
 def _prefetch_sync_queryset(products):
     if hasattr(products, "select_related"):
         products = products.select_related("tax")
@@ -183,6 +200,8 @@ def _prefetch_sync_queryset(products):
             "erp_nr",
             "sku",
             "name",
+            "name_de",
+            "name_en",
             "description",
             "is_active",
             "shopware_image_sync_hash",
@@ -347,11 +366,10 @@ class Command(BaseCommand):
                         "productNumber": product.erp_nr,
                         "active": product.is_active,
                         "taxId": _resolve_tax_id(product),
+                        "name": _resolve_product_name(product),
                     }
                     if effective_sku:
                         payload["id"] = effective_sku
-                    if product.name:
-                        payload["name"] = product.name
                     if product.description is not None:
                         payload["description"] = product.description
                     try:
