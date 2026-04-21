@@ -31,8 +31,8 @@ if "%DEPLOY_TAG%"=="" (
 )
 
 :: --- Code aktualisieren ---
-echo [%DATE% %TIME%] git fetch --tags origin >> "%LOG_FILE%"
-git fetch --tags origin >> "%LOG_FILE%" 2>&1
+echo [%DATE% %TIME%] git fetch --force --tags origin >> "%LOG_FILE%"
+git fetch --force --tags origin >> "%LOG_FILE%" 2>&1
 if errorlevel 1 (
     echo [%DATE% %TIME%] ERROR: git fetch failed >> "%LOG_FILE%"
     exit /b 1
