@@ -32,6 +32,7 @@ from unfold.views import UnfoldModelAdminViewMixin
 
 from core.admin import BaseAdmin, BaseStackedInline, BaseTabularInline
 from core.admin_utils import log_admin_change
+from mappei.models import MappeiProductMapping
 from shopware.models import ShopwareSettings
 from .services import PriceIncreaseService
 from .models import (
@@ -965,7 +966,60 @@ class PriceIncreaseAdmin(BaseAdmin):
         item.row_status_detail = self._build_row_status_detail(item)
         item.row_status_meta = self._build_row_status_meta(item)
         item.save_url = self._positions_save_url(price_increase.pk, item.pk)
+        item.mappei_data = self._get_mappei_price_data(item)
         return item
+
+    @staticmethod
+    def _get_mappei_price_data(item: PriceIncreaseItem) -> dict | None:
+        """Return Mappei comparison price data normalized to our rebate quantity (no factor involved)."""
+        try:
+            mapping = MappeiProductMapping.objects.select_related("mappei_product").get(product=item.product)
+        except MappeiProductMapping.DoesNotExist:
+            return None
+
+        mappei_product = mapping.mappei_product
+        snapshot = mappei_product.get_latest_snapshot()
+        if not snapshot:
+            return None
+
+        our_qty = item.current_rebate_quantity or 1
+        has_staffel = snapshot.staffelpreis_min is not None and snapshot.staffelpreismenge_min is not None
+
+        # Determine which Mappei price tier covers our rebate quantity
+        if has_staffel and our_qty >= snapshot.staffelpreismenge_min:
+            applicable_price = snapshot.staffelpreis_min
+            applicable_qty = snapshot.staffelpreismenge_min
+            tier_applies = True
+        else:
+            applicable_price = snapshot.preis
+            applicable_qty = mappei_product.vpe_menge or 1
+            tier_applies = False
+
+        # Normalize: scale Mappei's price to our rebate quantity
+        # applicable_price / applicable_qty = price per piece → × our_qty = total at our qty
+        ref_qty = Decimal(str(applicable_qty)) if applicable_qty else Decimal("1")
+        price_per_piece = applicable_price / ref_qty
+        normalized_total = price_per_piece * our_qty
+
+        return {
+            "artikelnr": mappei_product.artikelnr,
+            "scraped_at": snapshot.scraped_at,
+            "base_price": snapshot.preis,
+            "staffel_price_min": snapshot.staffelpreis_min,
+            "staffel_price_max": snapshot.staffelpreis_max,
+            "staffel_menge_min": snapshot.staffelpreismenge_min,
+            "staffel_menge_max": snapshot.staffelpreismenge_max,
+            "vpe_menge": mappei_product.vpe_menge,
+            "vpe_einheit": mappei_product.vpe_einheit,
+            "partial_success": snapshot.partial_success,
+            "has_staffel": has_staffel,
+            "tier_applies": tier_applies,
+            "applicable_price": applicable_price,
+            "applicable_qty": applicable_qty,
+            "price_per_piece": price_per_piece,
+            "normalized_total": normalized_total,
+            "our_qty": our_qty,
+        }
 
     @staticmethod
     def _get_row_status_user_and_time(item: PriceIncreaseItem):
