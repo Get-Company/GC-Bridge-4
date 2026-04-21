@@ -1,3 +1,4 @@
+import json
 from decimal import Decimal
 
 from django import forms
@@ -1012,52 +1013,39 @@ class PriceIncreaseAdmin(BaseAdmin):
         yearly_prices[current_price_year] = item.current_price
         yearly_prices[new_price_year] = item.effective_new_price
         sorted_years = sorted(yearly_prices)
-        prices = [yearly_prices[year] for year in sorted_years]
-        min_price = min(prices)
-        max_price = max(prices)
-        price_span = max_price - min_price
-
-        width = 640
-        height = 220
-        left = 48
-        right = 24
-        top = 28
-        bottom = 44
-        plot_width = width - left - right
-        plot_height = height - top - bottom
-        x_step = plot_width / max(len(sorted_years) - 1, 1)
-        middle_y = top + (plot_height / 2)
-
-        points = []
-        for index, year in enumerate(sorted_years):
-            price = yearly_prices[year]
-            x = left + (index * x_step)
-            if price_span:
-                y = top + (float(max_price - price) / float(price_span) * plot_height)
-            else:
-                y = middle_y
-            points.append(
-                {
-                    "year": str(year),
-                    "price": self._format_decimal(price),
-                    "x": f"{x:.2f}",
-                    "y": f"{y:.2f}",
-                    "is_current_price": year == current_price_year,
-                    "is_new_price": year == new_price_year,
-                }
-            )
-
-        path = " ".join(
-            f"{'M' if index == 0 else 'L'} {point['x']} {point['y']}"
-            for index, point in enumerate(points)
-        )
+        prices = [float(yearly_prices[year]) for year in sorted_years]
+        formatted_points = [
+            {
+                "year": str(year),
+                "price": self._format_decimal(yearly_prices[year]),
+                "is_current_price": year == current_price_year,
+                "is_new_price": year == new_price_year,
+            }
+            for year in sorted_years
+        ]
 
         return {
-            "view_box": f"0 0 {width} {height}",
-            "path": path,
-            "points": points,
-            "min_price": self._format_decimal(min_price),
-            "max_price": self._format_decimal(max_price),
+            "data": json.dumps(
+                {
+                    "labels": [str(year) for year in sorted_years],
+                    "datasets": [
+                        {
+                            "label": "Preis",
+                            "data": prices,
+                            "borderColor": "var(--color-primary-600)",
+                            "backgroundColor": "var(--color-primary-100)",
+                            "pointRadius": 4,
+                            "pointHoverRadius": 6,
+                            "tension": 0.25,
+                            "displayYAxis": True,
+                            "suffixYAxis": "EUR",
+                            "maxTicksXLimit": 12,
+                        }
+                    ],
+                }
+            ),
+            "height": 240,
+            "points": formatted_points,
             "current_price_year": str(current_price_year),
             "new_price_year": str(new_price_year),
         }

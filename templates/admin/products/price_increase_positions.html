@@ -130,6 +130,7 @@
                     }
                     container.innerHTML = await response.text();
                     bindInputs(container);
+                    bindHistoryCharts(container);
                     if (query && query.length >= minLength) {
                         setStatus(`Suchergebnis fuer "${query}" geladen.`, "success");
                     } else {
@@ -175,6 +176,7 @@
                     }
                     row.outerHTML = payload.row_html;
                     bindInputs(container);
+                    bindHistoryCharts(container);
                     setStatus(payload.message || "Gespeichert.", "success");
                 } catch (error) {
                     row.classList.remove("opacity-60");
@@ -182,6 +184,59 @@
                     input.focus();
                     setStatus(error.message || "Speichern fehlgeschlagen.", "error");
                 }
+            }
+
+            function resolveCssVar(value) {
+                if (!value || !value.startsWith("var(")) {
+                    return value;
+                }
+                const cssVar = value.match(/var\((.*?)\)/);
+                if (!cssVar) {
+                    return value;
+                }
+                return getComputedStyle(document.documentElement).getPropertyValue(cssVar[1]).trim() || value;
+            }
+
+            function initializeHistoryChart(chart) {
+                if (!window.Chart) {
+                    return;
+                }
+                const existingChart = Chart.getChart ? Chart.getChart(chart) : null;
+                if (existingChart) {
+                    existingChart.resize();
+                    return;
+                }
+                if (!chart.dataset.value) {
+                    return;
+                }
+                const parsedData = JSON.parse(chart.dataset.value);
+                parsedData.datasets.forEach(function (dataset) {
+                    dataset.borderColor = resolveCssVar(dataset.borderColor);
+                    dataset.backgroundColor = resolveCssVar(dataset.backgroundColor);
+                });
+                new Chart(chart.getContext("2d"), {
+                    type: chart.dataset.type || "line",
+                    data: parsedData,
+                    options: chart.dataset.options ? JSON.parse(chart.dataset.options) : {
+                        maintainAspectRatio: false,
+                        responsive: true,
+                    },
+                });
+            }
+
+            function bindHistoryCharts(root) {
+                root.querySelectorAll(".js-position-history-row details").forEach(function (details) {
+                    if (details.dataset.bound === "1") {
+                        return;
+                    }
+                    details.dataset.bound = "1";
+                    details.addEventListener("toggle", function () {
+                        if (!details.open) {
+                            return;
+                        }
+                        details.querySelectorAll("canvas.chart").forEach(initializeHistoryChart);
+                    });
+                });
             }
 
             function bindInputs(root) {
@@ -229,6 +284,7 @@
             });
 
             bindInputs(container);
+            bindHistoryCharts(container);
         });
     </script>
 {% endblock %}

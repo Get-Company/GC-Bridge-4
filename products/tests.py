@@ -413,7 +413,8 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
         self.assertContains(response, "2024")
         self.assertContains(response, "9,55")
         self.assertContains(response, "Gesamter Preisverlauf als Liniendiagramm")
-        self.assertContains(response, 'data-price-history-chart="A-6000"', html=False)
+        self.assertContains(response, 'data-type="line"', html=False)
+        self.assertContains(response, "canvas", html=False)
 
     def test_yearly_summary_only_shows_three_years_before_current_price_year(self):
         admin_instance = PriceIncreaseAdmin(PriceIncrease, AdminSite())
@@ -438,6 +439,8 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
         self.assertEqual(chart["points"][0]["year"], "2021")
         self.assertIn(str(current_price_year), [point["year"] for point in chart["points"]])
         self.assertIn(str(new_price_year), [point["year"] for point in chart["points"]])
+        self.assertIn('"labels": ["2021", "2022", "2023", "2024"', chart["data"])
+        self.assertIn('"label": "Preis"', chart["data"])
 
     def test_save_endpoint_saves_rounded_target_prices(self):
         response = self.client.post(

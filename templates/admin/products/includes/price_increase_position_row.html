@@ -1,3 +1,4 @@
+{% load unfold %}
 <tr class="align-top js-position-row">
     <td class="whitespace-nowrap px-4 py-3 text-sm font-medium text-font-important-light dark:text-font-important-dark">{{ item.product.erp_nr }}</td>
     <td class="whitespace-nowrap px-4 py-3 text-sm text-font-default-light dark:text-font-default-dark">{{ item.display_current_price }}</td>
@@ -64,33 +65,18 @@
                 </span>
             </summary>
             <div class="border-t border-base-200 px-4 py-4 dark:border-base-800">
-                <svg
-                    role="img"
-                    aria-label="Preisverlauf fuer {{ item.product.erp_nr }}"
-                    viewBox="{{ item.price_history_chart.view_box }}"
-                    class="h-64 w-full text-font-default-light dark:text-font-default-dark"
-                    data-price-history-chart="{{ item.product.erp_nr }}"
-                >
-                    <line x1="48" y1="28" x2="48" y2="176" class="stroke-base-300 dark:stroke-base-700" stroke-width="1"></line>
-                    <line x1="48" y1="176" x2="616" y2="176" class="stroke-base-300 dark:stroke-base-700" stroke-width="1"></line>
-                    <text x="6" y="34" class="fill-font-subtle-light text-[11px] dark:fill-font-subtle-dark">{{ item.price_history_chart.max_price }}</text>
-                    <text x="6" y="180" class="fill-font-subtle-light text-[11px] dark:fill-font-subtle-dark">{{ item.price_history_chart.min_price }}</text>
-                    <text x="18" y="104" text-anchor="middle" transform="rotate(-90 18 104)" class="fill-font-subtle-light text-[11px] dark:fill-font-subtle-dark">Preis</text>
-                    <text x="616" y="216" text-anchor="end" class="fill-font-subtle-light text-[11px] dark:fill-font-subtle-dark">Jahr</text>
-                    <path d="{{ item.price_history_chart.path }}" fill="none" class="stroke-primary-600 dark:stroke-primary-400" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path>
+                {% component "unfold/components/chart/line.html" with class="h-64" data=item.price_history_chart.data height=item.price_history_chart.height %}
+                {% endcomponent %}
+                <div class="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-xs text-font-subtle-light dark:text-font-subtle-dark">
                     {% for point in item.price_history_chart.points %}
-                        <line x1="{{ point.x }}" y1="176" x2="{{ point.x }}" y2="181" class="stroke-base-300 dark:stroke-base-700" stroke-width="1"></line>
-                        <circle
-                            cx="{{ point.x }}"
-                            cy="{{ point.y }}"
-                            r="{% if point.is_new_price %}5{% else %}4{% endif %}"
-                            class="{% if point.is_new_price %}fill-green-600 dark:fill-green-400{% elif point.is_current_price %}fill-primary-700 dark:fill-primary-300{% else %}fill-white stroke-primary-600 dark:fill-base-900 dark:stroke-primary-400{% endif %}"
-                            stroke-width="2"
-                        ></circle>
-                        <text x="{{ point.x }}" y="202" text-anchor="middle" class="fill-font-subtle-light text-[11px] dark:fill-font-subtle-dark">{{ point.year }}</text>
-                        <text x="{{ point.x }}" y="{{ point.y }}" dx="0" dy="-9" text-anchor="middle" class="fill-font-default-light text-[11px] font-semibold dark:fill-font-default-dark">{{ point.price }}</text>
+                        <span>
+                            <span class="{% if point.is_new_price %}font-semibold text-green-700 dark:text-green-400{% elif point.is_current_price %}font-semibold text-primary-700 dark:text-primary-400{% else %}font-medium{% endif %}">
+                                {{ point.year }}
+                            </span>
+                            {{ point.price }}
+                        </span>
                     {% endfor %}
-                </svg>
+                </div>
             </div>
         </details>
     </td>
