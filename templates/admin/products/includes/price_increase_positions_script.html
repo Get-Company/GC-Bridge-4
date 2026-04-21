@@ -1,3 +1,5 @@
+{% load static %}
+<script src="{% static 'unfold/js/chart/chart.js' %}"></script>
 <script>
     (function () {
         function setupPositionsEditor(container) {
@@ -11,6 +13,7 @@
 
             const tableUrl = container.dataset.tableUrl;
             const minLength = Number(container.dataset.searchMinLength || "3");
+            const deferInitialLoad = container.dataset.deferInitialLoad === "1";
             let searchTimer = null;
             let searchController = null;
 
@@ -149,6 +152,59 @@
                 });
             }
 
+            async function loadHistoryChart(details) {
+                if (details.dataset.chartLoaded === "1" || details.dataset.chartLoading === "1") {
+                    const existingChart = details.querySelector("canvas.chart");
+                    if (existingChart) {
+                        initializeHistoryChart(existingChart);
+                    }
+                    return;
+                }
+
+                const chartUrl = details.dataset.chartUrl;
+                const chartContainer = details.querySelector(".js-position-chart-container");
+                if (!chartUrl || !chartContainer) {
+                    return;
+                }
+
+                details.dataset.chartLoading = "1";
+                chartContainer.innerHTML = '<div class="js-position-chart-loader flex h-64 items-center justify-center text-sm text-font-subtle-light dark:text-font-subtle-dark">Lade Diagramm ...</div>';
+
+                try {
+                    const response = await fetch(chartUrl, {
+                        headers: {
+                            "X-Requested-With": "XMLHttpRequest",
+                        },
+                    });
+                    const payload = await response.json();
+                    if (!response.ok) {
+                        throw new Error(payload.error || "Diagramm konnte nicht geladen werden.");
+                    }
+
+                    const height = Number(payload.height || 240);
+                    chartContainer.innerHTML = "";
+                    const chartWrapper = document.createElement("div");
+                    chartWrapper.className = "h-64";
+                    chartWrapper.style.height = `${height}px`;
+                    const chart = document.createElement("canvas");
+                    chart.className = "chart";
+                    chart.dataset.type = "line";
+                    chart.dataset.value = JSON.stringify(payload.data);
+                    chartWrapper.appendChild(chart);
+                    chartContainer.appendChild(chartWrapper);
+                    details.dataset.chartLoaded = "1";
+                    initializeHistoryChart(chart);
+                } catch (error) {
+                    chartContainer.innerHTML = "";
+                    const errorBox = document.createElement("div");
+                    errorBox.className = "flex h-64 items-center justify-center text-sm text-red-600 dark:text-red-400";
+                    errorBox.textContent = error.message || "Diagramm konnte nicht geladen werden.";
+                    chartContainer.appendChild(errorBox);
+                } finally {
+                    details.dataset.chartLoading = "0";
+                }
+            }
+
             function bindHistoryCharts(root) {
                 root.querySelectorAll(".js-position-history-row details").forEach(function (details) {
                     if (details.dataset.bound === "1") {
@@ -159,7 +215,7 @@
                         if (!details.open) {
                             return;
                         }
-                        details.querySelectorAll("canvas.chart").forEach(initializeHistoryChart);
+                        loadHistoryChart(details);
                     });
                 });
             }
@@ -216,6 +272,9 @@
 
             bindInputs(container);
             bindHistoryCharts(container);
+            if (deferInitialLoad) {
+                loadTable(searchInput.value.trim());
+            }
         }
 
         document.addEventListener("DOMContentLoaded", function () {

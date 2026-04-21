@@ -78,7 +78,14 @@
         class="js-positions-table-container"
         data-table-url="{{ positions_table_url }}"
         data-search-min-length="{{ search_min_length }}"
+        {% if defer_initial_load %}data-defer-initial-load="1"{% endif %}
     >
-        {% include "admin/products/includes/price_increase_positions_table.html" %}
+        {% if defer_initial_load %}
+            <div class="rounded-default border border-base-200 bg-white px-4 py-8 text-sm text-font-subtle-light shadow-xs dark:border-base-800 dark:bg-base-900 dark:text-font-subtle-dark">
+                Lade Positionen ...
+            </div>
+        {% else %}
+            {% include "admin/products/includes/price_increase_positions_table.html" %}
+        {% endif %}
     </div>
 </div>

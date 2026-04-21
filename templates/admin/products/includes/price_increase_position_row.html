@@ -52,7 +52,7 @@
             <details class="group/mappei">
                 <summary class="flex cursor-pointer list-none items-center gap-1.5">
                     <span class="text-sm font-semibold text-red-600 dark:text-red-400 whitespace-nowrap">
-                        {{ m.applicable_price|floatformat:2 }} €
+                        {{ m.normalized_total|floatformat:2 }} €
                     </span>
                     {% if m.tier_applies %}
                         <span class="rounded bg-red-100 px-1 py-0.5 text-xs text-red-700 dark:bg-red-900/40 dark:text-red-300">Staffel</span>
@@ -60,11 +60,14 @@
                     <span class="material-symbols-outlined text-base text-font-subtle-light dark:text-font-subtle-dark group-open/mappei:rotate-180 transition-transform">expand_more</span>
                 </summary>
                 <div class="mt-2 space-y-1.5 text-xs">
-                    {# Normalized to our rebate qty #}
+                    {# Normalized to our purchase unit #}
                     <div class="rounded bg-red-50 px-2 py-1.5 dark:bg-red-900/20">
-                        <div class="font-medium text-red-700 dark:text-red-300">Normalisiert auf {{ m.our_qty }} St.</div>
+                        <div class="font-medium text-red-700 dark:text-red-300">Mappei auf unsere Kaufeinheit {{ m.purchase_unit }} St.</div>
                         <div class="text-red-600 dark:text-red-400">
                             {{ m.price_per_piece|floatformat:2 }} € / St. → <strong>{{ m.normalized_total|floatformat:2 }} €</strong>
+                        </div>
+                        <div class="mt-1 text-font-subtle-light dark:text-font-subtle-dark">
+                            Unsere Basis: {{ m.internal_basis_price|floatformat:2 }} €{% if m.internal_factor != 1 %} (Preis / {{ m.internal_factor|floatformat:0 }} × {{ m.purchase_unit }}){% endif %}
                         </div>
                     </div>
                     {# Original Mappei staffel — always shown for reference #}
@@ -121,16 +124,20 @@
 </tr>
 <tr class="js-position-history-row transition-colors group-hover:bg-base-50 dark:group-hover:bg-base-800/40">
     <td colspan="10" class="rounded-b-default border-x border-b border-base-200 px-4 pb-4 dark:border-base-800">
-        <details class="rounded-default border border-base-200 bg-white shadow-xs transition-colors group-hover:bg-base-50 dark:border-base-800 dark:bg-base-900 dark:group-hover:bg-base-800/40">
+        <details
+            class="rounded-default border border-base-200 bg-white shadow-xs transition-colors group-hover:bg-base-50 dark:border-base-800 dark:bg-base-900 dark:group-hover:bg-base-800/40"
+            data-chart-url="{{ item.price_history_chart.chart_url }}"
+        >
             <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-medium text-font-important-light hover:bg-base-50 dark:text-font-important-dark dark:hover:bg-base-800/40">
                 <span>{{ item.product.erp_nr }}{% if item.product.name %} - {{ item.product.name }}{% endif %}</span>
                 <span class="text-xs font-normal text-font-subtle-light dark:text-font-subtle-dark">
                     {{ item.price_history_chart.current_price_year }} aktueller Preis, {{ item.price_history_chart.new_price_year }} neuer Preis
                 </span>
             </summary>
-            <div class="border-t border-base-200 px-4 py-4 dark:border-base-800">
-                {% component "unfold/components/chart/line.html" with class="h-64" data=item.price_history_chart.data height=item.price_history_chart.height %}
-                {% endcomponent %}
+            <div class="js-position-chart-container border-t border-base-200 px-4 py-4 dark:border-base-800">
+                <div class="js-position-chart-loader flex h-64 items-center justify-center text-sm text-font-subtle-light dark:text-font-subtle-dark">
+                    Lade Diagramm ...
+                </div>
             </div>
         </details>
     </td>

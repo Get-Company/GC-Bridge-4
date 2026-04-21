@@ -26,6 +26,7 @@ from products.admin import (
     ProductPropertyInline,
 )
 from core.admin_utils import log_admin_change
+from mappei.models import MappeiPriceSnapshot, MappeiProduct, MappeiProductMapping
 from products.management.commands.import_legacy_product_properties import Command as ImportLegacyProductPropertiesCommand
 from products.management.commands.scheduled_product_sync import Command as ScheduledProductSyncCommand
 from products.models import (
@@ -397,8 +398,9 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Positionen direkt bearbeiten")
-        self.assertContains(response, "A-6000")
-        self.assertContains(response, 'placeholder="10,30"', html=False)
+        self.assertContains(response, "Lade Positionen ...")
+        self.assertNotContains(response, "A-6000")
+        self.assertNotContains(response, 'placeholder="10,30"', html=False)
         self.assertContains(
             response,
             reverse("admin:products_priceincrease_positions_table", args=(self.price_increase.pk,)),
@@ -427,8 +429,12 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
         self.assertContains(response, "2024")
         self.assertContains(response, "9,55")
         self.assertContains(response, "A-6000 - Admin Artikel")
-        self.assertContains(response, 'data-type="line"', html=False)
-        self.assertContains(response, "canvas", html=False)
+        self.assertContains(
+            response,
+            reverse("admin:products_priceincrease_position_chart", args=(self.price_increase.pk, self.item.pk)),
+        )
+        self.assertContains(response, "Lade Diagramm ...")
+        self.assertNotContains(response, "canvas", html=False)
 
     def test_yearly_summary_only_shows_three_years_before_current_price_year(self):
         admin_instance = PriceIncreaseAdmin(PriceIncrease, AdminSite())
@@ -476,6 +482,67 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
         self.assertIn(str(new_price_year), [point["year"] for point in chart["points"]])
         self.assertIn('"labels": ["2021", "2022", "2023", "2024"', chart["data"])
         self.assertIn('"label": "Preis"', chart["data"])
+
+    def test_mappei_comparison_scales_mappei_vpe_to_purchase_unit_without_product_factor(self):
+        product = Product.objects.create(
+            erp_nr="A-6100",
+            name="Faktor Artikel",
+            factor=100,
+            purchase_unit=25,
+        )
+        price = Price.objects.create(
+            product=product,
+            sales_channel=self.default_channel,
+            price=Decimal("200.00"),
+            rebate_quantity=5,
+            rebate_price=Decimal("180.00"),
+        )
+        item = PriceIncreaseItem.objects.create(
+            price_increase=self.price_increase,
+            product=product,
+            source_price=price,
+            unit="Stk",
+            current_price=Decimal("200.00"),
+            current_rebate_quantity=5,
+            current_rebate_price=Decimal("180.00"),
+        )
+        mappei_product = MappeiProduct.objects.create(
+            artikelnr="M-6100",
+            name="Mappei Faktor Artikel",
+            vpe_menge=10,
+            vpe_einheit="Stk",
+            hat_staffel=True,
+        )
+        mapping = MappeiProductMapping.objects.create(mappei_product=mappei_product, product=product)
+        snapshot = MappeiPriceSnapshot.objects.create(
+            product=mappei_product,
+            scraped_at=timezone.now(),
+            preis=Decimal("30.00"),
+            staffelpreismenge_min=20,
+            staffelpreismenge_max=None,
+            staffelpreis_min=Decimal("50.00"),
+            staffelpreis_max=None,
+        )
+
+        mappei_data = PriceIncreaseAdmin._build_mappei_price_data(item, mapping, snapshot)
+
+        self.assertTrue(mappei_data["tier_applies"])
+        self.assertEqual(mappei_data["purchase_unit"], 25)
+        self.assertEqual(mappei_data["internal_factor"], Decimal("100"))
+        self.assertEqual(mappei_data["internal_basis_price"], Decimal("50.00"))
+        self.assertEqual(mappei_data["price_per_piece"], Decimal("2.50"))
+        self.assertEqual(mappei_data["normalized_total"], Decimal("62.50"))
+
+    def test_position_chart_endpoint_returns_history_chart_data(self):
+        response = self.client.get(
+            reverse("admin:products_priceincrease_position_chart", args=(self.price_increase.pk, self.item.pk))
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["data"]["labels"][0], "2021")
+        self.assertEqual(payload["data"]["datasets"][0]["label"], "Preis")
+        self.assertEqual(payload["height"], 240)
 
     def test_save_endpoint_saves_rounded_target_prices(self):
         response = self.client.post(

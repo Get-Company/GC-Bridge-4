@@ -1,4 +1,5 @@
 import json
+from datetime import datetime
 from decimal import Decimal
 
 from django import forms
@@ -6,7 +7,8 @@ from django.contrib import admin, messages
 from django.contrib.admin.models import LogEntry
 from django.contrib.contenttypes.models import ContentType
 from django.core.management import call_command
-from django.db.models import Case, IntegerField, Prefetch, Q, Value, When
+from django.db.models import Case, Count, F, IntegerField, Prefetch, Q, Value, When, Window
+from django.db.models.functions import RowNumber
 from django.http import Http404, HttpResponseRedirect, HttpResponseNotAllowed, JsonResponse
 from django.template.loader import render_to_string
 from django.template.response import TemplateResponse
@@ -32,7 +34,7 @@ from unfold.views import UnfoldModelAdminViewMixin
 
 from core.admin import BaseAdmin, BaseStackedInline, BaseTabularInline
 from core.admin_utils import log_admin_change
-from mappei.models import MappeiProductMapping
+from mappei.models import MappeiPriceSnapshot, MappeiProductMapping
 from shopware.models import ShopwareSettings
 from .services import PriceIncreaseService
 from .models import (
@@ -885,7 +887,14 @@ class PriceIncreaseAdmin(BaseAdmin):
 
     @admin.display(description="Positionen")
     def position_count(self, obj: PriceIncrease):
+        annotated_count = getattr(obj, "_position_count", None)
+        if annotated_count is not None:
+            return annotated_count
         return obj.position_count
+
+    def get_queryset(self, request):
+        queryset = super().get_queryset(request)
+        return queryset.select_related("sales_channel").annotate(_position_count=Count("items"))
 
     def get_urls(self):
         positions_view = self.admin_site.admin_view(
@@ -907,6 +916,11 @@ class PriceIncreaseAdmin(BaseAdmin):
                 self.admin_site.admin_view(self.save_position_value_view),
                 name="products_priceincrease_position_save",
             ),
+            path(
+                "<path:object_id>/positions/<path:item_id>/chart/",
+                self.admin_site.admin_view(self.position_chart_view),
+                name="products_priceincrease_position_chart",
+            ),
         ] + super().get_urls()
 
     @staticmethod
@@ -920,6 +934,10 @@ class PriceIncreaseAdmin(BaseAdmin):
     @staticmethod
     def _positions_save_url(object_id: int | str, item_id: int | str) -> str:
         return reverse("admin:products_priceincrease_position_save", args=(object_id, item_id))
+
+    @staticmethod
+    def _position_chart_url(object_id: int | str, item_id: int | str) -> str:
+        return reverse("admin:products_priceincrease_position_chart", args=(object_id, item_id))
 
     @staticmethod
     def _format_decimal(value: Decimal | None) -> str:
@@ -939,7 +957,7 @@ class PriceIncreaseAdmin(BaseAdmin):
 
     def _get_positions_queryset(self, price_increase: PriceIncrease, search_term: str = ""):
         queryset = (
-            price_increase.items.select_related("product", "source_price", "last_changed_by")
+            price_increase.items.select_related("price_increase", "product", "source_price", "last_changed_by")
             .filter(product__is_active=True)
             .order_by("product__erp_nr", "id")
         )
@@ -966,27 +984,26 @@ class PriceIncreaseAdmin(BaseAdmin):
         item.row_status_detail = self._build_row_status_detail(item)
         item.row_status_meta = self._build_row_status_meta(item)
         item.save_url = self._positions_save_url(price_increase.pk, item.pk)
-        item.mappei_data = self._get_mappei_price_data(item)
         return item
 
     @staticmethod
-    def _get_mappei_price_data(item: PriceIncreaseItem) -> dict | None:
-        """Return Mappei comparison price data normalized to our rebate quantity."""
-        try:
-            mapping = MappeiProductMapping.objects.select_related("mappei_product").get(product=item.product)
-        except MappeiProductMapping.DoesNotExist:
-            return None
-
+    def _build_mappei_price_data(
+        item: PriceIncreaseItem,
+        mapping: MappeiProductMapping,
+        snapshot: MappeiPriceSnapshot,
+    ) -> dict | None:
+        """Return Mappei comparison price data normalized to our purchase unit."""
         mappei_product = mapping.mappei_product
-        snapshot = mappei_product.get_latest_snapshot()
-        if not snapshot:
-            return None
-
-        our_qty = item.current_rebate_quantity or 1
+        product = item.product
+        purchase_unit = product.purchase_unit or item.current_rebate_quantity or 1
+        comparison_qty = Decimal(str(purchase_unit))
+        internal_factor = Decimal(str(product.factor or 1))
+        if internal_factor <= 0:
+            internal_factor = Decimal("1")
+        internal_basis_price = (item.current_price / internal_factor) * comparison_qty
         has_staffel = snapshot.staffelpreis_min is not None and snapshot.staffelpreismenge_min is not None
 
-        # Determine which Mappei price tier covers our rebate quantity
-        if has_staffel and our_qty >= snapshot.staffelpreismenge_min:
+        if has_staffel and comparison_qty >= Decimal(str(snapshot.staffelpreismenge_min)):
             applicable_price = snapshot.staffelpreis_min
             applicable_qty = snapshot.staffelpreismenge_min
             tier_applies = True
@@ -995,11 +1012,9 @@ class PriceIncreaseAdmin(BaseAdmin):
             applicable_qty = mappei_product.vpe_menge or 1
             tier_applies = False
 
-        # Normalize: scale Mappei's price to our rebate quantity
-        # applicable_price / applicable_qty = price per piece → × our_qty = total at our qty
         ref_qty = Decimal(str(applicable_qty)) if applicable_qty else Decimal("1")
         price_per_piece = applicable_price / ref_qty
-        normalized_total = price_per_piece * our_qty
+        normalized_total = price_per_piece * comparison_qty
 
         return {
             "artikelnr": mappei_product.artikelnr,
@@ -1018,8 +1033,50 @@ class PriceIncreaseAdmin(BaseAdmin):
             "applicable_qty": applicable_qty,
             "price_per_piece": price_per_piece,
             "normalized_total": normalized_total,
-            "our_qty": our_qty,
+            "internal_basis_price": internal_basis_price,
+            "internal_factor": internal_factor,
+            "purchase_unit": purchase_unit,
         }
+
+    @classmethod
+    def _attach_mappei_price_data(cls, items: list[PriceIncreaseItem]) -> None:
+        for item in items:
+            item.mappei_data = None
+
+        product_ids = [item.product_id for item in items if item.product_id]
+        if not product_ids:
+            return
+
+        mappings = (
+            MappeiProductMapping.objects.filter(product_id__in=product_ids)
+            .select_related("mappei_product")
+        )
+        mapping_by_product_id = {mapping.product_id: mapping for mapping in mappings}
+        mappei_product_ids = [mapping.mappei_product_id for mapping in mapping_by_product_id.values()]
+        if not mappei_product_ids:
+            return
+
+        latest_snapshots = (
+            MappeiPriceSnapshot.objects.filter(product_id__in=mappei_product_ids)
+            .annotate(
+                row_number=Window(
+                    expression=RowNumber(),
+                    partition_by=[F("product_id")],
+                    order_by=[F("scraped_at").desc(), F("id").desc()],
+                )
+            )
+            .filter(row_number=1)
+        )
+        snapshot_by_product_id = {snapshot.product_id: snapshot for snapshot in latest_snapshots}
+
+        for item in items:
+            mapping = mapping_by_product_id.get(item.product_id)
+            if not mapping:
+                continue
+            snapshot = snapshot_by_product_id.get(mapping.mappei_product_id)
+            if not snapshot:
+                continue
+            item.mappei_data = cls._build_mappei_price_data(item, mapping, snapshot)
 
     @staticmethod
     def _get_row_status_user_and_time(item: PriceIncreaseItem):
@@ -1059,6 +1116,14 @@ class PriceIncreaseAdmin(BaseAdmin):
         new_price_year = timezone.localdate().year
         current_price_year = new_price_year - 1
         return current_price_year, new_price_year
+
+    @classmethod
+    def _price_summary_date_range(cls):
+        current_price_year, _new_price_year = cls._price_timeline_years()
+        current_timezone = timezone.get_current_timezone()
+        start_at = timezone.make_aware(datetime(current_price_year - 3, 1, 1), current_timezone)
+        end_at = timezone.make_aware(datetime(current_price_year, 1, 1), current_timezone)
+        return start_at, end_at
 
     @staticmethod
     def _get_latest_history_price_by_year(history_entries: list[PriceHistory]) -> dict[int, Decimal]:
@@ -1131,6 +1196,15 @@ class PriceIncreaseAdmin(BaseAdmin):
             "new_price_year": str(new_price_year),
         }
 
+    def _build_price_history_chart_meta(self, price_increase: PriceIncrease, item: PriceIncreaseItem) -> dict:
+        current_price_year, new_price_year = self._price_timeline_years()
+        return {
+            "chart_url": self._position_chart_url(price_increase.pk, item.pk),
+            "height": 240,
+            "current_price_year": str(current_price_year),
+            "new_price_year": str(new_price_year),
+        }
+
     def _build_yearly_price_history(
         self,
         item: PriceIncreaseItem,
@@ -1179,9 +1253,12 @@ class PriceIncreaseAdmin(BaseAdmin):
         search_term = (search_term or "").strip()
         items = list(self._get_positions_queryset(price_increase, search_term))
         self._attach_logged_position_statuses(items)
+        self._attach_mappei_price_data(items)
         source_price_ids = [item.source_price_id for item in items if item.source_price_id]
+        history_start_at, history_end_at = self._price_summary_date_range()
         history_entries = (
             PriceHistory.objects.filter(price_entry_id__in=source_price_ids)
+            .filter(created_at__gte=history_start_at, created_at__lt=history_end_at)
             .only("price_entry_id", "created_at", "price")
             .order_by("price_entry_id", "created_at", "id")
         )
@@ -1192,10 +1269,11 @@ class PriceIncreaseAdmin(BaseAdmin):
         prepared_items = []
         for item in items:
             item = self._prepare_position_item(price_increase, item)
-            item.yearly_prices, item.price_history_chart = self._build_yearly_price_history(
+            item.yearly_prices = self._build_yearly_price_summary(
                 item,
                 history_by_price_id.get(item.source_price_id, []),
             )
+            item.price_history_chart = self._build_price_history_chart_meta(price_increase, item)
             prepared_items.append(item)
 
         return {
@@ -1215,17 +1293,17 @@ class PriceIncreaseAdmin(BaseAdmin):
     def render_change_form(self, request, context, add=False, change=False, form_url="", obj=None):
         context = {**context}
         if obj and obj.pk:
-            positions_context = self._build_positions_context(
-                request=request,
-                price_increase=obj,
-                search_term="",
-            )
             context.update(
                 {
                     "price_increase_positions_inline_context": {
-                        key: value
-                        for key, value in positions_context.items()
-                        if key not in {"title", "subtitle"}
+                        **self.admin_site.each_context(request),
+                        "price_increase": obj,
+                        "items": [],
+                        "search_term": "",
+                        "search_min_length": 3,
+                        "positions_table_url": self._positions_table_url(obj.pk),
+                        "is_applied": obj.status == PriceIncrease.Status.APPLIED,
+                        "defer_initial_load": True,
                     },
                     "price_increase_positions_inline_enabled": True,
                 }
@@ -1271,6 +1349,34 @@ class PriceIncreaseAdmin(BaseAdmin):
             context,
         )
 
+    def position_chart_view(self, request, object_id: str, item_id: str):
+        if request.method != "GET":
+            return HttpResponseNotAllowed(["GET"])
+
+        price_increase = self._get_price_increase_or_404(object_id)
+        item = (
+            price_increase.items.select_related("price_increase", "product", "source_price")
+            .filter(pk=item_id, product__is_active=True)
+            .first()
+        )
+        if not item:
+            return JsonResponse({"error": "Position nicht gefunden."}, status=404)
+
+        history_entries = list(
+            PriceHistory.objects.filter(price_entry_id=item.source_price_id)
+            .only("price_entry_id", "created_at", "price")
+            .order_by("created_at", "id")
+        )
+        chart = self._build_price_history_chart(item, history_entries)
+        return JsonResponse(
+            {
+                "data": json.loads(chart["data"]),
+                "height": chart["height"],
+                "current_price_year": chart["current_price_year"],
+                "new_price_year": chart["new_price_year"],
+            }
+        )
+
     def save_position_value_view(self, request, object_id: str, item_id: str):
         if request.method != "POST":
             return HttpResponseNotAllowed(["POST"])
@@ -1282,7 +1388,7 @@ class PriceIncreaseAdmin(BaseAdmin):
             return JsonResponse({"error": "Diese Preiserhoehung wurde bereits uebernommen."}, status=400)
 
         item = (
-            price_increase.items.select_related("product", "source_price", "last_changed_by")
+            price_increase.items.select_related("price_increase", "product", "source_price", "last_changed_by")
             .filter(pk=item_id, product__is_active=True)
             .first()
         )
@@ -1310,15 +1416,19 @@ class PriceIncreaseAdmin(BaseAdmin):
         item.last_changed_at = timezone.now()
         item.save(update_fields=["last_status_message", "last_changed_by", "last_changed_at", "updated_at"])
         item.row_status_message = status_message
+        self._attach_mappei_price_data([item])
         self._prepare_position_item(price_increase, item)
-        item.yearly_prices, item.price_history_chart = self._build_yearly_price_history(
+        history_start_at, history_end_at = self._price_summary_date_range()
+        item.yearly_prices = self._build_yearly_price_summary(
             item,
             list(
                 PriceHistory.objects.filter(price_entry_id=item.source_price_id)
+                .filter(created_at__gte=history_start_at, created_at__lt=history_end_at)
                 .only("price_entry_id", "created_at", "price")
                 .order_by("created_at", "id")
             ),
         )
+        item.price_history_chart = self._build_price_history_chart_meta(price_increase, item)
 
         log_admin_change(
             user_id=request.user.id,
