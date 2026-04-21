@@ -108,6 +108,7 @@ INSTALLED_APPS = [
     'products.apps.ProductsConfig',
     'shopware.apps.ShopwareConfig',
     'microtech.apps.MicrotechConfig',
+    'mappei.apps.MappeiConfig',
 ]
 
 MIDDLEWARE = [
