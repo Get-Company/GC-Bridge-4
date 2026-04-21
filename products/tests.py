@@ -399,6 +399,7 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Positionen direkt bearbeiten")
         self.assertContains(response, "Lade Positionen ...")
+        self.assertContains(response, 'data-defer-initial-load="1"', html=False)
         self.assertNotContains(response, "A-6000")
         self.assertNotContains(response, 'placeholder="10,30"', html=False)
         self.assertContains(
