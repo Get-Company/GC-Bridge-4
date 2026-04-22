@@ -7,6 +7,7 @@ from django.contrib import admin, messages
 from django.contrib.admin.models import LogEntry
 from django.contrib.contenttypes.models import ContentType
 from django.core.management import call_command
+from django.core.serializers.json import DjangoJSONEncoder
 from django.db.models import Case, Count, F, IntegerField, Prefetch, Q, Value, When, Window
 from django.db.models.functions import RowNumber
 from django.http import Http404, HttpResponseRedirect, HttpResponseNotAllowed, JsonResponse
@@ -15,6 +16,7 @@ from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils import timezone
 from django.utils.html import format_html
+from js_asset import JS
 from mptt.admin import DraggableMPTTAdmin
 from modeltranslation.admin import TabbedTranslationAdmin
 from django.views.generic import TemplateView
@@ -1676,6 +1678,28 @@ class CategoryAdmin(DraggableMPTTAdmin, BaseAdmin):
     ]
     readonly_fields = BaseAdmin.readonly_fields + ("legacy_erp_nr", "legacy_api_id", "legacy_parent_erp_nr")
     mptt_indent_field = "name"
+
+    def changelist_view(self, request, *args, **kwargs):
+        response = super().changelist_view(request, *args, **kwargs)
+        try:
+            response.context_data["media"] = response.context_data["media"] + forms.Media(
+                css={"all": ["products/admin/category_mptt_unfold.css"]},
+                js=[
+                    JS(
+                        "products/admin/category_mptt_unfold.js",
+                        {
+                            "id": "category-mptt-unfold-context",
+                            "data-context": json.dumps(
+                                self._tree_context(request),
+                                cls=DjangoJSONEncoder,
+                            ),
+                        },
+                    ),
+                ],
+            )
+        except (AttributeError, KeyError):
+            pass
+        return response
 
 
 @admin.register(Tax)
