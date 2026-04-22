@@ -407,7 +407,7 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
             reverse("admin:products_priceincrease_positions_table", args=(self.price_increase.pk,)),
         )
 
-    def test_positions_table_renders_expected_columns_and_placeholders(self):
+    def test_positions_table_renders_expected_columns_and_suggested_values(self):
         response = self.client.get(
             reverse("admin:products_priceincrease_positions_table", args=(self.price_increase.pk,))
         )
@@ -421,8 +421,8 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
         self.assertContains(response, "Verlauf")
         self.assertContains(response, "Neuer Preis")
         self.assertContains(response, "neuer Rab.Preis")
-        self.assertContains(response, 'placeholder="10,30"', html=False)
-        self.assertContains(response, 'placeholder="9,25"', html=False)
+        self.assertContains(response, 'value="10,30"', html=False)
+        self.assertContains(response, 'value="9,25"', html=False)
         self.assertContains(response, "2022")
         self.assertContains(response, "8,50")
         self.assertContains(response, "2023")
@@ -484,33 +484,33 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
         self.assertIn('"labels": ["2021", "2022", "2023", "2024"', chart["data"])
         self.assertIn('"label": "Preis"', chart["data"])
 
-    def test_mappei_comparison_scales_mappei_vpe_to_purchase_unit_without_product_factor(self):
+    def test_mappei_comparison_uses_product_factor_as_comparison_unit(self):
         product = Product.objects.create(
-            erp_nr="A-6100",
+            erp_nr="204113",
             name="Faktor Artikel",
             factor=100,
-            purchase_unit=25,
+            purchase_unit=10,
         )
         price = Price.objects.create(
             product=product,
             sales_channel=self.default_channel,
-            price=Decimal("200.00"),
+            price=Decimal("53.75"),
             rebate_quantity=5,
-            rebate_price=Decimal("180.00"),
+            rebate_price=Decimal("50.00"),
         )
         item = PriceIncreaseItem.objects.create(
             price_increase=self.price_increase,
             product=product,
             source_price=price,
             unit="Stk",
-            current_price=Decimal("200.00"),
+            current_price=Decimal("53.75"),
             current_rebate_quantity=5,
-            current_rebate_price=Decimal("180.00"),
+            current_rebate_price=Decimal("50.00"),
         )
         mappei_product = MappeiProduct.objects.create(
-            artikelnr="M-6100",
+            artikelnr="M-204113",
             name="Mappei Faktor Artikel",
-            vpe_menge=10,
+            vpe_menge=100,
             vpe_einheit="Stk",
             hat_staffel=True,
         )
@@ -518,21 +518,77 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
         snapshot = MappeiPriceSnapshot.objects.create(
             product=mappei_product,
             scraped_at=timezone.now(),
-            preis=Decimal("30.00"),
-            staffelpreismenge_min=20,
-            staffelpreismenge_max=None,
-            staffelpreis_min=Decimal("50.00"),
-            staffelpreis_max=None,
+            preis=Decimal("56.95"),
+            staffelpreismenge_min=100,
+            staffelpreismenge_max=200,
+            staffelpreis_min=Decimal("56.20"),
+            staffelpreis_max=Decimal("56.95"),
+        )
+
+        mappei_data = PriceIncreaseAdmin._build_mappei_price_data(item, mapping, snapshot)
+
+        self.assertFalse(mappei_data["tier_applies"])
+        self.assertEqual(mappei_data["purchase_unit"], 10)
+        self.assertEqual(mappei_data["comparison_unit"], 100)
+        self.assertEqual(mappei_data["internal_factor"], Decimal("100"))
+        self.assertEqual(mappei_data["internal_basis_price"], Decimal("53.75"))
+        self.assertEqual(mappei_data["applicable_price"], Decimal("56.95"))
+        self.assertEqual(mappei_data["tier_qty"], 200)
+        self.assertEqual(mappei_data["tier_price"], Decimal("56.20"))
+        self.assertEqual(mappei_data["price_per_piece"], Decimal("0.5695"))
+        self.assertEqual(mappei_data["normalized_total"], Decimal("56.95"))
+
+    def test_mappei_comparison_scales_factor_to_multiple_mappei_vpes(self):
+        product = Product.objects.create(
+            erp_nr="204116",
+            name="Faktor Artikel mit kleiner Mappei VPE",
+            factor=100,
+            purchase_unit=10,
+        )
+        price = Price.objects.create(
+            product=product,
+            sales_channel=self.default_channel,
+            price=Decimal("68.55"),
+            rebate_quantity=250,
+            rebate_price=Decimal("66.20"),
+        )
+        item = PriceIncreaseItem.objects.create(
+            price_increase=self.price_increase,
+            product=product,
+            source_price=price,
+            unit="Stk",
+            current_price=Decimal("68.55"),
+            current_rebate_quantity=250,
+            current_rebate_price=Decimal("66.20"),
+        )
+        mappei_product = MappeiProduct.objects.create(
+            artikelnr="M-204116",
+            name="Mappei Faktor Artikel mit kleiner VPE",
+            vpe_menge=50,
+            vpe_einheit="Stk",
+            hat_staffel=True,
+        )
+        mapping = MappeiProductMapping.objects.create(mappei_product=mappei_product, product=product)
+        snapshot = MappeiPriceSnapshot.objects.create(
+            product=mappei_product,
+            scraped_at=timezone.now(),
+            preis=Decimal("36.30"),
+            staffelpreismenge_min=50,
+            staffelpreismenge_max=100,
+            staffelpreis_min=Decimal("36.30"),
+            staffelpreis_max=Decimal("36.80"),
         )
 
         mappei_data = PriceIncreaseAdmin._build_mappei_price_data(item, mapping, snapshot)
 
         self.assertTrue(mappei_data["tier_applies"])
-        self.assertEqual(mappei_data["purchase_unit"], 25)
-        self.assertEqual(mappei_data["internal_factor"], Decimal("100"))
-        self.assertEqual(mappei_data["internal_basis_price"], Decimal("50.00"))
-        self.assertEqual(mappei_data["price_per_piece"], Decimal("2.50"))
-        self.assertEqual(mappei_data["normalized_total"], Decimal("62.50"))
+        self.assertEqual(mappei_data["comparison_unit"], 100)
+        self.assertEqual(mappei_data["mappei_vpe_qty"], Decimal("50"))
+        self.assertEqual(mappei_data["applicable_price"], Decimal("36.80"))
+        self.assertEqual(mappei_data["tier_qty"], 100)
+        self.assertEqual(mappei_data["tier_price"], Decimal("36.80"))
+        self.assertEqual(mappei_data["price_per_piece"], Decimal("0.736"))
+        self.assertEqual(mappei_data["normalized_total"], Decimal("73.60"))
 
     def test_position_chart_endpoint_returns_history_chart_data(self):
         response = self.client.get(
@@ -561,8 +617,9 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
         self.assertEqual(self.item.last_status_message, "Neuer Preis gespeichert: leer -> 10,25")
         self.assertEqual(self.item.last_changed_by, self.user)
         self.assertIsNotNone(self.item.last_changed_at)
-        self.assertContains(response, 'value="10,25"', html=False)
-        self.assertContains(response, 'placeholder="9,25"', html=False)
+        row_html = response.json()["row_html"]
+        self.assertIn('value="10,25"', row_html)
+        self.assertIn('value="9,25"', row_html)
 
     def test_saved_status_is_rendered_after_table_reload_with_user_detail(self):
         self.item.last_status_message = "Neuer Preis gespeichert: leer -> 10,25"
@@ -612,7 +669,9 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
         self.item.refresh_from_db()
         self.assertIsNone(self.item.new_price)
         self.assertEqual(self.item.new_rebate_price, Decimal("4.25"))
-        self.assertContains(response, 'value="4,25"', html=False)
+        row_html = response.json()["row_html"]
+        self.assertIn('value="10,30"', row_html)
+        self.assertIn('value="4,25"', row_html)
 
     def test_positions_table_only_shows_active_products_sorted_by_erp_nr(self):
         inactive_product = Product.objects.create(erp_nr="A-1000", name="Inaktiv", unit="Stk", is_active=False)

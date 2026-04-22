@@ -60,30 +60,35 @@
                     <span class="material-symbols-outlined text-base text-font-subtle-light dark:text-font-subtle-dark group-open/mappei:rotate-180 transition-transform">expand_more</span>
                 </summary>
                 <div class="mt-2 space-y-1.5 text-xs">
-                    {# Normalized to our purchase unit #}
+                    {# Normalized to our internal price unit #}
                     <div class="rounded bg-red-50 px-2 py-1.5 dark:bg-red-900/20">
-                        <div class="font-medium text-red-700 dark:text-red-300">Mappei auf unsere Kaufeinheit {{ m.purchase_unit }} St.</div>
+                        <div class="font-medium text-red-700 dark:text-red-300">Mappei auf unsere Preiseinheit {{ m.comparison_unit }} St.</div>
                         <div class="text-red-600 dark:text-red-400">
                             {{ m.price_per_piece|floatformat:2 }} € / St. → <strong>{{ m.normalized_total|floatformat:2 }} €</strong>
                         </div>
                         <div class="mt-1 text-font-subtle-light dark:text-font-subtle-dark">
-                            Unsere Basis: {{ m.internal_basis_price|floatformat:2 }} €{% if m.internal_factor != 1 %} (Preis / {{ m.internal_factor|floatformat:0 }} × {{ m.purchase_unit }}){% endif %}
+                            Unsere Basis: {{ m.internal_basis_price|floatformat:2 }} €{% if m.internal_factor != m.comparison_unit %} (Preis / {{ m.internal_factor|floatformat:0 }} × {{ m.comparison_unit }}){% endif %}
                         </div>
+                        {% if m.mappei_vpe_qty != m.comparison_unit %}
+                            <div class="mt-1 text-font-subtle-light dark:text-font-subtle-dark">
+                                Mappei: {{ m.applicable_price|floatformat:2 }} € × {{ m.comparison_unit|floatformat:0 }} / {{ m.mappei_vpe_qty|floatformat:0 }}
+                            </div>
+                        {% endif %}
                     </div>
                     {# Original Mappei staffel — always shown for reference #}
                     <div class="border-t border-red-100 pt-1.5 dark:border-red-900/30">
                         <div class="mb-1 font-medium text-font-subtle-light dark:text-font-subtle-dark">Mappei original</div>
                         <div class="flex justify-between gap-2">
-                            <span class="text-font-subtle-light dark:text-font-subtle-dark">Basispreis</span>
+                            <span class="text-font-subtle-light dark:text-font-subtle-dark">Basispreis{% if m.base_qty %} ab {{ m.base_qty }} St.{% endif %}</span>
                             <span class="text-red-600 dark:text-red-400">{{ m.base_price|floatformat:2 }} €</span>
                         </div>
-                        {% if m.has_staffel %}
+                        {% if m.tier_qty and m.tier_price %}
                             <div class="flex justify-between gap-2 {% if m.tier_applies %}font-semibold{% endif %}">
                                 <span class="text-font-subtle-light dark:text-font-subtle-dark">
-                                    Staffel ab {{ m.staffel_menge_min }}{% if m.staffel_menge_max %} – {{ m.staffel_menge_max }}{% endif %} St.
+                                    Staffel ab {{ m.tier_qty }} St.
                                 </span>
                                 <span class="text-red-600 dark:text-red-400">
-                                    {{ m.staffel_price_min|floatformat:2 }}{% if m.staffel_price_max %} – {{ m.staffel_price_max|floatformat:2 }}{% endif %} €
+                                    {{ m.tier_price|floatformat:2 }} €
                                 </span>
                             </div>
                         {% endif %}

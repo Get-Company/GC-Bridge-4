@@ -975,8 +975,8 @@ class PriceIncreaseAdmin(BaseAdmin):
         item.display_current_rebate_quantity = self._format_integer(item.current_rebate_quantity)
         item.display_current_rebate_price = self._format_decimal(item.current_rebate_price)
         item.display_unit = item.unit or ""
-        item.display_new_price = self._format_decimal(item.new_price)
-        item.display_new_rebate_price = self._format_decimal(item.new_rebate_price)
+        item.display_new_price = self._format_decimal(item.effective_new_price)
+        item.display_new_rebate_price = self._format_decimal(item.effective_new_rebate_price)
         item.placeholder_new_price = self._format_decimal(item.suggested_price)
         item.placeholder_new_rebate_price = self._format_decimal(item.suggested_rebate_price)
         logged_status_message = getattr(item, "logged_status_message", "")
@@ -992,38 +992,58 @@ class PriceIncreaseAdmin(BaseAdmin):
         mapping: MappeiProductMapping,
         snapshot: MappeiPriceSnapshot,
     ) -> dict | None:
-        """Return Mappei comparison price data normalized to our purchase unit."""
+        """Return Mappei comparison price data normalized to our price unit."""
         mappei_product = mapping.mappei_product
         product = item.product
-        purchase_unit = product.purchase_unit or item.current_rebate_quantity or 1
-        comparison_qty = Decimal(str(purchase_unit))
         internal_factor = Decimal(str(product.factor or 1))
         if internal_factor <= 0:
             internal_factor = Decimal("1")
+        comparison_unit = product.factor or product.purchase_unit or item.current_rebate_quantity or 1
+        comparison_qty = Decimal(str(comparison_unit))
+        if comparison_qty <= 0:
+            comparison_qty = internal_factor
         internal_basis_price = (item.current_price / internal_factor) * comparison_qty
-        has_staffel = snapshot.staffelpreis_min is not None and snapshot.staffelpreismenge_min is not None
+        mappei_vpe_qty = Decimal(str(mappei_product.vpe_menge or 1))
+        if mappei_vpe_qty <= 0:
+            mappei_vpe_qty = Decimal("1")
 
-        if has_staffel and comparison_qty >= Decimal(str(snapshot.staffelpreismenge_min)):
-            applicable_price = snapshot.staffelpreis_min
-            applicable_qty = snapshot.staffelpreismenge_min
+        has_staffel = (
+            snapshot.staffelpreis_min is not None
+            and snapshot.staffelpreis_max is not None
+            and snapshot.staffelpreismenge_max is not None
+        )
+        tier_qty = snapshot.staffelpreismenge_max if has_staffel else None
+        tier_price = None
+        if has_staffel:
+            # The snapshot stores min/max prices, not quantity-price pairs. The base row is
+            # stored separately in ``preis``, so the other endpoint belongs to the higher tier.
+            tier_price = snapshot.staffelpreis_min
+            if snapshot.preis == snapshot.staffelpreis_min:
+                tier_price = snapshot.staffelpreis_max
+
+        if tier_qty and tier_price is not None and comparison_qty >= Decimal(str(tier_qty)):
+            applicable_price = tier_price
+            applicable_qty = tier_qty
             tier_applies = True
         else:
             applicable_price = snapshot.preis
-            applicable_qty = mappei_product.vpe_menge or 1
+            applicable_qty = mappei_product.vpe_menge or snapshot.staffelpreismenge_min or 1
             tier_applies = False
 
-        ref_qty = Decimal(str(applicable_qty)) if applicable_qty else Decimal("1")
-        price_per_piece = applicable_price / ref_qty
-        normalized_total = price_per_piece * comparison_qty
+        price_per_piece = applicable_price / mappei_vpe_qty
+        normalized_total = applicable_price * (comparison_qty / mappei_vpe_qty)
 
         return {
             "artikelnr": mappei_product.artikelnr,
             "scraped_at": snapshot.scraped_at,
             "base_price": snapshot.preis,
+            "base_qty": mappei_product.vpe_menge or snapshot.staffelpreismenge_min or 1,
             "staffel_price_min": snapshot.staffelpreis_min,
             "staffel_price_max": snapshot.staffelpreis_max,
             "staffel_menge_min": snapshot.staffelpreismenge_min,
             "staffel_menge_max": snapshot.staffelpreismenge_max,
+            "tier_price": tier_price,
+            "tier_qty": tier_qty,
             "vpe_menge": mappei_product.vpe_menge,
             "vpe_einheit": mappei_product.vpe_einheit,
             "partial_success": snapshot.partial_success,
@@ -1035,7 +1055,9 @@ class PriceIncreaseAdmin(BaseAdmin):
             "normalized_total": normalized_total,
             "internal_basis_price": internal_basis_price,
             "internal_factor": internal_factor,
-            "purchase_unit": purchase_unit,
+            "purchase_unit": product.purchase_unit or item.current_rebate_quantity or 1,
+            "comparison_unit": comparison_unit,
+            "mappei_vpe_qty": mappei_vpe_qty,
         }
 
     @classmethod
