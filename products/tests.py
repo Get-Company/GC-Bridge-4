@@ -1031,6 +1031,26 @@ class CategoryAdminManagerTest(TestCase):
         self.assertEqual(remove_response.status_code, 200)
         self.assertFalse(self.product.categories.filter(pk=self.child.pk).exists())
 
+    def test_delete_confirmation_for_parent_category_has_submit_button(self):
+        response = self.client.get(reverse("admin:products_category_delete", args=(self.root.pk,)))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'type="submit"')
+        self.assertNotContains(response, "protected related objects")
+
+    def test_parent_category_delete_removes_subtree(self):
+        response = self.client.post(
+            reverse("admin:products_category_delete", args=(self.root.pk,)),
+            {"post": "yes"},
+        )
+
+        self.assertRedirects(
+            response,
+            reverse("admin:products_category_changelist"),
+            fetch_redirect_response=False,
+        )
+        self.assertFalse(Category.objects.filter(pk__in=[self.root.pk, self.child.pk]).exists())
+
 
 class ScheduledProductSyncCommandTest(TestCase):
     def setUp(self):
