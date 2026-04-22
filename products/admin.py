@@ -1685,6 +1685,18 @@ class CategoryAdmin(DraggableMPTTAdmin, BaseAdmin):
             response.context_data["media"] = response.context_data["media"] + forms.Media(
                 css={"all": ["products/admin/category_mptt_unfold.css"]},
                 js=[
+                    "admin/js/vendor/jquery/jquery.js",
+                    "admin/js/jquery.init.js",
+                    JS(
+                        "mptt/draggable-admin.js",
+                        {
+                            "id": "draggable-admin-context",
+                            "data-context": json.dumps(
+                                self._tree_context(request),
+                                cls=DjangoJSONEncoder,
+                            ),
+                        },
+                    ),
                     JS(
                         "products/admin/category_mptt_unfold.js",
                         {

@@ -932,6 +932,33 @@ class LegacyCategoryImportCommandTest(TestCase):
         self.assertGreater(root.rght, root.lft)
         self.assertEqual(root.get_descendant_count(), 2)
 
+
+class CategoryAdminTreeMediaTest(TestCase):
+    def setUp(self):
+        user_model = get_user_model()
+        self.user = user_model.objects.create_superuser(
+            username="category-admin",
+            email="category-admin@example.com",
+            password="pass",
+        )
+        self.client.force_login(self.user)
+        root = Category.objects.create(name="Root", slug="root")
+        Category.objects.create(name="Child", slug="child", parent=root)
+
+    def test_unfold_mptt_override_loads_after_default_mptt_script(self):
+        response = self.client.get(reverse("admin:products_category_changelist"))
+
+        self.assertEqual(response.status_code, 200)
+        body = response.content.decode()
+        jquery_init_index = body.find("admin/js/jquery.init.js")
+        mptt_index = body.find("mptt/draggable-admin.js")
+        override_index = body.find("products/admin/category_mptt_unfold.js")
+
+        self.assertGreaterEqual(jquery_init_index, 0)
+        self.assertGreater(mptt_index, jquery_init_index)
+        self.assertGreater(override_index, mptt_index)
+
+
 class ScheduledProductSyncCommandTest(TestCase):
     def setUp(self):
         self.channel = ShopwareSettings.objects.create(
