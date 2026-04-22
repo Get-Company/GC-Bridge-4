@@ -52,7 +52,11 @@
             <details class="group/mappei">
                 <summary class="flex cursor-pointer list-none items-center gap-1.5">
                     <span class="text-sm font-semibold text-red-600 dark:text-red-400 whitespace-nowrap">
-                        {{ m.normalized_total|floatformat:2 }} €
+                        {% if m.staffel_price_max and m.staffel_menge_min and m.staffel_price_min %}
+                            {{ m.staffel_price_max|floatformat:2 }} € - {{ m.staffel_menge_min }} St. - {{ m.staffel_price_min|floatformat:2 }} €
+                        {% else %}
+                            {{ m.base_price|floatformat:2 }} €
+                        {% endif %}
                     </span>
                     {% if m.tier_applies %}
                         <span class="rounded bg-red-100 px-1 py-0.5 text-xs text-red-700 dark:bg-red-900/40 dark:text-red-300">Staffel</span>

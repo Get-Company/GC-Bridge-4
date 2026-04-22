@@ -30,6 +30,7 @@ from mappei.models import MappeiPriceSnapshot, MappeiProduct, MappeiProductMappi
 from products.management.commands.import_legacy_product_properties import Command as ImportLegacyProductPropertiesCommand
 from products.management.commands.scheduled_product_sync import Command as ScheduledProductSyncCommand
 from products.models import (
+    Category,
     Image,
     Price,
     PriceHistory,
@@ -590,6 +591,32 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
         self.assertEqual(mappei_data["price_per_piece"], Decimal("0.736"))
         self.assertEqual(mappei_data["normalized_total"], Decimal("73.60"))
 
+    def test_positions_table_renders_mappei_column_as_max_price_min_qty_min_price(self):
+        mappei_product = MappeiProduct.objects.create(
+            artikelnr="M-6000",
+            name="Mappei Admin Artikel",
+            vpe_menge=100,
+            vpe_einheit="Stk",
+            hat_staffel=True,
+        )
+        MappeiProductMapping.objects.create(mappei_product=mappei_product, product=self.product)
+        MappeiPriceSnapshot.objects.create(
+            product=mappei_product,
+            scraped_at=timezone.now(),
+            preis=Decimal("56.95"),
+            staffelpreismenge_min=100,
+            staffelpreismenge_max=200,
+            staffelpreis_min=Decimal("56.20"),
+            staffelpreis_max=Decimal("56.95"),
+        )
+
+        response = self.client.get(
+            reverse("admin:products_priceincrease_positions_table", args=(self.price_increase.pk,))
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "56,95 € - 100 St. - 56,20 €")
+
     def test_position_chart_endpoint_returns_history_chart_data(self):
         response = self.client.get(
             reverse("admin:products_priceincrease_position_chart", args=(self.price_increase.pk, self.item.pk))
@@ -815,6 +842,95 @@ class ProductAdminSpecialPriceActionTest(TestCase):
         self.assertEqual(len(sent_messages), 1)
         self.assertIn("1 Produkt(e) mit Fehlern: kaputt", sent_messages[0][0])
         self.assertEqual(sent_messages[0][1], messages.ERROR)
+
+
+class LegacyCategoryImportCommandTest(TestCase):
+    def test_import_legacy_categories_builds_mptt_tree(self):
+        with TemporaryDirectory() as temp_dir:
+            sqlite_path = Path(temp_dir) / "legacy.sqlite3"
+            connection = sqlite3.connect(sqlite_path)
+            try:
+                connection.execute(
+                    """
+                    CREATE TABLE bridge_category_entity (
+                        id INTEGER PRIMARY KEY,
+                        erp_nr INTEGER NOT NULL,
+                        api_id TEXT NOT NULL,
+                        erp_nr_parent INTEGER,
+                        api_idparent TEXT,
+                        title TEXT,
+                        image TEXT,
+                        description TEXT,
+                        erp_ltz_aend TEXT,
+                        created_at TEXT
+                    )
+                    """
+                )
+                connection.executemany(
+                    """
+                    INSERT INTO bridge_category_entity (
+                        id, erp_nr, api_id, erp_nr_parent, api_idparent, title, image,
+                        description, erp_ltz_aend, created_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    [
+                        (
+                            1,
+                            11,
+                            "root-api",
+                            0,
+                            "0",
+                            "Deutsch",
+                            None,
+                            "",
+                            "2021-12-06 09:57:32",
+                            "2023-02-16 16:10:16",
+                        ),
+                        (
+                            2,
+                            1,
+                            "orga-api",
+                            11,
+                            "root-api",
+                            "Orga-Mappen",
+                            None,
+                            "<p>Beschreibung</p>",
+                            "2023-03-02 16:47:00",
+                            "2023-02-16 16:10:16",
+                        ),
+                        (
+                            3,
+                            110,
+                            "standard-api",
+                            1,
+                            "orga-api",
+                            "Standard-Mappen",
+                            "standard.jpg",
+                            "Standard Beschreibung",
+                            "2021-12-06 09:57:32",
+                            "2023-02-16 16:10:16",
+                        ),
+                    ],
+                )
+                connection.commit()
+            finally:
+                connection.close()
+
+            call_command("import_legacy_categories", sqlite_path=str(sqlite_path), verbosity=0)
+
+        root = Category.objects.get(legacy_erp_nr=11)
+        parent = Category.objects.get(legacy_erp_nr=1)
+        child = Category.objects.get(legacy_erp_nr=110)
+
+        self.assertIsNone(root.parent)
+        self.assertEqual(parent.parent, root)
+        self.assertEqual(child.parent, parent)
+        self.assertEqual(parent.slug, "orga-mappen-1")
+        self.assertEqual(parent.name_de, "Orga-Mappen")
+        self.assertEqual(child.image, "standard.jpg")
+        self.assertGreater(root.rght, root.lft)
+        self.assertEqual(root.get_descendant_count(), 2)
 
 class ScheduledProductSyncCommandTest(TestCase):
     def setUp(self):

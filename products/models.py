@@ -6,6 +6,8 @@ from django.db import models
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
+from mptt.fields import TreeForeignKey
+from mptt.models import MPTTModel
 
 from core.models import BaseModel
 from shopware.models import ShopwareSettings
@@ -30,21 +32,55 @@ class Tax(BaseModel):
         return f"{self.name} ({self.rate}%)"
 
 
-class Category(BaseModel):
+class Category(MPTTModel, BaseModel):
     name = models.CharField(max_length=128, verbose_name=_("Name"))
     slug = models.SlugField(max_length=160, unique=True, verbose_name=_("Slug"))
-    parent = models.ForeignKey(
+    parent = TreeForeignKey(
         "self",
         on_delete=models.PROTECT,
         null=True,
         blank=True,
+        related_name="children",
         verbose_name=_("Oberkategorie"),
     )
+    legacy_erp_nr = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        unique=True,
+        db_index=True,
+        verbose_name=_("Legacy ERP-Nummer"),
+    )
+    legacy_api_id = models.CharField(
+        max_length=36,
+        blank=True,
+        default="",
+        db_index=True,
+        verbose_name=_("Legacy API-ID"),
+    )
+    legacy_parent_erp_nr = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        db_index=True,
+        verbose_name=_("Legacy Parent ERP-Nummer"),
+    )
+    image = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Bild"))
+    description = models.TextField(blank=True, default="", verbose_name=_("Beschreibung"))
+    legacy_changed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name=_("Legacy geaendert am"),
+    )
+    lft = models.PositiveIntegerField(default=0, editable=False, db_index=True)
+    rght = models.PositiveIntegerField(default=0, editable=False, db_index=True)
+    tree_id = models.PositiveIntegerField(default=0, editable=False, db_index=True)
+    level = models.PositiveIntegerField(default=0, editable=False, db_index=True)
 
     class Meta:
         verbose_name = _("Kategorie")
         verbose_name_plural = _("Kategorien")
-        ordering = ("name",)
+
+    class MPTTMeta:
+        order_insertion_by = ("name",)
 
     def __str__(self) -> str:
         return self.name

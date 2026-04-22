@@ -15,6 +15,7 @@ from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils import timezone
 from django.utils.html import format_html
+from mptt.admin import DraggableMPTTAdmin
 from modeltranslation.admin import TabbedTranslationAdmin
 from django.views.generic import TemplateView
 
@@ -1658,13 +1659,23 @@ class PropertyValueAdmin(TabbedTranslationAdmin, BaseAdmin):
 
 
 @admin.register(Category)
-class CategoryAdmin(BaseAdmin):
-    list_display = ("name", "slug", "parent", "created_at")
-    search_fields = ("name", "slug", "parent__name")
+class CategoryAdmin(DraggableMPTTAdmin, BaseAdmin):
+    list_display = (
+        "tree_actions",
+        "indented_title",
+        "slug",
+        "legacy_erp_nr",
+        "parent",
+        "created_at",
+    )
+    list_display_links = ("indented_title",)
+    search_fields = ("name", "slug", "legacy_erp_nr", "legacy_api_id", "parent__name")
     list_filter = [
         ("parent", RelatedDropdownFilter),
         ("created_at", RangeDateTimeFilter),
     ]
+    readonly_fields = BaseAdmin.readonly_fields + ("legacy_erp_nr", "legacy_api_id", "legacy_parent_erp_nr")
+    mptt_indent_field = "name"
 
 
 @admin.register(Tax)

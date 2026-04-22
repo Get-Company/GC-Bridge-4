@@ -95,6 +95,7 @@ INSTALLED_APPS = [
     'unfold.contrib.filters',
     'unfold.contrib.forms',
     'modeltranslation',
+    'mptt',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -328,6 +329,11 @@ UNFOLD = {
                         "title": _("Preiserhöhungen"),
                         "icon": "trending_up",
                         "link": reverse_lazy("admin:products_priceincrease_changelist"),
+                    },
+                    {
+                        "title": _("Kategorien"),
+                        "icon": "account_tree",
+                        "link": reverse_lazy("admin:products_category_changelist"),
                     },
                     {
                         "title": _("Attributgruppen"),

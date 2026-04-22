@@ -15,4 +15,6 @@ dependencies = [
     "sphinx>=8.2.3",
     "uvicorn>=0.41.0",
     "whitenoise>=6.0.0",
+    "django-mptt>=0.18.0",
+    "beautifulsoup4>=4.14.3",
 ]
