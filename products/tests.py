@@ -866,6 +866,23 @@ class LegacyCategoryImportCommandTest(TestCase):
                     )
                     """
                 )
+                connection.execute(
+                    """
+                    CREATE TABLE bridge_product_entity (
+                        id INTEGER PRIMARY KEY,
+                        erp_nr TEXT
+                    )
+                    """
+                )
+                connection.execute(
+                    """
+                    CREATE TABLE bridge_product_category_entity (
+                        product_id INTEGER NOT NULL,
+                        category_id INTEGER NOT NULL,
+                        PRIMARY KEY (product_id, category_id)
+                    )
+                    """
+                )
                 connection.executemany(
                     """
                     INSERT INTO bridge_category_entity (
@@ -913,10 +930,23 @@ class LegacyCategoryImportCommandTest(TestCase):
                         ),
                     ],
                 )
+                connection.execute(
+                    "INSERT INTO bridge_product_entity (id, erp_nr) VALUES (?, ?)",
+                    (77, "204113"),
+                )
+                connection.execute(
+                    """
+                    INSERT INTO bridge_product_category_entity (product_id, category_id)
+                    VALUES (?, ?)
+                    """,
+                    (77, 3),
+                )
                 connection.commit()
             finally:
                 connection.close()
 
+            product = Product.objects.create(erp_nr="204113", name="Orgamappe")
+            call_command("import_legacy_categories", sqlite_path=str(sqlite_path), verbosity=0)
             call_command("import_legacy_categories", sqlite_path=str(sqlite_path), verbosity=0)
 
         root = Category.objects.get(legacy_erp_nr=11)
@@ -931,6 +961,7 @@ class LegacyCategoryImportCommandTest(TestCase):
         self.assertEqual(child.image, "standard.jpg")
         self.assertGreater(root.rght, root.lft)
         self.assertEqual(root.get_descendant_count(), 2)
+        self.assertEqual(list(product.categories.values_list("legacy_erp_nr", flat=True)), [110])
 
 
 class CategoryAdminTreeMediaTest(TestCase):
