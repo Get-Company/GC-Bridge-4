@@ -70,6 +70,7 @@ class Category(MPTTModel, BaseModel):
         blank=True,
         verbose_name=_("Legacy geaendert am"),
     )
+    sort_order = models.PositiveIntegerField(default=1000, db_index=True, verbose_name=_("Sortierung"))
     lft = models.PositiveIntegerField(default=0, editable=False, db_index=True)
     rght = models.PositiveIntegerField(default=0, editable=False, db_index=True)
     tree_id = models.PositiveIntegerField(default=0, editable=False, db_index=True)
@@ -80,7 +81,7 @@ class Category(MPTTModel, BaseModel):
         verbose_name_plural = _("Kategorien")
 
     class MPTTMeta:
-        order_insertion_by = ("name",)
+        order_insertion_by = ("sort_order", "name")
 
     def __str__(self) -> str:
         return self.name

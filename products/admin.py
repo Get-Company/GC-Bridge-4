@@ -7,7 +7,7 @@ from django.contrib import admin, messages
 from django.contrib.admin.models import LogEntry
 from django.contrib.contenttypes.models import ContentType
 from django.core.management import call_command
-from django.core.serializers.json import DjangoJSONEncoder
+from django.db import transaction
 from django.db.models import Case, Count, F, IntegerField, Prefetch, Q, Value, When, Window
 from django.db.models.functions import RowNumber
 from django.http import Http404, HttpResponseRedirect, HttpResponseNotAllowed, JsonResponse
@@ -16,8 +16,6 @@ from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils import timezone
 from django.utils.html import format_html
-from js_asset import JS
-from mptt.admin import DraggableMPTTAdmin
 from modeltranslation.admin import TabbedTranslationAdmin
 from django.views.generic import TemplateView
 
@@ -310,6 +308,17 @@ class PriceIncreasePositionsPageView(UnfoldModelAdminViewMixin, TemplateView):
                 search_term=self.request.GET.get("q", ""),
             )
         )
+        return context
+
+
+class CategoryManagerPageView(UnfoldModelAdminViewMixin, TemplateView):
+    title = "Kategorien verwalten"
+    permission_required = ("products.view_category",)
+    template_name = "admin/products/category_manager.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.update(self.model_admin._build_manager_context(self.request))
         return context
 
 
@@ -1661,57 +1670,257 @@ class PropertyValueAdmin(TabbedTranslationAdmin, BaseAdmin):
 
 
 @admin.register(Category)
-class CategoryAdmin(DraggableMPTTAdmin, BaseAdmin):
+class CategoryAdmin(BaseAdmin):
     list_display = (
-        "tree_actions",
-        "indented_title",
+        "name",
         "slug",
         "legacy_erp_nr",
         "parent",
+        "sort_order",
         "created_at",
     )
-    list_display_links = ("indented_title",)
+    list_display_links = ("name",)
     search_fields = ("name", "slug", "legacy_erp_nr", "legacy_api_id", "parent__name")
     list_filter = [
         ("parent", RelatedDropdownFilter),
         ("created_at", RangeDateTimeFilter),
     ]
-    readonly_fields = BaseAdmin.readonly_fields + ("legacy_erp_nr", "legacy_api_id", "legacy_parent_erp_nr")
-    mptt_indent_field = "name"
+    readonly_fields = BaseAdmin.readonly_fields + (
+        "legacy_erp_nr",
+        "legacy_api_id",
+        "legacy_parent_erp_nr",
+    )
+    ordering = ("tree_id", "lft")
 
-    def changelist_view(self, request, *args, **kwargs):
-        response = super().changelist_view(request, *args, **kwargs)
+    def get_urls(self):
+        manager_view = self.admin_site.admin_view(CategoryManagerPageView.as_view(model_admin=self))
+        return [
+            path("manager/", manager_view, name="products_category_manager"),
+            path("manager/tree/", self.admin_site.admin_view(self.tree_api_view), name="products_category_tree_api"),
+            path("manager/move/", self.admin_site.admin_view(self.move_api_view), name="products_category_move_api"),
+            path(
+                "manager/<path:object_id>/products/",
+                self.admin_site.admin_view(self.products_api_view),
+                name="products_category_products_api",
+            ),
+            path(
+                "manager/<path:object_id>/products/update/",
+                self.admin_site.admin_view(self.product_assignment_api_view),
+                name="products_category_product_assignment_api",
+            ),
+        ] + super().get_urls()
+
+    def changelist_view(self, request, extra_context=None):
+        return HttpResponseRedirect(reverse("admin:products_category_manager"))
+
+    def _build_manager_context(self, request):
+        return {
+            **self.admin_site.each_context(request),
+            "title": "Kategorien verwalten",
+            "subtitle": "Baumstruktur und Produktzuordnung",
+            "category_tree": self._category_tree_payload(),
+            "category_count": Category.objects.count(),
+            "product_count": Product.objects.count(),
+            "urls": {
+                "tree": reverse("admin:products_category_tree_api"),
+                "move": reverse("admin:products_category_move_api"),
+                "products": reverse(
+                    "admin:products_category_products_api",
+                    args=(0,),
+                ).replace("/0/", "/{id}/"),
+                "assignment": reverse(
+                    "admin:products_category_product_assignment_api",
+                    args=(0,),
+                ).replace("/0/", "/{id}/"),
+                "add": reverse("admin:products_category_add"),
+            },
+            "can_change_categories": self.has_change_permission(request),
+        }
+
+    def tree_api_view(self, request):
+        if not self.has_view_permission(request):
+            return JsonResponse({"error": "Keine Berechtigung."}, status=403)
+        return JsonResponse({"categories": self._category_tree_payload()})
+
+    def move_api_view(self, request):
+        if request.method != "POST":
+            return HttpResponseNotAllowed(["POST"])
+        if not self.has_change_permission(request):
+            return JsonResponse({"error": "Keine Berechtigung zum Speichern."}, status=403)
+
         try:
-            response.context_data["media"] = response.context_data["media"] + forms.Media(
-                css={"all": ["products/admin/category_mptt_unfold.css"]},
-                js=[
-                    "admin/js/vendor/jquery/jquery.js",
-                    "admin/js/jquery.init.js",
-                    JS(
-                        "mptt/draggable-admin.js",
-                        {
-                            "id": "draggable-admin-context",
-                            "data-context": json.dumps(
-                                self._tree_context(request),
-                                cls=DjangoJSONEncoder,
-                            ),
-                        },
-                    ),
-                    JS(
-                        "products/admin/category_mptt_unfold.js",
-                        {
-                            "id": "category-mptt-unfold-context",
-                            "data-context": json.dumps(
-                                self._tree_context(request),
-                                cls=DjangoJSONEncoder,
-                            ),
-                        },
-                    ),
-                ],
+            category_id = int(request.POST.get("category_id") or 0)
+            target_id = int(request.POST.get("target_id") or 0)
+        except (TypeError, ValueError):
+            return JsonResponse({"error": "Ungueltige Kategorie."}, status=400)
+
+        position = str(request.POST.get("position") or "").strip()
+        if position not in {"before", "after", "inside"}:
+            return JsonResponse({"error": "Ungueltige Zielposition."}, status=400)
+
+        category = Category.objects.filter(pk=category_id).first()
+        target = Category.objects.filter(pk=target_id).first()
+        if not category or not target:
+            return JsonResponse({"error": "Kategorie nicht gefunden."}, status=404)
+        if category.pk == target.pk or target.is_descendant_of(category):
+            return JsonResponse({"error": "Diese Verschiebung wuerde einen Zyklus erzeugen."}, status=400)
+
+        self._move_category(category=category, target=target, position=position)
+        return JsonResponse({"categories": self._category_tree_payload()})
+
+    def products_api_view(self, request, object_id: str):
+        if not self.has_view_permission(request):
+            return JsonResponse({"error": "Keine Berechtigung."}, status=403)
+        category = self._get_category_or_404(object_id)
+        return JsonResponse(self._category_products_payload(category, request.GET.get("q", "")))
+
+    def product_assignment_api_view(self, request, object_id: str):
+        if request.method != "POST":
+            return HttpResponseNotAllowed(["POST"])
+        if not self.has_change_permission(request):
+            return JsonResponse({"error": "Keine Berechtigung zum Speichern."}, status=403)
+
+        category = self._get_category_or_404(object_id)
+        action_name = str(request.POST.get("action") or "").strip()
+        try:
+            product_id = int(request.POST.get("product_id") or 0)
+        except (TypeError, ValueError):
+            return JsonResponse({"error": "Ungueltiges Produkt."}, status=400)
+
+        product = Product.objects.filter(pk=product_id).first()
+        if not product:
+            return JsonResponse({"error": "Produkt nicht gefunden."}, status=404)
+
+        if action_name == "add":
+            product.categories.add(category)
+        elif action_name == "remove":
+            product.categories.remove(category)
+        else:
+            return JsonResponse({"error": "Ungueltige Aktion."}, status=400)
+
+        return JsonResponse(self._category_products_payload(category, request.POST.get("q", "")))
+
+    def _category_tree_payload(self) -> list[dict]:
+        product_counts = {
+            row["category_id"]: row["count"]
+            for row in Product.categories.through.objects.values("category_id").annotate(
+                count=Count("product_id"),
             )
-        except (AttributeError, KeyError):
-            pass
-        return response
+        }
+        child_parent_ids = set(
+            Category.objects.exclude(parent_id__isnull=True).values_list("parent_id", flat=True).distinct()
+        )
+        categories = Category.objects.order_by("tree_id", "lft").values(
+            "id",
+            "name",
+            "slug",
+            "parent_id",
+            "legacy_erp_nr",
+            "sort_order",
+            "level",
+            "lft",
+            "rght",
+        )
+        return [
+            {
+                "id": row["id"],
+                "name": row["name"],
+                "slug": row["slug"],
+                "parent_id": row["parent_id"],
+                "legacy_erp_nr": row["legacy_erp_nr"],
+                "sort_order": row["sort_order"],
+                "level": row["level"],
+                "has_children": row["id"] in child_parent_ids,
+                "product_count": product_counts.get(row["id"], 0),
+                "edit_url": reverse("admin:products_category_change", args=(row["id"],)),
+            }
+            for row in categories
+        ]
+
+    def _move_category(self, *, category: Category, target: Category, position: str) -> None:
+        if position == "inside":
+            new_parent = target
+            siblings = list(
+                target.get_children()
+                .exclude(pk=category.pk)
+                .order_by("sort_order", "name", "pk")
+            )
+            siblings.append(category)
+        else:
+            new_parent = target.parent
+            if new_parent:
+                siblings = list(
+                    new_parent.get_children()
+                    .exclude(pk=category.pk)
+                    .order_by("sort_order", "name", "pk")
+                )
+            else:
+                siblings = list(
+                    Category.objects.root_nodes()
+                    .exclude(pk=category.pk)
+                    .order_by("sort_order", "name", "pk")
+                )
+            target_index = next((index for index, sibling in enumerate(siblings) if sibling.pk == target.pk), None)
+            if target_index is None:
+                target_index = len(siblings)
+            insert_index = target_index + 1 if position == "after" else target_index
+            siblings.insert(insert_index, category)
+
+        new_parent_id = new_parent.pk if new_parent else None
+        with transaction.atomic(), Category.objects.disable_mptt_updates():
+            for index, sibling in enumerate(siblings, start=1):
+                Category.objects.filter(pk=sibling.pk).update(
+                    parent_id=new_parent_id,
+                    sort_order=index * 10,
+                )
+        with transaction.atomic():
+            Category.objects.rebuild()
+
+    def _get_category_or_404(self, object_id: str) -> Category:
+        category = Category.objects.filter(pk=object_id).first()
+        if not category:
+            raise Http404("Kategorie nicht gefunden.")
+        return category
+
+    def _category_products_payload(self, category: Category, search_term: str = "") -> dict:
+        search_term = (search_term or "").strip()
+        assigned_queryset = Product.objects.filter(categories=category).order_by("erp_nr", "name", "pk")
+        assigned_total = assigned_queryset.count()
+        assigned_products = [self._product_payload(product) for product in assigned_queryset[:200]]
+
+        available_products = []
+        if len(search_term) >= 2:
+            available_queryset = (
+                Product.objects.exclude(categories=category)
+                .filter(Q(erp_nr__icontains=search_term) | Q(name__icontains=search_term))
+                .order_by("-is_active", "erp_nr", "name", "pk")
+                .distinct()
+            )
+            available_products = [self._product_payload(product) for product in available_queryset[:30]]
+
+        return {
+            "category": {
+                "id": category.pk,
+                "name": category.name,
+                "legacy_erp_nr": category.legacy_erp_nr,
+                "edit_url": reverse("admin:products_category_change", args=(category.pk,)),
+            },
+            "assigned_total": assigned_total,
+            "assigned_products": assigned_products,
+            "available_products": available_products,
+            "search_term": search_term,
+            "search_min_length": 2,
+        }
+
+    @staticmethod
+    def _product_payload(product: Product) -> dict:
+        return {
+            "id": product.pk,
+            "erp_nr": product.erp_nr,
+            "name": product.name or "",
+            "is_active": product.is_active,
+            "edit_url": reverse("admin:products_product_change", args=(product.pk,)),
+        }
 
 
 @admin.register(Tax)

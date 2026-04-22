@@ -964,7 +964,7 @@ class LegacyCategoryImportCommandTest(TestCase):
         self.assertEqual(list(product.categories.values_list("legacy_erp_nr", flat=True)), [110])
 
 
-class CategoryAdminTreeMediaTest(TestCase):
+class CategoryAdminManagerTest(TestCase):
     def setUp(self):
         user_model = get_user_model()
         self.user = user_model.objects.create_superuser(
@@ -973,21 +973,63 @@ class CategoryAdminTreeMediaTest(TestCase):
             password="pass",
         )
         self.client.force_login(self.user)
-        root = Category.objects.create(name="Root", slug="root")
-        Category.objects.create(name="Child", slug="child", parent=root)
+        self.root = Category.objects.create(name="Root", slug="root", sort_order=10)
+        self.child = Category.objects.create(name="Child", slug="child", parent=self.root, sort_order=10)
+        self.sibling = Category.objects.create(name="Sibling", slug="sibling", sort_order=20)
+        self.product = Product.objects.create(erp_nr="A-3000", name="Artikel C")
 
-    def test_unfold_mptt_override_loads_after_default_mptt_script(self):
+    def test_changelist_redirects_to_custom_manager(self):
         response = self.client.get(reverse("admin:products_category_changelist"))
 
-        self.assertEqual(response.status_code, 200)
-        body = response.content.decode()
-        jquery_init_index = body.find("admin/js/jquery.init.js")
-        mptt_index = body.find("mptt/draggable-admin.js")
-        override_index = body.find("products/admin/category_mptt_unfold.js")
+        self.assertRedirects(response, reverse("admin:products_category_manager"))
 
-        self.assertGreaterEqual(jquery_init_index, 0)
-        self.assertGreater(mptt_index, jquery_init_index)
-        self.assertGreater(override_index, mptt_index)
+    def test_manager_renders_custom_assets_and_tree_payload(self):
+        response = self.client.get(reverse("admin:products_category_manager"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "products/admin/category_manager.css")
+        self.assertContains(response, "products/admin/category_manager.js")
+        self.assertContains(response, "category-manager-data")
+        self.assertContains(response, "Produktzuordnung")
+
+    def test_move_api_updates_parent_and_sibling_order(self):
+        response = self.client.post(
+            reverse("admin:products_category_move_api"),
+            {
+                "category_id": self.child.pk,
+                "target_id": self.sibling.pk,
+                "position": "after",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.child.refresh_from_db()
+        self.sibling.refresh_from_db()
+        self.assertIsNone(self.child.parent)
+        self.assertGreater(self.child.sort_order, self.sibling.sort_order)
+
+    def test_product_assignment_api_adds_and_removes_product(self):
+        add_response = self.client.post(
+            reverse("admin:products_category_product_assignment_api", args=(self.child.pk,)),
+            {
+                "action": "add",
+                "product_id": self.product.pk,
+            },
+        )
+
+        self.assertEqual(add_response.status_code, 200)
+        self.assertTrue(self.product.categories.filter(pk=self.child.pk).exists())
+
+        remove_response = self.client.post(
+            reverse("admin:products_category_product_assignment_api", args=(self.child.pk,)),
+            {
+                "action": "remove",
+                "product_id": self.product.pk,
+            },
+        )
+
+        self.assertEqual(remove_response.status_code, 200)
+        self.assertFalse(self.product.categories.filter(pk=self.child.pk).exists())
 
 
 class ScheduledProductSyncCommandTest(TestCase):

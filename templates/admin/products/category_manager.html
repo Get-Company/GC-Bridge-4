@@ -1,0 +1,104 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block extrastyle %}
+    {{ block.super }}
+    <link rel="stylesheet" href="{% static 'products/admin/category_manager.css' %}">
+{% endblock %}
+
+{% block content %}
+{{ category_tree|json_script:"category-manager-data" }}
+<div
+    id="category-manager"
+    class="category-manager"
+    data-tree-url="{{ urls.tree }}"
+    data-move-url="{{ urls.move }}"
+    data-products-url="{{ urls.products }}"
+    data-assignment-url="{{ urls.assignment }}"
+    data-can-change="{{ can_change_categories|yesno:'1,0' }}"
+>
+    <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
+
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
+        <div>
+            <h1 class="text-xl font-semibold text-gray-900 dark:text-gray-100">Kategorien verwalten</h1>
+            <div class="mt-1 flex flex-wrap gap-3 text-sm text-gray-500 dark:text-gray-400">
+                <span>{{ category_count }} Kategorien</span>
+                <span>{{ product_count }} Produkte</span>
+            </div>
+        </div>
+        <a
+            href="{{ urls.add }}"
+            class="inline-flex items-center gap-2 rounded border border-primary-600 bg-primary-600 px-3 py-2
+                   text-sm font-medium text-white hover:bg-primary-700"
+        >
+            <span class="material-symbols-outlined text-base">add</span>
+            Kategorie
+        </a>
+    </div>
+
+    <div class="category-manager-layout">
+        <section class="category-manager-panel category-manager-tree-panel">
+            <div class="category-manager-panel-header">
+                <div class="min-w-0">
+                    <h2>Kategoriebaum</h2>
+                </div>
+                <button
+                    type="button"
+                    class="category-manager-icon-button"
+                    data-action="refresh-tree"
+                    title="Aktualisieren"
+                >
+                    <span class="material-symbols-outlined">sync</span>
+                </button>
+            </div>
+            <div class="category-manager-search">
+                <span class="material-symbols-outlined">search</span>
+                <input id="category-tree-search" type="search" placeholder="Kategorie suchen">
+            </div>
+            <div id="category-tree" class="category-manager-tree" aria-live="polite"></div>
+        </section>
+
+        <section class="category-manager-panel category-manager-product-panel">
+            <div class="category-manager-panel-header">
+                <div class="min-w-0">
+                    <h2 id="category-products-title">Produktzuordnung</h2>
+                    <p id="category-products-meta"></p>
+                </div>
+                <a id="category-edit-link" class="category-manager-icon-button" href="#" title="Kategorie bearbeiten">
+                    <span class="material-symbols-outlined">edit</span>
+                </a>
+            </div>
+
+            <div id="category-empty-state" class="category-manager-empty">
+                Kategorie im Baum auswählen.
+            </div>
+
+            <div id="category-products-content" class="category-manager-products hidden">
+                <div class="category-manager-search">
+                    <span class="material-symbols-outlined">search</span>
+                    <input id="category-product-search" type="search" placeholder="Produkt suchen">
+                </div>
+
+                <div class="category-manager-product-grid">
+                    <div>
+                        <div class="category-manager-section-title">
+                            <span>Zugeordnet</span>
+                            <span id="assigned-products-count"></span>
+                        </div>
+                        <div id="assigned-products-list" class="category-manager-product-list"></div>
+                    </div>
+                    <div>
+                        <div class="category-manager-section-title">
+                            <span>Suchergebnis</span>
+                            <span id="available-products-count"></span>
+                        </div>
+                        <div id="available-products-list" class="category-manager-product-list"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+</div>
+<script src="{% static 'products/admin/category_manager.js' %}" defer></script>
+{% endblock %}

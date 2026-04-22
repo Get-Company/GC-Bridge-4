@@ -333,7 +333,7 @@ UNFOLD = {
                     {
                         "title": _("Kategorien"),
                         "icon": "account_tree",
-                        "link": reverse_lazy("admin:products_category_changelist"),
+                        "link": reverse_lazy("admin:products_category_manager"),
                     },
                     {
                         "title": _("Attributgruppen"),

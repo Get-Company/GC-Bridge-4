@@ -83,6 +83,7 @@ class Command(BaseCommand):
                     "image": str(row["image"] or "").strip(),
                     "description": str(row["description"] or ""),
                     "legacy_changed_at": self._parse_legacy_datetime(row["erp_ltz_aend"]),
+                    "sort_order": int(row["id"] or 1000),
                     "parent": None,
                 }
                 category, created = Category.objects.update_or_create(
