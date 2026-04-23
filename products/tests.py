@@ -785,6 +785,93 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "A-6000")
 
+    def test_price_list_items_use_current_price_as_fallback_without_new_price(self):
+        root_category = Category.objects.create(name="Papier", slug="papier", sort_order=10)
+        child_category = Category.objects.create(
+            name="Register",
+            slug="register",
+            parent=root_category,
+            sort_order=20,
+        )
+        self.product.categories.add(child_category)
+
+        admin_instance = PriceIncreaseAdmin(PriceIncrease, AdminSite())
+        rows = admin_instance._build_price_list_items(
+            price_increase=self.price_increase,
+            root_category=root_category,
+        )
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["erp_nr"], "A-6000")
+        self.assertEqual(rows[0]["price"], Decimal("10.01"))
+        self.assertEqual(rows[0]["rebate_price"], Decimal("9.01"))
+        self.assertEqual(rows[0]["price_source"], "aktuell")
+
+    def test_price_list_items_are_sorted_by_category_sort_order(self):
+        root_category = Category.objects.create(name="Mappe", slug="mappe", sort_order=10)
+        fast_category = Category.objects.create(
+            name="Schnell",
+            slug="schnell",
+            parent=root_category,
+            sort_order=5,
+        )
+        later_category = Category.objects.create(
+            name="Spaeter",
+            slug="spaeter",
+            parent=root_category,
+            sort_order=50,
+        )
+        self.product.categories.add(later_category)
+
+        second_product = Product.objects.create(erp_nr="A-5000", name="Schneller Artikel", unit="Stk")
+        second_product.categories.add(fast_category)
+        second_price = Price.objects.create(
+            product=second_product,
+            sales_channel=self.default_channel,
+            price=Decimal("8.00"),
+        )
+        PriceIncreaseItem.objects.create(
+            price_increase=self.price_increase,
+            product=second_product,
+            source_price=second_price,
+            unit="Stk",
+            current_price=Decimal("8.00"),
+        )
+
+        admin_instance = PriceIncreaseAdmin(PriceIncrease, AdminSite())
+        rows = admin_instance._build_price_list_items(
+            price_increase=self.price_increase,
+            root_category=root_category,
+        )
+
+        self.assertEqual([row["erp_nr"] for row in rows], ["A-5000", "A-6000"])
+
+    def test_export_price_list_pdf_action_returns_pdf(self):
+        root_category = Category.objects.create(name="Druck", slug="druck", sort_order=10)
+        child_category = Category.objects.create(
+            name="Druck Sortierung",
+            slug="druck-sortierung",
+            parent=root_category,
+            sort_order=20,
+        )
+        self.product.categories.add(child_category)
+
+        response = self.client.post(
+            reverse("admin:products_priceincrease_changelist"),
+            data={
+                "action": "export_price_list_pdf",
+                "root_category": str(root_category.pk),
+                "_selected_action": [str(self.price_increase.pk)],
+                "index": "0",
+                "select_across": "0",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/pdf")
+        self.assertIn("admin-view-test-druck-preisliste.pdf", response["Content-Disposition"])
+        self.assertTrue(response.content.startswith(b"%PDF"))
+
 
 class ProductAdminSpecialPriceActionTest(TestCase):
     def setUp(self):

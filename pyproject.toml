@@ -17,4 +17,5 @@ dependencies = [
     "whitenoise>=6.0.0",
     "django-mptt>=0.18.0",
     "beautifulsoup4>=4.14.3",
+    "reportlab>=4.4.10",
 ]

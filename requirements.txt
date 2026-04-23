@@ -11,3 +11,4 @@ beautifulsoup4>=4.14.3
 sphinx>=8.2.3
 uvicorn>=0.41.0
 whitenoise>=6.0.0
+reportlab>=4.4.10
