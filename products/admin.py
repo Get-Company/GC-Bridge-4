@@ -1,7 +1,9 @@
 import json
 from datetime import datetime
 from decimal import Decimal
+from io import BytesIO
 
+from django.conf import settings
 from django import forms
 from django.contrib import admin, messages
 from django.contrib.admin.models import LogEntry
@@ -10,13 +12,18 @@ from django.core.management import call_command
 from django.db import transaction
 from django.db.models import Case, Count, F, IntegerField, Prefetch, Q, Value, When, Window
 from django.db.models.functions import RowNumber
-from django.http import Http404, HttpResponseRedirect, HttpResponseNotAllowed, JsonResponse
+from django.http import Http404, HttpResponse, HttpResponseRedirect, HttpResponseNotAllowed, JsonResponse
 from django.template.loader import render_to_string
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
+from django.utils.text import slugify
 from django.utils import timezone
 from django.utils.html import format_html
 from modeltranslation.admin import TabbedTranslationAdmin
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4, landscape
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from django.views.generic import TemplateView
 
 from ai.models import AIRewriteJob, AIRewritePrompt
@@ -291,6 +298,22 @@ class PriceIncreaseItemEditForm(forms.ModelForm):
 
 class PriceIncreaseItemValueForm(forms.Form):
     value = forms.DecimalField(required=False, localize=True)
+
+
+class PriceIncreaseActionForm(UnfoldActionForm):
+    root_category = forms.ModelChoiceField(
+        label="Oberkategorie",
+        required=False,
+        queryset=Category.objects.none(),
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["root_category"].queryset = Category.objects.filter(parent__isnull=True).order_by(
+            "sort_order",
+            "name",
+            "id",
+        )
 
 
 class PriceIncreasePositionsPageView(UnfoldModelAdminViewMixin, TemplateView):
@@ -863,6 +886,8 @@ class PriceIncreaseAdmin(BaseAdmin):
         ("created_at", RangeDateTimeFilter),
         ("applied_at", RangeDateTimeFilter),
     ]
+    action_form = PriceIncreaseActionForm
+    actions = ("export_price_list_pdf",)
     actions_detail = ("open_positions_detail", "sync_positions_detail", "apply_price_increase_detail")
     readonly_fields = BaseAdmin.readonly_fields + (
         "status",
@@ -935,6 +960,11 @@ class PriceIncreaseAdmin(BaseAdmin):
             ),
         ] + super().get_urls()
 
+    def _build_action_form(self, request):
+        form = self.action_form(request.POST)
+        form.fields["action"].choices = self.get_action_choices(request)
+        return form
+
     @staticmethod
     def _positions_page_url(object_id: int | str) -> str:
         return reverse("admin:products_priceincrease_positions", args=(object_id,))
@@ -960,6 +990,199 @@ class PriceIncreaseAdmin(BaseAdmin):
     @staticmethod
     def _format_integer(value) -> str:
         return "" if value in (None, "") else str(value)
+
+    @staticmethod
+    def _format_pdf_decimal(value: Decimal | None) -> str:
+        if value is None:
+            return "-"
+        return format(value.quantize(Decimal("0.01")), "f").replace(".", ",")
+
+    @staticmethod
+    def _pdf_price_source(item: PriceIncreaseItem) -> str:
+        has_new_price = item.new_price is not None
+        has_new_rebate_price = item.new_rebate_price is not None
+        if has_new_price and has_new_rebate_price:
+            return "neu"
+        if not has_new_price and not has_new_rebate_price:
+            return "aktuell"
+        return "gemischt"
+
+    @staticmethod
+    def _category_in_root(category: Category, root_category: Category) -> bool:
+        return (
+            category.tree_id == root_category.tree_id
+            and category.lft >= root_category.lft
+            and category.rght <= root_category.rght
+        )
+
+    def _build_price_list_items(
+        self,
+        *,
+        price_increase: PriceIncrease,
+        root_category: Category,
+    ) -> list[dict]:
+        items = list(
+            price_increase.items.select_related("product")
+            .prefetch_related(
+                Prefetch(
+                    "product__categories",
+                    queryset=Category.objects.order_by("tree_id", "lft", "id"),
+                )
+            )
+            .filter(
+                product__is_active=True,
+                product__categories__tree_id=root_category.tree_id,
+                product__categories__lft__gte=root_category.lft,
+                product__categories__rght__lte=root_category.rght,
+            )
+            .distinct()
+        )
+
+        entries: list[dict] = []
+        for item in items:
+            matching_categories = [
+                category
+                for category in item.product.categories.all()
+                if self._category_in_root(category, root_category)
+            ]
+            if not matching_categories:
+                continue
+            lead_category = min(matching_categories, key=lambda category: (category.lft, category.id))
+            effective_price = item.new_price if item.new_price is not None else item.current_price
+            effective_rebate_price = item.new_rebate_price if item.new_rebate_price is not None else item.current_rebate_price
+            entries.append(
+                {
+                    "sort_key": (
+                        lead_category.lft,
+                        lead_category.sort_order,
+                        lead_category.name.lower(),
+                        item.product.sort_order,
+                        item.product.erp_nr,
+                        item.pk,
+                    ),
+                    "category_name": lead_category.name,
+                    "erp_nr": item.product.erp_nr,
+                    "product_name": item.product.name or "",
+                    "unit": item.unit or item.product.unit or "",
+                    "price": effective_price,
+                    "rebate_price": effective_rebate_price,
+                    "price_source": self._pdf_price_source(item),
+                }
+            )
+
+        return sorted(entries, key=lambda entry: entry["sort_key"])
+
+    def _build_price_list_pdf(
+        self,
+        *,
+        price_increase: PriceIncrease,
+        root_category: Category,
+        rows: list[dict],
+    ) -> bytes:
+        buffer = BytesIO()
+        document = SimpleDocTemplate(
+            buffer,
+            pagesize=landscape(A4),
+            leftMargin=24,
+            rightMargin=24,
+            topMargin=24,
+            bottomMargin=24,
+            title=price_increase.title,
+            author="GC-Bridge",
+        )
+
+        sample_styles = getSampleStyleSheet()
+        header_style = ParagraphStyle(
+            name="PriceIncreasePdfTitle",
+            parent=sample_styles["Heading1"],
+            fontName="Helvetica-Bold",
+            fontSize=16,
+            leading=20,
+            spaceAfter=4,
+        )
+        info_style = ParagraphStyle(
+            name="PriceIncreasePdfInfo",
+            parent=sample_styles["Normal"],
+            fontName="Helvetica",
+            fontSize=9,
+            leading=12,
+        )
+        cell_style = ParagraphStyle(
+            name="PriceIncreasePdfCell",
+            parent=sample_styles["Normal"],
+            fontName="Helvetica",
+            fontSize=8,
+            leading=10,
+        )
+
+        story = [
+            Paragraph(price_increase.title, header_style),
+            Paragraph(f"Oberkategorie: {root_category.name}", info_style),
+            Paragraph(
+                f"Erstellt am: {timezone.localtime().strftime('%d.%m.%Y %H:%M')}",
+                info_style,
+            ),
+            Spacer(1, 10),
+        ]
+
+        table_rows = [
+            ["Kategorie", "ERP", "Produkt", "Einht.", "Preis", "Rab.Preis", "Quelle"],
+        ]
+        for row in rows:
+            table_rows.append(
+                [
+                    Paragraph(row["category_name"], cell_style),
+                    row["erp_nr"],
+                    Paragraph(row["product_name"] or "-", cell_style),
+                    row["unit"] or "-",
+                    self._format_pdf_decimal(row["price"]),
+                    self._format_pdf_decimal(row["rebate_price"]),
+                    row["price_source"],
+                ]
+            )
+
+        if len(table_rows) == 1:
+            table_rows.append(
+                [
+                    Paragraph(root_category.name, cell_style),
+                    "-",
+                    Paragraph("Keine aktiven Produkte fuer diese Oberkategorie vorhanden.", cell_style),
+                    "-",
+                    "-",
+                    "-",
+                    "-",
+                ]
+            )
+
+        table = Table(
+            table_rows,
+            repeatRows=1,
+            colWidths=[130, 70, 280, 60, 70, 70, 70],
+        )
+        table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f1f3f5")),
+                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
+                    ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                    ("FONTSIZE", (0, 0), (-1, 0), 9),
+                    ("LINEBELOW", (0, 0), (-1, 0), 0.8, colors.HexColor("#adb5bd")),
+                    ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
+                    ("FONTSIZE", (0, 1), (-1, -1), 8),
+                    ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#dee2e6")),
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ("ALIGN", (4, 1), (5, -1), "RIGHT"),
+                    ("ALIGN", (1, 1), (1, -1), "LEFT"),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 5),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+                    ("TOPPADDING", (0, 0), (-1, -1), 4),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                ]
+            )
+        )
+        story.append(table)
+        document.build(story)
+        return buffer.getvalue()
 
     def _get_price_increase_or_404(self, object_id: int | str) -> PriceIncrease:
         price_increase = PriceIncrease.objects.select_related("sales_channel").filter(pk=object_id).first()
@@ -1047,6 +1270,7 @@ class PriceIncreaseAdmin(BaseAdmin):
 
         return {
             "artikelnr": mappei_product.artikelnr,
+            "url": mappei_product.url,
             "scraped_at": snapshot.scraped_at,
             "base_price": snapshot.preis,
             "base_qty": mappei_product.vpe_menge or snapshot.staffelpreismenge_min or 1,
@@ -1361,6 +1585,7 @@ class PriceIncreaseAdmin(BaseAdmin):
             "price_increase_changelist_url": reverse("admin:products_priceincrease_changelist"),
             "positions_table_url": self._positions_table_url(price_increase.pk),
             "is_applied": price_increase.status == PriceIncrease.Status.APPLIED,
+            "shopware_shop_url": getattr(settings, "SHOPWARE6_SHOP_URL", ""),
         }
 
     def render_change_form(self, request, context, add=False, change=False, form_url="", obj=None):
@@ -1554,6 +1779,54 @@ class PriceIncreaseAdmin(BaseAdmin):
                 self.message_user(request, str(exc), level=messages.ERROR)
             else:
                 self.message_user(request, f"{count} Preisposition(en) fuer die Preiserhoehung eingelesen.")
+
+    @admin.action(description="Preisliste als PDF (Oberkategorie)")
+    def export_price_list_pdf(self, request, queryset):
+        form = self._build_action_form(request)
+        if not form.is_valid():
+            self.message_user(request, "Bitte eine gueltige Oberkategorie auswaehlen.", level=messages.ERROR)
+            return
+
+        root_category = form.cleaned_data.get("root_category")
+        if root_category is None:
+            self.message_user(request, "Bitte fuer den PDF-Export eine Oberkategorie auswaehlen.", level=messages.ERROR)
+            return
+
+        selected_ids = list(queryset.values_list("pk", flat=True))
+        if len(selected_ids) != 1:
+            self.message_user(
+                request,
+                "Bitte genau eine Preiserhoehung markieren, damit eine eindeutige PDF erzeugt werden kann.",
+                level=messages.ERROR,
+            )
+            return
+
+        price_increase = (
+            PriceIncrease.objects.filter(pk=selected_ids[0])
+            .select_related("sales_channel")
+            .first()
+        )
+        if not price_increase:
+            self.message_user(request, "Preiserhoehung nicht gefunden.", level=messages.ERROR)
+            return
+
+        rows = self._build_price_list_items(
+            price_increase=price_increase,
+            root_category=root_category,
+        )
+        pdf_content = self._build_price_list_pdf(
+            price_increase=price_increase,
+            root_category=root_category,
+            rows=rows,
+        )
+
+        filename_title = slugify(price_increase.title) or f"preiserhoehung-{price_increase.pk}"
+        filename_category = slugify(root_category.name) or f"kategorie-{root_category.pk}"
+        response = HttpResponse(pdf_content, content_type="application/pdf")
+        response["Content-Disposition"] = (
+            f'attachment; filename="{filename_title}-{filename_category}-preisliste.pdf"'
+        )
+        return response
 
     @action(
         description="Positionen aktualisieren",

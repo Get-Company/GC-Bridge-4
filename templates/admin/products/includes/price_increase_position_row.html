@@ -1,6 +1,20 @@
 {% load unfold %}
 <tr class="align-top js-position-row transition-colors group-hover:bg-base-50 dark:group-hover:bg-base-800/40">
-    <td class="whitespace-nowrap rounded-l-default border-l border-t border-base-200 px-4 py-3 text-sm font-medium text-font-important-light dark:border-base-800 dark:text-font-important-dark">{{ item.product.erp_nr }}</td>
+    <td class="rounded-l-default border-l border-t border-base-200 px-4 py-3 text-sm font-medium text-font-important-light dark:border-base-800 dark:text-font-important-dark">
+        <div class="whitespace-nowrap">{{ item.product.erp_nr }}</div>
+        <div class="mt-1 flex flex-col gap-0.5">
+            {% if shopware_shop_url and item.product.sku %}
+                <a href="{{ shopware_shop_url }}/detail/{{ item.product.sku }}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-xs text-primary-600 hover:underline dark:text-primary-400">
+                    <span class="material-symbols-outlined text-sm leading-none">open_in_new</span>Shop
+                </a>
+            {% endif %}
+            {% if item.mappei_data.url %}
+                <a href="{{ item.mappei_data.url }}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-xs text-red-600 hover:underline dark:text-red-400">
+                    <span class="material-symbols-outlined text-sm leading-none">open_in_new</span>Mappei
+                </a>
+            {% endif %}
+        </div>
+    </td>
     <td class="whitespace-nowrap border-t border-base-200 px-4 py-3 text-sm text-font-default-light dark:border-base-800 dark:text-font-default-dark">{{ item.display_current_price }}</td>
     <td class="whitespace-nowrap border-t border-base-200 px-4 py-3 text-sm text-font-default-light dark:border-base-800 dark:text-font-default-dark">{{ item.display_current_rebate_quantity }}</td>
     <td class="whitespace-nowrap border-t border-base-200 px-4 py-3 text-sm text-font-default-light dark:border-base-800 dark:text-font-default-dark">{{ item.display_current_rebate_price }}</td>
