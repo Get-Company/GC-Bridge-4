@@ -1,10 +1,45 @@
+from django import forms
 from django.contrib import admin
+from django.contrib.admin.views.autocomplete import AutocompleteJsonView
+from django.contrib.admin.widgets import AutocompleteSelect
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 
 from core.admin import BaseAdmin, BaseTabularInline
+from products.models import Product
 
 from .models import MappeiProduct, MappeiPriceSnapshot, MappeiProductMapping
+
+
+class MappeiProductMappingAutocompleteSelect(AutocompleteSelect):
+    url_name = "%s:mappei_mappeiproductmapping_visual_autocomplete"
+
+    @property
+    def media(self):
+        return super().media + forms.Media(
+            js=("mappei/admin/product_mapping_autocomplete.js",),
+            css={
+                "all": ("mappei/admin/product_mapping_autocomplete.css",),
+            },
+        )
+
+
+class MappeiProductMappingAutocompleteJsonView(AutocompleteJsonView):
+    def serialize_result(self, obj, to_field_name):
+        result = super().serialize_result(obj, to_field_name)
+        image_url = self._get_image_url(obj)
+        if image_url:
+            result["image_url"] = image_url
+        return result
+
+    @staticmethod
+    def _get_image_url(obj) -> str:
+        if isinstance(obj, MappeiProduct):
+            return obj.image_url or ""
+        if isinstance(obj, Product):
+            image = obj.first_image
+            return image.url if image else ""
+        return ""
 
 
 class MappeiPriceSnapshotInline(BaseTabularInline):
@@ -115,3 +150,29 @@ class MappeiProductMappingAdmin(BaseAdmin):
     list_display = ("mappei_product", "product")
     search_fields = ("mappei_product__artikelnr", "mappei_product__name", "product__erp_nr", "product__name")
     autocomplete_fields = ("mappei_product", "product")
+
+    def get_custom_urls(self):
+        urls = super().get_custom_urls()
+        return (
+            *urls,
+            (
+                "visual-autocomplete/",
+                "mappei_mappeiproductmapping_visual_autocomplete",
+                self.visual_autocomplete_view,
+            ),
+        )
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name in self.autocomplete_fields:
+            kwargs["widget"] = MappeiProductMappingAutocompleteSelect(
+                db_field,
+                self.admin_site,
+                attrs={"class": "mappei-product-mapping-autocomplete"},
+                using=kwargs.get("using"),
+            )
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    def visual_autocomplete_view(self, request, **kwargs):
+        return MappeiProductMappingAutocompleteJsonView.as_view(
+            admin_site=self.admin_site,
+        )(request)

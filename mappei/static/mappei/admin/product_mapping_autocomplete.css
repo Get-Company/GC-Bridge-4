@@ -1,0 +1,22 @@
+.mappei-product-mapping-option {
+    align-items: center;
+    display: flex;
+    gap: 10px;
+    min-height: 48px;
+}
+
+.mappei-product-mapping-option__image,
+.mappei-product-mapping-option__placeholder {
+    background: #f3f4f6;
+    border: 1px solid #e5e7eb;
+    border-radius: 4px;
+    flex: 0 0 auto;
+    height: 42px;
+    object-fit: contain;
+    width: 42px;
+}
+
+.mappei-product-mapping-option__text {
+    line-height: 1.25;
+    white-space: normal;
+}
