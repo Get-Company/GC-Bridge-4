@@ -1081,12 +1081,16 @@ class PriceIncreaseAdmin(BaseAdmin):
         if not product_ids:
             return
 
-        mappings = (
+        mappings = list(
             MappeiProductMapping.objects.filter(product_id__in=product_ids)
             .select_related("mappei_product")
+            .order_by("product_id", "mappei_product__artikelnr", "id")
         )
-        mapping_by_product_id = {mapping.product_id: mapping for mapping in mappings}
-        mappei_product_ids = [mapping.mappei_product_id for mapping in mapping_by_product_id.values()]
+        mappings_by_product_id: dict[int, list[MappeiProductMapping]] = {}
+        for mapping in mappings:
+            mappings_by_product_id.setdefault(mapping.product_id, []).append(mapping)
+
+        mappei_product_ids = [mapping.mappei_product_id for mapping in mappings]
         if not mappei_product_ids:
             return
 
@@ -1104,13 +1108,23 @@ class PriceIncreaseAdmin(BaseAdmin):
         snapshot_by_product_id = {snapshot.product_id: snapshot for snapshot in latest_snapshots}
 
         for item in items:
-            mapping = mapping_by_product_id.get(item.product_id)
-            if not mapping:
+            item_mappings = mappings_by_product_id.get(item.product_id, [])
+            if not item_mappings:
                 continue
-            snapshot = snapshot_by_product_id.get(mapping.mappei_product_id)
-            if not snapshot:
-                continue
-            item.mappei_data = cls._build_mappei_price_data(item, mapping, snapshot)
+            mappei_data_options = [
+                cls._build_mappei_price_data(item, mapping, snapshot)
+                for mapping in item_mappings
+                if (snapshot := snapshot_by_product_id.get(mapping.mappei_product_id))
+            ]
+            mappei_data_options = [mappei_data for mappei_data in mappei_data_options if mappei_data]
+            if mappei_data_options:
+                item.mappei_data = min(
+                    mappei_data_options,
+                    key=lambda mappei_data: (
+                        mappei_data["normalized_total"],
+                        mappei_data["artikelnr"],
+                    ),
+                )
 
     @staticmethod
     def _get_row_status_user_and_time(item: PriceIncreaseItem):

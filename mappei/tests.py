@@ -1,5 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.models import User
+from django.db import IntegrityError, transaction
 from django.test import RequestFactory, TestCase
 from django.urls import reverse
 
@@ -111,3 +112,19 @@ class MappeiProductMappingAutocompleteTest(TestCase):
 
         self.assertEqual(loaded_mapping.mappei_product.artikelnr, "M-GREEN")
         self.assertEqual(loaded_mapping.product.first_image, image)
+
+    def test_mapping_combination_is_unique_but_allows_many_to_many_pairs(self):
+        mappei_product = MappeiProduct.objects.create(artikelnr="M-M2M", name="Mappei M2M")
+        second_mappei_product = MappeiProduct.objects.create(artikelnr="M-M2M-2", name="Mappei M2M 2")
+        product = Product.objects.create(erp_nr="P-M2M", name="Classei M2M")
+        second_product = Product.objects.create(erp_nr="P-M2M-2", name="Classei M2M 2")
+
+        MappeiProductMapping.objects.create(mappei_product=mappei_product, product=product)
+        MappeiProductMapping.objects.create(mappei_product=mappei_product, product=second_product)
+        MappeiProductMapping.objects.create(mappei_product=second_mappei_product, product=product)
+
+        self.assertEqual(mappei_product.products.count(), 2)
+        self.assertEqual(product.mappei_products.count(), 2)
+
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            MappeiProductMapping.objects.create(mappei_product=mappei_product, product=product)

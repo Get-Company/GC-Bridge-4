@@ -617,6 +617,37 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "56,95 € - 100 St. - 56,20 €")
 
+    def test_mappei_comparison_uses_cheapest_mapping_when_product_has_multiple_mappings(self):
+        expensive_mappei_product = MappeiProduct.objects.create(
+            artikelnr="M-6000-EXPENSIVE",
+            name="Mappei teuer",
+            vpe_menge=100,
+            vpe_einheit="Stk",
+        )
+        cheap_mappei_product = MappeiProduct.objects.create(
+            artikelnr="M-6000-CHEAP",
+            name="Mappei guenstig",
+            vpe_menge=100,
+            vpe_einheit="Stk",
+        )
+        MappeiProductMapping.objects.create(mappei_product=expensive_mappei_product, product=self.product)
+        MappeiProductMapping.objects.create(mappei_product=cheap_mappei_product, product=self.product)
+        MappeiPriceSnapshot.objects.create(
+            product=expensive_mappei_product,
+            scraped_at=timezone.now(),
+            preis=Decimal("70.00"),
+        )
+        MappeiPriceSnapshot.objects.create(
+            product=cheap_mappei_product,
+            scraped_at=timezone.now(),
+            preis=Decimal("55.00"),
+        )
+
+        PriceIncreaseAdmin._attach_mappei_price_data([self.item])
+
+        self.assertEqual(self.item.mappei_data["artikelnr"], "M-6000-CHEAP")
+        self.assertEqual(self.item.mappei_data["applicable_price"], Decimal("55.00"))
+
     def test_position_chart_endpoint_returns_history_chart_data(self):
         response = self.client.get(
             reverse("admin:products_priceincrease_position_chart", args=(self.price_increase.pk, self.item.pk))

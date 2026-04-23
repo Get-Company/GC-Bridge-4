@@ -108,7 +108,7 @@ class MappeiProductAdmin(BaseAdmin):
 
     @admin.display(description=_("Mapping"), boolean=True)
     def has_mapping(self, obj):
-        return hasattr(obj, "mapping")
+        return obj.mappings.exists()
 
     @admin.display(description=_("URL"))
     def url_link(self, obj):

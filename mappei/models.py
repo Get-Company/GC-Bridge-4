@@ -57,6 +57,13 @@ class MappeiProduct(BaseModel):
         blank=True,
         verbose_name=_("Zuletzt gescrapt"),
     )
+    products = models.ManyToManyField(
+        Product,
+        through="MappeiProductMapping",
+        related_name="mappei_products",
+        blank=True,
+        verbose_name=_("Classei Produkte"),
+    )
 
     class Meta:
         verbose_name = _("Mappei Produkt")
@@ -168,10 +175,10 @@ class MappeiPriceSnapshot(BaseModel):
 
 
 class MappeiProductMapping(BaseModel):
-    mappei_product = models.OneToOneField(
+    mappei_product = models.ForeignKey(
         MappeiProduct,
         on_delete=models.CASCADE,
-        related_name="mapping",
+        related_name="mappings",
         verbose_name=_("Mappei Produkt"),
     )
     product = models.ForeignKey(
@@ -185,6 +192,12 @@ class MappeiProductMapping(BaseModel):
         verbose_name = _("Mappei Produkt-Mapping")
         verbose_name_plural = _("Mappei Produkt-Mappings")
         ordering = ("mappei_product__artikelnr",)
+        constraints = [
+            models.UniqueConstraint(
+                fields=("mappei_product", "product"),
+                name="unique_mappei_classei_product_mapping",
+            )
+        ]
 
     def __str__(self) -> str:
         return f"{self.mappei_product.artikelnr} → {self.product.erp_nr}"
