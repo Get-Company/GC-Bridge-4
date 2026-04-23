@@ -1,0 +1,85 @@
+{% comment %}
+Editierbare Vorlage fuer die PDF-Preisliste.
+
+Wichtig:
+- Der Renderer unterstuetzt h1, h2, h3, p, ul/ol/li und table.
+- Jeder data-pdf-section Abschnitt beginnt im PDF auf einer neuen Seite.
+- Ueberschriften mit data-pdf-full-width-bar bekommen einen grauen Balken ueber die volle Seitenbreite.
+- CSS wird fuer dieses PDF nicht ausgewertet; Schriftgroessen und Farben stehen im ReportLab-Renderer.
+- Tabellenbreiten werden ueber data-width am Tabellenkopf gesteuert.
+- Preise werden bereits formatiert als price_display und rebate_price_display uebergeben.
+{% endcomment %}
+
+<section data-pdf-section="cover">
+    <h1>{{ price_increase.title }}</h1>
+    <h2>Preisliste</h2>
+    <p><b>Oberkategorie:</b> {{ root_category.name }}</p>
+    <p><b>Verkaufskanal:</b> {{ sales_channel }}</p>
+    <p><b>Generelle Erhoehung:</b> {{ general_percentage_display }} %</p>
+    <p><b>Artikelanzahl:</b> {{ row_count }}</p>
+    <p><b>Erstellt am:</b> {{ created_at_display }}</p>
+    <p>
+        Diese Preisliste enthaelt die ausgewaehlten aktiven Produkte der Oberkategorie
+        {{ root_category.name }} und deren neue bzw. aktuelle Preise.
+    </p>
+</section>
+
+{% for section in category_sections %}
+    <section data-pdf-section="category">
+        <h1 data-pdf-full-width-bar="true">{{ section.category_name }}</h1>
+
+        {% for group in section.groups %}
+            <h2>{{ group.category_name }}</h2>
+            <table data-pdf-table="price-list">
+                <thead>
+                    <tr>
+                        <th data-width="80">Kategorie</th>
+                        <th data-width="62">Artikelnr</th>
+                        <th data-width="142">Attribute</th>
+                        <th data-width="58">Kaufeinheit</th>
+                        <th data-width="58" data-align="right">Preis</th>
+                        <th data-width="70" data-align="right">Staffelmenge</th>
+                        <th data-width="76" data-align="right">Staffelpreis</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in group.rows %}
+                        <tr>
+                            <td>{{ group.category_name }}</td>
+                            <td>{{ row.erp_nr }}</td>
+                            <td>{{ row.attributes|default:"-" }}</td>
+                            <td>{{ row.purchase_unit_display|default:"-" }}</td>
+                            <td data-align="right">{{ row.price_display }}</td>
+                            <td data-align="right">{{ row.rebate_quantity_display|default:"-" }}</td>
+                            <td data-align="right">{{ row.rebate_price_display }}</td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td>{{ group.category_name }}</td>
+                            <td>-</td>
+                            <td>Keine aktiven Produkte fuer diese Kategorie vorhanden.</td>
+                            <td>-</td>
+                            <td data-align="right">-</td>
+                            <td data-align="right">-</td>
+                            <td data-align="right">-</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% endfor %}
+    </section>
+{% endfor %}
+
+<section data-pdf-section="closing">
+    <h1>Hinweise</h1>
+    <p>
+        Bitte pruefen Sie die Preisliste vor der Weitergabe. Massgeblich sind die im System
+        gespeicherten Preise zum Zeitpunkt der PDF-Erstellung.
+    </p>
+    <ul>
+        <li>Preisangaben ohne Gewaehr bei nachtraeglichen Aenderungen.</li>
+        <li>Sonderpreise und Staffelpreise werden nur angezeigt, wenn sie in der Preiserhoehung vorhanden sind.</li>
+        <li>Bei Rueckfragen bitte die interne Preiserhoehung "{{ price_increase.title }}" referenzieren.</li>
+    </ul>
+    <p><b>Erstellt mit GC-Bridge am {{ created_at_display }}.</b></p>
+</section>

@@ -1,8 +1,10 @@
 import json
+import re
 from datetime import datetime
 from decimal import Decimal
 from io import BytesIO
 
+from bs4 import BeautifulSoup
 from django.conf import settings
 from django import forms
 from django.contrib import admin, messages
@@ -21,9 +23,10 @@ from django.utils import timezone
 from django.utils.html import format_html
 from modeltranslation.admin import TabbedTranslationAdmin
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4, landscape
+from reportlab.lib.enums import TA_RIGHT
+from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import Flowable, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from django.views.generic import TemplateView
 
 from ai.models import AIRewriteJob, AIRewritePrompt
@@ -60,6 +63,43 @@ from .models import (
     Storage,
     Tax,
 )
+
+
+class FullWidthHeadingBar(Flowable):
+    def __init__(
+        self,
+        html: str,
+        style: ParagraphStyle,
+        *,
+        page_width: float,
+        left_margin: float,
+        background_color=colors.HexColor("#e9ecef"),
+        padding_top: float = 7,
+        padding_bottom: float = 7,
+    ):
+        super().__init__()
+        self.paragraph = Paragraph(html, style)
+        self.page_width = page_width
+        self.left_margin = left_margin
+        self.background_color = background_color
+        self.padding_top = padding_top
+        self.padding_bottom = padding_bottom
+        self.height = 0
+        self.paragraph_width = 0
+
+    def wrap(self, avail_width, avail_height):
+        paragraph_width, paragraph_height = self.paragraph.wrap(avail_width, avail_height)
+        self.paragraph_width = paragraph_width
+        self.height = paragraph_height + self.padding_top + self.padding_bottom
+        return avail_width, self.height
+
+    def draw(self):
+        canvas = self.canv
+        canvas.saveState()
+        canvas.setFillColor(self.background_color)
+        canvas.rect(-self.left_margin, 0, self.page_width, self.height, stroke=0, fill=1)
+        canvas.restoreState()
+        self.paragraph.drawOn(canvas, 0, self.padding_bottom)
 
 
 class StorageInline(BaseStackedInline):
@@ -869,6 +909,7 @@ class PriceHistoryAdmin(BaseAdmin):
 
 @admin.register(PriceIncrease)
 class PriceIncreaseAdmin(BaseAdmin):
+    price_list_pdf_template_name = "admin/products/price_list_pdf.html"
     change_form_outer_after_template = "admin/products/includes/price_increase_positions_inline.html"
     list_display = (
         "title",
@@ -1015,18 +1056,56 @@ class PriceIncreaseAdmin(BaseAdmin):
             and category.rght <= root_category.rght
         )
 
+    @staticmethod
+    def _category_path_in_subtree(category: Category, subtree_categories: list[Category]) -> list[Category]:
+        return [
+            candidate
+            for candidate in subtree_categories
+            if (
+                candidate.tree_id == category.tree_id
+                and candidate.lft <= category.lft
+                and candidate.rght >= category.rght
+            )
+        ]
+
+    @staticmethod
+    def _product_attribute_summary(product: Product) -> str:
+        attributes = []
+        for product_property in product.product_properties.all():
+            value = product_property.value
+            group_name = value.group.name if value.group_id else ""
+            if group_name:
+                attributes.append(f"{group_name}: {value.name}")
+            else:
+                attributes.append(value.name)
+        return ", ".join(attributes)
+
     def _build_price_list_items(
         self,
         *,
         price_increase: PriceIncrease,
         root_category: Category,
     ) -> list[dict]:
+        subtree_categories = list(
+            Category.objects.filter(
+                tree_id=root_category.tree_id,
+                lft__gte=root_category.lft,
+                rght__lte=root_category.rght,
+            ).order_by("lft", "id")
+        )
         items = list(
             price_increase.items.select_related("product")
             .prefetch_related(
                 Prefetch(
                     "product__categories",
                     queryset=Category.objects.order_by("tree_id", "lft", "id"),
+                ),
+                Prefetch(
+                    "product__product_properties",
+                    queryset=ProductProperty.objects.select_related("value__group").order_by(
+                        "value__group__name",
+                        "value__name",
+                    ),
                 )
             )
             .filter(
@@ -1047,30 +1126,371 @@ class PriceIncreaseAdmin(BaseAdmin):
             ]
             if not matching_categories:
                 continue
-            lead_category = min(matching_categories, key=lambda category: (category.lft, category.id))
+            lead_category = min(matching_categories, key=lambda category: (-category.level, category.lft, category.id))
+            category_path = self._category_path_in_subtree(lead_category, subtree_categories)
+            level1_category = category_path[1] if len(category_path) > 1 else root_category
+            level2_category = category_path[2] if len(category_path) > 2 else level1_category
             effective_price = item.new_price if item.new_price is not None else item.current_price
             effective_rebate_price = item.new_rebate_price if item.new_rebate_price is not None else item.current_rebate_price
             entries.append(
                 {
                     "sort_key": (
-                        lead_category.lft,
-                        lead_category.sort_order,
-                        lead_category.name.lower(),
+                        level1_category.lft,
+                        level1_category.sort_order,
+                        level1_category.name.lower(),
+                        level2_category.lft,
+                        level2_category.sort_order,
+                        level2_category.name.lower(),
                         item.product.sort_order,
                         item.product.erp_nr,
                         item.pk,
                     ),
-                    "category_name": lead_category.name,
+                    "category_name": level2_category.name,
+                    "category_level1_id": level1_category.pk,
+                    "category_level1_name": level1_category.name,
+                    "category_level1_sort_key": (
+                        level1_category.lft,
+                        level1_category.sort_order,
+                        level1_category.name.lower(),
+                        level1_category.pk,
+                    ),
+                    "category_level2_id": level2_category.pk,
+                    "category_level2_name": level2_category.name,
+                    "category_level2_sort_key": (
+                        level2_category.lft,
+                        level2_category.sort_order,
+                        level2_category.name.lower(),
+                        level2_category.pk,
+                    ),
                     "erp_nr": item.product.erp_nr,
+                    "attributes": self._product_attribute_summary(item.product),
                     "product_name": item.product.name or "",
+                    "purchase_unit": item.product.purchase_unit,
                     "unit": item.unit or item.product.unit or "",
                     "price": effective_price,
+                    "rebate_quantity": item.current_rebate_quantity,
                     "rebate_price": effective_rebate_price,
                     "price_source": self._pdf_price_source(item),
                 }
             )
 
         return sorted(entries, key=lambda entry: entry["sort_key"])
+
+    @staticmethod
+    def _clean_pdf_html(html: str) -> str:
+        fragment = BeautifulSoup(html or "", "html.parser")
+        for tag in fragment.find_all(True):
+            if tag.name == "strong":
+                tag.name = "b"
+            elif tag.name == "em":
+                tag.name = "i"
+            elif tag.name not in {"b", "br", "font", "i", "sub", "sup", "u"}:
+                tag.unwrap()
+        return re.sub(r"\s+", " ", fragment.decode_contents(formatter="html")).strip()
+
+    def _paragraph_from_tag(self, tag, style: ParagraphStyle, *, prefix: str = "") -> Paragraph | None:
+        html = self._clean_pdf_html(tag.decode_contents(formatter="html"))
+        if not html:
+            return None
+        return Paragraph(f"{prefix}{html}", style)
+
+    def _full_width_heading_from_tag(
+        self,
+        tag,
+        style: ParagraphStyle,
+        *,
+        page_width: float,
+        left_margin: float,
+    ) -> FullWidthHeadingBar | None:
+        html = self._clean_pdf_html(tag.decode_contents(formatter="html"))
+        if not html:
+            return None
+        return FullWidthHeadingBar(
+            html,
+            style,
+            page_width=page_width,
+            left_margin=left_margin,
+        )
+
+    def _price_list_pdf_styles(self) -> dict[str, ParagraphStyle]:
+        sample_styles = getSampleStyleSheet()
+        body = ParagraphStyle(
+            name="PriceListPdfBody",
+            parent=sample_styles["Normal"],
+            fontName="Helvetica",
+            fontSize=10,
+            leading=14,
+            spaceAfter=6,
+        )
+        return {
+            "h1": ParagraphStyle(
+                name="PriceListPdfHeading1",
+                parent=sample_styles["Heading1"],
+                fontName="Helvetica-Bold",
+                fontSize=26,
+                leading=31,
+                spaceAfter=14,
+            ),
+            "h2": ParagraphStyle(
+                name="PriceListPdfHeading2",
+                parent=sample_styles["Heading2"],
+                fontName="Helvetica-Bold",
+                fontSize=16,
+                leading=20,
+                spaceAfter=8,
+            ),
+            "h3": ParagraphStyle(
+                name="PriceListPdfHeading3",
+                parent=sample_styles["Heading3"],
+                fontName="Helvetica-Bold",
+                fontSize=12,
+                leading=16,
+                spaceAfter=6,
+            ),
+            "category_heading": ParagraphStyle(
+                name="PriceListPdfCategoryHeading",
+                parent=sample_styles["Heading1"],
+                fontName="Helvetica-Bold",
+                fontSize=15,
+                leading=18,
+                spaceAfter=0,
+            ),
+            "body": body,
+            "bullet": ParagraphStyle(
+                name="PriceListPdfBullet",
+                parent=body,
+                leftIndent=14,
+                firstLineIndent=-8,
+            ),
+            "table_header": ParagraphStyle(
+                name="PriceListPdfTableHeader",
+                parent=sample_styles["Normal"],
+                fontName="Helvetica-Bold",
+                fontSize=9,
+                leading=11,
+            ),
+            "table_header_right": ParagraphStyle(
+                name="PriceListPdfTableHeaderRight",
+                parent=sample_styles["Normal"],
+                fontName="Helvetica-Bold",
+                fontSize=9,
+                leading=11,
+                alignment=TA_RIGHT,
+            ),
+            "table_cell": ParagraphStyle(
+                name="PriceListPdfTableCell",
+                parent=sample_styles["Normal"],
+                fontName="Helvetica",
+                fontSize=8,
+                leading=10,
+            ),
+            "table_cell_right": ParagraphStyle(
+                name="PriceListPdfTableCellRight",
+                parent=sample_styles["Normal"],
+                fontName="Helvetica",
+                fontSize=8,
+                leading=10,
+                alignment=TA_RIGHT,
+            ),
+        }
+
+    @staticmethod
+    def _build_price_list_category_sections(rows: list[dict], root_category: Category) -> list[dict]:
+        if not rows:
+            return [
+                {
+                    "category_name": root_category.name,
+                    "sort_key": (root_category.lft, root_category.sort_order, root_category.name.lower(), root_category.pk),
+                    "groups": [
+                        {
+                            "category_name": root_category.name,
+                            "sort_key": (
+                                root_category.lft,
+                                root_category.sort_order,
+                                root_category.name.lower(),
+                                root_category.pk,
+                            ),
+                            "rows": [],
+                        }
+                    ],
+                }
+            ]
+
+        sections_by_key: dict[tuple, dict] = {}
+        for row in rows:
+            section_key = tuple(row["category_level1_sort_key"])
+            group_key = tuple(row["category_level2_sort_key"])
+            section = sections_by_key.setdefault(
+                section_key,
+                {
+                    "category_name": row["category_level1_name"],
+                    "sort_key": section_key,
+                    "groups_by_key": {},
+                },
+            )
+            group = section["groups_by_key"].setdefault(
+                group_key,
+                {
+                    "category_name": row["category_level2_name"],
+                    "sort_key": group_key,
+                    "rows": [],
+                },
+            )
+            group["rows"].append(row)
+
+        sections = sorted(sections_by_key.values(), key=lambda section: section["sort_key"])
+        for section in sections:
+            groups = sorted(section["groups_by_key"].values(), key=lambda group: group["sort_key"])
+            for group in groups:
+                group["rows"] = sorted(group["rows"], key=lambda row: row["sort_key"])
+            section["groups"] = groups
+            del section["groups_by_key"]
+        return sections
+
+    def _build_price_list_template_context(
+        self,
+        *,
+        price_increase: PriceIncrease,
+        root_category: Category,
+        rows: list[dict],
+    ) -> dict:
+        template_rows = []
+        for row in rows:
+            template_row = dict(row)
+            template_row["price_display"] = self._format_pdf_decimal(row["price"])
+            template_row["purchase_unit_display"] = self._format_integer(row["purchase_unit"])
+            template_row["rebate_quantity_display"] = self._format_integer(row["rebate_quantity"])
+            template_row["rebate_price_display"] = self._format_pdf_decimal(row["rebate_price"])
+            template_rows.append(template_row)
+
+        created_at = timezone.localtime()
+        sales_channel = price_increase.sales_channel.name if price_increase.sales_channel_id else "-"
+        return {
+            "created_at": created_at,
+            "created_at_display": created_at.strftime("%d.%m.%Y %H:%M"),
+            "general_percentage_display": self._format_pdf_decimal(price_increase.general_percentage),
+            "price_increase": price_increase,
+            "category_sections": self._build_price_list_category_sections(template_rows, root_category),
+            "root_category": root_category,
+            "row_count": len(template_rows),
+            "rows": template_rows,
+            "sales_channel": sales_channel,
+        }
+
+    def _build_price_list_pdf_table(self, table_node, styles: dict[str, ParagraphStyle]) -> Table | Spacer:
+        table_rows = []
+        column_widths: list[float | None] = []
+        column_alignments: list[str] = []
+
+        for row_index, tr in enumerate(table_node.select("tr")):
+            cells = tr.find_all(["td", "th"], recursive=False)
+            if not cells:
+                continue
+
+            if not column_widths:
+                for cell in cells:
+                    width = cell.get("data-width")
+                    try:
+                        column_widths.append(float(width) if width else None)
+                    except (TypeError, ValueError):
+                        column_widths.append(None)
+                    column_alignments.append((cell.get("data-align") or "left").lower())
+
+            rendered_cells = []
+            for column_index, cell in enumerate(cells):
+                while column_index >= len(column_alignments):
+                    column_alignments.append("left")
+                align = (cell.get("data-align") or column_alignments[column_index]).lower()
+                is_header = cell.name == "th" or row_index == 0
+                style_key = "table_header" if is_header else "table_cell"
+                if align == "right":
+                    style_key = f"{style_key}_right"
+                rendered_cells.append(self._paragraph_from_tag(cell, styles[style_key]) or "")
+            table_rows.append(rendered_cells)
+
+        if not table_rows:
+            return Spacer(1, 1)
+
+        style_commands = [
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f1f3f5")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
+            ("LINEBELOW", (0, 0), (-1, 0), 0.8, colors.HexColor("#adb5bd")),
+            ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#dee2e6")),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 5),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+            ("TOPPADDING", (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ]
+        for column_index, align in enumerate(column_alignments):
+            if align in {"center", "left", "right"}:
+                style_commands.append(("ALIGN", (column_index, 0), (column_index, -1), align.upper()))
+
+        table = Table(
+            table_rows,
+            repeatRows=1,
+            colWidths=column_widths if any(width is not None for width in column_widths) else None,
+        )
+        table.setStyle(TableStyle(style_commands))
+        return table
+
+    def _build_price_list_pdf_elements(
+        self,
+        node,
+        styles: dict[str, ParagraphStyle],
+        *,
+        page_width: float,
+        left_margin: float,
+    ) -> list:
+        elements = []
+        for child in node.children:
+            if not getattr(child, "name", None):
+                continue
+
+            name = child.name.lower()
+            if name in {"script", "style"}:
+                continue
+            if name in {"h1", "h2", "h3", "p"}:
+                if child.get("data-pdf-full-width-bar"):
+                    paragraph = self._full_width_heading_from_tag(
+                        child,
+                        styles["category_heading"],
+                        page_width=page_width,
+                        left_margin=left_margin,
+                    )
+                    if paragraph is not None:
+                        elements.append(paragraph)
+                        elements.append(Spacer(1, 10))
+                    continue
+                paragraph = self._paragraph_from_tag(child, styles.get(name, styles["body"]))
+                if paragraph is not None:
+                    elements.append(paragraph)
+                continue
+            if name in {"div", "article", "header", "footer", "section"}:
+                elements.extend(
+                    self._build_price_list_pdf_elements(
+                        child,
+                        styles,
+                        page_width=page_width,
+                        left_margin=left_margin,
+                    )
+                )
+                continue
+            if name in {"ul", "ol"}:
+                for index, item in enumerate(child.find_all("li", recursive=False), start=1):
+                    prefix = "&bull; " if name == "ul" else f"{index}. "
+                    paragraph = self._paragraph_from_tag(item, styles["bullet"], prefix=prefix)
+                    if paragraph is not None:
+                        elements.append(paragraph)
+                continue
+            if name == "table":
+                elements.append(self._build_price_list_pdf_table(child, styles))
+                continue
+
+            paragraph = self._paragraph_from_tag(child, styles["body"])
+            if paragraph is not None:
+                elements.append(paragraph)
+        return elements
 
     def _build_price_list_pdf(
         self,
@@ -1082,7 +1502,7 @@ class PriceIncreaseAdmin(BaseAdmin):
         buffer = BytesIO()
         document = SimpleDocTemplate(
             buffer,
-            pagesize=landscape(A4),
+            pagesize=A4,
             leftMargin=24,
             rightMargin=24,
             topMargin=24,
@@ -1091,96 +1511,33 @@ class PriceIncreaseAdmin(BaseAdmin):
             author="GC-Bridge",
         )
 
-        sample_styles = getSampleStyleSheet()
-        header_style = ParagraphStyle(
-            name="PriceIncreasePdfTitle",
-            parent=sample_styles["Heading1"],
-            fontName="Helvetica-Bold",
-            fontSize=16,
-            leading=20,
-            spaceAfter=4,
+        context = self._build_price_list_template_context(
+            price_increase=price_increase,
+            root_category=root_category,
+            rows=rows,
         )
-        info_style = ParagraphStyle(
-            name="PriceIncreasePdfInfo",
-            parent=sample_styles["Normal"],
-            fontName="Helvetica",
-            fontSize=9,
-            leading=12,
-        )
-        cell_style = ParagraphStyle(
-            name="PriceIncreasePdfCell",
-            parent=sample_styles["Normal"],
-            fontName="Helvetica",
-            fontSize=8,
-            leading=10,
-        )
+        html = render_to_string(self.price_list_pdf_template_name, context)
+        soup = BeautifulSoup(html, "html.parser")
+        styles = self._price_list_pdf_styles()
+        story = []
 
-        story = [
-            Paragraph(price_increase.title, header_style),
-            Paragraph(f"Oberkategorie: {root_category.name}", info_style),
-            Paragraph(
-                f"Erstellt am: {timezone.localtime().strftime('%d.%m.%Y %H:%M')}",
-                info_style,
-            ),
-            Spacer(1, 10),
-        ]
-
-        table_rows = [
-            ["Kategorie", "ERP", "Produkt", "Einht.", "Preis", "Rab.Preis", "Quelle"],
-        ]
-        for row in rows:
-            table_rows.append(
-                [
-                    Paragraph(row["category_name"], cell_style),
-                    row["erp_nr"],
-                    Paragraph(row["product_name"] or "-", cell_style),
-                    row["unit"] or "-",
-                    self._format_pdf_decimal(row["price"]),
-                    self._format_pdf_decimal(row["rebate_price"]),
-                    row["price_source"],
-                ]
+        sections = soup.select("[data-pdf-section]")
+        for section in sections:
+            section_elements = self._build_price_list_pdf_elements(
+                section,
+                styles,
+                page_width=A4[0],
+                left_margin=document.leftMargin,
             )
+            if not section_elements:
+                continue
+            if story:
+                story.append(PageBreak())
+            story.extend(section_elements)
 
-        if len(table_rows) == 1:
-            table_rows.append(
-                [
-                    Paragraph(root_category.name, cell_style),
-                    "-",
-                    Paragraph("Keine aktiven Produkte fuer diese Oberkategorie vorhanden.", cell_style),
-                    "-",
-                    "-",
-                    "-",
-                    "-",
-                ]
-            )
+        if not story:
+            story.append(Paragraph("Keine Inhalte fuer die Preisliste vorhanden.", styles["body"]))
 
-        table = Table(
-            table_rows,
-            repeatRows=1,
-            colWidths=[130, 70, 280, 60, 70, 70, 70],
-        )
-        table.setStyle(
-            TableStyle(
-                [
-                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f1f3f5")),
-                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
-                    ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-                    ("FONTSIZE", (0, 0), (-1, 0), 9),
-                    ("LINEBELOW", (0, 0), (-1, 0), 0.8, colors.HexColor("#adb5bd")),
-                    ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
-                    ("FONTSIZE", (0, 1), (-1, -1), 8),
-                    ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#dee2e6")),
-                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                    ("ALIGN", (4, 1), (5, -1), "RIGHT"),
-                    ("ALIGN", (1, 1), (1, -1), "LEFT"),
-                    ("LEFTPADDING", (0, 0), (-1, -1), 5),
-                    ("RIGHTPADDING", (0, 0), (-1, -1), 5),
-                    ("TOPPADDING", (0, 0), (-1, -1), 4),
-                    ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-                ]
-            )
-        )
-        story.append(table)
         document.build(story)
         return buffer.getvalue()
 
