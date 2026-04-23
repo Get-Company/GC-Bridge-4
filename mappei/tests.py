@@ -1,10 +1,11 @@
+from django.contrib import admin
 from django.contrib.auth.models import User
-from django.test import TestCase
+from django.test import RequestFactory, TestCase
 from django.urls import reverse
 
 from products.models import Image, Product, ProductImage
 
-from .models import MappeiProduct
+from .models import MappeiProduct, MappeiProductMapping
 
 
 class MappeiProductMappingAutocompleteTest(TestCase):
@@ -56,3 +57,15 @@ class MappeiProductMappingAutocompleteTest(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["results"][0]["image_url"], image.url)
+
+    def test_mapping_widget_is_only_initialized_by_custom_autocomplete(self):
+        model_admin = admin.site._registry[MappeiProductMapping]
+        request = RequestFactory().get("/admin/mappei/mappeiproductmapping/add/")
+        request.user = self.user
+        form = model_admin.get_form(request)
+        widget = form.base_fields["mappei_product"].widget.widget
+
+        attrs = widget.build_attrs(widget.attrs)
+
+        self.assertIn("mappei-product-mapping-autocomplete", attrs["class"])
+        self.assertNotIn("admin-autocomplete", attrs["class"].split())

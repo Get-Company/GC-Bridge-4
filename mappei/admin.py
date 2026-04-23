@@ -14,6 +14,14 @@ from .models import MappeiProduct, MappeiPriceSnapshot, MappeiProductMapping
 class MappeiProductMappingAutocompleteSelect(AutocompleteSelect):
     url_name = "%s:mappei_mappeiproductmapping_visual_autocomplete"
 
+    def build_attrs(self, base_attrs, extra_attrs=None):
+        attrs = super().build_attrs(base_attrs, extra_attrs=extra_attrs)
+        classes = attrs.get("class", "").split()
+        attrs["class"] = " ".join(
+            [class_name for class_name in classes if class_name != "admin-autocomplete"]
+        )
+        return attrs
+
     @property
     def media(self):
         return super().media + forms.Media(
