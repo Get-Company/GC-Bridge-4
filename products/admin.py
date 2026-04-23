@@ -1197,7 +1197,12 @@ class PriceIncreaseAdmin(BaseAdmin):
             )
         return summary
 
-    def _build_price_history_chart(self, item: PriceIncreaseItem, history_entries: list[PriceHistory]) -> dict:
+    def _build_price_history_chart(
+        self,
+        item: PriceIncreaseItem,
+        history_entries: list[PriceHistory],
+        mappei_yearly_prices: dict[int, Decimal] | None = None,
+    ) -> dict:
         current_price_year, new_price_year = self._price_timeline_years()
         yearly_prices = {
             year: price
@@ -1218,24 +1223,44 @@ class PriceIncreaseAdmin(BaseAdmin):
             for year in sorted_years
         ]
 
+        datasets = [
+            {
+                "label": "Preis",
+                "data": prices,
+                "borderColor": "#ff9933",
+                "backgroundColor": "rgba(255, 153, 51, 0.1)",
+                "pointRadius": 4,
+                "pointHoverRadius": 6,
+                "tension": 0.25,
+                "displayYAxis": True,
+                "suffixYAxis": "EUR",
+                "maxTicksXLimit": 12,
+            }
+        ]
+        if mappei_yearly_prices:
+            mappei_prices = [
+                float(mappei_yearly_prices[year]) if year in mappei_yearly_prices else None
+                for year in sorted_years
+            ]
+            if any(p is not None for p in mappei_prices):
+                datasets.append(
+                    {
+                        "label": "Mappei (höchster Preis)",
+                        "data": mappei_prices,
+                        "borderColor": "#c20e1a",
+                        "backgroundColor": "rgba(194, 14, 26, 0.1)",
+                        "pointRadius": 4,
+                        "pointHoverRadius": 6,
+                        "tension": 0.25,
+                        "spanGaps": True,
+                    }
+                )
+
         return {
             "data": json.dumps(
                 {
                     "labels": [str(year) for year in sorted_years],
-                    "datasets": [
-                        {
-                            "label": "Preis",
-                            "data": prices,
-                            "borderColor": "var(--color-primary-600)",
-                            "backgroundColor": "var(--color-primary-100)",
-                            "pointRadius": 4,
-                            "pointHoverRadius": 6,
-                            "tension": 0.25,
-                            "displayYAxis": True,
-                            "suffixYAxis": "EUR",
-                            "maxTicksXLimit": 12,
-                        }
-                    ],
+                    "datasets": datasets,
                 }
             ),
             "height": 240,
@@ -1415,7 +1440,24 @@ class PriceIncreaseAdmin(BaseAdmin):
             .only("price_entry_id", "created_at", "price")
             .order_by("created_at", "id")
         )
-        chart = self._build_price_history_chart(item, history_entries)
+        mappei_product_ids = list(
+            MappeiProductMapping.objects.filter(product_id=item.product_id)
+            .values_list("mappei_product_id", flat=True)
+        )
+        mappei_yearly_prices: dict[int, Decimal] = {}
+        if mappei_product_ids:
+            for snapshot in (
+                MappeiPriceSnapshot.objects.filter(
+                    product_id__in=mappei_product_ids,
+                    preis__isnull=False,
+                )
+                .only("product_id", "scraped_at", "preis")
+                .order_by("scraped_at")
+            ):
+                year = timezone.localtime(snapshot.scraped_at).year
+                if year not in mappei_yearly_prices or snapshot.preis > mappei_yearly_prices[year]:
+                    mappei_yearly_prices[year] = snapshot.preis
+        chart = self._build_price_history_chart(item, history_entries, mappei_yearly_prices or None)
         return JsonResponse(
             {
                 "data": json.loads(chart["data"]),
