@@ -20,7 +20,7 @@ from loguru import logger
 
 BASE_URL = "https://www.mappei.de"
 SITEMAP_PATH = "/de/sitemap"
-PRODUCT_URL_RE = re.compile(r"^/de/.+/\d{4,}$")
+PRODUCT_URL_RE = re.compile(r"^/de/.+/\d{4,}(?:/\d+)?$")
 
 # Markers that indicate the end of the product header section
 END_MARKERS = [
@@ -31,7 +31,10 @@ END_MARKERS = [
 ]
 
 # Regexes for data extraction
-RE_ARTIKELNR = re.compile(r"Produktnummer[:\s]*([A-Z0-9\-]+)", re.IGNORECASE)
+RE_ARTIKELNR = re.compile(
+    r"Produktnummer[:\s]*([A-Z0-9][A-Z0-9-]*(?:/[A-Z0-9][A-Z0-9-]*)*)",
+    re.IGNORECASE,
+)
 RE_VPE = re.compile(r"Inhalt[:\s]*(\d+)\s*([A-Za-zÄÖÜäöüß]+)", re.IGNORECASE)
 RE_PRICE_NETTO = re.compile(
     r"(\d{1,3}(?:\.\d{3})*,\d{2})\s*€[*]?\s+Brutto\s+(\d{1,3}(?:\.\d{3})*,\d{2})\s*€",
