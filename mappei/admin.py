@@ -2,11 +2,12 @@ from django import forms
 from django.contrib import admin
 from django.contrib.admin.views.autocomplete import AutocompleteJsonView
 from django.contrib.admin.widgets import AutocompleteSelect
+from django.db.models import Prefetch
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 
 from core.admin import BaseAdmin, BaseTabularInline
-from products.models import Product
+from products.models import Product, ProductImage
 
 from .models import MappeiProduct, MappeiPriceSnapshot, MappeiProductMapping
 
@@ -155,9 +156,43 @@ class MappeiPriceSnapshotAdmin(BaseAdmin):
 
 @admin.register(MappeiProductMapping)
 class MappeiProductMappingAdmin(BaseAdmin):
-    list_display = ("mappei_product", "product")
+    list_display = (
+        "mappei_product_image_display",
+        "mappei_product",
+        "product_image_display",
+        "product",
+    )
     search_fields = ("mappei_product__artikelnr", "mappei_product__name", "product__erp_nr", "product__name")
     autocomplete_fields = ("mappei_product", "product")
+
+    @admin.display(description=_("Mappei Bild"))
+    def mappei_product_image_display(self, obj):
+        image_url = obj.mappei_product.image_url if obj.mappei_product_id else ""
+        return self._thumbnail_html(image_url)
+
+    @admin.display(description=_("Produktbild"))
+    def product_image_display(self, obj):
+        image = obj.product.first_image if obj.product_id else None
+        return self._thumbnail_html(image.url if image else "")
+
+    @staticmethod
+    def _thumbnail_html(image_url: str):
+        if not image_url:
+            return "–"
+        return format_html(
+            '<img src="{}" loading="lazy" style="width:52px;height:52px;object-fit:contain;border-radius:4px;" />',
+            image_url,
+        )
+
+    def get_queryset(self, request):
+        queryset = super().get_queryset(request)
+        return queryset.select_related("mappei_product", "product").prefetch_related(
+            Prefetch(
+                "product__product_images",
+                queryset=ProductImage.objects.select_related("image").order_by("order", "id"),
+                to_attr="ordered_product_images",
+            )
+        )
 
     def get_custom_urls(self):
         urls = super().get_custom_urls()

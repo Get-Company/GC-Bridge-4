@@ -69,3 +69,45 @@ class MappeiProductMappingAutocompleteTest(TestCase):
 
         self.assertIn("mappei-product-mapping-autocomplete", attrs["class"])
         self.assertNotIn("admin-autocomplete", attrs["class"].split())
+
+    def test_mapping_list_displays_mappei_and_internal_product_thumbnails(self):
+        mappei_product = MappeiProduct.objects.create(
+            artikelnr="M-BLUE",
+            name="Register blau",
+            image_url="https://example.test/mappei-blue.jpg",
+        )
+        product = Product.objects.create(erp_nr="P-BLUE", name="Register blau")
+        image = Image.objects.create(path="products/blue.jpg", alt_text="Blau")
+        ProductImage.objects.create(product=product, image=image, order=1)
+        mapping = MappeiProductMapping.objects.create(
+            mappei_product=mappei_product,
+            product=product,
+        )
+        model_admin = admin.site._registry[MappeiProductMapping]
+
+        self.assertIn(
+            'src="https://example.test/mappei-blue.jpg"',
+            str(model_admin.mappei_product_image_display(mapping)),
+        )
+        self.assertIn(
+            f'src="{image.url}"',
+            str(model_admin.product_image_display(mapping)),
+        )
+
+    def test_mapping_list_queryset_prefetches_product_images(self):
+        mappei_product = MappeiProduct.objects.create(artikelnr="M-GREEN", name="Register gruen")
+        product = Product.objects.create(erp_nr="P-GREEN", name="Register gruen")
+        image = Image.objects.create(path="products/green.jpg", alt_text="Gruen")
+        ProductImage.objects.create(product=product, image=image, order=1)
+        mapping = MappeiProductMapping.objects.create(
+            mappei_product=mappei_product,
+            product=product,
+        )
+        model_admin = admin.site._registry[MappeiProductMapping]
+        request = RequestFactory().get("/admin/mappei/mappeiproductmapping/")
+        request.user = self.user
+
+        loaded_mapping = model_admin.get_queryset(request).get(pk=mapping.pk)
+
+        self.assertEqual(loaded_mapping.mappei_product.artikelnr, "M-GREEN")
+        self.assertEqual(loaded_mapping.product.first_image, image)
