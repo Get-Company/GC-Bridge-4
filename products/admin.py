@@ -24,7 +24,7 @@ from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils.text import slugify
 from django.utils import timezone
-from django.utils.html import format_html
+from django.utils.html import format_html, format_html_join
 from modeltranslation.admin import TabbedTranslationAdmin
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_RIGHT
@@ -34,7 +34,7 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas as pdf_canvas
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
-from reportlab.platypus import Flowable, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import CondPageBreak, Flowable, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from django.views.generic import TemplateView
 from pypdf import PdfReader, PdfWriter
 
@@ -936,9 +936,12 @@ class PriceIncreaseAdmin(BaseAdmin):
     price_list_cover_date_page_index = 0
     price_list_cover_date_x = 16 * mm
     price_list_cover_date_y_from_top = 9.4 * mm
-    price_list_cover_date_font_size = 0.5 * mm
+    price_list_cover_date_font_size = 5 * mm
     price_list_cover_date_font_name = "Arial"
     price_list_cover_date_font_bold_name = "Arial-Bold"
+    price_list_page_number_font_name = "Helvetica"
+    price_list_page_number_font_size = 9
+    price_list_page_number_y = 8 * mm
     change_form_outer_after_template = "admin/products/includes/price_increase_positions_inline.html"
     list_display = (
         "title",
@@ -1066,6 +1069,13 @@ class PriceIncreaseAdmin(BaseAdmin):
             return "-"
         return format(value.quantize(Decimal("0.01")), "f").replace(".", ",")
 
+    @classmethod
+    def _format_pdf_currency(cls, value: Decimal | None) -> str:
+        formatted_value = cls._format_pdf_decimal(value)
+        if formatted_value == "-":
+            return formatted_value
+        return f"{formatted_value} €"
+
     @staticmethod
     def _pdf_price_source(item: PriceIncreaseItem) -> str:
         has_new_price = item.new_price is not None
@@ -1103,10 +1113,23 @@ class PriceIncreaseAdmin(BaseAdmin):
             value = product_property.value
             group_name = value.group.name if value.group_id else ""
             if group_name:
-                attributes.append(f"{group_name}: {value.name}")
+                attributes.append((group_name, value.name))
             else:
-                attributes.append(value.name)
-        return ", ".join(attributes)
+                attributes.append(("", value.name))
+        if not attributes:
+            return "-"
+        return format_html_join(
+            "<br/>",
+            "{}",
+            (
+                (
+                    format_html("<b>{}</b>: {}", group_name, value_name)
+                    if group_name
+                    else format_html("{}", value_name),
+                )
+                for group_name, value_name in attributes
+            ),
+        )
 
     def _build_price_list_items(
         self,
@@ -1342,14 +1365,14 @@ class PriceIncreaseAdmin(BaseAdmin):
                 parent=sample_styles["Normal"],
                 fontName="Helvetica",
                 fontSize=8,
-                leading=10,
+                leading=9,
             ),
             "table_cell_right": ParagraphStyle(
                 name="PriceListPdfTableCellRight",
                 parent=sample_styles["Normal"],
                 fontName="Helvetica",
                 fontSize=8,
-                leading=10,
+                leading=9,
                 alignment=TA_RIGHT,
             ),
         }
@@ -1523,6 +1546,32 @@ class PriceIncreaseAdmin(BaseAdmin):
         writer.write(output)
         return output.getvalue()
 
+    def _overlay_page_numbers_on_pdf(self, pdf_content: bytes) -> bytes:
+        reader = self._bytes_to_pdf_reader(pdf_content)
+        writer = PdfWriter()
+        total_pages = len(reader.pages)
+
+        for page_index, page in enumerate(reader.pages, start=1):
+            overlay_buffer = BytesIO()
+            page_width = float(page.mediabox.width)
+            page_height = float(page.mediabox.height)
+            overlay = pdf_canvas.Canvas(overlay_buffer, pagesize=(page_width, page_height))
+            overlay.setFont(self.price_list_page_number_font_name, self.price_list_page_number_font_size)
+            overlay.drawCentredString(
+                page_width / 2,
+                float(self.price_list_page_number_y),
+                f"{page_index}/{total_pages}",
+            )
+            overlay.save()
+
+            overlay_reader = PdfReader(BytesIO(overlay_buffer.getvalue()))
+            page.merge_page(overlay_reader.pages[0])
+            writer.add_page(page)
+
+        output = BytesIO()
+        writer.write(output)
+        return output.getvalue()
+
     def _merge_price_list_pdf_parts(
         self,
         *,
@@ -1560,7 +1609,7 @@ class PriceIncreaseAdmin(BaseAdmin):
 
         output = BytesIO()
         writer.write(output)
-        return output.getvalue()
+        return self._overlay_page_numbers_on_pdf(output.getvalue())
 
     @staticmethod
     def _build_price_list_category_sections(rows: list[dict], root_category: Category | None) -> list[dict]:
@@ -1627,10 +1676,10 @@ class PriceIncreaseAdmin(BaseAdmin):
         template_rows = []
         for row in rows:
             template_row = dict(row)
-            template_row["price_display"] = self._format_pdf_decimal(row["price"])
+            template_row["price_display"] = self._format_pdf_currency(row["price"])
             template_row["purchase_unit_display"] = self._format_integer(row["purchase_unit"])
             template_row["rebate_quantity_display"] = self._format_integer(row["rebate_quantity"])
-            template_row["rebate_price_display"] = self._format_pdf_decimal(row["rebate_price"])
+            template_row["rebate_price_display"] = self._format_pdf_currency(row["rebate_price"])
             template_rows.append(template_row)
 
         created_at = timezone.localtime()
@@ -1649,7 +1698,11 @@ class PriceIncreaseAdmin(BaseAdmin):
             "sales_channel": sales_channel,
         }
 
-    def _build_price_list_pdf_table(self, table_node, styles: dict[str, ParagraphStyle]) -> Table | Spacer:
+    def _parse_price_list_pdf_table(
+        self,
+        table_node,
+        styles: dict[str, ParagraphStyle],
+    ) -> tuple[list[list], list[float | None], list[str]]:
         table_rows = []
         column_widths: list[float | None] = []
         column_alignments: list[str] = []
@@ -1679,7 +1732,14 @@ class PriceIncreaseAdmin(BaseAdmin):
                     style_key = f"{style_key}_right"
                 rendered_cells.append(self._paragraph_from_tag(cell, styles[style_key]) or "")
             table_rows.append(rendered_cells)
+        return table_rows, column_widths, column_alignments
 
+    @staticmethod
+    def _create_price_list_pdf_table(
+        table_rows: list[list],
+        column_widths: list[float | None],
+        column_alignments: list[str],
+    ) -> Table | Spacer:
         if not table_rows:
             return Spacer(1, 1)
 
@@ -1706,6 +1766,38 @@ class PriceIncreaseAdmin(BaseAdmin):
         table.setStyle(TableStyle(style_commands))
         return table
 
+    def _build_price_list_pdf_table(self, table_node, styles: dict[str, ParagraphStyle]) -> Table | Spacer:
+        table_rows, column_widths, column_alignments = self._parse_price_list_pdf_table(table_node, styles)
+        return self._create_price_list_pdf_table(table_rows, column_widths, column_alignments)
+
+    def _build_price_list_pdf_table_parts(
+        self,
+        table_node,
+        styles: dict[str, ParagraphStyle],
+        *,
+        first_body_rows: int = 1,
+    ) -> tuple[Table | Spacer, Table | Spacer | None]:
+        table_rows, column_widths, column_alignments = self._parse_price_list_pdf_table(table_node, styles)
+        if len(table_rows) <= 1:
+            table = self._create_price_list_pdf_table(table_rows, column_widths, column_alignments)
+            return table, None
+
+        split_index = min(len(table_rows), 1 + max(1, first_body_rows))
+        first_table = self._create_price_list_pdf_table(
+            table_rows[:split_index],
+            column_widths,
+            column_alignments,
+        )
+        remaining_rows = table_rows[split_index:]
+        if not remaining_rows:
+            return first_table, None
+        remaining_table = self._create_price_list_pdf_table(
+            [table_rows[0], *remaining_rows],
+            column_widths,
+            column_alignments,
+        )
+        return first_table, remaining_table
+
     def _build_price_list_pdf_elements(
         self,
         node,
@@ -1715,15 +1807,23 @@ class PriceIncreaseAdmin(BaseAdmin):
         left_margin: float,
     ) -> list:
         elements = []
-        for child in node.children:
+        children = [child for child in node.children if getattr(child, "name", None)]
+        child_index = 0
+        while child_index < len(children):
+            child = children[child_index]
             if not getattr(child, "name", None):
+                child_index += 1
                 continue
 
             name = child.name.lower()
             if name in {"script", "style"}:
+                child_index += 1
                 continue
+            next_child = children[child_index + 1] if child_index + 1 < len(children) else None
             if name in {"h1", "h2", "h3", "p"}:
                 if child.get("data-pdf-full-width-bar"):
+                    if next_child is not None and next_child.name.lower() in {"h2", "h3", "table"}:
+                        elements.append(CondPageBreak(90))
                     paragraph = self._full_width_heading_from_tag(
                         child,
                         styles["category_heading"],
@@ -1733,10 +1833,14 @@ class PriceIncreaseAdmin(BaseAdmin):
                     if paragraph is not None:
                         elements.append(paragraph)
                         elements.append(Spacer(1, 10))
+                    child_index += 1
                     continue
                 paragraph = self._paragraph_from_tag(child, styles.get(name, styles["body"]))
                 if paragraph is not None:
+                    if name == "h2" and next_child is not None and next_child.name.lower() == "table":
+                        elements.append(CondPageBreak(70))
                     elements.append(paragraph)
+                child_index += 1
                 continue
             if name in {"div", "article", "header", "footer", "section"}:
                 elements.extend(
@@ -1747,6 +1851,7 @@ class PriceIncreaseAdmin(BaseAdmin):
                         left_margin=left_margin,
                     )
                 )
+                child_index += 1
                 continue
             if name in {"ul", "ol"}:
                 for index, item in enumerate(child.find_all("li", recursive=False), start=1):
@@ -1754,14 +1859,17 @@ class PriceIncreaseAdmin(BaseAdmin):
                     paragraph = self._paragraph_from_tag(item, styles["bullet"], prefix=prefix)
                     if paragraph is not None:
                         elements.append(paragraph)
+                child_index += 1
                 continue
             if name == "table":
                 elements.append(self._build_price_list_pdf_table(child, styles))
+                child_index += 1
                 continue
 
             paragraph = self._paragraph_from_tag(child, styles["body"])
             if paragraph is not None:
                 elements.append(paragraph)
+            child_index += 1
         return elements
 
     def _build_price_list_pdf(
@@ -2617,8 +2725,8 @@ class PropertyGroupAdmin(TabbedTranslationAdmin, BaseAdmin):
         **getattr(TabbedTranslationAdmin, "formfield_overrides", {}),
         **BaseAdmin.formfield_overrides,
     }
-    list_display = ("name", "external_key", "created_at")
-    search_fields = ("name", "name_de", "name_en", "external_key")
+    list_display = ("name", "created_at")
+    search_fields = ("name", "name_de", "name_en")
     ordering = ("name",)
 
 

@@ -34,21 +34,19 @@ Wichtig:
             <table data-pdf-table="price-list">
                 <thead>
                     <tr>
-                        <th data-width="80">Kategorie</th>
-                        <th data-width="62">Artikelnr</th>
-                        <th data-width="142">Attribute</th>
-                        <th data-width="58">Kaufeinheit</th>
-                        <th data-width="58" data-align="right">Preis</th>
+                        <th data-width="68">Artikelnr</th>
+                        <th data-width="216">Attribute</th>
+                        <th data-width="44">VPE</th>
+                        <th data-width="68" data-align="right">Preis</th>
                         <th data-width="70" data-align="right">Staffelmenge</th>
-                        <th data-width="76" data-align="right">Staffelpreis</th>
+                        <th data-width="80" data-align="right">Staffelpreis</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for row in group.rows %}
                         <tr>
-                            <td>{{ row.category_name }}</td>
                             <td>{{ row.erp_nr }}</td>
-                            <td>{{ row.attributes|default:"-" }}</td>
+                            <td>{{ row.attributes|safe }}</td>
                             <td>{{ row.purchase_unit_display|default:"-" }}</td>
                             <td data-align="right">{{ row.price_display }}</td>
                             <td data-align="right">{{ row.rebate_quantity_display|default:"-" }}</td>
@@ -56,7 +54,6 @@ Wichtig:
                         </tr>
                     {% empty %}
                         <tr>
-                            <td>{{ group.category_name }}</td>
                             <td>-</td>
                             <td>Keine aktiven Produkte fuer diese Kategorie vorhanden.</td>
                             <td>-</td>
