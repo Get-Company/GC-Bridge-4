@@ -12,7 +12,7 @@ from django.contrib.admin.sites import AdminSite
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.core.management.base import CommandError
-from django.test import RequestFactory, TestCase, override_settings
+from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -44,6 +44,24 @@ from products.models import (
 )
 from products.services import PriceIncreaseService
 from shopware.models import ShopwareSettings
+
+
+class PriceIncreasePdfHtmlCleanupTest(SimpleTestCase):
+    def test_clean_pdf_html_normalizes_trix_blocks_and_br_tags(self):
+        html = (
+            "<div><!--block-->6 Kunststoffboxen, lichtgrau mit Griffleisten, 250 verschied. Orga-Mappen, </div>"
+            "<div><!--block-->10 Multifunktionsmappen, 3 Sammler, </div>"
+            "<div><!--block-->3 Dehnsammler, 7 verschied. Farben Quick-Tabs, <br>"
+            "2 Mappenstützen, 10 Leitkarten, Archivbox, Terminmappen-Set (1-31, Jan-Dez), "
+            "Folienschreiber und <strong>viel Zubehör!</strong></div>"
+        )
+
+        cleaned = PriceIncreaseAdmin._clean_pdf_html(html)
+
+        self.assertNotIn("<!--block-->", cleaned)
+        self.assertNotIn("</br>", cleaned)
+        self.assertIn("<br/>", cleaned)
+        self.assertIn("<b>viel Zubeh", cleaned)
 
 
 class PriceAdminActionTest(TestCase):

@@ -2,6 +2,7 @@ import json
 import re
 import subprocess
 from html import unescape
+from bs4 import Comment
 from datetime import datetime
 from decimal import Decimal
 from io import BytesIO
@@ -1132,14 +1133,8 @@ class PriceIncreaseAdmin(BaseAdmin):
             description_short = (product.description_short or "").strip()
             if not description_short:
                 return "-"
-            description_lines = [line.strip() for line in description_short.splitlines() if line.strip()]
-            if not description_lines:
-                return description_short
-            return format_html_join(
-                mark_safe("<br/>"),
-                "{}",
-                ((line,) for line in description_lines),
-            )
+            cleaned_description = PriceIncreaseAdmin._clean_pdf_html(description_short)
+            return mark_safe(cleaned_description) if cleaned_description else "-"
         return format_html_join(
             mark_safe("<br/>"),
             "{}",
@@ -1284,14 +1279,54 @@ class PriceIncreaseAdmin(BaseAdmin):
     @staticmethod
     def _clean_pdf_html(html: str) -> str:
         fragment = BeautifulSoup(unescape(html or ""), "html.parser")
+        for comment in fragment.find_all(string=lambda text: isinstance(text, Comment)):
+            comment.extract()
+
+        block_tags = {
+            "address",
+            "article",
+            "blockquote",
+            "dd",
+            "div",
+            "dl",
+            "dt",
+            "h1",
+            "h2",
+            "h3",
+            "h4",
+            "h5",
+            "h6",
+            "header",
+            "footer",
+            "li",
+            "p",
+            "pre",
+            "section",
+        }
+
         for tag in fragment.find_all(True):
             if tag.name == "strong":
                 tag.name = "b"
             elif tag.name == "em":
                 tag.name = "i"
+            elif tag.name in block_tags:
+                if tag.previous_sibling is not None:
+                    tag.insert_before(fragment.new_tag("br"))
+                if tag.get_text(strip=True) or tag.find(True):
+                    tag.insert_after(fragment.new_tag("br"))
+                tag.unwrap()
             elif tag.name not in {"b", "br", "font", "i", "sub", "sup", "u"}:
                 tag.unwrap()
-        return re.sub(r"\s+", " ", fragment.decode_contents(formatter="html")).strip()
+
+        cleaned_html = fragment.decode_contents(formatter="html")
+        cleaned_html = re.sub(r"</br\s*>", "", cleaned_html, flags=re.IGNORECASE)
+        cleaned_html = re.sub(r"<br\s*/?>", "<br/>", cleaned_html, flags=re.IGNORECASE)
+        cleaned_html = re.sub(r"(?:\s*<br/>\s*){3,}", "<br/><br/>", cleaned_html)
+        cleaned_html = re.sub(r"^\s*(?:<br/>\s*)+", "", cleaned_html)
+        cleaned_html = re.sub(r"(?:\s*<br/>\s*)+\s*$", "", cleaned_html)
+        cleaned_html = re.sub(r"[ \t\r\n]+", " ", cleaned_html)
+        cleaned_html = re.sub(r"\s*<br/>\s*", "<br/>", cleaned_html)
+        return cleaned_html.strip()
 
     def _paragraph_from_tag(self, tag, style: ParagraphStyle, *, prefix: str = "") -> Paragraph | None:
         html = self._clean_pdf_html(tag.decode_contents(formatter="html"))
