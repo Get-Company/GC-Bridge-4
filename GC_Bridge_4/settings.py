@@ -11,10 +11,13 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
 import os
+from functools import partial
 from pathlib import Path
 
 from django.urls import reverse_lazy
 from django.utils.translation import gettext_lazy as _
+
+from core.unfold import admin_model_permission
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -67,6 +70,14 @@ ADMIN_LOG_READER_FILES = env_list(
     "ADMIN_LOG_READER_FILES",
     "",
 )
+
+
+def sidebar_model_view_permission(app_label: str, model_name: str):
+    return partial(admin_model_permission, app_label=app_label, model_name=model_name)
+
+
+def sidebar_model_add_permission(app_label: str, model_name: str):
+    return partial(admin_model_permission, app_label=app_label, model_name=model_name, permission="add")
 
 
 # Quick-start development settings - unsuitable for production
@@ -297,11 +308,13 @@ UNFOLD = {
                         "title": _("Bestellungen"),
                         "icon": "shopping_cart",
                         "link": reverse_lazy("admin:orders_order_changelist"),
+                        "permission": sidebar_model_view_permission("orders", "Order"),
                     },
                     {
                         "title": _("Bestellpositionen"),
                         "icon": "receipt_long",
                         "link": reverse_lazy("admin:orders_orderdetail_changelist"),
+                        "permission": sidebar_model_view_permission("orders", "OrderDetail"),
                     },
                 ],
             },
@@ -314,16 +327,19 @@ UNFOLD = {
                         "title": _("Kunden"),
                         "icon": "people",
                         "link": reverse_lazy("admin:customer_customer_changelist"),
+                        "permission": sidebar_model_view_permission("customer", "Customer"),
                     },
                     {
                         "title": _("Adressen"),
                         "icon": "home",
                         "link": reverse_lazy("admin:customer_address_changelist"),
+                        "permission": sidebar_model_view_permission("customer", "Address"),
                     },
                     {
                         "title": _("Kunden Merge"),
                         "icon": "merge",
                         "link": reverse_lazy("admin:customer_merge"),
+                        "permission": sidebar_model_view_permission("customer", "Customer"),
                     },
                 ],
             },
@@ -336,31 +352,37 @@ UNFOLD = {
                         "title": _("Produkte"),
                         "icon": "inventory_2",
                         "link": reverse_lazy("admin:products_product_changelist"),
+                        "permission": sidebar_model_view_permission("products", "Product"),
                     },
                     {
                         "title": _("Preise"),
                         "icon": "sell",
                         "link": reverse_lazy("admin:products_price_changelist"),
+                        "permission": sidebar_model_view_permission("products", "Price"),
                     },
                     {
                         "title": _("Preiserhöhungen"),
                         "icon": "trending_up",
                         "link": reverse_lazy("admin:products_priceincrease_changelist"),
+                        "permission": sidebar_model_view_permission("products", "PriceIncrease"),
                     },
                     {
                         "title": _("Kategorien"),
                         "icon": "account_tree",
                         "link": reverse_lazy("admin:products_category_manager"),
+                        "permission": sidebar_model_view_permission("products", "Category"),
                     },
                     {
                         "title": _("Attributgruppen"),
                         "icon": "category",
                         "link": reverse_lazy("admin:products_propertygroup_changelist"),
+                        "permission": sidebar_model_view_permission("products", "PropertyGroup"),
                     },
                     {
                         "title": _("Attributwerte"),
                         "icon": "label",
                         "link": reverse_lazy("admin:products_propertyvalue_changelist"),
+                        "permission": sidebar_model_view_permission("products", "PropertyValue"),
                     },
                 ],
             },
@@ -373,16 +395,19 @@ UNFOLD = {
                         "title": _("Produkte"),
                         "icon": "store",
                         "link": reverse_lazy("admin:mappei_mappeiproduct_changelist"),
+                        "permission": sidebar_model_view_permission("mappei", "MappeiProduct"),
                     },
                     {
                         "title": _("Preise"),
                         "icon": "price_check",
                         "link": reverse_lazy("admin:mappei_mappeipricesnapshot_changelist"),
+                        "permission": sidebar_model_view_permission("mappei", "MappeiPriceSnapshot"),
                     },
                     {
                         "title": _("Mapping"),
                         "icon": "link",
                         "link": reverse_lazy("admin:mappei_mappeiproductmapping_changelist"),
+                        "permission": sidebar_model_view_permission("mappei", "MappeiProductMapping"),
                     },
                 ],
             },
@@ -395,21 +420,25 @@ UNFOLD = {
                         "title": _("Rewrite erzeugen"),
                         "icon": "edit_note",
                         "link": reverse_lazy("admin:ai_airewritejob_request"),
+                        "permission": sidebar_model_add_permission("ai", "AIRewriteJob"),
                     },
                     {
                         "title": _("Rewrite Jobs"),
                         "icon": "auto_awesome",
                         "link": reverse_lazy("admin:ai_airewritejob_changelist"),
+                        "permission": sidebar_model_view_permission("ai", "AIRewriteJob"),
                     },
                     {
                         "title": _("Prompts"),
                         "icon": "prompt_suggestion",
                         "link": reverse_lazy("admin:ai_airewriteprompt_changelist"),
+                        "permission": sidebar_model_view_permission("ai", "AIRewritePrompt"),
                     },
                     {
                         "title": _("Provider"),
                         "icon": "cloud",
                         "link": reverse_lazy("admin:ai_aiproviderconfig_changelist"),
+                        "permission": sidebar_model_view_permission("ai", "AIProviderConfig"),
                     },
                 ],
             },
@@ -422,11 +451,13 @@ UNFOLD = {
                         "title": _("Verbindung"),
                         "icon": "cable",
                         "link": reverse_lazy("admin:shopware_shopwareconnection_changelist"),
+                        "permission": sidebar_model_view_permission("shopware", "ShopwareConnection"),
                     },
                     {
                         "title": _("Verkaufskanäle"),
                         "icon": "storefront",
                         "link": reverse_lazy("admin:shopware_shopwaresettings_changelist"),
+                        "permission": sidebar_model_view_permission("shopware", "ShopwareSettings"),
                     },
                 ],
             },
@@ -439,41 +470,49 @@ UNFOLD = {
                         "title": _("Einstellungen"),
                         "icon": "settings",
                         "link": reverse_lazy("admin:microtech_microtechorderrule_changelist"),
+                        "permission": sidebar_model_view_permission("microtech", "MicrotechOrderRule"),
                     },
                     {
                         "title": _("Verbindung"),
                         "icon": "cable",
                         "link": reverse_lazy("admin:microtech_microtechsettings_changelist"),
+                        "permission": sidebar_model_view_permission("microtech", "MicrotechSettings"),
                     },
                     {
                         "title": _("Operatoren"),
                         "icon": "rule",
                         "link": reverse_lazy("admin:microtech_microtechorderruleoperator_changelist"),
+                        "permission": sidebar_model_view_permission("microtech", "MicrotechOrderRuleOperator"),
                     },
                     {
                         "title": _("Django Feld Policies"),
                         "icon": "input",
                         "link": reverse_lazy("admin:microtech_microtechorderruledjangofieldpolicy_changelist"),
+                        "permission": sidebar_model_view_permission("microtech", "MicrotechOrderRuleDjangoFieldPolicy"),
                     },
                     {
                         "title": _("Datasets"),
                         "icon": "storage",
                         "link": reverse_lazy("admin:microtech_microtechdatasetcatalog_changelist"),
+                        "permission": sidebar_model_view_permission("microtech", "MicrotechDatasetCatalog"),
                     },
                     {
                         "title": _("Dataset Felder"),
                         "icon": "table_rows",
                         "link": reverse_lazy("admin:microtech_microtechdatasetfield_changelist"),
+                        "permission": sidebar_model_view_permission("microtech", "MicrotechDatasetField"),
                     },
                     {
                         "title": _("Schweiz Zoll Mapping"),
                         "icon": "description",
                         "link": reverse_lazy("admin:microtech_microtechswisscustomsfieldmapping_changelist"),
+                        "permission": sidebar_model_view_permission("microtech", "MicrotechSwissCustomsFieldMapping"),
                     },
                     {
                         "title": _("Queue"),
                         "icon": "pending_actions",
                         "link": reverse_lazy("admin:microtech_queue"),
+                        "permission": sidebar_model_view_permission("microtech", "MicrotechJob"),
                     },
                 ],
             },
@@ -486,13 +525,13 @@ UNFOLD = {
                         "title": _("Benutzer"),
                         "icon": "person",
                         "link": reverse_lazy("admin:auth_user_changelist"),
-                        "permission": "core.unfold.superuser_only",
+                        "permission": sidebar_model_view_permission("auth", "User"),
                     },
                     {
                         "title": _("Gruppen"),
                         "icon": "groups",
                         "link": reverse_lazy("admin:auth_group_changelist"),
-                        "permission": "core.unfold.superuser_only",
+                        "permission": sidebar_model_view_permission("auth", "Group"),
                     },
                     {
                         "title": _("System-Status"),

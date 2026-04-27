@@ -3,7 +3,10 @@ from datetime import datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from django.contrib import admin
+from django.test import RequestFactory
 from django.test import SimpleTestCase, override_settings
+from django.urls import reverse
 
 from core.logging import build_managed_log_path, cleanup_old_log_files
 from core.log_reader import get_allowed_log_files, tail_log_file
@@ -140,3 +143,59 @@ class CommandRuntimeServiceTest(SimpleTestCase):
 
                 handle.close()
                 self.assertEqual(service.list_runs(), [])
+
+
+class _SidebarUser:
+    is_active = True
+    is_staff = True
+    is_superuser = False
+
+    def __init__(self, permissions=None):
+        self.permissions = set(permissions or [])
+
+    def has_perm(self, permission):
+        return permission in self.permissions
+
+
+class AdminSidebarPermissionTest(SimpleTestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
+
+    def _sidebar_item(self, *, permissions, title):
+        request = self.factory.get(reverse("admin:index"))
+        request.user = _SidebarUser(permissions)
+        for group in admin.site.get_sidebar_list(request):
+            for item in group.get("items", []):
+                if str(item.get("title")) == title:
+                    return item
+        self.fail(f"Sidebar item '{title}' not found.")
+
+    def test_order_sidebar_entry_requires_view_permission(self):
+        item = self._sidebar_item(permissions=set(), title="Bestellungen")
+        self.assertFalse(item["has_permission"])
+
+        item = self._sidebar_item(
+            permissions={"orders.view_order"},
+            title="Bestellungen",
+        )
+        self.assertTrue(item["has_permission"])
+
+    def test_ai_request_sidebar_entry_requires_add_permission(self):
+        item = self._sidebar_item(permissions={"ai.view_airewritejob"}, title="Rewrite erzeugen")
+        self.assertFalse(item["has_permission"])
+
+        item = self._sidebar_item(
+            permissions={"ai.add_airewritejob"},
+            title="Rewrite erzeugen",
+        )
+        self.assertTrue(item["has_permission"])
+
+    def test_microtech_queue_sidebar_entry_requires_job_view_permission(self):
+        item = self._sidebar_item(permissions=set(), title="Queue")
+        self.assertFalse(item["has_permission"])
+
+        item = self._sidebar_item(
+            permissions={"microtech.view_microtechjob"},
+            title="Queue",
+        )
+        self.assertTrue(item["has_permission"])
