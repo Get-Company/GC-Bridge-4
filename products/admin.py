@@ -1,6 +1,7 @@
 import json
 import re
 import subprocess
+from html import unescape
 from datetime import datetime
 from decimal import Decimal
 from io import BytesIO
@@ -25,6 +26,7 @@ from django.urls import path, reverse
 from django.utils.text import slugify
 from django.utils import timezone
 from django.utils.html import format_html, format_html_join
+from django.utils.safestring import mark_safe
 from modeltranslation.admin import TabbedTranslationAdmin
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_RIGHT
@@ -34,7 +36,17 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas as pdf_canvas
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
-from reportlab.platypus import CondPageBreak, Flowable, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import (
+    CondPageBreak,
+    Flowable,
+    KeepTogether,
+    PageBreak,
+    Paragraph,
+    SimpleDocTemplate,
+    Spacer,
+    Table,
+    TableStyle,
+)
 from django.views.generic import TemplateView
 from pypdf import PdfReader, PdfWriter
 
@@ -1117,9 +1129,19 @@ class PriceIncreaseAdmin(BaseAdmin):
             else:
                 attributes.append(("", value.name))
         if not attributes:
-            return "-"
+            description_short = (product.description_short or "").strip()
+            if not description_short:
+                return "-"
+            description_lines = [line.strip() for line in description_short.splitlines() if line.strip()]
+            if not description_lines:
+                return description_short
+            return format_html_join(
+                mark_safe("<br/>"),
+                "{}",
+                ((line,) for line in description_lines),
+            )
         return format_html_join(
-            "<br/>",
+            mark_safe("<br/>"),
             "{}",
             (
                 (
@@ -1261,7 +1283,7 @@ class PriceIncreaseAdmin(BaseAdmin):
 
     @staticmethod
     def _clean_pdf_html(html: str) -> str:
-        fragment = BeautifulSoup(html or "", "html.parser")
+        fragment = BeautifulSoup(unescape(html or ""), "html.parser")
         for tag in fragment.find_all(True):
             if tag.name == "strong":
                 tag.name = "b"
@@ -1529,8 +1551,9 @@ class PriceIncreaseAdmin(BaseAdmin):
                 page_height = float(page.mediabox.height)
                 overlay = pdf_canvas.Canvas(overlay_buffer, pagesize=(page_width, page_height))
                 font_size = float(self.price_list_cover_date_font_size)
-                y_position = page_height - float(self.price_list_cover_date_y_from_top)
                 x_position = float(self.price_list_cover_date_x)
+                # The requested coordinates are measured from the top edge of the cover.
+                y_position = page_height - float(self.price_list_cover_date_y_from_top) - font_size
                 overlay.setFont(regular_font_name, font_size)
                 overlay.drawString(x_position, y_position, prefix_text)
                 prefix_width = pdfmetrics.stringWidth(prefix_text, regular_font_name, font_size)
@@ -1676,10 +1699,16 @@ class PriceIncreaseAdmin(BaseAdmin):
         template_rows = []
         for row in rows:
             template_row = dict(row)
+            rebate_quantity = row["rebate_quantity"]
+            rebate_price = row["rebate_price"]
+            has_rebate_data = not (
+                rebate_quantity in (None, "", 0)
+                and (rebate_price is None or rebate_price == Decimal("0.00"))
+            )
             template_row["price_display"] = self._format_pdf_currency(row["price"])
             template_row["purchase_unit_display"] = self._format_integer(row["purchase_unit"])
-            template_row["rebate_quantity_display"] = self._format_integer(row["rebate_quantity"])
-            template_row["rebate_price_display"] = self._format_pdf_currency(row["rebate_price"])
+            template_row["rebate_quantity_display"] = self._format_integer(rebate_quantity) if has_rebate_data else "-"
+            template_row["rebate_price_display"] = self._format_pdf_currency(rebate_price) if has_rebate_data else "-"
             template_rows.append(template_row)
 
         created_at = timezone.localtime()
@@ -1770,6 +1799,30 @@ class PriceIncreaseAdmin(BaseAdmin):
         table_rows, column_widths, column_alignments = self._parse_price_list_pdf_table(table_node, styles)
         return self._create_price_list_pdf_table(table_rows, column_widths, column_alignments)
 
+    def _build_price_list_heading_table_block(
+        self,
+        *,
+        heading: Paragraph | None,
+        table_node,
+        styles: dict[str, ParagraphStyle],
+        leading_elements: list | None = None,
+        first_body_rows: int = 1,
+    ) -> list:
+        block_elements = list(leading_elements or [])
+        if heading is not None:
+            block_elements.append(heading)
+        first_table, remaining_table = self._build_price_list_pdf_table_parts(
+            table_node,
+            styles,
+            first_body_rows=first_body_rows,
+        )
+        block_elements.append(first_table)
+
+        elements = [KeepTogether(block_elements)]
+        if remaining_table is not None:
+            elements.append(remaining_table)
+        return elements
+
     def _build_price_list_pdf_table_parts(
         self,
         table_node,
@@ -1820,10 +1873,37 @@ class PriceIncreaseAdmin(BaseAdmin):
                 child_index += 1
                 continue
             next_child = children[child_index + 1] if child_index + 1 < len(children) else None
+            next_next_child = children[child_index + 2] if child_index + 2 < len(children) else None
             if name in {"h1", "h2", "h3", "p"}:
                 if child.get("data-pdf-full-width-bar"):
+                    if (
+                        next_child is not None
+                        and next_next_child is not None
+                        and next_child.name.lower() == "h2"
+                        and next_next_child.name.lower() == "table"
+                    ):
+                        full_width_heading = self._full_width_heading_from_tag(
+                            child,
+                            styles["category_heading"],
+                            page_width=page_width,
+                            left_margin=left_margin,
+                        )
+                        subsection_heading = self._paragraph_from_tag(next_child, styles["h2"])
+                        leading_elements = []
+                        if full_width_heading is not None:
+                            leading_elements.extend([full_width_heading, Spacer(1, 10)])
+                        elements.extend(
+                            self._build_price_list_heading_table_block(
+                                heading=subsection_heading,
+                                table_node=next_next_child,
+                                styles=styles,
+                                leading_elements=leading_elements,
+                            )
+                        )
+                        child_index += 3
+                        continue
                     if next_child is not None and next_child.name.lower() in {"h2", "h3", "table"}:
-                        elements.append(CondPageBreak(90))
+                        elements.append(CondPageBreak(130))
                     paragraph = self._full_width_heading_from_tag(
                         child,
                         styles["category_heading"],
@@ -1838,7 +1918,15 @@ class PriceIncreaseAdmin(BaseAdmin):
                 paragraph = self._paragraph_from_tag(child, styles.get(name, styles["body"]))
                 if paragraph is not None:
                     if name == "h2" and next_child is not None and next_child.name.lower() == "table":
-                        elements.append(CondPageBreak(70))
+                        elements.extend(
+                            self._build_price_list_heading_table_block(
+                                heading=paragraph,
+                                table_node=next_child,
+                                styles=styles,
+                            )
+                        )
+                        child_index += 2
+                        continue
                     elements.append(paragraph)
                 child_index += 1
                 continue

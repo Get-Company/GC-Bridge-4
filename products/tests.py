@@ -939,6 +939,28 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
 
         self.assertEqual([row["erp_nr"] for row in rows], ["A-5000", "A-6000"])
 
+    def test_price_list_items_use_short_description_when_no_attributes_exist(self):
+        root_category = Category.objects.create(name="Ordner", slug="ordner", sort_order=10)
+        child_category = Category.objects.create(
+            name="Hebelordner",
+            slug="hebelordner",
+            parent=root_category,
+            sort_order=20,
+        )
+        self.product.categories.add(child_category)
+        self.product.description_short = "Erste Zeile\nZweite Zeile"
+        self.product.save(update_fields=["description_short", "updated_at"])
+
+        admin_instance = PriceIncreaseAdmin(PriceIncrease, AdminSite())
+        rows = admin_instance._build_price_list_items(
+            price_increase=self.price_increase,
+            root_category=root_category,
+        )
+
+        self.assertEqual(len(rows), 1)
+        self.assertIn("Erste Zeile", str(rows[0]["attributes"]))
+        self.assertIn("Zweite Zeile", str(rows[0]["attributes"]))
+
     def test_export_price_list_pdf_action_returns_pdf(self):
         root_category = Category.objects.create(name="Druck", slug="druck", sort_order=10)
         child_category = Category.objects.create(
