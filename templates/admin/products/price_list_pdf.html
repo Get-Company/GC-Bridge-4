@@ -14,14 +14,14 @@ Wichtig:
 <section data-pdf-section="cover">
     <h1>{{ price_increase.title }}</h1>
     <h2>Preisliste</h2>
-    <p><b>Oberkategorie:</b> {{ root_category.name }}</p>
+    <p><b>Bereich:</b> {{ scope_label }}</p>
     <p><b>Verkaufskanal:</b> {{ sales_channel }}</p>
     <p><b>Generelle Erhoehung:</b> {{ general_percentage_display }} %</p>
     <p><b>Artikelanzahl:</b> {{ row_count }}</p>
     <p><b>Erstellt am:</b> {{ created_at_display }}</p>
     <p>
-        Diese Preisliste enthaelt die ausgewaehlten aktiven Produkte der Oberkategorie
-        {{ root_category.name }} und deren neue bzw. aktuelle Preise.
+        Diese Preisliste enthaelt die ausgewaehlten aktiven Produkte aus dem Bereich
+        {{ scope_label }} und deren neue bzw. aktuelle Preise.
     </p>
 </section>
 

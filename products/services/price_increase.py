@@ -50,6 +50,31 @@ class PriceIncreaseService(BaseService):
         instance.save(update_fields=["positions_synced_at", "updated_at"])
         return len(prices)
 
+    @staticmethod
+    def _get_blocking_issue_messages(item: PriceIncreaseItem) -> list[str]:
+        return [
+            str(issue["message"])
+            for issue in item.get_pricing_check_issues()
+            if issue.get("blocks_apply")
+        ]
+
+    def _validate_items_before_apply(self, items: list[PriceIncreaseItem]) -> None:
+        invalid_items: list[str] = []
+        for item in items:
+            issue_messages = self._get_blocking_issue_messages(item)
+            if not issue_messages:
+                continue
+            invalid_items.append(f"{item.product.erp_nr}: {issue_messages[0]}")
+
+        if invalid_items:
+            preview = "; ".join(invalid_items[:5])
+            if len(invalid_items) > 5:
+                preview = f"{preview}; +{len(invalid_items) - 5} weitere Position(en)"
+            raise ValueError(
+                "Die Preiserhoehung enthaelt blockierende Preispruefungen und kann nicht uebernommen werden: "
+                f"{preview}"
+            )
+
     @transaction.atomic
     def apply(self, instance: PriceIncrease) -> int:
         if instance.status == PriceIncrease.Status.APPLIED:
@@ -63,6 +88,7 @@ class PriceIncreaseService(BaseService):
         )
         if not items:
             raise ValueError("Die Preiserhoehung enthaelt keine Positionen.")
+        self._validate_items_before_apply(items)
 
         updated_price_ids: list[int] = []
         for item in items:

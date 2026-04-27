@@ -1,9 +1,11 @@
 import json
 import re
+import subprocess
 from datetime import datetime
 from decimal import Decimal
 from io import BytesIO
 from pathlib import Path
+from shutil import which
 
 from bs4 import BeautifulSoup
 from django.conf import settings
@@ -11,6 +13,7 @@ from django import forms
 from django.contrib import admin, messages
 from django.contrib.admin.models import LogEntry
 from django.contrib.contenttypes.models import ContentType
+from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.db import transaction
 from django.db.models import Case, Count, F, IntegerField, Prefetch, Q, Value, When, Window
@@ -26,6 +29,9 @@ from modeltranslation.admin import TabbedTranslationAdmin
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_RIGHT
 from reportlab.lib.pagesizes import A4
+from reportlab.lib.units import mm
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas as pdf_canvas
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.platypus import Flowable, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
@@ -341,22 +347,6 @@ class PriceIncreaseItemEditForm(forms.ModelForm):
 
 class PriceIncreaseItemValueForm(forms.Form):
     value = forms.DecimalField(required=False, localize=True)
-
-
-class PriceIncreaseActionForm(UnfoldActionForm):
-    root_category = forms.ModelChoiceField(
-        label="Oberkategorie",
-        required=False,
-        queryset=Category.objects.none(),
-    )
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.fields["root_category"].queryset = Category.objects.filter(parent__isnull=True).order_by(
-            "sort_order",
-            "name",
-            "id",
-        )
 
 
 class PriceIncreasePositionsPageView(UnfoldModelAdminViewMixin, TemplateView):
@@ -912,16 +902,43 @@ class PriceHistoryAdmin(BaseAdmin):
 
 @admin.register(PriceIncrease)
 class PriceIncreaseAdmin(BaseAdmin):
+    PRICE_INCREASE_TITLE_MONTH_MAP = {
+        "jan": 1,
+        "januar": 1,
+        "feb": 2,
+        "februar": 2,
+        "mar": 3,
+        "maerz": 3,
+        "märz": 3,
+        "mrz": 3,
+        "april": 4,
+        "apr": 4,
+        "mai": 5,
+        "jun": 6,
+        "juni": 6,
+        "jul": 7,
+        "juli": 7,
+        "aug": 8,
+        "august": 8,
+        "sep": 9,
+        "sept": 9,
+        "september": 9,
+        "okt": 10,
+        "oktober": 10,
+        "nov": 11,
+        "november": 11,
+        "dez": 12,
+        "dezember": 12,
+    }
     price_list_pdf_template_name = "admin/products/price_list_pdf.html"
-    price_list_cover_pdf_path = Path("products/static/products/pdf/price_list_cover.pdf")
+    price_list_cover_pdf_path = Path("templates/admin/products/includes/cover_pricelist.pdf")
     price_list_closing_pdf_path = Path("products/static/products/pdf/price_list_back.pdf")
     price_list_cover_date_page_index = 0
-    price_list_cover_date_x = 520
-    price_list_cover_date_y = 775
-    price_list_cover_date_font_name = "Helvetica"
-    price_list_cover_date_font_size = 11
-    price_list_cover_date_format = "%d.%m.%Y"
-    price_list_cover_date_align = "right"
+    price_list_cover_date_x = 16 * mm
+    price_list_cover_date_y_from_top = 9.4 * mm
+    price_list_cover_date_font_size = 0.5 * mm
+    price_list_cover_date_font_name = "Arial"
+    price_list_cover_date_font_bold_name = "Arial-Bold"
     change_form_outer_after_template = "admin/products/includes/price_increase_positions_inline.html"
     list_display = (
         "title",
@@ -939,9 +956,8 @@ class PriceIncreaseAdmin(BaseAdmin):
         ("created_at", RangeDateTimeFilter),
         ("applied_at", RangeDateTimeFilter),
     ]
-    action_form = PriceIncreaseActionForm
     actions = ("export_price_list_pdf",)
-    actions_detail = ("open_positions_detail", "sync_positions_detail", "apply_price_increase_detail")
+    actions_detail = ("export_price_list_pdf_detail", "apply_price_increase_detail")
     readonly_fields = BaseAdmin.readonly_fields + (
         "status",
         "sales_channel",
@@ -1147,9 +1163,11 @@ class PriceIncreaseAdmin(BaseAdmin):
             entries.append(
                 {
                     "sort_key": (
+                        root_category.tree_id,
                         level1_category.lft,
                         level1_category.sort_order,
                         level1_category.name.lower(),
+                        level2_category.tree_id,
                         level2_category.lft,
                         level2_category.sort_order,
                         level2_category.name.lower(),
@@ -1161,6 +1179,7 @@ class PriceIncreaseAdmin(BaseAdmin):
                     "category_level1_id": level1_category.pk,
                     "category_level1_name": level1_category.name,
                     "category_level1_sort_key": (
+                        level1_category.tree_id,
                         level1_category.lft,
                         level1_category.sort_order,
                         level1_category.name.lower(),
@@ -1169,6 +1188,7 @@ class PriceIncreaseAdmin(BaseAdmin):
                     "category_level2_id": level2_category.pk,
                     "category_level2_name": level2_category.name,
                     "category_level2_sort_key": (
+                        level2_category.tree_id,
                         level2_category.lft,
                         level2_category.sort_order,
                         level2_category.name.lower(),
@@ -1187,6 +1207,34 @@ class PriceIncreaseAdmin(BaseAdmin):
             )
 
         return sorted(entries, key=lambda entry: entry["sort_key"])
+
+    @staticmethod
+    def _build_price_list_scope_label(root_categories: list[Category]) -> str:
+        if not root_categories:
+            return "Standard-Verkaufskanal"
+        if len(root_categories) == 1:
+            return root_categories[0].name
+        return "Alle Oberkategorien"
+
+    def _get_price_list_root_categories(self, price_increase: PriceIncrease) -> list[Category]:
+        tree_ids = list(
+            price_increase.items.filter(
+                product__is_active=True,
+                product__categories__isnull=False,
+            )
+            .values_list("product__categories__tree_id", flat=True)
+            .distinct()
+        )
+        if not tree_ids:
+            return []
+        return list(
+            Category.objects.filter(parent__isnull=True, tree_id__in=tree_ids).order_by(
+                "tree_id",
+                "sort_order",
+                "name",
+                "id",
+            )
+        )
 
     @staticmethod
     def _clean_pdf_html(html: str) -> str:
@@ -1362,10 +1410,94 @@ class PriceIncreaseAdmin(BaseAdmin):
         document.build(story)
         return buffer.getvalue()
 
-    def _overlay_date_on_cover_pdf(self, pdf_content: bytes, *, created_at: datetime) -> bytes:
+    @classmethod
+    def _find_font_file(cls, pattern: str) -> str | None:
+        if not which("fc-match"):
+            return None
+        try:
+            font_file = subprocess.check_output(
+                ["fc-match", "-f", "%{file}\n", pattern],
+                text=True,
+            ).strip()
+        except (OSError, subprocess.CalledProcessError):
+            return None
+        return font_file or None
+
+    @classmethod
+    def _ensure_cover_date_fonts_registered(cls) -> tuple[str, str]:
+        regular_font_name = cls.price_list_cover_date_font_name
+        bold_font_name = cls.price_list_cover_date_font_bold_name
+        try:
+            pdfmetrics.getFont(regular_font_name)
+            pdfmetrics.getFont(bold_font_name)
+            return regular_font_name, bold_font_name
+        except KeyError:
+            pass
+
+        regular_font_file = cls._find_font_file("Arial")
+        bold_font_file = cls._find_font_file("Arial:style=Bold") or cls._find_font_file("Arial Bold")
+        if not regular_font_file:
+            regular_font_file = cls._find_font_file("Arimo")
+        if not bold_font_file:
+            bold_font_file = cls._find_font_file("Arimo:style=Bold") or cls._find_font_file("Arimo Bold")
+
+        if regular_font_file:
+            pdfmetrics.registerFont(TTFont(regular_font_name, regular_font_file))
+            pdfmetrics.registerFont(TTFont(bold_font_name, bold_font_file or regular_font_file))
+            return regular_font_name, bold_font_name
+
+        return "Helvetica", "Helvetica-Bold"
+
+    @classmethod
+    def _extract_cover_date_from_title(cls, title: str) -> str | None:
+        normalized_title = (title or "").strip()
+        if not normalized_title:
+            return None
+
+        month_year_match = re.search(r"\b(?P<month>\d{1,2})[./-](?P<year>\d{4})\b", normalized_title)
+        if month_year_match:
+            month = int(month_year_match.group("month"))
+            year = int(month_year_match.group("year"))
+            if 1 <= month <= 12:
+                return f"{month:02d}/{year}"
+
+        year_month_match = re.search(r"\b(?P<year>\d{4})[./-](?P<month>\d{1,2})\b", normalized_title)
+        if year_month_match:
+            month = int(year_month_match.group("month"))
+            year = int(year_month_match.group("year"))
+            if 1 <= month <= 12:
+                return f"{month:02d}/{year}"
+
+        month_name_match = re.search(
+            r"\b(?P<month_name>januar|jan|februar|feb|märz|maerz|mar|mrz|april|apr|mai|juni|jun|juli|jul|august|aug|"
+            r"september|sept|sep|oktober|okt|november|nov|dezember|dez)\b[\s/-]*(?P<year>\d{4})\b",
+            normalized_title,
+            flags=re.IGNORECASE,
+        )
+        if not month_name_match:
+            return None
+
+        month_name = month_name_match.group("month_name").lower()
+        month = cls.PRICE_INCREASE_TITLE_MONTH_MAP.get(month_name)
+        year = int(month_name_match.group("year"))
+        if not month:
+            return None
+        return f"{month:02d}/{year}"
+
+    @classmethod
+    def _build_cover_effective_date_text(cls, price_increase: PriceIncrease) -> tuple[str, str]:
+        formatted_month = cls._extract_cover_date_from_title(price_increase.title)
+        if not formatted_month:
+            reference_datetime = price_increase.applied_at or price_increase.positions_synced_at or price_increase.created_at
+            localized_reference = timezone.localtime(reference_datetime) if reference_datetime else timezone.localtime()
+            formatted_month = localized_reference.strftime("%m/%Y")
+        return "ab ", formatted_month
+
+    def _overlay_date_on_cover_pdf(self, pdf_content: bytes, *, price_increase: PriceIncrease) -> bytes:
         reader = self._bytes_to_pdf_reader(pdf_content)
         writer = PdfWriter()
-        overlay_text = created_at.strftime(self.price_list_cover_date_format)
+        prefix_text, date_text = self._build_cover_effective_date_text(price_increase)
+        regular_font_name, bold_font_name = self._ensure_cover_date_fonts_registered()
 
         for page_index, page in enumerate(reader.pages):
             if page_index == self.price_list_cover_date_page_index:
@@ -1373,25 +1505,14 @@ class PriceIncreaseAdmin(BaseAdmin):
                 page_width = float(page.mediabox.width)
                 page_height = float(page.mediabox.height)
                 overlay = pdf_canvas.Canvas(overlay_buffer, pagesize=(page_width, page_height))
-                overlay.setFont(self.price_list_cover_date_font_name, self.price_list_cover_date_font_size)
-                if self.price_list_cover_date_align == "center":
-                    overlay.drawCentredString(
-                        self.price_list_cover_date_x,
-                        self.price_list_cover_date_y,
-                        overlay_text,
-                    )
-                elif self.price_list_cover_date_align == "right":
-                    overlay.drawRightString(
-                        self.price_list_cover_date_x,
-                        self.price_list_cover_date_y,
-                        overlay_text,
-                    )
-                else:
-                    overlay.drawString(
-                        self.price_list_cover_date_x,
-                        self.price_list_cover_date_y,
-                        overlay_text,
-                    )
+                font_size = float(self.price_list_cover_date_font_size)
+                y_position = page_height - float(self.price_list_cover_date_y_from_top)
+                x_position = float(self.price_list_cover_date_x)
+                overlay.setFont(regular_font_name, font_size)
+                overlay.drawString(x_position, y_position, prefix_text)
+                prefix_width = pdfmetrics.stringWidth(prefix_text, regular_font_name, font_size)
+                overlay.setFont(bold_font_name, font_size)
+                overlay.drawString(x_position + prefix_width, y_position, date_text)
                 overlay.save()
 
                 overlay_reader = PdfReader(BytesIO(overlay_buffer.getvalue()))
@@ -1442,20 +1563,21 @@ class PriceIncreaseAdmin(BaseAdmin):
         return output.getvalue()
 
     @staticmethod
-    def _build_price_list_category_sections(rows: list[dict], root_category: Category) -> list[dict]:
+    def _build_price_list_category_sections(rows: list[dict], root_category: Category | None) -> list[dict]:
         if not rows:
+            scope_label = root_category.name if root_category else "Standard-Verkaufskanal"
             return [
                 {
-                    "category_name": root_category.name,
-                    "sort_key": (root_category.lft, root_category.sort_order, root_category.name.lower(), root_category.pk),
+                    "category_name": scope_label,
+                    "sort_key": (0, 0, scope_label.lower(), 0),
                     "groups": [
                         {
-                            "category_name": root_category.name,
+                            "category_name": scope_label,
                             "sort_key": (
-                                root_category.lft,
-                                root_category.sort_order,
-                                root_category.name.lower(),
-                                root_category.pk,
+                                0,
+                                0,
+                                scope_label.lower(),
+                                0,
                             ),
                             "rows": [],
                         }
@@ -1498,8 +1620,9 @@ class PriceIncreaseAdmin(BaseAdmin):
         self,
         *,
         price_increase: PriceIncrease,
-        root_category: Category,
+        root_category: Category | None,
         rows: list[dict],
+        scope_label: str | None = None,
     ) -> dict:
         template_rows = []
         for row in rows:
@@ -1512,6 +1635,7 @@ class PriceIncreaseAdmin(BaseAdmin):
 
         created_at = timezone.localtime()
         sales_channel = price_increase.sales_channel.name if price_increase.sales_channel_id else "-"
+        scope_label = scope_label or (root_category.name if root_category else "Standard-Verkaufskanal")
         return {
             "created_at": created_at,
             "created_at_display": created_at.strftime("%d.%m.%Y %H:%M"),
@@ -1519,6 +1643,7 @@ class PriceIncreaseAdmin(BaseAdmin):
             "price_increase": price_increase,
             "category_sections": self._build_price_list_category_sections(template_rows, root_category),
             "root_category": root_category,
+            "scope_label": scope_label,
             "row_count": len(template_rows),
             "rows": template_rows,
             "sales_channel": sales_channel,
@@ -1643,21 +1768,22 @@ class PriceIncreaseAdmin(BaseAdmin):
         self,
         *,
         price_increase: PriceIncrease,
-        root_category: Category,
+        root_category: Category | None,
         rows: list[dict],
+        scope_label: str | None = None,
     ) -> bytes:
         context = self._build_price_list_template_context(
             price_increase=price_increase,
             root_category=root_category,
             rows=rows,
+            scope_label=scope_label,
         )
         html = render_to_string(self.price_list_pdf_template_name, context)
         soup = BeautifulSoup(html, "html.parser")
-        created_at = context["created_at"]
 
         cover_pdf = self._load_optional_pdf_asset(self.price_list_cover_pdf_path)
         if cover_pdf:
-            cover_pdf = self._overlay_date_on_cover_pdf(cover_pdf, created_at=created_at)
+            cover_pdf = self._overlay_date_on_cover_pdf(cover_pdf, price_increase=price_increase)
         else:
             cover_pdf = self._build_pdf_from_sections(
                 sections=soup.select('[data-pdf-section="cover"]'),
@@ -1717,8 +1843,25 @@ class PriceIncreaseAdmin(BaseAdmin):
         item.row_status_message = getattr(item, "row_status_message", item.last_status_message or logged_status_message)
         item.row_status_detail = self._build_row_status_detail(item)
         item.row_status_meta = self._build_row_status_meta(item)
+        item.validation_issues = item.get_pricing_check_issues()
+        item.validation_errors = [
+            issue for issue in item.validation_issues if issue["severity"] == PriceIncreaseItem.CHECK_SEVERITY_ERROR
+        ]
+        item.validation_warnings = [
+            issue for issue in item.validation_issues if issue["severity"] == PriceIncreaseItem.CHECK_SEVERITY_WARNING
+        ]
         item.save_url = self._positions_save_url(price_increase.pk, item.pk)
         return item
+
+    @staticmethod
+    def _format_validation_error(exc: ValidationError) -> str:
+        if hasattr(exc, "message_dict"):
+            messages_list = []
+            for field_errors in exc.message_dict.values():
+                messages_list.extend(str(error) for error in field_errors)
+            if messages_list:
+                return " ".join(messages_list)
+        return " ".join(str(message) for message in exc.messages) or "Ungueltige Eingabe."
 
     @staticmethod
     def _build_mappei_price_data(
@@ -2121,18 +2264,6 @@ class PriceIncreaseAdmin(BaseAdmin):
             obj=obj,
         )
 
-    @action(
-        description="Positionsliste",
-        icon="table_rows",
-        variant=ActionVariant.PRIMARY,
-    )
-    def open_positions_detail(self, request, object_id: str):
-        obj = self.get_object(request, object_id)
-        if not obj:
-            self.message_user(request, "Preiserhoehung nicht gefunden.", level=messages.ERROR)
-            return HttpResponseRedirect(reverse("admin:products_priceincrease_changelist"))
-        return HttpResponseRedirect(self._positions_page_url(obj.pk))
-
     def positions_table_view(self, request, object_id: str):
         price_increase = self._get_price_increase_or_404(object_id)
         context = self._build_positions_context(
@@ -2219,6 +2350,10 @@ class PriceIncreaseAdmin(BaseAdmin):
 
         previous_value = getattr(item, field_name)
         setattr(item, field_name, value_form.cleaned_data["value"])
+        try:
+            item.full_clean()
+        except ValidationError as exc:
+            return JsonResponse({"error": self._format_validation_error(exc)}, status=400)
         item.save()
         item.refresh_from_db()
         old_value = self._format_decimal(previous_value)
@@ -2279,18 +2414,38 @@ class PriceIncreaseAdmin(BaseAdmin):
             else:
                 self.message_user(request, f"{count} Preisposition(en) fuer die Preiserhoehung eingelesen.")
 
-    @admin.action(description="Preisliste als PDF (Oberkategorie)")
+    def _build_default_price_list_response(self, price_increase: PriceIncrease) -> HttpResponse:
+        if price_increase.status != PriceIncrease.Status.APPLIED:
+            PriceIncreaseService().sync_items(price_increase)
+
+        root_categories = self._get_price_list_root_categories(price_increase)
+        rows: list[dict] = []
+        for root_category in root_categories:
+            rows.extend(
+                self._build_price_list_items(
+                    price_increase=price_increase,
+                    root_category=root_category,
+                )
+            )
+
+        scope_label = self._build_price_list_scope_label(root_categories)
+        pdf_content = self._build_price_list_pdf(
+            price_increase=price_increase,
+            root_category=root_categories[0] if len(root_categories) == 1 else None,
+            rows=rows,
+            scope_label=scope_label,
+        )
+
+        filename_title = slugify(price_increase.title) or f"preiserhoehung-{price_increase.pk}"
+        filename_scope = slugify(scope_label) or "standard-verkaufskanal"
+        response = HttpResponse(pdf_content, content_type="application/pdf")
+        response["Content-Disposition"] = (
+            f'attachment; filename="{filename_title}-{filename_scope}-preisliste.pdf"'
+        )
+        return response
+
+    @admin.action(description="PDF Preisliste")
     def export_price_list_pdf(self, request, queryset):
-        form = self._build_action_form(request)
-        if not form.is_valid():
-            self.message_user(request, "Bitte eine gueltige Oberkategorie auswaehlen.", level=messages.ERROR)
-            return
-
-        root_category = form.cleaned_data.get("root_category")
-        if root_category is None:
-            self.message_user(request, "Bitte fuer den PDF-Export eine Oberkategorie auswaehlen.", level=messages.ERROR)
-            return
-
         selected_ids = list(queryset.values_list("pk", flat=True))
         if len(selected_ids) != 1:
             self.message_user(
@@ -2309,43 +2464,26 @@ class PriceIncreaseAdmin(BaseAdmin):
             self.message_user(request, "Preiserhoehung nicht gefunden.", level=messages.ERROR)
             return
 
-        rows = self._build_price_list_items(
-            price_increase=price_increase,
-            root_category=root_category,
-        )
-        pdf_content = self._build_price_list_pdf(
-            price_increase=price_increase,
-            root_category=root_category,
-            rows=rows,
-        )
-
-        filename_title = slugify(price_increase.title) or f"preiserhoehung-{price_increase.pk}"
-        filename_category = slugify(root_category.name) or f"kategorie-{root_category.pk}"
-        response = HttpResponse(pdf_content, content_type="application/pdf")
-        response["Content-Disposition"] = (
-            f'attachment; filename="{filename_title}-{filename_category}-preisliste.pdf"'
-        )
-        return response
+        try:
+            return self._build_default_price_list_response(price_increase)
+        except ValueError as exc:
+            self.message_user(request, str(exc), level=messages.ERROR)
+            return
 
     @action(
-        description="Positionen aktualisieren",
-        icon="sync",
+        description="PDF Preisliste",
+        icon="picture_as_pdf",
         variant=ActionVariant.PRIMARY,
     )
-    def sync_positions_detail(self, request, object_id: str):
+    def export_price_list_pdf_detail(self, request, object_id: str):
         obj = self.get_object(request, object_id)
         if not obj:
             self.message_user(request, "Preiserhoehung nicht gefunden.", level=messages.ERROR)
             return HttpResponseRedirect(reverse("admin:products_priceincrease_changelist"))
-        if obj.status == PriceIncrease.Status.APPLIED:
-            self.message_user(request, "Uebernommene Preiserhoehungen koennen nicht mehr aktualisiert werden.", level=messages.WARNING)
-            return HttpResponseRedirect(reverse("admin:products_priceincrease_change", args=(object_id,)))
         try:
-            count = PriceIncreaseService().sync_items(obj)
+            return self._build_default_price_list_response(obj)
         except ValueError as exc:
             self.message_user(request, str(exc), level=messages.ERROR)
-        else:
-            self.message_user(request, f"{count} Preisposition(en) aktualisiert.")
         return HttpResponseRedirect(reverse("admin:products_priceincrease_change", args=(object_id,)))
 
     @action(

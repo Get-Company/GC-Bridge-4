@@ -238,6 +238,34 @@ class PriceIncreaseServiceTest(TestCase):
         self.assertEqual(item.new_price, Decimal("10.25"))
         self.assertEqual(item.new_rebate_price, Decimal("9.25"))
 
+    def test_item_pricing_checks_cover_large_price_deviation_and_quantity_rules(self):
+        self.product.unit = ""
+        self.product.min_purchase = 4
+        self.product.purchase_unit = 2
+        self.product.factor = 5
+        self.product.save(update_fields=["unit", "min_purchase", "purchase_unit", "factor", "updated_at"])
+
+        price_increase = PriceIncrease.objects.create(title="Warnungen", general_percentage=Decimal("2.50"))
+        item = PriceIncreaseItem.objects.create(
+            price_increase=price_increase,
+            product=self.product,
+            source_price=self.default_price,
+            unit="",
+            current_price=Decimal("10.00"),
+            current_rebate_quantity=3,
+            current_rebate_price=Decimal("9.00"),
+            new_price=Decimal("25.00"),
+        )
+
+        issue_codes = {issue["code"] for issue in item.get_pricing_check_issues()}
+
+        self.assertIn("price_increase_far_above_general_percentage", issue_codes)
+        self.assertIn("price_more_than_doubled", issue_codes)
+        self.assertIn("rebate_quantity_below_min_purchase", issue_codes)
+        self.assertIn("rebate_quantity_not_multiple_of_purchase_unit", issue_codes)
+        self.assertIn("rebate_quantity_below_factor", issue_codes)
+        self.assertIn("unit_missing", issue_codes)
+
     def test_apply_updates_default_price_and_syncs_other_channels_after_commit(self):
         price_increase = PriceIncrease.objects.create(title="August 2026")
         item = PriceIncreaseItem.objects.create(
@@ -272,6 +300,39 @@ class PriceIncreaseServiceTest(TestCase):
             self.default_price.history_entries.order_by("-created_at", "-id").first().price,
             Decimal("10.25"),
         )
+
+    def test_apply_blocks_items_with_blocking_price_checks(self):
+        price_increase = PriceIncrease.objects.create(title="September 2026")
+        PriceIncreaseItem.objects.create(
+            price_increase=price_increase,
+            product=self.product,
+            source_price=self.default_price,
+            unit="Stk",
+            current_price=Decimal("10.00"),
+            current_rebate_quantity=5,
+            current_rebate_price=Decimal("10.00"),
+        )
+
+        with self.assertRaisesMessage(ValueError, "blockierende Preispruefungen"):
+            PriceIncreaseService().apply(price_increase)
+
+    def test_cover_effective_date_is_extracted_from_german_month_title(self):
+        price_increase = PriceIncrease.objects.create(title="Mai 2026")
+        admin_instance = PriceIncreaseAdmin(PriceIncrease, AdminSite())
+
+        prefix, formatted_month = admin_instance._build_cover_effective_date_text(price_increase)
+
+        self.assertEqual(prefix, "ab ")
+        self.assertEqual(formatted_month, "05/2026")
+
+    def test_cover_effective_date_is_extracted_from_numeric_title(self):
+        price_increase = PriceIncrease.objects.create(title="Preiserhoehung 11/2027")
+        admin_instance = PriceIncreaseAdmin(PriceIncrease, AdminSite())
+
+        prefix, formatted_month = admin_instance._build_cover_effective_date_text(price_increase)
+
+        self.assertEqual(prefix, "ab ")
+        self.assertEqual(formatted_month, "11/2027")
 
 
 class ImportPriceHistoryCommandTest(TestCase):
@@ -731,6 +792,38 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
         self.assertIn('value="10,30"', row_html)
         self.assertIn('value="4,25"', row_html)
 
+    def test_save_endpoint_rejects_rebate_price_at_or_above_new_price(self):
+        response = self.client.post(
+            reverse("admin:products_priceincrease_position_save", args=(self.price_increase.pk, self.item.pk)),
+            data={
+                "field": "new_rebate_price",
+                "value": "10,28",
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.json()["error"],
+            "Der neue Rabattpreis muss kleiner als der neue Normalpreis sein.",
+        )
+        self.item.refresh_from_db()
+        self.assertIsNone(self.item.new_rebate_price)
+
+    def test_positions_table_renders_validation_warnings(self):
+        self.item.new_price = Decimal("21.00")
+        self.item.save(update_fields=["new_price", "updated_at"])
+
+        response = self.client.get(
+            reverse("admin:products_priceincrease_positions_table", args=(self.price_increase.pk,))
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Der neue Preis ist mehr als doppelt so hoch wie der aktuelle Preis.")
+        self.assertContains(
+            response,
+            "Der neue Preis liegt mehr als 10 Prozentpunkte ueber der generellen Erhoehung.",
+        )
+
     def test_positions_table_only_shows_active_products_sorted_by_erp_nr(self):
         inactive_product = Product.objects.create(erp_nr="A-1000", name="Inaktiv", unit="Stk", is_active=False)
         inactive_price = Price.objects.create(
@@ -860,7 +953,6 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
             reverse("admin:products_priceincrease_changelist"),
             data={
                 "action": "export_price_list_pdf",
-                "root_category": str(root_category.pk),
                 "_selected_action": [str(self.price_increase.pk)],
                 "index": "0",
                 "select_across": "0",

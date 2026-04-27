@@ -669,6 +669,9 @@ class PriceIncrease(BaseModel):
 
 
 class PriceIncreaseItem(BaseModel):
+    CHECK_SEVERITY_ERROR = "error"
+    CHECK_SEVERITY_WARNING = "warning"
+
     price_increase = models.ForeignKey(
         PriceIncrease,
         on_delete=models.CASCADE,
@@ -765,6 +768,30 @@ class PriceIncreaseItem(BaseModel):
             and self.source_price.sales_channel_id != self.price_increase.sales_channel_id
         ):
             raise ValidationError({"source_price": _("Der Quellpreis muss zum Standard-Verkaufskanal der Preiserhoehung gehoeren.")})
+        validation_errors = {}
+        rounded_new_price = self._rounded_price_value(self.new_price)
+        rounded_new_rebate_price = self._rounded_price_value(self.new_rebate_price)
+        if rounded_new_price is not None and rounded_new_price <= Decimal("0.00"):
+            validation_errors["new_price"] = _("Der neue Preis muss groesser als 0 sein.")
+        if rounded_new_rebate_price is not None:
+            if rounded_new_rebate_price <= Decimal("0.00"):
+                validation_errors["new_rebate_price"] = _("Der neue Rabattpreis muss groesser als 0 sein.")
+            elif self.current_rebate_price is None:
+                validation_errors["new_rebate_price"] = _(
+                    "Ein neuer Rabattpreis ist nur moeglich, wenn bereits ein aktueller Staffelpreis vorhanden ist."
+                )
+            elif self.current_rebate_quantity is None or self.current_rebate_quantity <= 0:
+                validation_errors["new_rebate_price"] = _(
+                    "Ein neuer Rabattpreis ist nur mit gueltiger Staffelmenge moeglich."
+                )
+            else:
+                reference_price = rounded_new_price or self.suggested_price
+                if reference_price is not None and rounded_new_rebate_price >= reference_price:
+                    validation_errors["new_rebate_price"] = _(
+                        "Der neue Rabattpreis muss kleiner als der neue Normalpreis sein."
+                    )
+        if validation_errors:
+            raise ValidationError(validation_errors)
 
     def save(self, *args, **kwargs):
         if self.new_price is not None:
@@ -797,3 +824,398 @@ class PriceIncreaseItem(BaseModel):
         factor = Decimal("1.00") + (self.price_increase.general_percentage / Decimal("100"))
         increased = Decimal(value) * factor
         return Price._round_up_5ct(increased).quantize(Decimal("0.01"))
+
+    @staticmethod
+    def _rounded_price_value(value: Decimal | None) -> Decimal | None:
+        if value is None:
+            return None
+        return Price._round_up_5ct(Decimal(value)).quantize(Decimal("0.01"))
+
+    @staticmethod
+    def _percentage_change(old_value: Decimal | None, new_value: Decimal | None) -> Decimal | None:
+        if old_value is None or new_value is None or old_value <= Decimal("0.00"):
+            return None
+        return ((new_value - old_value) / old_value) * Decimal("100")
+
+    @staticmethod
+    def _discount_percentage(normal_price: Decimal | None, rebate_price: Decimal | None) -> Decimal | None:
+        if normal_price is None or rebate_price is None or normal_price <= Decimal("0.00"):
+            return None
+        return ((normal_price - rebate_price) / normal_price) * Decimal("100")
+
+    @classmethod
+    def _build_check_issue(
+        cls,
+        code: str,
+        severity: str,
+        message: str,
+        *,
+        field: str = "",
+        blocks_apply: bool | None = None,
+    ) -> dict[str, object]:
+        return {
+            "code": code,
+            "severity": severity,
+            "field": field,
+            "message": message,
+            "blocks_apply": severity == cls.CHECK_SEVERITY_ERROR if blocks_apply is None else blocks_apply,
+        }
+
+    def get_pricing_check_issues(self) -> list[dict[str, object]]:
+        issues: list[dict[str, object]] = []
+        general_percentage = Decimal(self.price_increase.general_percentage or Decimal("0.00"))
+        current_price = Decimal(self.current_price)
+        effective_new_price = self.effective_new_price
+        current_rebate_price = Decimal(self.current_rebate_price) if self.current_rebate_price is not None else None
+        effective_new_rebate_price = self.effective_new_rebate_price
+        current_rebate_quantity = self.current_rebate_quantity
+        product = self.product
+
+        if current_price <= Decimal("0.00"):
+            issues.append(
+                self._build_check_issue(
+                    "current_price_non_positive",
+                    self.CHECK_SEVERITY_ERROR,
+                    "Aktueller Preis ist 0 oder negativ.",
+                    field="current_price",
+                )
+            )
+        if effective_new_price <= Decimal("0.00"):
+            issues.append(
+                self._build_check_issue(
+                    "new_price_non_positive",
+                    self.CHECK_SEVERITY_ERROR,
+                    "Neuer Preis ist 0 oder negativ.",
+                    field="new_price",
+                )
+            )
+        if current_rebate_price is not None and current_rebate_price <= Decimal("0.00"):
+            issues.append(
+                self._build_check_issue(
+                    "current_rebate_price_non_positive",
+                    self.CHECK_SEVERITY_ERROR,
+                    "Aktueller Staffelpreis ist 0 oder negativ.",
+                    field="current_rebate_price",
+                )
+            )
+        if effective_new_rebate_price is not None and effective_new_rebate_price <= Decimal("0.00"):
+            issues.append(
+                self._build_check_issue(
+                    "new_rebate_price_non_positive",
+                    self.CHECK_SEVERITY_ERROR,
+                    "Neuer Staffelpreis ist 0 oder negativ.",
+                    field="new_rebate_price",
+                )
+            )
+        if current_rebate_price is not None and (current_rebate_quantity is None or current_rebate_quantity <= 0):
+            issues.append(
+                self._build_check_issue(
+                    "missing_rebate_quantity",
+                    self.CHECK_SEVERITY_ERROR,
+                    "Aktueller Staffelpreis ist gesetzt, aber die Staffelmenge fehlt oder ist ungueltig.",
+                    field="current_rebate_quantity",
+                )
+            )
+        if current_rebate_quantity is not None and current_rebate_price is None:
+            issues.append(
+                self._build_check_issue(
+                    "missing_rebate_price",
+                    self.CHECK_SEVERITY_WARNING,
+                    "Staffelmenge ist gesetzt, aber es gibt keinen Staffelpreis.",
+                    field="current_rebate_price",
+                )
+            )
+        if current_rebate_quantity is not None and current_rebate_quantity <= 1:
+            issues.append(
+                self._build_check_issue(
+                    "rebate_quantity_too_low",
+                    self.CHECK_SEVERITY_WARNING,
+                    "Staffelmenge ist 1 oder kleiner und wirkt damit fachlich unplausibel.",
+                    field="current_rebate_quantity",
+                )
+            )
+        if current_rebate_price is not None and current_rebate_price >= current_price:
+            issues.append(
+                self._build_check_issue(
+                    "current_rebate_not_below_price",
+                    self.CHECK_SEVERITY_ERROR,
+                    "Aktueller Staffelpreis ist nicht guenstiger als der aktuelle Normalpreis.",
+                    field="current_rebate_price",
+                )
+            )
+        if effective_new_rebate_price is not None and effective_new_rebate_price >= effective_new_price:
+            issues.append(
+                self._build_check_issue(
+                    "new_rebate_not_below_price",
+                    self.CHECK_SEVERITY_ERROR,
+                    "Neuer Staffelpreis ist nicht guenstiger als der neue Normalpreis.",
+                    field="new_rebate_price",
+                )
+            )
+        if general_percentage < Decimal("0.00"):
+            issues.append(
+                self._build_check_issue(
+                    "negative_general_percentage",
+                    self.CHECK_SEVERITY_WARNING,
+                    "Die generelle Erhoehung ist negativ. Das sieht eher nach einer Preissenkung aus.",
+                )
+            )
+        if general_percentage > Decimal("25.00"):
+            issues.append(
+                self._build_check_issue(
+                    "very_high_general_percentage",
+                    self.CHECK_SEVERITY_WARNING,
+                    "Die generelle Erhoehung liegt ueber 25 % und sollte geprueft werden.",
+                )
+            )
+
+        effective_price_change_pct = self._percentage_change(current_price, effective_new_price)
+        if effective_price_change_pct is not None and effective_price_change_pct > general_percentage + Decimal("10.00"):
+            issues.append(
+                self._build_check_issue(
+                    "price_increase_far_above_general_percentage",
+                    self.CHECK_SEVERITY_WARNING,
+                    "Der neue Preis liegt mehr als 10 Prozentpunkte ueber der generellen Erhoehung.",
+                    field="new_price",
+                )
+            )
+        if effective_price_change_pct is not None and effective_price_change_pct < general_percentage - Decimal("10.00"):
+            issues.append(
+                self._build_check_issue(
+                    "price_increase_far_below_general_percentage",
+                    self.CHECK_SEVERITY_WARNING,
+                    "Der neue Preis liegt mehr als 10 Prozentpunkte unter der generellen Erhoehung.",
+                    field="new_price",
+                )
+            )
+        if effective_price_change_pct is not None and effective_price_change_pct > Decimal("100.00"):
+            issues.append(
+                self._build_check_issue(
+                    "price_more_than_doubled",
+                    self.CHECK_SEVERITY_WARNING,
+                    "Der neue Preis ist mehr als doppelt so hoch wie der aktuelle Preis.",
+                    field="new_price",
+                )
+            )
+        if effective_price_change_pct is not None and effective_price_change_pct < Decimal("0.00"):
+            issues.append(
+                self._build_check_issue(
+                    "price_decrease_detected",
+                    self.CHECK_SEVERITY_WARNING,
+                    "Der neue Preis liegt unter dem aktuellen Preis.",
+                    field="new_price",
+                )
+            )
+        if effective_price_change_pct is not None and general_percentage > Decimal("0.00") and effective_price_change_pct == Decimal("0.00"):
+            issues.append(
+                self._build_check_issue(
+                    "price_unchanged",
+                    self.CHECK_SEVERITY_WARNING,
+                    "Der neue Preis ist trotz positiver genereller Erhoehung unveraendert.",
+                    field="new_price",
+                )
+            )
+        if effective_new_price < Decimal("0.05"):
+            issues.append(
+                self._build_check_issue(
+                    "price_below_five_cents",
+                    self.CHECK_SEVERITY_WARNING,
+                    "Der neue Preis liegt unter 0,05 EUR.",
+                    field="new_price",
+                )
+            )
+        if self.new_price is not None:
+            manual_vs_suggested_pct = self._percentage_change(self.suggested_price, self.new_price)
+            if manual_vs_suggested_pct is not None and abs(manual_vs_suggested_pct) > Decimal("10.00"):
+                issues.append(
+                    self._build_check_issue(
+                        "manual_price_far_from_suggestion",
+                        self.CHECK_SEVERITY_WARNING,
+                        "Der manuelle neue Preis weicht mehr als 10 % vom Vorschlag ab.",
+                        field="new_price",
+                    )
+                )
+            if abs(self.suggested_price - self.new_price) >= Decimal("5.00"):
+                issues.append(
+                    self._build_check_issue(
+                        "manual_price_large_absolute_delta",
+                        self.CHECK_SEVERITY_WARNING,
+                        "Der manuelle neue Preis weicht absolut um mindestens 5,00 EUR vom Vorschlag ab.",
+                        field="new_price",
+                    )
+                )
+
+        effective_rebate_change_pct = self._percentage_change(current_rebate_price, effective_new_rebate_price)
+        if effective_rebate_change_pct is not None and effective_rebate_change_pct > general_percentage + Decimal("10.00"):
+            issues.append(
+                self._build_check_issue(
+                    "rebate_increase_far_above_general_percentage",
+                    self.CHECK_SEVERITY_WARNING,
+                    "Der neue Staffelpreis liegt mehr als 10 Prozentpunkte ueber der generellen Erhoehung.",
+                    field="new_rebate_price",
+                )
+            )
+        if effective_rebate_change_pct is not None and effective_rebate_change_pct < general_percentage - Decimal("10.00"):
+            issues.append(
+                self._build_check_issue(
+                    "rebate_increase_far_below_general_percentage",
+                    self.CHECK_SEVERITY_WARNING,
+                    "Der neue Staffelpreis liegt mehr als 10 Prozentpunkte unter der generellen Erhoehung.",
+                    field="new_rebate_price",
+                )
+            )
+        if effective_rebate_change_pct is not None and effective_rebate_change_pct < Decimal("0.00"):
+            issues.append(
+                self._build_check_issue(
+                    "rebate_price_decrease_detected",
+                    self.CHECK_SEVERITY_WARNING,
+                    "Der neue Staffelpreis liegt unter dem aktuellen Staffelpreis.",
+                    field="new_rebate_price",
+                )
+            )
+        if self.new_rebate_price is not None and self.suggested_rebate_price is not None:
+            manual_rebate_vs_suggested_pct = self._percentage_change(self.suggested_rebate_price, self.new_rebate_price)
+            if manual_rebate_vs_suggested_pct is not None and abs(manual_rebate_vs_suggested_pct) > Decimal("10.00"):
+                issues.append(
+                    self._build_check_issue(
+                        "manual_rebate_price_far_from_suggestion",
+                        self.CHECK_SEVERITY_WARNING,
+                        "Der manuelle Staffelpreis weicht mehr als 10 % vom Vorschlag ab.",
+                        field="new_rebate_price",
+                    )
+                )
+            if abs(self.suggested_rebate_price - self.new_rebate_price) >= Decimal("5.00"):
+                issues.append(
+                    self._build_check_issue(
+                        "manual_rebate_price_large_absolute_delta",
+                        self.CHECK_SEVERITY_WARNING,
+                        "Der manuelle Staffelpreis weicht absolut um mindestens 5,00 EUR vom Vorschlag ab.",
+                        field="new_rebate_price",
+                    )
+                )
+
+        current_discount_pct = self._discount_percentage(current_price, current_rebate_price)
+        new_discount_pct = self._discount_percentage(effective_new_price, effective_new_rebate_price)
+        if current_discount_pct is not None and new_discount_pct is not None:
+            if new_discount_pct < current_discount_pct - Decimal("10.00"):
+                issues.append(
+                    self._build_check_issue(
+                        "rebate_discount_gets_weaker",
+                        self.CHECK_SEVERITY_WARNING,
+                        "Der Rabattabstand zum Normalpreis wird deutlich kleiner.",
+                        field="new_rebate_price",
+                    )
+                )
+            if new_discount_pct > current_discount_pct + Decimal("20.00"):
+                issues.append(
+                    self._build_check_issue(
+                        "rebate_discount_gets_stronger",
+                        self.CHECK_SEVERITY_WARNING,
+                        "Der Rabattabstand zum Normalpreis wird deutlich groesser.",
+                        field="new_rebate_price",
+                    )
+                )
+
+        if not (self.unit or "").strip():
+            issues.append(
+                self._build_check_issue(
+                    "unit_missing",
+                    self.CHECK_SEVERITY_WARNING,
+                    "Die Einheit ist leer.",
+                    field="unit",
+                )
+            )
+
+        if product.min_purchase is not None:
+            if product.min_purchase <= 0:
+                issues.append(
+                    self._build_check_issue(
+                        "invalid_min_purchase",
+                        self.CHECK_SEVERITY_WARNING,
+                        "Die Mindestabnahme ist 0 oder negativ.",
+                    )
+                )
+            elif current_rebate_quantity is not None and current_rebate_quantity < product.min_purchase:
+                issues.append(
+                    self._build_check_issue(
+                        "rebate_quantity_below_min_purchase",
+                        self.CHECK_SEVERITY_WARNING,
+                        "Die Staffelmenge liegt unter der Mindestabnahme des Produkts.",
+                        field="current_rebate_quantity",
+                    )
+                )
+            elif (
+                current_rebate_quantity is not None
+                and product.min_purchase > 0
+                and current_rebate_quantity % product.min_purchase != 0
+            ):
+                issues.append(
+                    self._build_check_issue(
+                        "rebate_quantity_not_multiple_of_min_purchase",
+                        self.CHECK_SEVERITY_WARNING,
+                        "Die Staffelmenge ist kein Vielfaches der Mindestabnahme.",
+                        field="current_rebate_quantity",
+                    )
+                )
+
+        if product.purchase_unit is not None:
+            if product.purchase_unit <= 0:
+                issues.append(
+                    self._build_check_issue(
+                        "invalid_purchase_unit",
+                        self.CHECK_SEVERITY_WARNING,
+                        "Die Kaufeinheit ist 0 oder negativ.",
+                    )
+                )
+            elif current_rebate_quantity is not None and current_rebate_quantity < product.purchase_unit:
+                issues.append(
+                    self._build_check_issue(
+                        "rebate_quantity_below_purchase_unit",
+                        self.CHECK_SEVERITY_WARNING,
+                        "Die Staffelmenge liegt unter der Kaufeinheit des Produkts.",
+                        field="current_rebate_quantity",
+                    )
+                )
+            elif (
+                current_rebate_quantity is not None
+                and product.purchase_unit > 0
+                and current_rebate_quantity % product.purchase_unit != 0
+            ):
+                issues.append(
+                    self._build_check_issue(
+                        "rebate_quantity_not_multiple_of_purchase_unit",
+                        self.CHECK_SEVERITY_WARNING,
+                        "Die Staffelmenge ist kein Vielfaches der Kaufeinheit.",
+                        field="current_rebate_quantity",
+                    )
+                )
+
+        if product.factor is not None:
+            if product.factor <= 0:
+                issues.append(
+                    self._build_check_issue(
+                        "invalid_factor",
+                        self.CHECK_SEVERITY_WARNING,
+                        "Der Produktfaktor ist 0 oder negativ.",
+                    )
+                )
+            elif current_rebate_quantity is not None and current_rebate_quantity < product.factor:
+                issues.append(
+                    self._build_check_issue(
+                        "rebate_quantity_below_factor",
+                        self.CHECK_SEVERITY_WARNING,
+                        "Die Staffelmenge liegt unter dem Produktfaktor.",
+                        field="current_rebate_quantity",
+                    )
+                )
+            elif current_rebate_quantity is not None and current_rebate_quantity % product.factor != 0:
+                issues.append(
+                    self._build_check_issue(
+                        "rebate_quantity_not_multiple_of_factor",
+                        self.CHECK_SEVERITY_WARNING,
+                        "Die Staffelmenge ist kein Vielfaches des Produktfaktors.",
+                        field="current_rebate_quantity",
+                    )
+                )
+
+        return issues

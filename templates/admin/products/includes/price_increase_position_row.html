@@ -128,8 +128,8 @@
         {% endif %}
     </td>
     <td class="rounded-r-default border-r border-t border-base-200 px-4 py-3 text-sm dark:border-base-800">
-        {% if item.row_status_message %}
-            <div class="flex flex-col gap-1">
+        <div class="flex flex-col gap-2">
+            {% if item.row_status_message %}
                 <span class="inline-flex items-center gap-1.5 rounded-default bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-300">
                     <span>{{ item.row_status_message }}</span>
                     {% if item.row_status_detail %}
@@ -139,10 +139,26 @@
                 {% if item.row_status_meta %}
                     <span class="px-1 text-xs text-font-subtle-light dark:text-font-subtle-dark">{{ item.row_status_meta }}</span>
                 {% endif %}
-            </div>
-        {% else %}
-            <span class="text-font-subtle-light dark:text-font-subtle-dark">Noch nichts gespeichert.</span>
-        {% endif %}
+            {% else %}
+                <span class="text-font-subtle-light dark:text-font-subtle-dark">Noch nichts gespeichert.</span>
+            {% endif %}
+
+            {% if item.validation_errors %}
+                {% for issue in item.validation_errors %}
+                    <span class="inline-flex items-center gap-1.5 rounded-default bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:text-red-300">
+                        <span class="material-symbols-outlined text-sm leading-none">error</span>{{ issue.message }}
+                    </span>
+                {% endfor %}
+            {% endif %}
+
+            {% if item.validation_warnings %}
+                {% for issue in item.validation_warnings %}
+                    <span class="inline-flex items-center gap-1.5 rounded-default bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+                        <span class="material-symbols-outlined text-sm leading-none">warning</span>{{ issue.message }}
+                    </span>
+                {% endfor %}
+            {% endif %}
+        </div>
     </td>
 </tr>
 <tr class="js-position-history-row transition-colors group-hover:bg-base-50 dark:group-hover:bg-base-800/40">
