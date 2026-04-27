@@ -1076,6 +1076,19 @@ class PriceIncreaseAdmin(BaseAdmin):
     def _format_integer(value) -> str:
         return "" if value in (None, "") else str(value)
 
+    @classmethod
+    def _build_price_list_vpe_display(cls, row: dict) -> str:
+        primary_value = row["factor"] or row["purchase_unit"]
+        primary_display = cls._format_integer(primary_value) or "-"
+        min_purchase_display = cls._format_integer(row["min_purchase"]) or "-"
+        purchase_unit_display = cls._format_integer(row["purchase_unit"]) or "-"
+        return format_html(
+            "{}<br/><font size=\"7\">Min: {} | Schritt: {}</font>",
+            primary_display,
+            min_purchase_display,
+            purchase_unit_display,
+        )
+
     @staticmethod
     def _format_pdf_decimal(value: Decimal | None) -> str:
         if value is None:
@@ -1237,6 +1250,8 @@ class PriceIncreaseAdmin(BaseAdmin):
                     "erp_nr": item.product.erp_nr,
                     "attributes": self._product_attribute_summary(item.product),
                     "product_name": item.product.name or "",
+                    "factor": item.product.factor,
+                    "min_purchase": item.product.min_purchase,
                     "purchase_unit": item.product.purchase_unit,
                     "unit": item.unit or item.product.unit or "",
                     "price": effective_price,
@@ -1741,7 +1756,7 @@ class PriceIncreaseAdmin(BaseAdmin):
                 and (rebate_price is None or rebate_price == Decimal("0.00"))
             )
             template_row["price_display"] = self._format_pdf_currency(row["price"])
-            template_row["purchase_unit_display"] = self._format_integer(row["purchase_unit"])
+            template_row["vpe_display"] = self._build_price_list_vpe_display(row)
             template_row["rebate_quantity_display"] = self._format_integer(rebate_quantity) if has_rebate_data else "-"
             template_row["rebate_price_display"] = self._format_pdf_currency(rebate_price) if has_rebate_data else "-"
             template_rows.append(template_row)

@@ -979,6 +979,37 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
         self.assertIn("Erste Zeile", str(rows[0]["attributes"]))
         self.assertIn("Zweite Zeile", str(rows[0]["attributes"]))
 
+    def test_price_list_vpe_uses_factor_and_second_line_with_min_purchase_and_purchase_unit(self):
+        root_category = Category.objects.create(name="Boxen", slug="boxen", sort_order=10)
+        child_category = Category.objects.create(
+            name="Archivboxen",
+            slug="archivboxen",
+            parent=root_category,
+            sort_order=20,
+        )
+        self.product.categories.add(child_category)
+        self.product.factor = 12
+        self.product.min_purchase = 24
+        self.product.purchase_unit = 6
+        self.product.save(update_fields=["factor", "min_purchase", "purchase_unit", "updated_at"])
+
+        admin_instance = PriceIncreaseAdmin(PriceIncrease, AdminSite())
+        rows = admin_instance._build_price_list_items(
+            price_increase=self.price_increase,
+            root_category=root_category,
+        )
+        context = admin_instance._build_price_list_template_context(
+            price_increase=self.price_increase,
+            root_category=root_category,
+            rows=rows,
+        )
+
+        self.assertEqual(len(context["rows"]), 1)
+        vpe_display = str(context["rows"][0]["vpe_display"])
+        self.assertIn("12", vpe_display)
+        self.assertIn("Min: 24", vpe_display)
+        self.assertIn("Schritt: 6", vpe_display)
+
     def test_export_price_list_pdf_action_returns_pdf(self):
         root_category = Category.objects.create(name="Druck", slug="druck", sort_order=10)
         child_category = Category.objects.create(

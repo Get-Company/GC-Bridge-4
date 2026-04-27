@@ -47,7 +47,7 @@ Wichtig:
                         <tr>
                             <td>{{ row.erp_nr }}</td>
                             <td>{{ row.attributes|safe }}</td>
-                            <td>{{ row.purchase_unit_display|default:"-" }}</td>
+                            <td>{{ row.vpe_display|safe }}</td>
                             <td data-align="right">{{ row.price_display }}</td>
                             <td data-align="right">{{ row.rebate_quantity_display|default:"-" }}</td>
                             <td data-align="right">{{ row.rebate_price_display }}</td>
