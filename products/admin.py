@@ -3,6 +3,7 @@ import re
 from datetime import datetime
 from decimal import Decimal
 from io import BytesIO
+from pathlib import Path
 
 from bs4 import BeautifulSoup
 from django.conf import settings
@@ -25,9 +26,11 @@ from modeltranslation.admin import TabbedTranslationAdmin
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_RIGHT
 from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas as pdf_canvas
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.platypus import Flowable, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from django.views.generic import TemplateView
+from pypdf import PdfReader, PdfWriter
 
 from ai.models import AIRewriteJob, AIRewritePrompt
 from ai.rewrite_fields import get_rewriteable_product_field_names
@@ -910,6 +913,15 @@ class PriceHistoryAdmin(BaseAdmin):
 @admin.register(PriceIncrease)
 class PriceIncreaseAdmin(BaseAdmin):
     price_list_pdf_template_name = "admin/products/price_list_pdf.html"
+    price_list_cover_pdf_path = Path("products/static/products/pdf/price_list_cover.pdf")
+    price_list_closing_pdf_path = Path("products/static/products/pdf/price_list_back.pdf")
+    price_list_cover_date_page_index = 0
+    price_list_cover_date_x = 520
+    price_list_cover_date_y = 775
+    price_list_cover_date_font_name = "Helvetica"
+    price_list_cover_date_font_size = 11
+    price_list_cover_date_format = "%d.%m.%Y"
+    price_list_cover_date_align = "right"
     change_form_outer_after_template = "admin/products/includes/price_increase_positions_inline.html"
     list_display = (
         "title",
@@ -1295,6 +1307,141 @@ class PriceIncreaseAdmin(BaseAdmin):
         }
 
     @staticmethod
+    def _bytes_to_pdf_reader(pdf_content: bytes) -> PdfReader:
+        return PdfReader(BytesIO(pdf_content))
+
+    @staticmethod
+    def _resolve_pdf_asset_path(relative_path: Path | str) -> Path:
+        return Path(settings.BASE_DIR) / Path(relative_path)
+
+    def _load_optional_pdf_asset(self, relative_path: Path | str) -> bytes | None:
+        absolute_path = self._resolve_pdf_asset_path(relative_path)
+        if not absolute_path.exists() or not absolute_path.is_file():
+            return None
+        return absolute_path.read_bytes()
+
+    def _build_pdf_from_sections(
+        self,
+        *,
+        sections,
+        title: str,
+        empty_message: str | None = None,
+    ) -> bytes | None:
+        buffer = BytesIO()
+        document = SimpleDocTemplate(
+            buffer,
+            pagesize=A4,
+            leftMargin=24,
+            rightMargin=24,
+            topMargin=24,
+            bottomMargin=24,
+            title=title,
+            author="GC-Bridge",
+        )
+        styles = self._price_list_pdf_styles()
+        story = []
+
+        for section in sections:
+            section_elements = self._build_price_list_pdf_elements(
+                section,
+                styles,
+                page_width=A4[0],
+                left_margin=document.leftMargin,
+            )
+            if not section_elements:
+                continue
+            if story:
+                story.append(PageBreak())
+            story.extend(section_elements)
+
+        if not story:
+            if not empty_message:
+                return None
+            story.append(Paragraph(empty_message, styles["body"]))
+
+        document.build(story)
+        return buffer.getvalue()
+
+    def _overlay_date_on_cover_pdf(self, pdf_content: bytes, *, created_at: datetime) -> bytes:
+        reader = self._bytes_to_pdf_reader(pdf_content)
+        writer = PdfWriter()
+        overlay_text = created_at.strftime(self.price_list_cover_date_format)
+
+        for page_index, page in enumerate(reader.pages):
+            if page_index == self.price_list_cover_date_page_index:
+                overlay_buffer = BytesIO()
+                page_width = float(page.mediabox.width)
+                page_height = float(page.mediabox.height)
+                overlay = pdf_canvas.Canvas(overlay_buffer, pagesize=(page_width, page_height))
+                overlay.setFont(self.price_list_cover_date_font_name, self.price_list_cover_date_font_size)
+                if self.price_list_cover_date_align == "center":
+                    overlay.drawCentredString(
+                        self.price_list_cover_date_x,
+                        self.price_list_cover_date_y,
+                        overlay_text,
+                    )
+                elif self.price_list_cover_date_align == "right":
+                    overlay.drawRightString(
+                        self.price_list_cover_date_x,
+                        self.price_list_cover_date_y,
+                        overlay_text,
+                    )
+                else:
+                    overlay.drawString(
+                        self.price_list_cover_date_x,
+                        self.price_list_cover_date_y,
+                        overlay_text,
+                    )
+                overlay.save()
+
+                overlay_reader = PdfReader(BytesIO(overlay_buffer.getvalue()))
+                page.merge_page(overlay_reader.pages[0])
+            writer.add_page(page)
+
+        output = BytesIO()
+        writer.write(output)
+        return output.getvalue()
+
+    def _merge_price_list_pdf_parts(
+        self,
+        *,
+        cover_pdf: bytes | None,
+        content_pdf: bytes | None,
+        closing_pdf: bytes | None,
+    ) -> bytes:
+        writer = PdfWriter()
+        total_pages = 0
+
+        def append_pdf(pdf_content: bytes | None) -> int:
+            nonlocal total_pages
+            if not pdf_content:
+                return 0
+            reader = self._bytes_to_pdf_reader(pdf_content)
+            for page in reader.pages:
+                writer.add_page(page)
+                total_pages += 1
+            return len(reader.pages)
+
+        append_pdf(cover_pdf)
+        append_pdf(content_pdf)
+
+        if closing_pdf:
+            closing_reader = self._bytes_to_pdf_reader(closing_pdf)
+            closing_page_count = len(closing_reader.pages)
+            if (total_pages + closing_page_count) % 2 != 0:
+                writer.add_blank_page(width=A4[0], height=A4[1])
+                total_pages += 1
+            for page in closing_reader.pages:
+                writer.add_page(page)
+                total_pages += 1
+        elif total_pages % 2 != 0:
+            writer.add_blank_page(width=A4[0], height=A4[1])
+
+        output = BytesIO()
+        writer.write(output)
+        return output.getvalue()
+
+    @staticmethod
     def _build_price_list_category_sections(rows: list[dict], root_category: Category) -> list[dict]:
         if not rows:
             return [
@@ -1499,18 +1646,6 @@ class PriceIncreaseAdmin(BaseAdmin):
         root_category: Category,
         rows: list[dict],
     ) -> bytes:
-        buffer = BytesIO()
-        document = SimpleDocTemplate(
-            buffer,
-            pagesize=A4,
-            leftMargin=24,
-            rightMargin=24,
-            topMargin=24,
-            bottomMargin=24,
-            title=price_increase.title,
-            author="GC-Bridge",
-        )
-
         context = self._build_price_list_template_context(
             price_increase=price_increase,
             root_category=root_category,
@@ -1518,28 +1653,35 @@ class PriceIncreaseAdmin(BaseAdmin):
         )
         html = render_to_string(self.price_list_pdf_template_name, context)
         soup = BeautifulSoup(html, "html.parser")
-        styles = self._price_list_pdf_styles()
-        story = []
+        created_at = context["created_at"]
 
-        sections = soup.select("[data-pdf-section]")
-        for section in sections:
-            section_elements = self._build_price_list_pdf_elements(
-                section,
-                styles,
-                page_width=A4[0],
-                left_margin=document.leftMargin,
+        cover_pdf = self._load_optional_pdf_asset(self.price_list_cover_pdf_path)
+        if cover_pdf:
+            cover_pdf = self._overlay_date_on_cover_pdf(cover_pdf, created_at=created_at)
+        else:
+            cover_pdf = self._build_pdf_from_sections(
+                sections=soup.select('[data-pdf-section="cover"]'),
+                title=f"{price_increase.title} Cover",
             )
-            if not section_elements:
-                continue
-            if story:
-                story.append(PageBreak())
-            story.extend(section_elements)
 
-        if not story:
-            story.append(Paragraph("Keine Inhalte fuer die Preisliste vorhanden.", styles["body"]))
+        content_pdf = self._build_pdf_from_sections(
+            sections=soup.select('[data-pdf-section="category"]'),
+            title=price_increase.title,
+            empty_message="Keine Inhalte fuer die Preisliste vorhanden.",
+        )
 
-        document.build(story)
-        return buffer.getvalue()
+        closing_pdf = self._load_optional_pdf_asset(self.price_list_closing_pdf_path)
+        if not closing_pdf:
+            closing_pdf = self._build_pdf_from_sections(
+                sections=soup.select('[data-pdf-section="closing"]'),
+                title=f"{price_increase.title} Rueckseite",
+            )
+
+        return self._merge_price_list_pdf_parts(
+            cover_pdf=cover_pdf,
+            content_pdf=content_pdf,
+            closing_pdf=closing_pdf,
+        )
 
     def _get_price_increase_or_404(self, object_id: int | str) -> PriceIncrease:
         price_increase = PriceIncrease.objects.select_related("sales_channel").filter(pk=object_id).first()

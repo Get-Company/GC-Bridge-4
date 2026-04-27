@@ -404,7 +404,7 @@ UNFOLD = {
                         "permission": sidebar_model_view_permission("mappei", "MappeiPriceSnapshot"),
                     },
                     {
-                        "title": _("Mapping"),
+                        "title": _("Mappei<->Classei"),
                         "icon": "link",
                         "link": reverse_lazy("admin:mappei_mappeiproductmapping_changelist"),
                         "permission": sidebar_model_view_permission("mappei", "MappeiProductMapping"),

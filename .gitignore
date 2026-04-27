@@ -18,7 +18,6 @@ COM_Aktiv_Kompendium_overview.txt
 codex_log.md
 database.sql
 
-# RuFlo local runtime state
 /.swarm/
 /.claude/settings.local.json
 /.claude/memory.db

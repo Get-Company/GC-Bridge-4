@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * RuFlo V3 Statusline Generator (Optimized)
+ * Claude Code Statusline Generator (Optimized)
  * Displays real-time V3 implementation progress and system status
  *
  * Usage: node statusline.cjs [--json] [--compact]
@@ -571,7 +571,7 @@ function generateStatusline() {
   const lines = [];
 
   // Header
-  let header = c.bold + c.brightPurple + '\u258A RuFlo V3.5 ' + c.reset;
+  let header = c.bold + c.brightPurple + '\u258A Claude Code ' + c.reset;
   header += (swarm.coordinationActive ? c.brightCyan : c.dim) + '\u25CF ' + c.brightCyan + git.name + c.reset;
   if (git.gitBranch) {
     header += '  ' + c.dim + '\u2502' + c.reset + '  ' + c.brightBlue + '\u23C7 ' + git.gitBranch + c.reset;

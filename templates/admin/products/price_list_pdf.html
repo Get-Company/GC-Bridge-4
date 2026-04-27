@@ -5,6 +5,7 @@ Wichtig:
 - Der Renderer unterstuetzt h1, h2, h3, p, ul/ol/li und table.
 - Jeder data-pdf-section Abschnitt beginnt im PDF auf einer neuen Seite.
 - Ueberschriften mit data-pdf-full-width-bar bekommen einen grauen Balken ueber die volle Seitenbreite.
+- `cover` und `closing` werden nur genutzt, wenn keine externen PDF-Vorlagen vorhanden sind.
 - CSS wird fuer dieses PDF nicht ausgewertet; Schriftgroessen und Farben stehen im ReportLab-Renderer.
 - Tabellenbreiten werden ueber data-width am Tabellenkopf gesteuert.
 - Preise werden bereits formatiert als price_display und rebate_price_display uebergeben.
@@ -45,7 +46,7 @@ Wichtig:
                 <tbody>
                     {% for row in group.rows %}
                         <tr>
-                            <td>{{ group.category_name }}</td>
+                            <td>{{ row.category_name }}</td>
                             <td>{{ row.erp_nr }}</td>
                             <td>{{ row.attributes|default:"-" }}</td>
                             <td>{{ row.purchase_unit_display|default:"-" }}</td>
