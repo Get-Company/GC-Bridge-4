@@ -528,12 +528,13 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
         self.assertContains(response, "neuer Rab.Preis")
         self.assertContains(response, 'value="10,30"', html=False)
         self.assertContains(response, 'value="9,25"', html=False)
-        self.assertContains(response, "2022")
-        self.assertContains(response, "8,50")
         self.assertContains(response, "2023")
         self.assertContains(response, "9,10")
         self.assertContains(response, "2024")
         self.assertContains(response, "9,55")
+        self.assertContains(response, "2025")
+        self.assertContains(response, str(timezone.localdate().year))
+        self.assertContains(response, "10,01")
         self.assertContains(response, "A-6000 - Admin Artikel")
         self.assertContains(response, "Preisdiagramm")
         self.assertContains(response, "js-position-card", html=False)
@@ -544,17 +545,19 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
         self.assertContains(response, "Lade Diagramm ...")
         self.assertNotContains(response, "canvas", html=False)
 
-    def test_yearly_summary_only_shows_three_years_before_current_price_year(self):
+    def test_yearly_summary_shows_current_year_and_three_years_back(self):
         admin_instance = PriceIncreaseAdmin(PriceIncrease, AdminSite())
         history_entries = list(self.price.history_entries.order_by("created_at", "id"))
 
         summary = admin_instance._build_yearly_price_summary(self.item, history_entries)
 
-        current_price_year = timezone.localdate().year - 1
+        current_year = timezone.localdate().year
         self.assertEqual(
             [entry["year"] for entry in summary],
-            [str(year) for year in range(current_price_year - 3, current_price_year)],
+            [str(year) for year in range(current_year - 3, current_year + 1)],
         )
+        self.assertEqual(summary[-1]["price"], "10,01")
+        self.assertTrue(summary[-1]["is_current_price"])
 
     def test_yearly_summary_groups_imported_midnight_dates_by_local_year(self):
         admin_instance = PriceIncreaseAdmin(PriceIncrease, AdminSite())

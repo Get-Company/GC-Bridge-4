@@ -2285,10 +2285,10 @@ class PriceIncreaseAdmin(BaseAdmin):
 
     @classmethod
     def _price_summary_date_range(cls):
-        current_price_year, _new_price_year = cls._price_timeline_years()
+        current_year = timezone.localdate().year
         current_timezone = timezone.get_current_timezone()
-        start_at = timezone.make_aware(datetime(current_price_year - 3, 1, 1), current_timezone)
-        end_at = timezone.make_aware(datetime(current_price_year, 1, 1), current_timezone)
+        start_at = timezone.make_aware(datetime(current_year - 3, 1, 1), current_timezone)
+        end_at = timezone.make_aware(datetime(current_year, 1, 1), current_timezone)
         return start_at, end_at
 
     @staticmethod
@@ -2299,18 +2299,20 @@ class PriceIncreaseAdmin(BaseAdmin):
         return yearly_prices
 
     def _build_yearly_price_summary(self, item: PriceIncreaseItem, history_entries: list[PriceHistory]) -> list[dict[str, str]]:
-        current_price_year, _new_price_year = self._price_timeline_years()
+        current_year = timezone.localdate().year
         yearly_prices = self._get_latest_history_price_by_year(history_entries)
-        display_years = range(current_price_year - 3, current_price_year)
+        display_years = list(range(current_year - 3, current_year)) + [current_year]
 
         summary = []
         for year in display_years:
-            price = yearly_prices.get(year)
+            is_current_price = year == current_year
+            price = item.current_price if is_current_price else yearly_prices.get(year)
             summary.append(
                 {
                     "year": str(year),
                     "price": self._format_decimal(price) if price is not None else "-",
                     "has_price": price is not None,
+                    "is_current_price": is_current_price,
                 }
             )
         return summary

@@ -1,6 +1,7 @@
 {% load unfold %}
 <tr class="align-top js-position-row transition-colors group-hover:bg-black/[0.015] dark:group-hover:bg-white/[0.02]">
     <td class="rounded-l-default border-l border-t border-base-200 px-4 py-3 text-sm font-medium text-font-important-light dark:border-base-800 dark:text-font-important-dark">
+        <div class="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-font-subtle-light dark:text-font-subtle-dark">ErpNr</div>
         <div class="whitespace-nowrap">{{ item.product.erp_nr }}</div>
         <div class="mt-1 flex flex-col gap-0.5">
             {% if shopware_shop_url and item.product.sku %}
@@ -15,18 +16,31 @@
             {% endif %}
         </div>
     </td>
-    <td class="whitespace-nowrap border-t border-base-200 px-4 py-3 text-sm text-font-default-light dark:border-base-800 dark:text-font-default-dark">{{ item.display_current_price }}</td>
-    <td class="whitespace-nowrap border-t border-base-200 px-4 py-3 text-sm text-font-default-light dark:border-base-800 dark:text-font-default-dark">{{ item.display_current_rebate_quantity }}</td>
-    <td class="whitespace-nowrap border-t border-base-200 px-4 py-3 text-sm text-font-default-light dark:border-base-800 dark:text-font-default-dark">{{ item.display_current_rebate_price }}</td>
-    <td class="whitespace-nowrap border-t border-base-200 px-4 py-3 text-sm text-font-default-light dark:border-base-800 dark:text-font-default-dark">{{ item.display_unit }}</td>
+    <td class="whitespace-nowrap border-t border-base-200 px-4 py-3 text-sm text-font-default-light dark:border-base-800 dark:text-font-default-dark">
+        <div class="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-font-subtle-light dark:text-font-subtle-dark">Preis</div>
+        <div>{{ item.display_current_price }}</div>
+    </td>
+    <td class="whitespace-nowrap border-t border-base-200 px-4 py-3 text-sm text-font-default-light dark:border-base-800 dark:text-font-default-dark">
+        <div class="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-font-subtle-light dark:text-font-subtle-dark">VPE</div>
+        <div>{{ item.display_current_rebate_quantity }}</div>
+    </td>
+    <td class="whitespace-nowrap border-t border-base-200 px-4 py-3 text-sm text-font-default-light dark:border-base-800 dark:text-font-default-dark">
+        <div class="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-font-subtle-light dark:text-font-subtle-dark">Rab.Preis</div>
+        <div>{{ item.display_current_rebate_price }}</div>
+    </td>
+    <td class="whitespace-nowrap border-t border-base-200 px-4 py-3 text-sm text-font-default-light dark:border-base-800 dark:text-font-default-dark">
+        <div class="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-font-subtle-light dark:text-font-subtle-dark">Einht.</div>
+        <div>{{ item.display_unit }}</div>
+    </td>
     <td class="border-t border-base-200 px-4 py-3 dark:border-base-800">
+        <div class="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-font-subtle-light dark:text-font-subtle-dark">Verlauf</div>
         <div class="min-w-28 space-y-1">
             {% for yearly_price in item.yearly_prices %}
                 <div class="flex items-center justify-between gap-2 text-xs">
-                    <span class="font-medium text-font-subtle-light dark:text-font-subtle-dark">
+                    <span class="font-medium {% if yearly_price.is_current_price %}text-primary-700 dark:text-primary-300{% else %}text-font-subtle-light dark:text-font-subtle-dark{% endif %}">
                         {{ yearly_price.year }}
                     </span>
-                    <span class="{% if yearly_price.has_price %}text-font-default-light dark:text-font-default-dark{% else %}text-font-subtle-light dark:text-font-subtle-dark{% endif %}">
+                    <span class="{% if yearly_price.has_price %}text-font-default-light dark:text-font-default-dark{% else %}text-font-subtle-light dark:text-font-subtle-dark{% endif %}{% if yearly_price.is_current_price %} font-semibold{% endif %}">
                         {{ yearly_price.price }}
                     </span>
                 </div>
@@ -36,6 +50,7 @@
         </div>
     </td>
     <td class="border-t border-base-200 px-4 py-3 dark:border-base-800">
+        <div class="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-font-subtle-light dark:text-font-subtle-dark">Neuer Preis</div>
         <input
             type="text"
             inputmode="decimal"
@@ -48,6 +63,7 @@
         >
     </td>
     <td class="border-t border-base-200 px-4 py-3 dark:border-base-800">
+        <div class="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-font-subtle-light dark:text-font-subtle-dark">neuer Rab.Preis</div>
         <input
             type="text"
             inputmode="decimal"
@@ -61,6 +77,7 @@
     </td>
     {# Mappei comparison column #}
     <td class="border-t border-base-200 px-4 py-3 dark:border-base-800">
+        <div class="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-red-500 dark:text-red-400">Mappei</div>
         {% if item.mappei_data %}
             {% with m=item.mappei_data %}
             <details class="group/mappei">
@@ -128,6 +145,7 @@
         {% endif %}
     </td>
     <td class="rounded-r-default border-r border-t border-base-200 px-4 py-3 text-sm dark:border-base-800">
+        <div class="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-font-subtle-light dark:text-font-subtle-dark">Status</div>
         <div class="flex flex-col gap-2">
             {% if item.row_status_message %}
                 <span class="inline-flex items-center gap-1.5 rounded-default bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-300">
