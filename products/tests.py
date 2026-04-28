@@ -1009,6 +1009,7 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
         self.assertIn("12", vpe_display)
         self.assertIn("Min: 24", vpe_display)
         self.assertIn("Schritt: 6", vpe_display)
+        self.assertIn("Preis pro 12 Stk", vpe_display)
 
     def test_export_price_list_pdf_action_returns_pdf(self):
         root_category = Category.objects.create(name="Druck", slug="druck", sort_order=10)

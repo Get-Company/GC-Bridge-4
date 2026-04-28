@@ -1082,11 +1082,17 @@ class PriceIncreaseAdmin(BaseAdmin):
         primary_display = cls._format_integer(primary_value) or "-"
         min_purchase_display = cls._format_integer(row["min_purchase"]) or "-"
         purchase_unit_display = cls._format_integer(row["purchase_unit"]) or "-"
+        unit = (row.get("unit") or "").strip() or "St."
+        if row["factor"]:
+            price_unit_label = f"Preis pro {row['factor']} {unit}"
+        else:
+            price_unit_label = f"Preis pro {unit}"
         return format_html(
-            "{}<br/><font size=\"7\">Min: {} | Schritt: {}</font>",
+            "{}<br/><font size=\"7\">Min: {} | Schritt: {}</font><br/><font size=\"7\">{}</font>",
             primary_display,
             min_purchase_display,
             purchase_unit_display,
+            price_unit_label,
         )
 
     @staticmethod
