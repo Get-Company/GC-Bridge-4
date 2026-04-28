@@ -1,5 +1,5 @@
 {% load unfold %}
-<tr class="align-top js-position-row transition-colors group-hover:bg-base-50 dark:group-hover:bg-base-800/40">
+<tr class="align-top js-position-row transition-colors group-hover:bg-black/[0.015] dark:group-hover:bg-white/[0.02]">
     <td class="rounded-l-default border-l border-t border-base-200 px-4 py-3 text-sm font-medium text-font-important-light dark:border-base-800 dark:text-font-important-dark">
         <div class="whitespace-nowrap">{{ item.product.erp_nr }}</div>
         <div class="mt-1 flex flex-col gap-0.5">
@@ -143,32 +143,56 @@
                 <span class="text-font-subtle-light dark:text-font-subtle-dark">Noch nichts gespeichert.</span>
             {% endif %}
 
-            {% if item.validation_errors %}
-                {% for issue in item.validation_errors %}
-                    <span class="inline-flex items-center gap-1.5 rounded-default bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:text-red-300">
-                        <span class="material-symbols-outlined text-sm leading-none">error</span>{{ issue.message }}
-                    </span>
-                {% endfor %}
-            {% endif %}
-
-            {% if item.validation_warnings %}
-                {% for issue in item.validation_warnings %}
-                    <span class="inline-flex items-center gap-1.5 rounded-default bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
-                        <span class="material-symbols-outlined text-sm leading-none">warning</span>{{ issue.message }}
-                    </span>
-                {% endfor %}
+            {% if item.validation_errors or item.validation_warnings %}
+                <details class="group/validation js-position-validation-details rounded-default border {% if item.validation_errors %}border-red-200 bg-red-50/70 dark:border-red-900/60 dark:bg-red-900/10{% else %}border-amber-200 bg-amber-50/70 dark:border-amber-900/60 dark:bg-amber-900/10{% endif %}">
+                    <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-2.5 py-2 text-xs font-medium {% if item.validation_errors %}text-red-700 dark:text-red-300{% else %}text-amber-700 dark:text-amber-300{% endif %}">
+                        <span class="inline-flex items-center gap-1.5">
+                            <span class="material-symbols-outlined text-sm leading-none">{% if item.validation_errors %}error{% else %}warning{% endif %}</span>
+                            <span>
+                                {% if item.validation_errors %}
+                                    {{ item.validation_errors|length }} Fehler{% if item.validation_warnings %}, {{ item.validation_warnings|length }} Warnungen{% endif %}
+                                {% else %}
+                                    {{ item.validation_warnings|length }} Warnungen
+                                {% endif %}
+                            </span>
+                        </span>
+                        <span class="material-symbols-outlined text-sm leading-none transition-transform group-open/validation:rotate-180">expand_more</span>
+                    </summary>
+                    <div class="flex flex-col gap-2 border-t border-current/10 px-2.5 py-2">
+                        {% for issue in item.validation_errors %}
+                            <span class="inline-flex items-center gap-1.5 rounded-default bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:text-red-300">
+                                <span class="material-symbols-outlined text-sm leading-none">error</span>{{ issue.message }}
+                            </span>
+                        {% endfor %}
+                        {% for issue in item.validation_warnings %}
+                            <span class="inline-flex items-center gap-1.5 rounded-default bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+                                <span class="material-symbols-outlined text-sm leading-none">warning</span>{{ issue.message }}
+                            </span>
+                        {% endfor %}
+                    </div>
+                </details>
             {% endif %}
         </div>
     </td>
 </tr>
-<tr class="js-position-history-row transition-colors group-hover:bg-base-50 dark:group-hover:bg-base-800/40">
-    <td colspan="10" class="rounded-b-default border-x border-b border-base-200 px-4 pb-4 dark:border-base-800">
+<tr class="js-position-history-row transition-colors group-hover:bg-black/[0.015] dark:group-hover:bg-white/[0.02]">
+    <td colspan="10" class="rounded-b-default border-x border-b border-base-200 px-4 pb-4 pt-2 dark:border-base-800">
         <details
-            class="rounded-default border border-base-200 bg-white shadow-xs transition-colors group-hover:bg-base-50 dark:border-base-800 dark:bg-base-900 dark:group-hover:bg-base-800/40"
+            class="rounded-default border border-base-200/80 bg-base-50/85 shadow-xs transition-colors dark:border-base-800 dark:bg-base-950/65"
             data-chart-url="{{ item.price_history_chart.chart_url }}"
         >
-            <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-medium text-font-important-light hover:bg-base-50 dark:text-font-important-dark dark:hover:bg-base-800/40">
-                <span>{{ item.product.erp_nr }}{% if item.product.name %} - {{ item.product.name }}{% endif %}</span>
+            <summary class="flex cursor-pointer list-none items-center justify-between gap-3 rounded-default px-4 py-3 text-sm font-medium text-font-important-light hover:bg-black/[0.03] dark:text-font-important-dark dark:hover:bg-white/[0.03]">
+                <span class="flex items-center gap-2">
+                    <span class="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-300">
+                        <span class="material-symbols-outlined text-base leading-none">show_chart</span>
+                    </span>
+                    <span>
+                        Preisdiagramm
+                        <span class="text-xs font-normal text-font-subtle-light dark:text-font-subtle-dark">
+                            fuer {{ item.product.erp_nr }}{% if item.product.name %} - {{ item.product.name }}{% endif %}
+                        </span>
+                    </span>
+                </span>
                 <span class="text-xs font-normal text-font-subtle-light dark:text-font-subtle-dark">
                     {{ item.price_history_chart.current_price_year }} aktueller Preis, {{ item.price_history_chart.new_price_year }} neuer Preis
                 </span>

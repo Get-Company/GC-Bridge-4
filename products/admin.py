@@ -2084,8 +2084,8 @@ class PriceIncreaseAdmin(BaseAdmin):
 
     def _prepare_position_item(self, price_increase: PriceIncrease, item: PriceIncreaseItem) -> PriceIncreaseItem:
         item.display_current_price = self._format_decimal(item.current_price)
-        item.display_current_rebate_quantity = self._format_integer(item.current_rebate_quantity)
-        item.display_current_rebate_price = self._format_decimal(item.current_rebate_price)
+        item.display_current_rebate_quantity = self._format_integer(item.normalized_current_rebate_quantity)
+        item.display_current_rebate_price = self._format_decimal(item.normalized_current_rebate_price)
         item.display_unit = item.unit or ""
         item.display_new_price = self._format_decimal(item.effective_new_price)
         item.display_new_rebate_price = self._format_decimal(item.effective_new_rebate_price)

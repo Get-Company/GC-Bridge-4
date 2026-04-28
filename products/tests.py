@@ -284,6 +284,31 @@ class PriceIncreaseServiceTest(TestCase):
         self.assertIn("rebate_quantity_below_factor", issue_codes)
         self.assertIn("unit_missing", issue_codes)
 
+    def test_item_pricing_checks_ignore_missing_tier_when_rebate_values_are_zero(self):
+        self.product.factor = 0
+        self.product.save(update_fields=["factor", "updated_at"])
+
+        price_increase = PriceIncrease.objects.create(title="Ohne Staffel")
+        item = PriceIncreaseItem.objects.create(
+            price_increase=price_increase,
+            product=self.product,
+            source_price=self.default_price,
+            unit="Stk",
+            current_price=Decimal("10.00"),
+            current_rebate_quantity=0,
+            current_rebate_price=Decimal("0.00"),
+        )
+
+        issue_codes = {issue["code"] for issue in item.get_pricing_check_issues()}
+
+        self.assertNotIn("current_rebate_price_non_positive", issue_codes)
+        self.assertNotIn("new_rebate_price_non_positive", issue_codes)
+        self.assertNotIn("missing_rebate_quantity", issue_codes)
+        self.assertNotIn("rebate_quantity_too_low", issue_codes)
+        self.assertNotIn("rebate_quantity_below_min_purchase", issue_codes)
+        self.assertNotIn("rebate_quantity_below_purchase_unit", issue_codes)
+        self.assertNotIn("invalid_factor", issue_codes)
+
     def test_apply_updates_default_price_and_syncs_other_channels_after_commit(self):
         price_increase = PriceIncrease.objects.create(title="August 2026")
         item = PriceIncreaseItem.objects.create(
@@ -510,6 +535,8 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
         self.assertContains(response, "2024")
         self.assertContains(response, "9,55")
         self.assertContains(response, "A-6000 - Admin Artikel")
+        self.assertContains(response, "Preisdiagramm")
+        self.assertContains(response, "js-position-card", html=False)
         self.assertContains(
             response,
             reverse("admin:products_priceincrease_position_chart", args=(self.price_increase.pk, self.item.pk)),
@@ -841,6 +868,31 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
             response,
             "Der neue Preis liegt mehr als 10 Prozentpunkte ueber der generellen Erhoehung.",
         )
+        self.assertContains(response, 'js-position-validation-details', html=False)
+        self.assertContains(response, "2 Warnungen")
+
+    def test_positions_table_hides_zero_rebate_values_without_validation_toggle(self):
+        self.product.factor = 0
+        self.product.save(update_fields=["factor", "updated_at"])
+        self.item.current_rebate_quantity = 0
+        self.item.current_rebate_price = Decimal("0.00")
+        self.item.new_rebate_price = None
+        self.item.new_price = None
+        self.item.save(update_fields=["current_rebate_quantity", "current_rebate_price", "new_rebate_price", "new_price", "updated_at"])
+
+        response = self.client.get(
+            reverse("admin:products_priceincrease_positions_table", args=(self.price_increase.pk,))
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Aktueller Staffelpreis ist 0 oder negativ.")
+        self.assertNotContains(response, "Aktueller Staffelpreis ist gesetzt, aber die Staffelmenge fehlt oder ist ungueltig.")
+        self.assertNotContains(response, "Staffelmenge ist 1 oder kleiner und wirkt damit fachlich unplausibel.")
+        self.assertNotContains(response, "Die Staffelmenge liegt unter der Mindestabnahme des Produkts.")
+        self.assertNotContains(response, "Die Staffelmenge liegt unter der Kaufeinheit des Produkts.")
+        self.assertNotContains(response, "Der Produktfaktor ist 0 oder negativ.")
+        self.assertNotContains(response, 'js-position-validation-details', html=False)
+        self.assertNotContains(response, 'placeholder="9,25"', html=False)
 
     def test_positions_table_only_shows_active_products_sorted_by_erp_nr(self):
         inactive_product = Product.objects.create(erp_nr="A-1000", name="Inaktiv", unit="Stk", is_active=False)

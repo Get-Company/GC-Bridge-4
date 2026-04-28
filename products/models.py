@@ -771,16 +771,18 @@ class PriceIncreaseItem(BaseModel):
         validation_errors = {}
         rounded_new_price = self._rounded_price_value(self.new_price)
         rounded_new_rebate_price = self._rounded_price_value(self.new_rebate_price)
+        current_rebate_price = self.normalized_current_rebate_price
+        current_rebate_quantity = self.normalized_current_rebate_quantity
         if rounded_new_price is not None and rounded_new_price <= Decimal("0.00"):
             validation_errors["new_price"] = _("Der neue Preis muss groesser als 0 sein.")
         if rounded_new_rebate_price is not None:
             if rounded_new_rebate_price <= Decimal("0.00"):
                 validation_errors["new_rebate_price"] = _("Der neue Rabattpreis muss groesser als 0 sein.")
-            elif self.current_rebate_price is None:
+            elif current_rebate_price is None:
                 validation_errors["new_rebate_price"] = _(
                     "Ein neuer Rabattpreis ist nur moeglich, wenn bereits ein aktueller Staffelpreis vorhanden ist."
                 )
-            elif self.current_rebate_quantity is None or self.current_rebate_quantity <= 0:
+            elif current_rebate_quantity is None:
                 validation_errors["new_rebate_price"] = _(
                     "Ein neuer Rabattpreis ist nur mit gueltiger Staffelmenge moeglich."
                 )
@@ -800,15 +802,39 @@ class PriceIncreaseItem(BaseModel):
             self.new_rebate_price = Price._round_up_5ct(Decimal(self.new_rebate_price)).quantize(Decimal("0.01"))
         super().save(*args, **kwargs)
 
+    @staticmethod
+    def _normalized_positive_decimal(value: Decimal | None) -> Decimal | None:
+        if value is None:
+            return None
+        decimal_value = Decimal(value)
+        if decimal_value <= Decimal("0.00"):
+            return None
+        return decimal_value
+
+    @staticmethod
+    def _normalized_positive_integer(value: int | None) -> int | None:
+        if value is None or value <= 0:
+            return None
+        return value
+
+    @property
+    def normalized_current_rebate_price(self) -> Decimal | None:
+        return self._normalized_positive_decimal(self.current_rebate_price)
+
+    @property
+    def normalized_current_rebate_quantity(self) -> int | None:
+        return self._normalized_positive_integer(self.current_rebate_quantity)
+
     @property
     def suggested_price(self) -> Decimal:
         return self._apply_increase(self.current_price)
 
     @property
     def suggested_rebate_price(self) -> Decimal | None:
-        if self.current_rebate_price is None:
+        current_rebate_price = self.normalized_current_rebate_price
+        if current_rebate_price is None:
             return None
-        return self._apply_increase(self.current_rebate_price)
+        return self._apply_increase(current_rebate_price)
 
     @property
     def effective_new_price(self) -> Decimal:
@@ -816,7 +842,7 @@ class PriceIncreaseItem(BaseModel):
 
     @property
     def effective_new_rebate_price(self) -> Decimal | None:
-        if self.current_rebate_price is None:
+        if self.normalized_current_rebate_price is None:
             return None
         return self.new_rebate_price if self.new_rebate_price is not None else self.suggested_rebate_price
 
@@ -866,9 +892,9 @@ class PriceIncreaseItem(BaseModel):
         general_percentage = Decimal(self.price_increase.general_percentage or Decimal("0.00"))
         current_price = Decimal(self.current_price)
         effective_new_price = self.effective_new_price
-        current_rebate_price = Decimal(self.current_rebate_price) if self.current_rebate_price is not None else None
+        current_rebate_price = self.normalized_current_rebate_price
         effective_new_rebate_price = self.effective_new_rebate_price
-        current_rebate_quantity = self.current_rebate_quantity
+        current_rebate_quantity = self.normalized_current_rebate_quantity
         product = self.product
 
         if current_price <= Decimal("0.00"):
@@ -889,15 +915,6 @@ class PriceIncreaseItem(BaseModel):
                     field="new_price",
                 )
             )
-        if current_rebate_price is not None and current_rebate_price <= Decimal("0.00"):
-            issues.append(
-                self._build_check_issue(
-                    "current_rebate_price_non_positive",
-                    self.CHECK_SEVERITY_ERROR,
-                    "Aktueller Staffelpreis ist 0 oder negativ.",
-                    field="current_rebate_price",
-                )
-            )
         if effective_new_rebate_price is not None and effective_new_rebate_price <= Decimal("0.00"):
             issues.append(
                 self._build_check_issue(
@@ -907,7 +924,7 @@ class PriceIncreaseItem(BaseModel):
                     field="new_rebate_price",
                 )
             )
-        if current_rebate_price is not None and (current_rebate_quantity is None or current_rebate_quantity <= 0):
+        if current_rebate_price is not None and current_rebate_quantity is None:
             issues.append(
                 self._build_check_issue(
                     "missing_rebate_quantity",
@@ -1190,7 +1207,7 @@ class PriceIncreaseItem(BaseModel):
                     )
                 )
 
-        if product.factor is not None:
+        if product.factor is not None and (current_rebate_price is not None or current_rebate_quantity is not None):
             if product.factor <= 0:
                 issues.append(
                     self._build_check_issue(
