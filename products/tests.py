@@ -25,7 +25,7 @@ from products.admin import (
     ProductImageInline,
     ProductPropertyInline,
     PropertyValueAdmin,
-    PropertyValueProductInline,
+    PropertyValueAdminForm,
 )
 from core.admin_utils import log_admin_change
 from mappei.models import MappeiPriceSnapshot, MappeiProduct, MappeiProductMapping
@@ -1567,9 +1567,48 @@ class ProductImageAdminAndSyncTest(TestCase):
     def test_product_admin_uses_product_property_inline(self):
         self.assertIn(ProductPropertyInline, ProductAdmin.inlines)
 
-    def test_property_value_admin_uses_product_inline(self):
-        self.assertIn(PropertyValueProductInline, PropertyValueAdmin.inlines)
-        self.assertEqual(PropertyValueProductInline.autocomplete_fields, ("product",))
+    def test_property_value_admin_form_uses_filtered_product_assignment_widget(self):
+        form = PropertyValueAdminForm()
+
+        self.assertEqual(form.fields["products"].widget.__class__.__name__, "FilteredSelectMultiple")
+
+    def test_property_value_admin_form_prefills_assigned_products(self):
+        group = PropertyGroup.objects.create(name="Material")
+        value = PropertyValue.objects.create(group=group, name="Stahl")
+        matching_product = Product.objects.create(erp_nr="A-4010", name="Passend")
+        other_product = Product.objects.create(erp_nr="A-4011", name="Andere")
+        ProductProperty.objects.create(product=matching_product, value=value, external_key="keep-me")
+
+        form = PropertyValueAdminForm(instance=value)
+
+        self.assertEqual(list(form.fields["products"].initial), [matching_product])
+        self.assertIn(other_product, form.fields["products"].queryset)
+
+    def test_property_value_admin_saves_product_assignments_via_through_model(self):
+        group = PropertyGroup.objects.create(name="Farbe")
+        value = PropertyValue.objects.create(group=group, name="Rot")
+        keep_product = Product.objects.create(erp_nr="A-4012", name="Bleibt")
+        add_product = Product.objects.create(erp_nr="A-4013", name="Neu")
+        remove_product = Product.objects.create(erp_nr="A-4014", name="Weg")
+        preserved_relation = ProductProperty.objects.create(
+            product=keep_product,
+            value=value,
+            external_key="legacy-link",
+        )
+        ProductProperty.objects.create(
+            product=remove_product,
+            value=value,
+            external_key="obsolete-link",
+        )
+
+        PropertyValueAdmin._save_product_assignments(value, Product.objects.filter(pk__in=[keep_product.pk, add_product.pk]))
+
+        preserved_relation.refresh_from_db()
+        self.assertEqual(
+            list(ProductProperty.objects.filter(value=value).order_by("product__erp_nr").values_list("product_id", flat=True)),
+            [keep_product.pk, add_product.pk],
+        )
+        self.assertEqual(preserved_relation.external_key, "legacy-link")
 
     def test_product_image_inline_renders_lazy_preview(self):
         product = Product.objects.create(erp_nr="A-4005", name="Inline Bild")

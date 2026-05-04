@@ -243,14 +243,24 @@ class ProductPropertyInline(BaseTabularInline):
         return obj.value.group.name
 
 
-class PropertyValueProductInline(BaseTabularInline):
-    model = ProductProperty
-    fields = ("product", "external_key")
-    autocomplete_fields = ("product",)
+class PropertyValueAdminForm(forms.ModelForm):
+    products = forms.ModelMultipleChoiceField(
+        label="Produkte",
+        required=False,
+        queryset=Product.objects.none(),
+        widget=admin.widgets.FilteredSelectMultiple("Produkte", is_stacked=False),
+    )
 
-    def get_queryset(self, request):
-        queryset = super().get_queryset(request)
-        return queryset.select_related("product").order_by("product__erp_nr", "product__name", "id")
+    class Meta:
+        model = PropertyValue
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        product_queryset = Product.objects.order_by("erp_nr", "name")
+        self.fields["products"].queryset = product_queryset
+        if self.instance.pk:
+            self.fields["products"].initial = product_queryset.filter(product_properties__value=self.instance)
 
 
 class ProductSpecialPriceActionForm(UnfoldActionForm):
@@ -2888,16 +2898,38 @@ class PropertyGroupAdmin(TabbedTranslationAdmin, BaseAdmin):
 
 @admin.register(PropertyValue)
 class PropertyValueAdmin(TabbedTranslationAdmin, BaseAdmin):
+    form = PropertyValueAdminForm
     formfield_overrides = {
         **getattr(TabbedTranslationAdmin, "formfield_overrides", {}),
         **BaseAdmin.formfield_overrides,
     }
-    inlines = (PropertyValueProductInline,)
     list_display = ("name", "group", "external_key", "created_at")
     search_fields = ("name", "name_de", "name_en", "group__name", "group__name_de", "external_key")
     list_filter = [("group", RelatedDropdownFilter), ("created_at", RangeDateTimeFilter)]
     autocomplete_fields = ("group",)
     ordering = ("group__name", "name")
+
+    @staticmethod
+    def _save_product_assignments(property_value: PropertyValue, products):
+        if products is None:
+            return
+
+        selected_product_ids = set(products.values_list("id", flat=True))
+        existing_relations = ProductProperty.objects.filter(value=property_value)
+        existing_product_ids = set(existing_relations.values_list("product_id", flat=True))
+
+        existing_relations.exclude(product_id__in=selected_product_ids).delete()
+
+        ProductProperty.objects.bulk_create(
+            [
+                ProductProperty(product_id=product_id, value=property_value)
+                for product_id in sorted(selected_product_ids - existing_product_ids)
+            ]
+        )
+
+    def save_related(self, request, form, formsets, change):
+        super().save_related(request, form, formsets, change)
+        self._save_product_assignments(form.instance, form.cleaned_data.get("products"))
 
 
 @admin.register(Category)
