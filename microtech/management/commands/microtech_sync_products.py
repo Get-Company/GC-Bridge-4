@@ -87,6 +87,35 @@ def _log_admin_error(
 class Command(BaseCommand):
     help = "Sync products from Microtech (Artikel) into Django."
 
+    @staticmethod
+    def _save_microtech_price(
+        *,
+        product: Product,
+        sales_channel: ShopwareSettings,
+        price: Decimal,
+        rebate_quantity: int | None,
+        rebate_price: Decimal | None,
+        special_price: Decimal | None,
+        special_start_date,
+        special_end_date,
+    ) -> Price:
+        price_entry = (
+            Price.objects.filter(product=product, sales_channel=sales_channel)
+            .order_by("pk")
+            .first()
+        )
+        if price_entry is None:
+            price_entry = Price(product=product, sales_channel=sales_channel)
+
+        price_entry.price = price
+        price_entry.rebate_quantity = rebate_quantity
+        price_entry.rebate_price = rebate_price
+        price_entry.special_price = special_price
+        price_entry.special_start_date = special_start_date
+        price_entry.special_end_date = special_end_date
+        price_entry.save(history_tracked_fields=Price.MICROTECH_HISTORY_FIELDS)
+        return price_entry
+
     def add_arguments(self, parser):
         parser.add_argument(
             "erp_nrs",
@@ -341,17 +370,15 @@ class Command(BaseCommand):
                     object_repr=f"Product {product.erp_nr}",
                 )
             else:
-                base_price, _ = Price.objects.update_or_create(
+                base_price = self._save_microtech_price(
                     product=product,
                     sales_channel=default_channel,
-                    defaults={
-                        "price": price_value,
-                        "rebate_quantity": _to_int(artikel_service.get_rebate_quantity()),
-                        "rebate_price": _to_decimal(artikel_service.get_rebate_price()),
-                        "special_price": _to_decimal(artikel_service.get_special_price()),
-                        "special_start_date": artikel_service.get_special_start_date(),
-                        "special_end_date": artikel_service.get_special_end_date(),
-                    },
+                    price=price_value,
+                    rebate_quantity=_to_int(artikel_service.get_rebate_quantity()),
+                    rebate_price=_to_decimal(artikel_service.get_rebate_price()),
+                    special_price=_to_decimal(artikel_service.get_special_price()),
+                    special_start_date=artikel_service.get_special_start_date(),
+                    special_end_date=artikel_service.get_special_end_date(),
                 )
 
                 for channel in channels:
@@ -369,17 +396,15 @@ class Command(BaseCommand):
                             object_id=str(product.pk),
                             object_repr=f"Product {product.erp_nr}",
                         )
-                    Price.objects.update_or_create(
+                    self._save_microtech_price(
                         product=product,
                         sales_channel=channel,
-                        defaults={
-                            "price": _apply_factor(base_price.price, factor),
-                            "rebate_quantity": base_price.rebate_quantity,
-                            "rebate_price": _apply_factor(base_price.rebate_price, factor),
-                            "special_price": _apply_factor(base_price.special_price, factor),
-                            "special_start_date": base_price.special_start_date,
-                            "special_end_date": base_price.special_end_date,
-                        },
+                        price=_apply_factor(base_price.price, factor),
+                        rebate_quantity=base_price.rebate_quantity,
+                        rebate_price=_apply_factor(base_price.rebate_price, factor),
+                        special_price=_apply_factor(base_price.special_price, factor),
+                        special_start_date=base_price.special_start_date,
+                        special_end_date=base_price.special_end_date,
                     )
 
         image_names = _unique_preserve_order(artikel_service.get_image_list())

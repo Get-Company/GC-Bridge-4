@@ -1,12 +1,14 @@
+from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
 from django.core.management.base import CommandError
 from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 
-from products.models import Image, Product, ProductImage
+from products.models import Image, Price, Product, ProductImage
 from shopware.management.commands.shopware_sync_products import Command as ShopwareSyncProductsCommand
 from shopware.management.commands.shopware_force_product_image_uploads import Command as ForceProductImageUploadsCommand
+from shopware.models import ShopwareSettings
 from shopware.services.product import ProductService
 from shopware.services.product_media import ProductMediaSyncService
 from shopware.services.shopware6 import InvalidTokenError, Shopware6Service
@@ -252,6 +254,60 @@ class ShopwareSyncProductsCommandBatchTest(TestCase):
         self.assertEqual(main_payloads[0]["id"], "sku-1")
         self.assertEqual([payload["productNumber"] for payload in fallback_payloads], ["A-7002"])
         self.assertNotIn("id", fallback_payloads[0])
+        runtime.close.assert_called_once()
+
+    @patch("shopware.management.commands.shopware_sync_products.CommandRuntimeService.start")
+    @patch("shopware.management.commands.shopware_sync_products.ProductService")
+    def test_handle_replays_full_price_payload_after_fallback_sku_resolution(
+        self,
+        product_service_factory,
+        mock_runtime_start,
+    ):
+        runtime = MagicMock()
+        mock_runtime_start.return_value = runtime
+
+        service = MagicMock()
+        service.get_sku_map.side_effect = [{}, {"A-7004": "sku-4"}]
+        product_service_factory.return_value = service
+
+        default_channel = ShopwareSettings.objects.create(
+            name="Default",
+            is_active=True,
+            is_default=True,
+            currency_id="currency-default",
+            rule_id_price="rule-default",
+        )
+        b2b_channel = ShopwareSettings.objects.create(
+            name="B2B",
+            is_active=True,
+            currency_id="currency-b2b",
+            rule_id_price="rule-b2b",
+        )
+        product = Product.objects.create(erp_nr="A-7004", name="Fallback Preisprodukt")
+        Price.objects.create(product=product, sales_channel=default_channel, price=Decimal("10.00"))
+        Price.objects.create(product=product, sales_channel=b2b_channel, price=Decimal("12.50"))
+
+        cmd = ShopwareSyncProductsCommand()
+        cmd.handle(erp_nrs=["A-7004"], all=False, limit=None, batch_size=10, only_with_images=False, log_images=False)
+
+        self.assertEqual(service.bulk_upsert.call_count, 2)
+        initial_fallback_payload = service.bulk_upsert.call_args_list[0].args[0][0]
+        resolved_payload = service.bulk_upsert.call_args_list[1].args[0][0]
+
+        self.assertNotIn("id", initial_fallback_payload)
+        self.assertEqual(resolved_payload["id"], "sku-4")
+        self.assertIn("price", resolved_payload)
+        self.assertIn("prices", resolved_payload)
+        self.assertEqual(
+            [entry["ruleId"] for entry in resolved_payload["prices"]],
+            ["rule-default", "rule-b2b"],
+        )
+        service.purge_product_prices_by_product_and_rule.assert_called_once_with(
+            product_ids=["sku-4"],
+            rule_ids=["rule-default", "rule-b2b"],
+        )
+        product.refresh_from_db()
+        self.assertEqual(product.sku, "sku-4")
         runtime.close.assert_called_once()
 
     @patch("shopware.management.commands.shopware_sync_products.CommandRuntimeService.start")

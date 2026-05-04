@@ -341,6 +341,11 @@ class Price(BaseModel):
         "special_start_date",
         "special_end_date",
     )
+    MICROTECH_HISTORY_FIELDS = (
+        "price",
+        "rebate_quantity",
+        "rebate_price",
+    )
 
     product = models.ForeignKey(
         Product,
@@ -407,6 +412,7 @@ class Price(BaseModel):
         return (value / step).to_integral_value(rounding=ROUND_UP) * step
 
     def save(self, *args, **kwargs):
+        history_tracked_fields = tuple(kwargs.pop("history_tracked_fields", self.TRACKED_HISTORY_FIELDS))
         previous_state = None
         is_create = self.pk is None
         if not is_create:
@@ -436,13 +442,23 @@ class Price(BaseModel):
             self.special_start_date = None
             self.special_end_date = None
         super().save(*args, **kwargs)
-        self._create_history_entry(previous_state=previous_state, is_create=is_create)
+        self._create_history_entry(
+            previous_state=previous_state,
+            is_create=is_create,
+            history_tracked_fields=history_tracked_fields,
+        )
 
-    def _create_history_entry(self, *, previous_state: dict | None, is_create: bool) -> None:
+    def _create_history_entry(
+        self,
+        *,
+        previous_state: dict | None,
+        is_create: bool,
+        history_tracked_fields: tuple[str, ...] | list[str],
+    ) -> None:
         current_state = {field: getattr(self, field) for field in self.TRACKED_HISTORY_FIELDS}
         changed_fields = [
             field
-            for field in self.TRACKED_HISTORY_FIELDS
+            for field in history_tracked_fields
             if previous_state is None or previous_state.get(field) != current_state.get(field)
         ]
 

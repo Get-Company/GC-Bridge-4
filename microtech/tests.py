@@ -140,6 +140,117 @@ class MicrotechSyncProductsCommandTest(TestCase):
         self.assertEqual(price.special_price, Decimal("79.95"))
         self.assertTrue(price.is_special_active)
 
+    def test_sync_same_microtech_price_values_do_not_create_additional_history_entry(self):
+        cmd = MicrotechSyncProductsCommand()
+        artikel_service = self._build_artikel_service(erp_nr="1003", is_active=True)
+        artikel_service.get_price.return_value = Decimal("100.00")
+        artikel_service.get_rebate_quantity.return_value = 10
+        artikel_service.get_rebate_price.return_value = Decimal("95.00")
+
+        cmd._sync_current_record(
+            artikel_service,
+            self._build_lager_service(),
+            tax_map={
+                Decimal("19.00"): self.tax_19,
+                Decimal("7.00"): self.tax_7,
+            },
+            preserve_is_active=False,
+        )
+
+        product = Product.objects.get(erp_nr="1003")
+        price = Price.objects.get(product=product, sales_channel__is_default=True)
+        initial_history_count = price.history_entries.count()
+
+        cmd._sync_current_record(
+            artikel_service,
+            self._build_lager_service(),
+            tax_map={
+                Decimal("19.00"): self.tax_19,
+                Decimal("7.00"): self.tax_7,
+            },
+            preserve_is_active=False,
+        )
+
+        price.refresh_from_db()
+        self.assertEqual(price.history_entries.count(), initial_history_count)
+
+    def test_sync_special_only_change_does_not_create_additional_history_entry(self):
+        cmd = MicrotechSyncProductsCommand()
+        artikel_service = self._build_artikel_service(erp_nr="1004", is_active=True)
+        artikel_service.get_price.return_value = Decimal("100.00")
+        artikel_service.get_rebate_quantity.return_value = 10
+        artikel_service.get_rebate_price.return_value = Decimal("95.00")
+
+        cmd._sync_current_record(
+            artikel_service,
+            self._build_lager_service(),
+            tax_map={
+                Decimal("19.00"): self.tax_19,
+                Decimal("7.00"): self.tax_7,
+            },
+            preserve_is_active=False,
+        )
+
+        product = Product.objects.get(erp_nr="1004")
+        price = Price.objects.get(product=product, sales_channel__is_default=True)
+        initial_history_count = price.history_entries.count()
+
+        artikel_service.get_special_price.return_value = Decimal("79.95")
+        artikel_service.get_special_start_date.return_value = timezone.now() - timedelta(days=2)
+        artikel_service.get_special_end_date.return_value = timezone.now() + timedelta(days=2)
+
+        cmd._sync_current_record(
+            artikel_service,
+            self._build_lager_service(),
+            tax_map={
+                Decimal("19.00"): self.tax_19,
+                Decimal("7.00"): self.tax_7,
+            },
+            preserve_is_active=False,
+        )
+
+        price.refresh_from_db()
+        self.assertEqual(price.special_price, Decimal("79.95"))
+        self.assertEqual(price.history_entries.count(), initial_history_count)
+
+    def test_sync_changed_rebate_quantity_writes_history_entry(self):
+        cmd = MicrotechSyncProductsCommand()
+        artikel_service = self._build_artikel_service(erp_nr="1005", is_active=True)
+        artikel_service.get_price.return_value = Decimal("100.00")
+        artikel_service.get_rebate_quantity.return_value = 10
+        artikel_service.get_rebate_price.return_value = Decimal("95.00")
+
+        cmd._sync_current_record(
+            artikel_service,
+            self._build_lager_service(),
+            tax_map={
+                Decimal("19.00"): self.tax_19,
+                Decimal("7.00"): self.tax_7,
+            },
+            preserve_is_active=False,
+        )
+
+        product = Product.objects.get(erp_nr="1005")
+        price = Price.objects.get(product=product, sales_channel__is_default=True)
+
+        artikel_service.get_rebate_quantity.return_value = 20
+
+        cmd._sync_current_record(
+            artikel_service,
+            self._build_lager_service(),
+            tax_map={
+                Decimal("19.00"): self.tax_19,
+                Decimal("7.00"): self.tax_7,
+            },
+            preserve_is_active=False,
+        )
+
+        latest_history = price.history_entries.order_by("-created_at", "-id").first()
+        self.assertEqual(price.history_entries.count(), 2)
+        self.assertIsNotNone(latest_history)
+        self.assertEqual(latest_history.changed_fields, "rebate_quantity")
+        self.assertEqual(latest_history.rebate_quantity, 20)
+
 
 class MicrotechArtikelServiceTaxTest(TestCase):
     def test_get_tax_rate_uses_optional_field_and_falls_back_to_tax_key(self):

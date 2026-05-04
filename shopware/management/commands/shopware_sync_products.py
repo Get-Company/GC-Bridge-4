@@ -211,6 +211,107 @@ def _prefetch_sync_queryset(products):
     return products
 
 
+def _build_product_sync_payload(
+    *,
+    product: Product,
+    effective_sku: str,
+    default_channel: ShopwareSettings | None,
+    channels: list[ShopwareSettings],
+    admin_user_id: int | None,
+    content_type_id: int | None,
+) -> dict:
+    prices_by_channel = {
+        price.sales_channel_id: price
+        for price in product.prices.select_related("sales_channel").all()
+        if price.sales_channel_id
+    }
+    payload = {
+        "productNumber": product.erp_nr,
+        "active": product.is_active,
+        "taxId": _resolve_tax_id(product),
+        "name": _resolve_product_name(product),
+    }
+    if effective_sku:
+        payload["id"] = effective_sku
+    if product.description is not None:
+        payload["description"] = product.description
+    try:
+        storage = product.storage
+    except Storage.DoesNotExist:
+        storage = None
+    if storage:
+        payload["stock"] = storage.get_stock
+
+    if default_channel:
+        default_price = prices_by_channel.get(default_channel.id)
+        if default_price:
+            if default_channel.currency_id and default_channel.rule_id_price:
+                payload["price"] = _build_base_price(
+                    default_price,
+                    default_channel.currency_id,
+                    default_channel.rule_id_price,
+                )
+            else:
+                _log_admin_error(
+                    admin_user_id=admin_user_id,
+                    content_type_id=content_type_id,
+                    message=(
+                        f"Sales-Channel {default_channel.name} fehlt currency_id oder rule_id_price. "
+                        "Preis-Update übersprungen."
+                    ),
+                    object_id=str(product.pk),
+                    object_repr=f"Product {product.erp_nr}",
+                )
+        else:
+            _log_admin_error(
+                admin_user_id=admin_user_id,
+                content_type_id=content_type_id,
+                message=f"Kein Preis für Default-Sales-Channel bei Produkt {product.erp_nr}.",
+                object_id=str(product.pk),
+                object_repr=f"Product {product.erp_nr}",
+            )
+
+    prices_payload = []
+    if effective_sku:
+        for channel in channels:
+            price = prices_by_channel.get(channel.id)
+            if not price:
+                _log_admin_error(
+                    admin_user_id=admin_user_id,
+                    content_type_id=content_type_id,
+                    message=f"Kein Preis für Sales-Channel {channel.name} bei Produkt {product.erp_nr}.",
+                    object_id=str(product.pk),
+                    object_repr=f"Product {product.erp_nr}",
+                )
+                continue
+            if not channel.rule_id_price or not channel.currency_id:
+                _log_admin_error(
+                    admin_user_id=admin_user_id,
+                    content_type_id=content_type_id,
+                    message=f"Sales-Channel {channel.name} fehlt rule_id_price oder currency_id.",
+                    object_id=str(product.pk),
+                    object_repr=f"Product {product.erp_nr}",
+                )
+                continue
+            prices_payload.extend(_build_prices_for_channel(product, channel, price))
+    elif channels:
+        _log_admin_error(
+            admin_user_id=admin_user_id,
+            content_type_id=content_type_id,
+            message=(
+                f"Advanced prices for product {product.erp_nr} übersprungen, "
+                "da SKU im Fallback-Upsert noch nicht vorhanden war."
+            ),
+            object_id=str(product.pk),
+            object_repr=f"Product {product.erp_nr}",
+        )
+
+    if prices_payload:
+        payload["prices"] = prices_payload
+
+    return payload
+
+
 def _append_media_payload(
     *,
     product: Product,
@@ -357,94 +458,14 @@ class Command(BaseCommand):
                             product.sku = resolved_sku
                             product.save(update_fields=["sku"])
 
-                    prices_by_channel = {
-                        price.sales_channel_id: price
-                        for price in product.prices.select_related("sales_channel").all()
-                        if price.sales_channel_id
-                    }
-                    payload = {
-                        "productNumber": product.erp_nr,
-                        "active": product.is_active,
-                        "taxId": _resolve_tax_id(product),
-                        "name": _resolve_product_name(product),
-                    }
-                    if effective_sku:
-                        payload["id"] = effective_sku
-                    if product.description is not None:
-                        payload["description"] = product.description
-                    try:
-                        storage = product.storage
-                    except Storage.DoesNotExist:
-                        storage = None
-                    if storage:
-                        payload["stock"] = storage.get_stock
-
-                    if default_channel:
-                        default_price = prices_by_channel.get(default_channel.id)
-                        if default_price:
-                            if default_channel.currency_id and default_channel.rule_id_price:
-                                payload["price"] = _build_base_price(
-                                    default_price,
-                                    default_channel.currency_id,
-                                    default_channel.rule_id_price,
-                                )
-                            else:
-                                _log_admin_error(
-                                    admin_user_id=admin_user_id,
-                                    content_type_id=content_type_id,
-                                    message=(
-                                        f"Sales-Channel {default_channel.name} fehlt currency_id oder rule_id_price. "
-                                        "Preis-Update übersprungen."
-                                    ),
-                                    object_id=str(product.pk),
-                                    object_repr=f"Product {product.erp_nr}",
-                                )
-                        else:
-                            _log_admin_error(
-                                admin_user_id=admin_user_id,
-                                content_type_id=content_type_id,
-                                message=f"Kein Preis für Default-Sales-Channel bei Produkt {product.erp_nr}.",
-                                object_id=str(product.pk),
-                                object_repr=f"Product {product.erp_nr}",
-                            )
-
-                    prices_payload = []
-                    if effective_sku:
-                        for channel in channels:
-                            price = prices_by_channel.get(channel.id)
-                            if not price:
-                                _log_admin_error(
-                                    admin_user_id=admin_user_id,
-                                    content_type_id=content_type_id,
-                                    message=f"Kein Preis für Sales-Channel {channel.name} bei Produkt {product.erp_nr}.",
-                                    object_id=str(product.pk),
-                                    object_repr=f"Product {product.erp_nr}",
-                                )
-                                continue
-                            if not channel.rule_id_price or not channel.currency_id:
-                                _log_admin_error(
-                                    admin_user_id=admin_user_id,
-                                    content_type_id=content_type_id,
-                                    message=f"Sales-Channel {channel.name} fehlt rule_id_price oder currency_id.",
-                                    object_id=str(product.pk),
-                                    object_repr=f"Product {product.erp_nr}",
-                                )
-                                continue
-                            prices_payload.extend(_build_prices_for_channel(product, channel, price))
-                    elif channels:
-                        _log_admin_error(
-                            admin_user_id=admin_user_id,
-                            content_type_id=content_type_id,
-                            message=(
-                                f"Advanced prices for product {product.erp_nr} übersprungen, "
-                                "da SKU im Fallback-Upsert noch nicht vorhanden war."
-                            ),
-                            object_id=str(product.pk),
-                            object_repr=f"Product {product.erp_nr}",
-                        )
-
-                    if prices_payload:
-                        payload["prices"] = prices_payload
+                    payload = _build_product_sync_payload(
+                        product=product,
+                        effective_sku=effective_sku or "",
+                        default_channel=default_channel,
+                        channels=channels,
+                        admin_user_id=admin_user_id,
+                        content_type_id=content_type_id,
+                    )
 
                     if effective_sku:
                         image_names = _image_names_for_product(product)
@@ -581,16 +602,29 @@ class Command(BaseCommand):
                                     object_repr=f"Product {product.erp_nr}",
                                 )
                         refreshed_map = service.get_sku_map([product.erp_nr for product in fallback_products])
+                        resolved_fallback_payloads: list[dict] = []
                         fallback_media_payloads: list[dict] = []
                         fallback_media_entities: dict[str, dict] = {}
                         fallback_media_uploads: dict[str, dict] = {}
                         fallback_media_sync_hashes: list[tuple[Product, str]] = []
-                        resolved_fallback_ids: list[str] = []
+                        resolved_fallback_product_ids: list[str] = []
+                        resolved_fallback_media_ids: list[str] = []
                         for product in fallback_products:
                             resolved_sku = refreshed_map.get(product.erp_nr)
                             if resolved_sku:
                                 product.sku = resolved_sku
                                 product.save(update_fields=["sku"])
+                                resolved_fallback_product_ids.append(resolved_sku)
+                                resolved_fallback_payloads.append(
+                                    _build_product_sync_payload(
+                                        product=product,
+                                        effective_sku=resolved_sku,
+                                        default_channel=default_channel,
+                                        channels=channels,
+                                        admin_user_id=admin_user_id,
+                                        content_type_id=content_type_id,
+                                    )
+                                )
                                 image_names = _image_names_for_product(product)
                                 media_sync_hash = media_sync_service.build_media_sync_hash(product=product)
                                 media_changed = media_sync_service.has_media_changed(
@@ -607,7 +641,7 @@ class Command(BaseCommand):
                                         image_names,
                                     )
                                 if media_changed:
-                                    resolved_fallback_ids.append(resolved_sku)
+                                    resolved_fallback_media_ids.append(resolved_sku)
                                     fallback_media_sync_hashes.append((product, media_sync_hash))
                                     fallback_payload = {"id": resolved_sku, "productNumber": product.erp_nr}
                                     _append_media_payload(
@@ -630,14 +664,21 @@ class Command(BaseCommand):
                                 object_id=str(product.pk),
                                 object_repr=f"Product {product.erp_nr}",
                             )
-                        if resolved_fallback_ids:
+                        if resolved_fallback_payloads:
+                            if resolved_fallback_product_ids and cleanup_rule_ids:
+                                service.purge_product_prices_by_product_and_rule(
+                                    product_ids=resolved_fallback_product_ids,
+                                    rule_ids=cleanup_rule_ids,
+                                )
+                            service.bulk_upsert(resolved_fallback_payloads)
+                        if resolved_fallback_media_ids:
                             if log_images:
                                 logger.info(
                                     "Shopware image sync fallback batch {} cleanup existing media relations for products={}",
                                     batch_no,
-                                    resolved_fallback_ids,
+                                    resolved_fallback_media_ids,
                                 )
-                            service.purge_product_media_by_product_ids(product_ids=resolved_fallback_ids)
+                            service.purge_product_media_by_product_ids(product_ids=resolved_fallback_media_ids)
                             media_sync_service.sync_media_assets(
                                 product_service=service,
                                 media_entities=list(fallback_media_entities.values()),
