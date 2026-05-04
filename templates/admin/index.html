@@ -23,6 +23,19 @@
             {% endcomponent %}
         {% endcomponent %}
 
+        {% component "unfold/components/card.html" with title="Aktuelle offene Bestellungen" %}
+            {% component "unfold/components/title.html" %}
+                {{ open_orders_count }} offene Bestellungen
+            {% endcomponent %}
+
+            {% component "unfold/components/text.html" with class="mt-2 mb-4" %}
+                Sortierung nach Bestelldatum absteigend. Es werden offene Bestellungen angezeigt.
+            {% endcomponent %}
+
+            {% component "unfold/components/table.html" with table=open_orders_table striped=1 %}
+            {% endcomponent %}
+        {% endcomponent %}
+
         <div class="flex flex-col lg:flex-row lg:gap-8">
             <div class="grow">
                 {% include "unfold/helpers/app_list_default.html" %}

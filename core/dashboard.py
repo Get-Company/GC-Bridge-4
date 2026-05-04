@@ -5,7 +5,20 @@ from django.contrib import messages
 from django.db import DatabaseError, connection
 from django.utils import timezone
 
+from orders.models import Order
+
 logger = logging.getLogger(__name__)
+
+_HIDDEN_DASHBOARD_APPS = {
+    "ai",
+    "auth",
+    "customer",
+    "mappei",
+    "microtech",
+    "orders",
+    "products",
+    "shopware",
+}
 
 
 def _format_eur(value: Decimal) -> str:
@@ -141,10 +154,52 @@ def _fetch_discounted_rows(now, price_column: str) -> list[list[str]]:
     return rows
 
 
+def _format_datetime(value) -> str:
+    if not value:
+        return "-"
+    if timezone.is_naive(value):
+        value = timezone.make_aware(value, timezone.get_current_timezone())
+    return timezone.localtime(value).strftime("%d.%m.%Y %H:%M")
+
+
+def _filter_dashboard_apps(context: dict) -> None:
+    app_list = context.get("app_list") or []
+    available_apps = context.get("available_apps") or []
+
+    def is_visible(app: dict) -> bool:
+        return str(app.get("app_label") or "").strip().lower() not in _HIDDEN_DASHBOARD_APPS
+
+    context["app_list"] = [app for app in app_list if is_visible(app)]
+    context["available_apps"] = [app for app in available_apps if is_visible(app)]
+
+
+def _fetch_open_order_rows(limit: int = 10) -> tuple[int, list[list[str]]]:
+    queryset = (
+        Order.objects.select_related("customer")
+        .filter(order_state="open")
+        .order_by("-purchase_date", "-created_at")
+    )
+    count = queryset.count()
+    rows = [
+        [
+            order.order_number or order.api_id,
+            str(order.customer) if order.customer_id else "-",
+            _format_eur(order.total_price),
+            order.payment_method or "-",
+            _format_datetime(order.purchase_date),
+        ]
+        for order in queryset[:limit]
+    ]
+    return count, rows
+
+
 def dashboard_callback(request, context):
     now = timezone.now()
     rows = []
     warning_message = None
+    open_orders_rows = []
+    open_orders_count = 0
+    open_orders_warning = None
 
     try:
         price_column, warning_message = _detect_price_column()
@@ -157,8 +212,21 @@ def dashboard_callback(request, context):
             "Bitte Datenbankverbindung und Migrationen prüfen."
         )
 
+    try:
+        open_orders_count, open_orders_rows = _fetch_open_order_rows()
+    except DatabaseError:
+        logger.exception("Dashboard open orders could not be loaded.")
+        open_orders_warning = (
+            "Offene Bestellungen konnten nicht geladen werden. "
+            "Bitte Datenbankverbindung und Migrationen prüfen."
+        )
+
     if warning_message and request is not None:
         messages.warning(request, warning_message)
+    if open_orders_warning and request is not None:
+        messages.warning(request, open_orders_warning)
+
+    _filter_dashboard_apps(context)
 
     context["discounted_articles_table"] = {
         "headers": [
@@ -173,5 +241,17 @@ def dashboard_callback(request, context):
     }
     context["discounted_articles_count"] = len(rows)
     context["discounted_articles_warning"] = warning_message
+    context["open_orders_table"] = {
+        "headers": [
+            "Bestellung",
+            "Kunde",
+            "Gesamtpreis",
+            "Zahlart",
+            "Bestelldatum",
+        ],
+        "rows": open_orders_rows,
+    }
+    context["open_orders_count"] = open_orders_count
+    context["open_orders_warning"] = open_orders_warning
 
     return context

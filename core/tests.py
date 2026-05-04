@@ -1,16 +1,21 @@
 import os
 from datetime import datetime
+from decimal import Decimal
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 from django.contrib import admin
 from django.test import RequestFactory
-from django.test import SimpleTestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 
+from core.dashboard import dashboard_callback
 from core.logging import build_managed_log_path, cleanup_old_log_files
 from core.log_reader import get_allowed_log_files, tail_log_file
 from core.services import CommandRuntimeService
+from customer.models import Customer
+from orders.models import Order
 
 
 class ManagedLoggingTest(SimpleTestCase):
@@ -199,3 +204,47 @@ class AdminSidebarPermissionTest(SimpleTestCase):
             title="Queue",
         )
         self.assertTrue(item["has_permission"])
+
+
+class DashboardCallbackTest(TestCase):
+    def test_dashboard_filters_hidden_apps_and_lists_open_orders(self):
+        customer = Customer.objects.create(erp_nr="K-1000", name="Musterkunde")
+        Order.objects.create(
+            api_id="order-open",
+            order_number="10001",
+            customer=customer,
+            total_price=Decimal("49.90"),
+            payment_method="Rechnung",
+            order_state="open",
+        )
+        Order.objects.create(
+            api_id="order-done",
+            order_number="10002",
+            customer=customer,
+            total_price=Decimal("19.90"),
+            payment_method="PayPal",
+            order_state="completed",
+        )
+
+        context = {
+            "app_list": [
+                {"app_label": "ai", "name": "AI"},
+                {"app_label": "core", "name": "Core"},
+                {"app_label": "orders", "name": "Orders"},
+            ],
+            "available_apps": [
+                {"app_label": "shopware", "name": "Shopware"},
+                {"app_label": "core", "name": "Core"},
+            ],
+        }
+
+        with patch("core.dashboard._detect_price_column", return_value=(None, None)):
+            result = dashboard_callback(request=None, context=context)
+
+        self.assertEqual([app["app_label"] for app in result["app_list"]], ["core"])
+        self.assertEqual([app["app_label"] for app in result["available_apps"]], ["core"])
+        self.assertEqual(result["open_orders_count"], 1)
+        self.assertEqual(len(result["open_orders_table"]["rows"]), 1)
+        self.assertEqual(result["open_orders_table"]["rows"][0][0], "10001")
+        self.assertEqual(result["open_orders_table"]["rows"][0][1], "K-1000 | Musterkunde")
+        self.assertEqual(result["open_orders_table"]["rows"][0][2], "49.90 EUR")
