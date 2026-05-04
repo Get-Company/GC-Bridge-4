@@ -243,6 +243,16 @@ class ProductPropertyInline(BaseTabularInline):
         return obj.value.group.name
 
 
+class PropertyValueProductInline(BaseTabularInline):
+    model = ProductProperty
+    fields = ("product", "external_key")
+    autocomplete_fields = ("product",)
+
+    def get_queryset(self, request):
+        queryset = super().get_queryset(request)
+        return queryset.select_related("product").order_by("product__erp_nr", "product__name", "id")
+
+
 class ProductSpecialPriceActionForm(UnfoldActionForm):
     sales_channel = forms.ModelChoiceField(
         label="Sales-Channel",
@@ -2882,6 +2892,7 @@ class PropertyValueAdmin(TabbedTranslationAdmin, BaseAdmin):
         **getattr(TabbedTranslationAdmin, "formfield_overrides", {}),
         **BaseAdmin.formfield_overrides,
     }
+    inlines = (PropertyValueProductInline,)
     list_display = ("name", "group", "external_key", "created_at")
     search_fields = ("name", "name_de", "name_en", "group__name", "group__name_de", "external_key")
     list_filter = [("group", RelatedDropdownFilter), ("created_at", RangeDateTimeFilter)]

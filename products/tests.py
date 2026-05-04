@@ -24,6 +24,8 @@ from products.admin import (
     ProductAdmin,
     ProductImageInline,
     ProductPropertyInline,
+    PropertyValueAdmin,
+    PropertyValueProductInline,
 )
 from core.admin_utils import log_admin_change
 from mappei.models import MappeiPriceSnapshot, MappeiProduct, MappeiProductMapping
@@ -1564,6 +1566,10 @@ class ProductImageAdminAndSyncTest(TestCase):
 
     def test_product_admin_uses_product_property_inline(self):
         self.assertIn(ProductPropertyInline, ProductAdmin.inlines)
+
+    def test_property_value_admin_uses_product_inline(self):
+        self.assertIn(PropertyValueProductInline, PropertyValueAdmin.inlines)
+        self.assertEqual(PropertyValueProductInline.autocomplete_fields, ("product",))
 
     def test_product_image_inline_renders_lazy_preview(self):
         product = Product.objects.create(erp_nr="A-4005", name="Inline Bild")
