@@ -518,6 +518,61 @@ UNFOLD = {
                 ],
             },
             {
+                "title": _("Mitarbeiter"),
+                "separator": True,
+                "collapsible": True,
+                "items": [
+                    {
+                        "title": _("Kalender"),
+                        "icon": "calendar_month",
+                        "link": reverse_lazy("admin:hr_calendar"),
+                        "permission": sidebar_model_view_permission("hr", "EmployeeProfile"),
+                    },
+                    {
+                        "title": _("Profile"),
+                        "icon": "badge",
+                        "link": reverse_lazy("admin:hr_employeeprofile_changelist"),
+                        "permission": sidebar_model_view_permission("hr", "EmployeeProfile"),
+                    },
+                    {
+                        "title": _("Urlaubsantraege"),
+                        "icon": "beach_access",
+                        "link": reverse_lazy("admin:hr_leaverequest_changelist"),
+                        "permission": sidebar_model_view_permission("hr", "LeaveRequest"),
+                    },
+                    {
+                        "title": _("Krankmeldungen"),
+                        "icon": "healing",
+                        "link": reverse_lazy("admin:hr_sickleave_changelist"),
+                        "permission": sidebar_model_view_permission("hr", "SickLeave"),
+                    },
+                    {
+                        "title": _("Zeitkonto"),
+                        "icon": "schedule",
+                        "link": reverse_lazy("admin:hr_timeaccountentry_changelist"),
+                        "permission": sidebar_model_view_permission("hr", "TimeAccountEntry"),
+                    },
+                    {
+                        "title": _("Monatsuebersichten"),
+                        "icon": "summarize",
+                        "link": reverse_lazy("admin:hr_monthlyworksummary_changelist"),
+                        "permission": sidebar_model_view_permission("hr", "MonthlyWorkSummary"),
+                    },
+                    {
+                        "title": _("Feiertage"),
+                        "icon": "event_available",
+                        "link": reverse_lazy("admin:hr_publicholiday_changelist"),
+                        "permission": sidebar_model_view_permission("hr", "PublicHoliday"),
+                    },
+                    {
+                        "title": _("Betriebsurlaub"),
+                        "icon": "event_busy",
+                        "link": reverse_lazy("admin:hr_companyholiday_changelist"),
+                        "permission": sidebar_model_view_permission("hr", "CompanyHoliday"),
+                    },
+                ],
+            },
+            {
                 "title": _("Verwaltung"),
                 "separator": True,
                 "collapsible": True,

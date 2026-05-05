@@ -158,22 +158,35 @@ class CommandRuntimeServiceTest(SimpleTestCase):
 class _SidebarUser:
     is_active = True
     is_staff = True
-    is_superuser = False
+    is_authenticated = True
 
-    def __init__(self, permissions=None):
+    def __init__(self, permissions=None, *, is_superuser=False):
         self.permissions = set(permissions or [])
+        self.is_superuser = is_superuser
+        self.groups = self._Groups()
+        self.employee_profile = None
 
     def has_perm(self, permission):
         return permission in self.permissions
+
+    class _Groups:
+        @staticmethod
+        def filter(**_kwargs):
+            return _SidebarUser._GroupQuerySet()
+
+    class _GroupQuerySet:
+        @staticmethod
+        def exists():
+            return False
 
 
 class AdminSidebarPermissionTest(SimpleTestCase):
     def setUp(self):
         self.factory = RequestFactory()
 
-    def _sidebar_item(self, *, permissions, title):
+    def _sidebar_item(self, *, permissions, title, is_superuser=False):
         request = self.factory.get(reverse("admin:index"))
-        request.user = _SidebarUser(permissions)
+        request.user = _SidebarUser(permissions, is_superuser=is_superuser)
         for group in admin.site.get_sidebar_list(request):
             for item in group.get("items", []):
                 if str(item.get("title")) == title:
@@ -207,6 +220,17 @@ class AdminSidebarPermissionTest(SimpleTestCase):
         item = self._sidebar_item(
             permissions={"microtech.view_microtechjob"},
             title="Queue",
+        )
+        self.assertTrue(item["has_permission"])
+
+    def test_hr_calendar_sidebar_entry_requires_employee_profile_view_permission(self):
+        item = self._sidebar_item(permissions=set(), title="Kalender")
+        self.assertFalse(item["has_permission"])
+
+        item = self._sidebar_item(
+            permissions=set(),
+            title="Kalender",
+            is_superuser=True,
         )
         self.assertTrue(item["has_permission"])
 
