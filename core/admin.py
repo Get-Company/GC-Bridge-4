@@ -16,6 +16,7 @@ from unfold.forms import AdminPasswordChangeForm, UserChangeForm, UserCreationFo
 from core.log_reader import get_allowed_log_files, tail_log_file
 from core.services import CommandRuntimeService
 from core.system_status_view import system_status_api, system_status_run, system_status_view
+from hr.views import hr_calendar_api, hr_calendar_view
 from microtech.views.queue_view import microtech_queue_view, microtech_queue_api, microtech_queue_action
 from customer.views import (
     customer_merge_view,
@@ -138,6 +139,8 @@ def _admin_get_urls():
         path("microtech-queue/", admin.site.admin_view(microtech_queue_view), name="microtech_queue"),
         path("microtech-queue/api/", admin.site.admin_view(microtech_queue_api), name="microtech_queue_api"),
         path("microtech-queue/api/action/", admin.site.admin_view(microtech_queue_action), name="microtech_queue_action"),
+        path("hr/calendar/", admin.site.admin_view(hr_calendar_view), name="hr_calendar"),
+        path("hr/calendar/api/", admin.site.admin_view(hr_calendar_api), name="hr_calendar_api"),
     ]
     return custom_urls + _default_admin_get_urls()
 

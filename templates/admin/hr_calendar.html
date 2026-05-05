@@ -1,0 +1,308 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+<div class="flex flex-col gap-6">
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <div>
+      <h1 class="text-xl font-semibold">Mitarbeiterkalender</h1>
+      <p class="text-sm text-gray-500 dark:text-gray-400">
+        Urlaub, Krankheit und genehmigte Zeitkonto-Buchungen in einer Monatsansicht.
+      </p>
+    </div>
+    <div class="flex flex-wrap items-center gap-2 text-xs">
+      <span class="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1.5 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300">
+        <span class="inline-block h-2 w-2 rounded-full bg-blue-500"></span> Urlaub
+      </span>
+      <span class="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1.5 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300">
+        <span class="inline-block h-2 w-2 rounded-full bg-amber-500"></span> Abwesenheit
+      </span>
+      <span class="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1.5 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300">
+        <span class="inline-block h-2 w-2 rounded-full bg-emerald-500"></span> Zeitkonto
+      </span>
+      <span class="inline-flex items-center gap-1.5 rounded-full bg-slate-50 px-3 py-1.5 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+        <span class="inline-block h-2 w-2 rounded-full bg-slate-500"></span> Feiertag
+      </span>
+      <span class="inline-flex items-center gap-1.5 rounded-full bg-orange-50 px-3 py-1.5 text-orange-700 dark:bg-orange-900/20 dark:text-orange-300">
+        <span class="inline-block h-2 w-2 rounded-full bg-orange-600"></span> Betriebsurlaub
+      </span>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 xl:grid-cols-[320px,minmax(0,1fr)] gap-6 items-start">
+    <div class="flex flex-col gap-4 rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-900">
+      <div>
+        <label for="calendar-month" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Monat</label>
+        <input id="calendar-month" type="month" value="{{ default_month }}" class="w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800">
+      </div>
+
+      <div>
+        <label for="calendar-department" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Abteilung</label>
+        <select id="calendar-department" class="w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800">
+          <option value="">Alle sichtbaren Abteilungen</option>
+          {% for department in departments %}
+          <option value="{{ department.id }}">{{ department.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div>
+        <label for="calendar-employee" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Mitarbeiter</label>
+        <select id="calendar-employee" multiple size="10" class="w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800">
+          {% for employee in employees %}
+          <option value="{{ employee.id }}">{{ employee.short_code }} - {{ employee.full_name }}</option>
+          {% endfor %}
+        </select>
+        <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">Mehrfachauswahl mit Strg/Cmd.</p>
+      </div>
+
+      <div class="flex gap-2">
+        <button id="calendar-apply" type="button" class="inline-flex flex-1 items-center justify-center rounded border border-blue-300 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-300 dark:hover:bg-blue-900/20">
+          Aktualisieren
+        </button>
+        <button id="calendar-reset" type="button" class="inline-flex items-center justify-center rounded border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800">
+          Reset
+        </button>
+      </div>
+
+      <div class="rounded-lg bg-gray-50 p-3 text-xs text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+        {% if can_view_sick_leave_details %}
+        Krankmeldungen werden mit Klartext angezeigt.
+        {% else %}
+        Krankmeldungen werden datensparsam als allgemeine Abwesenheit angezeigt.
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="flex flex-col gap-4 rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-900">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-2">
+          <button id="calendar-prev" type="button" class="inline-flex h-9 w-9 items-center justify-center rounded border border-gray-300 text-lg text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800">&lsaquo;</button>
+          <button id="calendar-next" type="button" class="inline-flex h-9 w-9 items-center justify-center rounded border border-gray-300 text-lg text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800">&rsaquo;</button>
+        </div>
+        <div>
+          <h2 id="calendar-title" class="text-lg font-semibold"></h2>
+          <p id="calendar-meta" class="text-xs text-gray-400 dark:text-gray-500"></p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-7 gap-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+        <div>Mo</div>
+        <div>Di</div>
+        <div>Mi</div>
+        <div>Do</div>
+        <div>Fr</div>
+        <div>Sa</div>
+        <div>So</div>
+      </div>
+
+      <div id="calendar-grid" class="grid grid-cols-7 gap-2"></div>
+
+      <div class="rounded-lg border border-gray-200 dark:border-gray-700">
+        <div class="border-b border-gray-200 px-4 py-3 text-sm font-semibold dark:border-gray-700">
+          Tagesdetails
+        </div>
+        <div id="calendar-day-details" class="p-4 text-sm text-gray-500 dark:text-gray-400">
+          Einen Tag anklicken, um die Eintraege zu sehen.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  const monthInput = document.getElementById("calendar-month");
+  const departmentInput = document.getElementById("calendar-department");
+  const employeeInput = document.getElementById("calendar-employee");
+  const titleEl = document.getElementById("calendar-title");
+  const metaEl = document.getElementById("calendar-meta");
+  const gridEl = document.getElementById("calendar-grid");
+  const dayDetailsEl = document.getElementById("calendar-day-details");
+  const applyBtn = document.getElementById("calendar-apply");
+  const resetBtn = document.getElementById("calendar-reset");
+  const prevBtn = document.getElementById("calendar-prev");
+  const nextBtn = document.getElementById("calendar-next");
+
+  let currentMonth = monthInput.value || new Date().toISOString().slice(0, 7);
+  let selectedDay = null;
+  let currentEvents = [];
+
+  function getSelectedEmployees() {
+    return Array.from(employeeInput.selectedOptions).map((option) => option.value);
+  }
+
+  function toLocalIso(dateObj) {
+    const year = dateObj.getFullYear();
+    const month = String(dateObj.getMonth() + 1).padStart(2, "0");
+    const day = String(dateObj.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
+  function buildMonthRange(monthValue) {
+    const [year, month] = monthValue.split("-").map(Number);
+    const start = new Date(year, month - 1, 1);
+    const end = new Date(year, month, 0);
+    return {
+      start,
+      end,
+      startIso: toLocalIso(start),
+      endIso: toLocalIso(end),
+    };
+  }
+
+  function fetchEvents() {
+    const range = buildMonthRange(currentMonth);
+    const params = new URLSearchParams({
+      start: range.startIso,
+      end: range.endIso,
+    });
+    if (departmentInput.value) {
+      params.set("department", departmentInput.value);
+    }
+    for (const employeeId of getSelectedEmployees()) {
+      params.append("employee", employeeId);
+    }
+
+    fetch(`/admin/hr/calendar/api/?${params.toString()}`, {
+      headers: { "X-Requested-With": "XMLHttpRequest" },
+    })
+      .then((response) => response.json())
+      .then((data) => {
+        currentEvents = data.events || [];
+        renderMonth(range.start, currentEvents);
+      })
+      .catch(() => {
+        gridEl.innerHTML = '<div class="col-span-7 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-900/20 dark:text-red-300">Kalenderdaten konnten nicht geladen werden.</div>';
+      });
+  }
+
+  function renderMonth(startDate, events) {
+    const [year, month] = currentMonth.split("-").map(Number);
+    const titleDate = new Date(year, month - 1, 1);
+    titleEl.textContent = titleDate.toLocaleDateString("de-DE", { month: "long", year: "numeric" });
+    metaEl.textContent = `${events.length} Eintraege im sichtbaren Zeitraum`;
+
+    const firstGridDay = new Date(year, month - 1, 1);
+    const weekDay = firstGridDay.getDay();
+    const offset = weekDay === 0 ? 6 : weekDay - 1;
+    firstGridDay.setDate(firstGridDay.getDate() - offset);
+
+    gridEl.innerHTML = "";
+    for (let i = 0; i < 42; i += 1) {
+      const cellDate = new Date(firstGridDay);
+      cellDate.setDate(firstGridDay.getDate() + i);
+      const isoDate = toLocalIso(cellDate);
+      const isCurrentMonth = cellDate.getMonth() === startDate.getMonth();
+      const dayEvents = events.filter((event) => {
+        const eventStart = event.start;
+        const eventEndExclusive = event.end;
+        return eventStart <= isoDate && eventEndExclusive > isoDate;
+      });
+
+      const cell = document.createElement("button");
+      cell.type = "button";
+      cell.className = [
+        "min-h-[120px] rounded-lg border p-2 text-left transition-colors",
+        isCurrentMonth
+          ? "border-gray-200 bg-white hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:hover:bg-gray-800"
+          : "border-gray-100 bg-gray-50 text-gray-400 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-600",
+        selectedDay === isoDate ? "ring-2 ring-blue-400 dark:ring-blue-600" : "",
+      ].join(" ");
+      cell.addEventListener("click", () => {
+        selectedDay = isoDate;
+        renderMonth(startDate, events);
+        renderDayDetails(isoDate, dayEvents);
+      });
+
+      const chips = dayEvents.slice(0, 3).map((event) => {
+        const color = event.color || "#64748b";
+        return `<div class="truncate rounded px-1.5 py-0.5 text-[11px] font-medium text-white" style="background:${color}">${escapeHtml(event.title)}</div>`;
+      }).join("");
+      const moreCount = dayEvents.length > 3 ? `<div class="text-[11px] text-gray-400 dark:text-gray-500">+${dayEvents.length - 3} weitere</div>` : "";
+
+      cell.innerHTML = `
+        <div class="mb-2 flex items-center justify-between">
+          <span class="text-xs font-semibold ${isCurrentMonth ? "text-gray-700 dark:text-gray-200" : "text-gray-400 dark:text-gray-600"}">${cellDate.getDate()}</span>
+        </div>
+        <div class="flex flex-col gap-1">${chips}${moreCount}</div>
+      `;
+      gridEl.appendChild(cell);
+    }
+
+    if (!selectedDay) {
+      selectedDay = toLocalIso(startDate);
+    }
+    renderDayDetails(
+      selectedDay,
+      events.filter((event) => event.start <= selectedDay && event.end > selectedDay),
+    );
+  }
+
+  function renderDayDetails(isoDate, events) {
+    const label = new Date(isoDate).toLocaleDateString("de-DE", {
+      weekday: "long",
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+    if (!events.length) {
+      dayDetailsEl.innerHTML = `<div class="text-sm text-gray-500 dark:text-gray-400">${label}: keine Eintraege.</div>`;
+      return;
+    }
+
+    const html = events.map((event) => `
+      <div class="mb-3 rounded-lg border border-gray-200 px-3 py-2 last:mb-0 dark:border-gray-700">
+        <div class="flex items-center justify-between gap-3">
+          <div class="font-medium">${escapeHtml(event.title)}</div>
+          <span class="inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium text-white" style="background:${escapeHtml(event.color || "#64748b")}">
+            ${escapeHtml(event.type)}
+          </span>
+        </div>
+        <div class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          ${event.employee ? escapeHtml(event.employee) : "Global"}${event.department ? ` · ${escapeHtml(event.department)}` : ""}
+        </div>
+      </div>
+    `).join("");
+    dayDetailsEl.innerHTML = `<div class="mb-3 text-sm font-semibold">${label}</div>${html}`;
+  }
+
+  function escapeHtml(value) {
+    return String(value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function shiftMonth(step) {
+    const [year, month] = currentMonth.split("-").map(Number);
+    const nextDate = new Date(year, month - 1 + step, 1);
+    currentMonth = `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, "0")}`;
+    monthInput.value = currentMonth;
+    selectedDay = null;
+    fetchEvents();
+  }
+
+  applyBtn.addEventListener("click", () => {
+    currentMonth = monthInput.value || currentMonth;
+    selectedDay = null;
+    fetchEvents();
+  });
+  resetBtn.addEventListener("click", () => {
+    departmentInput.value = "";
+    Array.from(employeeInput.options).forEach((option) => { option.selected = false; });
+    monthInput.value = "{{ default_month }}";
+    currentMonth = monthInput.value;
+    selectedDay = null;
+    fetchEvents();
+  });
+  prevBtn.addEventListener("click", () => shiftMonth(-1));
+  nextBtn.addEventListener("click", () => shiftMonth(1));
+
+  fetchEvents();
+})();
+</script>
+{% endblock %}
