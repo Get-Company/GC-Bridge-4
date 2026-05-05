@@ -10,6 +10,7 @@ Der Fokus liegt auf einem nachvollziehbaren Tagesbetrieb fuer Admins und Operato
 
    einleitung
    erste_schritte
+   hr_mitarbeiterverwaltung
    microtech_rulebuilder_feldkatalog
    operator_checkliste
    workflows

@@ -15,7 +15,7 @@
     <script src="_static/translations.js?v=9bf55d28"></script>
     <link rel="index" title="Stichwortverzeichnis" href="genindex.html" />
     <link rel="search" title="Suche" href="search.html" />
-    <link rel="next" title="Microtech Rulebuilder mit Feldkatalog (Schritt fuer Schritt)" href="microtech_rulebuilder_feldkatalog.html" />
+    <link rel="next" title="HR Mitarbeiterverwaltung" href="hr_mitarbeiterverwaltung.html" />
     <link rel="prev" title="Einleitung" href="einleitung.html" />
    
   <link rel="stylesheet" href="_static/custom.css" type="text/css" />
@@ -72,6 +72,22 @@
 - Microtech-Einstellungen und Order-Regeln</p></li>
 </ol>
 </section>
+<section id="hr-modul-schnell-aktivieren">
+<h2>HR-Modul schnell aktivieren<a class="headerlink" href="#hr-modul-schnell-aktivieren" title="Link to this heading">¶</a></h2>
+<p>Wenn die Mitarbeiterverwaltung direkt genutzt werden soll:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>.venv/bin/python<span class="w"> </span>manage.py<span class="w"> </span>migrate
+.venv/bin/python<span class="w"> </span>manage.py<span class="w"> </span>hr_setup_groups
+.venv/bin/python<span class="w"> </span>manage.py<span class="w"> </span>hr_bootstrap
+</pre></div>
+</div>
+<p>Danach:</p>
+<ol class="arabic simple">
+<li><p>im Admin die echten User den HR-Gruppen zuweisen</p></li>
+<li><p>Mitarbeiterprofile pruefen oder anlegen</p></li>
+<li><p>Feiertage und Arbeitszeitmodelle kontrollieren</p></li>
+</ol>
+<p>Die vollstaendige Betriebsanleitung steht in <code class="docutils literal notranslate"><span class="pre">HR</span> <span class="pre">Mitarbeiterverwaltung</span></code>.</p>
+</section>
 <section id="schneller-funktionstest">
 <h2>Schneller Funktionstest<a class="headerlink" href="#schneller-funktionstest" title="Link to this heading">¶</a></h2>
 <p>Im Projektverzeichnis:</p>
@@ -122,9 +138,11 @@
 <li class="toctree-l2"><a class="reference internal" href="#voraussetzungen">Voraussetzungen</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#serverstart-auf-windows-klick-datei">Serverstart auf Windows (Klick-Datei)</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#erstlogin-im-admin">Erstlogin im Admin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#hr-modul-schnell-aktivieren">HR-Modul schnell aktivieren</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#schneller-funktionstest">Schneller Funktionstest</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="hr_mitarbeiterverwaltung.html">HR Mitarbeiterverwaltung</a></li>
 <li class="toctree-l1"><a class="reference internal" href="microtech_rulebuilder_feldkatalog.html">Microtech Rulebuilder mit Feldkatalog (Schritt fuer Schritt)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="operator_checkliste.html">Operator-Checkliste (1 Seite)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="workflows.html">Workflows</a></li>
@@ -138,7 +156,7 @@
 <ul>
   <li><a href="index.html">Documentation overview</a><ul>
       <li>Previous: <a href="einleitung.html" title="vorheriges Kapitel">Einleitung</a></li>
-      <li>Next: <a href="microtech_rulebuilder_feldkatalog.html" title="nächstes Kapitel">Microtech Rulebuilder mit Feldkatalog (Schritt fuer Schritt)</a></li>
+      <li>Next: <a href="hr_mitarbeiterverwaltung.html" title="nächstes Kapitel">HR Mitarbeiterverwaltung</a></li>
   </ul></li>
 </ul>
 </div>

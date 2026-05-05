@@ -1,12 +1,8 @@
 {
-    "betrieb_technik": 0.021,
-    "einleitung": 0.008,
-    "erste_schritte": 0.008,
+    "erste_schritte": 0.024,
+    "hr_mitarbeiterverwaltung": 0.037,
     "index": 0.002,
-    "microtech_rulebuilder_feldkatalog": 0.073,
-    "operator_checkliste": 0.015,
-    "reference/index": 0.002,
-    "reference/models_und_admins_generated": 0.449,
-    "stoerung_nicht_erreichbar": 0.01,
-    "workflows": 0.075
+    "microtech_rulebuilder_feldkatalog": 0.081,
+    "reference/models_und_admins_generated": 0.742,
+    "workflows": 0.026
 }

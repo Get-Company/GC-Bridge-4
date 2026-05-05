@@ -3,7 +3,7 @@ Model- und Admin-Inventar
 
 Diese Seite wird automatisch aus dem Django-Projekt erzeugt und deckt alle lokalen Apps, Models und registrierten Admin-Klassen ab.
 
-Generiert am: 2026-03-10 10:32:44 UTC
+Generiert am: 2026-05-05 14:02:58 UTC
 
 core
 ----
@@ -444,6 +444,77 @@ Admin-Konfiguration
    * - action_form
      - unfold.forms.ActionForm
 
+microtech.MicrotechJob
+~~~~~~~~~~~~~~~~~~~~~~
+
+* Python: ``microtech.models.MicrotechJob``
+* DB-Tabelle: ``microtech_microtechjob``
+* Verbose Name: ``Microtech Job``
+* Verbose Name Plural: ``Microtech Jobs``
+* Default Ordering: ``priority, created_at``
+
+Felder
+^^^^^^
+
+.. list-table::
+   :header-rows: 1
+
+   * - Feld
+     - Typ
+     - Optionen
+     - Details
+   * - id
+     - BigAutoField
+     - pk, unique, blank
+     - verbose=ID
+   * - created_at
+     - DateTimeField
+     - blank
+     - verbose=Angelegt am
+   * - updated_at
+     - DateTimeField
+     - blank
+     - verbose=Aktualisiert am
+   * - status
+     - CharField
+     - db_index, default=queued
+     - choices=5, verbose=Status, max_length=16
+   * - priority
+     - PositiveSmallIntegerField
+     - db_index, default=100
+     - verbose=Prioritaet
+   * - label
+     - CharField
+     - -
+     - verbose=Bezeichnung, max_length=255
+   * - correlation_id
+     - CharField
+     - unique, db_index
+     - verbose=Correlation ID, max_length=64
+   * - started_at
+     - DateTimeField
+     - null, blank
+     - verbose=Gestartet
+   * - finished_at
+     - DateTimeField
+     - null, blank
+     - verbose=Beendet
+   * - last_error
+     - TextField
+     - blank
+     - verbose=Letzter Fehler
+
+Admin-Konfiguration
+^^^^^^^^^^^^^^^^^^^
+
+.. list-table::
+   :header-rows: 1
+
+   * - Aspekt
+     - Wert
+   * - Registrierung
+     - Kein ModelAdmin registriert
+
 microtech.MicrotechOrderRule
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -509,7 +580,7 @@ Admin-Konfiguration
    * - search_fields
      - name
    * - readonly_fields
-     - created_at, updated_at
+     - created_at, updated_at, live_rule_summary
    * - ordering
      - priority, id
    * - list_select_related
@@ -629,6 +700,14 @@ Felder
      - ForeignKey
      - db_index
      - relation=microtech.MicrotechOrderRule, verbose=Regel
+   * - django_field
+     - ForeignKey
+     - db_index, null, blank
+     - relation=microtech.MicrotechOrderRuleDjangoField, verbose=Django Feld
+   * - operator
+     - ForeignKey
+     - db_index, null, blank
+     - relation=microtech.MicrotechOrderRuleOperator, verbose=Operator
    * - is_active
      - BooleanField
      - default=True
@@ -660,6 +739,97 @@ Admin-Konfiguration
      - Wert
    * - Registrierung
      - Kein ModelAdmin registriert
+
+microtech.MicrotechOrderRuleDjangoField
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* Python: ``microtech.models.MicrotechOrderRuleDjangoField``
+* DB-Tabelle: ``microtech_microtechorderruledjangofield``
+* Verbose Name: ``Microtech Django Feldkatalog``
+* Verbose Name Plural: ``Microtech Django Feldkatalog``
+* Default Ordering: ``priority, field_path, id``
+
+Felder
+^^^^^^
+
+.. list-table::
+   :header-rows: 1
+
+   * - Feld
+     - Typ
+     - Optionen
+     - Details
+   * - id
+     - BigAutoField
+     - pk, unique, blank
+     - verbose=ID
+   * - created_at
+     - DateTimeField
+     - blank
+     - verbose=Angelegt am
+   * - updated_at
+     - DateTimeField
+     - blank
+     - verbose=Aktualisiert am
+   * - field_path
+     - CharField
+     - unique
+     - verbose=Django Feldpfad, max_length=255
+   * - label
+     - CharField
+     - -
+     - verbose=Label, max_length=255
+   * - value_kind
+     - CharField
+     - -
+     - verbose=Wertetyp, max_length=32
+   * - hint
+     - CharField
+     - blank
+     - verbose=Hinweis, max_length=255
+   * - example
+     - CharField
+     - blank
+     - verbose=Beispiel, max_length=255
+   * - is_active
+     - BooleanField
+     - default=True
+     - verbose=Aktiv
+   * - priority
+     - PositiveIntegerField
+     - default=100
+     - verbose=Prioritaet
+
+Admin-Konfiguration
+^^^^^^^^^^^^^^^^^^^
+
+.. list-table::
+   :header-rows: 1
+
+   * - Aspekt
+     - Wert
+   * - Admin-Klasse
+     - microtech.admin.MicrotechOrderRuleDjangoFieldAdmin
+   * - list_display
+     - priority, label, field_path, value_kind, is_active, updated_at
+   * - list_filter
+     - is_active, value_kind
+   * - search_fields
+     - field_path, label, hint, example
+   * - readonly_fields
+     - created_at, updated_at
+   * - ordering
+     - priority, field_path, id
+   * - list_select_related
+     - False
+   * - list_per_page
+     - 100
+   * - inlines
+     - -
+   * - actions
+     - -
+   * - action_form
+     - unfold.forms.ActionForm
 
 microtech.MicrotechOrderRuleDjangoFieldPolicy
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -736,7 +906,7 @@ Admin-Konfiguration
    * - readonly_fields
      - created_at, updated_at
    * - ordering
-     - priority, id
+     - priority, field_path, id
    * - list_select_related
      - False
    * - list_per_page
@@ -790,7 +960,7 @@ Felder
    * - engine_operator
      - CharField
      - default=eq
-     - choices=4, verbose=Engine Operator, max_length=16
+     - choices=7, verbose=Engine Operator, max_length=16
    * - hint
      - CharField
      - blank
@@ -915,6 +1085,109 @@ Admin-Konfiguration
      - created_at, updated_at
    * - ordering
      - -created_at
+   * - list_select_related
+     - False
+   * - list_per_page
+     - 100
+   * - inlines
+     - -
+   * - actions
+     - -
+   * - action_form
+     - unfold.forms.ActionForm
+
+microtech.MicrotechSwissCustomsFieldMapping
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* Python: ``microtech.models.MicrotechSwissCustomsFieldMapping``
+* DB-Tabelle: ``microtech_microtechswisscustomsfieldmapping``
+* Verbose Name: ``Microtech Schweiz Zoll Feldmapping``
+* Verbose Name Plural: ``Microtech Schweiz Zoll Feldmappings``
+* Default Ordering: ``priority, portal_field, id``
+
+Felder
+^^^^^^
+
+.. list-table::
+   :header-rows: 1
+
+   * - Feld
+     - Typ
+     - Optionen
+     - Details
+   * - id
+     - BigAutoField
+     - pk, unique, blank
+     - verbose=ID
+   * - created_at
+     - DateTimeField
+     - blank
+     - verbose=Angelegt am
+   * - updated_at
+     - DateTimeField
+     - blank
+     - verbose=Aktualisiert am
+   * - portal_field
+     - CharField
+     - unique
+     - verbose=Portal Feld, max_length=255
+   * - section
+     - CharField
+     - default=shipment
+     - choices=13, verbose=Bereich, max_length=48
+   * - source_type
+     - CharField
+     - default=static
+     - choices=8, verbose=Quelltyp, max_length=32
+   * - source_path
+     - CharField
+     - blank
+     - verbose=Quellpfad / Resolver, max_length=255
+   * - static_value
+     - CharField
+     - blank
+     - verbose=Statischer Wert, max_length=255
+   * - value_kind
+     - CharField
+     - blank, default=text
+     - verbose=Wertetyp, max_length=32
+   * - is_required
+     - BooleanField
+     - default=False
+     - verbose=Pflichtfeld
+   * - help_text
+     - CharField
+     - blank
+     - verbose=Hinweis, max_length=255
+   * - is_active
+     - BooleanField
+     - default=True
+     - verbose=Aktiv
+   * - priority
+     - PositiveIntegerField
+     - default=100
+     - verbose=Prioritaet
+
+Admin-Konfiguration
+^^^^^^^^^^^^^^^^^^^
+
+.. list-table::
+   :header-rows: 1
+
+   * - Aspekt
+     - Wert
+   * - Admin-Klasse
+     - microtech.admin.MicrotechSwissCustomsFieldMappingAdmin
+   * - list_display
+     - priority, portal_field, section, source_type, source_preview_short, is_required, is_active, updated_at
+   * - list_filter
+     - is_active, section, source_type, is_required, value_kind
+   * - search_fields
+     - portal_field, source_path, static_value, help_text
+   * - readonly_fields
+     - created_at, updated_at
+   * - ordering
+     - priority, portal_field, id
    * - list_select_related
      - False
    * - list_per_page
@@ -1177,7 +1450,7 @@ products.Category
 * DB-Tabelle: ``products_category``
 * Verbose Name: ``Kategorie``
 * Verbose Name Plural: ``Kategorien``
-* Default Ordering: ``name``
+* Default Ordering: ``-``
 
 Felder
 ^^^^^^
@@ -1218,9 +1491,53 @@ Felder
      - unique, db_index
      - verbose=Slug, max_length=160
    * - parent
-     - ForeignKey
+     - TreeForeignKey
      - db_index, null, blank
      - relation=products.Category, verbose=Oberkategorie
+   * - legacy_erp_nr
+     - PositiveIntegerField
+     - unique, db_index, null, blank
+     - verbose=Legacy ERP-Nummer
+   * - legacy_api_id
+     - CharField
+     - db_index, blank
+     - verbose=Legacy API-ID, max_length=36
+   * - legacy_parent_erp_nr
+     - PositiveIntegerField
+     - db_index, null, blank
+     - verbose=Legacy Parent ERP-Nummer
+   * - image
+     - CharField
+     - blank
+     - verbose=Bild, max_length=255
+   * - description
+     - TextField
+     - blank
+     - verbose=Beschreibung
+   * - legacy_changed_at
+     - DateTimeField
+     - null, blank
+     - verbose=Legacy geaendert am
+   * - sort_order
+     - PositiveIntegerField
+     - db_index, default=1000
+     - verbose=Sortierung
+   * - lft
+     - PositiveIntegerField
+     - db_index, default=0
+     - -
+   * - rght
+     - PositiveIntegerField
+     - db_index, default=0
+     - -
+   * - tree_id
+     - PositiveIntegerField
+     - db_index, default=0
+     - verbose=tree id
+   * - level
+     - PositiveIntegerField
+     - db_index, default=0
+     - -
 
 Admin-Konfiguration
 ^^^^^^^^^^^^^^^^^^^
@@ -1233,15 +1550,15 @@ Admin-Konfiguration
    * - Admin-Klasse
      - products.admin.CategoryAdmin
    * - list_display
-     - name, slug, parent, created_at
+     - name, slug, legacy_erp_nr, parent, sort_order, created_at
    * - list_filter
      - ('parent', <class 'unfold.contrib.filters.admin.dropdown_filters.RelatedDropdownFilter'>), ('created_at', <class 'unfold.contrib.filters.admin.datetime_filters.RangeDateTimeFilter'>)
    * - search_fields
-     - name, slug, parent__name
+     - name, slug, legacy_erp_nr, legacy_api_id, parent__name
    * - readonly_fields
-     - created_at, updated_at
+     - created_at, updated_at, legacy_erp_nr, legacy_api_id, legacy_parent_erp_nr
    * - ordering
-     - -created_at
+     - tree_id, lft
    * - list_select_related
      - False
    * - list_per_page
@@ -1301,8 +1618,28 @@ Admin-Konfiguration
 
    * - Aspekt
      - Wert
-   * - Registrierung
-     - Kein ModelAdmin registriert
+   * - Admin-Klasse
+     - products.admin.ImageAdmin
+   * - list_display
+     - image_preview, path, alt_text, created_at
+   * - list_filter
+     - -
+   * - search_fields
+     - path, alt_text
+   * - readonly_fields
+     - created_at, updated_at
+   * - ordering
+     - -created_at
+   * - list_select_related
+     - False
+   * - list_per_page
+     - 100
+   * - inlines
+     - -
+   * - actions
+     - -
+   * - action_form
+     - unfold.forms.ActionForm
 
 products.Price
 ~~~~~~~~~~~~~~
@@ -1397,11 +1734,312 @@ Admin-Konfiguration
    * - list_per_page
      - 100
    * - inlines
-     - -
+     - products.admin.PriceHistoryInline
    * - actions
      - set_special_price_bulk, clear_special_price_bulk
    * - action_form
      - products.admin.PriceActionForm
+
+products.PriceHistory
+~~~~~~~~~~~~~~~~~~~~~
+
+* Python: ``products.models.PriceHistory``
+* DB-Tabelle: ``products_pricehistory``
+* Verbose Name: ``Preis-Historie``
+* Verbose Name Plural: ``Preis-Historie``
+* Default Ordering: ``-created_at, -id``
+
+Felder
+^^^^^^
+
+.. list-table::
+   :header-rows: 1
+
+   * - Feld
+     - Typ
+     - Optionen
+     - Details
+   * - id
+     - BigAutoField
+     - pk, unique, blank
+     - verbose=ID
+   * - created_at
+     - DateTimeField
+     - blank
+     - verbose=Angelegt am
+   * - updated_at
+     - DateTimeField
+     - blank
+     - verbose=Aktualisiert am
+   * - price_entry
+     - ForeignKey
+     - db_index
+     - relation=products.Price, verbose=Preis
+   * - change_type
+     - CharField
+     - default=updated
+     - choices=2, verbose=Aenderungstyp, max_length=16
+   * - changed_fields
+     - CharField
+     - blank
+     - verbose=Geaenderte Felder, max_length=255
+   * - price
+     - DecimalField
+     - -
+     - verbose=Preis, decimal=10/2
+   * - rebate_quantity
+     - IntegerField
+     - null, blank
+     - verbose=Staffelmenge
+   * - rebate_price
+     - DecimalField
+     - null, blank
+     - verbose=Staffelpreis, decimal=10/2
+   * - special_percentage
+     - DecimalField
+     - null, blank
+     - verbose=Sonderpreis (%), decimal=5/2
+   * - special_price
+     - DecimalField
+     - null, blank
+     - verbose=Sonderpreis, decimal=10/2
+   * - special_start_date
+     - DateTimeField
+     - null, blank
+     - verbose=Sonderpreis ab
+   * - special_end_date
+     - DateTimeField
+     - null, blank
+     - verbose=Sonderpreis bis
+
+Admin-Konfiguration
+^^^^^^^^^^^^^^^^^^^
+
+.. list-table::
+   :header-rows: 1
+
+   * - Aspekt
+     - Wert
+   * - Admin-Klasse
+     - products.admin.PriceHistoryAdmin
+   * - list_display
+     - price_entry, change_type, changed_fields, price, special_price, rebate_quantity, rebate_price, created_at
+   * - list_filter
+     - change_type, ('created_at', <class 'unfold.contrib.filters.admin.datetime_filters.RangeDateTimeFilter'>)
+   * - search_fields
+     - price_entry__product__erp_nr, price_entry__product__name, price_entry__sales_channel__name, changed_fields
+   * - readonly_fields
+     - created_at, updated_at
+   * - ordering
+     - -created_at
+   * - list_select_related
+     - False
+   * - list_per_page
+     - 100
+   * - inlines
+     - -
+   * - actions
+     - -
+   * - action_form
+     - unfold.forms.ActionForm
+
+products.PriceIncrease
+~~~~~~~~~~~~~~~~~~~~~~
+
+* Python: ``products.models.PriceIncrease``
+* DB-Tabelle: ``products_priceincrease``
+* Verbose Name: ``Preiserhoehung``
+* Verbose Name Plural: ``Preiserhoehungen``
+* Default Ordering: ``-created_at, -id``
+
+Felder
+^^^^^^
+
+.. list-table::
+   :header-rows: 1
+
+   * - Feld
+     - Typ
+     - Optionen
+     - Details
+   * - id
+     - BigAutoField
+     - pk, unique, blank
+     - verbose=ID
+   * - created_at
+     - DateTimeField
+     - blank
+     - verbose=Angelegt am
+   * - updated_at
+     - DateTimeField
+     - blank
+     - verbose=Aktualisiert am
+   * - title
+     - CharField
+     - -
+     - verbose=Titel, max_length=255
+   * - status
+     - CharField
+     - db_index, default=draft
+     - choices=2, verbose=Status, max_length=16
+   * - sales_channel
+     - ForeignKey
+     - db_index, null, blank
+     - relation=shopware.ShopwareSettings, verbose=Standard-Verkaufskanal
+   * - general_percentage
+     - DecimalField
+     - default=2.50
+     - verbose=Generelle Erhoehung (%), decimal=5/2
+   * - positions_synced_at
+     - DateTimeField
+     - null, blank
+     - verbose=Positionen synchronisiert am
+   * - applied_at
+     - DateTimeField
+     - null, blank
+     - verbose=Uebernommen am
+
+Admin-Konfiguration
+^^^^^^^^^^^^^^^^^^^
+
+.. list-table::
+   :header-rows: 1
+
+   * - Aspekt
+     - Wert
+   * - Admin-Klasse
+     - products.admin.PriceIncreaseAdmin
+   * - list_display
+     - title, status, sales_channel, general_percentage, position_count, positions_synced_at, applied_at, created_at
+   * - list_filter
+     - status, ('created_at', <class 'unfold.contrib.filters.admin.datetime_filters.RangeDateTimeFilter'>), ('applied_at', <class 'unfold.contrib.filters.admin.datetime_filters.RangeDateTimeFilter'>)
+   * - search_fields
+     - title, sales_channel__name
+   * - readonly_fields
+     - created_at, updated_at, status, sales_channel, position_count, positions_synced_at, applied_at
+   * - ordering
+     - -created_at
+   * - list_select_related
+     - False
+   * - list_per_page
+     - 100
+   * - inlines
+     - -
+   * - actions
+     - export_price_list_pdf
+   * - action_form
+     - unfold.forms.ActionForm
+
+products.PriceIncreaseItem
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* Python: ``products.models.PriceIncreaseItem``
+* DB-Tabelle: ``products_priceincreaseitem``
+* Verbose Name: ``Preiserhoehungs-Position``
+* Verbose Name Plural: ``Preiserhoehungs-Positionen``
+* Default Ordering: ``product__erp_nr, id``
+
+Felder
+^^^^^^
+
+.. list-table::
+   :header-rows: 1
+
+   * - Feld
+     - Typ
+     - Optionen
+     - Details
+   * - id
+     - BigAutoField
+     - pk, unique, blank
+     - verbose=ID
+   * - created_at
+     - DateTimeField
+     - blank
+     - verbose=Angelegt am
+   * - updated_at
+     - DateTimeField
+     - blank
+     - verbose=Aktualisiert am
+   * - price_increase
+     - ForeignKey
+     - db_index
+     - relation=products.PriceIncrease, verbose=Preiserhoehung
+   * - product
+     - ForeignKey
+     - db_index
+     - relation=products.Product, verbose=Produkt
+   * - source_price
+     - ForeignKey
+     - db_index
+     - relation=products.Price, verbose=Quellpreis
+   * - unit
+     - CharField
+     - blank
+     - verbose=Einheit, max_length=255
+   * - current_price
+     - DecimalField
+     - -
+     - verbose=Aktueller Preis, decimal=10/2
+   * - current_rebate_quantity
+     - IntegerField
+     - null, blank
+     - verbose=Aktuelle Staffelmenge
+   * - current_rebate_price
+     - DecimalField
+     - null, blank
+     - verbose=Aktueller Staffelpreis, decimal=10/2
+   * - new_price
+     - DecimalField
+     - null, blank
+     - verbose=Neuer Preis, decimal=10/2
+   * - new_rebate_price
+     - DecimalField
+     - null, blank
+     - verbose=neuer Rab.Preis, decimal=10/2
+   * - last_status_message
+     - CharField
+     - blank
+     - verbose=Letzter Status, max_length=255
+   * - last_changed_by
+     - ForeignKey
+     - db_index, null, blank
+     - relation=auth.User, verbose=Letzte Aenderung durch
+   * - last_changed_at
+     - DateTimeField
+     - null, blank
+     - verbose=Letzte Aenderung am
+
+Admin-Konfiguration
+^^^^^^^^^^^^^^^^^^^
+
+.. list-table::
+   :header-rows: 1
+
+   * - Aspekt
+     - Wert
+   * - Admin-Klasse
+     - products.admin.PriceIncreaseItemAdmin
+   * - list_display
+     - erp_nr_display, price_display, rebate_quantity_display, rebate_price_display, unit_display, new_price, new_rebate_price
+   * - list_filter
+     - ('price_increase', <class 'unfold.contrib.filters.admin.dropdown_filters.RelatedDropdownFilter'>)
+   * - search_fields
+     - price_increase__title, product__erp_nr, product__name
+   * - readonly_fields
+     - price_increase, product, source_price, unit, current_price, current_rebate_quantity, current_rebate_price
+   * - ordering
+     - product__erp_nr, id
+   * - list_select_related
+     - False
+   * - list_per_page
+     - 200
+   * - inlines
+     - -
+   * - actions
+     - -
+   * - action_form
+     - unfold.forms.ActionForm
 
 products.Product
 ~~~~~~~~~~~~~~~~
@@ -1434,6 +2072,10 @@ Felder
      - DateTimeField
      - blank
      - verbose=Aktualisiert am
+   * - shopware_image_sync_hash
+     - CharField
+     - blank
+     - verbose=Shopware Bild-Sync-Hash, max_length=64
    * - sku
      - CharField
      - unique, null, blank
@@ -1514,6 +2156,18 @@ Felder
      - IntegerField
      - null, blank
      - verbose=Kaufeinheit
+   * - customs_tariff_number
+     - CharField
+     - blank
+     - verbose=Statistische Warennummer, max_length=32
+   * - weight_gross
+     - DecimalField
+     - null, blank
+     - verbose=Bruttogewicht (kg), decimal=10/4
+   * - weight_net
+     - DecimalField
+     - null, blank
+     - verbose=Nettogewicht (kg), decimal=10/4
    * - tax
      - ForeignKey
      - db_index, null, blank
@@ -1526,6 +2180,10 @@ Felder
      - ManyToManyField
      - blank
      - relation=products.Image, verbose=Bilder
+   * - properties
+     - ManyToManyField
+     - blank
+     - relation=products.PropertyValue, verbose=Attribute
 
 Admin-Konfiguration
 ^^^^^^^^^^^^^^^^^^^
@@ -1538,7 +2196,7 @@ Admin-Konfiguration
    * - Admin-Klasse
      - products.admin.ProductAdmin
    * - list_display
-     - erp_nr, name, is_active, created_at
+     - image_preview, erp_nr, name, customs_tariff_number, is_active, created_at
    * - list_filter
      - ('is_active', <class 'unfold.contrib.filters.admin.choice_filters.BooleanRadioFilter'>), ('tax', <class 'unfold.contrib.filters.admin.dropdown_filters.RelatedDropdownFilter'>), ('categories', <class 'unfold.contrib.filters.admin.dropdown_filters.RelatedDropdownFilter'>), ('created_at', <class 'unfold.contrib.filters.admin.datetime_filters.RangeDateTimeFilter'>)
    * - search_fields
@@ -1546,17 +2204,289 @@ Admin-Konfiguration
    * - readonly_fields
      - created_at, updated_at
    * - ordering
-     - -created_at
+     - -is_active, erp_nr
    * - list_select_related
      - False
    * - list_per_page
      - 100
    * - inlines
-     - products.admin.StorageInline, products.admin.PriceInline
+     - products.admin.ProductImageInline, products.admin.ProductPropertyInline, products.admin.StorageInline, products.admin.PriceInline
    * - actions
      - sync_from_microtech, sync_to_shopware, set_special_price_for_channel, clear_special_price_for_channel
    * - action_form
      - products.admin.ProductSpecialPriceActionForm
+
+products.ProductImage
+~~~~~~~~~~~~~~~~~~~~~
+
+* Python: ``products.models.ProductImage``
+* DB-Tabelle: ``products_productimage``
+* Verbose Name: ``Produktbild``
+* Verbose Name Plural: ``Produktbilder``
+* Default Ordering: ``product, order, id``
+
+Felder
+^^^^^^
+
+.. list-table::
+   :header-rows: 1
+
+   * - Feld
+     - Typ
+     - Optionen
+     - Details
+   * - id
+     - BigAutoField
+     - pk, unique, blank
+     - verbose=ID
+   * - created_at
+     - DateTimeField
+     - blank
+     - verbose=Angelegt am
+   * - updated_at
+     - DateTimeField
+     - blank
+     - verbose=Aktualisiert am
+   * - product
+     - ForeignKey
+     - db_index
+     - relation=products.Product, verbose=Produkt
+   * - image
+     - ForeignKey
+     - db_index
+     - relation=products.Image, verbose=Bild
+   * - order
+     - PositiveIntegerField
+     - db_index, default=1
+     - verbose=Reihenfolge
+
+Admin-Konfiguration
+^^^^^^^^^^^^^^^^^^^
+
+.. list-table::
+   :header-rows: 1
+
+   * - Aspekt
+     - Wert
+   * - Registrierung
+     - Kein ModelAdmin registriert
+
+products.ProductProperty
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+* Python: ``products.models.ProductProperty``
+* DB-Tabelle: ``products_productproperty``
+* Verbose Name: ``Produktattribut``
+* Verbose Name Plural: ``Produktattribute``
+* Default Ordering: ``product__erp_nr, value__group__name, value__name``
+
+Felder
+^^^^^^
+
+.. list-table::
+   :header-rows: 1
+
+   * - Feld
+     - Typ
+     - Optionen
+     - Details
+   * - id
+     - BigAutoField
+     - pk, unique, blank
+     - verbose=ID
+   * - created_at
+     - DateTimeField
+     - blank
+     - verbose=Angelegt am
+   * - updated_at
+     - DateTimeField
+     - blank
+     - verbose=Aktualisiert am
+   * - external_key
+     - CharField
+     - db_index, blank
+     - verbose=Externe Referenz, max_length=255
+   * - product
+     - ForeignKey
+     - db_index
+     - relation=products.Product, verbose=Produkt
+   * - value
+     - ForeignKey
+     - db_index
+     - relation=products.PropertyValue, verbose=Attributwert
+
+Admin-Konfiguration
+^^^^^^^^^^^^^^^^^^^
+
+.. list-table::
+   :header-rows: 1
+
+   * - Aspekt
+     - Wert
+   * - Registrierung
+     - Kein ModelAdmin registriert
+
+products.PropertyGroup
+~~~~~~~~~~~~~~~~~~~~~~
+
+* Python: ``products.models.PropertyGroup``
+* DB-Tabelle: ``products_propertygroup``
+* Verbose Name: ``Attributgruppe``
+* Verbose Name Plural: ``Attributgruppen``
+* Default Ordering: ``name``
+
+Felder
+^^^^^^
+
+.. list-table::
+   :header-rows: 1
+
+   * - Feld
+     - Typ
+     - Optionen
+     - Details
+   * - id
+     - BigAutoField
+     - pk, unique, blank
+     - verbose=ID
+   * - created_at
+     - DateTimeField
+     - blank
+     - verbose=Angelegt am
+   * - updated_at
+     - DateTimeField
+     - blank
+     - verbose=Aktualisiert am
+   * - external_key
+     - CharField
+     - db_index, blank
+     - verbose=Externe Referenz, max_length=255
+   * - name
+     - CharField
+     - -
+     - verbose=Name, max_length=255
+   * - name_de
+     - TranslationCharField
+     - null, blank
+     - verbose=Name [de], max_length=255
+   * - name_en
+     - TranslationCharField
+     - null, blank
+     - verbose=Name [en], max_length=255
+
+Admin-Konfiguration
+^^^^^^^^^^^^^^^^^^^
+
+.. list-table::
+   :header-rows: 1
+
+   * - Aspekt
+     - Wert
+   * - Admin-Klasse
+     - products.admin.PropertyGroupAdmin
+   * - list_display
+     - name, created_at
+   * - list_filter
+     - -
+   * - search_fields
+     - name, name_de, name_en
+   * - readonly_fields
+     - created_at, updated_at
+   * - ordering
+     - name
+   * - list_select_related
+     - False
+   * - list_per_page
+     - 100
+   * - inlines
+     - -
+   * - actions
+     - -
+   * - action_form
+     - unfold.forms.ActionForm
+
+products.PropertyValue
+~~~~~~~~~~~~~~~~~~~~~~
+
+* Python: ``products.models.PropertyValue``
+* DB-Tabelle: ``products_propertyvalue``
+* Verbose Name: ``Attributwert``
+* Verbose Name Plural: ``Attributwerte``
+* Default Ordering: ``group__name, name``
+
+Felder
+^^^^^^
+
+.. list-table::
+   :header-rows: 1
+
+   * - Feld
+     - Typ
+     - Optionen
+     - Details
+   * - id
+     - BigAutoField
+     - pk, unique, blank
+     - verbose=ID
+   * - created_at
+     - DateTimeField
+     - blank
+     - verbose=Angelegt am
+   * - updated_at
+     - DateTimeField
+     - blank
+     - verbose=Aktualisiert am
+   * - external_key
+     - CharField
+     - db_index, blank
+     - verbose=Externe Referenz, max_length=255
+   * - group
+     - ForeignKey
+     - db_index
+     - relation=products.PropertyGroup, verbose=Attributgruppe
+   * - name
+     - CharField
+     - -
+     - verbose=Wert, max_length=255
+   * - name_de
+     - TranslationCharField
+     - null, blank
+     - verbose=Wert [de], max_length=255
+   * - name_en
+     - TranslationCharField
+     - null, blank
+     - verbose=Wert [en], max_length=255
+
+Admin-Konfiguration
+^^^^^^^^^^^^^^^^^^^
+
+.. list-table::
+   :header-rows: 1
+
+   * - Aspekt
+     - Wert
+   * - Admin-Klasse
+     - products.admin.PropertyValueAdmin
+   * - list_display
+     - name, group, external_key, created_at
+   * - list_filter
+     - ('group', <class 'unfold.contrib.filters.admin.dropdown_filters.RelatedDropdownFilter'>), ('created_at', <class 'unfold.contrib.filters.admin.datetime_filters.RangeDateTimeFilter'>)
+   * - search_fields
+     - name, name_de, name_en, group__name, group__name_de, external_key
+   * - readonly_fields
+     - created_at, updated_at
+   * - ordering
+     - group__name, name
+   * - list_select_related
+     - False
+   * - list_per_page
+     - 100
+   * - inlines
+     - -
+   * - actions
+     - -
+   * - action_form
+     - unfold.forms.ActionForm
 
 products.Storage
 ~~~~~~~~~~~~~~~~

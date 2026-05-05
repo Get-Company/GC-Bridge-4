@@ -201,6 +201,49 @@ Befehle
 
    .venv/bin/python manage.py shopware_sync_products 100001 100002
 
+Workflow 7: HR-Grundsetup und Pilotstart
+----------------------------------------
+
+Ziel
+^^^^
+
+Die Mitarbeiterverwaltung fuer den produktiven Start vorbereiten.
+
+Befehle
+^^^^^^^
+
+Nur Gruppen und Permissions anlegen:
+
+.. code-block:: bash
+
+   .venv/bin/python manage.py hr_setup_groups
+
+Grundkonfiguration anlegen:
+
+.. code-block:: bash
+
+   .venv/bin/python manage.py hr_bootstrap
+
+Pilot-Mitarbeiter mit Beispieldaten anlegen:
+
+.. code-block:: bash
+
+   .venv/bin/python manage.py hr_bootstrap --demo-username demo.hr --create-demo-user --demo-password 'BitteAendern123!' --with-sample-records
+
+Danach im Admin
+^^^^^^^^^^^^^^^
+
+1. Gruppen zuweisen
+2. Mitarbeiterprofil und Abteilung pruefen
+3. Arbeitszeitmodell pruefen
+4. Feiertage pflegen
+5. Kalender und Urlaubsworkflow testen
+
+Siehe auch
+^^^^^^^^^^
+
+Die ausfuehrliche Anleitung steht in ``HR Mitarbeiterverwaltung``.
+
 Betriebliche Kontrolle
 ----------------------
 

@@ -35,6 +35,25 @@ Erstlogin im Admin
    - Shopware-Verbindungen und Sales-Channels
    - Microtech-Einstellungen und Order-Regeln
 
+HR-Modul schnell aktivieren
+---------------------------
+
+Wenn die Mitarbeiterverwaltung direkt genutzt werden soll:
+
+.. code-block:: bash
+
+   .venv/bin/python manage.py migrate
+   .venv/bin/python manage.py hr_setup_groups
+   .venv/bin/python manage.py hr_bootstrap
+
+Danach:
+
+1. im Admin die echten User den HR-Gruppen zuweisen
+2. Mitarbeiterprofile pruefen oder anlegen
+3. Feiertage und Arbeitszeitmodelle kontrollieren
+
+Die vollstaendige Betriebsanleitung steht in ``HR Mitarbeiterverwaltung``.
+
 Schneller Funktionstest
 -----------------------
 

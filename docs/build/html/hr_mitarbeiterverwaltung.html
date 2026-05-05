@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+
+<html lang="de" data-content_root="./">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>HR Mitarbeiterverwaltung &#8212; GC-Bridge-4 0.1.0 Dokumentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=5ecbeea2" />
+    <link rel="stylesheet" type="text/css" href="_static/basic.css?v=b08954a9" />
+    <link rel="stylesheet" type="text/css" href="_static/alabaster.css?v=27fed22d" />
+    <script src="_static/documentation_options.js?v=7c8c992d"></script>
+    <script src="_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/translations.js?v=9bf55d28"></script>
+    <link rel="index" title="Stichwortverzeichnis" href="genindex.html" />
+    <link rel="search" title="Suche" href="search.html" />
+    <link rel="next" title="Microtech Rulebuilder mit Feldkatalog (Schritt fuer Schritt)" href="microtech_rulebuilder_feldkatalog.html" />
+    <link rel="prev" title="Erste Schritte" href="erste_schritte.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="hr-mitarbeiterverwaltung">
+<h1>HR Mitarbeiterverwaltung<a class="headerlink" href="#hr-mitarbeiterverwaltung" title="Link to this heading">¶</a></h1>
+<section id="zielbild">
+<h2>Zielbild<a class="headerlink" href="#zielbild" title="Link to this heading">¶</a></h2>
+<p>Die HR-App bildet in Django Admin die erste nutzbare Version der Mitarbeiterverwaltung ab.
+Der aktuelle Stand deckt folgende Bereiche ab:</p>
+<ul class="simple">
+<li><p>Abteilungen</p></li>
+<li><p>Mitarbeiterprofile auf Basis bestehender Django-User</p></li>
+<li><p>Arbeitszeitmodelle und Mitarbeiter-Zuweisungen</p></li>
+<li><p>Urlaubsantraege</p></li>
+<li><p>Krankmeldungen</p></li>
+<li><p>Zeitkonto-Buchungen</p></li>
+<li><p>Monatsuebersichten</p></li>
+<li><p>Feiertage und Betriebsurlaub</p></li>
+<li><p>Admin-Kalender fuer Abwesenheiten und Zeitkonto</p></li>
+</ul>
+<p>Die Umsetzung ist bewusst <code class="docutils literal notranslate"><span class="pre">Admin-first</span></code>.
+Es gibt noch kein eigenes Mitarbeiterportal.</p>
+</section>
+<section id="aktueller-funktionsumfang">
+<h2>Aktueller Funktionsumfang<a class="headerlink" href="#aktueller-funktionsumfang" title="Link to this heading">¶</a></h2>
+<section id="bereits-umgesetzt">
+<h3>Bereits umgesetzt<a class="headerlink" href="#bereits-umgesetzt" title="Link to this heading">¶</a></h3>
+<ul class="simple">
+<li><p>HR-Modelle inkl. Migrationen in <code class="docutils literal notranslate"><span class="pre">hr</span></code></p></li>
+<li><p>rollenbasierte Sichtbarkeit im Admin</p></li>
+<li><p>Freigabe-Logik fuer Urlaub und Zeitkonto ueber Services</p></li>
+<li><p>Konfliktpruefung fuer Urlaub gegen Krankheit und Betriebsurlaub</p></li>
+<li><p>Kalenderansicht im Admin unter <code class="docutils literal notranslate"><span class="pre">/admin/hr/calendar/</span></code></p></li>
+<li><p>Feiertage und Betriebsurlaub in Sollzeit und Monatsberechnung</p></li>
+<li><p>Bootstrap-Commands fuer Gruppen und Grundkonfiguration</p></li>
+</ul>
+</section>
+<section id="noch-bewusst-nicht-enthalten">
+<h3>Noch bewusst nicht enthalten<a class="headerlink" href="#noch-bewusst-nicht-enthalten" title="Link to this heading">¶</a></h3>
+<ul class="simple">
+<li><p>eigenes Self-Service-Portal</p></li>
+<li><p>E-Mail-Benachrichtigungen</p></li>
+<li><p>Resturlaub / Jahresurlaubskonto</p></li>
+<li><p>komplexe Genehmigungsworkflows</p></li>
+<li><p>automatische Behandlung <code class="docutils literal notranslate"><span class="pre">Krank</span> <span class="pre">waehrend</span> <span class="pre">Urlaub</span></code> ueber Warnlogik hinaus</p></li>
+</ul>
+</section>
+</section>
+<section id="produktiver-start-auf-dem-server">
+<h2>Produktiver Start auf dem Server<a class="headerlink" href="#produktiver-start-auf-dem-server" title="Link to this heading">¶</a></h2>
+<section id="voraussetzungen">
+<h3>Voraussetzungen<a class="headerlink" href="#voraussetzungen" title="Link to this heading">¶</a></h3>
+<ul class="simple">
+<li><p>aktueller Code ist deployed</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">.env</span></code> ist korrekt</p></li>
+<li><p>Datenbank ist erreichbar</p></li>
+<li><p>Django-Migrationen koennen auf dem Server ausgefuehrt werden</p></li>
+<li><p>mindestens ein Admin-User existiert</p></li>
+</ul>
+</section>
+<section id="empfohlene-reihenfolge">
+<h3>Empfohlene Reihenfolge<a class="headerlink" href="#empfohlene-reihenfolge" title="Link to this heading">¶</a></h3>
+<ol class="arabic simple">
+<li><p>Migrationen ausfuehren</p></li>
+<li><p>HR-Gruppen und Berechtigungen anlegen</p></li>
+<li><p>HR-Grundkonfiguration anlegen</p></li>
+<li><p>User Gruppen zuweisen</p></li>
+<li><p>Mitarbeiterprofile pruefen</p></li>
+<li><p>Arbeitszeitmodelle, Feiertage und Betriebsurlaub pflegen</p></li>
+<li><p>ersten Kalendereintrag und ersten Urlaubsantrag im Admin testen</p></li>
+</ol>
+</section>
+</section>
+<section id="schritt-1-migrationen">
+<h2>Schritt 1: Migrationen<a class="headerlink" href="#schritt-1-migrationen" title="Link to this heading">¶</a></h2>
+<p>Linux:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>.venv/bin/python<span class="w"> </span>manage.py<span class="w"> </span>migrate
+</pre></div>
+</div>
+<p>Windows:</p>
+<div class="highlight-doscon notranslate"><div class="highlight"><pre><span></span><span class="go">.venv\Scripts\python.exe manage.py migrate</span>
+</pre></div>
+</div>
+</section>
+<section id="schritt-2-hr-gruppen-und-permissions-anlegen">
+<h2>Schritt 2: HR-Gruppen und Permissions anlegen<a class="headerlink" href="#schritt-2-hr-gruppen-und-permissions-anlegen" title="Link to this heading">¶</a></h2>
+<p>Nur die Gruppen und deren Django-Model-Permissions:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>.venv/bin/python<span class="w"> </span>manage.py<span class="w"> </span>hr_setup_groups
+</pre></div>
+</div>
+<p>Windows:</p>
+<div class="highlight-doscon notranslate"><div class="highlight"><pre><span></span><span class="go">.venv\Scripts\python.exe manage.py hr_setup_groups</span>
+</pre></div>
+</div>
+<p>Der Command ist idempotent und kann mehrfach ausgefuehrt werden.</p>
+<p>Angelegte Gruppen:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">Mitarbeiter</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Teamleitung</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Abteilungsleitung</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Personalverwaltung</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Geschaeftsfuehrung</span></code></p></li>
+</ul>
+</section>
+<section id="schritt-3-hr-grundkonfiguration-anlegen">
+<h2>Schritt 3: HR-Grundkonfiguration anlegen<a class="headerlink" href="#schritt-3-hr-grundkonfiguration-anlegen" title="Link to this heading">¶</a></h2>
+<p>Minimaler Setup-Lauf ohne Demo-User:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>.venv/bin/python<span class="w"> </span>manage.py<span class="w"> </span>hr_bootstrap
+</pre></div>
+</div>
+<p>Dieser Lauf legt idempotent an:</p>
+<ul class="simple">
+<li><p>Abteilung <code class="docutils literal notranslate"><span class="pre">Allgemein</span></code></p></li>
+<li><p>Feiertagskalender <code class="docutils literal notranslate"><span class="pre">Deutschland</span></code></p></li>
+<li><p>Arbeitszeitmodell <code class="docutils literal notranslate"><span class="pre">Vollzeit</span> <span class="pre">40h</span></code></p></li>
+</ul>
+<p>Wenn direkt ein Demo- oder Pilot-Mitarbeiter angelegt werden soll:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>.venv/bin/python<span class="w"> </span>manage.py<span class="w"> </span>hr_bootstrap<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--demo-username<span class="w"> </span>demo.hr<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--create-demo-user<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--demo-password<span class="w"> </span><span class="s1">&#39;BitteAendern123!&#39;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--with-sample-records
+</pre></div>
+</div>
+<p>Windows:</p>
+<div class="highlight-doscon notranslate"><div class="highlight"><pre><span></span><span class="go">.venv\Scripts\python.exe manage.py hr_bootstrap --demo-username demo.hr --create-demo-user --demo-password BitteAendern123! --with-sample-records</span>
+</pre></div>
+</div>
+<p>Wirkung des Demo-Laufs:</p>
+<ul class="simple">
+<li><p>User wird bei Bedarf erzeugt</p></li>
+<li><p>User wird <code class="docutils literal notranslate"><span class="pre">is_staff</span> <span class="pre">=</span> <span class="pre">True</span></code> gesetzt</p></li>
+<li><p>User wird automatisch der Gruppe <code class="docutils literal notranslate"><span class="pre">Mitarbeiter</span></code> zugeordnet</p></li>
+<li><p>Mitarbeiterprofil wird angelegt</p></li>
+<li><p>Feiertagskalender und Abteilung werden zugewiesen</p></li>
+<li><p>Arbeitszeitmodell wird zugewiesen</p></li>
+<li><p>Beispiel-Urlaub, Beispiel-Krankmeldung, Beispiel-Zeitkonto und Monatsuebersicht werden erzeugt</p></li>
+</ul>
+</section>
+<section id="schritt-4-benutzer-und-gruppen-zuweisen">
+<h2>Schritt 4: Benutzer und Gruppen zuweisen<a class="headerlink" href="#schritt-4-benutzer-und-gruppen-zuweisen" title="Link to this heading">¶</a></h2>
+<p>Die eigentliche Sichtbarkeit im Admin entsteht aus:</p>
+<ul class="simple">
+<li><p>Django-User</p></li>
+<li><p>Gruppenmitgliedschaft</p></li>
+<li><p>Mitarbeiterprofil</p></li>
+<li><p>Abteilungszuordnung im Mitarbeiterprofil</p></li>
+</ul>
+<section id="empfohlene-zuordnung">
+<h3>Empfohlene Zuordnung<a class="headerlink" href="#empfohlene-zuordnung" title="Link to this heading">¶</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">Mitarbeiter</span></code></p>
+<ul class="simple">
+<li><p>soll eigene Daten sehen</p></li>
+<li><p>soll eigene Urlaubsantraege anlegen koennen</p></li>
+<li><p>soll Kalender sehen koennen</p></li>
+</ul>
+<p><code class="docutils literal notranslate"><span class="pre">Teamleitung</span></code> / <code class="docutils literal notranslate"><span class="pre">Abteilungsleitung</span></code></p>
+<ul class="simple">
+<li><p>sieht Mitarbeiter der eigenen Abteilung</p></li>
+<li><p>kann Urlaubsantraege in der eigenen Abteilung sehen und bearbeiten</p></li>
+<li><p>sieht den Kalender der eigenen Abteilung</p></li>
+</ul>
+<p><code class="docutils literal notranslate"><span class="pre">Personalverwaltung</span></code></p>
+<ul class="simple">
+<li><p>verwaltet Stammdaten</p></li>
+<li><p>sieht Krankmeldungen</p></li>
+<li><p>pflegt Feiertage und Betriebsurlaub</p></li>
+<li><p>verwaltet Monatsuebersichten, Zeitkonto und Arbeitszeitmodelle</p></li>
+</ul>
+<p><code class="docutils literal notranslate"><span class="pre">Geschaeftsfuehrung</span></code></p>
+<ul class="simple">
+<li><p>hat denselben weiten Zugriff wie Personalverwaltung</p></li>
+</ul>
+</section>
+<section id="wichtiger-punkt">
+<h3>Wichtiger Punkt<a class="headerlink" href="#wichtiger-punkt" title="Link to this heading">¶</a></h3>
+<p>Abteilungsbezogene Sicht funktioniert nur, wenn:</p>
+<ul class="simple">
+<li><p>der User ein <code class="docutils literal notranslate"><span class="pre">EmployeeProfile</span></code> hat</p></li>
+<li><p>dort eine <code class="docutils literal notranslate"><span class="pre">department</span></code> gesetzt ist</p></li>
+</ul>
+<p>Ohne Mitarbeiterprofil bleibt die HR-Sicht fuer Nicht-Superuser leer oder stark eingeschraenkt.</p>
+</section>
+</section>
+<section id="schritt-5-stammdaten-im-admin-pruefen">
+<h2>Schritt 5: Stammdaten im Admin pruefen<a class="headerlink" href="#schritt-5-stammdaten-im-admin-pruefen" title="Link to this heading">¶</a></h2>
+<p>Danach im Admin pruefen:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">Mitarbeiter</span> <span class="pre">-&gt;</span> <span class="pre">Profile</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Mitarbeiter</span> <span class="pre">-&gt;</span> <span class="pre">Urlaubsantraege</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Mitarbeiter</span> <span class="pre">-&gt;</span> <span class="pre">Krankmeldungen</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Mitarbeiter</span> <span class="pre">-&gt;</span> <span class="pre">Zeitkonto</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Mitarbeiter</span> <span class="pre">-&gt;</span> <span class="pre">Monatsuebersichten</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Mitarbeiter</span> <span class="pre">-&gt;</span> <span class="pre">Feiertage</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Mitarbeiter</span> <span class="pre">-&gt;</span> <span class="pre">Betriebsurlaub</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Mitarbeiter</span> <span class="pre">-&gt;</span> <span class="pre">Kalender</span></code></p></li>
+</ul>
+<p>Zusatzpruefung fuer neue Mitarbeiter:</p>
+<ol class="arabic simple">
+<li><p>User existiert und ist <code class="docutils literal notranslate"><span class="pre">is_staff</span></code></p></li>
+<li><p>User hat mindestens eine HR-Gruppe</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">EmployeeProfile</span></code> ist vorhanden</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">department</span></code> ist gesetzt</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">holiday_calendar</span></code> ist gesetzt oder Default-Kalender greift</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">EmployeeWorkSchedule</span></code> ist vorhanden</p></li>
+</ol>
+</section>
+<section id="schritt-6-erstkonfiguration-fuer-echte-nutzung">
+<h2>Schritt 6: Erstkonfiguration fuer echte Nutzung<a class="headerlink" href="#schritt-6-erstkonfiguration-fuer-echte-nutzung" title="Link to this heading">¶</a></h2>
+<p>Empfohlene manuelle Pflege nach dem Bootstrap:</p>
+<ol class="arabic simple">
+<li><p>reale Abteilungen anlegen</p></li>
+<li><p>Mitarbeiterprofilen die richtige Abteilung zuweisen</p></li>
+<li><p>Arbeitszeitmodelle anpassen</p></li>
+<li><p>Feiertage fuer das relevante Jahr pflegen</p></li>
+<li><p>Betriebsurlaub pflegen</p></li>
+<li><p>Pilot-Usern Gruppen zuweisen</p></li>
+</ol>
+<section id="feiertage">
+<h3>Feiertage<a class="headerlink" href="#feiertage" title="Link to this heading">¶</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">Mitarbeiter</span> <span class="pre">-&gt;</span> <span class="pre">Feiertage</span></code> enthaelt kalenderbezogene Feiertage.
+Wenn mehrere Regionen benoetigt werden, zuerst mehrere Feiertagskalender anlegen und dann den Mitarbeiterprofilen zuordnen.</p>
+</section>
+<section id="betriebsurlaub">
+<h3>Betriebsurlaub<a class="headerlink" href="#betriebsurlaub" title="Link to this heading">¶</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">Mitarbeiter</span> <span class="pre">-&gt;</span> <span class="pre">Betriebsurlaub</span></code> gilt global.</p>
+<p>Feld <code class="docutils literal notranslate"><span class="pre">counts_as_vacation</span></code>:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">Nein</span></code>: blockiert ueberschneidenden Urlaub/Krankheit, zaehlt aber nicht als Urlaub</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Ja</span></code>: fliesst zusaetzlich in Urlaubsminuten der Monatsuebersicht ein</p></li>
+</ul>
+</section>
+</section>
+<section id="typische-startbefehle-fuer-den-betrieb">
+<h2>Typische Startbefehle fuer den Betrieb<a class="headerlink" href="#typische-startbefehle-fuer-den-betrieb" title="Link to this heading">¶</a></h2>
+<p>Nur Gruppen nachziehen:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>.venv/bin/python<span class="w"> </span>manage.py<span class="w"> </span>hr_setup_groups
+</pre></div>
+</div>
+<p>Nur Grundkonfiguration nachziehen:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>.venv/bin/python<span class="w"> </span>manage.py<span class="w"> </span>hr_bootstrap
+</pre></div>
+</div>
+<p>Pilot-Benutzer mit Beispieldaten anlegen:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>.venv/bin/python<span class="w"> </span>manage.py<span class="w"> </span>hr_bootstrap<span class="w"> </span>--demo-username<span class="w"> </span>max.muster<span class="w"> </span>--create-demo-user<span class="w"> </span>--demo-password<span class="w"> </span><span class="s1">&#39;BitteAendern123!&#39;</span><span class="w"> </span>--with-sample-records
+</pre></div>
+</div>
+</section>
+<section id="fachlogik-im-aktuellen-stand">
+<h2>Fachlogik im aktuellen Stand<a class="headerlink" href="#fachlogik-im-aktuellen-stand" title="Link to this heading">¶</a></h2>
+<section id="sichtbarkeit">
+<h3>Sichtbarkeit<a class="headerlink" href="#sichtbarkeit" title="Link to this heading">¶</a></h3>
+<ul class="simple">
+<li><p>Superuser sieht alles</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Personalverwaltung</span></code> und <code class="docutils literal notranslate"><span class="pre">Geschaeftsfuehrung</span></code> sehen alles</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Teamleitung</span></code> und <code class="docutils literal notranslate"><span class="pre">Abteilungsleitung</span></code> sehen nur die eigene Abteilung</p></li>
+<li><p>normale <code class="docutils literal notranslate"><span class="pre">Mitarbeiter</span></code> sehen nur ihr eigenes Profil und ihre eigenen Daten</p></li>
+</ul>
+</section>
+<section id="urlaub">
+<h3>Urlaub<a class="headerlink" href="#urlaub" title="Link to this heading">¶</a></h3>
+<ul class="simple">
+<li><p>Freigabe laeuft ueber Service-Logik</p></li>
+<li><p>Konflikte gegen freigegebenen Urlaub werden geprueft</p></li>
+<li><p>Konflikte gegen Krankmeldungen werden geprueft</p></li>
+<li><p>Konflikte gegen Betriebsurlaub werden geprueft</p></li>
+<li><p>halbe Urlaubstage sind im Modell vorbereitet</p></li>
+</ul>
+</section>
+<section id="krankheit">
+<h3>Krankheit<a class="headerlink" href="#krankheit" title="Link to this heading">¶</a></h3>
+<ul class="simple">
+<li><p>Krankmeldungen werden separat gefuehrt</p></li>
+<li><p>fuer nicht privilegierte Rollen wird im Kalender datensparsam <code class="docutils literal notranslate"><span class="pre">Abwesend</span></code> statt <code class="docutils literal notranslate"><span class="pre">Krank</span></code> angezeigt</p></li>
+</ul>
+</section>
+<section id="zeitkonto">
+<h3>Zeitkonto<a class="headerlink" href="#zeitkonto" title="Link to this heading">¶</a></h3>
+<ul class="simple">
+<li><p>Freigaben laufen ueber Service-Logik</p></li>
+<li><p>positive und negative Minuten werden in Monatsuebersichten getrennt ausgewiesen</p></li>
+</ul>
+</section>
+<section id="sollzeit-und-monatsuebersicht">
+<h3>Sollzeit und Monatsuebersicht<a class="headerlink" href="#sollzeit-und-monatsuebersicht" title="Link to this heading">¶</a></h3>
+<ul class="simple">
+<li><p>Sollzeit kommt aus <code class="docutils literal notranslate"><span class="pre">WorkSchedule</span></code> und <code class="docutils literal notranslate"><span class="pre">WorkScheduleDay</span></code></p></li>
+<li><p>Feiertage und Betriebsurlaub reduzieren die effektive Sollzeit</p></li>
+<li><p>Betriebsurlaub mit <code class="docutils literal notranslate"><span class="pre">counts_as_vacation</span> <span class="pre">=</span> <span class="pre">True</span></code> wird zusaetzlich als Urlaub ausgewiesen</p></li>
+</ul>
+</section>
+</section>
+<section id="empfohlener-pilotablauf">
+<h2>Empfohlener Pilotablauf<a class="headerlink" href="#empfohlener-pilotablauf" title="Link to this heading">¶</a></h2>
+<ol class="arabic simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">hr_setup_groups</span></code> ausfuehren</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">hr_bootstrap</span></code> ausfuehren</p></li>
+<li><p>einen realen Pilot-User einer passenden Gruppe zuweisen</p></li>
+<li><p>Mitarbeiterprofil, Abteilung und Arbeitszeitmodell pruefen</p></li>
+<li><p>Feiertage fuer das laufende Jahr pflegen</p></li>
+<li><p>einen Test-Urlaubsantrag anlegen</p></li>
+<li><p>als HR- oder Leitungsrolle freigeben</p></li>
+<li><p>Kalender unter <code class="docutils literal notranslate"><span class="pre">/admin/hr/calendar/</span></code> pruefen</p></li>
+<li><p>Monatsuebersicht neu berechnen</p></li>
+</ol>
+</section>
+<section id="wichtige-einschraenkungen">
+<h2>Wichtige Einschraenkungen<a class="headerlink" href="#wichtige-einschraenkungen" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p>kein Resturlaubskonto</p></li>
+<li><p>keine automatische Rueckverrechnung von Krankheit waehrend Urlaub</p></li>
+<li><p>keine Benachrichtigungen</p></li>
+<li><p>kein Mitarbeiterportal ausserhalb des Django-Admins</p></li>
+<li><p>halbtaegige Feiertage sind modelliert, aber fachlich noch nicht in der Sollzeitberechnung differenziert</p></li>
+</ul>
+</section>
+<section id="empfehlung-fuer-den-direkten-start">
+<h2>Empfehlung fuer den direkten Start<a class="headerlink" href="#empfehlung-fuer-den-direkten-start" title="Link to this heading">¶</a></h2>
+<p>Wenn du sofort loslegen willst, ist die kuerzeste produktive Reihenfolge:</p>
+<ol class="arabic simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">manage.py</span> <span class="pre">migrate</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">manage.py</span> <span class="pre">hr_setup_groups</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">manage.py</span> <span class="pre">hr_bootstrap</span></code></p></li>
+<li><p>reale User den Gruppen zuweisen</p></li>
+<li><p>Mitarbeiterprofile und Abteilungen vervollstaendigen</p></li>
+<li><p>Feiertage pflegen</p></li>
+<li><p>Pilotbetrieb mit 1-2 Mitarbeitern starten</p></li>
+</ol>
+</section>
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="index.html">GC-Bridge-4</a></h1>
+
+
+
+
+
+
+
+
+
+<search id="searchbox" style="display: none" role="search">
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Search"/>
+      <input type="submit" value="Los" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script><h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Inhalte</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="einleitung.html">Einleitung</a></li>
+<li class="toctree-l1"><a class="reference internal" href="erste_schritte.html">Erste Schritte</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">HR Mitarbeiterverwaltung</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#zielbild">Zielbild</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#aktueller-funktionsumfang">Aktueller Funktionsumfang</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#produktiver-start-auf-dem-server">Produktiver Start auf dem Server</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#schritt-1-migrationen">Schritt 1: Migrationen</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#schritt-2-hr-gruppen-und-permissions-anlegen">Schritt 2: HR-Gruppen und Permissions anlegen</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#schritt-3-hr-grundkonfiguration-anlegen">Schritt 3: HR-Grundkonfiguration anlegen</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#schritt-4-benutzer-und-gruppen-zuweisen">Schritt 4: Benutzer und Gruppen zuweisen</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#schritt-5-stammdaten-im-admin-pruefen">Schritt 5: Stammdaten im Admin pruefen</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#schritt-6-erstkonfiguration-fuer-echte-nutzung">Schritt 6: Erstkonfiguration fuer echte Nutzung</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#typische-startbefehle-fuer-den-betrieb">Typische Startbefehle fuer den Betrieb</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#fachlogik-im-aktuellen-stand">Fachlogik im aktuellen Stand</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#empfohlener-pilotablauf">Empfohlener Pilotablauf</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#wichtige-einschraenkungen">Wichtige Einschraenkungen</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#empfehlung-fuer-den-direkten-start">Empfehlung fuer den direkten Start</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="microtech_rulebuilder_feldkatalog.html">Microtech Rulebuilder mit Feldkatalog (Schritt fuer Schritt)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="operator_checkliste.html">Operator-Checkliste (1 Seite)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="workflows.html">Workflows</a></li>
+<li class="toctree-l1"><a class="reference internal" href="betrieb_technik.html">Betrieb und Technik</a></li>
+<li class="toctree-l1"><a class="reference internal" href="stoerung_nicht_erreichbar.html">Stoerung: Seite nicht erreichbar</a></li>
+<li class="toctree-l1"><a class="reference internal" href="reference/index.html">Referenz</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+      <li>Previous: <a href="erste_schritte.html" title="vorheriges Kapitel">Erste Schritte</a></li>
+      <li>Next: <a href="microtech_rulebuilder_feldkatalog.html" title="nächstes Kapitel">Microtech Rulebuilder mit Feldkatalog (Schritt fuer Schritt)</a></li>
+  </ul></li>
+</ul>
+</div>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 9.1.0</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+      
+      |
+      <a href="_sources/hr_mitarbeiterverwaltung.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

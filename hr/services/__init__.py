@@ -4,6 +4,7 @@ from .holiday_service import HolidayService
 from .leave_service import LeaveService
 from .monthly_summary_service import MonthlySummaryService
 from .sick_leave_service import SickLeaveService
+from .setup_service import HrSetupService
 from .time_account_service import TimeAccountService
 from .working_time_service import WorkingTimeService
 
@@ -14,6 +15,7 @@ __all__ = [
     "LeaveService",
     "MonthlySummaryService",
     "SickLeaveService",
+    "HrSetupService",
     "TimeAccountService",
     "WorkingTimeService",
 ]

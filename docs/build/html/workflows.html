@@ -130,12 +130,12 @@ inklusive Kunden- und Adressdaten.</p>
 </section>
 <section id="beispielregel">
 <h3>Beispielregel<a class="headerlink" href="#beispielregel" title="Link to this heading">¶</a></h3>
-<p>Wenn <code class="docutils literal notranslate"><span class="pre">payment_method</span></code> den Text <code class="docutils literal notranslate"><span class="pre">paypal</span></code> enthaelt und
-<code class="docutils literal notranslate"><span class="pre">shipping_address__country_code</span></code> gleich <code class="docutils literal notranslate"><span class="pre">AT</span></code> ist:</p>
+<p>Wenn die Zahlungsart den Text <code class="docutils literal notranslate"><span class="pre">paypal</span></code> enthaelt und
+das Lieferland gleich <code class="docutils literal notranslate"><span class="pre">AT</span></code> ist:</p>
 <ol class="arabic simple">
 <li><p>Zusatzposition mit ERP-Nr <code class="docutils literal notranslate"><span class="pre">P</span></code> erzeugen</p></li>
-<li><p>Im Dataset <code class="docutils literal notranslate"><span class="pre">Vorgang</span></code> das Feld <code class="docutils literal notranslate"><span class="pre">ZahlArt</span></code> auf <code class="docutils literal notranslate"><span class="pre">22</span></code> setzen</p></li>
-<li><p>Im Dataset <code class="docutils literal notranslate"><span class="pre">VorgangPosition</span></code> das Feld <code class="docutils literal notranslate"><span class="pre">KuBez</span></code> auf <code class="docutils literal notranslate"><span class="pre">PayPal</span> <span class="pre">Gebuehr</span></code> setzen</p></li>
+<li><p>Vorgangsfeld <code class="docutils literal notranslate"><span class="pre">ZahlArt</span></code> auf <code class="docutils literal notranslate"><span class="pre">22</span></code> setzen</p></li>
+<li><p>Feld der Zusatzposition <code class="docutils literal notranslate"><span class="pre">KuBez</span></code> auf <code class="docutils literal notranslate"><span class="pre">PayPal</span> <span class="pre">Gebuehr</span></code> setzen</p></li>
 </ol>
 </section>
 <section id="schritte-im-admin">
@@ -165,20 +165,20 @@ inklusive Kunden- und Adressdaten.</p>
 <li><p>Bedingungen in der Regel</p></li>
 </ol>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">django_field_path</span> <span class="pre">=</span> <span class="pre">payment_method</span></code></p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">operator_code</span> <span class="pre">=</span> <span class="pre">contains</span></code></p></li>
+<li><p>Feld: <code class="docutils literal notranslate"><span class="pre">payment_method</span></code></p></li>
+<li><p>Operator: <code class="docutils literal notranslate"><span class="pre">contains</span></code></p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">expected_value</span> <span class="pre">=</span> <span class="pre">paypal</span></code></p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">django_field_path</span> <span class="pre">=</span> <span class="pre">shipping_address__country_code</span></code></p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">operator_code</span> <span class="pre">=</span> <span class="pre">eq</span></code></p></li>
+<li><p>Feld: <code class="docutils literal notranslate"><span class="pre">shipping_address__country_code</span></code></p></li>
+<li><p>Operator: <code class="docutils literal notranslate"><span class="pre">eq</span></code></p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">expected_value</span> <span class="pre">=</span> <span class="pre">AT</span></code></p></li>
 </ul>
 <ol class="arabic simple" start="5">
 <li><p>Aktionen in der Regel</p></li>
 </ol>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">action_type</span> <span class="pre">=</span> <span class="pre">create_extra_position</span></code>, <code class="docutils literal notranslate"><span class="pre">target_value</span> <span class="pre">=</span> <span class="pre">P</span></code></p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">action_type</span> <span class="pre">=</span> <span class="pre">set_field</span></code>, <code class="docutils literal notranslate"><span class="pre">dataset</span> <span class="pre">=</span> <span class="pre">Vorgang</span></code>, <code class="docutils literal notranslate"><span class="pre">dataset_field</span> <span class="pre">=</span> <span class="pre">ZahlArt</span></code>, <code class="docutils literal notranslate"><span class="pre">target_value</span> <span class="pre">=</span> <span class="pre">22</span></code></p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">action_type</span> <span class="pre">=</span> <span class="pre">set_field</span></code>, <code class="docutils literal notranslate"><span class="pre">dataset</span> <span class="pre">=</span> <span class="pre">VorgangPosition</span></code>, <code class="docutils literal notranslate"><span class="pre">dataset_field</span> <span class="pre">=</span> <span class="pre">KuBez</span></code>, <code class="docutils literal notranslate"><span class="pre">target_value</span> <span class="pre">=</span> <span class="pre">PayPal</span> <span class="pre">Gebuehr</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ui_action</span> <span class="pre">=</span> <span class="pre">Zusatzposition</span> <span class="pre">anlegen</span></code>, <code class="docutils literal notranslate"><span class="pre">target_value</span> <span class="pre">=</span> <span class="pre">P</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ui_action</span> <span class="pre">=</span> <span class="pre">Vorgangsfeld</span> <span class="pre">setzen</span></code>, <code class="docutils literal notranslate"><span class="pre">dataset_field</span> <span class="pre">=</span> <span class="pre">ZahlArt</span></code>, <code class="docutils literal notranslate"><span class="pre">target_value</span> <span class="pre">=</span> <span class="pre">22</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ui_action</span> <span class="pre">=</span> <span class="pre">Feld</span> <span class="pre">der</span> <span class="pre">Zusatzposition</span> <span class="pre">setzen</span></code>, <code class="docutils literal notranslate"><span class="pre">dataset_field</span> <span class="pre">=</span> <span class="pre">KuBez</span></code>, <code class="docutils literal notranslate"><span class="pre">target_value</span> <span class="pre">=</span> <span class="pre">PayPal</span> <span class="pre">Gebuehr</span></code></p></li>
 </ul>
 </section>
 <section id="testbefehl">
@@ -229,6 +229,42 @@ inklusive Kunden- und Adressdaten.</p>
 </div>
 </section>
 </section>
+<section id="workflow-7-hr-grundsetup-und-pilotstart">
+<h2>Workflow 7: HR-Grundsetup und Pilotstart<a class="headerlink" href="#workflow-7-hr-grundsetup-und-pilotstart" title="Link to this heading">¶</a></h2>
+<section id="id8">
+<h3>Ziel<a class="headerlink" href="#id8" title="Link to this heading">¶</a></h3>
+<p>Die Mitarbeiterverwaltung fuer den produktiven Start vorbereiten.</p>
+</section>
+<section id="id9">
+<h3>Befehle<a class="headerlink" href="#id9" title="Link to this heading">¶</a></h3>
+<p>Nur Gruppen und Permissions anlegen:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>.venv/bin/python<span class="w"> </span>manage.py<span class="w"> </span>hr_setup_groups
+</pre></div>
+</div>
+<p>Grundkonfiguration anlegen:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>.venv/bin/python<span class="w"> </span>manage.py<span class="w"> </span>hr_bootstrap
+</pre></div>
+</div>
+<p>Pilot-Mitarbeiter mit Beispieldaten anlegen:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>.venv/bin/python<span class="w"> </span>manage.py<span class="w"> </span>hr_bootstrap<span class="w"> </span>--demo-username<span class="w"> </span>demo.hr<span class="w"> </span>--create-demo-user<span class="w"> </span>--demo-password<span class="w"> </span><span class="s1">&#39;BitteAendern123!&#39;</span><span class="w"> </span>--with-sample-records
+</pre></div>
+</div>
+</section>
+<section id="danach-im-admin">
+<h3>Danach im Admin<a class="headerlink" href="#danach-im-admin" title="Link to this heading">¶</a></h3>
+<ol class="arabic simple">
+<li><p>Gruppen zuweisen</p></li>
+<li><p>Mitarbeiterprofil und Abteilung pruefen</p></li>
+<li><p>Arbeitszeitmodell pruefen</p></li>
+<li><p>Feiertage pflegen</p></li>
+<li><p>Kalender und Urlaubsworkflow testen</p></li>
+</ol>
+</section>
+<section id="siehe-auch">
+<h3>Siehe auch<a class="headerlink" href="#siehe-auch" title="Link to this heading">¶</a></h3>
+<p>Die ausfuehrliche Anleitung steht in <code class="docutils literal notranslate"><span class="pre">HR</span> <span class="pre">Mitarbeiterverwaltung</span></code>.</p>
+</section>
+</section>
 <section id="betriebliche-kontrolle">
 <h2>Betriebliche Kontrolle<a class="headerlink" href="#betriebliche-kontrolle" title="Link to this heading">¶</a></h2>
 <p>Nach jedem Lauf pruefen:</p>
@@ -270,6 +306,7 @@ inklusive Kunden- und Adressdaten.</p>
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="einleitung.html">Einleitung</a></li>
 <li class="toctree-l1"><a class="reference internal" href="erste_schritte.html">Erste Schritte</a></li>
+<li class="toctree-l1"><a class="reference internal" href="hr_mitarbeiterverwaltung.html">HR Mitarbeiterverwaltung</a></li>
 <li class="toctree-l1"><a class="reference internal" href="microtech_rulebuilder_feldkatalog.html">Microtech Rulebuilder mit Feldkatalog (Schritt fuer Schritt)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="operator_checkliste.html">Operator-Checkliste (1 Seite)</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Workflows</a><ul>
@@ -279,6 +316,7 @@ inklusive Kunden- und Adressdaten.</p>
 <li class="toctree-l2"><a class="reference internal" href="#workflow-4-rulebuilder-regel-mit-beispiel-umsetzen-paypal-at">Workflow 4: Rulebuilder-Regel mit Beispiel umsetzen (PayPal + AT)</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#workflow-5-kunden-nach-microtech-upserten">Workflow 5: Kunden nach Microtech upserten</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#workflow-6-shopware-produktsync-aus-django">Workflow 6: Shopware-Produktsync aus Django</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#workflow-7-hr-grundsetup-und-pilotstart">Workflow 7: HR-Grundsetup und Pilotstart</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#betriebliche-kontrolle">Betriebliche Kontrolle</a></li>
 </ul>
 </li>

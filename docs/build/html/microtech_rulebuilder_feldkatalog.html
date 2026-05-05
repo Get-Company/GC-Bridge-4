@@ -16,7 +16,7 @@
     <link rel="index" title="Stichwortverzeichnis" href="genindex.html" />
     <link rel="search" title="Suche" href="search.html" />
     <link rel="next" title="Operator-Checkliste (1 Seite)" href="operator_checkliste.html" />
-    <link rel="prev" title="Erste Schritte" href="erste_schritte.html" />
+    <link rel="prev" title="HR Mitarbeiterverwaltung" href="hr_mitarbeiterverwaltung.html" />
    
   <link rel="stylesheet" href="_static/custom.css" type="text/css" />
   
@@ -38,8 +38,9 @@
 <h1>Microtech Rulebuilder mit Feldkatalog (Schritt fuer Schritt)<a class="headerlink" href="#microtech-rulebuilder-mit-feldkatalog-schritt-fuer-schritt" title="Link to this heading">¶</a></h1>
 <section id="ziel">
 <h2>Ziel<a class="headerlink" href="#ziel" title="Link to this heading">¶</a></h2>
-<p>Diese Anleitung beschreibt den aktuellen Rulebuilder-Stand auf Basis von Django-Feldpfaden
-(Bedingungen) und Microtech-Dataset-Feldern (Aktionen).</p>
+<p>Diese Anleitung beschreibt den aktuellen Rulebuilder-Stand. Intern arbeitet er weiterhin
+mit Django-Feldpfaden (Bedingungen) und Microtech-Dataset-Feldern (Aktionen), die UI fuehrt
+aber fachlicher durch den Ablauf <code class="docutils literal notranslate"><span class="pre">Wenn</span> <span class="pre">...</span> <span class="pre">dann</span> <span class="pre">...</span></code>.</p>
 </section>
 <section id="durchgehendes-beispiel-wird-in-allen-abschnitten-verwendet">
 <h2>Durchgehendes Beispiel (wird in allen Abschnitten verwendet)<a class="headerlink" href="#durchgehendes-beispiel-wird-in-allen-abschnitten-verwendet" title="Link to this heading">¶</a></h2>
@@ -329,7 +330,7 @@ und setze im neu erzeugten VorgangPosition-Datensatz <cite>KuBez</cite> auf <cit
 <td><p><code class="docutils literal notranslate"><span class="pre">10</span></code></p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">django_field_path</span></code></p></td>
-<td><p>Django-Feldpfad (Textfeld mit Autocomplete).</p></td>
+<td><p>Intern gespeicherter Django-Feldpfad. In der UI wird ein lesbares Feldlabel angeboten.</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">shipping_address__country_code</span></code></p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">operator_code</span></code></p></td>
@@ -337,14 +338,14 @@ und setze im neu erzeugten VorgangPosition-Datensatz <cite>KuBez</cite> auf <cit
 <td><p><code class="docutils literal notranslate"><span class="pre">eq</span></code></p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">expected_value</span></code></p></td>
-<td><p>Vergleichswert als Text.</p></td>
+<td><p>Vergleichswert. Die UI passt Eingabehilfe und Eingabetyp an den Feldtyp an.</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">AT</span></code></p></td>
 </tr>
 </tbody>
 </table>
 <p>Hinweis:</p>
 <ul class="simple">
-<li><p>Die Auswahl <code class="docutils literal notranslate"><span class="pre">django_field_path</span></code> steuert, welche Operatoren erlaubt sind.</p></li>
+<li><p>Die Auswahl des Feldes steuert, welche Operatoren erlaubt sind.</p></li>
 <li><p>Typbeispiele:
 - Textfeld: <code class="docutils literal notranslate"><span class="pre">eq</span></code>, <code class="docutils literal notranslate"><span class="pre">contains</span></code>
 - Zahl/Datum: <code class="docutils literal notranslate"><span class="pre">eq</span></code>, <code class="docutils literal notranslate"><span class="pre">gt</span></code>, <code class="docutils literal notranslate"><span class="pre">lt</span></code>
@@ -370,19 +371,23 @@ und setze im neu erzeugten VorgangPosition-Datensatz <cite>KuBez</cite> auf <cit
 <td><p>Reihenfolge der Ausfuehrung.</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">10</span></code></p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">action_type</span></code></p></td>
-<td><p>Aktionstyp (<cite>set_field</cite> oder <cite>create_extra_position</cite>).</p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ui_action</span></code></p></td>
+<td><p>Fachliche Aktion in der UI.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Vorgangsfeld</span> <span class="pre">setzen</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">action_type</span></code></p></td>
+<td><p>Intern gespeicherter Aktionstyp.</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">set_field</span></code></p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">dataset</span></code></p></td>
-<td><p>Ziel-Dataset fuer <cite>set_field</cite>.</p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">dataset</span></code></p></td>
+<td><p>Internes Ziel-Dataset fuer <cite>set_field</cite>.</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">Vorgang</span> <span class="pre">-</span> <span class="pre">Vorgange</span></code></p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">dataset_field</span></code></p></td>
-<td><p>Ziel-Feld, gefiltert nach gewaehltem Dataset.</p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">dataset_field</span></code></p></td>
+<td><p>Ziel-Feld, gefiltert nach der fachlichen Aktion.</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">ZahlArt</span></code></p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">target_value</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">target_value</span></code></p></td>
 <td><p>Zu schreibender Wert oder ERP-Nr bei <cite>create_extra_position</cite>.</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">22</span></code> oder <code class="docutils literal notranslate"><span class="pre">P</span></code></p></td>
 </tr>
@@ -390,8 +395,10 @@ und setze im neu erzeugten VorgangPosition-Datensatz <cite>KuBez</cite> auf <cit
 </table>
 <p>Wichtig:</p>
 <ul class="simple">
-<li><p>Bei <code class="docutils literal notranslate"><span class="pre">create_extra_position</span></code> muessen <code class="docutils literal notranslate"><span class="pre">dataset</span></code> und <code class="docutils literal notranslate"><span class="pre">dataset_field</span></code> leer sein.</p></li>
-<li><p>Bei <code class="docutils literal notranslate"><span class="pre">set_field</span></code> muessen <code class="docutils literal notranslate"><span class="pre">dataset</span></code> und <code class="docutils literal notranslate"><span class="pre">dataset_field</span></code> gesetzt sein.</p></li>
+<li><p>Bei <code class="docutils literal notranslate"><span class="pre">Zusatzposition</span> <span class="pre">anlegen</span></code> wird nur die ERP-Nr eingegeben.</p></li>
+<li><p>Bei <code class="docutils literal notranslate"><span class="pre">Vorgangsfeld</span> <span class="pre">setzen</span></code> werden nur Felder aus <code class="docutils literal notranslate"><span class="pre">Vorgang</span></code> angeboten.</p></li>
+<li><p>Bei <code class="docutils literal notranslate"><span class="pre">Feld</span> <span class="pre">der</span> <span class="pre">Zusatzposition</span> <span class="pre">setzen</span></code> werden nur Felder aus <code class="docutils literal notranslate"><span class="pre">VorgangPosition</span></code> angeboten.</p></li>
+<li><p>Fuer Felder der Zusatzposition sollte auch eine Aktion <code class="docutils literal notranslate"><span class="pre">Zusatzposition</span> <span class="pre">anlegen</span></code> in derselben Regel vorhanden sein.</p></li>
 </ul>
 </section>
 </section>
@@ -447,22 +454,20 @@ und setze im neu erzeugten VorgangPosition-Datensatz <cite>KuBez</cite> auf <cit
 <p>Aktion A (zusaetzliche Position):</p>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">priority</span></code>: <code class="docutils literal notranslate"><span class="pre">10</span></code></p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">action_type</span></code>: <code class="docutils literal notranslate"><span class="pre">create_extra_position</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ui_action</span></code>: <code class="docutils literal notranslate"><span class="pre">Zusatzposition</span> <span class="pre">anlegen</span></code></p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">target_value</span></code>: <code class="docutils literal notranslate"><span class="pre">P</span></code></p></li>
 </ul>
 <p>Aktion B (Vorgang-Feld setzen):</p>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">priority</span></code>: <code class="docutils literal notranslate"><span class="pre">20</span></code></p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">action_type</span></code>: <code class="docutils literal notranslate"><span class="pre">set_field</span></code></p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">dataset</span></code>: <code class="docutils literal notranslate"><span class="pre">Vorgang</span> <span class="pre">-</span> <span class="pre">Vorgange</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ui_action</span></code>: <code class="docutils literal notranslate"><span class="pre">Vorgangsfeld</span> <span class="pre">setzen</span></code></p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">dataset_field</span></code>: <code class="docutils literal notranslate"><span class="pre">ZahlArt</span></code></p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">target_value</span></code>: <code class="docutils literal notranslate"><span class="pre">22</span></code></p></li>
 </ul>
 <p>Aktion C (Feld auf der neu erstellten VorgangPosition setzen):</p>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">priority</span></code>: <code class="docutils literal notranslate"><span class="pre">30</span></code></p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">action_type</span></code>: <code class="docutils literal notranslate"><span class="pre">set_field</span></code></p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">dataset</span></code>: <code class="docutils literal notranslate"><span class="pre">VorgangPosition</span> <span class="pre">-</span> <span class="pre">Vorgangspositionen</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ui_action</span></code>: <code class="docutils literal notranslate"><span class="pre">Feld</span> <span class="pre">der</span> <span class="pre">Zusatzposition</span> <span class="pre">setzen</span></code></p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">dataset_field</span></code>: <code class="docutils literal notranslate"><span class="pre">KuBez</span></code></p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">target_value</span></code>: <code class="docutils literal notranslate"><span class="pre">PayPal</span> <span class="pre">Gebuehr</span></code></p></li>
 </ul>
@@ -553,6 +558,7 @@ und setze im neu erzeugten VorgangPosition-Datensatz <cite>KuBez</cite> auf <cit
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="einleitung.html">Einleitung</a></li>
 <li class="toctree-l1"><a class="reference internal" href="erste_schritte.html">Erste Schritte</a></li>
+<li class="toctree-l1"><a class="reference internal" href="hr_mitarbeiterverwaltung.html">HR Mitarbeiterverwaltung</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Microtech Rulebuilder mit Feldkatalog (Schritt fuer Schritt)</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#ziel">Ziel</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#durchgehendes-beispiel-wird-in-allen-abschnitten-verwendet">Durchgehendes Beispiel (wird in allen Abschnitten verwendet)</a></li>
@@ -575,7 +581,7 @@ und setze im neu erzeugten VorgangPosition-Datensatz <cite>KuBez</cite> auf <cit
 <h3>Related Topics</h3>
 <ul>
   <li><a href="index.html">Documentation overview</a><ul>
-      <li>Previous: <a href="erste_schritte.html" title="vorheriges Kapitel">Erste Schritte</a></li>
+      <li>Previous: <a href="hr_mitarbeiterverwaltung.html" title="vorheriges Kapitel">HR Mitarbeiterverwaltung</a></li>
       <li>Next: <a href="operator_checkliste.html" title="nächstes Kapitel">Operator-Checkliste (1 Seite)</a></li>
   </ul></li>
 </ul>
