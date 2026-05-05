@@ -1,4 +1,4 @@
-<div class="js-price-increase-positions-root {% if inline_mode %}mt-6 {% endif %}flex flex-col gap-6">
+<div class="js-price-increase-positions-root {% if inline_mode %}mt-6 {% endif %}relative flex flex-col gap-6">
     {% if not inline_mode %}
         <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div class="space-y-3">
@@ -36,7 +36,7 @@
                         </div>
                     </div>
                     <p class="mt-3 text-sm text-font-subtle-light dark:text-font-subtle-dark">
-                        Positionen aktualisieren liest die aktuellen Basispreise des Standard-Verkaufskanals neu ein,
+                        Produkte neu laden liest die aktuellen Basispreise des Standard-Verkaufskanals neu ein,
                         entfernt entfallene Positionen und behaelt manuell gesetzte Zielpreise bei.
                     </p>
                 </div>
@@ -55,7 +55,7 @@
         </div>
     {% endif %}
 
-    <div class="rounded-default border border-base-200 bg-white p-4 shadow-xs dark:border-base-800 dark:bg-base-900">
+    <div class="js-positions-toolbar sticky top-4 z-30 rounded-default border border-base-200 bg-white/95 p-4 shadow-sm backdrop-blur dark:border-base-800 dark:bg-base-900/95">
         <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div class="w-full max-w-xl">
                 <label for="{% if inline_mode %}positions-search-inline{% else %}positions-search{% endif %}" class="mb-1 block text-sm font-medium text-font-default-light dark:text-font-default-dark">
@@ -88,4 +88,13 @@
             {% include "admin/products/includes/price_increase_positions_table.html" %}
         {% endif %}
     </div>
+
+    <button
+        type="button"
+        class="js-positions-scroll-top pointer-events-none fixed bottom-6 right-6 z-40 inline-flex translate-y-3 items-center gap-2 rounded-full bg-primary-600 px-4 py-3 text-sm font-medium text-white opacity-0 shadow-lg transition-all hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-600/30 dark:bg-primary-500 dark:hover:bg-primary-400"
+        aria-label="Zum Anfang der Preiserhoehungsliste springen"
+    >
+        <span class="material-symbols-outlined text-base leading-none">arrow_upward</span>
+        <span>Anfang der Liste</span>
+    </button>
 </div>

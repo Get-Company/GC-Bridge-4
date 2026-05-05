@@ -494,7 +494,9 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Preiserhoehungs-Positionen: Admin View Test")
-        self.assertContains(response, "Positionen aktualisieren liest die aktuellen Basispreise")
+        self.assertContains(response, "Produkte neu laden liest die aktuellen Basispreise")
+        self.assertContains(response, "js-positions-toolbar", html=False)
+        self.assertContains(response, "js-positions-scroll-top", html=False)
         self.assertContains(
             response,
             reverse("admin:products_priceincrease_positions_table", args=(self.price_increase.pk,)),
@@ -504,6 +506,10 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
         response = self.client.get(reverse("admin:products_priceincrease_change", args=(self.price_increase.pk,)))
 
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, ">Einstellungen<", html=False)
+        self.assertContains(response, ">Preiserhoehungsliste<", html=False)
+        self.assertContains(response, ">Aktionen<", html=False)
+        self.assertContains(response, ">Produkte neu laden<", html=False)
         self.assertContains(response, "Positionen direkt bearbeiten")
         self.assertContains(response, "Lade Positionen ...")
         self.assertContains(response, 'data-defer-initial-load="1"', html=False)
@@ -530,10 +536,10 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
         self.assertContains(response, "neuer Rab.Preis")
         self.assertContains(response, 'value="10,30"', html=False)
         self.assertContains(response, 'value="9,25"', html=False)
-        self.assertContains(response, "2023")
-        self.assertContains(response, "9,10")
         self.assertContains(response, "2022")
         self.assertContains(response, "8,50")
+        self.assertContains(response, "2023")
+        self.assertContains(response, "9,10")
         self.assertContains(response, "2024")
         self.assertContains(response, "9,55")
         self.assertContains(response, "2025")

@@ -975,7 +975,8 @@ class PriceIncreaseAdmin(BaseAdmin):
     price_list_page_number_font_name = "Helvetica"
     price_list_page_number_font_size = 9
     price_list_page_number_y = 8 * mm
-    change_form_outer_after_template = "admin/products/includes/price_increase_positions_inline.html"
+    change_form_before_template = "admin/products/includes/price_increase_change_tabs_nav.html"
+    change_form_after_template = "admin/products/includes/price_increase_change_tabs_panel.html"
     list_display = (
         "title",
         "status",
@@ -993,7 +994,17 @@ class PriceIncreaseAdmin(BaseAdmin):
         ("applied_at", RangeDateTimeFilter),
     ]
     actions = ("export_price_list_pdf",)
-    actions_detail = ("export_price_list_pdf_detail", "apply_price_increase_detail")
+    actions_detail = [
+        {
+            "title": "Aktionen",
+            "icon": "more_vert",
+            "items": [
+                "export_price_list_pdf_detail",
+                "reload_products_detail",
+                "apply_price_increase_detail",
+            ],
+        }
+    ]
     readonly_fields = BaseAdmin.readonly_fields + (
         "status",
         "sales_channel",
@@ -1003,26 +1014,20 @@ class PriceIncreaseAdmin(BaseAdmin):
     )
     fieldsets = (
         (
-            "Allgemein",
+            "Einstellungen",
             {
                 "fields": (
                     "title",
                     "status",
                     "sales_channel",
                     "general_percentage",
-                )
-            },
-        ),
-        (
-            "Ausfuehrung",
-            {
-                "fields": (
                     "position_count",
                     "positions_synced_at",
                     "applied_at",
                     "created_at",
                     "updated_at",
-                )
+                ),
+                "classes": ("js-price-increase-info-panel", "js-price-increase-tab-panel"),
             },
         ),
     )
@@ -2758,6 +2763,38 @@ class PriceIncreaseAdmin(BaseAdmin):
             return self._build_default_price_list_response(obj)
         except ValueError as exc:
             self.message_user(request, str(exc), level=messages.ERROR)
+        return HttpResponseRedirect(reverse("admin:products_priceincrease_change", args=(object_id,)))
+
+    @action(
+        description="Produkte neu laden",
+        icon="sync",
+        variant=ActionVariant.DEFAULT,
+    )
+    def reload_products_detail(self, request, object_id: str):
+        obj = self.get_object(request, object_id)
+        if not obj:
+            self.message_user(request, "Preiserhoehung nicht gefunden.", level=messages.ERROR)
+            return HttpResponseRedirect(reverse("admin:products_priceincrease_changelist"))
+        if obj.status == PriceIncrease.Status.APPLIED:
+            self.message_user(
+                request,
+                "Produkte koennen nach dem Uebernehmen der Preiserhoehung nicht mehr neu geladen werden.",
+                level=messages.ERROR,
+            )
+            return HttpResponseRedirect(reverse("admin:products_priceincrease_change", args=(object_id,)))
+        try:
+            count = PriceIncreaseService().sync_items(obj)
+        except ValueError as exc:
+            self.message_user(request, str(exc), level=messages.ERROR)
+        else:
+            self.message_user(
+                request,
+                (
+                    f"{count} Produktpreis(e) neu geladen. "
+                    "Preis, Staffelmenge und Staffelpreis wurden aus den Produkten aktualisiert; "
+                    "manuell gesetzte Zielpreise bleiben erhalten."
+                ),
+            )
         return HttpResponseRedirect(reverse("admin:products_priceincrease_change", args=(object_id,)))
 
     @action(

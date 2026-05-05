@@ -6,6 +6,7 @@
             const root = container.closest(".js-price-increase-positions-root") || container.parentElement;
             const searchInput = root ? root.querySelector(".js-positions-search") : null;
             const statusBox = root ? root.querySelector(".js-positions-status") : null;
+            const scrollTopButton = root ? root.querySelector(".js-positions-scroll-top") : null;
             if (!container || !searchInput || !statusBox || container.dataset.bound === "1") {
                 return;
             }
@@ -16,6 +17,21 @@
             const deferInitialLoad = container.dataset.deferInitialLoad === "1";
             let searchTimer = null;
             let searchController = null;
+
+            function toggleScrollTopButton() {
+                if (!scrollTopButton) {
+                    return;
+                }
+                const rootIsVisible = root && root.offsetParent !== null;
+                const rootTop = root ? root.getBoundingClientRect().top + window.scrollY : 0;
+                const shouldShow = rootIsVisible && window.scrollY > rootTop + 320;
+                scrollTopButton.classList.toggle("pointer-events-none", !shouldShow);
+                scrollTopButton.classList.toggle("opacity-0", !shouldShow);
+                scrollTopButton.classList.toggle("translate-y-3", !shouldShow);
+                scrollTopButton.classList.toggle("pointer-events-auto", shouldShow);
+                scrollTopButton.classList.toggle("opacity-100", shouldShow);
+                scrollTopButton.classList.toggle("translate-y-0", shouldShow);
+            }
 
             function getCookie(name) {
                 const cookies = document.cookie ? document.cookie.split(";") : [];
@@ -270,8 +286,22 @@
                 }
             });
 
+            if (scrollTopButton && scrollTopButton.dataset.bound !== "1") {
+                scrollTopButton.dataset.bound = "1";
+                scrollTopButton.addEventListener("click", function () {
+                    root.scrollIntoView({
+                        behavior: "smooth",
+                        block: "start",
+                    });
+                });
+            }
+
+            window.addEventListener("scroll", toggleScrollTopButton, { passive: true });
+            window.addEventListener("resize", toggleScrollTopButton);
+
             bindInputs(container);
             bindHistoryCharts(container);
+            toggleScrollTopButton();
             if (deferInitialLoad) {
                 loadTable(searchInput.value.trim());
             }

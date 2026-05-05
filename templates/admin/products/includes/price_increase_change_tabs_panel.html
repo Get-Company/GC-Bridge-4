@@ -1,0 +1,57 @@
+{% if price_increase_positions_inline_enabled %}
+    <div class="js-price-increase-list-panel js-price-increase-tab-panel hidden">
+        {% include "admin/products/includes/price_increase_positions_editor.html" with inline_mode=True %}
+        {% include "admin/products/includes/price_increase_positions_script.html" %}
+    </div>
+{% endif %}
+<script>
+    (function () {
+        const currentScript = document.currentScript;
+        const form = currentScript ? currentScript.closest("form") : null;
+        if (!form || form.dataset.priceIncreaseTabsBound === "1") {
+            return;
+        }
+        form.dataset.priceIncreaseTabsBound = "1";
+
+        const infoPanels = Array.from(form.querySelectorAll(".js-price-increase-info-panel"));
+        const listPanels = Array.from(form.querySelectorAll(".js-price-increase-list-panel"));
+        const buttons = Array.from(form.querySelectorAll(".js-price-increase-tab-button"));
+        if (!infoPanels.length || !buttons.length) {
+            return;
+        }
+
+        function setActiveTab(tabName) {
+            const activeTab = tabName === "list" && listPanels.length ? "list" : "settings";
+
+            infoPanels.forEach(function (panel) {
+                panel.classList.toggle("hidden", activeTab !== "settings");
+            });
+            listPanels.forEach(function (panel) {
+                panel.classList.toggle("hidden", activeTab !== "list");
+            });
+            buttons.forEach(function (button) {
+                const isActive = button.dataset.priceIncreaseTabButton === activeTab;
+                button.classList.toggle("bg-white", isActive);
+                button.classList.toggle("shadow-xs", isActive);
+                button.classList.toggle("text-font-important-light", isActive);
+                button.classList.toggle("dark:bg-base-950", isActive);
+                button.classList.toggle("dark:text-font-important-dark", isActive);
+                button.classList.toggle("text-font-subtle-light", !isActive);
+                button.classList.toggle("dark:text-font-subtle-dark", !isActive);
+            });
+
+            if (window.history && window.history.replaceState) {
+                const hash = activeTab === "list" ? "#preiserhoehungsliste" : "#einstellungen";
+                window.history.replaceState(null, "", window.location.pathname + window.location.search + hash);
+            }
+        }
+
+        buttons.forEach(function (button) {
+            button.addEventListener("click", function () {
+                setActiveTab(button.dataset.priceIncreaseTabButton || "settings");
+            });
+        });
+
+        setActiveTab(window.location.hash === "#preiserhoehungsliste" ? "list" : "settings");
+    })();
+</script>
