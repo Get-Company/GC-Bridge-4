@@ -1064,6 +1064,11 @@ class PriceIncreaseAdmin(BaseAdmin):
                 name="products_priceincrease_position_save",
             ),
             path(
+                "<path:object_id>/positions/save-batch/",
+                self.admin_site.admin_view(self.save_positions_batch_view),
+                name="products_priceincrease_positions_save_batch",
+            ),
+            path(
                 "<path:object_id>/positions/<path:item_id>/chart/",
                 self.admin_site.admin_view(self.position_chart_view),
                 name="products_priceincrease_position_chart",
@@ -1086,6 +1091,10 @@ class PriceIncreaseAdmin(BaseAdmin):
     @staticmethod
     def _positions_save_url(object_id: int | str, item_id: int | str) -> str:
         return reverse("admin:products_priceincrease_position_save", args=(object_id, item_id))
+
+    @staticmethod
+    def _positions_batch_save_url(object_id: int | str) -> str:
+        return reverse("admin:products_priceincrease_positions_save_batch", args=(object_id,))
 
     @staticmethod
     def _position_chart_url(object_id: int | str, item_id: int | str) -> str:
@@ -2114,6 +2123,8 @@ class PriceIncreaseAdmin(BaseAdmin):
         item.display_unit = item.unit or ""
         item.display_new_price = self._format_decimal(item.effective_new_price)
         item.display_new_rebate_price = self._format_decimal(item.effective_new_rebate_price)
+        item.stored_new_price = self._format_decimal(item.new_price)
+        item.stored_new_rebate_price = self._format_decimal(item.new_rebate_price)
         item.placeholder_new_price = self._format_decimal(item.suggested_price)
         item.placeholder_new_rebate_price = self._format_decimal(item.suggested_rebate_price)
         logged_status_message = getattr(item, "logged_status_message", "")
@@ -2441,6 +2452,72 @@ class PriceIncreaseAdmin(BaseAdmin):
         return field_name
 
     @staticmethod
+    def _clean_position_value(raw_value):
+        value_form = PriceIncreaseItemValueForm({"value": raw_value})
+        if not value_form.is_valid():
+            raise ValidationError("Ungueltiger Preiswert.")
+        return value_form.cleaned_data["value"]
+
+    def _build_position_status_message(
+        self,
+        item: PriceIncreaseItem,
+        previous_values: dict[str, Decimal | None],
+        saved_fields: list[str],
+    ) -> str:
+        if not saved_fields:
+            return ""
+        if len(saved_fields) == 1:
+            field_name = saved_fields[0]
+            old_value = self._format_decimal(previous_values.get(field_name))
+            new_value = self._format_decimal(getattr(item, field_name))
+            field_label = self._get_save_field_label(field_name)
+            return f"{field_label} gespeichert: {old_value or 'leer'} -> {new_value or 'leer'}"
+
+        parts = []
+        for field_name in saved_fields:
+            old_value = self._format_decimal(previous_values.get(field_name))
+            new_value = self._format_decimal(getattr(item, field_name))
+            field_label = self._get_save_field_label(field_name)
+            parts.append(f"{field_label} {old_value or 'leer'} -> {new_value or 'leer'}")
+        return f"Preise gespeichert: {'; '.join(parts)}"
+
+    def _hydrate_position_item_for_response(
+        self,
+        request,
+        price_increase: PriceIncrease,
+        item: PriceIncreaseItem,
+        *,
+        row_status_message: str | None = None,
+    ) -> PriceIncreaseItem:
+        if row_status_message:
+            item.row_status_message = row_status_message
+        self._attach_mappei_price_data([item])
+        self._prepare_position_item(price_increase, item)
+        history_start_at, history_end_at = self._price_summary_date_range()
+        item.yearly_prices = self._build_yearly_price_summary(
+            item,
+            list(
+                PriceHistory.objects.filter(price_entry_id=item.source_price_id)
+                .filter(created_at__gte=history_start_at, created_at__lt=history_end_at)
+                .only("price_entry_id", "created_at", "price")
+                .order_by("created_at", "id")
+            ),
+        )
+        item.price_history_chart = self._build_price_history_chart_meta(price_increase, item)
+        return item
+
+    def _render_position_row_html(self, request, price_increase: PriceIncrease, item: PriceIncreaseItem) -> str:
+        return render_to_string(
+            "admin/products/includes/price_increase_position_row.html",
+            {
+                "item": item,
+                "price_increase": price_increase,
+                "is_applied": False,
+            },
+            request=request,
+        )
+
+    @staticmethod
     def _attach_logged_position_statuses(items: list[PriceIncreaseItem]) -> None:
         item_ids = [str(item.pk) for item in items if item.pk and not item.last_status_message]
         if not item_ids:
@@ -2505,6 +2582,7 @@ class PriceIncreaseAdmin(BaseAdmin):
             "price_increase_change_url": reverse("admin:products_priceincrease_change", args=(price_increase.pk,)),
             "price_increase_changelist_url": reverse("admin:products_priceincrease_changelist"),
             "positions_table_url": self._positions_table_url(price_increase.pk),
+            "positions_batch_save_url": self._positions_batch_save_url(price_increase.pk),
             "is_applied": price_increase.status == PriceIncrease.Status.APPLIED,
             "shopware_shop_url": getattr(settings, "SHOPWARE6_SHOP_URL", ""),
         }
@@ -2521,6 +2599,7 @@ class PriceIncreaseAdmin(BaseAdmin):
                         "search_term": "",
                         "search_min_length": 3,
                         "positions_table_url": self._positions_table_url(obj.pk),
+                        "positions_batch_save_url": self._positions_batch_save_url(obj.pk),
                         "is_applied": obj.status == PriceIncrease.Status.APPLIED,
                         "defer_initial_load": True,
                     },
@@ -2635,28 +2714,17 @@ class PriceIncreaseAdmin(BaseAdmin):
             return JsonResponse({"error": self._format_validation_error(exc)}, status=400)
         item.save()
         item.refresh_from_db()
-        old_value = self._format_decimal(previous_value)
-        new_value = self._format_decimal(getattr(item, field_name))
-        field_label = self._get_save_field_label(field_name)
-        status_message = f"{field_label} gespeichert: {old_value or 'leer'} -> {new_value or 'leer'}"
+        status_message = self._build_position_status_message(item, {field_name: previous_value}, [field_name])
         item.last_status_message = status_message
         item.last_changed_by = request.user
         item.last_changed_at = timezone.now()
         item.save(update_fields=["last_status_message", "last_changed_by", "last_changed_at", "updated_at"])
-        item.row_status_message = status_message
-        self._attach_mappei_price_data([item])
-        self._prepare_position_item(price_increase, item)
-        history_start_at, history_end_at = self._price_summary_date_range()
-        item.yearly_prices = self._build_yearly_price_summary(
+        self._hydrate_position_item_for_response(
+            request,
+            price_increase,
             item,
-            list(
-                PriceHistory.objects.filter(price_entry_id=item.source_price_id)
-                .filter(created_at__gte=history_start_at, created_at__lt=history_end_at)
-                .only("price_entry_id", "created_at", "price")
-                .order_by("created_at", "id")
-            ),
+            row_status_message=status_message,
         )
-        item.price_history_chart = self._build_price_history_chart_meta(price_increase, item)
 
         log_admin_change(
             user_id=request.user.id,
@@ -2666,20 +2734,130 @@ class PriceIncreaseAdmin(BaseAdmin):
             message=item.row_status_message,
         )
 
-        row_html = render_to_string(
-            "admin/products/includes/price_increase_position_row.html",
-            {
-                "item": item,
-                "price_increase": price_increase,
-                "is_applied": False,
-            },
-            request=request,
-        )
+        row_html = self._render_position_row_html(request, price_increase, item)
         return JsonResponse(
             {
                 "message": item.row_status_message,
                 "row_html": row_html,
             }
+        )
+
+    def save_positions_batch_view(self, request, object_id: str):
+        if request.method != "POST":
+            return HttpResponseNotAllowed(["POST"])
+        if not self.has_change_permission(request):
+            return JsonResponse({"error": "Keine Berechtigung zum Speichern."}, status=403)
+
+        price_increase = self._get_price_increase_or_404(object_id)
+        if price_increase.status == PriceIncrease.Status.APPLIED:
+            return JsonResponse({"error": "Diese Preiserhoehung wurde bereits uebernommen."}, status=400)
+
+        try:
+            payload = json.loads(request.body.decode("utf-8"))
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return JsonResponse({"error": "Ungueltige Speicherdaten."}, status=400)
+
+        entries = payload.get("items") or []
+        if not isinstance(entries, list) or not entries:
+            return JsonResponse({"error": "Keine Aenderungen zum Speichern uebergeben."}, status=400)
+
+        item_ids = []
+        for entry in entries:
+            item_id = entry.get("item_id")
+            if item_id is None:
+                return JsonResponse({"error": "Ungueltige Speicherdaten."}, status=400)
+            item_ids.append(str(item_id))
+
+        items_by_id = {
+            str(item.pk): item
+            for item in price_increase.items.select_related("price_increase", "product", "source_price", "last_changed_by")
+            .filter(pk__in=item_ids, product__is_active=True)
+        }
+
+        results = []
+        saved_count = 0
+        error_count = 0
+        for entry in entries:
+            item_id = str(entry.get("item_id"))
+            item = items_by_id.get(item_id)
+            if not item:
+                error_count += 1
+                results.append({"item_id": item_id, "error": "Position nicht gefunden."})
+                continue
+
+            values = entry.get("values") or {}
+            if not isinstance(values, dict):
+                error_count += 1
+                results.append({"item_id": item_id, "error": "Ungueltige Speicherdaten."})
+                continue
+
+            try:
+                cleaned_values = {
+                    field_name: self._clean_position_value(values.get(field_name, ""))
+                    for field_name in ("new_price", "new_rebate_price")
+                }
+            except ValidationError as exc:
+                error_count += 1
+                results.append({"item_id": item_id, "error": self._format_validation_error(exc)})
+                continue
+
+            previous_values = {
+                "new_price": item.new_price,
+                "new_rebate_price": item.new_rebate_price,
+            }
+            for field_name, value in cleaned_values.items():
+                setattr(item, field_name, value)
+
+            try:
+                item.full_clean()
+            except ValidationError as exc:
+                error_count += 1
+                results.append({"item_id": item_id, "error": self._format_validation_error(exc)})
+                continue
+
+            item.save()
+            item.refresh_from_db()
+            saved_fields = [
+                field_name
+                for field_name in ("new_price", "new_rebate_price")
+                if previous_values[field_name] != getattr(item, field_name)
+            ]
+            status_message = self._build_position_status_message(item, previous_values, saved_fields)
+            if saved_fields:
+                item.last_status_message = status_message
+                item.last_changed_by = request.user
+                item.last_changed_at = timezone.now()
+                item.save(update_fields=["last_status_message", "last_changed_by", "last_changed_at", "updated_at"])
+                log_admin_change(
+                    user_id=request.user.id,
+                    content_type_id=ContentType.objects.get_for_model(PriceIncreaseItem).id,
+                    object_id=str(item.pk),
+                    object_repr=str(item),
+                    message=status_message,
+                )
+            self._hydrate_position_item_for_response(
+                request,
+                price_increase,
+                item,
+                row_status_message=status_message or None,
+            )
+            results.append(
+                {
+                    "item_id": item_id,
+                    "message": status_message or "Keine fachliche Aenderung gespeichert.",
+                    "row_html": self._render_position_row_html(request, price_increase, item),
+                }
+            )
+            saved_count += 1
+
+        status = 200 if error_count == 0 else 207
+        return JsonResponse(
+            {
+                "saved_count": saved_count,
+                "error_count": error_count,
+                "results": results,
+            },
+            status=status,
         )
 
     def save_model(self, request, obj, form, change):

@@ -57,6 +57,7 @@
             class="js-position-price-input w-32 rounded-default border border-base-200 bg-white px-3 py-2 text-sm text-font-default-light placeholder-font-subtle-light shadow-xs focus:border-primary-600 focus:outline-none focus:ring-2 focus:ring-primary-600/20 dark:border-base-700 dark:bg-base-950 dark:text-font-default-dark dark:placeholder-font-subtle-dark"
             data-field="new_price"
             data-save-url="{{ item.save_url }}"
+            data-stored-value="{{ item.stored_new_price }}"
             value="{{ item.display_new_price }}"
             placeholder="{{ item.placeholder_new_price }}"
             {% if is_applied %}disabled{% endif %}
@@ -70,6 +71,7 @@
             class="js-position-price-input w-32 rounded-default border border-base-200 bg-white px-3 py-2 text-sm text-font-default-light placeholder-font-subtle-light shadow-xs focus:border-primary-600 focus:outline-none focus:ring-2 focus:ring-primary-600/20 dark:border-base-700 dark:bg-base-950 dark:text-font-default-dark dark:placeholder-font-subtle-dark"
             data-field="new_rebate_price"
             data-save-url="{{ item.save_url }}"
+            data-stored-value="{{ item.stored_new_rebate_price }}"
             value="{{ item.display_new_rebate_price }}"
             placeholder="{{ item.placeholder_new_rebate_price }}"
             {% if is_applied %}disabled{% endif %}
@@ -147,6 +149,7 @@
     <td class="rounded-r-default border-r border-t border-base-200 px-4 py-3 text-sm dark:border-base-800">
         <div class="mb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-font-subtle-light dark:text-font-subtle-dark">Status</div>
         <div class="flex flex-col gap-2">
+            <div class="js-position-local-state hidden"></div>
             {% if item.row_status_message %}
                 <span class="inline-flex items-center gap-1.5 rounded-default bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-300">
                     <span>{{ item.row_status_message }}</span>

@@ -7,7 +7,12 @@
             const searchInput = root ? root.querySelector(".js-positions-search") : null;
             const statusBox = root ? root.querySelector(".js-positions-status") : null;
             const scrollTopButton = root ? root.querySelector(".js-positions-scroll-top") : null;
-            if (!container || !searchInput || !statusBox || container.dataset.bound === "1") {
+            const toolbar = root ? root.querySelector(".js-positions-toolbar") : null;
+            const toolbarAnchor = root ? root.querySelector(".js-positions-toolbar-anchor") : null;
+            const toolbarSpacer = root ? root.querySelector(".js-positions-toolbar-spacer") : null;
+            const saveButton = root ? root.querySelector(".js-positions-save-button") : null;
+            const saveButtonLabel = root ? root.querySelector(".js-positions-save-button-label") : null;
+            if (!container || !searchInput || !statusBox || !toolbar || !toolbarAnchor || !toolbarSpacer || !saveButton || !saveButtonLabel || container.dataset.bound === "1") {
                 return;
             }
             container.dataset.bound = "1";
@@ -15,22 +20,115 @@
             const tableUrl = container.dataset.tableUrl;
             const minLength = Number(container.dataset.searchMinLength || "3");
             const deferInitialLoad = container.dataset.deferInitialLoad === "1";
+            const batchSaveUrl = saveButton.dataset.saveBatchUrl;
             let searchTimer = null;
             let searchController = null;
+            let isSavingBatch = false;
 
-            function toggleScrollTopButton() {
-                if (!scrollTopButton) {
+            function parseLocalizedDecimal(rawValue) {
+                const normalized = String(rawValue || "").trim().replace(/\s+/g, "").replace(",", ".");
+                if (!normalized) {
+                    return null;
+                }
+                if (!/^-?\d+(\.\d+)?$/.test(normalized)) {
+                    return Number.NaN;
+                }
+                return Number(normalized);
+            }
+
+            function formatLocalizedDecimal(value) {
+                return Number(value).toFixed(2).replace(".", ",");
+            }
+
+            function roundUpToFiveCents(value) {
+                const cents = Math.round(Number(value) * 100);
+                return (Math.ceil(cents / 5) * 5) / 100;
+            }
+
+            function getPositionCards() {
+                return Array.from(container.querySelectorAll(".js-position-card"));
+            }
+
+            function isCardDirty(card) {
+                return card.dataset.dirty === "1";
+            }
+
+            function hasCardErrors(card) {
+                return card.dataset.invalid === "1";
+            }
+
+            function getDirtyCards() {
+                return getPositionCards().filter(isCardDirty);
+            }
+
+            function countInvalidCards() {
+                return getPositionCards().filter(hasCardErrors).length;
+            }
+
+            function getCardInputs(card) {
+                return Array.from(card.querySelectorAll(".js-position-price-input"));
+            }
+
+            function getCardInput(card, fieldName) {
+                return card.querySelector(`.js-position-price-input[data-field="${fieldName}"]`);
+            }
+
+            function getCardLocalState(card) {
+                return card.querySelector(".js-position-local-state");
+            }
+
+            function getActualValue(input) {
+                return input.dataset.actualValue || "";
+            }
+
+            function setActualValue(input, actualValue) {
+                input.dataset.actualValue = actualValue || "";
+            }
+
+            function setFieldError(input, message) {
+                input.dataset.error = message || "";
+                input.classList.add("border-red-500", "focus:border-red-500", "focus:ring-red-500/20");
+                input.classList.remove("border-base-200", "dark:border-base-700");
+            }
+
+            function clearFieldError(input) {
+                delete input.dataset.error;
+                input.classList.remove("border-red-500", "focus:border-red-500", "focus:ring-red-500/20");
+                if (!input.classList.contains("border-base-200")) {
+                    input.classList.add("border-base-200", "dark:border-base-700");
+                }
+            }
+
+            function setCardLocalState(card, tone, message) {
+                const box = getCardLocalState(card);
+                if (!box) {
                     return;
                 }
-                const rootIsVisible = root && root.offsetParent !== null;
-                const rootTop = root ? root.getBoundingClientRect().top + window.scrollY : 0;
-                const shouldShow = rootIsVisible && window.scrollY > rootTop + 320;
-                scrollTopButton.classList.toggle("pointer-events-none", !shouldShow);
-                scrollTopButton.classList.toggle("opacity-0", !shouldShow);
-                scrollTopButton.classList.toggle("translate-y-3", !shouldShow);
-                scrollTopButton.classList.toggle("pointer-events-auto", shouldShow);
-                scrollTopButton.classList.toggle("opacity-100", shouldShow);
-                scrollTopButton.classList.toggle("translate-y-0", shouldShow);
+                if (!message) {
+                    box.textContent = "";
+                    box.className = "js-position-local-state hidden";
+                    return;
+                }
+                box.textContent = message;
+                box.className = "js-position-local-state inline-flex items-center gap-1.5 rounded-default px-2.5 py-1 text-xs font-medium";
+                if (tone === "error") {
+                    box.classList.add("bg-red-50", "text-red-700", "dark:bg-red-900/30", "dark:text-red-300");
+                } else {
+                    box.classList.add("bg-amber-50", "text-amber-700", "dark:bg-amber-900/30", "dark:text-amber-300");
+                }
+            }
+
+            function updateCardVisualState(card, dirty, invalid) {
+                card.dataset.dirty = dirty ? "1" : "0";
+                card.dataset.invalid = invalid ? "1" : "0";
+                card.classList.toggle("ring-amber-300", dirty && !invalid);
+                card.classList.toggle("border-amber-300", dirty && !invalid);
+                card.classList.toggle("dark:ring-amber-700/80", dirty && !invalid);
+                card.classList.toggle("dark:border-amber-700", dirty && !invalid);
+                card.classList.toggle("ring-red-300", invalid);
+                card.classList.toggle("border-red-300", invalid);
+                card.classList.toggle("dark:ring-red-700/80", invalid);
+                card.classList.toggle("dark:border-red-700", invalid);
             }
 
             function getCookie(name) {
@@ -56,6 +154,54 @@
                 }
             }
 
+            function toggleScrollTopButton() {
+                if (!scrollTopButton) {
+                    return;
+                }
+                const rootIsVisible = root && root.offsetParent !== null;
+                const rootTop = root ? root.getBoundingClientRect().top + window.scrollY : 0;
+                const shouldShow = rootIsVisible && window.scrollY > rootTop + 320;
+                scrollTopButton.classList.toggle("pointer-events-none", !shouldShow);
+                scrollTopButton.classList.toggle("opacity-0", !shouldShow);
+                scrollTopButton.classList.toggle("translate-y-3", !shouldShow);
+                scrollTopButton.classList.toggle("pointer-events-auto", shouldShow);
+                scrollTopButton.classList.toggle("opacity-100", shouldShow);
+                scrollTopButton.classList.toggle("translate-y-0", shouldShow);
+            }
+
+            function updateToolbarPinState() {
+                const rootIsVisible = root && root.offsetParent !== null;
+                if (!rootIsVisible) {
+                    toolbar.classList.remove("fixed", "z-50");
+                    toolbar.style.top = "";
+                    toolbar.style.left = "";
+                    toolbar.style.width = "";
+                    toolbarSpacer.classList.add("hidden");
+                    toolbarSpacer.style.height = "";
+                    return;
+                }
+
+                const anchorRect = toolbarAnchor.getBoundingClientRect();
+                const rootRect = root.getBoundingClientRect();
+                const shouldPin = anchorRect.top <= 16;
+                if (!shouldPin) {
+                    toolbar.classList.remove("fixed", "z-50");
+                    toolbar.style.top = "";
+                    toolbar.style.left = "";
+                    toolbar.style.width = "";
+                    toolbarSpacer.classList.add("hidden");
+                    toolbarSpacer.style.height = "";
+                    return;
+                }
+
+                toolbarSpacer.classList.remove("hidden");
+                toolbarSpacer.style.height = `${toolbar.offsetHeight}px`;
+                toolbar.classList.add("fixed", "z-50");
+                toolbar.style.top = "1rem";
+                toolbar.style.left = `${rootRect.left}px`;
+                toolbar.style.width = `${rootRect.width}px`;
+            }
+
             async function loadTable(query) {
                 if (searchController) {
                     searchController.abort();
@@ -75,6 +221,10 @@
                     container.innerHTML = await response.text();
                     bindInputs(container);
                     bindHistoryCharts(container);
+                    getPositionCards().forEach(syncCardState);
+                    updateToolbarPinState();
+                    toggleScrollTopButton();
+                    updateSaveButtonState();
                     if (query && query.length >= minLength) {
                         setStatus(`Suchergebnis fuer "${query}" geladen.`, "success");
                     } else {
@@ -85,48 +235,6 @@
                         return;
                     }
                     setStatus(error.message || "Fehler beim Laden.", "error");
-                }
-            }
-
-            async function saveInput(input) {
-                const row = input.closest("tr");
-                if (!row) {
-                    return;
-                }
-                row.classList.add("opacity-60");
-                input.disabled = true;
-                setStatus("Speichere ...", "info");
-
-                try {
-                    const response = await fetch(input.dataset.saveUrl, {
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-                            "X-CSRFToken": getCookie("csrftoken"),
-                            "X-Requested-With": "XMLHttpRequest",
-                        },
-                        body: new URLSearchParams({
-                            field: input.dataset.field,
-                            value: input.value,
-                        }),
-                    });
-                    const payload = await response.json();
-                    if (!response.ok) {
-                        throw new Error(payload.error || "Speichern fehlgeschlagen.");
-                    }
-                    const detailRow = row.nextElementSibling;
-                    if (detailRow && detailRow.classList.contains("js-position-history-row")) {
-                        detailRow.remove();
-                    }
-                    row.outerHTML = payload.row_html;
-                    bindInputs(container);
-                    bindHistoryCharts(container);
-                    setStatus(payload.message || "Gespeichert.", "success");
-                } catch (error) {
-                    row.classList.remove("opacity-60");
-                    input.disabled = false;
-                    input.focus();
-                    setStatus(error.message || "Speichern fehlgeschlagen.", "error");
                 }
             }
 
@@ -221,8 +329,8 @@
                 }
             }
 
-            function bindHistoryCharts(root) {
-                root.querySelectorAll(".js-position-history-row details").forEach(function (details) {
+            function bindHistoryCharts(scopeRoot) {
+                scopeRoot.querySelectorAll(".js-position-history-row details").forEach(function (details) {
                     if (details.dataset.bound === "1") {
                         return;
                     }
@@ -236,16 +344,257 @@
                 });
             }
 
-            function bindInputs(root) {
-                root.querySelectorAll(".js-position-price-input").forEach(function (input) {
+            function normalizeInputForEditing(input) {
+                const rawValue = (input.value || "").trim();
+                const storedValue = input.dataset.storedValue || "";
+                const defaultDisplayValue = input.dataset.defaultDisplayValue || "";
+
+                if (!rawValue) {
+                    setActualValue(input, "");
+                    if (!storedValue && defaultDisplayValue) {
+                        input.value = defaultDisplayValue;
+                    } else {
+                        input.value = "";
+                    }
+                    clearFieldError(input);
+                    return true;
+                }
+
+                const parsedValue = parseLocalizedDecimal(rawValue);
+                if (Number.isNaN(parsedValue)) {
+                    setActualValue(input, rawValue);
+                    setFieldError(input, "Ungueltiger Preiswert.");
+                    return false;
+                }
+
+                const roundedValue = formatLocalizedDecimal(roundUpToFiveCents(parsedValue));
+                setActualValue(input, roundedValue);
+                input.value = roundedValue;
+                clearFieldError(input);
+                return true;
+            }
+
+            function validateCard(card) {
+                const normalInput = getCardInput(card, "new_price");
+                const rebateInput = getCardInput(card, "new_rebate_price");
+                if (!normalInput || !rebateInput) {
+                    return { dirty: false, invalid: false };
+                }
+
+                getCardInputs(card).forEach(clearFieldError);
+
+                const normalActualValue = getActualValue(normalInput);
+                const rebateActualValue = getActualValue(rebateInput);
+                const normalPrice = normalActualValue ? parseLocalizedDecimal(normalActualValue) : null;
+                const rebatePrice = rebateActualValue ? parseLocalizedDecimal(rebateActualValue) : null;
+                const currentRebatePrice = parseLocalizedDecimal(card.dataset.currentRebatePrice || "");
+                const currentRebateQuantity = parseLocalizedDecimal(card.dataset.currentRebateQuantity || "");
+                const suggestedPrice = parseLocalizedDecimal(card.dataset.suggestedPrice || "");
+                const errors = [];
+
+                if (normalActualValue && Number.isNaN(normalPrice)) {
+                    errors.push({ input: normalInput, message: "Ungueltiger Preiswert." });
+                } else if (normalPrice !== null && normalPrice <= 0) {
+                    errors.push({ input: normalInput, message: "Der neue Preis muss groesser als 0 sein." });
+                }
+
+                if (rebateActualValue && Number.isNaN(rebatePrice)) {
+                    errors.push({ input: rebateInput, message: "Ungueltiger Preiswert." });
+                } else if (rebatePrice !== null) {
+                    if (rebatePrice <= 0) {
+                        errors.push({ input: rebateInput, message: "Der neue Rabattpreis muss groesser als 0 sein." });
+                    } else if (currentRebatePrice === null || Number.isNaN(currentRebatePrice)) {
+                        errors.push({
+                            input: rebateInput,
+                            message: "Ein neuer Rabattpreis ist nur moeglich, wenn bereits ein aktueller Staffelpreis vorhanden ist.",
+                        });
+                    } else if (currentRebateQuantity === null || Number.isNaN(currentRebateQuantity)) {
+                        errors.push({
+                            input: rebateInput,
+                            message: "Ein neuer Rabattpreis ist nur mit gueltiger Staffelmenge moeglich.",
+                        });
+                    } else {
+                        const referencePrice = normalPrice !== null ? normalPrice : suggestedPrice;
+                        if (referencePrice !== null && !Number.isNaN(referencePrice) && rebatePrice >= referencePrice) {
+                            errors.push({
+                                input: rebateInput,
+                                message: "Der neue Rabattpreis muss kleiner als der neue Normalpreis sein.",
+                            });
+                        }
+                    }
+                }
+
+                errors.forEach(function (entry) {
+                    setFieldError(entry.input, entry.message);
+                });
+
+                const dirty = getCardInputs(card).some(function (input) {
+                    return getActualValue(input) !== (input.dataset.storedValue || "");
+                });
+                const invalid = errors.length > 0;
+
+                if (invalid) {
+                    setCardLocalState(card, "error", errors[0].message);
+                } else if (dirty) {
+                    const dirtyFields = getCardInputs(card).filter(function (input) {
+                        return getActualValue(input) !== (input.dataset.storedValue || "");
+                    }).length;
+                    setCardLocalState(
+                        card,
+                        "warning",
+                        dirtyFields === 1 ? "1 ungespeicherte Aenderung." : `${dirtyFields} ungespeicherte Aenderungen.`
+                    );
+                } else {
+                    setCardLocalState(card, "", "");
+                }
+
+                updateCardVisualState(card, dirty, invalid);
+                return { dirty: dirty, invalid: invalid, errors: errors };
+            }
+
+            function updateSaveButtonState() {
+                const dirtyCount = getDirtyCards().length;
+                const invalidCount = countInvalidCards();
+                saveButton.disabled = dirtyCount === 0 || invalidCount > 0 || isSavingBatch;
+                saveButtonLabel.textContent = dirtyCount > 0 ? `Speichern (${dirtyCount})` : "Speichern";
+
+                if (isSavingBatch) {
+                    setStatus("Speichere Aenderungen ...", "info");
+                    return;
+                }
+                if (invalidCount > 0) {
+                    setStatus(
+                        invalidCount === 1
+                            ? "1 Position enthaelt noch Validierungsfehler."
+                            : `${invalidCount} Positionen enthalten noch Validierungsfehler.`,
+                        "error"
+                    );
+                    return;
+                }
+                if (dirtyCount > 0) {
+                    setStatus(
+                        dirtyCount === 1
+                            ? "1 Position mit ungespeicherten Aenderungen."
+                            : `${dirtyCount} Positionen mit ungespeicherten Aenderungen.`,
+                        "info"
+                    );
+                    return;
+                }
+                setStatus("", "info");
+            }
+
+            function syncCardState(card) {
+                validateCard(card);
+                updateSaveButtonState();
+            }
+
+            async function saveDirtyCards() {
+                const dirtyCards = getDirtyCards();
+                if (!dirtyCards.length || countInvalidCards() > 0 || isSavingBatch) {
+                    updateSaveButtonState();
+                    return;
+                }
+
+                isSavingBatch = true;
+                updateSaveButtonState();
+                dirtyCards.forEach(function (card) {
+                    card.classList.add("opacity-60");
+                });
+
+                try {
+                    const response = await fetch(batchSaveUrl, {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "X-CSRFToken": getCookie("csrftoken"),
+                            "X-Requested-With": "XMLHttpRequest",
+                        },
+                        body: JSON.stringify({
+                            items: dirtyCards.map(function (card) {
+                                return {
+                                    item_id: card.dataset.itemId,
+                                    values: {
+                                        new_price: getActualValue(getCardInput(card, "new_price")),
+                                        new_rebate_price: getActualValue(getCardInput(card, "new_rebate_price")),
+                                    },
+                                };
+                            }),
+                        }),
+                    });
+                    const payload = await response.json();
+                    if (!response.ok && response.status !== 207) {
+                        throw new Error(payload.error || "Speichern fehlgeschlagen.");
+                    }
+
+                    let savedRows = 0;
+                    (payload.results || []).forEach(function (result) {
+                        const card = container.querySelector(`.js-position-card[data-item-id="${result.item_id}"]`);
+                        if (!card) {
+                            return;
+                        }
+                        card.classList.remove("opacity-60");
+                        if (result.error) {
+                            setCardLocalState(card, "error", result.error);
+                            updateCardVisualState(card, true, true);
+                            return;
+                        }
+                        if (result.row_html) {
+                            card.innerHTML = result.row_html;
+                            card.dataset.dirty = "0";
+                            card.dataset.invalid = "0";
+                            bindInputs(card);
+                            bindHistoryCharts(card);
+                            savedRows += 1;
+                        }
+                    });
+
+                    if (payload.error_count) {
+                        setStatus(
+                            `${savedRows} Position(en) gespeichert, ${payload.error_count} Position(en) mit Fehlern.`,
+                            savedRows > 0 ? "info" : "error"
+                        );
+                    } else {
+                        setStatus(
+                            savedRows === 1 ? "1 Position gespeichert." : `${savedRows} Positionen gespeichert.`,
+                            "success"
+                        );
+                    }
+                } catch (error) {
+                    dirtyCards.forEach(function (card) {
+                        card.classList.remove("opacity-60");
+                    });
+                    setStatus(error.message || "Speichern fehlgeschlagen.", "error");
+                } finally {
+                    isSavingBatch = false;
+                    getPositionCards().forEach(function (card) {
+                        if (!card.classList.contains("opacity-60")) {
+                            validateCard(card);
+                        }
+                    });
+                    updateToolbarPinState();
+                    const dirtyCount = getDirtyCards().length;
+                    const invalidCount = countInvalidCards();
+                    saveButton.disabled = dirtyCount === 0 || invalidCount > 0;
+                    saveButtonLabel.textContent = dirtyCount > 0 ? `Speichern (${dirtyCount})` : "Speichern";
+                    if (dirtyCount > 0 || invalidCount > 0) {
+                        updateSaveButtonState();
+                    }
+                }
+            }
+
+            function bindInputs(scopeRoot) {
+                scopeRoot.querySelectorAll(".js-position-price-input").forEach(function (input) {
                     if (input.dataset.bound === "1") {
                         return;
                     }
                     input.dataset.bound = "1";
-                    input.dataset.initialValue = input.value;
+                    input.dataset.defaultDisplayValue = input.value || "";
+                    setActualValue(input, input.dataset.storedValue || "");
 
                     input.addEventListener("focus", function () {
-                        input.dataset.initialValue = input.value;
+                        if (!getActualValue(input) && input.dataset.storedValue === "") {
+                            input.value = "";
+                        }
                     });
 
                     input.addEventListener("keydown", function (event) {
@@ -256,14 +605,22 @@
                     });
 
                     input.addEventListener("blur", function () {
-                        const initialValue = (input.dataset.initialValue || "").trim();
-                        const currentValue = (input.value || "").trim();
-                        if (initialValue === currentValue) {
+                        const card = input.closest(".js-position-card");
+                        if (!card) {
                             return;
                         }
-                        saveInput(input);
+                        normalizeInputForEditing(input);
+                        syncCardState(card);
                     });
                 });
+            }
+
+            function maybeWarnBeforeUnload(event) {
+                if (!getDirtyCards().length) {
+                    return;
+                }
+                event.preventDefault();
+                event.returnValue = "";
             }
 
             searchInput.addEventListener("input", function () {
@@ -276,6 +633,10 @@
                 }
 
                 searchTimer = window.setTimeout(function () {
+                    if (getDirtyCards().length && !window.confirm("Es gibt ungespeicherte Aenderungen. Wirklich neue Suchergebnisse laden?")) {
+                        updateSaveButtonState();
+                        return;
+                    }
                     loadTable(query);
                 }, 250);
             });
@@ -296,12 +657,40 @@
                 });
             }
 
+            if (saveButton.dataset.bound !== "1") {
+                saveButton.dataset.bound = "1";
+                saveButton.addEventListener("click", saveDirtyCards);
+            }
+
+            if (root.dataset.beforeUnloadBound !== "1") {
+                root.dataset.beforeUnloadBound = "1";
+                window.addEventListener("beforeunload", maybeWarnBeforeUnload);
+            }
+
+            if (root.dataset.tabListenerBound !== "1") {
+                root.dataset.tabListenerBound = "1";
+                document.addEventListener("click", function (event) {
+                    if (!event.target.closest("[data-price-increase-tab-button]")) {
+                        return;
+                    }
+                    window.setTimeout(function () {
+                        updateToolbarPinState();
+                        toggleScrollTopButton();
+                    }, 0);
+                });
+            }
+
             window.addEventListener("scroll", toggleScrollTopButton, { passive: true });
+            window.addEventListener("scroll", updateToolbarPinState, { passive: true });
             window.addEventListener("resize", toggleScrollTopButton);
+            window.addEventListener("resize", updateToolbarPinState);
 
             bindInputs(container);
             bindHistoryCharts(container);
+            getPositionCards().forEach(syncCardState);
+            updateToolbarPinState();
             toggleScrollTopButton();
+            updateSaveButtonState();
             if (deferInitialLoad) {
                 loadTable(searchInput.value.trim());
             }

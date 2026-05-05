@@ -17,7 +17,8 @@
                             <p class="text-sm font-medium text-font-important-light dark:text-font-important-dark">Neue Preise setzen</p>
                             <p class="mt-1 text-sm text-font-subtle-light dark:text-font-subtle-dark">
                                 Trage den Zielpreis direkt ins Feld ein. Beispiel: Aus <strong>4,39</strong> wird <strong>4,50</strong>.
-                                Sobald du danach in ein anderes Feld klickst, wird der Wert sofort gespeichert.
+                                Beim Verlassen des Feldes werden Werte lokal geprueft und auf 5 Cent gerundet.
+                                Gespeichert wird erst ueber den Speichern-Button.
                             </p>
                         </div>
                         <div class="rounded-default border border-base-200 bg-white p-3 dark:border-base-800 dark:bg-base-900">
@@ -49,13 +50,14 @@
                     Positionen direkt bearbeiten
                 </h2>
                 <p class="text-sm text-font-subtle-light dark:text-font-subtle-dark">
-                    Zielpreise werden beim Verlassen des Feldes sofort gespeichert.
+                    Zielpreise werden lokal geprueft und erst ueber Speichern uebernommen.
                 </p>
             </div>
         </div>
     {% endif %}
 
-    <div class="js-positions-toolbar sticky top-4 z-30 rounded-default border border-base-200 bg-white/95 p-4 shadow-sm backdrop-blur dark:border-base-800 dark:bg-base-900/95">
+    <div class="js-positions-toolbar-anchor h-px"></div>
+    <div class="js-positions-toolbar rounded-default border border-base-200 bg-white/95 p-4 shadow-sm backdrop-blur dark:border-base-800 dark:bg-base-900/95">
         <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div class="w-full max-w-xl">
                 <label for="{% if inline_mode %}positions-search-inline{% else %}positions-search{% endif %}" class="mb-1 block text-sm font-medium text-font-default-light dark:text-font-default-dark">
@@ -70,9 +72,21 @@
                 >
             </div>
 
-            <div class="js-positions-status min-h-6 text-sm text-font-subtle-light dark:text-font-subtle-dark"></div>
+            <div class="flex flex-col items-start gap-3 lg:items-end">
+                <div class="js-positions-status min-h-6 text-sm text-font-subtle-light dark:text-font-subtle-dark"></div>
+                <button
+                    type="button"
+                    class="js-positions-save-button inline-flex items-center gap-2 rounded-default bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-xs transition disabled:cursor-not-allowed disabled:opacity-50 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-600/30 dark:bg-primary-500 dark:hover:bg-primary-400"
+                    data-save-batch-url="{{ positions_batch_save_url }}"
+                    disabled
+                >
+                    <span class="material-symbols-outlined text-base leading-none">save</span>
+                    <span class="js-positions-save-button-label">Speichern</span>
+                </button>
+            </div>
         </div>
     </div>
+    <div class="js-positions-toolbar-spacer hidden"></div>
 
     <div
         class="js-positions-table-container"

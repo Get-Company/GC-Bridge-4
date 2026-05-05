@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from datetime import datetime, timedelta, timezone as datetime_timezone
 from decimal import Decimal
@@ -495,8 +496,10 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Preiserhoehungs-Positionen: Admin View Test")
         self.assertContains(response, "Produkte neu laden liest die aktuellen Basispreise")
+        self.assertContains(response, "Gespeichert wird erst ueber den Speichern-Button")
         self.assertContains(response, "js-positions-toolbar", html=False)
         self.assertContains(response, "js-positions-scroll-top", html=False)
+        self.assertContains(response, "js-positions-save-button", html=False)
         self.assertContains(
             response,
             reverse("admin:products_priceincrease_positions_table", args=(self.price_increase.pk,)),
@@ -513,6 +516,10 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
         self.assertContains(response, "Positionen direkt bearbeiten")
         self.assertContains(response, "Lade Positionen ...")
         self.assertContains(response, 'data-defer-initial-load="1"', html=False)
+        self.assertContains(
+            response,
+            reverse("admin:products_priceincrease_positions_save_batch", args=(self.price_increase.pk)),
+        )
         self.assertNotContains(response, "A-6000")
         self.assertNotContains(response, 'placeholder="10,30"', html=False)
         self.assertContains(
@@ -547,6 +554,7 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
         self.assertContains(response, "A-6000 - Admin Artikel")
         self.assertContains(response, "Preisdiagramm")
         self.assertContains(response, "js-position-card", html=False)
+        self.assertContains(response, 'data-item-id="%s"' % self.item.pk, html=False)
         self.assertContains(
             response,
             reverse("admin:products_priceincrease_position_chart", args=(self.price_increase.pk, self.item.pk)),
@@ -797,6 +805,67 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
         row_html = response.json()["row_html"]
         self.assertIn('value="10,25"', row_html)
         self.assertIn('value="9,25"', row_html)
+
+    def test_batch_save_endpoint_saves_rounded_target_prices(self):
+        response = self.client.post(
+            reverse("admin:products_priceincrease_positions_save_batch", args=(self.price_increase.pk,)),
+            data=json.dumps(
+                {
+                    "items": [
+                        {
+                            "item_id": self.item.pk,
+                            "values": {
+                                "new_price": "10,21",
+                                "new_rebate_price": "4,21",
+                            },
+                        }
+                    ]
+                }
+            ),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.new_price, Decimal("10.25"))
+        self.assertEqual(self.item.new_rebate_price, Decimal("4.25"))
+        self.assertEqual(self.item.last_status_message, "Preise gespeichert: Neuer Preis leer -> 10,25; neuer Rab.Preis leer -> 4,25")
+        payload = response.json()
+        self.assertEqual(payload["saved_count"], 1)
+        self.assertEqual(payload["error_count"], 0)
+        self.assertIn('value="10,25"', payload["results"][0]["row_html"])
+        self.assertIn('value="4,25"', payload["results"][0]["row_html"])
+
+    def test_batch_save_endpoint_returns_validation_errors_without_persisting(self):
+        response = self.client.post(
+            reverse("admin:products_priceincrease_positions_save_batch", args=(self.price_increase.pk,)),
+            data=json.dumps(
+                {
+                    "items": [
+                        {
+                            "item_id": self.item.pk,
+                            "values": {
+                                "new_price": "",
+                                "new_rebate_price": "10,28",
+                            },
+                        }
+                    ]
+                }
+            ),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 207)
+        self.item.refresh_from_db()
+        self.assertIsNone(self.item.new_price)
+        self.assertIsNone(self.item.new_rebate_price)
+        payload = response.json()
+        self.assertEqual(payload["saved_count"], 0)
+        self.assertEqual(payload["error_count"], 1)
+        self.assertEqual(
+            payload["results"][0]["error"],
+            "Der neue Rabattpreis muss kleiner als der neue Normalpreis sein.",
+        )
 
     def test_saved_status_is_rendered_after_table_reload_with_user_detail(self):
         self.item.last_status_message = "Neuer Preis gespeichert: leer -> 10,25"
