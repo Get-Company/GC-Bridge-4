@@ -30,16 +30,16 @@ class Command(BaseCommand):
         parser.add_argument(
             "--log-file",
             type=str,
-            default="tmp/logs/microtech_order_upsert.log",
-            help="Pfad fuer den detaillierten Vorgangs-Log.",
+            default="",
+            help="Optionaler Pfad fuer den detaillierten Vorgangs-Log. Standard ist der verwaltete Wochen-Logpfad.",
         )
 
     @staticmethod
     def _add_file_sink(log_file: str) -> tuple[int, Path]:
         return add_managed_file_sink(
             log_name="microtech_order_upsert",
-            category="monthly",
-            log_file=log_file,
+            category="weekly",
+            log_file=log_file or None,
             rotation="10 MB",
             diagnose=True,
         )

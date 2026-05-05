@@ -11,7 +11,7 @@ from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 
 from core.dashboard import dashboard_callback
-from core.logging import build_managed_log_path, cleanup_old_log_files
+from core.logging import build_managed_log_path, cleanup_old_log_files, get_retention
 from core.log_reader import get_allowed_log_files, tail_log_file
 from core.services import CommandRuntimeService
 from customer.models import Customer
@@ -31,6 +31,11 @@ class ManagedLoggingTest(SimpleTestCase):
                 )
 
             self.assertEqual(path, logs_root / "monthly" / "deploy" / "deploy.2026-03-24.log")
+
+    def test_default_retention_is_one_week_for_all_managed_categories(self):
+        self.assertEqual(get_retention("daily"), "7 days")
+        self.assertEqual(get_retention("weekly"), "7 days")
+        self.assertEqual(get_retention("monthly"), "7 days")
 
 
 class LogReaderUtilsTest(SimpleTestCase):

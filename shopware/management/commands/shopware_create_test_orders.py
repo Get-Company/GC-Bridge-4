@@ -149,8 +149,8 @@ class Command(BaseCommand):
     def _add_file_sink(log_file: str) -> tuple[int, Path]:
         return add_managed_file_sink(
             log_name="shopware_create_test_orders",
-            category="monthly",
-            log_file=log_file,
+            category="weekly",
+            log_file=log_file or None,
             rotation="10 MB",
             diagnose=True,
         )

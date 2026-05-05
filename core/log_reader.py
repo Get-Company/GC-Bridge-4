@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from collections import deque
 from datetime import datetime, timedelta
+import os
 from pathlib import Path
 
 from django.conf import settings
@@ -49,5 +49,21 @@ def tail_log_file(path: Path, line_count: int = 50) -> list[str]:
     max_lines = max(1, min(int(line_count), 500))
     if not path.exists() or not path.is_file():
         return []
-    with path.open("r", encoding="utf-8", errors="replace") as handle:
-        return [line.rstrip("\n") for line in deque(handle, maxlen=max_lines)]
+
+    chunk_size = 8192
+    buffer = bytearray()
+    lines: list[str] = []
+
+    with path.open("rb") as handle:
+        handle.seek(0, os.SEEK_END)
+        file_size = handle.tell()
+        position = file_size
+
+        while position > 0 and len(lines) <= max_lines:
+            read_size = min(chunk_size, position)
+            position -= read_size
+            handle.seek(position)
+            buffer[:0] = handle.read(read_size)
+            lines = buffer.decode("utf-8", errors="replace").splitlines()
+
+    return lines[-max_lines:]

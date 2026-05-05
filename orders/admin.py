@@ -153,7 +153,7 @@ class OrderAdmin(BaseAdmin):
     def _add_upsert_file_sink() -> tuple[int, Path]:
         return add_managed_file_sink(
             log_name="microtech_order_upsert",
-            category="monthly",
+            category="weekly",
             rotation="10 MB",
             diagnose=True,
         )

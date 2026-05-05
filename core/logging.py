@@ -11,9 +11,9 @@ from django.conf import settings
 from loguru import logger
 
 DEFAULT_LOG_RETENTION = {
-    "daily": "8 days",
-    "weekly": "6 weeks",
-    "monthly": "13 months",
+    "daily": "7 days",
+    "weekly": "7 days",
+    "monthly": "7 days",
 }
 
 PACKAGE_RETENTION = {
@@ -22,7 +22,7 @@ PACKAGE_RETENTION = {
     "orders": "weekly",
     "products": "weekly",
     "shopware": "weekly",
-    "microtech": "monthly",
+    "microtech": "weekly",
     "django": "weekly",
     "uvicorn": "daily",
 }
@@ -232,7 +232,7 @@ def configure_logging() -> None:
                 filter=lambda record, prefix=package_name: _record_matches_package(record, prefix),
             )
 
-        error_path = build_managed_log_pattern("errors", category="monthly")
+        error_path = build_managed_log_pattern("errors", category="weekly")
         error_path.parent.mkdir(parents=True, exist_ok=True)
         logger.add(
             str(error_path),
@@ -241,7 +241,7 @@ def configure_logging() -> None:
             backtrace=True,
             diagnose=False,
             rotation="00:00",
-            retention=get_retention("monthly"),
+            retention=get_retention("weekly"),
             encoding="utf-8",
             format=LOG_FORMAT,
         )
