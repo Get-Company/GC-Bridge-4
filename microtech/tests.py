@@ -30,7 +30,7 @@ class MicrotechSyncProductsCommandTest(TestCase):
             rate=Decimal("7.00"),
             shopware_id="tax-7",
         )
-        ShopwareSettings.objects.create(
+        self.default_channel = ShopwareSettings.objects.create(
             name="Default",
             is_default=True,
             is_active=True,
@@ -250,6 +250,88 @@ class MicrotechSyncProductsCommandTest(TestCase):
         self.assertIsNotNone(latest_history)
         self.assertEqual(latest_history.changed_fields, "rebate_quantity")
         self.assertEqual(latest_history.rebate_quantity, 20)
+
+    def test_sync_preserves_existing_non_default_channel_prices(self):
+        b2b_channel = ShopwareSettings.objects.create(
+            name="B2B",
+            is_active=True,
+            price_factor=Decimal("1.25"),
+        )
+        product = Product.objects.create(erp_nr="1006", name="Bestehend")
+        Price.objects.create(
+            product=product,
+            sales_channel=self.default_channel,
+            price=Decimal("90.00"),
+        )
+        preserved_price = Price.objects.create(
+            product=product,
+            sales_channel=b2b_channel,
+            price=Decimal("137.00"),
+            rebate_quantity=20,
+            rebate_price=Decimal("129.00"),
+            special_price=Decimal("119.00"),
+            special_start_date=timezone.now() - timedelta(days=1),
+            special_end_date=timezone.now() + timedelta(days=1),
+        )
+
+        cmd = MicrotechSyncProductsCommand()
+        artikel_service = self._build_artikel_service(erp_nr="1006", is_active=True)
+        artikel_service.get_price.return_value = Decimal("100.00")
+        artikel_service.get_rebate_quantity.return_value = 10
+        artikel_service.get_rebate_price.return_value = Decimal("95.00")
+
+        cmd._sync_current_record(
+            artikel_service,
+            self._build_lager_service(),
+            tax_map={
+                Decimal("19.00"): self.tax_19,
+                Decimal("7.00"): self.tax_7,
+            },
+            preserve_is_active=False,
+        )
+
+        default_price = Price.objects.get(product=product, sales_channel=self.default_channel)
+        preserved_price.refresh_from_db()
+
+        self.assertEqual(default_price.price, Decimal("100.00"))
+        self.assertEqual(default_price.rebate_quantity, 10)
+        self.assertEqual(default_price.rebate_price, Decimal("95.00"))
+        self.assertEqual(preserved_price.price, Decimal("137.00"))
+        self.assertEqual(preserved_price.rebate_quantity, 20)
+        self.assertEqual(preserved_price.rebate_price, Decimal("129.00"))
+        self.assertEqual(preserved_price.special_price, Decimal("119.00"))
+
+    def test_sync_creates_missing_non_default_channel_prices_from_factor(self):
+        b2b_channel = ShopwareSettings.objects.create(
+            name="B2B",
+            is_active=True,
+            price_factor=Decimal("1.25"),
+        )
+
+        cmd = MicrotechSyncProductsCommand()
+        artikel_service = self._build_artikel_service(erp_nr="1007", is_active=True)
+        artikel_service.get_price.return_value = Decimal("100.00")
+        artikel_service.get_rebate_quantity.return_value = 10
+        artikel_service.get_rebate_price.return_value = Decimal("95.00")
+        artikel_service.get_special_price.return_value = Decimal("80.00")
+        artikel_service.get_special_start_date.return_value = timezone.now() - timedelta(days=1)
+        artikel_service.get_special_end_date.return_value = timezone.now() + timedelta(days=1)
+
+        cmd._sync_current_record(
+            artikel_service,
+            self._build_lager_service(),
+            tax_map={
+                Decimal("19.00"): self.tax_19,
+                Decimal("7.00"): self.tax_7,
+            },
+            preserve_is_active=False,
+        )
+
+        derived_price = Price.objects.get(product__erp_nr="1007", sales_channel=b2b_channel)
+        self.assertEqual(derived_price.price, Decimal("125.00"))
+        self.assertEqual(derived_price.rebate_quantity, 10)
+        self.assertEqual(derived_price.rebate_price, Decimal("118.75"))
+        self.assertEqual(derived_price.special_price, Decimal("100.00"))
 
 
 class MicrotechArtikelServiceTaxTest(TestCase):
