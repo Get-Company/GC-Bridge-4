@@ -11,8 +11,127 @@ jobs:
     runs-on: [self-hosted, Windows, x64]
 
     steps:
-      - name: Run update script
-        shell: cmd
+      - name: Deploy application
+        shell: pwsh
         env:
           DEPLOY_TAG: ${{ github.ref_name }}
-        run: D:\GC-Bridge-4\deploy\windows\update.cmd
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $appDir = 'D:\GC-Bridge-4'
+
+          function Write-DeployLog {
+            param([string]$Message)
+            $timestamp = Get-Date -Format 'dd.MM.yyyy HH:mm:ss,ff'
+            Add-Content -Path $script:LogFile -Value "[$timestamp] $Message"
+          }
+
+          function Invoke-LoggedCommand {
+            param(
+              [string]$Label,
+              [scriptblock]$Command,
+              [string]$ErrorLabel
+            )
+
+            Write-DeployLog $Label
+            & $Command 2>&1 | Tee-Object -FilePath $script:LogFile -Append | Out-Host
+            if ($LASTEXITCODE -ne 0) {
+              Write-DeployLog "ERROR: $ErrorLabel failed"
+              throw "$ErrorLabel failed"
+            }
+          }
+
+          Set-Location $appDir
+
+          New-Item -ItemType Directory -Force -Path 'tmp\logs' | Out-Null
+          cmd /c "call deploy\windows\prune-logs.cmd 14" *> $null
+
+          $dateStamp = Get-Date -Format 'yyyy-MM-dd'
+          $deployLogDir = Join-Path $appDir 'tmp\logs\monthly\deploy'
+          New-Item -ItemType Directory -Force -Path $deployLogDir | Out-Null
+          $script:LogFile = Join-Path $deployLogDir "deploy.$dateStamp.log"
+
+          Write-DeployLog '=============================='
+          Write-DeployLog "Deploying $env:DEPLOY_TAG"
+
+          if ([string]::IsNullOrWhiteSpace($env:DEPLOY_TAG)) {
+            Write-DeployLog 'ERROR: DEPLOY_TAG is not set'
+            throw 'DEPLOY_TAG is not set'
+          }
+
+          $fetchSucceeded = $false
+          $fetchSource = 'origin'
+          for ($attempt = 1; $attempt -le 3 -and -not $fetchSucceeded; $attempt++) {
+            Write-DeployLog "git fetch --force --tags origin (attempt $attempt/3)"
+            git fetch --force --tags origin 2>&1 | Tee-Object -FilePath $script:LogFile -Append | Out-Host
+            if ($LASTEXITCODE -eq 0) {
+              $fetchSucceeded = $true
+              break
+            }
+            Write-DeployLog "WARNING: git fetch attempt $attempt failed"
+            if ($attempt -lt 3) {
+              Start-Sleep -Seconds 5
+            }
+          }
+
+          if (-not $fetchSucceeded) {
+            $originUrl = (& git remote get-url origin 2>$null).Trim()
+            if ($originUrl -like 'https://github.com/*') {
+              $fetchSource = $originUrl -replace '^https://github\.com/', 'git@github.com:'
+              Write-DeployLog "git fetch fallback via $fetchSource"
+              git fetch --force --tags $fetchSource 2>&1 | Tee-Object -FilePath $script:LogFile -Append | Out-Host
+              if ($LASTEXITCODE -eq 0) {
+                $fetchSucceeded = $true
+              } else {
+                Write-DeployLog 'WARNING: git fetch fallback via SSH failed'
+              }
+            }
+          }
+
+          if (-not $fetchSucceeded) {
+            Write-DeployLog 'ERROR: git fetch failed'
+            throw 'git fetch failed'
+          }
+          Write-DeployLog "git fetch OK via $fetchSource"
+
+          Write-DeployLog "git checkout -f $env:DEPLOY_TAG"
+          git checkout -f $env:DEPLOY_TAG 2>&1 | Tee-Object -FilePath $script:LogFile -Append | Out-Host
+          $currentTag = (& git describe --exact-match --tags HEAD 2>$null).Trim()
+          if ($currentTag -ne $env:DEPLOY_TAG) {
+            Write-DeployLog "ERROR: git checkout failed, HEAD is at `"$currentTag`" not `"$env:DEPLOY_TAG`""
+            throw 'git checkout failed'
+          }
+          Write-DeployLog "git checkout OK, HEAD verified at $env:DEPLOY_TAG"
+          Set-Content -Path (Join-Path $appDir 'VERSION') -Value $env:DEPLOY_TAG -NoNewline
+
+          Invoke-LoggedCommand 'uv pip install -r requirements.txt' { uv pip install -r requirements.txt } 'uv pip install'
+          Invoke-LoggedCommand 'manage.py migrate' { .venv\Scripts\python.exe manage.py migrate --noinput } 'migrate'
+          Invoke-LoggedCommand 'manage.py collectstatic' { .venv\Scripts\python.exe manage.py collectstatic --noinput } 'collectstatic'
+
+          Invoke-LoggedCommand 'Ensuring GC-Bridge-Log-Prune task...' { cmd /c "call deploy\windows\ensure-log-prune-task.cmd" } 'ensure-log-prune-task'
+
+          Write-DeployLog 'Restarting Uvicorn...'
+          Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue |
+            Select-Object -ExpandProperty OwningProcess |
+            ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }
+          Start-Sleep -Seconds 3
+          schtasks /Run /TN 'GC-Bridge-Uvicorn' 2>&1 | Tee-Object -FilePath $script:LogFile -Append | Out-Host
+          if ($LASTEXITCODE -ne 0) {
+            Write-DeployLog 'ERROR: restart Uvicorn failed'
+            throw 'restart Uvicorn failed'
+          }
+
+          Write-DeployLog 'Refreshing scheduled task "GC-Bridge Scheduled Product Sync"...'
+          schtasks /Query /TN 'GC-Bridge Scheduled Product Sync' *> $null
+          if ($LASTEXITCODE -ne 0) {
+            Write-DeployLog 'WARNING: Scheduled task "GC-Bridge Scheduled Product Sync" not found.'
+          } else {
+            schtasks /End /TN 'GC-Bridge Scheduled Product Sync' 2>&1 | Tee-Object -FilePath $script:LogFile -Append | Out-Host
+            Start-Sleep -Seconds 2
+            schtasks /Run /TN 'GC-Bridge Scheduled Product Sync' 2>&1 | Tee-Object -FilePath $script:LogFile -Append | Out-Host
+            if ($LASTEXITCODE -ne 0) {
+              Write-DeployLog 'ERROR: scheduled product sync restart failed'
+              throw 'scheduled product sync restart failed'
+            }
+          }
+
+          Write-DeployLog "Deployment $env:DEPLOY_TAG abgeschlossen"
