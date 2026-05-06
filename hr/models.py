@@ -166,7 +166,7 @@ class SchoolHoliday(BaseModel):
 
     def clean(self) -> None:
         errors: dict[str, str] = {}
-        if self.end_date < self.start_date:
+        if self.start_date and self.end_date and self.end_date < self.start_date:
             errors["end_date"] = _("Bis darf nicht vor Von liegen.")
         if errors:
             raise ValidationError(errors)
@@ -191,15 +191,17 @@ class CompanyHoliday(BaseModel):
 
     def clean(self) -> None:
         errors: dict[str, str] = {}
-        if self.end_date < self.start_date:
-            errors["end_date"] = _("Bis darf nicht vor Von liegen.")
-        overlaps = (
-            type(self).objects.filter(is_active=True, start_date__lte=self.end_date, end_date__gte=self.start_date)
-            .exclude(pk=self.pk)
-            .exists()
-        )
-        if overlaps:
-            errors["start_date"] = _("Dieser Betriebsurlaub ueberschneidet sich mit einem bestehenden Eintrag.")
+        if self.start_date and self.end_date:
+            if self.end_date < self.start_date:
+                errors["end_date"] = _("Bis darf nicht vor Von liegen.")
+            overlaps = (
+                type(self)
+                .objects.filter(is_active=True, start_date__lte=self.end_date, end_date__gte=self.start_date)
+                .exclude(pk=self.pk)
+                .exists()
+            )
+            if overlaps:
+                errors["start_date"] = _("Dieser Betriebsurlaub ueberschneidet sich mit einem bestehenden Eintrag.")
         if self.is_bridge_day and not self.counts_as_vacation:
             errors["is_bridge_day"] = _("Ein Brueckentag muss auch als Urlaub zaehlen.")
         if errors:
@@ -304,9 +306,9 @@ class EmployeeWorkSchedule(BaseModel):
 
     def clean(self) -> None:
         errors: dict[str, str] = {}
-        if self.valid_until and self.valid_until < self.valid_from:
+        if self.valid_from and self.valid_until and self.valid_until < self.valid_from:
             errors["valid_until"] = _("Gueltig bis darf nicht vor Gueltig ab liegen.")
-        if self.employee_id:
+        if self.employee_id and self.valid_from:
             candidate_end = self.valid_until or date.max
             overlaps = (
                 type(self).objects.filter(employee=self.employee)
@@ -385,10 +387,13 @@ class LeaveRequest(BaseModel):
 
     def clean(self) -> None:
         errors: dict[str, str] = {}
-        if self.end_date < self.start_date:
-            errors["end_date"] = _("Bis darf nicht vor Von liegen.")
-        if self.start_date == self.end_date and self.half_day_start and self.half_day_end:
-            errors["half_day_end"] = _("Bei einem eintaeigen Antrag kann nicht beides gleichzeitig halbtags sein.")
+        if self.start_date and self.end_date:
+            if self.end_date < self.start_date:
+                errors["end_date"] = _("Bis darf nicht vor Von liegen.")
+            if self.start_date == self.end_date and self.half_day_start and self.half_day_end:
+                errors["half_day_end"] = _(
+                    "Bei einem eintaeigen Antrag kann nicht beides gleichzeitig halbtags sein."
+                )
         if self.employee_id and self.start_date and self.end_date:
             from hr.services.leave_service import LeaveService
 
@@ -398,8 +403,7 @@ class LeaveRequest(BaseModel):
                 errors["start_date"] = _(
                     "Im gewaehlten Zeitraum liegen laut Arbeitszeitmodell, Feiertagskalender und Wochenende keine Arbeitstage."
                 )
-
-        if self.status == self.Status.APPROVED and self.employee_id:
+        if self.status == self.Status.APPROVED and self.employee_id and self.start_date and self.end_date:
             try:
                 LeaveService().validate_leave_request_conflicts(self)
             except ValidationError as exc:
@@ -430,7 +434,7 @@ class SickLeave(BaseModel):
 
     def clean(self) -> None:
         errors: dict[str, str] = {}
-        if self.end_date < self.start_date:
+        if self.start_date and self.end_date and self.end_date < self.start_date:
             errors["end_date"] = _("Bis darf nicht vor Von liegen.")
         if self.employee_id and self.start_date and self.end_date:
             from hr.services.sick_leave_service import SickLeaveService
@@ -495,12 +499,13 @@ class TimeAccountEntry(BaseModel):
 
     def clean(self) -> None:
         errors: dict[str, str] = {}
-        if self.minutes == 0:
-            errors["minutes"] = _("Die Minuten duerfen nicht 0 sein.")
-        if self.entry_type == self.EntryType.EXTRA_WORK and self.minutes <= 0:
-            errors["minutes"] = _("Mehrarbeit muss als positive Minuten gebucht werden.")
-        if self.entry_type in {self.EntryType.MINUS_TIME, self.EntryType.OVERTIME_REDUCTION} and self.minutes >= 0:
-            errors["minutes"] = _("Diese Buchungsart muss als negative Minuten gebucht werden.")
+        if self.minutes is not None:
+            if self.minutes == 0:
+                errors["minutes"] = _("Die Minuten duerfen nicht 0 sein.")
+            if self.entry_type == self.EntryType.EXTRA_WORK and self.minutes <= 0:
+                errors["minutes"] = _("Mehrarbeit muss als positive Minuten gebucht werden.")
+            if self.entry_type in {self.EntryType.MINUS_TIME, self.EntryType.OVERTIME_REDUCTION} and self.minutes >= 0:
+                errors["minutes"] = _("Diese Buchungsart muss als negative Minuten gebucht werden.")
         if errors:
             raise ValidationError(errors)
 
@@ -537,7 +542,7 @@ class MonthlyWorkSummary(BaseModel):
 
     def clean(self) -> None:
         errors: dict[str, str] = {}
-        if self.month < 1 or self.month > 12:
+        if self.month is not None and (self.month < 1 or self.month > 12):
             errors["month"] = _("Der Monat muss zwischen 1 und 12 liegen.")
         if errors:
             raise ValidationError(errors)
@@ -584,9 +589,9 @@ class VacationEntitlement(BaseModel):
 
     def clean(self) -> None:
         errors: dict[str, str] = {}
-        if self.base_days < Decimal("0"):
+        if self.base_days is not None and self.base_days < Decimal("0"):
             errors["base_days"] = _("Basistage duerfen nicht negativ sein.")
-        if self.carryover_days < Decimal("0"):
+        if self.carryover_days is not None and self.carryover_days < Decimal("0"):
             errors["carryover_days"] = _("Resturlaub darf nicht negativ sein.")
         if errors:
             raise ValidationError(errors)

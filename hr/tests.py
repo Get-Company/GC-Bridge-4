@@ -8,6 +8,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.core.management import call_command
 from django.core.exceptions import ValidationError
+from django.forms import modelform_factory
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 
@@ -267,6 +268,23 @@ class HrAdminFormWidgetTest(SimpleTestCase):
         )
 
         self.assertFalse(form.is_valid())
+
+    def test_company_holiday_form_missing_end_date_returns_field_error(self):
+        form_class = modelform_factory(
+            CompanyHoliday,
+            fields=("name", "start_date", "end_date", "counts_as_vacation", "is_bridge_day", "is_active", "note"),
+        )
+        form = form_class(
+            data={
+                "name": "Sommerpause",
+                "start_date": "2026-08-01",
+                "counts_as_vacation": "on",
+                "is_active": "on",
+            }
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("end_date", form.errors)
 
 
 class HrSetupServiceTest(TestCase):
