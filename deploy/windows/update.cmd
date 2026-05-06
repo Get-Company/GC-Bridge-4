@@ -1,5 +1,5 @@
 @echo off
-setlocal
+setlocal EnableExtensions EnableDelayedExpansion
 
 :: ============================================================
 ::  GC-Bridge Deployment Update Script
@@ -31,12 +31,38 @@ if "%DEPLOY_TAG%"=="" (
 )
 
 :: --- Code aktualisieren ---
-echo [%DATE% %TIME%] git fetch --force --tags origin >> "%LOG_FILE%"
-git fetch --force --tags origin >> "%LOG_FILE%" 2>&1
-if errorlevel 1 (
+set "FETCH_OK=0"
+set "FETCH_SOURCE=origin"
+
+for /L %%I in (1,1,3) do (
+    echo [%DATE% %TIME%] git fetch --force --tags origin (attempt %%I/3) >> "%LOG_FILE%"
+    git fetch --force --tags origin >> "%LOG_FILE%" 2>&1
+    if not errorlevel 1 (
+        set "FETCH_OK=1"
+        goto :fetch_done
+    )
+    echo [%DATE% %TIME%] WARNING: git fetch attempt %%I failed >> "%LOG_FILE%"
+    if not "%%I"=="3" timeout /t 5 /nobreak >nul
+)
+
+for /f "delims=" %%U in ('git remote get-url origin 2^>nul') do set "ORIGIN_URL=%%U"
+if /I "!ORIGIN_URL:~0,19!"=="https://github.com/" (
+    set "FETCH_SOURCE=!ORIGIN_URL:https://github.com/=git@github.com:!"
+    echo [%DATE% %TIME%] git fetch fallback via !FETCH_SOURCE! >> "%LOG_FILE%"
+    git fetch --force --tags "!FETCH_SOURCE!" >> "%LOG_FILE%" 2>&1
+    if not errorlevel 1 (
+        set "FETCH_OK=1"
+        goto :fetch_done
+    )
+    echo [%DATE% %TIME%] WARNING: git fetch fallback via SSH failed >> "%LOG_FILE%"
+)
+
+:fetch_done
+if not "!FETCH_OK!"=="1" (
     echo [%DATE% %TIME%] ERROR: git fetch failed >> "%LOG_FILE%"
     exit /b 1
 )
+echo [%DATE% %TIME%] git fetch OK via !FETCH_SOURCE! >> "%LOG_FILE%"
 
 echo [%DATE% %TIME%] git checkout -f %DEPLOY_TAG% >> "%LOG_FILE%"
 git checkout -f %DEPLOY_TAG% >> "%LOG_FILE%" 2>&1
