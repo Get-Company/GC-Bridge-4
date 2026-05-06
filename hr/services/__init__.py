@@ -8,6 +8,7 @@ from .sick_leave_service import SickLeaveService
 from .setup_service import HrSetupService
 from .time_account_service import TimeAccountService
 from .working_time_service import WorkingTimeService
+from .working_time_overview_service import WorkingTimeOverviewService
 
 __all__ = [
     "AccessService",
@@ -21,4 +22,5 @@ __all__ = [
     "HrSetupService",
     "TimeAccountService",
     "WorkingTimeService",
+    "WorkingTimeOverviewService",
 ]

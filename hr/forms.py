@@ -8,6 +8,7 @@ from django.utils.translation import gettext_lazy as _
 from unfold.widgets import (
     UnfoldAdminColorInputWidget,
     UnfoldAdminIntegerFieldWidget,
+    UnfoldAdminSingleDateWidget,
     UnfoldAdminSelectWidget,
     UnfoldAdminTextInputWidget,
     UnfoldAdminTimeWidget,
@@ -86,3 +87,30 @@ class WorkScheduleDayInlineForm(forms.ModelForm):
 
     class Media:
         js = ("core/admin/hr_work_schedule_time_fields.js",)
+
+
+class EmployeeWorkingTimeOverviewForm(forms.Form):
+    start_date = forms.DateField(
+        label=_("Von"),
+        widget=UnfoldAdminSingleDateWidget,
+    )
+    end_date = forms.DateField(
+        label=_("Bis"),
+        widget=UnfoldAdminSingleDateWidget,
+    )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        start_date = cleaned_data.get("start_date")
+        end_date = cleaned_data.get("end_date")
+        if start_date and end_date and end_date < start_date:
+            raise forms.ValidationError(_("Bis darf nicht vor Von liegen."))
+        return cleaned_data
+
+    @classmethod
+    def build_initial(cls) -> dict[str, object]:
+        today = date.today()
+        return {
+            "start_date": today.replace(day=1),
+            "end_date": today,
+        }

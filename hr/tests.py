@@ -11,7 +11,7 @@ from django.core.exceptions import ValidationError
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 
-from hr.forms import EmployeeProfileAdminForm, WorkScheduleDayInlineForm
+from hr.forms import EmployeeProfileAdminForm, EmployeeWorkingTimeOverviewForm, WorkScheduleDayInlineForm
 from hr.models import (
     CompanyHoliday,
     Department,
@@ -37,6 +37,7 @@ from hr.services import (
     OpenHolidaysService,
     TimeAccountService,
     WorkingTimeService,
+    WorkingTimeOverviewService,
 )
 from unfold.widgets import UnfoldAdminColorInputWidget, UnfoldAdminTimeWidget
 
@@ -260,6 +261,13 @@ class HrAdminFormWidgetTest(SimpleTestCase):
         self.assertIsInstance(form.fields["end_time"].widget, UnfoldAdminTimeWidget)
         self.assertIn("core/admin/hr_work_schedule_time_fields.js", form.media.render_js())
 
+    def test_working_time_overview_form_rejects_inverted_range(self):
+        form = EmployeeWorkingTimeOverviewForm(
+            data={"start_date": "2026-05-10", "end_date": "2026-05-01"}
+        )
+
+        self.assertFalse(form.is_valid())
+
 
 class HrSetupServiceTest(TestCase):
     def test_ensure_groups_creates_expected_permissions(self):
@@ -440,6 +448,68 @@ class HrVacationBalanceTest(TestCase):
 
         self.assertEqual(approved_days, Decimal("4.00"))
         self.assertEqual(remaining_days, Decimal("26.00"))
+
+    def test_working_time_overview_summarizes_leave_holidays_and_bridge_days(self):
+        PublicHoliday.objects.create(
+            calendar=self.calendar,
+            name="Feiertag",
+            date=date(2026, 5, 6),
+            is_active=True,
+        )
+        SickLeave.objects.create(
+            employee=self.employee,
+            start_date=date(2026, 5, 7),
+            end_date=date(2026, 5, 7),
+        )
+        CompanyHoliday.objects.create(
+            name="Brueckentag",
+            start_date=date(2026, 5, 8),
+            end_date=date(2026, 5, 8),
+            counts_as_vacation=True,
+            is_bridge_day=True,
+        )
+        LeaveRequest.objects.create(
+            employee=self.employee,
+            leave_type=LeaveRequest.LeaveType.VACATION,
+            start_date=date(2026, 5, 5),
+            end_date=date(2026, 5, 5),
+            half_day_start=True,
+            status=LeaveRequest.Status.APPROVED,
+        )
+        TimeAccountEntry.objects.create(
+            employee=self.employee,
+            date=date(2026, 5, 4),
+            entry_type=TimeAccountEntry.EntryType.EXTRA_WORK,
+            minutes=60,
+            reason="Projektabschluss",
+            status=TimeAccountEntry.Status.APPROVED,
+        )
+        TimeAccountEntry.objects.create(
+            employee=self.employee,
+            date=date(2026, 5, 5),
+            entry_type=TimeAccountEntry.EntryType.MINUS_TIME,
+            minutes=-30,
+            reason="Frueher gegangen",
+            status=TimeAccountEntry.Status.APPROVED,
+        )
+
+        overview = WorkingTimeOverviewService().build_range_overview(
+            self.employee,
+            start_date=date(2026, 5, 4),
+            end_date=date(2026, 5, 10),
+        )
+
+        self.assertEqual(overview["summary"]["scheduled_minutes"], 2400)
+        self.assertEqual(overview["summary"]["planned_minutes"], 720)
+        self.assertEqual(overview["summary"]["vacation_minutes"], 240)
+        self.assertEqual(overview["summary"]["public_holiday_minutes"], 480)
+        self.assertEqual(overview["summary"]["sick_minutes"], 480)
+        self.assertEqual(overview["summary"]["bridge_day_minutes"], 480)
+        self.assertEqual(overview["summary"]["overtime_minutes"], 60)
+        self.assertEqual(overview["summary"]["minus_minutes"], -30)
+        self.assertEqual(len(overview["weekly_rows"]), 1)
+        self.assertEqual(len(overview["monthly_rows"]), 1)
+        self.assertEqual(len(overview["yearly_rows"]), 1)
 
 
 class HrOpenHolidaysImportTest(TestCase):

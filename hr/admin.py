@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
+from decimal import Decimal
 import logging
 
 from django.contrib import admin, messages
@@ -15,7 +16,7 @@ from unfold.enums import ActionVariant
 from unfold.contrib.filters.admin import BooleanRadioFilter, RangeDateTimeFilter, RelatedDropdownFilter
 
 from core.admin import BaseAdmin, BaseTabularInline
-from hr.forms import EmployeeProfileAdminForm, OpenHolidaysImportForm, WorkScheduleDayInlineForm
+from hr.forms import EmployeeProfileAdminForm, EmployeeWorkingTimeOverviewForm, OpenHolidaysImportForm, WorkScheduleDayInlineForm
 from hr.models import (
     CompanyHoliday,
     Department,
@@ -39,6 +40,7 @@ from hr.services import (
     OpenHolidaysApiError,
     OpenHolidaysService,
     TimeAccountService,
+    WorkingTimeOverviewService,
 )
 
 logger = logging.getLogger(__name__)
@@ -201,6 +203,7 @@ class HolidayCalendarAdmin(HrScopedAdminMixin, BaseAdmin):
 class EmployeeProfileAdmin(HrScopedAdminMixin, BaseAdmin):
     employee_lookup = None
     form = EmployeeProfileAdminForm
+    actions_detail = ("working_time_overview_action",)
     readonly_fields = BaseAdmin.readonly_fields + ("vacation_entitlement_display", "approved_vacation_days_display", "bridge_days_display", "remaining_vacation_days_display")
     list_display = (
         "user",
@@ -246,6 +249,92 @@ class EmployeeProfileAdmin(HrScopedAdminMixin, BaseAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return self.can_manage(request)
+
+    @staticmethod
+    def _format_minutes(value: int) -> str:
+        absolute_value = abs(int(value or 0))
+        hours, minutes = divmod(absolute_value, 60)
+        prefix = "-" if value < 0 else ""
+        return f"{prefix}{hours:02d}:{minutes:02d} h"
+
+    @classmethod
+    def _format_units(cls, value: Decimal) -> str:
+        return f"{Decimal(value or 0).quantize(Decimal('0.00')):.2f} Tage"
+
+    def _decorate_overview_rows(self, rows: list[dict[str, object]]) -> list[dict[str, object]]:
+        decorated_rows: list[dict[str, object]] = []
+        for row in rows:
+            row_copy = dict(row)
+            row_copy["scheduled_minutes_display"] = self._format_minutes(int(row["scheduled_minutes"]))
+            row_copy["planned_minutes_display"] = self._format_minutes(int(row["planned_minutes"]))
+            row_copy["vacation_minutes_display"] = self._format_minutes(int(row["vacation_minutes"]))
+            row_copy["special_leave_minutes_display"] = self._format_minutes(int(row["special_leave_minutes"]))
+            row_copy["overtime_reduction_minutes_display"] = self._format_minutes(int(row["overtime_reduction_minutes"]))
+            row_copy["sick_minutes_display"] = self._format_minutes(int(row["sick_minutes"]))
+            row_copy["public_holiday_minutes_display"] = self._format_minutes(int(row["public_holiday_minutes"]))
+            row_copy["company_holiday_minutes_display"] = self._format_minutes(int(row["company_holiday_minutes"]))
+            row_copy["bridge_day_minutes_display"] = self._format_minutes(int(row["bridge_day_minutes"]))
+            row_copy["overtime_minutes_display"] = self._format_minutes(int(row["overtime_minutes"]))
+            row_copy["minus_minutes_display"] = self._format_minutes(int(row["minus_minutes"]))
+            row_copy["scheduled_units_display"] = self._format_units(Decimal(row["scheduled_units"]))
+            row_copy["planned_units_display"] = self._format_units(Decimal(row["planned_units"]))
+            row_copy["vacation_units_display"] = self._format_units(Decimal(row["vacation_units"]))
+            row_copy["special_leave_units_display"] = self._format_units(Decimal(row["special_leave_units"]))
+            row_copy["overtime_reduction_units_display"] = self._format_units(Decimal(row["overtime_reduction_units"]))
+            row_copy["sick_units_display"] = self._format_units(Decimal(row["sick_units"]))
+            row_copy["public_holiday_units_display"] = self._format_units(Decimal(row["public_holiday_units"]))
+            row_copy["company_holiday_units_display"] = self._format_units(Decimal(row["company_holiday_units"]))
+            row_copy["bridge_day_units_display"] = self._format_units(Decimal(row["bridge_day_units"]))
+            decorated_rows.append(row_copy)
+        return decorated_rows
+
+    @action(
+        description=_("Arbeitszeit-Auswertung"),
+        url_path="working-time-overview",
+        icon="query_stats",
+        variant=ActionVariant.PRIMARY,
+        permissions=["working_time_overview_action"],
+    )
+    def working_time_overview_action(self, request, object_id):
+        employee = self.get_object(request, object_id)
+        if employee is None:
+            raise PermissionDenied
+
+        initial = EmployeeWorkingTimeOverviewForm.build_initial()
+        form = EmployeeWorkingTimeOverviewForm(request.GET or None, initial=initial)
+        if form.is_valid():
+            start_date = form.cleaned_data["start_date"]
+            end_date = form.cleaned_data["end_date"]
+        else:
+            start_date = initial["start_date"]
+            end_date = initial["end_date"]
+
+        overview = WorkingTimeOverviewService().build_range_overview(
+            employee,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        context = {
+            **self.admin_site.each_context(request),
+            "opts": self.model._meta,
+            "original": employee,
+            "title": f"Arbeitszeit-Auswertung: {employee.full_name}",
+            "employee": employee,
+            "form": form,
+            "summary_row": self._decorate_overview_rows([overview["summary"]])[0],
+            "weekly_rows": self._decorate_overview_rows(overview["weekly_rows"]),
+            "monthly_rows": self._decorate_overview_rows(overview["monthly_rows"]),
+            "yearly_rows": self._decorate_overview_rows(overview["yearly_rows"]),
+            "daily_rows": self._decorate_overview_rows(overview["daily_rows"]),
+            "time_account_balance_display": self._format_minutes(int(overview["time_account_balance_minutes"])),
+            "change_url": reverse("admin:hr_employeeprofile_change", args=[employee.pk]),
+        }
+        return TemplateResponse(request, "admin/hr/employee_working_time_overview.html", context)
+
+    def has_working_time_overview_action_permission(self, request, object_id=None):
+        if object_id is None:
+            return False
+        return self.get_visible_employee_queryset(request).filter(pk=object_id).exists()
 
     @admin.display(description="Name", ordering="user__last_name")
     def full_name_display(self, obj: EmployeeProfile) -> str:
