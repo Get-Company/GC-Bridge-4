@@ -17,6 +17,7 @@ from hr.models import (
     LeaveRequest,
     MonthlyWorkSummary,
     PublicHoliday,
+    SchoolHoliday,
     SickLeave,
     TimeAccountEntry,
     WorkSchedule,
@@ -38,6 +39,7 @@ class HrSetupService(BaseService):
         "hr.view_timeaccountentry",
         "hr.view_monthlyworksummary",
         "hr.view_publicholiday",
+        "hr.view_schoolholiday",
         "hr.view_companyholiday",
     }
     DEPARTMENT_LEAD_GROUP_PERMISSIONS = EMPLOYEE_GROUP_PERMISSIONS | {
@@ -67,6 +69,10 @@ class HrSetupService(BaseService):
         "hr.add_companyholiday",
         "hr.change_companyholiday",
         "hr.delete_companyholiday",
+        "hr.view_schoolholiday",
+        "hr.add_schoolholiday",
+        "hr.change_schoolholiday",
+        "hr.delete_schoolholiday",
         "hr.view_workschedule",
         "hr.add_workschedule",
         "hr.change_workschedule",

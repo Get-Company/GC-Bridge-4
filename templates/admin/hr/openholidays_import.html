@@ -1,0 +1,141 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+<div class="flex flex-col gap-6">
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <div>
+      <h1 class="text-xl font-semibold">OpenHolidays Import</h1>
+      <p class="text-sm text-gray-500 dark:text-gray-400">
+        Feiertage und Schulferien fuer Bayern aus OpenHolidays fuer das Jahr {{ year }} laden und direkt importieren.
+      </p>
+    </div>
+    <div class="flex flex-wrap items-center gap-2">
+      <a href="{{ changelist_url }}" class="inline-flex items-center justify-center rounded border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800">
+        Zurueck zu Feiertage
+      </a>
+    </div>
+  </div>
+
+  <form method="post" class="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-900">
+    {% csrf_token %}
+    <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
+      <div>
+        <label for="id_calendar_id" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Feiertagskalender</label>
+        <select id="id_calendar_id" name="calendar_id" class="w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800">
+          {% for calendar in holiday_calendars %}
+          <option value="{{ calendar.pk }}"{% if calendar.pk == selected_calendar_id %} selected{% endif %}>{{ calendar.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div>
+        <label for="id_year" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Jahr</label>
+        <input id="id_year" name="year" type="number" value="{{ year }}" min="2000" max="2100" class="w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800">
+      </div>
+
+      <div>
+        <label for="id_country_iso_code" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Land</label>
+        <input id="id_country_iso_code" name="country_iso_code" type="text" value="{{ country_iso_code }}" class="w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm uppercase dark:border-gray-600 dark:bg-gray-800">
+      </div>
+
+      <div>
+        <label for="id_subdivision_code" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Region</label>
+        <input id="id_subdivision_code" name="subdivision_code" type="text" value="{{ subdivision_code }}" class="w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm uppercase dark:border-gray-600 dark:bg-gray-800">
+      </div>
+
+      <div>
+        <label for="id_language_iso_code" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Sprache</label>
+        <input id="id_language_iso_code" name="language_iso_code" type="text" value="{{ language_iso_code }}" class="w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm uppercase dark:border-gray-600 dark:bg-gray-800">
+      </div>
+    </div>
+
+    <div class="mt-4 flex flex-wrap gap-2">
+      <button type="submit" name="action" value="import_all_holidays" class="inline-flex items-center justify-center rounded border border-blue-300 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-300 dark:hover:bg-blue-900/20">
+        Feiertage + Ferientermine importieren
+      </button>
+      {% if public_holidays %}
+      <button type="submit" name="action" value="import_public_holidays" class="inline-flex items-center justify-center rounded border border-emerald-300 px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-300 dark:hover:bg-emerald-900/20">
+        Feiertage importieren
+      </button>
+      {% endif %}
+      {% if school_holidays %}
+      <button type="submit" name="action" value="import_school_holidays" class="inline-flex items-center justify-center rounded border border-teal-300 px-3 py-2 text-sm font-medium text-teal-700 hover:bg-teal-50 dark:border-teal-700 dark:text-teal-300 dark:hover:bg-teal-900/20">
+        Ferientermine importieren
+      </button>
+      {% endif %}
+    </div>
+  </form>
+
+  <div class="grid grid-cols-1 gap-6 xl:grid-cols-2">
+    <div class="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-900">
+      <div class="mb-4 flex items-center justify-between gap-3">
+        <div>
+          <h2 class="text-lg font-semibold">Feiertage</h2>
+          <p class="text-sm text-gray-500 dark:text-gray-400">{{ public_holiday_count }} Eintraege fuer {{ year }}</p>
+        </div>
+      </div>
+
+      {% if public_holidays %}
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-sm">
+          <thead>
+            <tr class="border-b border-gray-200 text-left dark:border-gray-700">
+              <th class="px-3 py-2">Datum</th>
+              <th class="px-3 py-2">Feiertag</th>
+              <th class="px-3 py-2">Halber Tag</th>
+              <th class="px-3 py-2">Regionen</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for holiday in public_holidays %}
+            <tr class="border-b border-gray-100 dark:border-gray-800">
+              <td class="px-3 py-2 whitespace-nowrap">{{ holiday.date|date:"d.m.Y" }}</td>
+              <td class="px-3 py-2">{{ holiday.name }}</td>
+              <td class="px-3 py-2 whitespace-nowrap">{% if holiday.is_half_day %}Ja{% else %}Nein{% endif %}</td>
+              <td class="px-3 py-2">{{ holiday.subdivisions|default:"-" }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="text-sm text-gray-500 dark:text-gray-400">Keine Feiertage fuer die gewaehlten Parameter gefunden.</p>
+      {% endif %}
+    </div>
+
+    <div class="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-900">
+      <div class="mb-4">
+        <h2 class="text-lg font-semibold">Schulferien</h2>
+        <p class="text-sm text-gray-500 dark:text-gray-400">{{ school_holiday_count }} Eintraege fuer {{ year }}. Diese Liste kann direkt importiert werden.</p>
+      </div>
+
+      {% if school_holidays %}
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-sm">
+          <thead>
+            <tr class="border-b border-gray-200 text-left dark:border-gray-700">
+              <th class="px-3 py-2">Von</th>
+              <th class="px-3 py-2">Bis</th>
+              <th class="px-3 py-2">Ferien</th>
+              <th class="px-3 py-2">Regionen</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for holiday in school_holidays %}
+            <tr class="border-b border-gray-100 dark:border-gray-800">
+              <td class="px-3 py-2 whitespace-nowrap">{{ holiday.start_date|date:"d.m.Y" }}</td>
+              <td class="px-3 py-2 whitespace-nowrap">{{ holiday.end_date|date:"d.m.Y" }}</td>
+              <td class="px-3 py-2">{{ holiday.name }}</td>
+              <td class="px-3 py-2">{{ holiday.subdivisions|default:"-" }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="text-sm text-gray-500 dark:text-gray-400">Keine Schulferien fuer die gewaehlten Parameter gefunden.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

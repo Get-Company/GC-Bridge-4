@@ -139,6 +139,42 @@ class PublicHoliday(BaseModel):
         return f"{self.name} ({self.date})"
 
 
+class SchoolHoliday(BaseModel):
+    calendar = models.ForeignKey(
+        HolidayCalendar,
+        on_delete=models.CASCADE,
+        related_name="school_holidays",
+        verbose_name=_("Feiertagskalender"),
+    )
+    name = models.CharField(max_length=120, verbose_name=_("Ferien"))
+    start_date = models.DateField(verbose_name=_("Von"))
+    end_date = models.DateField(verbose_name=_("Bis"))
+    source_subdivisions = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Regionen"))
+    is_active = models.BooleanField(default=True, verbose_name=_("Aktiv"))
+    note = models.TextField(blank=True, default="", verbose_name=_("Bemerkung"))
+
+    class Meta:
+        verbose_name = _("Ferientermin")
+        verbose_name_plural = _("Ferientermine")
+        ordering = ("start_date", "end_date", "name")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("calendar", "name", "start_date", "end_date"),
+                name="unique_school_holiday_per_calendar",
+            ),
+        ]
+
+    def clean(self) -> None:
+        errors: dict[str, str] = {}
+        if self.end_date < self.start_date:
+            errors["end_date"] = _("Bis darf nicht vor Von liegen.")
+        if errors:
+            raise ValidationError(errors)
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.start_date} bis {self.end_date})"
+
+
 class CompanyHoliday(BaseModel):
     name = models.CharField(max_length=120, verbose_name=_("Bezeichnung"))
     start_date = models.DateField(verbose_name=_("Von"))

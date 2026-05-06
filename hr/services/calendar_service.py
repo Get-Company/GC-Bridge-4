@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 from core.services import BaseService
-from hr.models import CompanyHoliday, EmployeeProfile, LeaveRequest, PublicHoliday, SickLeave, TimeAccountEntry
+from hr.models import CompanyHoliday, EmployeeProfile, LeaveRequest, PublicHoliday, SchoolHoliday, SickLeave, TimeAccountEntry
 from hr.services.access_service import AccessService
 from hr.services.holiday_service import HolidayService
 
@@ -166,9 +166,47 @@ class CalendarService(BaseService):
             for company_holiday in company_holidays
         ]
 
+    def get_school_holiday_events(self, start_date: date, end_date: date, employees=None) -> list[dict[str, str]]:
+        employee_queryset = self._normalize_employees(employees)
+        holiday_service = HolidayService()
+        calendar_ids = [
+            calendar_id
+            for calendar_id in employee_queryset.values_list("holiday_calendar_id", flat=True).distinct()
+            if calendar_id
+        ]
+        if employee_queryset.filter(holiday_calendar__isnull=True).exists():
+            default_calendar = holiday_service.get_default_holiday_calendar()
+            if default_calendar is not None:
+                calendar_ids.append(default_calendar.pk)
+        school_holidays = (
+            SchoolHoliday.objects.filter(calendar_id__in=calendar_ids, is_active=True)
+            .filter(start_date__lte=end_date, end_date__gte=start_date)
+            .select_related("calendar")
+            .order_by("start_date", "end_date", "calendar__name", "pk")
+        )
+        seen_keys = set()
+        events = []
+        for school_holiday in school_holidays:
+            key = (school_holiday.calendar_id, school_holiday.start_date, school_holiday.end_date, school_holiday.name)
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
+            events.append(
+                self._build_event(
+                    employee=None,
+                    title_suffix=f"Schulferien: {school_holiday.name}",
+                    start_date=max(school_holiday.start_date, start_date),
+                    end_date=min(school_holiday.end_date, end_date),
+                    event_type="school_holiday",
+                    color="#0f766e",
+                )
+            )
+        return events
+
     def get_calendar_events(self, start_date: date, end_date: date, employees=None) -> list[dict[str, str]]:
         events = []
         events.extend(self.get_public_holiday_events(start_date, end_date, employees=employees))
+        events.extend(self.get_school_holiday_events(start_date, end_date, employees=employees))
         events.extend(self.get_company_holiday_events(start_date, end_date))
         events.extend(self.get_leave_events(start_date, end_date, employees=employees))
         events.extend(self.get_sick_leave_events(start_date, end_date, employees=employees))
@@ -187,6 +225,7 @@ class CalendarService(BaseService):
         employee_queryset = employees or access_service.get_visible_employee_queryset(user)
         events = []
         events.extend(self.get_public_holiday_events(start_date, end_date, employees=employee_queryset))
+        events.extend(self.get_school_holiday_events(start_date, end_date, employees=employee_queryset))
         events.extend(self.get_company_holiday_events(start_date, end_date))
         events.extend(self.get_leave_events(start_date, end_date, employees=employee_queryset))
         events.extend(

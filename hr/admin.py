@@ -1,7 +1,13 @@
 from __future__ import annotations
 
+from datetime import date
+from urllib.parse import urlencode
+
 from django.contrib import admin, messages
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
+from django.http import HttpResponseRedirect
+from django.template.response import TemplateResponse
+from django.urls import path, reverse
 
 from unfold.contrib.filters.admin import BooleanRadioFilter, RangeDateTimeFilter, RelatedDropdownFilter
 
@@ -15,12 +21,20 @@ from hr.models import (
     LeaveRequest,
     MonthlyWorkSummary,
     PublicHoliday,
+    SchoolHoliday,
     SickLeave,
     TimeAccountEntry,
     WorkSchedule,
     WorkScheduleDay,
 )
-from hr.services import AccessService, LeaveService, MonthlySummaryService, TimeAccountService
+from hr.services import (
+    AccessService,
+    LeaveService,
+    MonthlySummaryService,
+    OpenHolidaysApiError,
+    OpenHolidaysService,
+    TimeAccountService,
+)
 
 
 class WorkScheduleDayInline(BaseTabularInline):
@@ -218,6 +232,7 @@ class WorkScheduleAdmin(HrScopedAdminMixin, BaseAdmin):
 @admin.register(PublicHoliday)
 class PublicHolidayAdmin(HrScopedAdminMixin, BaseAdmin):
     employee_lookup = None
+    change_list_template = "admin/hr/publicholiday/change_list.html"
     list_display = ("name", "date", "calendar", "is_half_day", "is_active", "created_at")
     search_fields = ("name", "calendar__name")
     list_filter = [
@@ -227,6 +242,217 @@ class PublicHolidayAdmin(HrScopedAdminMixin, BaseAdmin):
         ("created_at", RangeDateTimeFilter),
     ]
     date_hierarchy = "date"
+
+    @staticmethod
+    def _get_openholidays_year(raw_value: str | None) -> int:
+        current_year = date.today().year
+        try:
+            parsed_year = int((raw_value or "").strip())
+        except (TypeError, ValueError):
+            return current_year
+        if parsed_year < 2000 or parsed_year > current_year + 5:
+            return current_year
+        return parsed_year
+
+    @staticmethod
+    def _get_openholidays_value(raw_value: str | None, *, default: str) -> str:
+        cleaned = (raw_value or "").strip().upper()
+        return cleaned or default
+
+    def get_urls(self):
+        custom_urls = [
+            path(
+                "openholidays/",
+                self.admin_site.admin_view(self.openholidays_view),
+                name="hr_publicholiday_openholidays",
+            ),
+        ]
+        return custom_urls + super().get_urls()
+
+    def openholidays_view(self, request):
+        if not self.can_manage(request):
+            raise PermissionDenied
+
+        data = request.POST if request.method == "POST" else request.GET
+        service = OpenHolidaysService()
+        year = self._get_openholidays_year(data.get("year"))
+        country_iso_code = self._get_openholidays_value(
+            data.get("country_iso_code"),
+            default=service.DEFAULT_COUNTRY_ISO_CODE,
+        )
+        language_iso_code = self._get_openholidays_value(
+            data.get("language_iso_code"),
+            default=service.DEFAULT_LANGUAGE_ISO_CODE,
+        )
+        subdivision_code = self._get_openholidays_value(
+            data.get("subdivision_code"),
+            default=service.DEFAULT_SUBDIVISION_CODE,
+        )
+        try:
+            selected_calendar_id = int((data.get("calendar_id") or "").strip())
+        except (TypeError, ValueError):
+            selected_calendar_id = None
+
+        holiday_calendars = HolidayCalendar.objects.order_by("name", "pk")
+        selected_calendar = None
+        if selected_calendar_id is not None:
+            selected_calendar = holiday_calendars.filter(pk=selected_calendar_id).first()
+        if selected_calendar is None:
+            selected_calendar = holiday_calendars.filter(is_default=True).first() or holiday_calendars.first()
+            selected_calendar_id = selected_calendar.pk if selected_calendar else None
+
+        public_holidays: list[dict] = []
+        school_holidays: list[dict] = []
+        try:
+            public_holidays = service.fetch_public_holidays(
+                year=year,
+                country_iso_code=country_iso_code,
+                language_iso_code=language_iso_code,
+                subdivision_code=subdivision_code,
+            )
+            school_holidays = service.fetch_school_holidays(
+                year=year,
+                country_iso_code=country_iso_code,
+                language_iso_code=language_iso_code,
+                subdivision_code=subdivision_code,
+            )
+        except OpenHolidaysApiError as exc:
+            self.message_user(request, str(exc), level=messages.ERROR)
+
+        if request.method == "POST" and request.POST.get("action") == "import_public_holidays":
+            if selected_calendar is None:
+                self.message_user(request, "Bitte zuerst einen Feiertagskalender auswaehlen.", level=messages.ERROR)
+            elif not public_holidays:
+                self.message_user(
+                    request,
+                    "Es konnten keine Feiertage geladen werden. Import wurde nicht ausgefuehrt.",
+                    level=messages.WARNING,
+                )
+            else:
+                result = service.import_public_holidays(calendar=selected_calendar, holidays=public_holidays)
+                self.message_user(
+                    request,
+                    (
+                        f"Feiertage importiert fuer '{selected_calendar.name}': "
+                        f"{result['created']} neu, {result['updated']} aktualisiert, "
+                        f"{result['unchanged']} unveraendert."
+                    ),
+                )
+                query_string = urlencode(
+                    {
+                        "year": year,
+                        "country_iso_code": country_iso_code,
+                        "language_iso_code": language_iso_code,
+                        "subdivision_code": subdivision_code,
+                        "calendar_id": selected_calendar.pk,
+                    }
+                )
+                return HttpResponseRedirect(f"{reverse('admin:hr_publicholiday_openholidays')}?{query_string}")
+
+        if request.method == "POST" and request.POST.get("action") == "import_school_holidays":
+            if selected_calendar is None:
+                self.message_user(request, "Bitte zuerst einen Feiertagskalender auswaehlen.", level=messages.ERROR)
+            elif not school_holidays:
+                self.message_user(
+                    request,
+                    "Es konnten keine Schulferien geladen werden. Import wurde nicht ausgefuehrt.",
+                    level=messages.WARNING,
+                )
+            else:
+                result = service.import_school_holidays(calendar=selected_calendar, holidays=school_holidays)
+                self.message_user(
+                    request,
+                    (
+                        f"Ferientermine importiert fuer '{selected_calendar.name}': "
+                        f"{result['created']} neu, {result['updated']} aktualisiert, "
+                        f"{result['unchanged']} unveraendert."
+                    ),
+                )
+                query_string = urlencode(
+                    {
+                        "year": year,
+                        "country_iso_code": country_iso_code,
+                        "language_iso_code": language_iso_code,
+                        "subdivision_code": subdivision_code,
+                        "calendar_id": selected_calendar.pk,
+                    }
+                )
+                return HttpResponseRedirect(f"{reverse('admin:hr_publicholiday_openholidays')}?{query_string}")
+
+        if request.method == "POST" and request.POST.get("action") == "import_all_holidays":
+            if selected_calendar is None:
+                self.message_user(request, "Bitte zuerst einen Feiertagskalender auswaehlen.", level=messages.ERROR)
+            else:
+                public_result = service.import_public_holidays(calendar=selected_calendar, holidays=public_holidays)
+                school_result = service.import_school_holidays(calendar=selected_calendar, holidays=school_holidays)
+                self.message_user(
+                    request,
+                    (
+                        f"Import fuer '{selected_calendar.name}' abgeschlossen. "
+                        f"Feiertage: {public_result['created']} neu, {public_result['updated']} aktualisiert, "
+                        f"{public_result['unchanged']} unveraendert. "
+                        f"Ferientermine: {school_result['created']} neu, {school_result['updated']} aktualisiert, "
+                        f"{school_result['unchanged']} unveraendert."
+                    ),
+                )
+                query_string = urlencode(
+                    {
+                        "year": year,
+                        "country_iso_code": country_iso_code,
+                        "language_iso_code": language_iso_code,
+                        "subdivision_code": subdivision_code,
+                        "calendar_id": selected_calendar.pk,
+                    }
+                )
+                return HttpResponseRedirect(f"{reverse('admin:hr_publicholiday_openholidays')}?{query_string}")
+
+        context = {
+            **self.admin_site.each_context(request),
+            "opts": self.model._meta,
+            "title": "OpenHolidays Import",
+            "subtitle": "Feiertage und Schulferien fuer das aktuelle Jahr laden und importieren",
+            "holiday_calendars": holiday_calendars,
+            "selected_calendar_id": selected_calendar_id,
+            "year": year,
+            "country_iso_code": country_iso_code,
+            "language_iso_code": language_iso_code,
+            "subdivision_code": subdivision_code,
+            "public_holidays": public_holidays,
+            "school_holidays": school_holidays,
+            "public_holiday_count": len(public_holidays),
+            "school_holiday_count": len(school_holidays),
+            "import_url": reverse("admin:hr_publicholiday_openholidays"),
+            "changelist_url": reverse("admin:hr_publicholiday_changelist"),
+        }
+        return TemplateResponse(request, "admin/hr/openholidays_import.html", context)
+
+    def has_module_permission(self, request):
+        return self.can_manage(request)
+
+    def has_view_permission(self, request, obj=None):
+        return self.can_manage(request)
+
+    def has_add_permission(self, request):
+        return self.can_manage(request)
+
+    def has_change_permission(self, request, obj=None):
+        return self.can_manage(request)
+
+    def has_delete_permission(self, request, obj=None):
+        return self.can_manage(request)
+
+
+@admin.register(SchoolHoliday)
+class SchoolHolidayAdmin(HrScopedAdminMixin, BaseAdmin):
+    employee_lookup = None
+    list_display = ("name", "start_date", "end_date", "calendar", "is_active", "created_at")
+    search_fields = ("name", "calendar__name", "source_subdivisions", "note")
+    list_filter = [
+        ("calendar", RelatedDropdownFilter),
+        ("is_active", BooleanRadioFilter),
+        ("created_at", RangeDateTimeFilter),
+    ]
+    date_hierarchy = "start_date"
 
     def has_module_permission(self, request):
         return self.can_manage(request)
@@ -463,6 +689,7 @@ class SickLeaveAdmin(HrScopedAdminMixin, BaseAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return self.can_manage(request)
+
 
 @admin.register(TimeAccountEntry)
 class TimeAccountEntryAdmin(HrScopedAdminMixin, BaseAdmin):

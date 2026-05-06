@@ -559,10 +559,22 @@ UNFOLD = {
                         "permission": sidebar_model_view_permission("hr", "MonthlyWorkSummary"),
                     },
                     {
+                        "title": _("Feiertagskalender"),
+                        "icon": "calendar_view_month",
+                        "link": reverse_lazy("admin:hr_holidaycalendar_changelist"),
+                        "permission": sidebar_model_view_permission("hr", "HolidayCalendar"),
+                    },
+                    {
                         "title": _("Feiertage"),
                         "icon": "event_available",
                         "link": reverse_lazy("admin:hr_publicholiday_changelist"),
                         "permission": sidebar_model_view_permission("hr", "PublicHoliday"),
+                    },
+                    {
+                        "title": _("Ferientermine"),
+                        "icon": "family_restroom",
+                        "link": reverse_lazy("admin:hr_schoolholiday_changelist"),
+                        "permission": sidebar_model_view_permission("hr", "SchoolHoliday"),
                     },
                     {
                         "title": _("Betriebsurlaub"),
