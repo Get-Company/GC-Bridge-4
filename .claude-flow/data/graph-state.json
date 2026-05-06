@@ -1,0 +1,79 @@
+{
+  "version": 1,
+  "updatedAt": 1778049507796,
+  "nodeCount": 7,
+  "nodes": {
+    "mem-MEMORY-preferences": {
+      "id": "mem-MEMORY-preferences",
+      "category": "core",
+      "confidence": 0.5,
+      "accessCount": 0,
+      "createdAt": 1777269069937
+    },
+    "mem-MEMORY-project": {
+      "id": "mem-MEMORY-project",
+      "category": "core",
+      "confidence": 0.5,
+      "accessCount": 0,
+      "createdAt": 1777269069937
+    },
+    "mem-project_overview----": {
+      "id": "mem-project_overview----",
+      "category": "project_overview",
+      "confidence": 0.5,
+      "accessCount": 0,
+      "createdAt": 1777269069937
+    },
+    "mem-MEMORY-user-preferences": {
+      "id": "mem-MEMORY-user-preferences",
+      "category": "core",
+      "confidence": 0.5,
+      "accessCount": 0,
+      "createdAt": 1777269069939
+    },
+    "mem-MEMORY-project--gc-bridge-4": {
+      "id": "mem-MEMORY-project--gc-bridge-4",
+      "category": "core",
+      "confidence": 0.5,
+      "accessCount": 0,
+      "createdAt": 1777269069939
+    },
+    "mem-project_microtech_testing----": {
+      "id": "mem-project_microtech_testing----",
+      "category": "project_microtech_testing",
+      "confidence": 0.5,
+      "accessCount": 0,
+      "createdAt": 1777269069939
+    },
+    "insight-1777271652123-bb4d": {
+      "id": "insight-1777271652123-bb4d",
+      "category": "insights",
+      "confidence": 0.5,
+      "accessCount": 0,
+      "createdAt": 1777271652123
+    }
+  },
+  "edges": [
+    {
+      "sourceId": "mem-MEMORY-preferences",
+      "targetId": "mem-MEMORY-project",
+      "type": "temporal",
+      "weight": 0.5
+    },
+    {
+      "sourceId": "mem-MEMORY-user-preferences",
+      "targetId": "mem-MEMORY-project--gc-bridge-4",
+      "type": "temporal",
+      "weight": 0.5
+    }
+  ],
+  "pageRanks": {
+    "mem-MEMORY-preferences": 0.11494252389734855,
+    "mem-MEMORY-project": 0.2126436902566286,
+    "mem-project_overview----": 0.11494252389734855,
+    "mem-MEMORY-user-preferences": 0.11494252389734855,
+    "mem-MEMORY-project--gc-bridge-4": 0.2126436902566286,
+    "mem-project_microtech_testing----": 0.11494252389734855,
+    "insight-1777271652123-bb4d": 0.11494252389734855
+  }
+}
