@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 
 from django.core.exceptions import ValidationError
 from django.utils import timezone
@@ -45,7 +45,7 @@ class MonthlySummaryService(BaseService):
             last_date = min(sick_leave.end_date, end_date)
             while current_date <= last_date:
                 total_minutes += working_time_service.get_target_minutes_for_date(employee, current_date)
-                current_date = current_date.fromordinal(current_date.toordinal() + 1)
+                current_date = current_date + timedelta(days=1)
 
         return total_minutes
 

@@ -1,52 +1,49 @@
 HR Mitarbeiterverwaltung
 ========================
 
-Zielbild
---------
-
 Die HR-App bildet in Django Admin die erste nutzbare Version der Mitarbeiterverwaltung ab.
-Der aktuelle Stand deckt folgende Bereiche ab:
+Dieses Kapitel beschreibt jeden Bereich feldgenau: welche Felder es gibt, was sie bedeuten,
+und wie Mitarbeiter bzw. Personalverwaltung damit arbeiten.
 
-- Abteilungen
-- Mitarbeiterprofile auf Basis bestehender Django-User
-- Arbeitszeitmodelle und Mitarbeiter-Zuweisungen
-- Urlaubsantraege
-- Krankmeldungen
-- Zeitkonto-Buchungen
-- Monatsuebersichten
-- Feiertage und Betriebsurlaub
-- Admin-Kalender fuer Abwesenheiten und Zeitkonto
-
-Die Umsetzung ist bewusst ``Admin-first``.
-Es gibt noch kein eigenes Mitarbeiterportal.
+.. contents:: Inhalt
+   :depth: 2
+   :local:
 
 
-Aktueller Funktionsumfang
--------------------------
+Rollen und Sichtbarkeit
+-----------------------
 
-Bereits umgesetzt
-^^^^^^^^^^^^^^^^^
+Das System kennt fuenf Rollen. Jeder User braucht eine HR-Gruppe **und** ein Mitarbeiterprofil
+(Ausnahme: Superuser).
 
-- HR-Modelle inkl. Migrationen in ``hr``
-- rollenbasierte Sichtbarkeit im Admin
-- Freigabe-Logik fuer Urlaub und Zeitkonto ueber Services
-- Konfliktpruefung fuer Urlaub gegen Krankheit und Betriebsurlaub
-- Kalenderansicht im Admin unter ``/admin/hr/calendar/``
-- Feiertage und Betriebsurlaub in Sollzeit und Monatsberechnung
-- Bootstrap-Commands fuer Gruppen und Grundkonfiguration
+.. list-table::
+   :header-rows: 1
+   :widths: 22 78
 
-Noch bewusst nicht enthalten
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   * - Gruppe
+     - Was diese Rolle sieht und darf
+   * - ``Mitarbeiter``
+     - Eigenes Profil, eigene Urlaubsantraege, eigene Zeitkonto-Buchungen, Kalender
+   * - ``Teamleitung``
+     - Wie Mitarbeiter, plus: alle Profile und Daten der eigenen Abteilung
+   * - ``Abteilungsleitung``
+     - Wie Teamleitung
+   * - ``Personalverwaltung``
+     - Alles: Stammdaten, Krankmeldungen, Monatsuebersichten, Feiertage, Betriebsurlaub
+   * - ``Geschaeftsfuehrung``
+     - Alles wie Personalverwaltung
 
-- eigenes Self-Service-Portal
-- E-Mail-Benachrichtigungen
-- Resturlaub / Jahresurlaubskonto
-- komplexe Genehmigungsworkflows
-- automatische Behandlung ``Krank waehrend Urlaub`` ueber Warnlogik hinaus
+.. note::
 
+   Die abteilungsbezogene Sicht (Teamleitung, Abteilungsleitung) funktioniert nur,
+   wenn der User ein Mitarbeiterprofil mit gesetzter Abteilung hat.
+   Ohne Mitarbeiterprofil bleibt die HR-Sicht fuer Nicht-Superuser leer.
+
+
+.. _hr-produktiver-start:
 
 Produktiver Start auf dem Server
---------------------------------
+---------------------------------
 
 Voraussetzungen
 ^^^^^^^^^^^^^^^
@@ -54,79 +51,52 @@ Voraussetzungen
 - aktueller Code ist deployed
 - ``.env`` ist korrekt
 - Datenbank ist erreichbar
-- Django-Migrationen koennen auf dem Server ausgefuehrt werden
 - mindestens ein Admin-User existiert
 
 Empfohlene Reihenfolge
 ^^^^^^^^^^^^^^^^^^^^^^
 
 1. Migrationen ausfuehren
-2. HR-Gruppen und Berechtigungen anlegen
+2. HR-Gruppen anlegen
 3. HR-Grundkonfiguration anlegen
 4. User Gruppen zuweisen
-5. Mitarbeiterprofile pruefen
-6. Arbeitszeitmodelle, Feiertage und Betriebsurlaub pflegen
-7. ersten Kalendereintrag und ersten Urlaubsantrag im Admin testen
-
+5. Mitarbeiterprofile vervollstaendigen
+6. Feiertage und Betriebsurlaub pflegen
 
 Schritt 1: Migrationen
-----------------------
-
-Linux:
+^^^^^^^^^^^^^^^^^^^^^^
 
 .. code-block:: bash
 
    .venv/bin/python manage.py migrate
 
-Windows:
-
 .. code-block:: doscon
 
    .venv\Scripts\python.exe manage.py migrate
 
-
-Schritt 2: HR-Gruppen und Permissions anlegen
----------------------------------------------
-
-Nur die Gruppen und deren Django-Model-Permissions:
+Schritt 2: HR-Gruppen anlegen
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. code-block:: bash
 
    .venv/bin/python manage.py hr_setup_groups
 
-Windows:
+Der Command ist idempotent und kann jederzeit wiederholt werden.
+Er legt die fuenf Gruppen an und weist die Django-Modell-Permissions zu:
+``Mitarbeiter``, ``Teamleitung``, ``Abteilungsleitung``, ``Personalverwaltung``, ``Geschaeftsfuehrung``.
 
-.. code-block:: doscon
+Schritt 3: HR-Grundkonfiguration
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-   .venv\Scripts\python.exe manage.py hr_setup_groups
-
-Der Command ist idempotent und kann mehrfach ausgefuehrt werden.
-
-Angelegte Gruppen:
-
-- ``Mitarbeiter``
-- ``Teamleitung``
-- ``Abteilungsleitung``
-- ``Personalverwaltung``
-- ``Geschaeftsfuehrung``
-
-
-Schritt 3: HR-Grundkonfiguration anlegen
-----------------------------------------
-
-Minimaler Setup-Lauf ohne Demo-User:
+Minimaler Lauf ohne Demo-User:
 
 .. code-block:: bash
 
    .venv/bin/python manage.py hr_bootstrap
 
-Dieser Lauf legt idempotent an:
+Legt idempotent an: Abteilung *Allgemein*, Feiertagskalender *Deutschland*, Arbeitszeitmodell *Vollzeit 40h*.
 
-- Abteilung ``Allgemein``
-- Feiertagskalender ``Deutschland``
-- Arbeitszeitmodell ``Vollzeit 40h``
-
-Wenn direkt ein Demo- oder Pilot-Mitarbeiter angelegt werden soll:
+Mit Demo-Mitarbeiter und Beispieldaten:
 
 .. code-block:: bash
 
@@ -136,218 +106,1075 @@ Wenn direkt ein Demo- oder Pilot-Mitarbeiter angelegt werden soll:
      --demo-password 'BitteAendern123!' \
      --with-sample-records
 
-Windows:
-
-.. code-block:: doscon
-
-   .venv\Scripts\python.exe manage.py hr_bootstrap --demo-username demo.hr --create-demo-user --demo-password BitteAendern123! --with-sample-records
-
-Wirkung des Demo-Laufs:
-
-- User wird bei Bedarf erzeugt
-- User wird ``is_staff = True`` gesetzt
-- User wird automatisch der Gruppe ``Mitarbeiter`` zugeordnet
-- Mitarbeiterprofil wird angelegt
-- Feiertagskalender und Abteilung werden zugewiesen
-- Arbeitszeitmodell wird zugewiesen
-- Beispiel-Urlaub, Beispiel-Krankmeldung, Beispiel-Zeitkonto und Monatsuebersicht werden erzeugt
+Der Demo-Lauf erzeugt: User, Mitarbeiterprofil, Abteilungs- und Kalenderzuweisung,
+Arbeitszeitmodell-Zuweisung, Beispiel-Urlaub, Beispiel-Krankmeldung, Beispiel-Zeitkonto,
+Monatsuebersicht.
 
 
-Schritt 4: Benutzer und Gruppen zuweisen
-----------------------------------------
+.. _hr-abteilungen:
 
-Die eigentliche Sichtbarkeit im Admin entsteht aus:
+Abteilungen
+-----------
 
-- Django-User
-- Gruppenmitgliedschaft
-- Mitarbeiterprofil
-- Abteilungszuordnung im Mitarbeiterprofil
+**Admin-Pfad:** ``/admin/hr/department/``
 
-Empfohlene Zuordnung
-^^^^^^^^^^^^^^^^^^^^
+**Sichtbar fuer:** Personalverwaltung, Geschaeftsfuehrung, Superuser
 
-``Mitarbeiter``
+Abteilungen gliedern Mitarbeiter und steuern die Sichtbarkeit fuer Teamleitungen.
 
-- soll eigene Daten sehen
-- soll eigene Urlaubsantraege anlegen koennen
-- soll Kalender sehen koennen
+Felder
+^^^^^^
 
-``Teamleitung`` / ``Abteilungsleitung``
+.. list-table::
+   :header-rows: 1
+   :widths: 20 15 65
 
-- sieht Mitarbeiter der eigenen Abteilung
-- kann Urlaubsantraege in der eigenen Abteilung sehen und bearbeiten
-- sieht den Kalender der eigenen Abteilung
+   * - Feld
+     - Pflicht
+     - Bedeutung und Beispiel
+   * - ``name``
+     - Ja
+     - Vollstaendiger Name der Abteilung. |br|
+       Beispiel: ``Vertrieb``, ``Technik``, ``Verwaltung``
+   * - ``code``
+     - Nein
+     - Optionales Kuerzel, z. B. fuer Berichte. |br|
+       Beispiel: ``VTR``, ``TEK``, ``VWL``
+   * - ``is_active``
+     - Ja
+     - Aktive Abteilungen erscheinen in Dropdown-Feldern. |br|
+       Inaktive Abteilungen werden ausgeblendet, Daten bleiben erhalten.
 
-``Personalverwaltung``
+Beispiel
+^^^^^^^^
 
-- verwaltet Stammdaten
-- sieht Krankmeldungen
-- pflegt Feiertage und Betriebsurlaub
-- verwaltet Monatsuebersichten, Zeitkonto und Arbeitszeitmodelle
+.. code-block:: text
 
-``Geschaeftsfuehrung``
-
-- hat denselben weiten Zugriff wie Personalverwaltung
-
-Wichtiger Punkt
-^^^^^^^^^^^^^^^
-
-Abteilungsbezogene Sicht funktioniert nur, wenn:
-
-- der User ein ``EmployeeProfile`` hat
-- dort eine ``department`` gesetzt ist
-
-Ohne Mitarbeiterprofil bleibt die HR-Sicht fuer Nicht-Superuser leer oder stark eingeschraenkt.
+   name:      Vertrieb
+   code:      VTR
+   is_active: Ja
 
 
-Schritt 5: Stammdaten im Admin pruefen
---------------------------------------
+.. _hr-mitarbeiterprofil:
 
-Danach im Admin pruefen:
+Mitarbeiterprofil
+-----------------
 
-- ``Mitarbeiter -> Profile``
-- ``Mitarbeiter -> Urlaubsantraege``
-- ``Mitarbeiter -> Krankmeldungen``
-- ``Mitarbeiter -> Zeitkonto``
-- ``Mitarbeiter -> Monatsuebersichten``
-- ``Mitarbeiter -> Feiertage``
-- ``Mitarbeiter -> Betriebsurlaub``
-- ``Mitarbeiter -> Kalender``
+**Admin-Pfad:** ``/admin/hr/employeeprofile/``
 
-Zusatzpruefung fuer neue Mitarbeiter:
+**Sichtbar fuer:** Personalverwaltung/Geschaeftsfuehrung (alles), Teamleitung (eigene Abteilung),
+Mitarbeiter (nur eigenes Profil, nur lesen)
 
-1. User existiert und ist ``is_staff``
-2. User hat mindestens eine HR-Gruppe
-3. ``EmployeeProfile`` ist vorhanden
-4. ``department`` ist gesetzt
-5. ``holiday_calendar`` ist gesetzt oder Default-Kalender greift
-6. ``EmployeeWorkSchedule`` ist vorhanden
+Das Mitarbeiterprofil verbindet einen Django-User mit allen HR-Funktionen.
+Jeder User, der HR nutzen soll, braucht genau ein Profil.
+
+Felder
+^^^^^^
+
+.. list-table::
+   :header-rows: 1
+   :widths: 25 10 65
+
+   * - Feld
+     - Pflicht
+     - Bedeutung und Beispiel
+   * - ``user``
+     - Ja
+     - Verknuepfung zum Django-User (Login). |br|
+       Jeder User kann nur ein Profil haben. |br|
+       Beispiel: Benutzer ``max.muster``
+   * - ``employee_number``
+     - Nein
+     - Interne Personalnummer fuer Berichte und Suche. |br|
+       Beispiel: ``MA-042``
+   * - ``department``
+     - Empfohlen
+     - Abteilungszuordnung. Steuert, wer den Mitarbeiter sehen darf. |br|
+       Ohne Abteilung ist der Mitarbeiter fuer Leitungsrollen unsichtbar. |br|
+       Beispiel: ``Vertrieb``
+   * - ``holiday_calendar``
+     - Empfohlen
+     - Feiertagskalender fuer die Sollzeitberechnung. |br|
+       Ist kein Kalender gesetzt, greift der Standardkalender. |br|
+       Beispiel: ``Deutschland``
+   * - ``short_code``
+     - Ja
+     - Kuerzel fuer den Kalender (max. 10 Zeichen). |br|
+       Erscheint vor jedem Kalender-Event. |br|
+       Beispiel: ``MM`` fuer Max Muster, ``FB`` fuer Franz Buchner
+   * - ``color``
+     - Ja
+     - Farbe fuer Kalender-Events als Hex-Code. |br|
+       Standard: ``#3788d8`` (blau). |br|
+       Beispiel: ``#e74c3c`` (rot), ``#27ae60`` (gruen)
+   * - ``phone``
+     - Nein
+     - Telefonnummer fuer interne Kontaktliste. |br|
+       Beispiel: ``+49 89 123456-42``
+   * - ``is_active_employee``
+     - Ja
+     - Aktive Mitarbeiter erscheinen in Dropdowns und im Kalender. |br|
+       Ausgeschiedene Mitarbeiter auf ``Nein`` setzen (Daten bleiben). |br|
+       Beispiel: ``Ja``
+   * - ``vacation_days_per_year``
+     - Ja
+     - Vertragliche Urlaubstage pro Kalenderjahr. |br|
+       Wird aktuell nicht automatisch gegen Antraege geprueft, dient als Referenzwert. |br|
+       Beispiel: ``30.00`` fuer 30 Tage
+   * - ``start_date``
+     - Empfohlen
+     - Eintrittsdatum. Tage vor Eintritt werden bei der Sollzeitberechnung uebersprungen. |br|
+       Beispiel: ``2024-01-15``
+   * - ``end_date``
+     - Nein
+     - Austrittsdatum. Tage nach Austritt zaehlen keine Sollzeit. |br|
+       Leer lassen bei aktiven Mitarbeitern. |br|
+       Beispiel: ``2025-12-31``
+
+Hinweis fuer den Django-User
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Damit sich ein Mitarbeiter im Admin anmelden kann, muss der User folgende Werte haben:
+
+.. code-block:: text
+
+   is_active = True
+   is_staff  = True
+
+Superuser-Rechte sind nicht erforderlich und sollten nur fuer Administratoren gesetzt werden.
+
+Beispiel: Neuen Mitarbeiter anlegen
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+1. ``/admin/auth/user/`` → ``Benutzer hinzufuegen`` → Benutzername und Passwort setzen
+2. Im User ``is_staff = True`` setzen, Vor- und Nachname eintragen
+3. Gruppe ``Mitarbeiter`` (oder hoehere Rolle) zuweisen
+4. ``/admin/hr/employeeprofile/`` → ``Mitarbeiterprofil hinzufuegen``
+5. User auswaehlen, Abteilung setzen, ``short_code`` (z. B. ``MM``) und ``color`` eintragen
+6. Eintrittsdatum setzen, Urlaubstage eintragen
+7. Unter ``/admin/hr/employeeworkschedule/`` das Arbeitszeitmodell ab Eintrittsdatum zuweisen
 
 
-Schritt 6: Erstkonfiguration fuer echte Nutzung
------------------------------------------------
+.. _hr-feiertagskalender:
 
-Empfohlene manuelle Pflege nach dem Bootstrap:
+Feiertagskalender und Feiertage
+--------------------------------
 
-1. reale Abteilungen anlegen
-2. Mitarbeiterprofilen die richtige Abteilung zuweisen
-3. Arbeitszeitmodelle anpassen
-4. Feiertage fuer das relevante Jahr pflegen
-5. Betriebsurlaub pflegen
-6. Pilot-Usern Gruppen zuweisen
+**Sidebar:** ``Mitarbeiter -> Feiertagskalender``, ``Mitarbeiter -> Feiertage`` und ``Mitarbeiter -> Ferientermine``
+
+**Admin-Pfad Kalender:** ``/admin/hr/holidaycalendar/``
+
+**Admin-Pfad Feiertage:** ``/admin/hr/publicholiday/``
+
+**OpenHolidays-Import:** ``/admin/hr/publicholiday/openholidays/``
+
+**Sichtbar fuer:** Personalverwaltung, Geschaeftsfuehrung, Superuser
+
+Feiertagskalender
+^^^^^^^^^^^^^^^^^
+
+Jeder Kalender gilt fuer eine Region. Mitarbeiter werden einem Kalender zugeordnet.
+Es kann genau einen Standardkalender geben, der greift, wenn kein Kalender explizit gesetzt ist.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 10 70
+
+   * - Feld
+     - Pflicht
+     - Bedeutung und Beispiel
+   * - ``name``
+     - Ja
+     - Name des Kalenders. |br|
+       Beispiel: ``Deutschland``, ``Oesterreich``, ``Bayern``
+   * - ``region_code``
+     - Nein
+     - Freitext fuer interne Ablage. |br|
+       Beispiel: ``DE``, ``AT``, ``DE-BY``
+   * - ``is_active``
+     - Ja
+     - Inaktive Kalender werden in Dropdowns ausgeblendet.
+   * - ``is_default``
+     - Ja
+     - Genau ein Kalender darf Standardkalender sein. |br|
+       Er greift automatisch fuer Mitarbeiter ohne explizite Zuweisung.
 
 Feiertage
 ^^^^^^^^^
 
-``Mitarbeiter -> Feiertage`` enthaelt kalenderbezogene Feiertage.
-Wenn mehrere Regionen benoetigt werden, zuerst mehrere Feiertagskalender anlegen und dann den Mitarbeiterprofilen zuordnen.
+Feiertage gehoeren zu einem Kalender und muessen pro Jahr manuell gepflegt werden.
+Alternativ koennen sie ueber ``OpenHolidays Import`` fuer das gewaehlte Jahr geladen
+und direkt in den ausgewaehlten Feiertagskalender importiert werden.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 10 70
+
+   * - Feld
+     - Pflicht
+     - Bedeutung und Beispiel
+   * - ``calendar``
+     - Ja
+     - Feiertagskalender, zu dem dieser Feiertag gehoert. |br|
+       Beispiel: ``Deutschland``
+   * - ``name``
+     - Ja
+     - Bezeichnung des Feiertags. |br|
+       Beispiel: ``Tag der Deutschen Einheit``
+   * - ``date``
+     - Ja
+     - Datum des Feiertags. |br|
+       Beispiel: ``2026-10-03``
+   * - ``is_half_day``
+     - Ja
+     - Halber Feiertag (z. B. Heiligabend, Silvester). |br|
+       Aktuell modelliert, aber noch nicht in der Sollzeitberechnung differenziert.
+   * - ``is_active``
+     - Ja
+     - Inaktive Feiertage werden bei der Sollzeitberechnung ignoriert.
+
+Beispiel: Feiertage fuer ein Jahr anlegen
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Fuer Deutschland 2026 muessen mindestens folgende Tage angelegt werden:
+
+.. code-block:: text
+
+   01.01.2026  Neujahr
+   06.01.2026  Heilige Drei Koenige  (je nach Bundesland)
+   03.04.2026  Karfreitag
+   05.04.2026  Ostersonntag
+   06.04.2026  Ostermontag
+   01.05.2026  Tag der Arbeit
+   14.05.2026  Christi Himmelfahrt
+   24.05.2026  Pfingstsonntag
+   25.05.2026  Pfingstmontag
+   03.10.2026  Tag der Deutschen Einheit
+   25.12.2026  1. Weihnachtstag
+   26.12.2026  2. Weihnachtstag
+
+Ferientermine
+^^^^^^^^^^^^^
+
+**Admin-Pfad:** ``/admin/hr/schoolholiday/``
+
+Ferientermine werden kalenderbezogen gespeichert und koennen ebenfalls ueber
+``/admin/hr/publicholiday/openholidays/`` direkt fuer das aktuelle Jahr importiert werden.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 10 70
+
+   * - Feld
+     - Pflicht
+     - Bedeutung und Beispiel
+   * - ``calendar``
+     - Ja
+     - Feiertagskalender bzw. Region, zu der der Ferientermin gehoert.
+   * - ``name``
+     - Ja
+     - Bezeichnung des Ferienblocks. |br|
+       Beispiel: ``Sommerferien``, ``Osterferien``
+   * - ``start_date``
+     - Ja
+     - Erster Ferientag.
+   * - ``end_date``
+     - Ja
+     - Letzter Ferientag.
+   * - ``source_subdivisions``
+     - Nein
+     - Von OpenHolidays gelieferte Regionalcodes. |br|
+       Beispiel: ``DE-BY``
+   * - ``is_active``
+     - Ja
+     - Inaktive Eintraege werden im Kalender ignoriert.
+
+
+.. _hr-betriebsurlaub:
 
 Betriebsurlaub
-^^^^^^^^^^^^^^
+--------------
 
-``Mitarbeiter -> Betriebsurlaub`` gilt global.
+**Admin-Pfad:** ``/admin/hr/companyholiday/``
 
-Feld ``counts_as_vacation``:
+**Sichtbar fuer:** Personalverwaltung, Geschaeftsfuehrung, Superuser
 
-- ``Nein``: blockiert ueberschneidenden Urlaub/Krankheit, zaehlt aber nicht als Urlaub
-- ``Ja``: fliesst zusaetzlich in Urlaubsminuten der Monatsuebersicht ein
+Betriebsurlaub gilt fuer alle Mitarbeiter gleichzeitig (z. B. Sommerpause, Brueckentage).
 
-
-Typische Startbefehle fuer den Betrieb
---------------------------------------
-
-Nur Gruppen nachziehen:
-
-.. code-block:: bash
-
-   .venv/bin/python manage.py hr_setup_groups
-
-Nur Grundkonfiguration nachziehen:
-
-.. code-block:: bash
-
-   .venv/bin/python manage.py hr_bootstrap
-
-Pilot-Benutzer mit Beispieldaten anlegen:
-
-.. code-block:: bash
-
-   .venv/bin/python manage.py hr_bootstrap --demo-username max.muster --create-demo-user --demo-password 'BitteAendern123!' --with-sample-records
-
-
-Fachlogik im aktuellen Stand
-----------------------------
-
-Sichtbarkeit
-^^^^^^^^^^^^
-
-- Superuser sieht alles
-- ``Personalverwaltung`` und ``Geschaeftsfuehrung`` sehen alles
-- ``Teamleitung`` und ``Abteilungsleitung`` sehen nur die eigene Abteilung
-- normale ``Mitarbeiter`` sehen nur ihr eigenes Profil und ihre eigenen Daten
-
-Urlaub
+Felder
 ^^^^^^
 
-- Freigabe laeuft ueber Service-Logik
-- Konflikte gegen freigegebenen Urlaub werden geprueft
-- Konflikte gegen Krankmeldungen werden geprueft
-- Konflikte gegen Betriebsurlaub werden geprueft
-- halbe Urlaubstage sind im Modell vorbereitet
+.. list-table::
+   :header-rows: 1
+   :widths: 25 10 65
 
-Krankheit
-^^^^^^^^^
+   * - Feld
+     - Pflicht
+     - Bedeutung und Beispiel
+   * - ``name``
+     - Ja
+     - Bezeichnung des Betriebsurlaubs. |br|
+       Beispiel: ``Sommerpause 2026``, ``Weihnachtsschliesszeit``
+   * - ``start_date``
+     - Ja
+     - Erster Tag des Betriebsurlaubs. |br|
+       Beispiel: ``2026-08-03``
+   * - ``end_date``
+     - Ja
+     - Letzter Tag des Betriebsurlaubs (einschliesslich). |br|
+       Beispiel: ``2026-08-07``
+   * - ``counts_as_vacation``
+     - Ja
+     - | ``Nein``: blockiert ueberschneidenden Urlaub/Krankheit, reduziert die Sollzeit,
+       |   zaehlt aber nicht als genehmigter Urlaub in der Monatsuebersicht.
+       | ``Ja``: zaehlt zusaetzlich als Urlaubsminuten in der Monatsuebersicht
+       |   (z. B. wenn der Betriebsurlaub vom Urlaubskonto abgezogen wird).
+   * - ``is_active``
+     - Ja
+     - Inaktive Eintraege werden ignoriert.
+   * - ``note``
+     - Nein
+     - Interne Bemerkung. Wird nicht fuer Berechnungen genutzt.
 
-- Krankmeldungen werden separat gefuehrt
-- fuer nicht privilegierte Rollen wird im Kalender datensparsam ``Abwesend`` statt ``Krank`` angezeigt
+.. warning::
 
-Zeitkonto
-^^^^^^^^^
+   Ueberschneidende aktive Betriebsurlaubseintraege werden beim Speichern abgelehnt.
+   Zwei Eintraege duerfen sich zeitlich nicht ueberlappen.
 
-- Freigaben laufen ueber Service-Logik
-- positive und negative Minuten werden in Monatsuebersichten getrennt ausgewiesen
+Beispiel
+^^^^^^^^
 
-Sollzeit und Monatsuebersicht
+.. code-block:: text
+
+   name:               Weihnachtsschliesszeit 2026
+   start_date:         2026-12-24
+   end_date:           2026-12-31
+   counts_as_vacation: Nein
+   is_active:          Ja
+
+
+.. _hr-arbeitszeitmodelle:
+
+Arbeitszeitmodelle
+------------------
+
+**Admin-Pfad Modell:** ``/admin/hr/workschedule/``
+
+**Admin-Pfad Zuweisung:** ``/admin/hr/employeeworkschedule/``
+
+**Sichtbar fuer:** Personalverwaltung, Geschaeftsfuehrung, Superuser
+
+Arbeitszeitmodell (WorkSchedule)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Ein Modell beschreibt die Sollarbeitszeiten fuer jeden Wochentag.
+Jeder aktive Mitarbeiter sollte ab Eintrittsdatum einem Modell zugewiesen sein.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 10 70
+
+   * - Feld
+     - Pflicht
+     - Bedeutung und Beispiel
+   * - ``name``
+     - Ja
+     - Name des Modells. |br|
+       Beispiel: ``Vollzeit 40h``, ``Teilzeit 20h Mo-Do``, ``Minijob``
+   * - ``description``
+     - Nein
+     - Optionale Beschreibung fuer die Personalverwaltung.
+   * - ``is_active``
+     - Ja
+     - Inaktive Modelle werden in Dropdowns ausgeblendet.
+
+Wochentage (WorkScheduleDay)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Pro Arbeitszeitmodell wird jeder Wochentag (Montag–Sonntag) gepflegt.
+Die Wochentage werden direkt im Arbeitszeitmodell als Inline-Tabelle bearbeitet.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 25 10 65
+
+   * - Feld
+     - Pflicht
+     - Bedeutung und Beispiel
+   * - ``weekday``
+     - Ja
+     - Wochentag (0 = Montag, 6 = Sonntag). |br|
+       Jeder Tag darf pro Modell nur einmal vorkommen.
+   * - ``is_working_day``
+     - Ja
+     - ``Ja``: Arbeitstag, Sollzeit wird berechnet. |br|
+       ``Nein``: kein Arbeitstag (Samstag, Sonntag, freier Tag).
+   * - ``start_time``
+     - Nein
+     - Kernarbeitszeit Beginn (informativ). |br|
+       Beispiel: ``08:00``
+   * - ``end_time``
+     - Nein
+     - Kernarbeitszeit Ende (informativ). |br|
+       Beispiel: ``16:30``
+   * - ``break_minutes``
+     - Ja
+     - Pausenzeit in Minuten. |br|
+       Beispiel: ``30``
+   * - ``target_minutes``
+     - Ja
+     - Soll-Arbeitszeit in Minuten **ohne Pause**. |br|
+       Fuer Arbeitstage muss dieser Wert groesser als 0 sein. |br|
+       Fuer freie Tage muss er 0 sein. |br|
+       Beispiel: ``480`` (= 8 Stunden)
+
+Beispiel: Vollzeit 40h
+^^^^^^^^^^^^^^^^^^^^^^^
+
+.. code-block:: text
+
+   name: Vollzeit 40h
+
+   Montag:     is_working_day=Ja, 08:00–16:30, Pause 30 Min, target_minutes=480
+   Dienstag:   is_working_day=Ja, 08:00–16:30, Pause 30 Min, target_minutes=480
+   Mittwoch:   is_working_day=Ja, 08:00–16:30, Pause 30 Min, target_minutes=480
+   Donnerstag: is_working_day=Ja, 08:00–16:30, Pause 30 Min, target_minutes=480
+   Freitag:    is_working_day=Ja, 08:00–16:30, Pause 30 Min, target_minutes=480
+   Samstag:    is_working_day=Nein, target_minutes=0
+   Sonntag:    is_working_day=Nein, target_minutes=0
+
+Beispiel: Teilzeit Mo-Do 20h
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-- Sollzeit kommt aus ``WorkSchedule`` und ``WorkScheduleDay``
-- Feiertage und Betriebsurlaub reduzieren die effektive Sollzeit
-- Betriebsurlaub mit ``counts_as_vacation = True`` wird zusaetzlich als Urlaub ausgewiesen
+.. code-block:: text
+
+   Montag:     is_working_day=Ja, 08:00–13:00, Pause 0 Min, target_minutes=300
+   Dienstag:   is_working_day=Ja, 08:00–13:00, Pause 0 Min, target_minutes=300
+   Mittwoch:   is_working_day=Ja, 08:00–13:00, Pause 0 Min, target_minutes=300
+   Donnerstag: is_working_day=Ja, 08:00–13:00, Pause 0 Min, target_minutes=300
+   Freitag:    is_working_day=Nein, target_minutes=0
+   Samstag:    is_working_day=Nein, target_minutes=0
+   Sonntag:    is_working_day=Nein, target_minutes=0
+
+Mitarbeiter-Arbeitszeitmodell (EmployeeWorkSchedule)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Die Zuweisung verbindet einen Mitarbeiter ab einem bestimmten Datum mit einem Modell.
+Historische Wechsel werden durch mehrere Eintraege mit unterschiedlichen Gueltigkeitszeitraeumen abgebildet.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 25 10 65
+
+   * - Feld
+     - Pflicht
+     - Bedeutung und Beispiel
+   * - ``employee``
+     - Ja
+     - Mitarbeiter, dem das Modell zugewiesen wird. |br|
+       Beispiel: ``Max Muster``
+   * - ``schedule``
+     - Ja
+     - Arbeitszeitmodell. |br|
+       Beispiel: ``Vollzeit 40h``
+   * - ``valid_from``
+     - Ja
+     - Ab diesem Tag gilt das Modell. |br|
+       Beispiel: ``2024-01-15`` (= Eintrittsdatum)
+   * - ``valid_until``
+     - Nein
+     - Bis einschliesslich diesem Tag gilt das Modell. |br|
+       Leer lassen, wenn das Modell aktuell gueltig ist. |br|
+       Beispiel: ``2024-12-31`` bei einem Modellwechsel
+
+.. warning::
+
+   Ueberschneidende Zuweisungen desselben Mitarbeiters werden beim Speichern abgelehnt.
+   Vor dem Anlegen einer neuen Zuweisung muss die bestehende zuerst mit ``valid_until`` geschlossen werden.
 
 
-Empfohlener Pilotablauf
------------------------
+.. _hr-urlaubsantraege:
 
-1. ``hr_setup_groups`` ausfuehren
-2. ``hr_bootstrap`` ausfuehren
-3. einen realen Pilot-User einer passenden Gruppe zuweisen
-4. Mitarbeiterprofil, Abteilung und Arbeitszeitmodell pruefen
-5. Feiertage fuer das laufende Jahr pflegen
-6. einen Test-Urlaubsantrag anlegen
-7. als HR- oder Leitungsrolle freigeben
-8. Kalender unter ``/admin/hr/calendar/`` pruefen
-9. Monatsuebersicht neu berechnen
+Urlaubsantraege
+---------------
+
+**Admin-Pfad:** ``/admin/hr/leaverequest/``
+
+**Sichtbar fuer:**
+
+- Mitarbeiter: eigene Antraege anlegen und lesen
+- Teamleitung/Abteilungsleitung: Antraege der eigenen Abteilung sehen und bearbeiten
+- Personalverwaltung/Geschaeftsfuehrung: alle Antraege, Freigabe-Aktionen
+
+Felder
+^^^^^^
+
+.. list-table::
+   :header-rows: 1
+   :widths: 25 10 65
+
+   * - Feld
+     - Pflicht
+     - Bedeutung und Beispiel
+   * - ``employee``
+     - Ja
+     - Mitarbeiter, fuer den der Antrag gestellt wird. |br|
+       Mitarbeiter (ohne Verwaltungsrolle) koennen dieses Feld nicht sehen –
+       ihr Profil wird automatisch eingesetzt.
+   * - ``leave_type``
+     - Ja
+     - Art des Urlaubs: |br|
+       ``Urlaub`` – regulaerer Jahresurlaub |br|
+       ``Sonderurlaub`` – Hochzeit, Trauerfall usw. |br|
+       ``Ueberstundenabbau`` – Freizeit als Ausgleich fuer genehmigte Ueberstunden
+   * - ``start_date``
+     - Ja
+     - Erster Urlaubstag (einschliesslich). |br|
+       Beispiel: ``2026-07-13``
+   * - ``end_date``
+     - Ja
+     - Letzter Urlaubstag (einschliesslich). |br|
+       Beispiel: ``2026-07-24``
+   * - ``half_day_start``
+     - Nein
+     - ``Ja``: Der erste Tag zaehlt nur als halber Urlaubstag. |br|
+       Beispiel: Mitarbeiter beginnt Urlaub erst am Nachmittag.
+   * - ``half_day_end``
+     - Nein
+     - ``Ja``: Der letzte Tag zaehlt nur als halber Urlaubstag. |br|
+       Hinweis: Wenn Start- und Enddatum identisch sind, koennen nicht beide
+       Felder gleichzeitig ``Ja`` sein.
+   * - ``status``
+     - automatisch
+     - Aktueller Status des Antrags. Wird nicht direkt bearbeitet, sondern
+       ueber Admin-Aktionen gesteuert (siehe unten). |br|
+       ``Beantragt`` → ``Freigegeben`` / ``Abgelehnt`` / ``Storniert``
+   * - ``reason``
+     - Nein
+     - Bemerkung des Mitarbeiters (z. B. Reiseziel, besonderer Anlass). |br|
+       Beispiel: ``Familienurlaub Mallorca``
+   * - ``approved_by``
+     - automatisch
+     - Wird beim Freigeben automatisch mit dem genehmigenden User befuellt.
+   * - ``approved_at``
+     - automatisch
+     - Zeitstempel der Freigabe. Wird automatisch gesetzt.
+
+Statuswechsel und Admin-Aktionen
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Erlaubte Uebergaenge:
+
+.. code-block:: text
+
+   Beantragt  →  Freigegeben   (Admin-Aktion: "Ausgewaehlte Urlaubsantraege freigeben")
+   Beantragt  →  Abgelehnt     (Admin-Aktion: "Ausgewaehlte Urlaubsantraege ablehnen")
+   Freigegeben → Storniert     (Admin-Aktion: "Ausgewaehlte Urlaubsantraege stornieren")
+
+Ungueltige Uebergaenge (werden abgewiesen):
+
+.. code-block:: text
+
+   Freigegeben  →  Beantragt   (nicht erlaubt)
+   Abgelehnt    →  Freigegeben (nicht erlaubt)
+
+Konfliktpruefung bei Freigabe
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Das System prueft vor der Freigabe automatisch:
+
+1. Gibt es eine ueberschneidende **freigegebene** Krankmeldung desselben Mitarbeiters?
+2. Gibt es einen ueberschneidenden **aktiven Betriebsurlaub**?
+3. Gibt es einen anderen bereits **freigegebenen** Urlaub desselben Mitarbeiters in diesem Zeitraum?
+
+Ist einer dieser Konflikte vorhanden, wird die Freigabe mit einer Warnung abgewiesen.
+
+Beispiel: Urlaubsantrag als Mitarbeiter anlegen
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+1. ``/admin/hr/leaverequest/`` → ``Urlaubsantrag hinzufuegen``
+2. ``leave_type``: ``Urlaub``
+3. ``start_date``: ``2026-08-17``, ``end_date``: ``2026-08-28``
+4. ``reason``: ``Sommerurlaub``
+5. Speichern → Status ist automatisch ``Beantragt``
+6. Personalverwaltung waehlt den Antrag in der Liste aus → Aktion ``freigeben``
+
+Beispiel: Halber Urlaubstag am letzten Tag
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. code-block:: text
+
+   start_date:    2026-09-07
+   end_date:      2026-09-09
+   half_day_end:  Ja
+
+   Ergebnis: 07.09. = 1 Tag, 08.09. = 1 Tag, 09.09. = 0.5 Tag → 2.5 Tage gesamt
 
 
-Wichtige Einschraenkungen
--------------------------
+.. _hr-krankmeldungen:
 
-- kein Resturlaubskonto
-- keine automatische Rueckverrechnung von Krankheit waehrend Urlaub
-- keine Benachrichtigungen
-- kein Mitarbeiterportal ausserhalb des Django-Admins
-- halbtaegige Feiertage sind modelliert, aber fachlich noch nicht in der Sollzeitberechnung differenziert
+Krankmeldungen
+--------------
+
+**Admin-Pfad:** ``/admin/hr/sickleave/``
+
+**Sichtbar fuer:** Nur Personalverwaltung, Geschaeftsfuehrung, Superuser
+
+Im Kalender wird Krankheit fuer Mitarbeiter ohne Verwaltungsrolle als ``Abwesend`` angezeigt
+(datenschutzfreundlich). Personalverwaltung und Geschaeftsfuehrung sehen ``Krank``.
+
+.. note::
+
+   Es werden keine medizinischen Diagnosen gespeichert.
+   Nur Zeitraum und ob ein Attest vorliegt.
+
+Felder
+^^^^^^
+
+.. list-table::
+   :header-rows: 1
+   :widths: 25 10 65
+
+   * - Feld
+     - Pflicht
+     - Bedeutung und Beispiel
+   * - ``employee``
+     - Ja
+     - Betroffener Mitarbeiter. |br|
+       Beispiel: ``Max Muster``
+   * - ``start_date``
+     - Ja
+     - Erster Krankheitstag (einschliesslich). |br|
+       Beispiel: ``2026-06-01``
+   * - ``end_date``
+     - Ja
+     - Letzter Krankheitstag (einschliesslich). |br|
+       Beispiel: ``2026-06-05``
+   * - ``has_certificate``
+     - Ja
+     - ``Ja``: Attest liegt vor. |br|
+       ``Nein``: noch kein Attest oder nicht benoetigt.
+   * - ``note``
+     - Nein
+     - Interne Bemerkung der Personalverwaltung. |br|
+       **Keine Diagnosen eintragen.** |br|
+       Beispiel: ``Attest liegt in der Akte``
+
+Konfliktpruefung
+^^^^^^^^^^^^^^^^
+
+Das System warnt beim Speichern, wenn die Krankmeldung einen anderen Krankheitsfall
+desselben Mitarbeiters ueberschneidet. Eine automatische Aenderung des Urlaubsstatus
+erfolgt **nicht** – das muss manuell entschieden werden.
+
+Beispiel
+^^^^^^^^
+
+.. code-block:: text
+
+   employee:        Max Muster
+   start_date:      2026-06-01
+   end_date:        2026-06-05
+   has_certificate: Ja
+   note:            Attest erhalten am 03.06.
 
 
-Empfehlung fuer den direkten Start
-----------------------------------
+.. _hr-zeitkonto:
 
-Wenn du sofort loslegen willst, ist die kuerzeste produktive Reihenfolge:
+Zeitkonto-Buchungen
+-------------------
 
-1. ``manage.py migrate``
-2. ``manage.py hr_setup_groups``
-3. ``manage.py hr_bootstrap``
-4. reale User den Gruppen zuweisen
-5. Mitarbeiterprofile und Abteilungen vervollstaendigen
-6. Feiertage pflegen
-7. Pilotbetrieb mit 1-2 Mitarbeitern starten
+**Admin-Pfad:** ``/admin/hr/timeaccountentry/``
+
+**Sichtbar fuer:**
+
+- Mitarbeiter: eigene Buchungen lesen (keine Aktionen)
+- Personalverwaltung/Geschaeftsfuehrung: anlegen, freigeben, ablehnen
+
+Zeitkonto-Buchungen erfassen Abweichungen von der Sollzeit:
+Ueberstunden (positive Minuten) und Minusstunden (negative Minuten).
+
+Da nicht gestempelt wird, entstehen Buchungen immer manuell oder durch die Personalverwaltung.
+
+Felder
+^^^^^^
+
+.. list-table::
+   :header-rows: 1
+   :widths: 25 10 65
+
+   * - Feld
+     - Pflicht
+     - Bedeutung und Beispiel
+   * - ``employee``
+     - Ja
+     - Mitarbeiter, fuer den gebucht wird. |br|
+       Beispiel: ``Max Muster``
+   * - ``date``
+     - Ja
+     - Datum, auf das sich die Buchung bezieht. |br|
+       Beispiel: ``2026-05-14``
+   * - ``entry_type``
+     - Ja
+     - Art der Buchung: |br|
+       ``Mehrarbeit / Ueberstunden`` – positiv, Mitarbeiter hat laenger gearbeitet |br|
+       ``Minusstunden`` – negativ, Mitarbeiter hat kuerzer gearbeitet |br|
+       ``Manuelle Korrektur`` – kann positiv oder negativ sein |br|
+       ``Ueberstundenabbau`` – negativ, Mitarbeiter nimmt Freizeit aus dem Zeitkonto
+   * - ``minutes``
+     - Ja
+     - Anzahl der Minuten. Vorzeichen muss zur Buchungsart passen: |br|
+       ``Mehrarbeit``: positiver Wert, z. B. ``60`` (= 1 Stunde laenger) |br|
+       ``Minusstunden``, ``Ueberstundenabbau``: negativer Wert, z. B. ``-120`` |br|
+       ``Manuelle Korrektur``: positiv oder negativ |br|
+       **Wert 0 ist nicht erlaubt.**
+   * - ``reason``
+     - Nein
+     - Begruendung fuer die Buchung. |br|
+       Beispiel: ``Kundentermin am Abend``, ``Fruehzeitiger Abgang wegen Arzttermin``
+   * - ``status``
+     - automatisch
+     - Wird durch Aktionen gesteuert (Standard: ``Beantragt``). |br|
+       Nur **freigegebene** Buchungen fliessen in die Monatsuebersicht ein.
+
+Vorzeichenregel
+^^^^^^^^^^^^^^^
+
+.. list-table::
+   :header-rows: 1
+   :widths: 40 20 40
+
+   * - Situation
+     - Minuten
+     - Buchungsart
+   * - 1 Stunde laenger gearbeitet
+     - ``+60``
+     - ``Mehrarbeit``
+   * - 2 Stunden frueher gegangen
+     - ``-120``
+     - ``Minusstunden``
+   * - halber Tag Ueberstundenabbau (4h)
+     - ``-240``
+     - ``Ueberstundenabbau``
+   * - Korrektur zu Gunsten des Mitarbeiters (1 Tag)
+     - ``+480``
+     - ``Manuelle Korrektur``
+
+Admin-Aktionen
+^^^^^^^^^^^^^^
+
+.. code-block:: text
+
+   "Ausgewaehlte Zeitbuchungen freigeben"  →  Status wird "Freigegeben"
+   "Ausgewaehlte Zeitbuchungen ablehnen"   →  Status wird "Abgelehnt"
+
+Nur Buchungen mit Status ``Beantragt`` koennen freigegeben oder abgelehnt werden.
+
+Beispiel: Ueberstunde buchen und freigeben
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+1. ``/admin/hr/timeaccountentry/`` → ``Zeitkonto-Buchung hinzufuegen``
+2. ``employee``: ``Max Muster``
+3. ``date``: ``2026-05-14``
+4. ``entry_type``: ``Mehrarbeit / Ueberstunden``
+5. ``minutes``: ``90``
+6. ``reason``: ``Abendtermin Kundenpraesentation``
+7. Speichern → Status ``Beantragt``
+8. In der Liste auswaehlen → Aktion ``Zeitbuchungen freigeben``
+
+
+.. _hr-monatsuebersicht:
+
+Monatsuebersichten
+------------------
+
+**Admin-Pfad:** ``/admin/hr/monthlyworksummary/``
+
+**Sichtbar fuer:** Personalverwaltung, Geschaeftsfuehrung, Superuser (Mitarbeiter koennen Uebersicht sehen, nicht aendern)
+
+Monatsuebersichten koennen nicht manuell angelegt werden. Sie werden ueber die Admin-Aktion
+``Monatsuebersichten neu berechnen`` erzeugt oder aktualisiert.
+
+Felder
+^^^^^^
+
+.. list-table::
+   :header-rows: 1
+   :widths: 25 10 65
+
+   * - Feld
+     - Pflicht
+     - Bedeutung und Beispiel
+   * - ``employee``
+     - automatisch
+     - Mitarbeiter, fuer den die Uebersicht gilt.
+   * - ``year``
+     - automatisch
+     - Jahr der Uebersicht. |br|
+       Beispiel: ``2026``
+   * - ``month``
+     - automatisch
+     - Monat (1–12). |br|
+       Beispiel: ``5`` fuer Mai
+   * - ``target_minutes``
+     - berechnet
+     - Soll-Arbeitszeit des Monats in Minuten, abgeleitet aus dem Arbeitszeitmodell. |br|
+       Feiertage und Betriebsurlaub werden abgezogen. |br|
+       Beispiel: ``10080`` (= 21 Arbeitstage × 480 Min)
+   * - ``vacation_minutes``
+     - berechnet
+     - Freigegebene Urlaubsminuten im Monat. |br|
+       Berechnet aus den Sollminuten der einzelnen Urlaubstage. |br|
+       Betriebsurlaub mit ``counts_as_vacation = Ja`` ist eingerechnet. |br|
+       Beispiel: ``2400`` (= 5 Tage × 480 Min)
+   * - ``sick_minutes``
+     - berechnet
+     - Krankheitsminuten im Monat. |br|
+       Berechnet aus den Sollminuten der einzelnen Krankheitstage. |br|
+       Beispiel: ``960`` (= 2 Tage × 480 Min)
+   * - ``overtime_minutes``
+     - berechnet
+     - Summe aller freigegebenen positiven Zeitkonto-Buchungen im Monat. |br|
+       Beispiel: ``150`` (= 2,5 Stunden Ueberstunden)
+   * - ``minus_minutes``
+     - berechnet
+     - Summe aller freigegebenen negativen Zeitkonto-Buchungen im Monat. |br|
+       Immer 0 oder negativ. |br|
+       Beispiel: ``-120``
+   * - ``balance_minutes``
+     - berechnet
+     - Monats-Saldo: ``overtime_minutes + minus_minutes``. |br|
+       Positiv = Ueberstunden-Gutschrift, negativ = Defizit. |br|
+       Beispiel: ``30`` (= 150 + (-120))
+   * - ``calculated_at``
+     - automatisch
+     - Zeitpunkt der letzten Berechnung.
+   * - ``locked``
+     - manuell
+     - ``Ja``: Monat ist abgeschlossen. Neuberechnung ist nicht mehr moeglich. |br|
+       Korrekturen mussen als neue Zeitkonto-Buchung im aktuellen Monat erfolgen.
+
+Admin-Aktionen
+^^^^^^^^^^^^^^
+
+.. code-block:: text
+
+   "Monatsuebersichten neu berechnen"   →  Liest aktuelle Daten und aktualisiert alle Felder.
+                                           Abgeschlossene Monate werden uebersprungen.
+   "Monatsuebersichten abschliessen"    →  Setzt locked = True. Nicht rueckgaengig zu machen.
+
+Berechnung Schritt fuer Schritt
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Das System berechnet pro Mitarbeiter und Monat:
+
+1. **Sollzeit**: Fuer jeden Kalendertag das gueltige Arbeitszeitmodell des Mitarbeiters bestimmen,
+   Wochentag nachschlagen, ``target_minutes`` des WorkScheduleDay addieren.
+   Feiertage aus dem zugewiesenen Kalender und aktiver Betriebsurlaub reduzieren die Sollzeit auf 0.
+   Tage vor Eintritt und nach Austritt werden uebersprungen.
+
+2. **Urlaub**: Fuer jeden freigegebenen Urlaubsantrag des Monats die Sollzeit jedes
+   betroffenen Tages addieren. Halbe Tage werden mit 0,5 gewichtet.
+
+3. **Krankheit**: Fuer jeden Krankmeldungstag des Monats die Sollzeit des Tages addieren.
+
+4. **Zeitkonto**: Alle freigegebenen Zeitkonto-Buchungen des Monats aufsummieren,
+   getrennt nach positiv (= ``overtime_minutes``) und negativ (= ``minus_minutes``).
+
+5. **Saldo**: ``overtime_minutes + minus_minutes``
+
+Wichtige Fachregeln
+^^^^^^^^^^^^^^^^^^^^
+
+.. code-block:: text
+
+   Urlaub und Krankheit sind KEINE Minusstunden.
+   Sie werden getrennt ausgewiesen und reduzieren nicht das Zeitkonto.
+
+   Nur freigegebene Buchungen fliessen ein.
+   Beantragte oder abgelehnte Eintraege werden ignoriert.
+
+   Abgeschlossene Monate (locked = Ja) werden bei der Neuberechnung uebersprungen.
+
+Beispiel: Monat Mai 2026 fuer Max Muster berechnen
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. code-block:: text
+
+   Arbeitszeitmodell:  Vollzeit 40h (Mo-Fr, 480 Min/Tag)
+   Arbeitstage Mai:    20 Tage (nach Abzug Feiertage: Tag der Arbeit 01.05.)
+   Feiertage:          1 Tag (Tag der Arbeit)
+
+   target_minutes:    20 × 480 = 9600
+   Urlaub (3 Tage):   3 × 480 = 1440  →  vacation_minutes: 1440
+   Krank (1 Tag):     1 × 480 = 480   →  sick_minutes:     480
+   Ueberstunden:      +90 Min          →  overtime_minutes: 90
+   Minusstunden:      -120 Min         →  minus_minutes:    -120
+   Saldo:             90 + (-120)     = -30  →  balance_minutes: -30
+
+
+.. _hr-kalender:
+
+Kalenderansicht
+---------------
+
+**Admin-Pfad:** ``/admin/hr/calendar/``
+
+**Sichtbar fuer:** Alle Rollen mit Mitarbeiterprofil (eingeschraenkte Sicht fuer Mitarbeiter)
+
+Der Kalender zeigt Abwesenheiten, Zeitkonto-Ereignisse, Feiertage und Betriebsurlaub
+in einer Uebersicht. Er hat keine eigene Datenspeicherung – alle Daten kommen aus
+Urlaubsantraegen, Krankmeldungen, Zeitkonto-Buchungen und Feiertagen.
+
+Darstellung
+^^^^^^^^^^^
+
+Jedes Event wird nach folgendem Muster angezeigt:
+
+.. code-block:: text
+
+   [Kuerzel] Art
+
+   Beispiele:
+   MM Urlaub
+   FB Abwesend       (Krankmeldung, fuer Rollen ohne Verwaltungszugriff)
+   FB Krank          (Krankmeldung, fuer Personalverwaltung/Geschaeftsfuehrung)
+   JN +90 Min        (Zeitkonto-Buchung, positiv)
+   MS -120 Min       (Zeitkonto-Buchung, negativ)
+   Feiertag: Tag der Arbeit
+   Betriebsurlaub: Sommerpause
+
+Die Hintergrundfarbe des Events kommt aus dem ``color``-Feld des Mitarbeiterprofils.
+
+Filtermoeglichkeiten
+^^^^^^^^^^^^^^^^^^^^^
+
+Im Kalender koennen Ereignisse gefiltert werden nach:
+
+- Abteilung
+- einzelnem Mitarbeiter
+
+API-Endpunkt
+^^^^^^^^^^^^^
+
+Der Kalender laedt seine Daten per JSON-API:
+
+.. code-block:: text
+
+   GET /admin/hr/calendar/api/?start=2026-05-01&end=2026-05-31
+
+   Optionale Parameter:
+   department=<id>     Nur Mitarbeiter dieser Abteilung
+   employee=<id>       Nur dieser Mitarbeiter (auch mehrfach: employee=1&employee=2)
+
+Das Response-Format folgt dem FullCalendar-Standard. Jedes Event enthaelt zusaetzlich:
+
+.. code-block:: json
+
+   {
+     "title":       "MM Urlaub",
+     "start":       "2026-07-13",
+     "end":         "2026-07-25",
+     "color":       "#3788d8",
+     "employee":    "Max Muster",
+     "employee_id": 42,
+     "department":  "Vertrieb",
+     "short_code":  "MM",
+     "type":        "vacation",
+     "allDay":      true
+   }
+
+
+.. _hr-typische-workflows:
+
+Typische Workflows
+------------------
+
+Workflow: Neuen Mitarbeiter einrichten
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. code-block:: text
+
+   1. /admin/auth/user/ → Benutzer anlegen
+      - Benutzername, Passwort, Vor- und Nachname setzen
+      - is_staff = True
+
+   2. User der Gruppe "Mitarbeiter" zuweisen
+
+   3. /admin/hr/employeeprofile/ → Mitarbeiterprofil anlegen
+      - user, employee_number, department, holiday_calendar
+      - short_code (z. B. "MM"), color (z. B. "#3788d8")
+      - vacation_days_per_year, start_date
+
+   4. /admin/hr/employeeworkschedule/ → Arbeitszeitmodell zuweisen
+      - employee: Max Muster
+      - schedule: Vollzeit 40h
+      - valid_from: Eintrittsdatum
+
+   5. Ergebnis pruefen: /admin/hr/calendar/ → Mitarbeiter sollte erscheinen
+
+Workflow: Urlaubsantrag bearbeiten
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. code-block:: text
+
+   1. Mitarbeiter legt Antrag an unter /admin/hr/leaverequest/
+      → Status: Beantragt
+
+   2. Personalverwaltung oeffnet /admin/hr/leaverequest/
+      → Antrag auswaehlen
+      → Aktion "Ausgewaehlte Urlaubsantraege freigeben"
+
+   3. Bei Konflikt erscheint Warnmeldung (Krankmeldung, Betriebsurlaub, anderer Urlaub)
+      → Konflikt klaeren, dann erneut freigeben
+
+   4. Nach Freigabe erscheint Urlaub im Kalender und in der Monatsuebersicht
+
+Workflow: Monatsuebersicht erstellen
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. code-block:: text
+
+   1. Sicherstellen, dass alle Urlaubsantraege, Krankmeldungen und
+      Zeitkonto-Buchungen des Monats freigegeben sind
+
+   2. /admin/hr/monthlyworksummary/ → einen oder alle Mitarbeiter auswaehlen
+      → Aktion "Monatsuebersichten neu berechnen"
+
+   3. Werte pruefen (target_minutes, vacation_minutes, sick_minutes, balance_minutes)
+
+   4. Wenn Monat abgeschlossen: Aktion "Monatsuebersichten abschliessen" (nicht rueckgaengig!)
+
+   5. Spaetere Korrekturen: als neue Zeitkonto-Buchung im aktuellen Monat anlegen
+
+Workflow: Arbeitszeitmodell wechseln
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. code-block:: text
+
+   1. Bestehende Zuweisung unter /admin/hr/employeeworkschedule/
+      → valid_until = letzter Tag des alten Modells setzen
+
+   2. Neue Zuweisung anlegen:
+      → valid_from = erster Tag des neuen Modells
+      → valid_until = leer (offen)
+
+   3. Ueberschneidungen werden beim Speichern automatisch abgewiesen
+
+
+.. _hr-wichtige-einschraenkungen:
+
+Bekannte Einschraenkungen
+--------------------------
+
+- Kein Resturlaubskonto und kein Jahresurlaubssaldo
+- Keine automatische Behandlung von Krankheit waehrend Urlaub (nur Warnung)
+- Keine E-Mail-Benachrichtigungen bei neuen Antraegen oder Freigaben
+- Kein Self-Service-Portal ausserhalb des Django-Admins
+- Halbtaegige Feiertage sind modelliert, werden aber in der Sollzeitberechnung noch nicht differenziert berechnet
+- Keine automatische Pruefung, ob Urlaubstage das Jahreskontingent ueberschreiten
+
+
+.. |br| raw:: html
+
+   <br/>

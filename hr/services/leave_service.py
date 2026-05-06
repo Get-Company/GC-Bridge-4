@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
@@ -8,7 +8,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from core.services import BaseService
-from hr.models import EmployeeProfile, LeaveRequest, SickLeave
+from hr.models import CompanyHoliday, EmployeeProfile, LeaveRequest, SickLeave, VacationEntitlement
 from hr.services.holiday_service import HolidayService
 from hr.services.working_time_service import WorkingTimeService
 
@@ -67,7 +67,7 @@ class LeaveService(BaseService):
                 if current_date == end_date and half_day_end:
                     day_units -= Decimal("0.50")
                 total_days += day_units
-            current_date = current_date.fromordinal(current_date.toordinal() + 1)
+            current_date = current_date + timedelta(days=1)
 
         return self._quantize_days(total_days)
 
@@ -131,6 +131,44 @@ class LeaveService(BaseService):
 
         return self._quantize_days(total_days)
 
+    def get_vacation_entitlement_total(
+        self,
+        employee: EmployeeProfile,
+        year: int,
+    ) -> Decimal:
+        entitlement = VacationEntitlement.objects.filter(employee=employee, year=year).first()
+        if entitlement is not None:
+            return entitlement.total_days
+        return self._quantize_days(Decimal(employee.vacation_days_per_year))
+
+    def get_bridge_days_for_year(
+        self,
+        employee: EmployeeProfile,
+        year: int,
+        *,
+        working_time_service: WorkingTimeService | None = None,
+    ) -> Decimal:
+        working_time_service = working_time_service or WorkingTimeService()
+        year_start = date(year, 1, 1)
+        year_end = date(year, 12, 31)
+        bridge_holidays = (
+            CompanyHoliday.objects.filter(
+                is_active=True,
+                is_bridge_day=True,
+                start_date__lte=year_end,
+                end_date__gte=year_start,
+            ).order_by("start_date")
+        )
+        total = Decimal("0.00")
+        for bridge in bridge_holidays:
+            current_date = max(bridge.start_date, year_start)
+            last_date = min(bridge.end_date, year_end)
+            while current_date <= last_date:
+                if working_time_service.get_target_minutes_for_date(employee, current_date) > 0:
+                    total += Decimal("1.00")
+                current_date = current_date + timedelta(days=1)
+        return self._quantize_days(total)
+
     def get_remaining_vacation_days_for_year(
         self,
         employee: EmployeeProfile,
@@ -138,12 +176,18 @@ class LeaveService(BaseService):
         *,
         working_time_service: WorkingTimeService | None = None,
     ) -> Decimal:
+        total_entitlement = self.get_vacation_entitlement_total(employee, year)
         approved_days = self.get_approved_vacation_days_for_year(
             employee,
             year,
             working_time_service=working_time_service,
         )
-        return self._quantize_days(Decimal(employee.vacation_days_per_year) - approved_days)
+        bridge_days = self.get_bridge_days_for_year(
+            employee,
+            year,
+            working_time_service=working_time_service,
+        )
+        return self._quantize_days(total_entitlement - approved_days - bridge_days)
 
     def get_approved_leave_minutes_for_month(
         self,
@@ -171,7 +215,7 @@ class LeaveService(BaseService):
                 if current_date == leave_request.end_date and leave_request.half_day_end:
                     target_minutes /= Decimal("2")
                 total_minutes += target_minutes
-                current_date = current_date.fromordinal(current_date.toordinal() + 1)
+                current_date = current_date + timedelta(days=1)
 
         return int(total_minutes)
 

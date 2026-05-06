@@ -36,118 +36,195 @@
             
   <section id="hr-mitarbeiterverwaltung">
 <h1>HR Mitarbeiterverwaltung<a class="headerlink" href="#hr-mitarbeiterverwaltung" title="Link to this heading">¶</a></h1>
-<section id="zielbild">
-<h2>Zielbild<a class="headerlink" href="#zielbild" title="Link to this heading">¶</a></h2>
 <p>Die HR-App bildet in Django Admin die erste nutzbare Version der Mitarbeiterverwaltung ab.
-Der aktuelle Stand deckt folgende Bereiche ab:</p>
+Dieses Kapitel beschreibt jeden Bereich feldgenau: welche Felder es gibt, was sie bedeuten,
+und wie Mitarbeiter bzw. Personalverwaltung damit arbeiten.</p>
+<nav class="contents local" id="inhalt">
+<p class="topic-title">Inhalt</p>
 <ul class="simple">
-<li><p>Abteilungen</p></li>
-<li><p>Mitarbeiterprofile auf Basis bestehender Django-User</p></li>
-<li><p>Arbeitszeitmodelle und Mitarbeiter-Zuweisungen</p></li>
-<li><p>Urlaubsantraege</p></li>
-<li><p>Krankmeldungen</p></li>
-<li><p>Zeitkonto-Buchungen</p></li>
-<li><p>Monatsuebersichten</p></li>
-<li><p>Feiertage und Betriebsurlaub</p></li>
-<li><p>Admin-Kalender fuer Abwesenheiten und Zeitkonto</p></li>
+<li><p><a class="reference internal" href="#rollen-und-sichtbarkeit" id="id10">Rollen und Sichtbarkeit</a></p></li>
+<li><p><a class="reference internal" href="#produktiver-start-auf-dem-server" id="id11">Produktiver Start auf dem Server</a></p>
+<ul>
+<li><p><a class="reference internal" href="#voraussetzungen" id="id12">Voraussetzungen</a></p></li>
+<li><p><a class="reference internal" href="#empfohlene-reihenfolge" id="id13">Empfohlene Reihenfolge</a></p></li>
+<li><p><a class="reference internal" href="#schritt-1-migrationen" id="id14">Schritt 1: Migrationen</a></p></li>
+<li><p><a class="reference internal" href="#schritt-2-hr-gruppen-anlegen" id="id15">Schritt 2: HR-Gruppen anlegen</a></p></li>
+<li><p><a class="reference internal" href="#schritt-3-hr-grundkonfiguration" id="id16">Schritt 3: HR-Grundkonfiguration</a></p></li>
 </ul>
-<p>Die Umsetzung ist bewusst <code class="docutils literal notranslate"><span class="pre">Admin-first</span></code>.
-Es gibt noch kein eigenes Mitarbeiterportal.</p>
-</section>
-<section id="aktueller-funktionsumfang">
-<h2>Aktueller Funktionsumfang<a class="headerlink" href="#aktueller-funktionsumfang" title="Link to this heading">¶</a></h2>
-<section id="bereits-umgesetzt">
-<h3>Bereits umgesetzt<a class="headerlink" href="#bereits-umgesetzt" title="Link to this heading">¶</a></h3>
-<ul class="simple">
-<li><p>HR-Modelle inkl. Migrationen in <code class="docutils literal notranslate"><span class="pre">hr</span></code></p></li>
-<li><p>rollenbasierte Sichtbarkeit im Admin</p></li>
-<li><p>Freigabe-Logik fuer Urlaub und Zeitkonto ueber Services</p></li>
-<li><p>Konfliktpruefung fuer Urlaub gegen Krankheit und Betriebsurlaub</p></li>
-<li><p>Kalenderansicht im Admin unter <code class="docutils literal notranslate"><span class="pre">/admin/hr/calendar/</span></code></p></li>
-<li><p>Feiertage und Betriebsurlaub in Sollzeit und Monatsberechnung</p></li>
-<li><p>Bootstrap-Commands fuer Gruppen und Grundkonfiguration</p></li>
+</li>
+<li><p><a class="reference internal" href="#abteilungen" id="id17">Abteilungen</a></p>
+<ul>
+<li><p><a class="reference internal" href="#felder" id="id18">Felder</a></p></li>
+<li><p><a class="reference internal" href="#beispiel" id="id19">Beispiel</a></p></li>
 </ul>
-</section>
-<section id="noch-bewusst-nicht-enthalten">
-<h3>Noch bewusst nicht enthalten<a class="headerlink" href="#noch-bewusst-nicht-enthalten" title="Link to this heading">¶</a></h3>
-<ul class="simple">
-<li><p>eigenes Self-Service-Portal</p></li>
-<li><p>E-Mail-Benachrichtigungen</p></li>
-<li><p>Resturlaub / Jahresurlaubskonto</p></li>
-<li><p>komplexe Genehmigungsworkflows</p></li>
-<li><p>automatische Behandlung <code class="docutils literal notranslate"><span class="pre">Krank</span> <span class="pre">waehrend</span> <span class="pre">Urlaub</span></code> ueber Warnlogik hinaus</p></li>
+</li>
+<li><p><a class="reference internal" href="#mitarbeiterprofil" id="id20">Mitarbeiterprofil</a></p>
+<ul>
+<li><p><a class="reference internal" href="#id1" id="id21">Felder</a></p></li>
+<li><p><a class="reference internal" href="#hinweis-fuer-den-django-user" id="id22">Hinweis fuer den Django-User</a></p></li>
+<li><p><a class="reference internal" href="#beispiel-neuen-mitarbeiter-anlegen" id="id23">Beispiel: Neuen Mitarbeiter anlegen</a></p></li>
 </ul>
-</section>
+</li>
+<li><p><a class="reference internal" href="#feiertagskalender-und-feiertage" id="id24">Feiertagskalender und Feiertage</a></p>
+<ul>
+<li><p><a class="reference internal" href="#feiertagskalender" id="id25">Feiertagskalender</a></p></li>
+<li><p><a class="reference internal" href="#feiertage" id="id26">Feiertage</a></p></li>
+<li><p><a class="reference internal" href="#beispiel-feiertage-fuer-ein-jahr-anlegen" id="id27">Beispiel: Feiertage fuer ein Jahr anlegen</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#betriebsurlaub" id="id28">Betriebsurlaub</a></p>
+<ul>
+<li><p><a class="reference internal" href="#id2" id="id29">Felder</a></p></li>
+<li><p><a class="reference internal" href="#id3" id="id30">Beispiel</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#arbeitszeitmodelle" id="id31">Arbeitszeitmodelle</a></p>
+<ul>
+<li><p><a class="reference internal" href="#arbeitszeitmodell-workschedule" id="id32">Arbeitszeitmodell (WorkSchedule)</a></p></li>
+<li><p><a class="reference internal" href="#wochentage-workscheduleday" id="id33">Wochentage (WorkScheduleDay)</a></p></li>
+<li><p><a class="reference internal" href="#beispiel-vollzeit-40h" id="id34">Beispiel: Vollzeit 40h</a></p></li>
+<li><p><a class="reference internal" href="#beispiel-teilzeit-mo-do-20h" id="id35">Beispiel: Teilzeit Mo-Do 20h</a></p></li>
+<li><p><a class="reference internal" href="#mitarbeiter-arbeitszeitmodell-employeeworkschedule" id="id36">Mitarbeiter-Arbeitszeitmodell (EmployeeWorkSchedule)</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#urlaubsantraege" id="id37">Urlaubsantraege</a></p>
+<ul>
+<li><p><a class="reference internal" href="#id4" id="id38">Felder</a></p></li>
+<li><p><a class="reference internal" href="#statuswechsel-und-admin-aktionen" id="id39">Statuswechsel und Admin-Aktionen</a></p></li>
+<li><p><a class="reference internal" href="#konfliktpruefung-bei-freigabe" id="id40">Konfliktpruefung bei Freigabe</a></p></li>
+<li><p><a class="reference internal" href="#beispiel-urlaubsantrag-als-mitarbeiter-anlegen" id="id41">Beispiel: Urlaubsantrag als Mitarbeiter anlegen</a></p></li>
+<li><p><a class="reference internal" href="#beispiel-halber-urlaubstag-am-letzten-tag" id="id42">Beispiel: Halber Urlaubstag am letzten Tag</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#krankmeldungen" id="id43">Krankmeldungen</a></p>
+<ul>
+<li><p><a class="reference internal" href="#id5" id="id44">Felder</a></p></li>
+<li><p><a class="reference internal" href="#konfliktpruefung" id="id45">Konfliktpruefung</a></p></li>
+<li><p><a class="reference internal" href="#id6" id="id46">Beispiel</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#zeitkonto-buchungen" id="id47">Zeitkonto-Buchungen</a></p>
+<ul>
+<li><p><a class="reference internal" href="#id7" id="id48">Felder</a></p></li>
+<li><p><a class="reference internal" href="#vorzeichenregel" id="id49">Vorzeichenregel</a></p></li>
+<li><p><a class="reference internal" href="#admin-aktionen" id="id50">Admin-Aktionen</a></p></li>
+<li><p><a class="reference internal" href="#beispiel-ueberstunde-buchen-und-freigeben" id="id51">Beispiel: Ueberstunde buchen und freigeben</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#monatsuebersichten" id="id52">Monatsuebersichten</a></p>
+<ul>
+<li><p><a class="reference internal" href="#id8" id="id53">Felder</a></p></li>
+<li><p><a class="reference internal" href="#id9" id="id54">Admin-Aktionen</a></p></li>
+<li><p><a class="reference internal" href="#berechnung-schritt-fuer-schritt" id="id55">Berechnung Schritt fuer Schritt</a></p></li>
+<li><p><a class="reference internal" href="#wichtige-fachregeln" id="id56">Wichtige Fachregeln</a></p></li>
+<li><p><a class="reference internal" href="#beispiel-monat-mai-2026-fuer-max-muster-berechnen" id="id57">Beispiel: Monat Mai 2026 fuer Max Muster berechnen</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#kalenderansicht" id="id58">Kalenderansicht</a></p>
+<ul>
+<li><p><a class="reference internal" href="#darstellung" id="id59">Darstellung</a></p></li>
+<li><p><a class="reference internal" href="#filtermoeglichkeiten" id="id60">Filtermoeglichkeiten</a></p></li>
+<li><p><a class="reference internal" href="#api-endpunkt" id="id61">API-Endpunkt</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#typische-workflows" id="id62">Typische Workflows</a></p>
+<ul>
+<li><p><a class="reference internal" href="#workflow-neuen-mitarbeiter-einrichten" id="id63">Workflow: Neuen Mitarbeiter einrichten</a></p></li>
+<li><p><a class="reference internal" href="#workflow-urlaubsantrag-bearbeiten" id="id64">Workflow: Urlaubsantrag bearbeiten</a></p></li>
+<li><p><a class="reference internal" href="#workflow-monatsuebersicht-erstellen" id="id65">Workflow: Monatsuebersicht erstellen</a></p></li>
+<li><p><a class="reference internal" href="#workflow-arbeitszeitmodell-wechseln" id="id66">Workflow: Arbeitszeitmodell wechseln</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#bekannte-einschraenkungen" id="id67">Bekannte Einschraenkungen</a></p></li>
+</ul>
+</nav>
+<section id="rollen-und-sichtbarkeit">
+<h2><a class="toc-backref" href="#id10" role="doc-backlink">Rollen und Sichtbarkeit</a><a class="headerlink" href="#rollen-und-sichtbarkeit" title="Link to this heading">¶</a></h2>
+<p>Das System kennt fuenf Rollen. Jeder User braucht eine HR-Gruppe <strong>und</strong> ein Mitarbeiterprofil
+(Ausnahme: Superuser).</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 22.0%" />
+<col style="width: 78.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Gruppe</p></th>
+<th class="head"><p>Was diese Rolle sieht und darf</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">Mitarbeiter</span></code></p></td>
+<td><p>Eigenes Profil, eigene Urlaubsantraege, eigene Zeitkonto-Buchungen, Kalender</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">Teamleitung</span></code></p></td>
+<td><p>Wie Mitarbeiter, plus: alle Profile und Daten der eigenen Abteilung</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">Abteilungsleitung</span></code></p></td>
+<td><p>Wie Teamleitung</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">Personalverwaltung</span></code></p></td>
+<td><p>Alles: Stammdaten, Krankmeldungen, Monatsuebersichten, Feiertage, Betriebsurlaub</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">Geschaeftsfuehrung</span></code></p></td>
+<td><p>Alles wie Personalverwaltung</p></td>
+</tr>
+</tbody>
+</table>
+<div class="admonition note">
+<p class="admonition-title">Bemerkung</p>
+<p>Die abteilungsbezogene Sicht (Teamleitung, Abteilungsleitung) funktioniert nur,
+wenn der User ein Mitarbeiterprofil mit gesetzter Abteilung hat.
+Ohne Mitarbeiterprofil bleibt die HR-Sicht fuer Nicht-Superuser leer.</p>
+</div>
 </section>
 <section id="produktiver-start-auf-dem-server">
-<h2>Produktiver Start auf dem Server<a class="headerlink" href="#produktiver-start-auf-dem-server" title="Link to this heading">¶</a></h2>
+<span id="hr-produktiver-start"></span><h2><a class="toc-backref" href="#id11" role="doc-backlink">Produktiver Start auf dem Server</a><a class="headerlink" href="#produktiver-start-auf-dem-server" title="Link to this heading">¶</a></h2>
 <section id="voraussetzungen">
-<h3>Voraussetzungen<a class="headerlink" href="#voraussetzungen" title="Link to this heading">¶</a></h3>
+<h3><a class="toc-backref" href="#id12" role="doc-backlink">Voraussetzungen</a><a class="headerlink" href="#voraussetzungen" title="Link to this heading">¶</a></h3>
 <ul class="simple">
 <li><p>aktueller Code ist deployed</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">.env</span></code> ist korrekt</p></li>
 <li><p>Datenbank ist erreichbar</p></li>
-<li><p>Django-Migrationen koennen auf dem Server ausgefuehrt werden</p></li>
 <li><p>mindestens ein Admin-User existiert</p></li>
 </ul>
 </section>
 <section id="empfohlene-reihenfolge">
-<h3>Empfohlene Reihenfolge<a class="headerlink" href="#empfohlene-reihenfolge" title="Link to this heading">¶</a></h3>
+<h3><a class="toc-backref" href="#id13" role="doc-backlink">Empfohlene Reihenfolge</a><a class="headerlink" href="#empfohlene-reihenfolge" title="Link to this heading">¶</a></h3>
 <ol class="arabic simple">
 <li><p>Migrationen ausfuehren</p></li>
-<li><p>HR-Gruppen und Berechtigungen anlegen</p></li>
+<li><p>HR-Gruppen anlegen</p></li>
 <li><p>HR-Grundkonfiguration anlegen</p></li>
 <li><p>User Gruppen zuweisen</p></li>
-<li><p>Mitarbeiterprofile pruefen</p></li>
-<li><p>Arbeitszeitmodelle, Feiertage und Betriebsurlaub pflegen</p></li>
-<li><p>ersten Kalendereintrag und ersten Urlaubsantrag im Admin testen</p></li>
+<li><p>Mitarbeiterprofile vervollstaendigen</p></li>
+<li><p>Feiertage und Betriebsurlaub pflegen</p></li>
 </ol>
 </section>
-</section>
 <section id="schritt-1-migrationen">
-<h2>Schritt 1: Migrationen<a class="headerlink" href="#schritt-1-migrationen" title="Link to this heading">¶</a></h2>
-<p>Linux:</p>
+<h3><a class="toc-backref" href="#id14" role="doc-backlink">Schritt 1: Migrationen</a><a class="headerlink" href="#schritt-1-migrationen" title="Link to this heading">¶</a></h3>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>.venv/bin/python<span class="w"> </span>manage.py<span class="w"> </span>migrate
 </pre></div>
 </div>
-<p>Windows:</p>
 <div class="highlight-doscon notranslate"><div class="highlight"><pre><span></span><span class="go">.venv\Scripts\python.exe manage.py migrate</span>
 </pre></div>
 </div>
 </section>
-<section id="schritt-2-hr-gruppen-und-permissions-anlegen">
-<h2>Schritt 2: HR-Gruppen und Permissions anlegen<a class="headerlink" href="#schritt-2-hr-gruppen-und-permissions-anlegen" title="Link to this heading">¶</a></h2>
-<p>Nur die Gruppen und deren Django-Model-Permissions:</p>
+<section id="schritt-2-hr-gruppen-anlegen">
+<h3><a class="toc-backref" href="#id15" role="doc-backlink">Schritt 2: HR-Gruppen anlegen</a><a class="headerlink" href="#schritt-2-hr-gruppen-anlegen" title="Link to this heading">¶</a></h3>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>.venv/bin/python<span class="w"> </span>manage.py<span class="w"> </span>hr_setup_groups
 </pre></div>
 </div>
-<p>Windows:</p>
-<div class="highlight-doscon notranslate"><div class="highlight"><pre><span></span><span class="go">.venv\Scripts\python.exe manage.py hr_setup_groups</span>
-</pre></div>
-</div>
-<p>Der Command ist idempotent und kann mehrfach ausgefuehrt werden.</p>
-<p>Angelegte Gruppen:</p>
-<ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">Mitarbeiter</span></code></p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">Teamleitung</span></code></p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">Abteilungsleitung</span></code></p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">Personalverwaltung</span></code></p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">Geschaeftsfuehrung</span></code></p></li>
-</ul>
+<p>Der Command ist idempotent und kann jederzeit wiederholt werden.
+Er legt die fuenf Gruppen an und weist die Django-Modell-Permissions zu:
+<code class="docutils literal notranslate"><span class="pre">Mitarbeiter</span></code>, <code class="docutils literal notranslate"><span class="pre">Teamleitung</span></code>, <code class="docutils literal notranslate"><span class="pre">Abteilungsleitung</span></code>, <code class="docutils literal notranslate"><span class="pre">Personalverwaltung</span></code>, <code class="docutils literal notranslate"><span class="pre">Geschaeftsfuehrung</span></code>.</p>
 </section>
-<section id="schritt-3-hr-grundkonfiguration-anlegen">
-<h2>Schritt 3: HR-Grundkonfiguration anlegen<a class="headerlink" href="#schritt-3-hr-grundkonfiguration-anlegen" title="Link to this heading">¶</a></h2>
-<p>Minimaler Setup-Lauf ohne Demo-User:</p>
+<section id="schritt-3-hr-grundkonfiguration">
+<h3><a class="toc-backref" href="#id16" role="doc-backlink">Schritt 3: HR-Grundkonfiguration</a><a class="headerlink" href="#schritt-3-hr-grundkonfiguration" title="Link to this heading">¶</a></h3>
+<p>Minimaler Lauf ohne Demo-User:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>.venv/bin/python<span class="w"> </span>manage.py<span class="w"> </span>hr_bootstrap
 </pre></div>
 </div>
-<p>Dieser Lauf legt idempotent an:</p>
-<ul class="simple">
-<li><p>Abteilung <code class="docutils literal notranslate"><span class="pre">Allgemein</span></code></p></li>
-<li><p>Feiertagskalender <code class="docutils literal notranslate"><span class="pre">Deutschland</span></code></p></li>
-<li><p>Arbeitszeitmodell <code class="docutils literal notranslate"><span class="pre">Vollzeit</span> <span class="pre">40h</span></code></p></li>
-</ul>
-<p>Wenn direkt ein Demo- oder Pilot-Mitarbeiter angelegt werden soll:</p>
+<p>Legt idempotent an: Abteilung <em>Allgemein</em>, Feiertagskalender <em>Deutschland</em>, Arbeitszeitmodell <em>Vollzeit 40h</em>.</p>
+<p>Mit Demo-Mitarbeiter und Beispieldaten:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>.venv/bin/python<span class="w"> </span>manage.py<span class="w"> </span>hr_bootstrap<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--demo-username<span class="w"> </span>demo.hr<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>--create-demo-user<span class="w"> </span><span class="se">\</span>
@@ -155,210 +232,1106 @@ Es gibt noch kein eigenes Mitarbeiterportal.</p>
 <span class="w">  </span>--with-sample-records
 </pre></div>
 </div>
-<p>Windows:</p>
-<div class="highlight-doscon notranslate"><div class="highlight"><pre><span></span><span class="go">.venv\Scripts\python.exe manage.py hr_bootstrap --demo-username demo.hr --create-demo-user --demo-password BitteAendern123! --with-sample-records</span>
+<p>Der Demo-Lauf erzeugt: User, Mitarbeiterprofil, Abteilungs- und Kalenderzuweisung,
+Arbeitszeitmodell-Zuweisung, Beispiel-Urlaub, Beispiel-Krankmeldung, Beispiel-Zeitkonto,
+Monatsuebersicht.</p>
+</section>
+</section>
+<section id="abteilungen">
+<span id="hr-abteilungen"></span><h2><a class="toc-backref" href="#id17" role="doc-backlink">Abteilungen</a><a class="headerlink" href="#abteilungen" title="Link to this heading">¶</a></h2>
+<p><strong>Admin-Pfad:</strong> <code class="docutils literal notranslate"><span class="pre">/admin/hr/department/</span></code></p>
+<p><strong>Sichtbar fuer:</strong> Personalverwaltung, Geschaeftsfuehrung, Superuser</p>
+<p>Abteilungen gliedern Mitarbeiter und steuern die Sichtbarkeit fuer Teamleitungen.</p>
+<section id="felder">
+<h3><a class="toc-backref" href="#id18" role="doc-backlink">Felder</a><a class="headerlink" href="#felder" title="Link to this heading">¶</a></h3>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 20.0%" />
+<col style="width: 15.0%" />
+<col style="width: 65.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Pflicht</p></th>
+<th class="head"><p>Bedeutung und Beispiel</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">name</span></code></p></td>
+<td><p>Ja</p></td>
+<td><p>Vollstaendiger Name der Abteilung. <br/>
+Beispiel: <code class="docutils literal notranslate"><span class="pre">Vertrieb</span></code>, <code class="docutils literal notranslate"><span class="pre">Technik</span></code>, <code class="docutils literal notranslate"><span class="pre">Verwaltung</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">code</span></code></p></td>
+<td><p>Nein</p></td>
+<td><p>Optionales Kuerzel, z. B. fuer Berichte. <br/>
+Beispiel: <code class="docutils literal notranslate"><span class="pre">VTR</span></code>, <code class="docutils literal notranslate"><span class="pre">TEK</span></code>, <code class="docutils literal notranslate"><span class="pre">VWL</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">is_active</span></code></p></td>
+<td><p>Ja</p></td>
+<td><p>Aktive Abteilungen erscheinen in Dropdown-Feldern. <br/>
+Inaktive Abteilungen werden ausgeblendet, Daten bleiben erhalten.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="beispiel">
+<h3><a class="toc-backref" href="#id19" role="doc-backlink">Beispiel</a><a class="headerlink" href="#beispiel" title="Link to this heading">¶</a></h3>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>name:      Vertrieb
+code:      VTR
+is_active: Ja
 </pre></div>
 </div>
-<p>Wirkung des Demo-Laufs:</p>
-<ul class="simple">
-<li><p>User wird bei Bedarf erzeugt</p></li>
-<li><p>User wird <code class="docutils literal notranslate"><span class="pre">is_staff</span> <span class="pre">=</span> <span class="pre">True</span></code> gesetzt</p></li>
-<li><p>User wird automatisch der Gruppe <code class="docutils literal notranslate"><span class="pre">Mitarbeiter</span></code> zugeordnet</p></li>
-<li><p>Mitarbeiterprofil wird angelegt</p></li>
-<li><p>Feiertagskalender und Abteilung werden zugewiesen</p></li>
-<li><p>Arbeitszeitmodell wird zugewiesen</p></li>
-<li><p>Beispiel-Urlaub, Beispiel-Krankmeldung, Beispiel-Zeitkonto und Monatsuebersicht werden erzeugt</p></li>
-</ul>
-</section>
-<section id="schritt-4-benutzer-und-gruppen-zuweisen">
-<h2>Schritt 4: Benutzer und Gruppen zuweisen<a class="headerlink" href="#schritt-4-benutzer-und-gruppen-zuweisen" title="Link to this heading">¶</a></h2>
-<p>Die eigentliche Sichtbarkeit im Admin entsteht aus:</p>
-<ul class="simple">
-<li><p>Django-User</p></li>
-<li><p>Gruppenmitgliedschaft</p></li>
-<li><p>Mitarbeiterprofil</p></li>
-<li><p>Abteilungszuordnung im Mitarbeiterprofil</p></li>
-</ul>
-<section id="empfohlene-zuordnung">
-<h3>Empfohlene Zuordnung<a class="headerlink" href="#empfohlene-zuordnung" title="Link to this heading">¶</a></h3>
-<p><code class="docutils literal notranslate"><span class="pre">Mitarbeiter</span></code></p>
-<ul class="simple">
-<li><p>soll eigene Daten sehen</p></li>
-<li><p>soll eigene Urlaubsantraege anlegen koennen</p></li>
-<li><p>soll Kalender sehen koennen</p></li>
-</ul>
-<p><code class="docutils literal notranslate"><span class="pre">Teamleitung</span></code> / <code class="docutils literal notranslate"><span class="pre">Abteilungsleitung</span></code></p>
-<ul class="simple">
-<li><p>sieht Mitarbeiter der eigenen Abteilung</p></li>
-<li><p>kann Urlaubsantraege in der eigenen Abteilung sehen und bearbeiten</p></li>
-<li><p>sieht den Kalender der eigenen Abteilung</p></li>
-</ul>
-<p><code class="docutils literal notranslate"><span class="pre">Personalverwaltung</span></code></p>
-<ul class="simple">
-<li><p>verwaltet Stammdaten</p></li>
-<li><p>sieht Krankmeldungen</p></li>
-<li><p>pflegt Feiertage und Betriebsurlaub</p></li>
-<li><p>verwaltet Monatsuebersichten, Zeitkonto und Arbeitszeitmodelle</p></li>
-</ul>
-<p><code class="docutils literal notranslate"><span class="pre">Geschaeftsfuehrung</span></code></p>
-<ul class="simple">
-<li><p>hat denselben weiten Zugriff wie Personalverwaltung</p></li>
-</ul>
-</section>
-<section id="wichtiger-punkt">
-<h3>Wichtiger Punkt<a class="headerlink" href="#wichtiger-punkt" title="Link to this heading">¶</a></h3>
-<p>Abteilungsbezogene Sicht funktioniert nur, wenn:</p>
-<ul class="simple">
-<li><p>der User ein <code class="docutils literal notranslate"><span class="pre">EmployeeProfile</span></code> hat</p></li>
-<li><p>dort eine <code class="docutils literal notranslate"><span class="pre">department</span></code> gesetzt ist</p></li>
-</ul>
-<p>Ohne Mitarbeiterprofil bleibt die HR-Sicht fuer Nicht-Superuser leer oder stark eingeschraenkt.</p>
 </section>
 </section>
-<section id="schritt-5-stammdaten-im-admin-pruefen">
-<h2>Schritt 5: Stammdaten im Admin pruefen<a class="headerlink" href="#schritt-5-stammdaten-im-admin-pruefen" title="Link to this heading">¶</a></h2>
-<p>Danach im Admin pruefen:</p>
-<ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">Mitarbeiter</span> <span class="pre">-&gt;</span> <span class="pre">Profile</span></code></p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">Mitarbeiter</span> <span class="pre">-&gt;</span> <span class="pre">Urlaubsantraege</span></code></p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">Mitarbeiter</span> <span class="pre">-&gt;</span> <span class="pre">Krankmeldungen</span></code></p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">Mitarbeiter</span> <span class="pre">-&gt;</span> <span class="pre">Zeitkonto</span></code></p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">Mitarbeiter</span> <span class="pre">-&gt;</span> <span class="pre">Monatsuebersichten</span></code></p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">Mitarbeiter</span> <span class="pre">-&gt;</span> <span class="pre">Feiertage</span></code></p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">Mitarbeiter</span> <span class="pre">-&gt;</span> <span class="pre">Betriebsurlaub</span></code></p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">Mitarbeiter</span> <span class="pre">-&gt;</span> <span class="pre">Kalender</span></code></p></li>
-</ul>
-<p>Zusatzpruefung fuer neue Mitarbeiter:</p>
+<section id="mitarbeiterprofil">
+<span id="hr-mitarbeiterprofil"></span><h2><a class="toc-backref" href="#id20" role="doc-backlink">Mitarbeiterprofil</a><a class="headerlink" href="#mitarbeiterprofil" title="Link to this heading">¶</a></h2>
+<p><strong>Admin-Pfad:</strong> <code class="docutils literal notranslate"><span class="pre">/admin/hr/employeeprofile/</span></code></p>
+<p><strong>Sichtbar fuer:</strong> Personalverwaltung/Geschaeftsfuehrung (alles), Teamleitung (eigene Abteilung),
+Mitarbeiter (nur eigenes Profil, nur lesen)</p>
+<p>Das Mitarbeiterprofil verbindet einen Django-User mit allen HR-Funktionen.
+Jeder User, der HR nutzen soll, braucht genau ein Profil.</p>
+<section id="id1">
+<h3><a class="toc-backref" href="#id21" role="doc-backlink">Felder</a><a class="headerlink" href="#id1" title="Link to this heading">¶</a></h3>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 25.0%" />
+<col style="width: 10.0%" />
+<col style="width: 65.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Pflicht</p></th>
+<th class="head"><p>Bedeutung und Beispiel</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">user</span></code></p></td>
+<td><p>Ja</p></td>
+<td><p>Verknuepfung zum Django-User (Login). <br/>
+Jeder User kann nur ein Profil haben. <br/>
+Beispiel: Benutzer <code class="docutils literal notranslate"><span class="pre">max.muster</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">employee_number</span></code></p></td>
+<td><p>Nein</p></td>
+<td><p>Interne Personalnummer fuer Berichte und Suche. <br/>
+Beispiel: <code class="docutils literal notranslate"><span class="pre">MA-042</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">department</span></code></p></td>
+<td><p>Empfohlen</p></td>
+<td><p>Abteilungszuordnung. Steuert, wer den Mitarbeiter sehen darf. <br/>
+Ohne Abteilung ist der Mitarbeiter fuer Leitungsrollen unsichtbar. <br/>
+Beispiel: <code class="docutils literal notranslate"><span class="pre">Vertrieb</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">holiday_calendar</span></code></p></td>
+<td><p>Empfohlen</p></td>
+<td><p>Feiertagskalender fuer die Sollzeitberechnung. <br/>
+Ist kein Kalender gesetzt, greift der Standardkalender. <br/>
+Beispiel: <code class="docutils literal notranslate"><span class="pre">Deutschland</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">short_code</span></code></p></td>
+<td><p>Ja</p></td>
+<td><p>Kuerzel fuer den Kalender (max. 10 Zeichen). <br/>
+Erscheint vor jedem Kalender-Event. <br/>
+Beispiel: <code class="docutils literal notranslate"><span class="pre">MM</span></code> fuer Max Muster, <code class="docutils literal notranslate"><span class="pre">FB</span></code> fuer Franz Buchner</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">color</span></code></p></td>
+<td><p>Ja</p></td>
+<td><p>Farbe fuer Kalender-Events als Hex-Code. <br/>
+Standard: <code class="docutils literal notranslate"><span class="pre">#3788d8</span></code> (blau). <br/>
+Beispiel: <code class="docutils literal notranslate"><span class="pre">#e74c3c</span></code> (rot), <code class="docutils literal notranslate"><span class="pre">#27ae60</span></code> (gruen)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">phone</span></code></p></td>
+<td><p>Nein</p></td>
+<td><p>Telefonnummer fuer interne Kontaktliste. <br/>
+Beispiel: <code class="docutils literal notranslate"><span class="pre">+49</span> <span class="pre">89</span> <span class="pre">123456-42</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">is_active_employee</span></code></p></td>
+<td><p>Ja</p></td>
+<td><p>Aktive Mitarbeiter erscheinen in Dropdowns und im Kalender. <br/>
+Ausgeschiedene Mitarbeiter auf <code class="docutils literal notranslate"><span class="pre">Nein</span></code> setzen (Daten bleiben). <br/>
+Beispiel: <code class="docutils literal notranslate"><span class="pre">Ja</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">vacation_days_per_year</span></code></p></td>
+<td><p>Ja</p></td>
+<td><p>Vertragliche Urlaubstage pro Kalenderjahr. <br/>
+Wird aktuell nicht automatisch gegen Antraege geprueft, dient als Referenzwert. <br/>
+Beispiel: <code class="docutils literal notranslate"><span class="pre">30.00</span></code> fuer 30 Tage</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">start_date</span></code></p></td>
+<td><p>Empfohlen</p></td>
+<td><p>Eintrittsdatum. Tage vor Eintritt werden bei der Sollzeitberechnung uebersprungen. <br/>
+Beispiel: <code class="docutils literal notranslate"><span class="pre">2024-01-15</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">end_date</span></code></p></td>
+<td><p>Nein</p></td>
+<td><p>Austrittsdatum. Tage nach Austritt zaehlen keine Sollzeit. <br/>
+Leer lassen bei aktiven Mitarbeitern. <br/>
+Beispiel: <code class="docutils literal notranslate"><span class="pre">2025-12-31</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="hinweis-fuer-den-django-user">
+<h3><a class="toc-backref" href="#id22" role="doc-backlink">Hinweis fuer den Django-User</a><a class="headerlink" href="#hinweis-fuer-den-django-user" title="Link to this heading">¶</a></h3>
+<p>Damit sich ein Mitarbeiter im Admin anmelden kann, muss der User folgende Werte haben:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>is_active = True
+is_staff  = True
+</pre></div>
+</div>
+<p>Superuser-Rechte sind nicht erforderlich und sollten nur fuer Administratoren gesetzt werden.</p>
+</section>
+<section id="beispiel-neuen-mitarbeiter-anlegen">
+<h3><a class="toc-backref" href="#id23" role="doc-backlink">Beispiel: Neuen Mitarbeiter anlegen</a><a class="headerlink" href="#beispiel-neuen-mitarbeiter-anlegen" title="Link to this heading">¶</a></h3>
 <ol class="arabic simple">
-<li><p>User existiert und ist <code class="docutils literal notranslate"><span class="pre">is_staff</span></code></p></li>
-<li><p>User hat mindestens eine HR-Gruppe</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">EmployeeProfile</span></code> ist vorhanden</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">department</span></code> ist gesetzt</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">holiday_calendar</span></code> ist gesetzt oder Default-Kalender greift</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">EmployeeWorkSchedule</span></code> ist vorhanden</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">/admin/auth/user/</span></code> → <code class="docutils literal notranslate"><span class="pre">Benutzer</span> <span class="pre">hinzufuegen</span></code> → Benutzername und Passwort setzen</p></li>
+<li><p>Im User <code class="docutils literal notranslate"><span class="pre">is_staff</span> <span class="pre">=</span> <span class="pre">True</span></code> setzen, Vor- und Nachname eintragen</p></li>
+<li><p>Gruppe <code class="docutils literal notranslate"><span class="pre">Mitarbeiter</span></code> (oder hoehere Rolle) zuweisen</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">/admin/hr/employeeprofile/</span></code> → <code class="docutils literal notranslate"><span class="pre">Mitarbeiterprofil</span> <span class="pre">hinzufuegen</span></code></p></li>
+<li><p>User auswaehlen, Abteilung setzen, <code class="docutils literal notranslate"><span class="pre">short_code</span></code> (z. B. <code class="docutils literal notranslate"><span class="pre">MM</span></code>) und <code class="docutils literal notranslate"><span class="pre">color</span></code> eintragen</p></li>
+<li><p>Eintrittsdatum setzen, Urlaubstage eintragen</p></li>
+<li><p>Unter <code class="docutils literal notranslate"><span class="pre">/admin/hr/employeeworkschedule/</span></code> das Arbeitszeitmodell ab Eintrittsdatum zuweisen</p></li>
 </ol>
 </section>
-<section id="schritt-6-erstkonfiguration-fuer-echte-nutzung">
-<h2>Schritt 6: Erstkonfiguration fuer echte Nutzung<a class="headerlink" href="#schritt-6-erstkonfiguration-fuer-echte-nutzung" title="Link to this heading">¶</a></h2>
-<p>Empfohlene manuelle Pflege nach dem Bootstrap:</p>
-<ol class="arabic simple">
-<li><p>reale Abteilungen anlegen</p></li>
-<li><p>Mitarbeiterprofilen die richtige Abteilung zuweisen</p></li>
-<li><p>Arbeitszeitmodelle anpassen</p></li>
-<li><p>Feiertage fuer das relevante Jahr pflegen</p></li>
-<li><p>Betriebsurlaub pflegen</p></li>
-<li><p>Pilot-Usern Gruppen zuweisen</p></li>
-</ol>
+</section>
+<section id="feiertagskalender-und-feiertage">
+<span id="hr-feiertagskalender"></span><h2><a class="toc-backref" href="#id24" role="doc-backlink">Feiertagskalender und Feiertage</a><a class="headerlink" href="#feiertagskalender-und-feiertage" title="Link to this heading">¶</a></h2>
+<p><strong>Admin-Pfad Kalender:</strong> <code class="docutils literal notranslate"><span class="pre">/admin/hr/holidaycalendar/</span></code></p>
+<p><strong>Admin-Pfad Feiertage:</strong> <code class="docutils literal notranslate"><span class="pre">/admin/hr/publicholiday/</span></code></p>
+<p><strong>Sichtbar fuer:</strong> Personalverwaltung, Geschaeftsfuehrung, Superuser</p>
+<section id="feiertagskalender">
+<h3><a class="toc-backref" href="#id25" role="doc-backlink">Feiertagskalender</a><a class="headerlink" href="#feiertagskalender" title="Link to this heading">¶</a></h3>
+<p>Jeder Kalender gilt fuer eine Region. Mitarbeiter werden einem Kalender zugeordnet.
+Es kann genau einen Standardkalender geben, der greift, wenn kein Kalender explizit gesetzt ist.</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 20.0%" />
+<col style="width: 10.0%" />
+<col style="width: 70.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Pflicht</p></th>
+<th class="head"><p>Bedeutung und Beispiel</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">name</span></code></p></td>
+<td><p>Ja</p></td>
+<td><p>Name des Kalenders. <br/>
+Beispiel: <code class="docutils literal notranslate"><span class="pre">Deutschland</span></code>, <code class="docutils literal notranslate"><span class="pre">Oesterreich</span></code>, <code class="docutils literal notranslate"><span class="pre">Bayern</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">region_code</span></code></p></td>
+<td><p>Nein</p></td>
+<td><p>Freitext fuer interne Ablage. <br/>
+Beispiel: <code class="docutils literal notranslate"><span class="pre">DE</span></code>, <code class="docutils literal notranslate"><span class="pre">AT</span></code>, <code class="docutils literal notranslate"><span class="pre">DE-BY</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">is_active</span></code></p></td>
+<td><p>Ja</p></td>
+<td><p>Inaktive Kalender werden in Dropdowns ausgeblendet.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">is_default</span></code></p></td>
+<td><p>Ja</p></td>
+<td><p>Genau ein Kalender darf Standardkalender sein. <br/>
+Er greift automatisch fuer Mitarbeiter ohne explizite Zuweisung.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
 <section id="feiertage">
-<h3>Feiertage<a class="headerlink" href="#feiertage" title="Link to this heading">¶</a></h3>
-<p><code class="docutils literal notranslate"><span class="pre">Mitarbeiter</span> <span class="pre">-&gt;</span> <span class="pre">Feiertage</span></code> enthaelt kalenderbezogene Feiertage.
-Wenn mehrere Regionen benoetigt werden, zuerst mehrere Feiertagskalender anlegen und dann den Mitarbeiterprofilen zuordnen.</p>
+<h3><a class="toc-backref" href="#id26" role="doc-backlink">Feiertage</a><a class="headerlink" href="#feiertage" title="Link to this heading">¶</a></h3>
+<p>Feiertage gehoeren zu einem Kalender und muessen pro Jahr manuell gepflegt werden.</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 20.0%" />
+<col style="width: 10.0%" />
+<col style="width: 70.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Pflicht</p></th>
+<th class="head"><p>Bedeutung und Beispiel</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">calendar</span></code></p></td>
+<td><p>Ja</p></td>
+<td><p>Feiertagskalender, zu dem dieser Feiertag gehoert. <br/>
+Beispiel: <code class="docutils literal notranslate"><span class="pre">Deutschland</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">name</span></code></p></td>
+<td><p>Ja</p></td>
+<td><p>Bezeichnung des Feiertags. <br/>
+Beispiel: <code class="docutils literal notranslate"><span class="pre">Tag</span> <span class="pre">der</span> <span class="pre">Deutschen</span> <span class="pre">Einheit</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">date</span></code></p></td>
+<td><p>Ja</p></td>
+<td><p>Datum des Feiertags. <br/>
+Beispiel: <code class="docutils literal notranslate"><span class="pre">2026-10-03</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">is_half_day</span></code></p></td>
+<td><p>Ja</p></td>
+<td><p>Halber Feiertag (z. B. Heiligabend, Silvester). <br/>
+Aktuell modelliert, aber noch nicht in der Sollzeitberechnung differenziert.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">is_active</span></code></p></td>
+<td><p>Ja</p></td>
+<td><p>Inaktive Feiertage werden bei der Sollzeitberechnung ignoriert.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="beispiel-feiertage-fuer-ein-jahr-anlegen">
+<h3><a class="toc-backref" href="#id27" role="doc-backlink">Beispiel: Feiertage fuer ein Jahr anlegen</a><a class="headerlink" href="#beispiel-feiertage-fuer-ein-jahr-anlegen" title="Link to this heading">¶</a></h3>
+<p>Fuer Deutschland 2026 muessen mindestens folgende Tage angelegt werden:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>01.01.2026  Neujahr
+06.01.2026  Heilige Drei Koenige  (je nach Bundesland)
+03.04.2026  Karfreitag
+05.04.2026  Ostersonntag
+06.04.2026  Ostermontag
+01.05.2026  Tag der Arbeit
+14.05.2026  Christi Himmelfahrt
+24.05.2026  Pfingstsonntag
+25.05.2026  Pfingstmontag
+03.10.2026  Tag der Deutschen Einheit
+25.12.2026  1. Weihnachtstag
+26.12.2026  2. Weihnachtstag
+</pre></div>
+</div>
+</section>
 </section>
 <section id="betriebsurlaub">
-<h3>Betriebsurlaub<a class="headerlink" href="#betriebsurlaub" title="Link to this heading">¶</a></h3>
-<p><code class="docutils literal notranslate"><span class="pre">Mitarbeiter</span> <span class="pre">-&gt;</span> <span class="pre">Betriebsurlaub</span></code> gilt global.</p>
-<p>Feld <code class="docutils literal notranslate"><span class="pre">counts_as_vacation</span></code>:</p>
-<ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">Nein</span></code>: blockiert ueberschneidenden Urlaub/Krankheit, zaehlt aber nicht als Urlaub</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">Ja</span></code>: fliesst zusaetzlich in Urlaubsminuten der Monatsuebersicht ein</p></li>
-</ul>
+<span id="hr-betriebsurlaub"></span><h2><a class="toc-backref" href="#id28" role="doc-backlink">Betriebsurlaub</a><a class="headerlink" href="#betriebsurlaub" title="Link to this heading">¶</a></h2>
+<p><strong>Admin-Pfad:</strong> <code class="docutils literal notranslate"><span class="pre">/admin/hr/companyholiday/</span></code></p>
+<p><strong>Sichtbar fuer:</strong> Personalverwaltung, Geschaeftsfuehrung, Superuser</p>
+<p>Betriebsurlaub gilt fuer alle Mitarbeiter gleichzeitig (z. B. Sommerpause, Brueckentage).</p>
+<section id="id2">
+<h3><a class="toc-backref" href="#id29" role="doc-backlink">Felder</a><a class="headerlink" href="#id2" title="Link to this heading">¶</a></h3>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 25.0%" />
+<col style="width: 10.0%" />
+<col style="width: 65.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Pflicht</p></th>
+<th class="head"><p>Bedeutung und Beispiel</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">name</span></code></p></td>
+<td><p>Ja</p></td>
+<td><p>Bezeichnung des Betriebsurlaubs. <br/>
+Beispiel: <code class="docutils literal notranslate"><span class="pre">Sommerpause</span> <span class="pre">2026</span></code>, <code class="docutils literal notranslate"><span class="pre">Weihnachtsschliesszeit</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">start_date</span></code></p></td>
+<td><p>Ja</p></td>
+<td><p>Erster Tag des Betriebsurlaubs. <br/>
+Beispiel: <code class="docutils literal notranslate"><span class="pre">2026-08-03</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">end_date</span></code></p></td>
+<td><p>Ja</p></td>
+<td><p>Letzter Tag des Betriebsurlaubs (einschliesslich). <br/>
+Beispiel: <code class="docutils literal notranslate"><span class="pre">2026-08-07</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">counts_as_vacation</span></code></p></td>
+<td><p>Ja</p></td>
+<td><div class="line-block">
+<div class="line"><code class="docutils literal notranslate"><span class="pre">Nein</span></code>: blockiert ueberschneidenden Urlaub/Krankheit, reduziert die Sollzeit,</div>
+<div class="line-block">
+<div class="line">zaehlt aber nicht als genehmigter Urlaub in der Monatsuebersicht.</div>
+</div>
+<div class="line"><code class="docutils literal notranslate"><span class="pre">Ja</span></code>: zaehlt zusaetzlich als Urlaubsminuten in der Monatsuebersicht</div>
+<div class="line-block">
+<div class="line">(z. B. wenn der Betriebsurlaub vom Urlaubskonto abgezogen wird).</div>
+</div>
+</div>
+</td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">is_active</span></code></p></td>
+<td><p>Ja</p></td>
+<td><p>Inaktive Eintraege werden ignoriert.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">note</span></code></p></td>
+<td><p>Nein</p></td>
+<td><p>Interne Bemerkung. Wird nicht fuer Berechnungen genutzt.</p></td>
+</tr>
+</tbody>
+</table>
+<div class="admonition warning">
+<p class="admonition-title">Warnung</p>
+<p>Ueberschneidende aktive Betriebsurlaubseintraege werden beim Speichern abgelehnt.
+Zwei Eintraege duerfen sich zeitlich nicht ueberlappen.</p>
+</div>
 </section>
-</section>
-<section id="typische-startbefehle-fuer-den-betrieb">
-<h2>Typische Startbefehle fuer den Betrieb<a class="headerlink" href="#typische-startbefehle-fuer-den-betrieb" title="Link to this heading">¶</a></h2>
-<p>Nur Gruppen nachziehen:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>.venv/bin/python<span class="w"> </span>manage.py<span class="w"> </span>hr_setup_groups
+<section id="id3">
+<h3><a class="toc-backref" href="#id30" role="doc-backlink">Beispiel</a><a class="headerlink" href="#id3" title="Link to this heading">¶</a></h3>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>name:               Weihnachtsschliesszeit 2026
+start_date:         2026-12-24
+end_date:           2026-12-31
+counts_as_vacation: Nein
+is_active:          Ja
 </pre></div>
 </div>
-<p>Nur Grundkonfiguration nachziehen:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>.venv/bin/python<span class="w"> </span>manage.py<span class="w"> </span>hr_bootstrap
+</section>
+</section>
+<section id="arbeitszeitmodelle">
+<span id="hr-arbeitszeitmodelle"></span><h2><a class="toc-backref" href="#id31" role="doc-backlink">Arbeitszeitmodelle</a><a class="headerlink" href="#arbeitszeitmodelle" title="Link to this heading">¶</a></h2>
+<p><strong>Admin-Pfad Modell:</strong> <code class="docutils literal notranslate"><span class="pre">/admin/hr/workschedule/</span></code></p>
+<p><strong>Admin-Pfad Zuweisung:</strong> <code class="docutils literal notranslate"><span class="pre">/admin/hr/employeeworkschedule/</span></code></p>
+<p><strong>Sichtbar fuer:</strong> Personalverwaltung, Geschaeftsfuehrung, Superuser</p>
+<section id="arbeitszeitmodell-workschedule">
+<h3><a class="toc-backref" href="#id32" role="doc-backlink">Arbeitszeitmodell (WorkSchedule)</a><a class="headerlink" href="#arbeitszeitmodell-workschedule" title="Link to this heading">¶</a></h3>
+<p>Ein Modell beschreibt die Sollarbeitszeiten fuer jeden Wochentag.
+Jeder aktive Mitarbeiter sollte ab Eintrittsdatum einem Modell zugewiesen sein.</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 20.0%" />
+<col style="width: 10.0%" />
+<col style="width: 70.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Pflicht</p></th>
+<th class="head"><p>Bedeutung und Beispiel</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">name</span></code></p></td>
+<td><p>Ja</p></td>
+<td><p>Name des Modells. <br/>
+Beispiel: <code class="docutils literal notranslate"><span class="pre">Vollzeit</span> <span class="pre">40h</span></code>, <code class="docutils literal notranslate"><span class="pre">Teilzeit</span> <span class="pre">20h</span> <span class="pre">Mo-Do</span></code>, <code class="docutils literal notranslate"><span class="pre">Minijob</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">description</span></code></p></td>
+<td><p>Nein</p></td>
+<td><p>Optionale Beschreibung fuer die Personalverwaltung.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">is_active</span></code></p></td>
+<td><p>Ja</p></td>
+<td><p>Inaktive Modelle werden in Dropdowns ausgeblendet.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="wochentage-workscheduleday">
+<h3><a class="toc-backref" href="#id33" role="doc-backlink">Wochentage (WorkScheduleDay)</a><a class="headerlink" href="#wochentage-workscheduleday" title="Link to this heading">¶</a></h3>
+<p>Pro Arbeitszeitmodell wird jeder Wochentag (Montag–Sonntag) gepflegt.
+Die Wochentage werden direkt im Arbeitszeitmodell als Inline-Tabelle bearbeitet.</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 25.0%" />
+<col style="width: 10.0%" />
+<col style="width: 65.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Pflicht</p></th>
+<th class="head"><p>Bedeutung und Beispiel</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">weekday</span></code></p></td>
+<td><p>Ja</p></td>
+<td><p>Wochentag (0 = Montag, 6 = Sonntag). <br/>
+Jeder Tag darf pro Modell nur einmal vorkommen.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">is_working_day</span></code></p></td>
+<td><p>Ja</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Ja</span></code>: Arbeitstag, Sollzeit wird berechnet. <br/>
+<code class="docutils literal notranslate"><span class="pre">Nein</span></code>: kein Arbeitstag (Samstag, Sonntag, freier Tag).</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">start_time</span></code></p></td>
+<td><p>Nein</p></td>
+<td><p>Kernarbeitszeit Beginn (informativ). <br/>
+Beispiel: <code class="docutils literal notranslate"><span class="pre">08:00</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">end_time</span></code></p></td>
+<td><p>Nein</p></td>
+<td><p>Kernarbeitszeit Ende (informativ). <br/>
+Beispiel: <code class="docutils literal notranslate"><span class="pre">16:30</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">break_minutes</span></code></p></td>
+<td><p>Ja</p></td>
+<td><p>Pausenzeit in Minuten. <br/>
+Beispiel: <code class="docutils literal notranslate"><span class="pre">30</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">target_minutes</span></code></p></td>
+<td><p>Ja</p></td>
+<td><p>Soll-Arbeitszeit in Minuten <strong>ohne Pause</strong>. <br/>
+Fuer Arbeitstage muss dieser Wert groesser als 0 sein. <br/>
+Fuer freie Tage muss er 0 sein. <br/>
+Beispiel: <code class="docutils literal notranslate"><span class="pre">480</span></code> (= 8 Stunden)</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="beispiel-vollzeit-40h">
+<h3><a class="toc-backref" href="#id34" role="doc-backlink">Beispiel: Vollzeit 40h</a><a class="headerlink" href="#beispiel-vollzeit-40h" title="Link to this heading">¶</a></h3>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>name: Vollzeit 40h
+
+Montag:     is_working_day=Ja, 08:00–16:30, Pause 30 Min, target_minutes=480
+Dienstag:   is_working_day=Ja, 08:00–16:30, Pause 30 Min, target_minutes=480
+Mittwoch:   is_working_day=Ja, 08:00–16:30, Pause 30 Min, target_minutes=480
+Donnerstag: is_working_day=Ja, 08:00–16:30, Pause 30 Min, target_minutes=480
+Freitag:    is_working_day=Ja, 08:00–16:30, Pause 30 Min, target_minutes=480
+Samstag:    is_working_day=Nein, target_minutes=0
+Sonntag:    is_working_day=Nein, target_minutes=0
 </pre></div>
 </div>
-<p>Pilot-Benutzer mit Beispieldaten anlegen:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>.venv/bin/python<span class="w"> </span>manage.py<span class="w"> </span>hr_bootstrap<span class="w"> </span>--demo-username<span class="w"> </span>max.muster<span class="w"> </span>--create-demo-user<span class="w"> </span>--demo-password<span class="w"> </span><span class="s1">&#39;BitteAendern123!&#39;</span><span class="w"> </span>--with-sample-records
+</section>
+<section id="beispiel-teilzeit-mo-do-20h">
+<h3><a class="toc-backref" href="#id35" role="doc-backlink">Beispiel: Teilzeit Mo-Do 20h</a><a class="headerlink" href="#beispiel-teilzeit-mo-do-20h" title="Link to this heading">¶</a></h3>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Montag:     is_working_day=Ja, 08:00–13:00, Pause 0 Min, target_minutes=300
+Dienstag:   is_working_day=Ja, 08:00–13:00, Pause 0 Min, target_minutes=300
+Mittwoch:   is_working_day=Ja, 08:00–13:00, Pause 0 Min, target_minutes=300
+Donnerstag: is_working_day=Ja, 08:00–13:00, Pause 0 Min, target_minutes=300
+Freitag:    is_working_day=Nein, target_minutes=0
+Samstag:    is_working_day=Nein, target_minutes=0
+Sonntag:    is_working_day=Nein, target_minutes=0
 </pre></div>
 </div>
 </section>
-<section id="fachlogik-im-aktuellen-stand">
-<h2>Fachlogik im aktuellen Stand<a class="headerlink" href="#fachlogik-im-aktuellen-stand" title="Link to this heading">¶</a></h2>
-<section id="sichtbarkeit">
-<h3>Sichtbarkeit<a class="headerlink" href="#sichtbarkeit" title="Link to this heading">¶</a></h3>
+<section id="mitarbeiter-arbeitszeitmodell-employeeworkschedule">
+<h3><a class="toc-backref" href="#id36" role="doc-backlink">Mitarbeiter-Arbeitszeitmodell (EmployeeWorkSchedule)</a><a class="headerlink" href="#mitarbeiter-arbeitszeitmodell-employeeworkschedule" title="Link to this heading">¶</a></h3>
+<p>Die Zuweisung verbindet einen Mitarbeiter ab einem bestimmten Datum mit einem Modell.
+Historische Wechsel werden durch mehrere Eintraege mit unterschiedlichen Gueltigkeitszeitraeumen abgebildet.</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 25.0%" />
+<col style="width: 10.0%" />
+<col style="width: 65.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Pflicht</p></th>
+<th class="head"><p>Bedeutung und Beispiel</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">employee</span></code></p></td>
+<td><p>Ja</p></td>
+<td><p>Mitarbeiter, dem das Modell zugewiesen wird. <br/>
+Beispiel: <code class="docutils literal notranslate"><span class="pre">Max</span> <span class="pre">Muster</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">schedule</span></code></p></td>
+<td><p>Ja</p></td>
+<td><p>Arbeitszeitmodell. <br/>
+Beispiel: <code class="docutils literal notranslate"><span class="pre">Vollzeit</span> <span class="pre">40h</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">valid_from</span></code></p></td>
+<td><p>Ja</p></td>
+<td><p>Ab diesem Tag gilt das Modell. <br/>
+Beispiel: <code class="docutils literal notranslate"><span class="pre">2024-01-15</span></code> (= Eintrittsdatum)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">valid_until</span></code></p></td>
+<td><p>Nein</p></td>
+<td><p>Bis einschliesslich diesem Tag gilt das Modell. <br/>
+Leer lassen, wenn das Modell aktuell gueltig ist. <br/>
+Beispiel: <code class="docutils literal notranslate"><span class="pre">2024-12-31</span></code> bei einem Modellwechsel</p></td>
+</tr>
+</tbody>
+</table>
+<div class="admonition warning">
+<p class="admonition-title">Warnung</p>
+<p>Ueberschneidende Zuweisungen desselben Mitarbeiters werden beim Speichern abgelehnt.
+Vor dem Anlegen einer neuen Zuweisung muss die bestehende zuerst mit <code class="docutils literal notranslate"><span class="pre">valid_until</span></code> geschlossen werden.</p>
+</div>
+</section>
+</section>
+<section id="urlaubsantraege">
+<span id="hr-urlaubsantraege"></span><h2><a class="toc-backref" href="#id37" role="doc-backlink">Urlaubsantraege</a><a class="headerlink" href="#urlaubsantraege" title="Link to this heading">¶</a></h2>
+<p><strong>Admin-Pfad:</strong> <code class="docutils literal notranslate"><span class="pre">/admin/hr/leaverequest/</span></code></p>
+<p><strong>Sichtbar fuer:</strong></p>
 <ul class="simple">
-<li><p>Superuser sieht alles</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">Personalverwaltung</span></code> und <code class="docutils literal notranslate"><span class="pre">Geschaeftsfuehrung</span></code> sehen alles</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">Teamleitung</span></code> und <code class="docutils literal notranslate"><span class="pre">Abteilungsleitung</span></code> sehen nur die eigene Abteilung</p></li>
-<li><p>normale <code class="docutils literal notranslate"><span class="pre">Mitarbeiter</span></code> sehen nur ihr eigenes Profil und ihre eigenen Daten</p></li>
+<li><p>Mitarbeiter: eigene Antraege anlegen und lesen</p></li>
+<li><p>Teamleitung/Abteilungsleitung: Antraege der eigenen Abteilung sehen und bearbeiten</p></li>
+<li><p>Personalverwaltung/Geschaeftsfuehrung: alle Antraege, Freigabe-Aktionen</p></li>
 </ul>
+<section id="id4">
+<h3><a class="toc-backref" href="#id38" role="doc-backlink">Felder</a><a class="headerlink" href="#id4" title="Link to this heading">¶</a></h3>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 25.0%" />
+<col style="width: 10.0%" />
+<col style="width: 65.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Pflicht</p></th>
+<th class="head"><p>Bedeutung und Beispiel</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">employee</span></code></p></td>
+<td><p>Ja</p></td>
+<td><p>Mitarbeiter, fuer den der Antrag gestellt wird. <br/>
+Mitarbeiter (ohne Verwaltungsrolle) koennen dieses Feld nicht sehen –
+ihr Profil wird automatisch eingesetzt.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">leave_type</span></code></p></td>
+<td><p>Ja</p></td>
+<td><p>Art des Urlaubs: <br/>
+<code class="docutils literal notranslate"><span class="pre">Urlaub</span></code> – regulaerer Jahresurlaub <br/>
+<code class="docutils literal notranslate"><span class="pre">Sonderurlaub</span></code> – Hochzeit, Trauerfall usw. <br/>
+<code class="docutils literal notranslate"><span class="pre">Ueberstundenabbau</span></code> – Freizeit als Ausgleich fuer genehmigte Ueberstunden</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">start_date</span></code></p></td>
+<td><p>Ja</p></td>
+<td><p>Erster Urlaubstag (einschliesslich). <br/>
+Beispiel: <code class="docutils literal notranslate"><span class="pre">2026-07-13</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">end_date</span></code></p></td>
+<td><p>Ja</p></td>
+<td><p>Letzter Urlaubstag (einschliesslich). <br/>
+Beispiel: <code class="docutils literal notranslate"><span class="pre">2026-07-24</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">half_day_start</span></code></p></td>
+<td><p>Nein</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Ja</span></code>: Der erste Tag zaehlt nur als halber Urlaubstag. <br/>
+Beispiel: Mitarbeiter beginnt Urlaub erst am Nachmittag.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">half_day_end</span></code></p></td>
+<td><p>Nein</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Ja</span></code>: Der letzte Tag zaehlt nur als halber Urlaubstag. <br/>
+Hinweis: Wenn Start- und Enddatum identisch sind, koennen nicht beide
+Felder gleichzeitig <code class="docutils literal notranslate"><span class="pre">Ja</span></code> sein.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">status</span></code></p></td>
+<td><p>automatisch</p></td>
+<td><p>Aktueller Status des Antrags. Wird nicht direkt bearbeitet, sondern
+ueber Admin-Aktionen gesteuert (siehe unten). <br/>
+<code class="docutils literal notranslate"><span class="pre">Beantragt</span></code> → <code class="docutils literal notranslate"><span class="pre">Freigegeben</span></code> / <code class="docutils literal notranslate"><span class="pre">Abgelehnt</span></code> / <code class="docutils literal notranslate"><span class="pre">Storniert</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">reason</span></code></p></td>
+<td><p>Nein</p></td>
+<td><p>Bemerkung des Mitarbeiters (z. B. Reiseziel, besonderer Anlass). <br/>
+Beispiel: <code class="docutils literal notranslate"><span class="pre">Familienurlaub</span> <span class="pre">Mallorca</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">approved_by</span></code></p></td>
+<td><p>automatisch</p></td>
+<td><p>Wird beim Freigeben automatisch mit dem genehmigenden User befuellt.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">approved_at</span></code></p></td>
+<td><p>automatisch</p></td>
+<td><p>Zeitstempel der Freigabe. Wird automatisch gesetzt.</p></td>
+</tr>
+</tbody>
+</table>
 </section>
-<section id="urlaub">
-<h3>Urlaub<a class="headerlink" href="#urlaub" title="Link to this heading">¶</a></h3>
-<ul class="simple">
-<li><p>Freigabe laeuft ueber Service-Logik</p></li>
-<li><p>Konflikte gegen freigegebenen Urlaub werden geprueft</p></li>
-<li><p>Konflikte gegen Krankmeldungen werden geprueft</p></li>
-<li><p>Konflikte gegen Betriebsurlaub werden geprueft</p></li>
-<li><p>halbe Urlaubstage sind im Modell vorbereitet</p></li>
-</ul>
+<section id="statuswechsel-und-admin-aktionen">
+<h3><a class="toc-backref" href="#id39" role="doc-backlink">Statuswechsel und Admin-Aktionen</a><a class="headerlink" href="#statuswechsel-und-admin-aktionen" title="Link to this heading">¶</a></h3>
+<p>Erlaubte Uebergaenge:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Beantragt  →  Freigegeben   (Admin-Aktion: &quot;Ausgewaehlte Urlaubsantraege freigeben&quot;)
+Beantragt  →  Abgelehnt     (Admin-Aktion: &quot;Ausgewaehlte Urlaubsantraege ablehnen&quot;)
+Freigegeben → Storniert     (Admin-Aktion: &quot;Ausgewaehlte Urlaubsantraege stornieren&quot;)
+</pre></div>
+</div>
+<p>Ungueltige Uebergaenge (werden abgewiesen):</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Freigegeben  →  Beantragt   (nicht erlaubt)
+Abgelehnt    →  Freigegeben (nicht erlaubt)
+</pre></div>
+</div>
 </section>
-<section id="krankheit">
-<h3>Krankheit<a class="headerlink" href="#krankheit" title="Link to this heading">¶</a></h3>
-<ul class="simple">
-<li><p>Krankmeldungen werden separat gefuehrt</p></li>
-<li><p>fuer nicht privilegierte Rollen wird im Kalender datensparsam <code class="docutils literal notranslate"><span class="pre">Abwesend</span></code> statt <code class="docutils literal notranslate"><span class="pre">Krank</span></code> angezeigt</p></li>
-</ul>
-</section>
-<section id="zeitkonto">
-<h3>Zeitkonto<a class="headerlink" href="#zeitkonto" title="Link to this heading">¶</a></h3>
-<ul class="simple">
-<li><p>Freigaben laufen ueber Service-Logik</p></li>
-<li><p>positive und negative Minuten werden in Monatsuebersichten getrennt ausgewiesen</p></li>
-</ul>
-</section>
-<section id="sollzeit-und-monatsuebersicht">
-<h3>Sollzeit und Monatsuebersicht<a class="headerlink" href="#sollzeit-und-monatsuebersicht" title="Link to this heading">¶</a></h3>
-<ul class="simple">
-<li><p>Sollzeit kommt aus <code class="docutils literal notranslate"><span class="pre">WorkSchedule</span></code> und <code class="docutils literal notranslate"><span class="pre">WorkScheduleDay</span></code></p></li>
-<li><p>Feiertage und Betriebsurlaub reduzieren die effektive Sollzeit</p></li>
-<li><p>Betriebsurlaub mit <code class="docutils literal notranslate"><span class="pre">counts_as_vacation</span> <span class="pre">=</span> <span class="pre">True</span></code> wird zusaetzlich als Urlaub ausgewiesen</p></li>
-</ul>
-</section>
-</section>
-<section id="empfohlener-pilotablauf">
-<h2>Empfohlener Pilotablauf<a class="headerlink" href="#empfohlener-pilotablauf" title="Link to this heading">¶</a></h2>
+<section id="konfliktpruefung-bei-freigabe">
+<h3><a class="toc-backref" href="#id40" role="doc-backlink">Konfliktpruefung bei Freigabe</a><a class="headerlink" href="#konfliktpruefung-bei-freigabe" title="Link to this heading">¶</a></h3>
+<p>Das System prueft vor der Freigabe automatisch:</p>
 <ol class="arabic simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">hr_setup_groups</span></code> ausfuehren</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">hr_bootstrap</span></code> ausfuehren</p></li>
-<li><p>einen realen Pilot-User einer passenden Gruppe zuweisen</p></li>
-<li><p>Mitarbeiterprofil, Abteilung und Arbeitszeitmodell pruefen</p></li>
-<li><p>Feiertage fuer das laufende Jahr pflegen</p></li>
-<li><p>einen Test-Urlaubsantrag anlegen</p></li>
-<li><p>als HR- oder Leitungsrolle freigeben</p></li>
-<li><p>Kalender unter <code class="docutils literal notranslate"><span class="pre">/admin/hr/calendar/</span></code> pruefen</p></li>
-<li><p>Monatsuebersicht neu berechnen</p></li>
+<li><p>Gibt es eine ueberschneidende <strong>freigegebene</strong> Krankmeldung desselben Mitarbeiters?</p></li>
+<li><p>Gibt es einen ueberschneidenden <strong>aktiven Betriebsurlaub</strong>?</p></li>
+<li><p>Gibt es einen anderen bereits <strong>freigegebenen</strong> Urlaub desselben Mitarbeiters in diesem Zeitraum?</p></li>
+</ol>
+<p>Ist einer dieser Konflikte vorhanden, wird die Freigabe mit einer Warnung abgewiesen.</p>
+</section>
+<section id="beispiel-urlaubsantrag-als-mitarbeiter-anlegen">
+<h3><a class="toc-backref" href="#id41" role="doc-backlink">Beispiel: Urlaubsantrag als Mitarbeiter anlegen</a><a class="headerlink" href="#beispiel-urlaubsantrag-als-mitarbeiter-anlegen" title="Link to this heading">¶</a></h3>
+<ol class="arabic simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">/admin/hr/leaverequest/</span></code> → <code class="docutils literal notranslate"><span class="pre">Urlaubsantrag</span> <span class="pre">hinzufuegen</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">leave_type</span></code>: <code class="docutils literal notranslate"><span class="pre">Urlaub</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">start_date</span></code>: <code class="docutils literal notranslate"><span class="pre">2026-08-17</span></code>, <code class="docutils literal notranslate"><span class="pre">end_date</span></code>: <code class="docutils literal notranslate"><span class="pre">2026-08-28</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">reason</span></code>: <code class="docutils literal notranslate"><span class="pre">Sommerurlaub</span></code></p></li>
+<li><p>Speichern → Status ist automatisch <code class="docutils literal notranslate"><span class="pre">Beantragt</span></code></p></li>
+<li><p>Personalverwaltung waehlt den Antrag in der Liste aus → Aktion <code class="docutils literal notranslate"><span class="pre">freigeben</span></code></p></li>
 </ol>
 </section>
-<section id="wichtige-einschraenkungen">
-<h2>Wichtige Einschraenkungen<a class="headerlink" href="#wichtige-einschraenkungen" title="Link to this heading">¶</a></h2>
+<section id="beispiel-halber-urlaubstag-am-letzten-tag">
+<h3><a class="toc-backref" href="#id42" role="doc-backlink">Beispiel: Halber Urlaubstag am letzten Tag</a><a class="headerlink" href="#beispiel-halber-urlaubstag-am-letzten-tag" title="Link to this heading">¶</a></h3>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>start_date:    2026-09-07
+end_date:      2026-09-09
+half_day_end:  Ja
+
+Ergebnis: 07.09. = 1 Tag, 08.09. = 1 Tag, 09.09. = 0.5 Tag → 2.5 Tage gesamt
+</pre></div>
+</div>
+</section>
+</section>
+<section id="krankmeldungen">
+<span id="hr-krankmeldungen"></span><h2><a class="toc-backref" href="#id43" role="doc-backlink">Krankmeldungen</a><a class="headerlink" href="#krankmeldungen" title="Link to this heading">¶</a></h2>
+<p><strong>Admin-Pfad:</strong> <code class="docutils literal notranslate"><span class="pre">/admin/hr/sickleave/</span></code></p>
+<p><strong>Sichtbar fuer:</strong> Nur Personalverwaltung, Geschaeftsfuehrung, Superuser</p>
+<p>Im Kalender wird Krankheit fuer Mitarbeiter ohne Verwaltungsrolle als <code class="docutils literal notranslate"><span class="pre">Abwesend</span></code> angezeigt
+(datenschutzfreundlich). Personalverwaltung und Geschaeftsfuehrung sehen <code class="docutils literal notranslate"><span class="pre">Krank</span></code>.</p>
+<div class="admonition note">
+<p class="admonition-title">Bemerkung</p>
+<p>Es werden keine medizinischen Diagnosen gespeichert.
+Nur Zeitraum und ob ein Attest vorliegt.</p>
+</div>
+<section id="id5">
+<h3><a class="toc-backref" href="#id44" role="doc-backlink">Felder</a><a class="headerlink" href="#id5" title="Link to this heading">¶</a></h3>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 25.0%" />
+<col style="width: 10.0%" />
+<col style="width: 65.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Pflicht</p></th>
+<th class="head"><p>Bedeutung und Beispiel</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">employee</span></code></p></td>
+<td><p>Ja</p></td>
+<td><p>Betroffener Mitarbeiter. <br/>
+Beispiel: <code class="docutils literal notranslate"><span class="pre">Max</span> <span class="pre">Muster</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">start_date</span></code></p></td>
+<td><p>Ja</p></td>
+<td><p>Erster Krankheitstag (einschliesslich). <br/>
+Beispiel: <code class="docutils literal notranslate"><span class="pre">2026-06-01</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">end_date</span></code></p></td>
+<td><p>Ja</p></td>
+<td><p>Letzter Krankheitstag (einschliesslich). <br/>
+Beispiel: <code class="docutils literal notranslate"><span class="pre">2026-06-05</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">has_certificate</span></code></p></td>
+<td><p>Ja</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Ja</span></code>: Attest liegt vor. <br/>
+<code class="docutils literal notranslate"><span class="pre">Nein</span></code>: noch kein Attest oder nicht benoetigt.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">note</span></code></p></td>
+<td><p>Nein</p></td>
+<td><p>Interne Bemerkung der Personalverwaltung. <br/>
+<strong>Keine Diagnosen eintragen.</strong> <br/>
+Beispiel: <code class="docutils literal notranslate"><span class="pre">Attest</span> <span class="pre">liegt</span> <span class="pre">in</span> <span class="pre">der</span> <span class="pre">Akte</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="konfliktpruefung">
+<h3><a class="toc-backref" href="#id45" role="doc-backlink">Konfliktpruefung</a><a class="headerlink" href="#konfliktpruefung" title="Link to this heading">¶</a></h3>
+<p>Das System warnt beim Speichern, wenn die Krankmeldung einen anderen Krankheitsfall
+desselben Mitarbeiters ueberschneidet. Eine automatische Aenderung des Urlaubsstatus
+erfolgt <strong>nicht</strong> – das muss manuell entschieden werden.</p>
+</section>
+<section id="id6">
+<h3><a class="toc-backref" href="#id46" role="doc-backlink">Beispiel</a><a class="headerlink" href="#id6" title="Link to this heading">¶</a></h3>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>employee:        Max Muster
+start_date:      2026-06-01
+end_date:        2026-06-05
+has_certificate: Ja
+note:            Attest erhalten am 03.06.
+</pre></div>
+</div>
+</section>
+</section>
+<section id="zeitkonto-buchungen">
+<span id="hr-zeitkonto"></span><h2><a class="toc-backref" href="#id47" role="doc-backlink">Zeitkonto-Buchungen</a><a class="headerlink" href="#zeitkonto-buchungen" title="Link to this heading">¶</a></h2>
+<p><strong>Admin-Pfad:</strong> <code class="docutils literal notranslate"><span class="pre">/admin/hr/timeaccountentry/</span></code></p>
+<p><strong>Sichtbar fuer:</strong></p>
 <ul class="simple">
-<li><p>kein Resturlaubskonto</p></li>
-<li><p>keine automatische Rueckverrechnung von Krankheit waehrend Urlaub</p></li>
-<li><p>keine Benachrichtigungen</p></li>
-<li><p>kein Mitarbeiterportal ausserhalb des Django-Admins</p></li>
-<li><p>halbtaegige Feiertage sind modelliert, aber fachlich noch nicht in der Sollzeitberechnung differenziert</p></li>
+<li><p>Mitarbeiter: eigene Buchungen lesen (keine Aktionen)</p></li>
+<li><p>Personalverwaltung/Geschaeftsfuehrung: anlegen, freigeben, ablehnen</p></li>
+</ul>
+<p>Zeitkonto-Buchungen erfassen Abweichungen von der Sollzeit:
+Ueberstunden (positive Minuten) und Minusstunden (negative Minuten).</p>
+<p>Da nicht gestempelt wird, entstehen Buchungen immer manuell oder durch die Personalverwaltung.</p>
+<section id="id7">
+<h3><a class="toc-backref" href="#id48" role="doc-backlink">Felder</a><a class="headerlink" href="#id7" title="Link to this heading">¶</a></h3>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 25.0%" />
+<col style="width: 10.0%" />
+<col style="width: 65.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Pflicht</p></th>
+<th class="head"><p>Bedeutung und Beispiel</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">employee</span></code></p></td>
+<td><p>Ja</p></td>
+<td><p>Mitarbeiter, fuer den gebucht wird. <br/>
+Beispiel: <code class="docutils literal notranslate"><span class="pre">Max</span> <span class="pre">Muster</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">date</span></code></p></td>
+<td><p>Ja</p></td>
+<td><p>Datum, auf das sich die Buchung bezieht. <br/>
+Beispiel: <code class="docutils literal notranslate"><span class="pre">2026-05-14</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">entry_type</span></code></p></td>
+<td><p>Ja</p></td>
+<td><p>Art der Buchung: <br/>
+<code class="docutils literal notranslate"><span class="pre">Mehrarbeit</span> <span class="pre">/</span> <span class="pre">Ueberstunden</span></code> – positiv, Mitarbeiter hat laenger gearbeitet <br/>
+<code class="docutils literal notranslate"><span class="pre">Minusstunden</span></code> – negativ, Mitarbeiter hat kuerzer gearbeitet <br/>
+<code class="docutils literal notranslate"><span class="pre">Manuelle</span> <span class="pre">Korrektur</span></code> – kann positiv oder negativ sein <br/>
+<code class="docutils literal notranslate"><span class="pre">Ueberstundenabbau</span></code> – negativ, Mitarbeiter nimmt Freizeit aus dem Zeitkonto</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">minutes</span></code></p></td>
+<td><p>Ja</p></td>
+<td><p>Anzahl der Minuten. Vorzeichen muss zur Buchungsart passen: <br/>
+<code class="docutils literal notranslate"><span class="pre">Mehrarbeit</span></code>: positiver Wert, z. B. <code class="docutils literal notranslate"><span class="pre">60</span></code> (= 1 Stunde laenger) <br/>
+<code class="docutils literal notranslate"><span class="pre">Minusstunden</span></code>, <code class="docutils literal notranslate"><span class="pre">Ueberstundenabbau</span></code>: negativer Wert, z. B. <code class="docutils literal notranslate"><span class="pre">-120</span></code> <br/>
+<code class="docutils literal notranslate"><span class="pre">Manuelle</span> <span class="pre">Korrektur</span></code>: positiv oder negativ <br/>
+<strong>Wert 0 ist nicht erlaubt.</strong></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">reason</span></code></p></td>
+<td><p>Nein</p></td>
+<td><p>Begruendung fuer die Buchung. <br/>
+Beispiel: <code class="docutils literal notranslate"><span class="pre">Kundentermin</span> <span class="pre">am</span> <span class="pre">Abend</span></code>, <code class="docutils literal notranslate"><span class="pre">Fruehzeitiger</span> <span class="pre">Abgang</span> <span class="pre">wegen</span> <span class="pre">Arzttermin</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">status</span></code></p></td>
+<td><p>automatisch</p></td>
+<td><p>Wird durch Aktionen gesteuert (Standard: <code class="docutils literal notranslate"><span class="pre">Beantragt</span></code>). <br/>
+Nur <strong>freigegebene</strong> Buchungen fliessen in die Monatsuebersicht ein.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="vorzeichenregel">
+<h3><a class="toc-backref" href="#id49" role="doc-backlink">Vorzeichenregel</a><a class="headerlink" href="#vorzeichenregel" title="Link to this heading">¶</a></h3>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 40.0%" />
+<col style="width: 20.0%" />
+<col style="width: 40.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Situation</p></th>
+<th class="head"><p>Minuten</p></th>
+<th class="head"><p>Buchungsart</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>1 Stunde laenger gearbeitet</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">+60</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Mehrarbeit</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>2 Stunden frueher gegangen</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">-120</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Minusstunden</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>halber Tag Ueberstundenabbau (4h)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">-240</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Ueberstundenabbau</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Korrektur zu Gunsten des Mitarbeiters (1 Tag)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">+480</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Manuelle</span> <span class="pre">Korrektur</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="admin-aktionen">
+<h3><a class="toc-backref" href="#id50" role="doc-backlink">Admin-Aktionen</a><a class="headerlink" href="#admin-aktionen" title="Link to this heading">¶</a></h3>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>&quot;Ausgewaehlte Zeitbuchungen freigeben&quot;  →  Status wird &quot;Freigegeben&quot;
+&quot;Ausgewaehlte Zeitbuchungen ablehnen&quot;   →  Status wird &quot;Abgelehnt&quot;
+</pre></div>
+</div>
+<p>Nur Buchungen mit Status <code class="docutils literal notranslate"><span class="pre">Beantragt</span></code> koennen freigegeben oder abgelehnt werden.</p>
+</section>
+<section id="beispiel-ueberstunde-buchen-und-freigeben">
+<h3><a class="toc-backref" href="#id51" role="doc-backlink">Beispiel: Ueberstunde buchen und freigeben</a><a class="headerlink" href="#beispiel-ueberstunde-buchen-und-freigeben" title="Link to this heading">¶</a></h3>
+<ol class="arabic simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">/admin/hr/timeaccountentry/</span></code> → <code class="docutils literal notranslate"><span class="pre">Zeitkonto-Buchung</span> <span class="pre">hinzufuegen</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">employee</span></code>: <code class="docutils literal notranslate"><span class="pre">Max</span> <span class="pre">Muster</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">date</span></code>: <code class="docutils literal notranslate"><span class="pre">2026-05-14</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">entry_type</span></code>: <code class="docutils literal notranslate"><span class="pre">Mehrarbeit</span> <span class="pre">/</span> <span class="pre">Ueberstunden</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">minutes</span></code>: <code class="docutils literal notranslate"><span class="pre">90</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">reason</span></code>: <code class="docutils literal notranslate"><span class="pre">Abendtermin</span> <span class="pre">Kundenpraesentation</span></code></p></li>
+<li><p>Speichern → Status <code class="docutils literal notranslate"><span class="pre">Beantragt</span></code></p></li>
+<li><p>In der Liste auswaehlen → Aktion <code class="docutils literal notranslate"><span class="pre">Zeitbuchungen</span> <span class="pre">freigeben</span></code></p></li>
+</ol>
+</section>
+</section>
+<section id="monatsuebersichten">
+<span id="hr-monatsuebersicht"></span><h2><a class="toc-backref" href="#id52" role="doc-backlink">Monatsuebersichten</a><a class="headerlink" href="#monatsuebersichten" title="Link to this heading">¶</a></h2>
+<p><strong>Admin-Pfad:</strong> <code class="docutils literal notranslate"><span class="pre">/admin/hr/monthlyworksummary/</span></code></p>
+<p><strong>Sichtbar fuer:</strong> Personalverwaltung, Geschaeftsfuehrung, Superuser (Mitarbeiter koennen Uebersicht sehen, nicht aendern)</p>
+<p>Monatsuebersichten koennen nicht manuell angelegt werden. Sie werden ueber die Admin-Aktion
+<code class="docutils literal notranslate"><span class="pre">Monatsuebersichten</span> <span class="pre">neu</span> <span class="pre">berechnen</span></code> erzeugt oder aktualisiert.</p>
+<section id="id8">
+<h3><a class="toc-backref" href="#id53" role="doc-backlink">Felder</a><a class="headerlink" href="#id8" title="Link to this heading">¶</a></h3>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 25.0%" />
+<col style="width: 10.0%" />
+<col style="width: 65.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Pflicht</p></th>
+<th class="head"><p>Bedeutung und Beispiel</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">employee</span></code></p></td>
+<td><p>automatisch</p></td>
+<td><p>Mitarbeiter, fuer den die Uebersicht gilt.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">year</span></code></p></td>
+<td><p>automatisch</p></td>
+<td><p>Jahr der Uebersicht. <br/>
+Beispiel: <code class="docutils literal notranslate"><span class="pre">2026</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">month</span></code></p></td>
+<td><p>automatisch</p></td>
+<td><p>Monat (1–12). <br/>
+Beispiel: <code class="docutils literal notranslate"><span class="pre">5</span></code> fuer Mai</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">target_minutes</span></code></p></td>
+<td><p>berechnet</p></td>
+<td><p>Soll-Arbeitszeit des Monats in Minuten, abgeleitet aus dem Arbeitszeitmodell. <br/>
+Feiertage und Betriebsurlaub werden abgezogen. <br/>
+Beispiel: <code class="docutils literal notranslate"><span class="pre">10080</span></code> (= 21 Arbeitstage × 480 Min)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">vacation_minutes</span></code></p></td>
+<td><p>berechnet</p></td>
+<td><p>Freigegebene Urlaubsminuten im Monat. <br/>
+Berechnet aus den Sollminuten der einzelnen Urlaubstage. <br/>
+Betriebsurlaub mit <code class="docutils literal notranslate"><span class="pre">counts_as_vacation</span> <span class="pre">=</span> <span class="pre">Ja</span></code> ist eingerechnet. <br/>
+Beispiel: <code class="docutils literal notranslate"><span class="pre">2400</span></code> (= 5 Tage × 480 Min)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">sick_minutes</span></code></p></td>
+<td><p>berechnet</p></td>
+<td><p>Krankheitsminuten im Monat. <br/>
+Berechnet aus den Sollminuten der einzelnen Krankheitstage. <br/>
+Beispiel: <code class="docutils literal notranslate"><span class="pre">960</span></code> (= 2 Tage × 480 Min)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">overtime_minutes</span></code></p></td>
+<td><p>berechnet</p></td>
+<td><p>Summe aller freigegebenen positiven Zeitkonto-Buchungen im Monat. <br/>
+Beispiel: <code class="docutils literal notranslate"><span class="pre">150</span></code> (= 2,5 Stunden Ueberstunden)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">minus_minutes</span></code></p></td>
+<td><p>berechnet</p></td>
+<td><p>Summe aller freigegebenen negativen Zeitkonto-Buchungen im Monat. <br/>
+Immer 0 oder negativ. <br/>
+Beispiel: <code class="docutils literal notranslate"><span class="pre">-120</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">balance_minutes</span></code></p></td>
+<td><p>berechnet</p></td>
+<td><p>Monats-Saldo: <code class="docutils literal notranslate"><span class="pre">overtime_minutes</span> <span class="pre">+</span> <span class="pre">minus_minutes</span></code>. <br/>
+Positiv = Ueberstunden-Gutschrift, negativ = Defizit. <br/>
+Beispiel: <code class="docutils literal notranslate"><span class="pre">30</span></code> (= 150 + (-120))</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">calculated_at</span></code></p></td>
+<td><p>automatisch</p></td>
+<td><p>Zeitpunkt der letzten Berechnung.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">locked</span></code></p></td>
+<td><p>manuell</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Ja</span></code>: Monat ist abgeschlossen. Neuberechnung ist nicht mehr moeglich. <br/>
+Korrekturen mussen als neue Zeitkonto-Buchung im aktuellen Monat erfolgen.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="id9">
+<h3><a class="toc-backref" href="#id54" role="doc-backlink">Admin-Aktionen</a><a class="headerlink" href="#id9" title="Link to this heading">¶</a></h3>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>&quot;Monatsuebersichten neu berechnen&quot;   →  Liest aktuelle Daten und aktualisiert alle Felder.
+                                        Abgeschlossene Monate werden uebersprungen.
+&quot;Monatsuebersichten abschliessen&quot;    →  Setzt locked = True. Nicht rueckgaengig zu machen.
+</pre></div>
+</div>
+</section>
+<section id="berechnung-schritt-fuer-schritt">
+<h3><a class="toc-backref" href="#id55" role="doc-backlink">Berechnung Schritt fuer Schritt</a><a class="headerlink" href="#berechnung-schritt-fuer-schritt" title="Link to this heading">¶</a></h3>
+<p>Das System berechnet pro Mitarbeiter und Monat:</p>
+<ol class="arabic simple">
+<li><p><strong>Sollzeit</strong>: Fuer jeden Kalendertag das gueltige Arbeitszeitmodell des Mitarbeiters bestimmen,
+Wochentag nachschlagen, <code class="docutils literal notranslate"><span class="pre">target_minutes</span></code> des WorkScheduleDay addieren.
+Feiertage aus dem zugewiesenen Kalender und aktiver Betriebsurlaub reduzieren die Sollzeit auf 0.
+Tage vor Eintritt und nach Austritt werden uebersprungen.</p></li>
+<li><p><strong>Urlaub</strong>: Fuer jeden freigegebenen Urlaubsantrag des Monats die Sollzeit jedes
+betroffenen Tages addieren. Halbe Tage werden mit 0,5 gewichtet.</p></li>
+<li><p><strong>Krankheit</strong>: Fuer jeden Krankmeldungstag des Monats die Sollzeit des Tages addieren.</p></li>
+<li><p><strong>Zeitkonto</strong>: Alle freigegebenen Zeitkonto-Buchungen des Monats aufsummieren,
+getrennt nach positiv (= <code class="docutils literal notranslate"><span class="pre">overtime_minutes</span></code>) und negativ (= <code class="docutils literal notranslate"><span class="pre">minus_minutes</span></code>).</p></li>
+<li><p><strong>Saldo</strong>: <code class="docutils literal notranslate"><span class="pre">overtime_minutes</span> <span class="pre">+</span> <span class="pre">minus_minutes</span></code></p></li>
+</ol>
+</section>
+<section id="wichtige-fachregeln">
+<h3><a class="toc-backref" href="#id56" role="doc-backlink">Wichtige Fachregeln</a><a class="headerlink" href="#wichtige-fachregeln" title="Link to this heading">¶</a></h3>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Urlaub und Krankheit sind KEINE Minusstunden.
+Sie werden getrennt ausgewiesen und reduzieren nicht das Zeitkonto.
+
+Nur freigegebene Buchungen fliessen ein.
+Beantragte oder abgelehnte Eintraege werden ignoriert.
+
+Abgeschlossene Monate (locked = Ja) werden bei der Neuberechnung uebersprungen.
+</pre></div>
+</div>
+</section>
+<section id="beispiel-monat-mai-2026-fuer-max-muster-berechnen">
+<h3><a class="toc-backref" href="#id57" role="doc-backlink">Beispiel: Monat Mai 2026 fuer Max Muster berechnen</a><a class="headerlink" href="#beispiel-monat-mai-2026-fuer-max-muster-berechnen" title="Link to this heading">¶</a></h3>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Arbeitszeitmodell:  Vollzeit 40h (Mo-Fr, 480 Min/Tag)
+Arbeitstage Mai:    20 Tage (nach Abzug Feiertage: Tag der Arbeit 01.05.)
+Feiertage:          1 Tag (Tag der Arbeit)
+
+target_minutes:    20 × 480 = 9600
+Urlaub (3 Tage):   3 × 480 = 1440  →  vacation_minutes: 1440
+Krank (1 Tag):     1 × 480 = 480   →  sick_minutes:     480
+Ueberstunden:      +90 Min          →  overtime_minutes: 90
+Minusstunden:      -120 Min         →  minus_minutes:    -120
+Saldo:             90 + (-120)     = -30  →  balance_minutes: -30
+</pre></div>
+</div>
+</section>
+</section>
+<section id="kalenderansicht">
+<span id="hr-kalender"></span><h2><a class="toc-backref" href="#id58" role="doc-backlink">Kalenderansicht</a><a class="headerlink" href="#kalenderansicht" title="Link to this heading">¶</a></h2>
+<p><strong>Admin-Pfad:</strong> <code class="docutils literal notranslate"><span class="pre">/admin/hr/calendar/</span></code></p>
+<p><strong>Sichtbar fuer:</strong> Alle Rollen mit Mitarbeiterprofil (eingeschraenkte Sicht fuer Mitarbeiter)</p>
+<p>Der Kalender zeigt Abwesenheiten, Zeitkonto-Ereignisse, Feiertage und Betriebsurlaub
+in einer Uebersicht. Er hat keine eigene Datenspeicherung – alle Daten kommen aus
+Urlaubsantraegen, Krankmeldungen, Zeitkonto-Buchungen und Feiertagen.</p>
+<section id="darstellung">
+<h3><a class="toc-backref" href="#id59" role="doc-backlink">Darstellung</a><a class="headerlink" href="#darstellung" title="Link to this heading">¶</a></h3>
+<p>Jedes Event wird nach folgendem Muster angezeigt:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>[Kuerzel] Art
+
+Beispiele:
+MM Urlaub
+FB Abwesend       (Krankmeldung, fuer Rollen ohne Verwaltungszugriff)
+FB Krank          (Krankmeldung, fuer Personalverwaltung/Geschaeftsfuehrung)
+JN +90 Min        (Zeitkonto-Buchung, positiv)
+MS -120 Min       (Zeitkonto-Buchung, negativ)
+Feiertag: Tag der Arbeit
+Betriebsurlaub: Sommerpause
+</pre></div>
+</div>
+<p>Die Hintergrundfarbe des Events kommt aus dem <code class="docutils literal notranslate"><span class="pre">color</span></code>-Feld des Mitarbeiterprofils.</p>
+</section>
+<section id="filtermoeglichkeiten">
+<h3><a class="toc-backref" href="#id60" role="doc-backlink">Filtermoeglichkeiten</a><a class="headerlink" href="#filtermoeglichkeiten" title="Link to this heading">¶</a></h3>
+<p>Im Kalender koennen Ereignisse gefiltert werden nach:</p>
+<ul class="simple">
+<li><p>Abteilung</p></li>
+<li><p>einzelnem Mitarbeiter</p></li>
 </ul>
 </section>
-<section id="empfehlung-fuer-den-direkten-start">
-<h2>Empfehlung fuer den direkten Start<a class="headerlink" href="#empfehlung-fuer-den-direkten-start" title="Link to this heading">¶</a></h2>
-<p>Wenn du sofort loslegen willst, ist die kuerzeste produktive Reihenfolge:</p>
-<ol class="arabic simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">manage.py</span> <span class="pre">migrate</span></code></p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">manage.py</span> <span class="pre">hr_setup_groups</span></code></p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">manage.py</span> <span class="pre">hr_bootstrap</span></code></p></li>
-<li><p>reale User den Gruppen zuweisen</p></li>
-<li><p>Mitarbeiterprofile und Abteilungen vervollstaendigen</p></li>
-<li><p>Feiertage pflegen</p></li>
-<li><p>Pilotbetrieb mit 1-2 Mitarbeitern starten</p></li>
-</ol>
+<section id="api-endpunkt">
+<h3><a class="toc-backref" href="#id61" role="doc-backlink">API-Endpunkt</a><a class="headerlink" href="#api-endpunkt" title="Link to this heading">¶</a></h3>
+<p>Der Kalender laedt seine Daten per JSON-API:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>GET /admin/hr/calendar/api/?start=2026-05-01&amp;end=2026-05-31
+
+Optionale Parameter:
+department=&lt;id&gt;     Nur Mitarbeiter dieser Abteilung
+employee=&lt;id&gt;       Nur dieser Mitarbeiter (auch mehrfach: employee=1&amp;employee=2)
+</pre></div>
+</div>
+<p>Das Response-Format folgt dem FullCalendar-Standard. Jedes Event enthaelt zusaetzlich:</p>
+<div class="highlight-json notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;title&quot;</span><span class="p">:</span><span class="w">       </span><span class="s2">&quot;MM Urlaub&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;start&quot;</span><span class="p">:</span><span class="w">       </span><span class="s2">&quot;2026-07-13&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;end&quot;</span><span class="p">:</span><span class="w">         </span><span class="s2">&quot;2026-07-25&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;color&quot;</span><span class="p">:</span><span class="w">       </span><span class="s2">&quot;#3788d8&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;employee&quot;</span><span class="p">:</span><span class="w">    </span><span class="s2">&quot;Max Muster&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;employee_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">42</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;department&quot;</span><span class="p">:</span><span class="w">  </span><span class="s2">&quot;Vertrieb&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;short_code&quot;</span><span class="p">:</span><span class="w">  </span><span class="s2">&quot;MM&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w">        </span><span class="s2">&quot;vacation&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;allDay&quot;</span><span class="p">:</span><span class="w">      </span><span class="kc">true</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="typische-workflows">
+<span id="hr-typische-workflows"></span><h2><a class="toc-backref" href="#id62" role="doc-backlink">Typische Workflows</a><a class="headerlink" href="#typische-workflows" title="Link to this heading">¶</a></h2>
+<section id="workflow-neuen-mitarbeiter-einrichten">
+<h3><a class="toc-backref" href="#id63" role="doc-backlink">Workflow: Neuen Mitarbeiter einrichten</a><a class="headerlink" href="#workflow-neuen-mitarbeiter-einrichten" title="Link to this heading">¶</a></h3>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>1. /admin/auth/user/ → Benutzer anlegen
+   - Benutzername, Passwort, Vor- und Nachname setzen
+   - is_staff = True
+
+2. User der Gruppe &quot;Mitarbeiter&quot; zuweisen
+
+3. /admin/hr/employeeprofile/ → Mitarbeiterprofil anlegen
+   - user, employee_number, department, holiday_calendar
+   - short_code (z. B. &quot;MM&quot;), color (z. B. &quot;#3788d8&quot;)
+   - vacation_days_per_year, start_date
+
+4. /admin/hr/employeeworkschedule/ → Arbeitszeitmodell zuweisen
+   - employee: Max Muster
+   - schedule: Vollzeit 40h
+   - valid_from: Eintrittsdatum
+
+5. Ergebnis pruefen: /admin/hr/calendar/ → Mitarbeiter sollte erscheinen
+</pre></div>
+</div>
+</section>
+<section id="workflow-urlaubsantrag-bearbeiten">
+<h3><a class="toc-backref" href="#id64" role="doc-backlink">Workflow: Urlaubsantrag bearbeiten</a><a class="headerlink" href="#workflow-urlaubsantrag-bearbeiten" title="Link to this heading">¶</a></h3>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>1. Mitarbeiter legt Antrag an unter /admin/hr/leaverequest/
+   → Status: Beantragt
+
+2. Personalverwaltung oeffnet /admin/hr/leaverequest/
+   → Antrag auswaehlen
+   → Aktion &quot;Ausgewaehlte Urlaubsantraege freigeben&quot;
+
+3. Bei Konflikt erscheint Warnmeldung (Krankmeldung, Betriebsurlaub, anderer Urlaub)
+   → Konflikt klaeren, dann erneut freigeben
+
+4. Nach Freigabe erscheint Urlaub im Kalender und in der Monatsuebersicht
+</pre></div>
+</div>
+</section>
+<section id="workflow-monatsuebersicht-erstellen">
+<h3><a class="toc-backref" href="#id65" role="doc-backlink">Workflow: Monatsuebersicht erstellen</a><a class="headerlink" href="#workflow-monatsuebersicht-erstellen" title="Link to this heading">¶</a></h3>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>1. Sicherstellen, dass alle Urlaubsantraege, Krankmeldungen und
+   Zeitkonto-Buchungen des Monats freigegeben sind
+
+2. /admin/hr/monthlyworksummary/ → einen oder alle Mitarbeiter auswaehlen
+   → Aktion &quot;Monatsuebersichten neu berechnen&quot;
+
+3. Werte pruefen (target_minutes, vacation_minutes, sick_minutes, balance_minutes)
+
+4. Wenn Monat abgeschlossen: Aktion &quot;Monatsuebersichten abschliessen&quot; (nicht rueckgaengig!)
+
+5. Spaetere Korrekturen: als neue Zeitkonto-Buchung im aktuellen Monat anlegen
+</pre></div>
+</div>
+</section>
+<section id="workflow-arbeitszeitmodell-wechseln">
+<h3><a class="toc-backref" href="#id66" role="doc-backlink">Workflow: Arbeitszeitmodell wechseln</a><a class="headerlink" href="#workflow-arbeitszeitmodell-wechseln" title="Link to this heading">¶</a></h3>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>1. Bestehende Zuweisung unter /admin/hr/employeeworkschedule/
+   → valid_until = letzter Tag des alten Modells setzen
+
+2. Neue Zuweisung anlegen:
+   → valid_from = erster Tag des neuen Modells
+   → valid_until = leer (offen)
+
+3. Ueberschneidungen werden beim Speichern automatisch abgewiesen
+</pre></div>
+</div>
+</section>
+</section>
+<section id="bekannte-einschraenkungen">
+<span id="hr-wichtige-einschraenkungen"></span><h2><a class="toc-backref" href="#id67" role="doc-backlink">Bekannte Einschraenkungen</a><a class="headerlink" href="#bekannte-einschraenkungen" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p>Kein Resturlaubskonto und kein Jahresurlaubssaldo</p></li>
+<li><p>Keine automatische Behandlung von Krankheit waehrend Urlaub (nur Warnung)</p></li>
+<li><p>Keine E-Mail-Benachrichtigungen bei neuen Antraegen oder Freigaben</p></li>
+<li><p>Kein Self-Service-Portal ausserhalb des Django-Admins</p></li>
+<li><p>Halbtaegige Feiertage sind modelliert, werden aber in der Sollzeitberechnung noch nicht differenziert berechnet</p></li>
+<li><p>Keine automatische Pruefung, ob Urlaubstage das Jahreskontingent ueberschreiten</p></li>
+</ul>
 </section>
 </section>
 
@@ -393,20 +1366,20 @@ Wenn mehrere Regionen benoetigt werden, zuerst mehrere Feiertagskalender anlegen
 <li class="toctree-l1"><a class="reference internal" href="einleitung.html">Einleitung</a></li>
 <li class="toctree-l1"><a class="reference internal" href="erste_schritte.html">Erste Schritte</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">HR Mitarbeiterverwaltung</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#zielbild">Zielbild</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#aktueller-funktionsumfang">Aktueller Funktionsumfang</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#rollen-und-sichtbarkeit">Rollen und Sichtbarkeit</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#produktiver-start-auf-dem-server">Produktiver Start auf dem Server</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#schritt-1-migrationen">Schritt 1: Migrationen</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#schritt-2-hr-gruppen-und-permissions-anlegen">Schritt 2: HR-Gruppen und Permissions anlegen</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#schritt-3-hr-grundkonfiguration-anlegen">Schritt 3: HR-Grundkonfiguration anlegen</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#schritt-4-benutzer-und-gruppen-zuweisen">Schritt 4: Benutzer und Gruppen zuweisen</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#schritt-5-stammdaten-im-admin-pruefen">Schritt 5: Stammdaten im Admin pruefen</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#schritt-6-erstkonfiguration-fuer-echte-nutzung">Schritt 6: Erstkonfiguration fuer echte Nutzung</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#typische-startbefehle-fuer-den-betrieb">Typische Startbefehle fuer den Betrieb</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#fachlogik-im-aktuellen-stand">Fachlogik im aktuellen Stand</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#empfohlener-pilotablauf">Empfohlener Pilotablauf</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#wichtige-einschraenkungen">Wichtige Einschraenkungen</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#empfehlung-fuer-den-direkten-start">Empfehlung fuer den direkten Start</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#abteilungen">Abteilungen</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#mitarbeiterprofil">Mitarbeiterprofil</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#feiertagskalender-und-feiertage">Feiertagskalender und Feiertage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#betriebsurlaub">Betriebsurlaub</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#arbeitszeitmodelle">Arbeitszeitmodelle</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#urlaubsantraege">Urlaubsantraege</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#krankmeldungen">Krankmeldungen</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#zeitkonto-buchungen">Zeitkonto-Buchungen</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#monatsuebersichten">Monatsuebersichten</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#kalenderansicht">Kalenderansicht</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#typische-workflows">Typische Workflows</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#bekannte-einschraenkungen">Bekannte Einschraenkungen</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="microtech_rulebuilder_feldkatalog.html">Microtech Rulebuilder mit Feldkatalog (Schritt fuer Schritt)</a></li>

@@ -28,6 +28,7 @@ from hr.models import (
     SchoolHoliday,
     SickLeave,
     TimeAccountEntry,
+    VacationEntitlement,
     WorkSchedule,
     WorkScheduleDay,
 )
@@ -63,6 +64,37 @@ class EmployeeWorkScheduleInline(BaseTabularInline):
     fk_name = "employee"
     fields = ("schedule", "valid_from", "valid_until", "created_at", "updated_at")
     autocomplete_fields = ("schedule",)
+
+
+class VacationEntitlementInline(BaseTabularInline):
+    model = VacationEntitlement
+    fk_name = "employee"
+    fields = ("year", "base_days", "carryover_days", "carryover_expires_on", "note", "created_at", "updated_at")
+    readonly_fields = ("created_at", "updated_at")
+    extra = 0
+    ordering = ("-year",)
+
+
+class LeaveRequestYearInline(BaseTabularInline):
+    model = LeaveRequest
+    fk_name = "employee"
+    fields = ("leave_type", "start_date", "end_date", "half_day_start", "half_day_end", "status", "approved_at")
+    readonly_fields = ("leave_type", "start_date", "end_date", "half_day_start", "half_day_end", "status", "approved_at")
+    extra = 0
+    can_delete = False
+    ordering = ("-start_date",)
+
+    def get_queryset(self, request):
+        current_year = date.today().year
+        return (
+            super().get_queryset(request)
+            .filter(start_date__year=current_year)
+            .exclude(status=LeaveRequest.Status.CANCELLED)
+            .order_by("-start_date")
+        )
+
+    def has_add_permission(self, request, obj=None):
+        return False
 
 
 class HrScopedAdminMixin:
@@ -169,7 +201,7 @@ class HolidayCalendarAdmin(HrScopedAdminMixin, BaseAdmin):
 class EmployeeProfileAdmin(HrScopedAdminMixin, BaseAdmin):
     employee_lookup = None
     form = EmployeeProfileAdminForm
-    readonly_fields = BaseAdmin.readonly_fields + ("approved_vacation_days_display", "remaining_vacation_days_display")
+    readonly_fields = BaseAdmin.readonly_fields + ("vacation_entitlement_display", "approved_vacation_days_display", "bridge_days_display", "remaining_vacation_days_display")
     list_display = (
         "user",
         "full_name_display",
@@ -194,7 +226,7 @@ class EmployeeProfileAdmin(HrScopedAdminMixin, BaseAdmin):
         ("is_active_employee", BooleanRadioFilter),
         ("created_at", RangeDateTimeFilter),
     ]
-    inlines = (EmployeeWorkScheduleInline,)
+    inlines = (VacationEntitlementInline, LeaveRequestYearInline, EmployeeWorkScheduleInline,)
 
     def has_module_permission(self, request):
         return self.access_service.can_view_calendar(request.user)
@@ -219,11 +251,35 @@ class EmployeeProfileAdmin(HrScopedAdminMixin, BaseAdmin):
     def full_name_display(self, obj: EmployeeProfile) -> str:
         return obj.full_name
 
+    @admin.display(description="Urlaubskonto")
+    def vacation_entitlement_display(self, obj: EmployeeProfile) -> str:
+        from hr.models import VacationEntitlement
+        current_year = date.today().year
+        entitlement = VacationEntitlement.objects.filter(employee=obj, year=current_year).first()
+        if entitlement is None:
+            return f"{obj.vacation_days_per_year:.2f} Tage (aus Profil, kein Konto fuer {current_year})"
+        parts = [f"Basis: {entitlement.base_days:.2f} Tage"]
+        if entitlement.carryover_days > 0:
+            if entitlement.effective_carryover_days > 0:
+                parts.append(f"Uebertrag: +{entitlement.carryover_days:.2f} (verfaellt {entitlement.carryover_expires_on})")
+            else:
+                parts.append(f"Uebertrag: {entitlement.carryover_days:.2f} (verfallen seit {entitlement.carryover_expires_on})")
+        parts.append(f"Gesamt: {entitlement.total_days:.2f} Tage")
+        return " | ".join(parts)
+
     @admin.display(description="Genehmigter Urlaub")
     def approved_vacation_days_display(self, obj: EmployeeProfile) -> str:
         current_year = date.today().year
         approved_days = LeaveService().get_approved_vacation_days_for_year(obj, current_year)
         return f"{approved_days:.2f} Tage ({current_year})"
+
+    @admin.display(description="Brueckentage")
+    def bridge_days_display(self, obj: EmployeeProfile) -> str:
+        current_year = date.today().year
+        bridge_days = LeaveService().get_bridge_days_for_year(obj, current_year)
+        if bridge_days == 0:
+            return f"0.00 Tage ({current_year})"
+        return f"{bridge_days:.2f} Tage ({current_year})"
 
     @admin.display(description="Resturlaub")
     def remaining_vacation_days_display(self, obj: EmployeeProfile) -> str:
@@ -918,3 +974,39 @@ class MonthlyWorkSummaryAdmin(HrScopedAdminMixin, BaseAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+
+@admin.register(VacationEntitlement)
+class VacationEntitlementAdmin(HrScopedAdminMixin, BaseAdmin):
+    manager_permission_name = "can_manage_master_data"
+    list_display = ("employee", "year", "base_days", "carryover_days", "carryover_expires_on", "total_days_display", "created_at")
+    search_fields = (
+        "employee__user__username",
+        "employee__user__first_name",
+        "employee__user__last_name",
+        "employee__short_code",
+    )
+    list_filter = [
+        ("employee__department", RelatedDropdownFilter),
+        ("employee", RelatedDropdownFilter),
+        ("created_at", RangeDateTimeFilter),
+    ]
+
+    @admin.display(description="Gesamt", ordering="base_days")
+    def total_days_display(self, obj: VacationEntitlement) -> str:
+        return f"{obj.total_days:.2f}"
+
+    def has_module_permission(self, request):
+        return self.can_manage(request)
+
+    def has_view_permission(self, request, obj=None):
+        return self.can_manage(request)
+
+    def has_add_permission(self, request):
+        return self.can_manage(request)
+
+    def has_change_permission(self, request, obj=None):
+        return self.can_manage(request)
+
+    def has_delete_permission(self, request, obj=None):
+        return self.can_manage(request)

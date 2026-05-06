@@ -180,6 +180,7 @@ class CompanyHoliday(BaseModel):
     start_date = models.DateField(verbose_name=_("Von"))
     end_date = models.DateField(verbose_name=_("Bis"))
     counts_as_vacation = models.BooleanField(default=False, verbose_name=_("Zaehlt als Urlaub"))
+    is_bridge_day = models.BooleanField(default=False, verbose_name=_("Brueckentag"))
     is_active = models.BooleanField(default=True, verbose_name=_("Aktiv"))
     note = models.TextField(blank=True, default="", verbose_name=_("Bemerkung"))
 
@@ -199,6 +200,8 @@ class CompanyHoliday(BaseModel):
         )
         if overlaps:
             errors["start_date"] = _("Dieser Betriebsurlaub ueberschneidet sich mit einem bestehenden Eintrag.")
+        if self.is_bridge_day and not self.counts_as_vacation:
+            errors["is_bridge_day"] = _("Ein Brueckentag muss auch als Urlaub zaehlen.")
         if errors:
             raise ValidationError(errors)
 
@@ -541,3 +544,62 @@ class MonthlyWorkSummary(BaseModel):
 
     def __str__(self) -> str:
         return f"{self.employee} - {self.month:02d}/{self.year}"
+
+
+class VacationEntitlement(BaseModel):
+    employee = models.ForeignKey(
+        EmployeeProfile,
+        on_delete=models.CASCADE,
+        related_name="vacation_entitlements",
+        verbose_name=_("Mitarbeiter"),
+    )
+    year = models.PositiveIntegerField(verbose_name=_("Jahr"))
+    base_days = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        verbose_name=_("Basistage"),
+        help_text=_("Jahresurlaubsanspruch laut Vertrag."),
+    )
+    carryover_days = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        verbose_name=_("Resturlaub Vorjahr"),
+    )
+    carryover_expires_on = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name=_("Resturlaub verfaellt am"),
+        help_text=_("Standard: 31.03. des Jahres. Danach wird der Resturlaub nicht mehr angerechnet."),
+    )
+    note = models.TextField(blank=True, default="", verbose_name=_("Bemerkung"))
+
+    class Meta:
+        verbose_name = _("Jahresurlaubs-Konto")
+        verbose_name_plural = _("Jahresurlaubs-Konten")
+        ordering = ("-year", "employee")
+        constraints = [
+            models.UniqueConstraint(fields=("employee", "year"), name="unique_vacation_entitlement"),
+        ]
+
+    def clean(self) -> None:
+        errors: dict[str, str] = {}
+        if self.base_days < Decimal("0"):
+            errors["base_days"] = _("Basistage duerfen nicht negativ sein.")
+        if self.carryover_days < Decimal("0"):
+            errors["carryover_days"] = _("Resturlaub darf nicht negativ sein.")
+        if errors:
+            raise ValidationError(errors)
+
+    @property
+    def effective_carryover_days(self) -> Decimal:
+        if self.carryover_expires_on and date.today() > self.carryover_expires_on:
+            return Decimal("0.00")
+        return self.carryover_days
+
+    @property
+    def total_days(self) -> Decimal:
+        return (self.base_days + self.effective_carryover_days).quantize(Decimal("0.00"))
+
+    def __str__(self) -> str:
+        return f"{self.employee} {self.year}: {self.total_days} Tage"

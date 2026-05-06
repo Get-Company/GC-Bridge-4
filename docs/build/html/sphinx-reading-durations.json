@@ -1,8 +1,4 @@
 {
-    "erste_schritte": 0.024,
-    "hr_mitarbeiterverwaltung": 0.037,
-    "index": 0.002,
-    "microtech_rulebuilder_feldkatalog": 0.081,
-    "reference/models_und_admins_generated": 0.742,
-    "workflows": 0.026
+    "hr_mitarbeiterverwaltung": 0.217,
+    "reference/models_und_admins_generated": 0.735
 }
