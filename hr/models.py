@@ -359,6 +359,12 @@ class LeaveRequest(BaseModel):
         verbose_name=_("Status"),
     )
     reason = models.TextField(blank=True, default="", verbose_name=_("Bemerkung"))
+    calculated_days = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        verbose_name=_("Berechnete Tage"),
+    )
     approved_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -380,9 +386,17 @@ class LeaveRequest(BaseModel):
             errors["end_date"] = _("Bis darf nicht vor Von liegen.")
         if self.start_date == self.end_date and self.half_day_start and self.half_day_end:
             errors["half_day_end"] = _("Bei einem eintaeigen Antrag kann nicht beides gleichzeitig halbtags sein.")
-        if self.status == self.Status.APPROVED and self.employee_id:
+        if self.employee_id and self.start_date and self.end_date:
             from hr.services.leave_service import LeaveService
 
+            calculated_days = LeaveService().calculate_leave_days_for_request(self)
+            self.calculated_days = calculated_days
+            if calculated_days <= Decimal("0.00"):
+                errors["start_date"] = _(
+                    "Im gewaehlten Zeitraum liegen laut Arbeitszeitmodell, Feiertagskalender und Wochenende keine Arbeitstage."
+                )
+
+        if self.status == self.Status.APPROVED and self.employee_id:
             try:
                 LeaveService().validate_leave_request_conflicts(self)
             except ValidationError as exc:

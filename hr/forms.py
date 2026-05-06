@@ -6,12 +6,14 @@ from django import forms
 from django.utils.translation import gettext_lazy as _
 
 from unfold.widgets import (
+    UnfoldAdminColorInputWidget,
     UnfoldAdminIntegerFieldWidget,
     UnfoldAdminSelectWidget,
     UnfoldAdminTextInputWidget,
+    UnfoldAdminTimeWidget,
 )
 
-from hr.models import HolidayCalendar
+from hr.models import EmployeeProfile, HolidayCalendar, WorkScheduleDay
 from hr.services import OpenHolidaysService
 
 
@@ -62,3 +64,25 @@ class OpenHolidaysImportForm(forms.Form):
             "subdivision_code": service.DEFAULT_SUBDIVISION_CODE,
             "language_iso_code": service.DEFAULT_LANGUAGE_ISO_CODE,
         }
+
+
+class EmployeeProfileAdminForm(forms.ModelForm):
+    class Meta:
+        model = EmployeeProfile
+        fields = "__all__"
+        widgets = {
+            "color": UnfoldAdminColorInputWidget(),
+        }
+
+
+class WorkScheduleDayInlineForm(forms.ModelForm):
+    class Meta:
+        model = WorkScheduleDay
+        fields = "__all__"
+        widgets = {
+            "start_time": UnfoldAdminTimeWidget(),
+            "end_time": UnfoldAdminTimeWidget(),
+        }
+
+    class Media:
+        js = ("core/admin/hr_work_schedule_time_fields.js",)

@@ -15,7 +15,7 @@ from unfold.enums import ActionVariant
 from unfold.contrib.filters.admin import BooleanRadioFilter, RangeDateTimeFilter, RelatedDropdownFilter
 
 from core.admin import BaseAdmin, BaseTabularInline
-from hr.forms import OpenHolidaysImportForm
+from hr.forms import EmployeeProfileAdminForm, OpenHolidaysImportForm, WorkScheduleDayInlineForm
 from hr.models import (
     CompanyHoliday,
     Department,
@@ -45,6 +45,7 @@ logger = logging.getLogger(__name__)
 
 class WorkScheduleDayInline(BaseTabularInline):
     model = WorkScheduleDay
+    form = WorkScheduleDayInlineForm
     fields = (
         "weekday",
         "is_working_day",
@@ -55,6 +56,13 @@ class WorkScheduleDayInline(BaseTabularInline):
         "created_at",
         "updated_at",
     )
+
+
+class EmployeeWorkScheduleInline(BaseTabularInline):
+    model = EmployeeWorkSchedule
+    fk_name = "employee"
+    fields = ("schedule", "valid_from", "valid_until", "created_at", "updated_at")
+    autocomplete_fields = ("schedule",)
 
 
 class HrScopedAdminMixin:
@@ -160,12 +168,15 @@ class HolidayCalendarAdmin(HrScopedAdminMixin, BaseAdmin):
 @admin.register(EmployeeProfile)
 class EmployeeProfileAdmin(HrScopedAdminMixin, BaseAdmin):
     employee_lookup = None
+    form = EmployeeProfileAdminForm
+    readonly_fields = BaseAdmin.readonly_fields + ("approved_vacation_days_display", "remaining_vacation_days_display")
     list_display = (
         "user",
         "full_name_display",
         "employee_number",
         "department",
         "holiday_calendar",
+        "remaining_vacation_days_display",
         "short_code",
         "color",
         "is_active_employee",
@@ -183,6 +194,7 @@ class EmployeeProfileAdmin(HrScopedAdminMixin, BaseAdmin):
         ("is_active_employee", BooleanRadioFilter),
         ("created_at", RangeDateTimeFilter),
     ]
+    inlines = (EmployeeWorkScheduleInline,)
 
     def has_module_permission(self, request):
         return self.access_service.can_view_calendar(request.user)
@@ -206,6 +218,18 @@ class EmployeeProfileAdmin(HrScopedAdminMixin, BaseAdmin):
     @admin.display(description="Name", ordering="user__last_name")
     def full_name_display(self, obj: EmployeeProfile) -> str:
         return obj.full_name
+
+    @admin.display(description="Genehmigter Urlaub")
+    def approved_vacation_days_display(self, obj: EmployeeProfile) -> str:
+        current_year = date.today().year
+        approved_days = LeaveService().get_approved_vacation_days_for_year(obj, current_year)
+        return f"{approved_days:.2f} Tage ({current_year})"
+
+    @admin.display(description="Resturlaub")
+    def remaining_vacation_days_display(self, obj: EmployeeProfile) -> str:
+        current_year = date.today().year
+        remaining_days = LeaveService().get_remaining_vacation_days_for_year(obj, current_year)
+        return f"{remaining_days:.2f} Tage ({current_year})"
 
 
 @admin.register(WorkSchedule)
@@ -568,6 +592,7 @@ class EmployeeWorkScheduleAdmin(HrScopedAdminMixin, BaseAdmin):
         ("created_at", RangeDateTimeFilter),
     ]
     date_hierarchy = "valid_from"
+    autocomplete_fields = ("employee", "schedule")
 
     def has_module_permission(self, request):
         return self.can_manage(request)
@@ -588,11 +613,13 @@ class EmployeeWorkScheduleAdmin(HrScopedAdminMixin, BaseAdmin):
 @admin.register(LeaveRequest)
 class LeaveRequestAdmin(HrScopedAdminMixin, BaseAdmin):
     manager_permission_name = "can_manage_leave_requests"
+    readonly_fields = BaseAdmin.readonly_fields + ("calculated_days",)
     list_display = (
         "employee",
         "leave_type",
         "start_date",
         "end_date",
+        "calculated_days",
         "status",
         "approved_by",
         "approved_at",
@@ -703,11 +730,13 @@ class LeaveRequestAdmin(HrScopedAdminMixin, BaseAdmin):
         return ("status", "approved_by", "approved_at")
 
     def save_model(self, request, obj, form, change):
+        service = LeaveService()
         if not self.can_manage(request):
             employee_profile = self.access_service.get_user_employee_profile(request.user)
             if employee_profile is None:
                 raise ValidationError("Ohne Mitarbeiterprofil kann kein Urlaubsantrag gespeichert werden.")
             obj.employee = employee_profile
+        obj.calculated_days = service.calculate_leave_days_for_request(obj)
         super().save_model(request, obj, form, change)
 
 

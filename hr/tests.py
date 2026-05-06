@@ -11,7 +11,22 @@ from django.core.exceptions import ValidationError
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 
-from hr.models import CompanyHoliday, Department, EmployeeProfile, EmployeeWorkSchedule, HolidayCalendar, LeaveRequest, MonthlyWorkSummary, SchoolHoliday, SickLeave, TimeAccountEntry, WorkSchedule
+from hr.forms import EmployeeProfileAdminForm, WorkScheduleDayInlineForm
+from hr.models import (
+    CompanyHoliday,
+    Department,
+    EmployeeProfile,
+    EmployeeWorkSchedule,
+    HolidayCalendar,
+    LeaveRequest,
+    MonthlyWorkSummary,
+    PublicHoliday,
+    SchoolHoliday,
+    SickLeave,
+    TimeAccountEntry,
+    WorkSchedule,
+    WorkScheduleDay,
+)
 from hr.services import (
     AccessService,
     CalendarService,
@@ -23,6 +38,7 @@ from hr.services import (
     TimeAccountService,
     WorkingTimeService,
 )
+from unfold.widgets import UnfoldAdminColorInputWidget, UnfoldAdminTimeWidget
 
 
 class HrServiceUtilityTest(SimpleTestCase):
@@ -208,6 +224,42 @@ class HrServiceUtilityTest(SimpleTestCase):
 
         self.assertEqual(target_minutes, 0)
 
+    def test_calculate_leave_days_skips_non_working_days_and_respects_half_days(self):
+        class StubWorkingTimeService:
+            @staticmethod
+            def get_target_minutes_for_date(employee, target_date):
+                working_days = {
+                    date(2026, 5, 4): 480,
+                    date(2026, 5, 6): 480,
+                }
+                return working_days.get(target_date, 0)
+
+        calculated_days = LeaveService().calculate_leave_days(
+            SimpleNamespace(),
+            start_date=date(2026, 5, 4),
+            end_date=date(2026, 5, 6),
+            half_day_start=True,
+            half_day_end=False,
+            working_time_service=StubWorkingTimeService(),
+        )
+
+        self.assertEqual(calculated_days, Decimal("1.50"))
+
+
+class HrAdminFormWidgetTest(SimpleTestCase):
+    def test_employee_profile_form_uses_color_picker_widget(self):
+        form = EmployeeProfileAdminForm()
+
+        self.assertIsInstance(form.fields["color"].widget, UnfoldAdminColorInputWidget)
+        self.assertEqual(form.fields["color"].widget.attrs.get("type"), "color")
+
+    def test_work_schedule_day_form_uses_timepicker_widgets(self):
+        form = WorkScheduleDayInlineForm()
+
+        self.assertIsInstance(form.fields["start_time"].widget, UnfoldAdminTimeWidget)
+        self.assertIsInstance(form.fields["end_time"].widget, UnfoldAdminTimeWidget)
+        self.assertIn("core/admin/hr_work_schedule_time_fields.js", form.media.render_js())
+
 
 class HrSetupServiceTest(TestCase):
     def test_ensure_groups_creates_expected_permissions(self):
@@ -316,6 +368,78 @@ class HrLeaveConflictTest(TestCase):
 
         with self.assertRaises(ValidationError):
             LeaveService().approve_leave_request(leave_request, approved_by=self.user)
+
+
+class HrVacationBalanceTest(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(username="vacation-user", password="pass", is_staff=True)
+        self.department = Department.objects.create(name="HR", code="HR")
+        self.calendar = HolidayCalendar.objects.create(name="Deutschland", region_code="DE", is_default=True)
+        self.employee = EmployeeProfile.objects.create(
+            user=self.user,
+            department=self.department,
+            holiday_calendar=self.calendar,
+            short_code="VAC",
+            vacation_days_per_year=Decimal("30.00"),
+        )
+        self.schedule = WorkSchedule.objects.create(name="Vollzeit", is_active=True)
+        for weekday in range(5):
+            WorkScheduleDay.objects.create(
+                schedule=self.schedule,
+                weekday=weekday,
+                is_working_day=True,
+                start_time="08:00",
+                end_time="16:00",
+                break_minutes=30,
+                target_minutes=480,
+            )
+        for weekday in (5, 6):
+            WorkScheduleDay.objects.create(
+                schedule=self.schedule,
+                weekday=weekday,
+                is_working_day=False,
+                target_minutes=0,
+            )
+        EmployeeWorkSchedule.objects.create(
+            employee=self.employee,
+            schedule=self.schedule,
+            valid_from=date(2026, 1, 1),
+        )
+
+    def test_remaining_vacation_days_use_only_approved_vacation_requests(self):
+        PublicHoliday.objects.create(
+            calendar=self.calendar,
+            name="Sonderfeiertag",
+            date=date(2026, 5, 6),
+            is_active=True,
+        )
+        LeaveRequest.objects.create(
+            employee=self.employee,
+            leave_type=LeaveRequest.LeaveType.VACATION,
+            start_date=date(2026, 5, 4),
+            end_date=date(2026, 5, 8),
+            status=LeaveRequest.Status.APPROVED,
+        )
+        LeaveRequest.objects.create(
+            employee=self.employee,
+            leave_type=LeaveRequest.LeaveType.VACATION,
+            start_date=date(2026, 6, 1),
+            end_date=date(2026, 6, 2),
+            status=LeaveRequest.Status.REQUESTED,
+        )
+        LeaveRequest.objects.create(
+            employee=self.employee,
+            leave_type=LeaveRequest.LeaveType.SPECIAL_LEAVE,
+            start_date=date(2026, 7, 1),
+            end_date=date(2026, 7, 1),
+            status=LeaveRequest.Status.APPROVED,
+        )
+
+        approved_days = LeaveService().get_approved_vacation_days_for_year(self.employee, 2026)
+        remaining_days = LeaveService().get_remaining_vacation_days_for_year(self.employee, 2026)
+
+        self.assertEqual(approved_days, Decimal("4.00"))
+        self.assertEqual(remaining_days, Decimal("26.00"))
 
 
 class HrOpenHolidaysImportTest(TestCase):

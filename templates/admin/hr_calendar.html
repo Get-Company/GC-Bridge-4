@@ -7,7 +7,7 @@
     <div>
       <h1 class="text-xl font-semibold">Mitarbeiterkalender</h1>
       <p class="text-sm text-gray-500 dark:text-gray-400">
-        Urlaub, Krankheit und genehmigte Zeitkonto-Buchungen in einer Monatsansicht.
+        Urlaub, Krankheit und genehmigte Zeitkonto-Buchungen in Monats-, 3-Monats- und Jahresansicht.
       </p>
     </div>
     <div class="flex flex-wrap items-center gap-2 text-xs">
@@ -34,6 +34,15 @@
 
   <div class="grid grid-cols-1 xl:grid-cols-[320px,minmax(0,1fr)] gap-6 items-start">
     <div class="flex flex-col gap-4 rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-900">
+      <div>
+        <label for="calendar-view-mode" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Ansicht</label>
+        <select id="calendar-view-mode" class="w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800">
+          <option value="month">Monatsansicht</option>
+          <option value="quarter">3-Monatsansicht</option>
+          <option value="year">Jahresansicht</option>
+        </select>
+      </div>
+
       <div>
         <label for="calendar-month" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Monat</label>
         <input id="calendar-month" type="month" value="{{ default_month }}" class="w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800">
@@ -89,17 +98,7 @@
         </div>
       </div>
 
-      <div class="grid grid-cols-7 gap-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-        <div>Mo</div>
-        <div>Di</div>
-        <div>Mi</div>
-        <div>Do</div>
-        <div>Fr</div>
-        <div>Sa</div>
-        <div>So</div>
-      </div>
-
-      <div id="calendar-grid" class="grid grid-cols-7 gap-2"></div>
+      <div id="calendar-panels" class="grid gap-4"></div>
 
       <div class="rounded-lg border border-gray-200 dark:border-gray-700">
         <div class="border-b border-gray-200 px-4 py-3 text-sm font-semibold dark:border-gray-700">
@@ -118,11 +117,12 @@
   "use strict";
 
   const monthInput = document.getElementById("calendar-month");
+  const viewModeInput = document.getElementById("calendar-view-mode");
   const departmentInput = document.getElementById("calendar-department");
   const employeeInput = document.getElementById("calendar-employee");
   const titleEl = document.getElementById("calendar-title");
   const metaEl = document.getElementById("calendar-meta");
-  const gridEl = document.getElementById("calendar-grid");
+  const panelsEl = document.getElementById("calendar-panels");
   const dayDetailsEl = document.getElementById("calendar-day-details");
   const applyBtn = document.getElementById("calendar-apply");
   const resetBtn = document.getElementById("calendar-reset");
@@ -130,8 +130,10 @@
   const nextBtn = document.getElementById("calendar-next");
 
   let currentMonth = monthInput.value || new Date().toISOString().slice(0, 7);
+  let currentViewMode = viewModeInput.value || "month";
   let selectedDay = null;
   let currentEvents = [];
+  let currentPeriod = null;
 
   function getSelectedEmployees() {
     return Array.from(employeeInput.selectedOptions).map((option) => option.value);
@@ -144,23 +146,48 @@
     return `${year}-${month}-${day}`;
   }
 
-  function buildMonthRange(monthValue) {
+  function fromIsoToLocalDate(isoDate) {
+    const [year, month, day] = isoDate.split("-").map(Number);
+    return new Date(year, month - 1, day);
+  }
+
+  function getMonthLabel(dateObj) {
+    return dateObj.toLocaleDateString("de-DE", { month: "long", year: "numeric" });
+  }
+
+  function buildVisiblePeriod(monthValue, viewMode) {
     const [year, month] = monthValue.split("-").map(Number);
-    const start = new Date(year, month - 1, 1);
-    const end = new Date(year, month, 0);
+    const visibleMonths = [];
+
+    if (viewMode === "year") {
+      for (let monthIndex = 0; monthIndex < 12; monthIndex += 1) {
+        visibleMonths.push(new Date(year, monthIndex, 1));
+      }
+    } else {
+      const totalMonths = viewMode === "quarter" ? 3 : 1;
+      for (let monthOffset = 0; monthOffset < totalMonths; monthOffset += 1) {
+        visibleMonths.push(new Date(year, month - 1 + monthOffset, 1));
+      }
+    }
+
+    const start = visibleMonths[0];
+    const lastMonth = visibleMonths[visibleMonths.length - 1];
+    const end = new Date(lastMonth.getFullYear(), lastMonth.getMonth() + 1, 0);
     return {
       start,
       end,
       startIso: toLocalIso(start),
       endIso: toLocalIso(end),
+      visibleMonths,
+      viewMode,
     };
   }
 
   function fetchEvents() {
-    const range = buildMonthRange(currentMonth);
+    currentPeriod = buildVisiblePeriod(currentMonth, currentViewMode);
     const params = new URLSearchParams({
-      start: range.startIso,
-      end: range.endIso,
+      start: currentPeriod.startIso,
+      end: currentPeriod.endIso,
     });
     if (departmentInput.value) {
       params.set("department", departmentInput.value);
@@ -175,40 +202,83 @@
       .then((response) => response.json())
       .then((data) => {
         currentEvents = data.events || [];
-        renderMonth(range.start, currentEvents);
+        renderCalendar(currentPeriod, currentEvents);
       })
       .catch(() => {
-        gridEl.innerHTML = '<div class="col-span-7 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-900/20 dark:text-red-300">Kalenderdaten konnten nicht geladen werden.</div>';
+        panelsEl.innerHTML = '<div class="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-900/20 dark:text-red-300">Kalenderdaten konnten nicht geladen werden.</div>';
       });
   }
 
-  function renderMonth(startDate, events) {
-    const [year, month] = currentMonth.split("-").map(Number);
-    const titleDate = new Date(year, month - 1, 1);
-    titleEl.textContent = titleDate.toLocaleDateString("de-DE", { month: "long", year: "numeric" });
-    metaEl.textContent = `${events.length} Eintraege im sichtbaren Zeitraum`;
+  function getEventsForDay(events, isoDate) {
+    return events.filter((event) => event.start <= isoDate && event.end > isoDate);
+  }
 
-    const firstGridDay = new Date(year, month - 1, 1);
+  function renderCalendar(period, events) {
+    const totalMonths = period.visibleMonths.length;
+    if (period.viewMode === "year") {
+      titleEl.textContent = `Jahresansicht ${period.start.getFullYear()}`;
+      metaEl.textContent = `${events.length} Eintraege in 12 Monaten`;
+      panelsEl.className = "grid gap-4 md:grid-cols-2 2xl:grid-cols-3";
+    } else if (period.viewMode === "quarter") {
+      titleEl.textContent = `${getMonthLabel(period.visibleMonths[0])} bis ${getMonthLabel(period.visibleMonths[2])}`;
+      metaEl.textContent = `${events.length} Eintraege in 3 Monaten`;
+      panelsEl.className = "grid gap-4 xl:grid-cols-3";
+    } else {
+      titleEl.textContent = getMonthLabel(period.start);
+      metaEl.textContent = `${events.length} Eintraege im sichtbaren Zeitraum`;
+      panelsEl.className = "grid gap-4";
+    }
+
+    if (!selectedDay || selectedDay < period.startIso || selectedDay > period.endIso) {
+      selectedDay = period.startIso;
+    }
+
+    panelsEl.innerHTML = "";
+    period.visibleMonths.forEach((monthStart) => {
+      panelsEl.appendChild(renderMonthPanel(monthStart, events, totalMonths));
+    });
+
+    renderDayDetails(selectedDay, getEventsForDay(events, selectedDay));
+  }
+
+  function renderMonthPanel(monthStart, events, totalMonths) {
+    const panel = document.createElement("section");
+    panel.className = "rounded-lg border border-gray-200 bg-gray-50/60 p-3 dark:border-gray-700 dark:bg-gray-950/40";
+
+    const heading = document.createElement("div");
+    heading.className = "mb-3 text-sm font-semibold text-gray-700 dark:text-gray-200";
+    heading.textContent = getMonthLabel(monthStart);
+    panel.appendChild(heading);
+
+    const weekdays = document.createElement("div");
+    weekdays.className = "mb-2 grid grid-cols-7 gap-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400";
+    ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"].forEach((label) => {
+      const item = document.createElement("div");
+      item.textContent = label;
+      weekdays.appendChild(item);
+    });
+    panel.appendChild(weekdays);
+
+    const grid = document.createElement("div");
+    grid.className = "grid grid-cols-7 gap-2";
+
+    const firstGridDay = new Date(monthStart);
     const weekDay = firstGridDay.getDay();
     const offset = weekDay === 0 ? 6 : weekDay - 1;
     firstGridDay.setDate(firstGridDay.getDate() - offset);
 
-    gridEl.innerHTML = "";
     for (let i = 0; i < 42; i += 1) {
       const cellDate = new Date(firstGridDay);
       cellDate.setDate(firstGridDay.getDate() + i);
       const isoDate = toLocalIso(cellDate);
-      const isCurrentMonth = cellDate.getMonth() === startDate.getMonth();
-      const dayEvents = events.filter((event) => {
-        const eventStart = event.start;
-        const eventEndExclusive = event.end;
-        return eventStart <= isoDate && eventEndExclusive > isoDate;
-      });
+      const isCurrentMonth = cellDate.getMonth() === monthStart.getMonth() && cellDate.getFullYear() === monthStart.getFullYear();
+      const dayEvents = getEventsForDay(events, isoDate);
+      const isCompactMode = totalMonths > 3;
 
       const cell = document.createElement("button");
       cell.type = "button";
       cell.className = [
-        "min-h-[120px] rounded-lg border p-2 text-left transition-colors",
+        isCompactMode ? "min-h-[96px] rounded-lg border p-2 text-left transition-colors" : "min-h-[120px] rounded-lg border p-2 text-left transition-colors",
         isCurrentMonth
           ? "border-gray-200 bg-white hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:hover:bg-gray-800"
           : "border-gray-100 bg-gray-50 text-gray-400 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-600",
@@ -216,7 +286,7 @@
       ].join(" ");
       cell.addEventListener("click", () => {
         selectedDay = isoDate;
-        renderMonth(startDate, events);
+        renderCalendar(currentPeriod, currentEvents);
         renderDayDetails(isoDate, dayEvents);
       });
 
@@ -232,20 +302,15 @@
         </div>
         <div class="flex flex-col gap-1">${chips}${moreCount}</div>
       `;
-      gridEl.appendChild(cell);
+      grid.appendChild(cell);
     }
 
-    if (!selectedDay) {
-      selectedDay = toLocalIso(startDate);
-    }
-    renderDayDetails(
-      selectedDay,
-      events.filter((event) => event.start <= selectedDay && event.end > selectedDay),
-    );
+    panel.appendChild(grid);
+    return panel;
   }
 
   function renderDayDetails(isoDate, events) {
-    const label = new Date(isoDate).toLocaleDateString("de-DE", {
+    const label = fromIsoToLocalDate(isoDate).toLocaleDateString("de-DE", {
       weekday: "long",
       day: "2-digit",
       month: "2-digit",
@@ -280,9 +345,10 @@
       .replace(/"/g, "&quot;");
   }
 
-  function shiftMonth(step) {
+  function shiftPeriod(step) {
+    const monthStep = currentViewMode === "year" ? 12 : currentViewMode === "quarter" ? 3 : 1;
     const [year, month] = currentMonth.split("-").map(Number);
-    const nextDate = new Date(year, month - 1 + step, 1);
+    const nextDate = new Date(year, month - 1 + (step * monthStep), 1);
     currentMonth = `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, "0")}`;
     monthInput.value = currentMonth;
     selectedDay = null;
@@ -291,19 +357,32 @@
 
   applyBtn.addEventListener("click", () => {
     currentMonth = monthInput.value || currentMonth;
+    currentViewMode = viewModeInput.value || "month";
+    selectedDay = null;
+    fetchEvents();
+  });
+  monthInput.addEventListener("change", () => {
+    currentMonth = monthInput.value || currentMonth;
+    selectedDay = null;
+    fetchEvents();
+  });
+  viewModeInput.addEventListener("change", () => {
+    currentViewMode = viewModeInput.value || "month";
     selectedDay = null;
     fetchEvents();
   });
   resetBtn.addEventListener("click", () => {
     departmentInput.value = "";
     Array.from(employeeInput.options).forEach((option) => { option.selected = false; });
+    viewModeInput.value = "month";
     monthInput.value = "{{ default_month }}";
+    currentViewMode = viewModeInput.value;
     currentMonth = monthInput.value;
     selectedDay = null;
     fetchEvents();
   });
-  prevBtn.addEventListener("click", () => shiftMonth(-1));
-  nextBtn.addEventListener("click", () => shiftMonth(1));
+  prevBtn.addEventListener("click", () => shiftPeriod(-1));
+  nextBtn.addEventListener("click", () => shiftPeriod(1));
 
   fetchEvents();
 })();

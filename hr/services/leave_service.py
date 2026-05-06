@@ -41,19 +41,109 @@ class LeaveService(BaseService):
             total_days -= Decimal("0.5")
         return total_days
 
+    @staticmethod
+    def _quantize_days(value: Decimal) -> Decimal:
+        return value.quantize(Decimal("0.00"))
+
+    def calculate_leave_days(
+        self,
+        employee: EmployeeProfile,
+        *,
+        start_date: date,
+        end_date: date,
+        half_day_start: bool = False,
+        half_day_end: bool = False,
+        working_time_service: WorkingTimeService | None = None,
+    ) -> Decimal:
+        working_time_service = working_time_service or WorkingTimeService()
+        total_days = Decimal("0.00")
+        current_date = start_date
+
+        while current_date <= end_date:
+            if working_time_service.get_target_minutes_for_date(employee, current_date) > 0:
+                day_units = Decimal("1.00")
+                if current_date == start_date and half_day_start:
+                    day_units -= Decimal("0.50")
+                if current_date == end_date and half_day_end:
+                    day_units -= Decimal("0.50")
+                total_days += day_units
+            current_date = current_date.fromordinal(current_date.toordinal() + 1)
+
+        return self._quantize_days(total_days)
+
+    def calculate_leave_days_for_request(
+        self,
+        leave_request: LeaveRequest,
+        *,
+        working_time_service: WorkingTimeService | None = None,
+    ) -> Decimal:
+        return self.calculate_leave_days(
+            leave_request.employee,
+            start_date=leave_request.start_date,
+            end_date=leave_request.end_date,
+            half_day_start=leave_request.half_day_start,
+            half_day_end=leave_request.half_day_end,
+            working_time_service=working_time_service,
+        )
+
     def get_approved_leave_requests(
         self,
         employee: EmployeeProfile,
         *,
         start_date: date,
         end_date: date,
+        leave_type: str | None = None,
     ):
-        return (
+        queryset = (
             self.get_queryset()
             .filter(employee=employee, status=LeaveRequest.Status.APPROVED)
             .filter(start_date__lte=end_date, end_date__gte=start_date)
-            .order_by("start_date", "pk")
         )
+        if leave_type:
+            queryset = queryset.filter(leave_type=leave_type)
+        return queryset.order_by("start_date", "pk")
+
+    def get_approved_vacation_days_for_year(
+        self,
+        employee: EmployeeProfile,
+        year: int,
+        *,
+        working_time_service: WorkingTimeService | None = None,
+    ) -> Decimal:
+        year_start = date(year, 1, 1)
+        year_end = date(year, 12, 31)
+        total_days = Decimal("0.00")
+
+        for leave_request in self.get_approved_leave_requests(
+            employee,
+            start_date=year_start,
+            end_date=year_end,
+            leave_type=LeaveRequest.LeaveType.VACATION,
+        ):
+            total_days += self.calculate_leave_days(
+                employee,
+                start_date=max(leave_request.start_date, year_start),
+                end_date=min(leave_request.end_date, year_end),
+                half_day_start=leave_request.half_day_start and leave_request.start_date >= year_start,
+                half_day_end=leave_request.half_day_end and leave_request.end_date <= year_end,
+                working_time_service=working_time_service,
+            )
+
+        return self._quantize_days(total_days)
+
+    def get_remaining_vacation_days_for_year(
+        self,
+        employee: EmployeeProfile,
+        year: int,
+        *,
+        working_time_service: WorkingTimeService | None = None,
+    ) -> Decimal:
+        approved_days = self.get_approved_vacation_days_for_year(
+            employee,
+            year,
+            working_time_service=working_time_service,
+        )
+        return self._quantize_days(Decimal(employee.vacation_days_per_year) - approved_days)
 
     def get_approved_leave_minutes_for_month(
         self,
@@ -141,6 +231,7 @@ class LeaveService(BaseService):
     def approve_leave_request(self, leave_request: LeaveRequest, *, approved_by) -> LeaveRequest:
         self.validate_status_transition(leave_request.status, LeaveRequest.Status.APPROVED)
         self.validate_leave_request_conflicts(leave_request)
+        leave_request.calculated_days = self.calculate_leave_days_for_request(leave_request)
         leave_request.status = LeaveRequest.Status.APPROVED
         leave_request.approved_by = approved_by
         leave_request.approved_at = timezone.now()
@@ -150,6 +241,7 @@ class LeaveService(BaseService):
 
     def reject_leave_request(self, leave_request: LeaveRequest, *, approved_by) -> LeaveRequest:
         self.validate_status_transition(leave_request.status, LeaveRequest.Status.REJECTED)
+        leave_request.calculated_days = self.calculate_leave_days_for_request(leave_request)
         leave_request.status = LeaveRequest.Status.REJECTED
         leave_request.approved_by = approved_by
         leave_request.approved_at = timezone.now()
@@ -159,6 +251,7 @@ class LeaveService(BaseService):
 
     def cancel_leave_request(self, leave_request: LeaveRequest) -> LeaveRequest:
         self.validate_status_transition(leave_request.status, LeaveRequest.Status.CANCELLED)
+        leave_request.calculated_days = self.calculate_leave_days_for_request(leave_request)
         leave_request.status = LeaveRequest.Status.CANCELLED
         leave_request.full_clean()
         leave_request.save()

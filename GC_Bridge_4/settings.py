@@ -559,6 +559,18 @@ UNFOLD = {
                         "permission": sidebar_model_view_permission("hr", "MonthlyWorkSummary"),
                     },
                     {
+                        "title": _("Arbeitszeitmodelle"),
+                        "icon": "edit_calendar",
+                        "link": reverse_lazy("admin:hr_workschedule_changelist"),
+                        "permission": sidebar_model_view_permission("hr", "WorkSchedule"),
+                    },
+                    {
+                        "title": _("Arbeitszeit-Zuweisungen"),
+                        "icon": "assignment_ind",
+                        "link": reverse_lazy("admin:hr_employeeworkschedule_changelist"),
+                        "permission": sidebar_model_view_permission("hr", "EmployeeWorkSchedule"),
+                    },
+                    {
                         "title": _("Feiertagskalender"),
                         "icon": "calendar_view_month",
                         "link": reverse_lazy("admin:hr_holidaycalendar_changelist"),
