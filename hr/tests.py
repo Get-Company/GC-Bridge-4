@@ -408,6 +408,51 @@ class HrOpenHolidaysImportTest(TestCase):
             ).exists()
         )
 
+    def test_admin_openholidays_import_works_with_import_action_field(self):
+        HrSetupService.ensure_groups()
+        user = get_user_model().objects.create_user(
+            username="hr-admin-action",
+            password="pass",
+            is_staff=True,
+        )
+        user.groups.add(Group.objects.get(name=AccessService.GROUP_HR))
+        self.client.force_login(user)
+
+        with patch(
+            "hr.admin.OpenHolidaysService.fetch_public_holidays",
+            return_value=[
+                {
+                    "date": date(2026, 5, 1),
+                    "name": "Tag der Arbeit",
+                    "is_half_day": False,
+                    "subdivisions": "DE-BY",
+                }
+            ],
+        ), patch(
+            "hr.admin.OpenHolidaysService.fetch_school_holidays",
+            return_value=[],
+        ):
+            response = self.client.post(
+                reverse("admin:hr_publicholiday_openholidays"),
+                data={
+                    "calendar": self.calendar.pk,
+                    "year": 2026,
+                    "country_iso_code": "DE",
+                    "subdivision_code": "DE-BY",
+                    "language_iso_code": "DE",
+                    "import_action": "import_public_holidays",
+                },
+            )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(
+            PublicHoliday.objects.filter(
+                calendar=self.calendar,
+                date=date(2026, 5, 1),
+                name="Tag der Arbeit",
+            ).exists()
+        )
+
     def test_approve_leave_request_rejects_overlap_with_company_holiday(self):
         CompanyHoliday.objects.create(
             name="Sommerpause",

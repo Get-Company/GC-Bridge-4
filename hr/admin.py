@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
+import logging
 
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied, ValidationError
@@ -38,6 +39,8 @@ from hr.services import (
     OpenHolidaysService,
     TimeAccountService,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class WorkScheduleDayInline(BaseTabularInline):
@@ -290,6 +293,7 @@ class PublicHolidayAdmin(HrScopedAdminMixin, BaseAdmin):
             raise PermissionDenied
 
         service = OpenHolidaysService()
+        import_action = (request.POST.get("import_action") or request.POST.get("action") or "").strip()
         holiday_calendars = HolidayCalendar.objects.order_by("name", "pk")
         initial = OpenHolidaysImportForm.build_initial()
         form = OpenHolidaysImportForm(
@@ -297,11 +301,21 @@ class PublicHolidayAdmin(HrScopedAdminMixin, BaseAdmin):
             initial=initial,
             calendar_queryset=holiday_calendars,
         )
+        debug_info: list[str] = [
+            f"request_method={request.method}",
+            f"import_action={import_action or '-'}",
+            f"post_keys={', '.join(sorted(request.POST.keys())) if request.method == 'POST' else '-'}",
+        ]
 
-        if request.method == "POST" and not form.is_valid():
+        form_is_valid = form.is_valid() if request.method == "POST" else False
+        debug_info.append(f"form_is_valid={form_is_valid}")
+
+        if request.method == "POST" and not form_is_valid:
             self.message_user(request, _("Bitte die Importparameter pruefen."), level=messages.ERROR)
+            for field_name, errors in form.errors.items():
+                debug_info.append(f"form_error[{field_name}]={'; '.join(errors)}")
 
-        if request.method == "POST" and form.is_valid():
+        if request.method == "POST" and form_is_valid:
             year = int(form.cleaned_data["year"])
             country_iso_code = self._get_openholidays_value(
                 form.cleaned_data["country_iso_code"],
@@ -316,6 +330,7 @@ class PublicHolidayAdmin(HrScopedAdminMixin, BaseAdmin):
                 default=service.DEFAULT_SUBDIVISION_CODE,
             )
             selected_calendar = form.cleaned_data["calendar"]
+            debug_info.append(f"selected_calendar={selected_calendar.pk}:{selected_calendar.name}")
         else:
             year = self._get_openholidays_year(str(initial["year"]))
             country_iso_code = self._get_openholidays_value(
@@ -331,6 +346,10 @@ class PublicHolidayAdmin(HrScopedAdminMixin, BaseAdmin):
                 default=service.DEFAULT_SUBDIVISION_CODE,
             )
             selected_calendar = holiday_calendars.filter(pk=initial["calendar"]).first() if initial["calendar"] else None
+            debug_info.append(
+                "selected_calendar="
+                + (f"{selected_calendar.pk}:{selected_calendar.name}" if selected_calendar is not None else "-")
+            )
 
         public_holidays: list[dict] = []
         school_holidays: list[dict] = []
@@ -347,13 +366,18 @@ class PublicHolidayAdmin(HrScopedAdminMixin, BaseAdmin):
                 language_iso_code=language_iso_code,
                 subdivision_code=subdivision_code,
             )
+            debug_info.append(f"fetched_public_holidays={len(public_holidays)}")
+            debug_info.append(f"fetched_school_holidays={len(school_holidays)}")
         except OpenHolidaysApiError as exc:
+            debug_info.append(f"fetch_error={exc}")
             self.message_user(request, str(exc), level=messages.ERROR)
 
-        if request.method == "POST" and request.POST.get("action") == "import_public_holidays":
+        if request.method == "POST" and import_action == "import_public_holidays":
             if selected_calendar is None:
+                debug_info.append("import_public_holidays=aborted:no_calendar")
                 self.message_user(request, "Bitte zuerst einen Feiertagskalender auswaehlen.", level=messages.ERROR)
             elif not public_holidays:
+                debug_info.append("import_public_holidays=aborted:no_public_holidays")
                 self.message_user(
                     request,
                     "Es konnten keine Feiertage geladen werden. Import wurde nicht ausgefuehrt.",
@@ -361,6 +385,11 @@ class PublicHolidayAdmin(HrScopedAdminMixin, BaseAdmin):
                 )
             else:
                 result = service.import_public_holidays(calendar=selected_calendar, holidays=public_holidays)
+                debug_info.append(
+                    "import_public_holidays="
+                    f"created:{result['created']} updated:{result['updated']} unchanged:{result['unchanged']}"
+                )
+                logger.info("OpenHolidays public import result: %s", debug_info[-1])
                 self.message_user(
                     request,
                     (
@@ -371,10 +400,12 @@ class PublicHolidayAdmin(HrScopedAdminMixin, BaseAdmin):
                 )
                 return HttpResponseRedirect(reverse("admin:hr_publicholiday_changelist"))
 
-        if request.method == "POST" and request.POST.get("action") == "import_school_holidays":
+        if request.method == "POST" and import_action == "import_school_holidays":
             if selected_calendar is None:
+                debug_info.append("import_school_holidays=aborted:no_calendar")
                 self.message_user(request, "Bitte zuerst einen Feiertagskalender auswaehlen.", level=messages.ERROR)
             elif not school_holidays:
+                debug_info.append("import_school_holidays=aborted:no_school_holidays")
                 self.message_user(
                     request,
                     "Es konnten keine Schulferien geladen werden. Import wurde nicht ausgefuehrt.",
@@ -382,6 +413,11 @@ class PublicHolidayAdmin(HrScopedAdminMixin, BaseAdmin):
                 )
             else:
                 result = service.import_school_holidays(calendar=selected_calendar, holidays=school_holidays)
+                debug_info.append(
+                    "import_school_holidays="
+                    f"created:{result['created']} updated:{result['updated']} unchanged:{result['unchanged']}"
+                )
+                logger.info("OpenHolidays school import result: %s", debug_info[-1])
                 self.message_user(
                     request,
                     (
@@ -392,12 +428,19 @@ class PublicHolidayAdmin(HrScopedAdminMixin, BaseAdmin):
                 )
                 return HttpResponseRedirect(reverse("admin:hr_schoolholiday_changelist"))
 
-        if request.method == "POST" and request.POST.get("action") == "import_all_holidays":
+        if request.method == "POST" and import_action == "import_all_holidays":
             if selected_calendar is None:
+                debug_info.append("import_all_holidays=aborted:no_calendar")
                 self.message_user(request, "Bitte zuerst einen Feiertagskalender auswaehlen.", level=messages.ERROR)
             else:
                 public_result = service.import_public_holidays(calendar=selected_calendar, holidays=public_holidays)
                 school_result = service.import_school_holidays(calendar=selected_calendar, holidays=school_holidays)
+                debug_info.append(
+                    "import_all_holidays="
+                    f"public(created:{public_result['created']} updated:{public_result['updated']} unchanged:{public_result['unchanged']}) "
+                    f"school(created:{school_result['created']} updated:{school_result['updated']} unchanged:{school_result['unchanged']})"
+                )
+                logger.info("OpenHolidays combined import result: %s", debug_info[-1])
                 self.message_user(
                     request,
                     (
@@ -409,6 +452,14 @@ class PublicHolidayAdmin(HrScopedAdminMixin, BaseAdmin):
                     ),
                 )
                 return HttpResponseRedirect(reverse("admin:hr_publicholiday_changelist"))
+
+        if request.method == "POST" and not import_action:
+            debug_info.append("import_skipped=no_import_action")
+            self.message_user(
+                request,
+                "Kein Importmodus erkannt. Bitte den Import-Button direkt anklicken.",
+                level=messages.WARNING,
+            )
 
         context = {
             **self.admin_site.each_context(request),
@@ -426,6 +477,7 @@ class PublicHolidayAdmin(HrScopedAdminMixin, BaseAdmin):
             "school_holiday_count": len(school_holidays),
             "import_url": reverse("admin:hr_publicholiday_openholidays"),
             "changelist_url": reverse("admin:hr_publicholiday_changelist"),
+            "debug_info": debug_info,
         }
         return TemplateResponse(request, "admin/hr/openholidays_import.html", context)
 
