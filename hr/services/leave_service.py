@@ -163,9 +163,10 @@ class LeaveService(BaseService):
         for bridge in bridge_holidays:
             current_date = max(bridge.start_date, year_start)
             last_date = min(bridge.end_date, year_end)
+            day_fraction = Decimal(str(bridge.day_fraction))
             while current_date <= last_date:
-                if working_time_service.get_target_minutes_for_date(employee, current_date) > 0:
-                    total += Decimal("1.00")
+                if working_time_service.get_scheduled_target_minutes_for_date(employee, current_date) > 0:
+                    total += day_fraction
                 current_date = current_date + timedelta(days=1)
         return self._quantize_days(total)
 

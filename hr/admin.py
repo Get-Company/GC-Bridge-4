@@ -697,7 +697,7 @@ class SchoolHolidayAdmin(HrScopedAdminMixin, BaseAdmin):
 @admin.register(CompanyHoliday)
 class CompanyHolidayAdmin(HrScopedAdminMixin, BaseAdmin):
     employee_lookup = None
-    list_display = ("name", "start_date", "end_date", "counts_as_vacation", "is_active", "created_at")
+    list_display = ("name", "start_date", "end_date", "day_fraction", "counts_as_vacation", "is_active", "created_at")
     search_fields = ("name", "note")
     list_filter = [
         ("counts_as_vacation", BooleanRadioFilter),

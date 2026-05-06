@@ -176,14 +176,20 @@ class WorkingTimeOverviewService(BaseService):
 
         if target_date in company_holiday_map:
             company_holiday = company_holiday_map[target_date]
+            holiday_fraction = Decimal(str(company_holiday.day_fraction))
+            holiday_minutes = int((Decimal(scheduled_minutes) * holiday_fraction).quantize(Decimal("1")))
+            planned_minutes = scheduled_minutes - holiday_minutes
+            planned_units = self._quantize_units(scheduled_units - holiday_fraction)
             row["status_label"] = "Brueckentag" if company_holiday.is_bridge_day else "Betriebsurlaub"
             row["detail_label"] = company_holiday.name
+            row["planned_minutes"] = planned_minutes
+            row["planned_units"] = planned_units
             if company_holiday.is_bridge_day:
-                row["bridge_day_minutes"] = scheduled_minutes
-                row["bridge_day_units"] = scheduled_units
+                row["bridge_day_minutes"] = holiday_minutes
+                row["bridge_day_units"] = holiday_fraction
             else:
-                row["company_holiday_minutes"] = scheduled_minutes
-                row["company_holiday_units"] = scheduled_units
+                row["company_holiday_minutes"] = holiday_minutes
+                row["company_holiday_units"] = holiday_fraction
             return row
 
         if target_date in public_holiday_map:

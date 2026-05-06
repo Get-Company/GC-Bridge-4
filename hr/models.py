@@ -176,11 +176,26 @@ class SchoolHoliday(BaseModel):
 
 
 class CompanyHoliday(BaseModel):
+    DAY_FRACTION_FULL = Decimal("1.00")
+    DAY_FRACTION_HALF = Decimal("0.50")
+    DAY_FRACTION_CHOICES = (
+        (DAY_FRACTION_FULL, _("Ganzer Tag")),
+        (DAY_FRACTION_HALF, _("Halber Tag")),
+    )
+
     name = models.CharField(max_length=120, verbose_name=_("Bezeichnung"))
     start_date = models.DateField(verbose_name=_("Von"))
     end_date = models.DateField(verbose_name=_("Bis"))
     counts_as_vacation = models.BooleanField(default=False, verbose_name=_("Zaehlt als Urlaub"))
     is_bridge_day = models.BooleanField(default=False, verbose_name=_("Brueckentag"))
+    day_fraction = models.DecimalField(
+        max_digits=3,
+        decimal_places=2,
+        default=DAY_FRACTION_FULL,
+        choices=DAY_FRACTION_CHOICES,
+        verbose_name=_("Tagesanteil"),
+        help_text=_("1.00 = ganzer Tag, 0.50 = halber Tag."),
+    )
     is_active = models.BooleanField(default=True, verbose_name=_("Aktiv"))
     note = models.TextField(blank=True, default="", verbose_name=_("Bemerkung"))
 
@@ -204,6 +219,8 @@ class CompanyHoliday(BaseModel):
                 errors["start_date"] = _("Dieser Betriebsurlaub ueberschneidet sich mit einem bestehenden Eintrag.")
         if self.is_bridge_day and not self.counts_as_vacation:
             errors["is_bridge_day"] = _("Ein Brueckentag muss auch als Urlaub zaehlen.")
+        if self.day_fraction not in {self.DAY_FRACTION_FULL, self.DAY_FRACTION_HALF}:
+            errors["day_fraction"] = _("Der Tagesanteil muss 1.00 oder 0.50 sein.")
         if errors:
             raise ValidationError(errors)
 

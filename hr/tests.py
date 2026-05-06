@@ -219,7 +219,7 @@ class HrServiceUtilityTest(SimpleTestCase):
         service = WorkingTimeService()
 
         with patch.object(service, "get_scheduled_target_minutes_for_date", return_value=480), patch(
-            "hr.services.working_time_service.HolidayService.is_non_working_holiday",
+            "hr.services.working_time_service.HolidayService.is_public_holiday",
             return_value=True,
         ):
             target_minutes = service.get_target_minutes_for_date(employee, date(2026, 5, 1))
@@ -467,6 +467,31 @@ class HrVacationBalanceTest(TestCase):
         self.assertEqual(approved_days, Decimal("4.00"))
         self.assertEqual(remaining_days, Decimal("26.00"))
 
+    def test_half_day_bridge_day_reduces_remaining_vacation_by_half(self):
+        CompanyHoliday.objects.create(
+            name="Heiligabend",
+            start_date=date(2026, 12, 24),
+            end_date=date(2026, 12, 24),
+            counts_as_vacation=True,
+            is_bridge_day=True,
+            day_fraction=Decimal("0.50"),
+        )
+
+        bridge_days = LeaveService().get_bridge_days_for_year(self.employee, 2026)
+        remaining_days = LeaveService().get_remaining_vacation_days_for_year(self.employee, 2026)
+        target_minutes = WorkingTimeService().get_target_minutes_for_date(self.employee, date(2026, 12, 24))
+        holiday_minutes = HolidayService().get_company_holiday_vacation_minutes_for_month(
+            self.employee,
+            2026,
+            12,
+            working_time_service=WorkingTimeService(),
+        )
+
+        self.assertEqual(bridge_days, Decimal("0.50"))
+        self.assertEqual(remaining_days, Decimal("29.50"))
+        self.assertEqual(target_minutes, 240)
+        self.assertEqual(holiday_minutes, 240)
+
     def test_working_time_overview_summarizes_leave_holidays_and_bridge_days(self):
         PublicHoliday.objects.create(
             calendar=self.calendar,
@@ -528,6 +553,29 @@ class HrVacationBalanceTest(TestCase):
         self.assertEqual(len(overview["weekly_rows"]), 1)
         self.assertEqual(len(overview["monthly_rows"]), 1)
         self.assertEqual(len(overview["yearly_rows"]), 1)
+
+    def test_working_time_overview_summarizes_half_day_bridge_day(self):
+        CompanyHoliday.objects.create(
+            name="Silvester",
+            start_date=date(2026, 12, 31),
+            end_date=date(2026, 12, 31),
+            counts_as_vacation=True,
+            is_bridge_day=True,
+            day_fraction=Decimal("0.50"),
+        )
+
+        overview = WorkingTimeOverviewService().build_range_overview(
+            self.employee,
+            start_date=date(2026, 12, 31),
+            end_date=date(2026, 12, 31),
+        )
+
+        row = overview["daily_rows"][0]
+        self.assertEqual(row["scheduled_minutes"], 480)
+        self.assertEqual(row["planned_minutes"], 240)
+        self.assertEqual(row["bridge_day_minutes"], 240)
+        self.assertEqual(row["planned_units"], Decimal("0.50"))
+        self.assertEqual(row["bridge_day_units"], Decimal("0.50"))
 
 
 class HrOpenHolidaysImportTest(TestCase):

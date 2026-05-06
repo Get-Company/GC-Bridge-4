@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
+from decimal import Decimal
 
 from core.services import BaseService
 from hr.models import CompanyHoliday, EmployeeProfile, HolidayCalendar, PublicHoliday
@@ -52,6 +53,12 @@ class HolidayService(BaseService):
     def is_non_working_holiday(self, employee: EmployeeProfile, target_date: date) -> bool:
         return self.is_public_holiday(employee, target_date) or self.is_company_holiday(target_date)
 
+    def get_company_holiday_fraction_for_date(self, target_date: date) -> Decimal:
+        company_holiday = self.get_company_holiday_for_date(target_date)
+        if company_holiday is None:
+            return Decimal("0.00")
+        return Decimal(str(company_holiday.day_fraction)).quantize(Decimal("0.00"))
+
     def get_company_holiday_vacation_minutes_for_month(
         self,
         employee: EmployeeProfile,
@@ -79,7 +86,9 @@ class HolidayService(BaseService):
         for company_holiday in company_holidays:
             current_date = max(company_holiday.start_date, start_date)
             last_date = min(company_holiday.end_date, end_date)
+            holiday_fraction = Decimal(str(company_holiday.day_fraction))
             while current_date <= last_date:
-                total_minutes += working_time_service.get_scheduled_target_minutes_for_date(employee, current_date)
+                scheduled_minutes = working_time_service.get_scheduled_target_minutes_for_date(employee, current_date)
+                total_minutes += int((Decimal(scheduled_minutes) * holiday_fraction).quantize(Decimal("1")))
                 current_date = current_date.fromordinal(current_date.toordinal() + 1)
         return total_minutes

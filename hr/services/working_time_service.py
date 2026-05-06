@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from calendar import monthrange
 from datetime import date
+from decimal import Decimal
 
 from django.db.models import Q
 
@@ -53,8 +54,14 @@ class WorkingTimeService(BaseService):
         base_target_minutes = self.get_scheduled_target_minutes_for_date(employee, target_date)
         if base_target_minutes <= 0:
             return 0
-        if HolidayService().is_non_working_holiday(employee, target_date):
+        holiday_service = HolidayService()
+        if holiday_service.is_public_holiday(employee, target_date):
             return 0
+        company_holiday_fraction = holiday_service.get_company_holiday_fraction_for_date(target_date)
+        if company_holiday_fraction > Decimal("0.00"):
+            remaining_fraction = Decimal("1.00") - company_holiday_fraction
+            adjusted_minutes = int((Decimal(base_target_minutes) * remaining_fraction).quantize(Decimal("1")))
+            return max(adjusted_minutes, 0)
         return base_target_minutes
 
     def get_scheduled_target_minutes_for_date(
