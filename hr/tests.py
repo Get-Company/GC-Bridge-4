@@ -9,6 +9,7 @@ from django.contrib.auth.models import Group
 from django.core.management import call_command
 from django.core.exceptions import ValidationError
 from django.test import SimpleTestCase, TestCase
+from django.urls import reverse
 
 from hr.models import CompanyHoliday, Department, EmployeeProfile, EmployeeWorkSchedule, HolidayCalendar, LeaveRequest, MonthlyWorkSummary, SchoolHoliday, SickLeave, TimeAccountEntry, WorkSchedule
 from hr.services import (
@@ -344,6 +345,66 @@ class HrOpenHolidaysImportTest(TestCase):
                 start_date=date(2026, 8, 3),
                 end_date=date(2026, 9, 14),
                 source_subdivisions="DE-BY",
+            ).exists()
+        )
+
+    def test_admin_openholidays_import_creates_public_and_school_holidays(self):
+        HrSetupService.ensure_groups()
+        user = get_user_model().objects.create_user(
+            username="hr-admin",
+            password="pass",
+            is_staff=True,
+        )
+        user.groups.add(Group.objects.get(name=AccessService.GROUP_HR))
+        self.client.force_login(user)
+
+        with patch(
+            "hr.admin.OpenHolidaysService.fetch_public_holidays",
+            return_value=[
+                {
+                    "date": date(2026, 1, 1),
+                    "name": "Neujahr",
+                    "is_half_day": False,
+                    "subdivisions": "DE-BY",
+                }
+            ],
+        ), patch(
+            "hr.admin.OpenHolidaysService.fetch_school_holidays",
+            return_value=[
+                {
+                    "name": "Sommerferien",
+                    "start_date": date(2026, 8, 3),
+                    "end_date": date(2026, 9, 14),
+                    "subdivisions": "DE-BY",
+                }
+            ],
+        ):
+            response = self.client.post(
+                reverse("admin:hr_publicholiday_openholidays"),
+                data={
+                    "calendar": self.calendar.pk,
+                    "year": 2026,
+                    "country_iso_code": "DE",
+                    "subdivision_code": "DE-BY",
+                    "language_iso_code": "DE",
+                    "action": "import_all_holidays",
+                },
+            )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(
+            PublicHoliday.objects.filter(
+                calendar=self.calendar,
+                date=date(2026, 1, 1),
+                name="Neujahr",
+            ).exists()
+        )
+        self.assertTrue(
+            SchoolHoliday.objects.filter(
+                calendar=self.calendar,
+                name="Sommerferien",
+                start_date=date(2026, 8, 3),
+                end_date=date(2026, 9, 14),
             ).exists()
         )
 

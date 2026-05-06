@@ -10,6 +10,7 @@ These rules are mandatory for all contributors and tools.
 - Do not introduce new tools or frameworks without explicit approval.
 - Always use the .venv directory
 - Always let django makemigartions create the migration files. Do not wrcodexite the migrations by yourself.
+- For Django Unfold admin buttons and entry points, prefer the most appropriate native Unfold action type (especially changelist actions for model-wide operations) instead of custom template buttons whenever feasible. Reference: https://unfoldadmin.com/docs/actions/introduction/
 
 ## graphify
 

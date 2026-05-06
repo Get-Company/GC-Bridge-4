@@ -18,35 +18,22 @@
 
   <form method="post" class="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-900">
     {% csrf_token %}
+    {% if form.non_field_errors %}
+    <div class="mb-4 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-900/20 dark:text-red-300">
+      {{ form.non_field_errors }}
+    </div>
+    {% endif %}
+
     <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
+      {% for field in form %}
       <div>
-        <label for="id_calendar_id" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Feiertagskalender</label>
-        <select id="id_calendar_id" name="calendar_id" class="w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800">
-          {% for calendar in holiday_calendars %}
-          <option value="{{ calendar.pk }}"{% if calendar.pk == selected_calendar_id %} selected{% endif %}>{{ calendar.name }}</option>
-          {% endfor %}
-        </select>
+        {{ field.label_tag }}
+        {{ field }}
+        {% if field.errors %}
+        <div class="mt-1 text-sm text-red-600 dark:text-red-400">{{ field.errors }}</div>
+        {% endif %}
       </div>
-
-      <div>
-        <label for="id_year" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Jahr</label>
-        <input id="id_year" name="year" type="number" value="{{ year }}" min="2000" max="2100" class="w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800">
-      </div>
-
-      <div>
-        <label for="id_country_iso_code" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Land</label>
-        <input id="id_country_iso_code" name="country_iso_code" type="text" value="{{ country_iso_code }}" class="w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm uppercase dark:border-gray-600 dark:bg-gray-800">
-      </div>
-
-      <div>
-        <label for="id_subdivision_code" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Region</label>
-        <input id="id_subdivision_code" name="subdivision_code" type="text" value="{{ subdivision_code }}" class="w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm uppercase dark:border-gray-600 dark:bg-gray-800">
-      </div>
-
-      <div>
-        <label for="id_language_iso_code" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Sprache</label>
-        <input id="id_language_iso_code" name="language_iso_code" type="text" value="{{ language_iso_code }}" class="w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm uppercase dark:border-gray-600 dark:bg-gray-800">
-      </div>
+      {% endfor %}
     </div>
 
     <div class="mt-4 flex flex-wrap gap-2">
