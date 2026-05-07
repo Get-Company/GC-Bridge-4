@@ -232,8 +232,55 @@ class Product(BaseModel):
         verbose_name_plural = _("Produkte")
         ordering = ("erp_nr", "name")
 
+    MICROTECH_SYNC_FIELDS = (
+        ("KuBez5", "name"),
+        ("Bez5", "description"),
+        ("Bez2", "description_short"),
+        ("WShopKz", "is_active"),
+    )
+
     def __str__(self) -> str:
         return f"{self.erp_nr} - {self.name}"
+
+    def get_microtech_sync_payload(self) -> dict[str, object]:
+        payload: dict[str, object] = {}
+        for field_name, attribute_name in self.MICROTECH_SYNC_FIELDS:
+            value = getattr(self, attribute_name)
+            payload[field_name] = bool(value) if attribute_name == "is_active" else (value or "")
+        return payload
+
+    def sync_to_microtech(self, *, erp: object | None = None) -> dict[str, object]:
+        from microtech.services import microtech_connection
+        from microtech.services.artikel import MicrotechArtikelService
+
+        erp_nr = str(self.erp_nr or "").strip()
+        if not erp_nr:
+            raise ValueError("Product.erp_nr is required for Microtech sync.")
+
+        if erp is None:
+            with microtech_connection() as erp_connection:
+                return self.sync_to_microtech(erp=erp_connection)
+
+        artikel_service = MicrotechArtikelService(erp=erp)
+        if not artikel_service.find(erp_nr):
+            raise ValueError(f"Microtech Artikel {erp_nr} nicht gefunden.")
+
+        payload = self.get_microtech_sync_payload()
+        artikel_service.edit()
+
+        failed_fields: list[str] = []
+        for field_name, value in payload.items():
+            if not artikel_service.set_field(field_name, value):
+                failed_fields.append(field_name)
+
+        if failed_fields:
+            artikel_service.cancel()
+            raise ValueError(
+                f"Microtech Artikel {erp_nr} konnte nicht geschrieben werden: {', '.join(failed_fields)}"
+            )
+
+        artikel_service.post()
+        return payload
 
     def get_ordered_product_images(self) -> list["ProductImage"]:
         if hasattr(self, "ordered_product_images"):
