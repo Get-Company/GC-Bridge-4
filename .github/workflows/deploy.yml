@@ -12,7 +12,7 @@ jobs:
 
     steps:
       - name: Deploy application
-        shell: pwsh
+        shell: powershell
         env:
           DEPLOY_TAG: ${{ github.ref_name }}
         run: |
