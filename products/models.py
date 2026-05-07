@@ -35,6 +35,13 @@ class Tax(BaseModel):
 class Category(MPTTModel, BaseModel):
     name = models.CharField(max_length=128, verbose_name=_("Name"))
     slug = models.SlugField(max_length=160, unique=True, verbose_name=_("Slug"))
+    sku = models.CharField(
+        max_length=64,
+        unique=True,
+        blank=True,
+        null=True,
+        verbose_name=_("SKU / Shopware-ID"),
+    )
     parent = TreeForeignKey(
         "self",
         on_delete=models.CASCADE,
@@ -64,7 +71,8 @@ class Category(MPTTModel, BaseModel):
         verbose_name=_("Legacy Parent ERP-Nummer"),
     )
     image = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Bild"))
-    description = models.TextField(blank=True, default="", verbose_name=_("Beschreibung"))
+    description_short = models.TextField(blank=True, default="", verbose_name=_("Kurzbeschreibung (HTML)"))
+    description = models.TextField(blank=True, default="", verbose_name=_("Beschreibung (HTML)"))
     legacy_changed_at = models.DateTimeField(
         null=True,
         blank=True,

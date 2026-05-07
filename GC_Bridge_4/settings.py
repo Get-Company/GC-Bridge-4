@@ -14,6 +14,7 @@ import os
 from functools import partial
 from pathlib import Path
 
+from django.conf.locale import LANG_INFO
 from django.urls import reverse_lazy
 from django.utils.translation import gettext_lazy as _
 
@@ -128,6 +129,7 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'django.middleware.locale.LocaleMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -200,20 +202,49 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/6.0/topics/i18n/
 
+LANG_INFO.update(
+    {
+        "ch-de": {
+            "bidi": False,
+            "code": "ch-de",
+            "name": "Swiss German",
+            "name_local": "Schweizerdeutsch",
+        },
+        "it-de": {
+            "bidi": False,
+            "code": "it-de",
+            "name": "German (Italy)",
+            "name_local": "Deutsch (Italien)",
+        },
+        "it-it": {
+            "bidi": False,
+            "code": "it-it",
+            "name": "Italian",
+            "name_local": "Italiano",
+        },
+    }
+)
+
 LANGUAGE_CODE = 'de'
 LANGUAGES = [
     ('de', 'Deutsch'),
     ('en', 'Englisch'),
+    ('ch-de', 'Schweizerdeutsch'),
+    ('it-de', 'Deutsch (Italien)'),
+    ('it-it', 'Italiano'),
 ]
 
 SHOPWARE6_SHOP_URL = os.getenv("SHOPWARE6_SHOP_URL", "").rstrip("/")
 
 MODELTRANSLATION_DEFAULT_LANGUAGE = 'de'
-MODELTRANSLATION_LANGUAGES = ('de', 'en')
+MODELTRANSLATION_LANGUAGES = ('de', 'en', 'ch-de', 'it-de', 'it-it')
 MODELTRANSLATION_FALLBACK_LANGUAGES = {
     'default': ('de',),
     'de': ('en',),
     'en': ('de',),
+    'ch-de': ('de', 'en'),
+    'it-de': ('de', 'en'),
+    'it-it': ('de', 'en'),
 }
 
 TIME_ZONE = 'Europe/Berlin'
@@ -265,6 +296,9 @@ UNFOLD = {
             "flags": {
                 "de": "DE",
                 "en": "EN",
+                "ch-de": "CH-DE",
+                "it-de": "IT-DE",
+                "it-it": "IT",
             },
         },
     },

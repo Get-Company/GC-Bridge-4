@@ -15,7 +15,11 @@ class ProductTranslationOptions(TranslationOptions):
 
 @register(Category)
 class CategoryTranslationOptions(TranslationOptions):
-    fields = ("name",)
+    fields = (
+        "name",
+        "description",
+        "description_short",
+    )
 
 
 @register(PropertyGroup)

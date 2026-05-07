@@ -68,7 +68,7 @@
 
     const visibleIds = new Set()
     categories.forEach((category) => {
-      const haystack = `${category.name} ${category.slug} ${category.legacy_erp_nr || ""}`.toLowerCase()
+      const haystack = `${category.name} ${category.sku || ""} ${category.slug} ${category.legacy_erp_nr || ""}`.toLowerCase()
       if (!haystack.includes(searchTerm)) {
         return
       }
@@ -98,6 +98,19 @@
     span.className = "material-symbols-outlined"
     span.textContent = name
     return span
+  }
+
+  function categoryMetaText(category) {
+    if (!category) {
+      return ""
+    }
+    if (category.sku) {
+      return `SKU ${category.sku}`
+    }
+    if (category.legacy_erp_nr) {
+      return `ERP ${category.legacy_erp_nr}`
+    }
+    return category.slug || ""
   }
 
   function renderTree() {
@@ -153,7 +166,7 @@
       name.textContent = category.name
       const meta = document.createElement("div")
       meta.className = "category-manager-meta"
-      meta.textContent = category.legacy_erp_nr ? `ERP ${category.legacy_erp_nr}` : category.slug
+      meta.textContent = categoryMetaText(category)
       title.append(name, meta)
 
       const count = document.createElement("span")
@@ -259,7 +272,7 @@
     productsContent.classList.remove("hidden")
     emptyState.classList.add("hidden")
     productsTitle.textContent = payload.category.name
-    productsMeta.textContent = payload.category.legacy_erp_nr ? `ERP ${payload.category.legacy_erp_nr}` : ""
+    productsMeta.textContent = categoryMetaText(payload.category)
     editLink.href = payload.category.edit_url
     assignedCount.textContent = payload.assigned_total
     availableCount.textContent = payload.available_products.length

@@ -1389,8 +1389,14 @@ class CategoryAdminManagerTest(TestCase):
             password="pass",
         )
         self.client.force_login(self.user)
-        self.root = Category.objects.create(name="Root", slug="root", sort_order=10)
-        self.child = Category.objects.create(name="Child", slug="child", parent=self.root, sort_order=10)
+        self.root = Category.objects.create(name="Root", slug="root", sku="cat-root", sort_order=10)
+        self.child = Category.objects.create(
+            name="Child",
+            slug="child",
+            sku="cat-child",
+            parent=self.root,
+            sort_order=10,
+        )
         self.sibling = Category.objects.create(name="Sibling", slug="sibling", sort_order=20)
         self.product = Product.objects.create(erp_nr="A-3000", name="Artikel C")
 
@@ -1407,6 +1413,21 @@ class CategoryAdminManagerTest(TestCase):
         self.assertContains(response, "products/admin/category_manager.js")
         self.assertContains(response, "category-manager-data")
         self.assertContains(response, "Produktzuordnung")
+
+    def test_tree_and_products_payload_include_category_sku(self):
+        tree_response = self.client.get(reverse("admin:products_category_tree_api"))
+
+        self.assertEqual(tree_response.status_code, 200)
+        tree_payload = tree_response.json()["categories"]
+        child_entry = next(item for item in tree_payload if item["id"] == self.child.pk)
+        self.assertEqual(child_entry["sku"], "cat-child")
+
+        products_response = self.client.get(
+            reverse("admin:products_category_products_api", args=(self.child.pk,))
+        )
+
+        self.assertEqual(products_response.status_code, 200)
+        self.assertEqual(products_response.json()["category"]["sku"], "cat-child")
 
     def test_move_api_updates_parent_and_sibling_order(self):
         response = self.client.post(

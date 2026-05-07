@@ -3151,6 +3151,7 @@ class PropertyValueAdmin(TabbedTranslationAdmin, BaseAdmin):
 class CategoryAdmin(BaseAdmin):
     list_display = (
         "name",
+        "sku",
         "slug",
         "legacy_erp_nr",
         "parent",
@@ -3158,7 +3159,7 @@ class CategoryAdmin(BaseAdmin):
         "created_at",
     )
     list_display_links = ("name",)
-    search_fields = ("name", "slug", "legacy_erp_nr", "legacy_api_id", "parent__name")
+    search_fields = ("name", "sku", "slug", "legacy_erp_nr", "legacy_api_id", "parent__name")
     list_filter = [
         ("parent", RelatedDropdownFilter),
         ("created_at", RangeDateTimeFilter),
@@ -3291,6 +3292,7 @@ class CategoryAdmin(BaseAdmin):
         categories = Category.objects.order_by("tree_id", "lft").values(
             "id",
             "name",
+            "sku",
             "slug",
             "parent_id",
             "legacy_erp_nr",
@@ -3303,6 +3305,7 @@ class CategoryAdmin(BaseAdmin):
             {
                 "id": row["id"],
                 "name": row["name"],
+                "sku": row["sku"] or "",
                 "slug": row["slug"],
                 "parent_id": row["parent_id"],
                 "legacy_erp_nr": row["legacy_erp_nr"],
@@ -3380,6 +3383,8 @@ class CategoryAdmin(BaseAdmin):
             "category": {
                 "id": category.pk,
                 "name": category.name,
+                "sku": category.sku or "",
+                "slug": category.slug,
                 "legacy_erp_nr": category.legacy_erp_nr,
                 "edit_url": reverse("admin:products_category_change", args=(category.pk,)),
             },
