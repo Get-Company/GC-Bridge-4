@@ -1,13 +1,13 @@
 {
   "version": 1,
-  "computedAt": 1778049507796,
+  "computedAt": 1778078821375,
   "entries": [
     {
       "id": "mem-MEMORY-project",
       "content": "- [project_overview.md](project_overview.md) — Archithek: Django archival/cultural heritage management app",
       "summary": "Project",
       "category": "core",
-      "confidence": 0.5,
+      "confidence": 0.455,
       "pageRank": 0.2126436902566286,
       "accessCount": 0,
       "words": [
@@ -30,7 +30,7 @@
       "content": "- Package installation: always use `uv pip install` (not regular pip)\n- [Microtech testing requires Windows](project_microtech_testing.md)",
       "summary": "Project: GC-Bridge-4",
       "category": "core",
-      "confidence": 0.5,
+      "confidence": 0.455,
       "pageRank": 0.2126436902566286,
       "accessCount": 0,
       "words": [
@@ -58,7 +58,7 @@
       "content": "- **No Co-Authored-By in commits** — never add `Co-Authored-By: Claude` lines to commit messages.\n- **Django migrations** — always generate via `python manage.py makemigrations`, never write manually.",
       "summary": "Preferences",
       "category": "core",
-      "confidence": 0.5,
+      "confidence": 0.455,
       "pageRank": 0.11494252389734855,
       "accessCount": 0,
       "words": [
@@ -90,7 +90,7 @@
       "content": "name: Archithek project overview\ndescription: Django-based archival/cultural heritage management app with documents, events, media, persons, places, subjects\ntype: project\n---\n\nArchithek is a Django application for managing archival and cultural heritage data.\n\n**Core apps:** documents, events, media, persons, places, subjects\n\n**Key features:**\n- Extensive Django admin customization with info box templates\n- Media batch upload and mobile upload via QR codes\n- Sphinx-based documentation (German)",
       "summary": "---",
       "category": "project_overview",
-      "confidence": 0.5,
+      "confidence": 0.455,
       "pageRank": 0.11494252389734855,
       "accessCount": 0,
       "words": [
@@ -157,7 +157,7 @@
       "content": "- Never add Co-Authored-By lines in git commits\n- Always correct the user's English (for their progress in learning)",
       "summary": "User Preferences",
       "category": "core",
-      "confidence": 0.5,
+      "confidence": 0.455,
       "pageRank": 0.11494252389734855,
       "accessCount": 0,
       "words": [
@@ -183,7 +183,7 @@
       "content": "name: Microtech testing requires Windows\ndescription: Microtech ERP interface is a Windows COM object — cannot test on Linux dev machine, must test after deploy to CLSRV01\ntype: project\n---\n\nMicrotech services use Windows COM objects and can only be tested on the Windows server (CLSRV01).\n\n**Why:** The ERP connection relies on COM automation which is unavailable on Linux.\n**How to apply:** Don't write or attempt to run Microtech-related tests on the dev machine. Test after deploying to the Windo",
       "summary": "---",
       "category": "project_microtech_testing",
-      "confidence": 0.5,
+      "confidence": 0.455,
       "pageRank": 0.11494252389734855,
       "accessCount": 0,
       "words": [
@@ -250,7 +250,7 @@
       "content": "File unknown was edited 15 times this session — likely a hot path worth monitoring.",
       "summary": "Frequently edited: unknown (15x)",
       "category": "insights",
-      "confidence": 0.5,
+      "confidence": 0.455,
       "pageRank": 0.11494252389734855,
       "accessCount": 0,
       "words": [

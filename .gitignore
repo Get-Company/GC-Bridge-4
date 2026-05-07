@@ -26,3 +26,4 @@ database.sql
 /.claude-flow/metrics/
 /.claude-flow/security/
 /.claude-flow/swarm/
+/graphify-out
