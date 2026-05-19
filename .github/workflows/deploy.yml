@@ -15,7 +15,7 @@ jobs:
         shell: bash
         env:
           DEPLOY_TAG: ${{ github.ref_name }}
-          APP_DIR: /opt/GC-Bridge-4
+          APP_DIR: /home/buchner/deploy/GC-Bridge-4
         run: |
           set -euo pipefail
 
@@ -41,9 +41,11 @@ jobs:
           run_logged git fetch --force --tags origin
           run_logged git checkout -f "$DEPLOY_TAG"
 
-          current_tag="$(git describe --exact-match --tags HEAD 2>/dev/null || true)"
-          if [ "$current_tag" != "$DEPLOY_TAG" ]; then
-            log "ERROR: checkout failed, HEAD is at '${current_tag}'"
+          deployed_sha="$(git rev-parse HEAD)"
+          tag_sha="$(git rev-list -n 1 "$DEPLOY_TAG")"
+          
+          if [ "$deployed_sha" != "$tag_sha" ]; then
+            log "ERROR: checkout failed, HEAD is at '${deployed_sha}', expected tag '${DEPLOY_TAG}' at '${tag_sha}'"
             exit 1
           fi
 
