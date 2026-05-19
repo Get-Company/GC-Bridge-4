@@ -1,0 +1,118 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+<div class="flex flex-col gap-6">
+  <div class="flex flex-wrap items-start justify-between gap-3">
+    <div>
+      <h1 class="text-xl font-semibold">Celery Tasks</h1>
+      <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+        Tasks werden in Redis eingereiht und vom Celery Worker ausgefuehrt.
+      </p>
+    </div>
+    <div class="text-xs text-gray-500 dark:text-gray-400">
+      Broker: <code>{{ broker_url }}</code>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
+    <div class="flex flex-col gap-4">
+      <div class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+        <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+          <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300">
+            Tasks starten
+          </h2>
+        </div>
+
+        <div class="divide-y divide-gray-100 dark:divide-gray-700">
+          {% for task in tasks %}
+          <form method="post" class="p-4 flex flex-col gap-3">
+            {% csrf_token %}
+            <input type="hidden" name="task_name" value="{{ task.name }}">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div class="min-w-0">
+                <div class="font-medium text-sm">{{ task.label }}</div>
+                <div class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{{ task.description }}</div>
+                <code class="mt-1 inline-block text-xs text-gray-400 dark:text-gray-500">{{ task.name }}</code>
+              </div>
+              <button
+                type="submit"
+                class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded border border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"
+              >
+                <span class="material-symbols-outlined" style="font-size:14px">play_arrow</span>
+                Starten
+              </button>
+            </div>
+
+            {% if task.fields %}
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {% for field in task.fields %}
+              <label class="flex flex-col gap-1 text-sm">
+                <span class="font-medium text-gray-700 dark:text-gray-300">{{ field.label }}</span>
+                {% if field.type == "bool" %}
+                  <span class="inline-flex items-center gap-2 min-h-9">
+                    <input
+                      type="checkbox"
+                      name="{{ field.name }}"
+                      {% if field.default %}checked{% endif %}
+                      class="rounded border-gray-300 dark:border-gray-600"
+                    >
+                    <span class="text-xs text-gray-500 dark:text-gray-400">aktiv</span>
+                  </span>
+                {% elif field.type == "int" or field.type == "float" %}
+                  <input
+                    type="number"
+                    {% if field.type == "float" %}step="any"{% endif %}
+                    name="{{ field.name }}"
+                    value="{{ field.default }}"
+                    class="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-2 py-1.5"
+                  >
+                {% else %}
+                  <input
+                    type="text"
+                    name="{{ field.name }}"
+                    value="{{ field.default }}"
+                    class="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-2 py-1.5"
+                  >
+                {% endif %}
+                {% if field.help_text %}
+                  <span class="text-xs text-gray-400 dark:text-gray-500">{{ field.help_text }}</span>
+                {% endif %}
+              </label>
+              {% endfor %}
+            </div>
+            {% endif %}
+          </form>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+      <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+        <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300">
+          Celery Beat Schedule
+        </h2>
+      </div>
+      <div class="divide-y divide-gray-100 dark:divide-gray-700">
+        {% for entry in beat_schedule %}
+        <div class="p-4">
+          <div class="font-medium text-sm">{{ entry.name }}</div>
+          <div class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            Task: <code>{{ entry.task }}</code>
+          </div>
+          <div class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            Schedule: <code>{{ entry.schedule }}</code>
+          </div>
+          <div class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            Kwargs: <code>{{ entry.kwargs }}</code>
+          </div>
+        </div>
+        {% empty %}
+        <p class="p-4 text-sm text-gray-400 dark:text-gray-500 italic">Keine Beat-Eintraege konfiguriert.</p>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
