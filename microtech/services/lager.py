@@ -6,6 +6,7 @@ from .base import MicrotechDatasetService
 class MicrotechLagerService(MicrotechDatasetService):
     dataset_name = "Lager"
     index_field = "ArtNrLagNr"
+    default_fields = ("ArtNr", "LagNr", "Mge", "Pos")
 
     def __init__(self, *, erp, lager_nr: int = 1, **kwargs) -> None:
         super().__init__(erp=erp, **kwargs)

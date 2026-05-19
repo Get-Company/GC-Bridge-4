@@ -14,6 +14,7 @@ import os
 from functools import partial
 from pathlib import Path
 
+from celery.schedules import crontab
 from django.conf.locale import LANG_INFO
 from django.urls import reverse_lazy
 from django.utils.translation import gettext_lazy as _
@@ -40,11 +41,31 @@ def env_url(name: str, default: str = "") -> str:
     return f"{value.rstrip('/')}/"
 
 
+def build_microtech_graphql_url() -> str:
+    host = os.getenv("MICROTECH_GRAPHQL_HOST", "").strip()
+    if not host:
+        return ""
+    if host.startswith(("http://", "https://")):
+        if "/" in host.split("://", 1)[1].rstrip("/"):
+            return host
+        base_url = host
+    else:
+        scheme = os.getenv("MICROTECH_GRAPHQL_SCHEME", "http").strip() or "http"
+        port = os.getenv("MICROTECH_GRAPHQL_PORT", "8888").strip()
+        base_url = f"{scheme}://{host}{f':{port}' if port else ''}"
+    path = os.getenv("MICROTECH_GRAPHQL_PATH", "graphql").strip().strip("/")
+    return f"{base_url.rstrip('/')}/{path}/" if path else base_url
+
+
 CDN_PREFIX = env_url("CDN_PREFIX")
 MICROTECH_IMAGE_BASE_URL = env_url(
     "MICROTECH_IMAGE_BASE_URL",
     f"{CDN_PREFIX}img/" if CDN_PREFIX else "",
 )
+MICROTECH_GRAPHQL_URL = env_url("MICROTECH_GRAPHQL_URL", build_microtech_graphql_url())
+MICROTECH_GRAPHQL_REQUEST_TIMEOUT = float(os.getenv("MICROTECH_GRAPHQL_REQUEST_TIMEOUT", "30"))
+MICROTECH_GRAPHQL_POLL_TIMEOUT = float(os.getenv("MICROTECH_GRAPHQL_POLL_TIMEOUT", "180"))
+MICROTECH_GRAPHQL_POLL_INTERVAL = float(os.getenv("MICROTECH_GRAPHQL_POLL_INTERVAL", "2"))
 SHOPWARE_PRODUCT_MEDIA_FOLDER_ID = os.getenv("SHOPWARE_PRODUCT_MEDIA_FOLDER_ID", "").strip()
 
 
@@ -57,6 +78,13 @@ def env_bool(name: str, default: bool = False) -> bool:
 
 def env_list(name: str, default: str = "") -> list[str]:
     return [item.strip() for item in os.getenv(name, default).split(",") if item.strip()]
+
+
+def env_int(name: str, default: int) -> int:
+    try:
+        return int(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return default
 
 
 LOGS_ROOT = Path(os.getenv("LOGS_ROOT", "tmp/logs"))
@@ -108,6 +136,7 @@ INSTALLED_APPS = [
     'unfold.contrib.forms',
     'modeltranslation',
     'mptt',
+    'django_celery_beat',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -261,6 +290,61 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+MEDIA_URL = 'media/'
+MEDIA_ROOT = BASE_DIR / 'media'
+
+CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
+CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/1")
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
+CELERY_BEAT_SCHEDULE = {
+    "mappei-daily-price-scrape": {
+        "task": "mappei.scrape_daily_prices",
+        "schedule": crontab(hour=20, minute=0),
+    },
+}
+if env_bool("CELERY_SCHEDULED_PRODUCT_SYNC_ENABLED", True):
+    CELERY_BEAT_SCHEDULE["products-scheduled-product-sync"] = {
+        "task": "products.scheduled_product_sync",
+        "schedule": crontab(
+            hour=os.getenv("CELERY_SCHEDULED_PRODUCT_SYNC_HOUR", "*").strip() or "*",
+            minute=os.getenv("CELERY_SCHEDULED_PRODUCT_SYNC_MINUTE", "0").strip() or "0",
+        ),
+        "kwargs": {
+            "limit": env_int("CELERY_SCHEDULED_PRODUCT_SYNC_LIMIT", 0) or None,
+            "exclude_inactive": env_bool("CELERY_SCHEDULED_PRODUCT_SYNC_EXCLUDE_INACTIVE", False),
+            "write_base_price_back": env_bool("CELERY_SCHEDULED_PRODUCT_SYNC_WRITE_BASE_PRICE_BACK", False),
+        },
+    }
+if env_bool("CELERY_SHOPWARE_OPEN_ORDERS_SYNC_ENABLED", False):
+    CELERY_BEAT_SCHEDULE["orders-shopware-open-orders-sync"] = {
+        "task": "orders.shopware_sync_open_orders",
+        "schedule": crontab(
+            hour=os.getenv("CELERY_SHOPWARE_OPEN_ORDERS_SYNC_HOUR", "*").strip() or "*",
+            minute=os.getenv("CELERY_SHOPWARE_OPEN_ORDERS_SYNC_MINUTE", "15").strip() or "15",
+        ),
+        "kwargs": {
+            "limit_orders": env_int("CELERY_SHOPWARE_OPEN_ORDERS_SYNC_LIMIT", 0) or None,
+        },
+    }
+
+if env_bool("CELERY_HR_HOLIDAY_SYNC_ENABLED", False):
+    CELERY_BEAT_SCHEDULE["hr-holiday-sync"] = {
+        "task": "hr.sync_holidays",
+        "schedule": crontab(
+            hour=os.getenv("CELERY_HR_HOLIDAY_SYNC_HOUR", "3").strip() or "3",
+            minute=os.getenv("CELERY_HR_HOLIDAY_SYNC_MINUTE", "0").strip() or "0",
+            day_of_month=os.getenv("CELERY_HR_HOLIDAY_SYNC_DAY_OF_MONTH", "1").strip() or "1",
+        ),
+        "kwargs": {
+            "country_iso_code": os.getenv("CELERY_HR_HOLIDAY_SYNC_COUNTRY", "").strip(),
+            "language_iso_code": os.getenv("CELERY_HR_HOLIDAY_SYNC_LANGUAGE", "").strip(),
+            "subdivision_code": os.getenv("CELERY_HR_HOLIDAY_SYNC_SUBDIVISION", "").strip(),
+        },
+    }
 
 
 UNFOLD = {
@@ -543,12 +627,6 @@ UNFOLD = {
                         "link": reverse_lazy("admin:microtech_microtechswisscustomsfieldmapping_changelist"),
                         "permission": sidebar_model_view_permission("microtech", "MicrotechSwissCustomsFieldMapping"),
                     },
-                    {
-                        "title": _("Queue"),
-                        "icon": "pending_actions",
-                        "link": reverse_lazy("admin:microtech_queue"),
-                        "permission": sidebar_model_view_permission("microtech", "MicrotechJob"),
-                    },
                 ],
             },
             {
@@ -652,6 +730,24 @@ UNFOLD = {
                         "icon": "monitor_heart",
                         "link": reverse_lazy("admin:core_system_status"),
                         "permission": "core.unfold.superuser_only",
+                    },
+                    {
+                        "title": _("Celery Tasks"),
+                        "icon": "task_alt",
+                        "link": reverse_lazy("admin:core_celery_tasks"),
+                        "permission": "core.unfold.superuser_only",
+                    },
+                    {
+                        "title": _("Celery Scheduler"),
+                        "icon": "event_repeat",
+                        "link": reverse_lazy("admin:django_celery_beat_periodictask_changelist"),
+                        "permission": sidebar_model_view_permission("django_celery_beat", "PeriodicTask"),
+                    },
+                    {
+                        "title": _("Celery Cron-Zeitplaene"),
+                        "icon": "schedule",
+                        "link": reverse_lazy("admin:django_celery_beat_crontabschedule_changelist"),
+                        "permission": sidebar_model_view_permission("django_celery_beat", "CrontabSchedule"),
                     },
                     {
                         "title": _("Logs"),

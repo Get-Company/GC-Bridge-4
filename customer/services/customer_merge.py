@@ -562,34 +562,31 @@ class CustomerIdUpdateService(BaseService):
             except Exception as exc:
                 steps["shopware"] = str(exc)
 
-        # 2) Microtech — rename AdrNr if exists
+        # 2) Microtech — GraphQL wrapper owns writes. There is no direct local
+        # AdrNr rename via COM anymore, so we upsert the target number below.
         try:
-            from microtech.services import MicrotechAdresseService, microtech_connection
-            with microtech_connection() as erp:
-                adresse = MicrotechAdresseService(erp=erp)
-                if adresse.find(old_erp_nr):
-                    adresse.edit()
-                    adresse.set_field("AdrNr", new_erp_nr)
-                    adresse.post()
-                    steps["microtech"] = "renamed"
-                else:
-                    steps["microtech"] = "not_found"
+            from customer.services.customer_upsert_microtech import CustomerUpsertMicrotechService
+            from microtech.services import microtech_connection
+
+            customer.erp_nr = new_erp_nr
+            with microtech_connection() as client:
+                CustomerUpsertMicrotechService().upsert_customer(customer, erp=client)
+            customer.erp_nr = old_erp_nr
+            steps["microtech"] = "upserted"
         except Exception as exc:
+            customer.erp_nr = old_erp_nr
             steps["microtech"] = str(exc)
 
         # 3) Django
         customer.erp_nr = new_erp_nr
         customer.save(update_fields=["erp_nr", "updated_at"])
 
-        # 4) Microtech full upsert (updates all addresses regardless)
-        if steps["microtech"] in ("renamed", "not_found"):
+        # 4) Microtech full upsert (updates default addresses after local save)
+        if steps["microtech"] in ("upserted", "skipped"):
             try:
-                sync_svc = CustomerSyncDirectionService()
-                sync_svc._django_to_microtech(new_erp_nr)
-                label = "umbenannt + Adressen aktualisiert" if steps["microtech"] == "renamed" else "neu angelegt mit Adressen"
-                steps["microtech"] = f"ok ({label})"
+                self._django_to_microtech(new_erp_nr)
             except Exception as exc:
-                steps["microtech"] = f"upsert fehlgeschlagen: {exc}"
+                steps["microtech_full_upsert"] = str(exc)
 
         logger.info("ERP-Nr changed: {} -> {} (customer {}) steps={}", old_erp_nr, new_erp_nr, customer.pk, steps)
         return {"old_erp_nr": old_erp_nr, "new_erp_nr": new_erp_nr, "steps": steps}
@@ -889,76 +886,35 @@ class CustomerSyncDirectionService(BaseService):
             raise ValueError(f"Kunde {erp_nr} hat keine Adressen in Django.")
 
         from customer.services.customer_upsert_microtech import CustomerUpsertMicrotechService
-        from microtech.services import (
-            MicrotechAdresseService,
-            MicrotechAnschriftService,
-            MicrotechAnsprechpartnerService,
-            microtech_connection,
-        )
+        from microtech.services import microtech_connection
 
         svc = CustomerUpsertMicrotechService()
-
-        with microtech_connection() as erp:
-            adresse_service = MicrotechAdresseService(erp=erp)
-            anschrift_service = MicrotechAnschriftService(erp=erp)
-            ansprechpartner_service = MicrotechAnsprechpartnerService(erp=erp)
-
-            # Upsert the top-level Adresse record (uses first address for UStKat)
+        with microtech_connection() as client:
             shipping = customer.shipping_address or all_addresses[0]
-            actual_erp_nr, is_new = svc._upsert_adresse_record(
-                customer=customer,
-                shipping=shipping,
-                adresse_service=adresse_service,
+            billing = customer.billing_address or shipping
+            result = svc.upsert_customer(
+                customer,
+                shipping_address=shipping,
+                billing_address=billing,
+                erp=client,
             )
-
-            # Reset all standard flags before setting new ones
-            svc._reset_anschrift_standard_flags(
-                erp_nr=actual_erp_nr,
-                anschrift_service=anschrift_service,
-            )
-
-            # Upsert ALL addresses as Anschrift + Ansprechpartner
-            used_ans_nrs: set[int] = set()
-            first_shipping_nr = None
-            first_billing_nr = None
-
+            address_number = int(result.erp_nr)
             for addr in all_addresses:
-                ans_nr = svc._determine_ans_nr(
-                    erp_nr=actual_erp_nr,
+                if addr.pk in {shipping.pk, billing.pk}:
+                    continue
+                svc._upsert_postal_address_graphql(
+                    client=client,
+                    address_number=address_number,
                     address=addr,
-                    anschrift_service=anschrift_service,
-                    reserved=used_ans_nrs,
-                )
-                used_ans_nrs.add(ans_nr)
-
-                svc._upsert_anschrift_and_contact(
-                    erp_nr=actual_erp_nr,
-                    address=addr,
-                    ans_nr=ans_nr,
                     is_shipping=bool(addr.is_shipping),
                     is_invoice=bool(addr.is_invoice),
-                    anschrift_service=anschrift_service,
-                    ansprechpartner_service=ansprechpartner_service,
                     na1_mode="auto",
                     na1_static_value="",
                 )
 
-                if addr.is_shipping and first_shipping_nr is None:
-                    first_shipping_nr = ans_nr
-                if addr.is_invoice and first_billing_nr is None:
-                    first_billing_nr = ans_nr
-
-            # Set default Liefer/Rechnungs-AnsNr on the Adresse record
-            ship_nr = first_shipping_nr or min(used_ans_nrs)
-            bill_nr = first_billing_nr or ship_nr
-            adresse_service.edit()
-            adresse_service.set_field("LiAnsNr", ship_nr)
-            adresse_service.set_field("ReAnsNr", bill_nr)
-            adresse_service.post()
-
         addr_count = len(all_addresses)
         msg = f"Kunde nach Microtech uebertragen ({addr_count} Adressen)"
-        if is_new:
+        if result.is_new_customer:
             msg += " [NEU]"
         logger.info("Django->Microtech: {} upserted ({} addresses)", erp_nr, addr_count)
         return {"message": msg}

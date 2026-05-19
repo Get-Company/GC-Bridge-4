@@ -3,7 +3,7 @@ Model- und Admin-Inventar
 
 Diese Seite wird automatisch aus dem Django-Projekt erzeugt und deckt alle lokalen Apps, Models und registrierten Admin-Klassen ab.
 
-Generiert am: 2026-05-06 07:08:07 UTC
+Generiert am: 2026-05-18 07:57:37 UTC
 
 core
 ----
@@ -443,77 +443,6 @@ Admin-Konfiguration
      - -
    * - action_form
      - unfold.forms.ActionForm
-
-microtech.MicrotechJob
-~~~~~~~~~~~~~~~~~~~~~~
-
-* Python: ``microtech.models.MicrotechJob``
-* DB-Tabelle: ``microtech_microtechjob``
-* Verbose Name: ``Microtech Job``
-* Verbose Name Plural: ``Microtech Jobs``
-* Default Ordering: ``priority, created_at``
-
-Felder
-^^^^^^
-
-.. list-table::
-   :header-rows: 1
-
-   * - Feld
-     - Typ
-     - Optionen
-     - Details
-   * - id
-     - BigAutoField
-     - pk, unique, blank
-     - verbose=ID
-   * - created_at
-     - DateTimeField
-     - blank
-     - verbose=Angelegt am
-   * - updated_at
-     - DateTimeField
-     - blank
-     - verbose=Aktualisiert am
-   * - status
-     - CharField
-     - db_index, default=queued
-     - choices=5, verbose=Status, max_length=16
-   * - priority
-     - PositiveSmallIntegerField
-     - db_index, default=100
-     - verbose=Prioritaet
-   * - label
-     - CharField
-     - -
-     - verbose=Bezeichnung, max_length=255
-   * - correlation_id
-     - CharField
-     - unique, db_index
-     - verbose=Correlation ID, max_length=64
-   * - started_at
-     - DateTimeField
-     - null, blank
-     - verbose=Gestartet
-   * - finished_at
-     - DateTimeField
-     - null, blank
-     - verbose=Beendet
-   * - last_error
-     - TextField
-     - blank
-     - verbose=Letzter Fehler
-
-Admin-Konfiguration
-^^^^^^^^^^^^^^^^^^^
-
-.. list-table::
-   :header-rows: 1
-
-   * - Aspekt
-     - Wert
-   * - Registrierung
-     - Kein ModelAdmin registriert
 
 microtech.MicrotechOrderRule
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1486,10 +1415,26 @@ Felder
      - TranslationCharField
      - null, blank
      - verbose=Name [en], max_length=128
+   * - name_ch_de
+     - TranslationCharField
+     - null, blank
+     - verbose=Name [ch-de], max_length=128
+   * - name_it_de
+     - TranslationCharField
+     - null, blank
+     - verbose=Name [it-de], max_length=128
+   * - name_it_it
+     - TranslationCharField
+     - null, blank
+     - verbose=Name [it-it], max_length=128
    * - slug
      - SlugField
      - unique, db_index
      - verbose=Slug, max_length=160
+   * - sku
+     - CharField
+     - unique, null, blank
+     - verbose=SKU / Shopware-ID, max_length=64
    * - parent
      - TreeForeignKey
      - db_index, null, blank
@@ -1510,10 +1455,54 @@ Felder
      - CharField
      - blank
      - verbose=Bild, max_length=255
+   * - description_short
+     - TextField
+     - blank
+     - verbose=Kurzbeschreibung (HTML)
+   * - description_short_de
+     - TranslationTextField
+     - null, blank
+     - verbose=Kurzbeschreibung (HTML) [de]
+   * - description_short_en
+     - TranslationTextField
+     - null, blank
+     - verbose=Kurzbeschreibung (HTML) [en]
+   * - description_short_ch_de
+     - TranslationTextField
+     - null, blank
+     - verbose=Kurzbeschreibung (HTML) [ch-de]
+   * - description_short_it_de
+     - TranslationTextField
+     - null, blank
+     - verbose=Kurzbeschreibung (HTML) [it-de]
+   * - description_short_it_it
+     - TranslationTextField
+     - null, blank
+     - verbose=Kurzbeschreibung (HTML) [it-it]
    * - description
      - TextField
      - blank
-     - verbose=Beschreibung
+     - verbose=Beschreibung (HTML)
+   * - description_de
+     - TranslationTextField
+     - null, blank
+     - verbose=Beschreibung (HTML) [de]
+   * - description_en
+     - TranslationTextField
+     - null, blank
+     - verbose=Beschreibung (HTML) [en]
+   * - description_ch_de
+     - TranslationTextField
+     - null, blank
+     - verbose=Beschreibung (HTML) [ch-de]
+   * - description_it_de
+     - TranslationTextField
+     - null, blank
+     - verbose=Beschreibung (HTML) [it-de]
+   * - description_it_it
+     - TranslationTextField
+     - null, blank
+     - verbose=Beschreibung (HTML) [it-it]
    * - legacy_changed_at
      - DateTimeField
      - null, blank
@@ -1550,11 +1539,11 @@ Admin-Konfiguration
    * - Admin-Klasse
      - products.admin.CategoryAdmin
    * - list_display
-     - name, slug, legacy_erp_nr, parent, sort_order, created_at
+     - name, sku, slug, legacy_erp_nr, parent, sort_order, created_at
    * - list_filter
      - ('parent', <class 'unfold.contrib.filters.admin.dropdown_filters.RelatedDropdownFilter'>), ('created_at', <class 'unfold.contrib.filters.admin.datetime_filters.RangeDateTimeFilter'>)
    * - search_fields
-     - name, slug, legacy_erp_nr, legacy_api_id, parent__name
+     - name, sku, slug, legacy_erp_nr, legacy_api_id, parent__name
    * - readonly_fields
      - created_at, updated_at, legacy_erp_nr, legacy_api_id, legacy_parent_erp_nr
    * - ordering
@@ -2100,6 +2089,18 @@ Felder
      - TranslationCharField
      - null, blank
      - verbose=Name [en], max_length=255
+   * - name_ch_de
+     - TranslationCharField
+     - null, blank
+     - verbose=Name [ch-de], max_length=255
+   * - name_it_de
+     - TranslationCharField
+     - null, blank
+     - verbose=Name [it-de], max_length=255
+   * - name_it_it
+     - TranslationCharField
+     - null, blank
+     - verbose=Name [it-it], max_length=255
    * - sort_order
      - PositiveIntegerField
      - default=1000
@@ -2116,6 +2117,18 @@ Felder
      - TranslationTextField
      - null, blank
      - verbose=Beschreibung [en]
+   * - description_ch_de
+     - TranslationTextField
+     - null, blank
+     - verbose=Beschreibung [ch-de]
+   * - description_it_de
+     - TranslationTextField
+     - null, blank
+     - verbose=Beschreibung [it-de]
+   * - description_it_it
+     - TranslationTextField
+     - null, blank
+     - verbose=Beschreibung [it-it]
    * - description_short
      - TextField
      - null, blank
@@ -2128,6 +2141,18 @@ Felder
      - TranslationTextField
      - null, blank
      - verbose=Kurzbeschreibung [en]
+   * - description_short_ch_de
+     - TranslationTextField
+     - null, blank
+     - verbose=Kurzbeschreibung [ch-de]
+   * - description_short_it_de
+     - TranslationTextField
+     - null, blank
+     - verbose=Kurzbeschreibung [it-de]
+   * - description_short_it_it
+     - TranslationTextField
+     - null, blank
+     - verbose=Kurzbeschreibung [it-it]
    * - is_active
      - BooleanField
      - default=True
@@ -2148,6 +2173,18 @@ Felder
      - TranslationCharField
      - null, blank
      - verbose=Einheit [en], max_length=255
+   * - unit_ch_de
+     - TranslationCharField
+     - null, blank
+     - verbose=Einheit [ch-de], max_length=255
+   * - unit_it_de
+     - TranslationCharField
+     - null, blank
+     - verbose=Einheit [it-de], max_length=255
+   * - unit_it_it
+     - TranslationCharField
+     - null, blank
+     - verbose=Einheit [it-it], max_length=255
    * - min_purchase
      - IntegerField
      - null, blank
@@ -2373,6 +2410,18 @@ Felder
      - TranslationCharField
      - null, blank
      - verbose=Name [en], max_length=255
+   * - name_ch_de
+     - TranslationCharField
+     - null, blank
+     - verbose=Name [ch-de], max_length=255
+   * - name_it_de
+     - TranslationCharField
+     - null, blank
+     - verbose=Name [it-de], max_length=255
+   * - name_it_it
+     - TranslationCharField
+     - null, blank
+     - verbose=Name [it-it], max_length=255
 
 Admin-Konfiguration
 ^^^^^^^^^^^^^^^^^^^
@@ -2456,6 +2505,18 @@ Felder
      - TranslationCharField
      - null, blank
      - verbose=Wert [en], max_length=255
+   * - name_ch_de
+     - TranslationCharField
+     - null, blank
+     - verbose=Wert [ch-de], max_length=255
+   * - name_it_de
+     - TranslationCharField
+     - null, blank
+     - verbose=Wert [it-de], max_length=255
+   * - name_it_it
+     - TranslationCharField
+     - null, blank
+     - verbose=Wert [it-it], max_length=255
 
 Admin-Konfiguration
 ^^^^^^^^^^^^^^^^^^^

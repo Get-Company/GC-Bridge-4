@@ -213,16 +213,6 @@ class AdminSidebarPermissionTest(SimpleTestCase):
         )
         self.assertTrue(item["has_permission"])
 
-    def test_microtech_queue_sidebar_entry_requires_job_view_permission(self):
-        item = self._sidebar_item(permissions=set(), title="Queue")
-        self.assertFalse(item["has_permission"])
-
-        item = self._sidebar_item(
-            permissions={"microtech.view_microtechjob"},
-            title="Queue",
-        )
-        self.assertTrue(item["has_permission"])
-
     def test_hr_calendar_sidebar_entry_requires_employee_profile_view_permission(self):
         item = self._sidebar_item(permissions=set(), title="Kalender")
         self.assertFalse(item["has_permission"])
@@ -230,6 +220,17 @@ class AdminSidebarPermissionTest(SimpleTestCase):
         item = self._sidebar_item(
             permissions=set(),
             title="Kalender",
+            is_superuser=True,
+        )
+        self.assertTrue(item["has_permission"])
+
+    def test_celery_tasks_sidebar_entry_is_superuser_only(self):
+        item = self._sidebar_item(permissions={"auth.view_user"}, title="Celery Tasks")
+        self.assertFalse(item["has_permission"])
+
+        item = self._sidebar_item(
+            permissions=set(),
+            title="Celery Tasks",
             is_superuser=True,
         )
         self.assertTrue(item["has_permission"])

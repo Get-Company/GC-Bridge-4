@@ -1,22 +1,15 @@
 import os
-import sys
 import unittest
 
 from microtech.services import MicrotechArtikelService, microtech_connection
 
 
 def _has_env() -> bool:
-    required = (
-        "MICROTECH_MANDANT",
-        "MICROTECH_FIRMA",
-        "MICROTECH_BENUTZER",
-    )
-    return all(os.getenv(key) for key in required)
+    return bool(os.getenv("MICROTECH_GRAPHQL_URL"))
 
 
 class MicrotechArticleReadTest(unittest.TestCase):
-    @unittest.skipUnless(sys.platform == "win32", "Requires Windows COM")
-    @unittest.skipUnless(_has_env(), "Missing MICROTECH_* environment variables")
+    @unittest.skipUnless(_has_env(), "Missing MICROTECH_GRAPHQL_URL environment variable")
     def test_read_article_204113(self):
         with microtech_connection() as erp:
             service = MicrotechArtikelService(erp=erp)

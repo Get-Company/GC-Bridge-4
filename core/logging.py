@@ -25,6 +25,8 @@ PACKAGE_RETENTION = {
     "microtech": "weekly",
     "django": "weekly",
     "uvicorn": "daily",
+    "gunicorn": "daily",
+    "celery": "weekly",
 }
 
 LOG_FORMAT = (
@@ -189,7 +191,16 @@ def _record_matches_package(record: dict[str, Any], package_name: str) -> bool:
 def _configure_stdlib_logging() -> None:
     intercept_handler = InterceptHandler()
     logging.basicConfig(handlers=[intercept_handler], level=0, force=True)
-    for logger_name in ("django", "uvicorn", "uvicorn.error", "uvicorn.access"):
+    for logger_name in (
+        "django",
+        "uvicorn",
+        "uvicorn.error",
+        "uvicorn.access",
+        "gunicorn",
+        "gunicorn.error",
+        "gunicorn.access",
+        "celery",
+    ):
         stdlib_logger = logging.getLogger(logger_name)
         stdlib_logger.handlers = [intercept_handler]
         stdlib_logger.propagate = False

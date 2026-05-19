@@ -1,7 +1,26 @@
 from decimal import Decimal
 from unittest import TestCase
+from unittest.mock import patch
 
+from mappei import tasks as mappei_tasks
 from mappei.services.scraper import PRODUCT_URL_RE, _parse_product_page
+
+
+class MappeiCeleryTaskTest(TestCase):
+    @patch("mappei.tasks.call_command")
+    def test_scrape_daily_prices_delegates_to_management_command(self, mock_call_command):
+        mappei_tasks.scrape_daily_prices.run(
+            product=" 104046 ",
+            limit=10,
+            log_file="tmp/logs/mappei.log",
+        )
+
+        mock_call_command.assert_called_once_with(
+            "scrape_mappei",
+            product="104046",
+            limit=10,
+            log_file="tmp/logs/mappei.log",
+        )
 
 
 class MappeiScraperParserTest(TestCase):

@@ -8,12 +8,8 @@ from .base import MicrotechDatasetService
 class MicrotechAdresseService(MicrotechDatasetService):
     dataset_name = "Adressen"
     index_field = "Nr"
+    default_fields = ("AdrNr", "AdrId", "Na1", "EMail1", "ReAnsNr", "LiAnsNr")
 
     def get_next_nr(self):
-        self._require_dataset()
-        try:
-            return self.dataset.SetupNr("")
-        except Exception as exc:
-            logger.error("Fehler bei der Adressnummernvergabe: {}", exc)
-            self.cancel()
-            return None
+        logger.error("Adressnummernvergabe ist in GC-Bridge nicht mehr per COM verfuegbar.")
+        return None

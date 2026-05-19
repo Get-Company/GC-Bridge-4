@@ -50,7 +50,6 @@ TRIGGERABLE_JOBS = [
 _WINDOWS_SCHEDULED_TASKS = [
     "GC-Bridge-Uvicorn",
     "GC-Bridge-Caddy",
-    "GC-Bridge Scheduled Product Sync",
     "GC-Bridge-Mappei-Scrape",
 ]
 _WINDOWS_RUNNER_SERVICES = [
@@ -128,15 +127,15 @@ def _get_active_processes() -> list[dict]:
 
 
 def _get_microtech_slot_status() -> dict:
-    """Check if the Microtech COM queue status."""
+    """Check if the external Microtech GraphQL endpoint is reachable."""
     try:
-        from microtech.models import MicrotechJob
-        queued = MicrotechJob.objects.filter(status=MicrotechJob.Status.QUEUED).count()
-        running = MicrotechJob.objects.filter(status=MicrotechJob.Status.RUNNING).count()
+        from microtech.services import MicrotechGraphQLClientService
+
+        health = MicrotechGraphQLClientService().health()
         return {
-            "available": running == 0,
-            "queued": queued,
-            "running": running,
+            "available": health == "ok",
+            "queued": 0,
+            "running": 0,
         }
     except Exception:
         return {"available": None, "queued": 0, "running": 0}

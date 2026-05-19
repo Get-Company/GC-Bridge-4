@@ -46,6 +46,7 @@ from products.models import (
     PropertyValue,
 )
 from products.services import PriceIncreaseService
+from products import tasks as product_tasks
 from shopware.models import ShopwareSettings
 
 
@@ -65,6 +66,87 @@ class PriceIncreasePdfHtmlCleanupTest(SimpleTestCase):
         self.assertNotIn("</br>", cleaned)
         self.assertIn("<br/>", cleaned)
         self.assertIn("<b>viel Zubeh", cleaned)
+
+
+class ProductCeleryTaskTest(SimpleTestCase):
+    @patch("products.tasks.call_command")
+    def test_scheduled_product_sync_task_delegates_to_management_command(self, mock_call_command):
+        product_tasks.scheduled_product_sync.run(
+            limit=25,
+            exclude_inactive=True,
+            write_base_price_back=True,
+        )
+
+        mock_call_command.assert_called_once_with(
+            "scheduled_product_sync",
+            limit=25,
+            exclude_inactive=True,
+            write_base_price_back=True,
+        )
+
+    @patch("products.tasks.call_command")
+    def test_product_sync_tasks_clean_erp_numbers_and_pass_options(self, mock_call_command):
+        product_tasks.microtech_sync_products.run(
+            [" 204113 ", "", "A-2"],
+            sync_all=False,
+            include_inactive=True,
+            preserve_is_active=True,
+            limit=10,
+        )
+        product_tasks.shopware_sync_products.run(
+            [" 204113 "],
+            sync_all=False,
+            limit=5,
+            batch_size=20,
+            only_with_images=True,
+            log_images=True,
+        )
+
+        self.assertEqual(mock_call_command.call_count, 2)
+        mock_call_command.assert_has_calls(
+            [
+                call(
+                    "microtech_sync_products",
+                    "204113",
+                    "A-2",
+                    all=False,
+                    include_inactive=True,
+                    preserve_is_active=True,
+                    limit=10,
+                ),
+                call(
+                    "shopware_sync_products",
+                    "204113",
+                    all=False,
+                    limit=5,
+                    batch_size=20,
+                    only_with_images=True,
+                    log_images=True,
+                ),
+            ]
+        )
+
+    @patch("products.tasks.call_command")
+    def test_force_product_image_upload_task_delegates_to_management_command(self, mock_call_command):
+        product_tasks.shopware_force_product_image_uploads.run(
+            [" 204113 ", "", "A-2"],
+            sync_all=False,
+            limit=5,
+            batch_size=20,
+            only_with_images=True,
+            log_images=True,
+        )
+
+        mock_call_command.assert_called_once_with(
+            "shopware_force_product_image_uploads",
+            "204113",
+            "A-2",
+            all=False,
+            limit=5,
+            batch_size=20,
+            only_with_images=True,
+            log_images=True,
+        )
 
 
 class PriceAdminActionTest(TestCase):

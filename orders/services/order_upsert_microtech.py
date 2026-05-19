@@ -11,6 +11,7 @@ from customer.services import CustomerUpsertMicrotechService
 from microtech.models import MicrotechOrderRuleAction, MicrotechSettings
 from microtech.services import (
     MicrotechArtikelService,
+    MicrotechGraphQLClientService,
     MicrotechVorgangService,
     microtech_connection,
 )
@@ -93,6 +94,9 @@ class OrderUpsertMicrotechService(BaseService):
             with microtech_connection() as erp_connection:
                 return self.refresh_erp_order_id(order, erp=erp_connection)
 
+        if isinstance(erp, MicrotechGraphQLClientService):
+            return self._refresh_erp_order_id_graphql(order=order, client=erp)
+
         vorgang_service = MicrotechVorgangService(erp=erp)
         existing_beleg_nr = (order.erp_order_id or "").strip()
         customer_erp_nr = (order.customer.erp_nr or "").strip() if order.customer else ""
@@ -128,6 +132,9 @@ class OrderUpsertMicrotechService(BaseService):
         if erp is None:
             with microtech_connection() as erp_connection:
                 return self.upsert_order(order, erp=erp_connection)
+
+        if isinstance(erp, MicrotechGraphQLClientService):
+            return self._upsert_order_graphql(order=order, client=erp)
 
         resolved_rule = OrderRuleResolverService().resolve_for_order(order=order)
         self._ensure_customer_synced(
@@ -237,6 +244,233 @@ class OrderUpsertMicrotechService(BaseService):
             is_new=is_new,
             rule_debug=rule_debug,
         )
+
+    def _refresh_erp_order_id_graphql(self, *, order: Order, client: MicrotechGraphQLClientService) -> str:
+        existing_beleg_nr = (order.erp_order_id or "").strip()
+        if existing_beleg_nr:
+            job = client.request_vorgang(existing_beleg_nr)
+            vorgang = job.get("vorgang") or {}
+            beleg_nr = str(vorgang.get("belegNr") or "").strip()
+            if beleg_nr:
+                self._persist_erp_order_id(order=order, erp_order_id=beleg_nr)
+                return beleg_nr
+            self._clear_erp_order_id(order=order)
+
+        order_number = (order.order_number or "").strip()
+        if not order_number:
+            return ""
+
+        result = client.poll_dataset_records(
+            {
+                "dataset": "Vorgang",
+                "indexField": "BelegNr",
+                "range": {"fromValues": [""], "toValues": ["ZZZZZZZZZZZZZZ"]},
+                "filters": [{"field": "AuftrNr", "op": "EQ", "value": order_number}],
+                "fields": ["BelegNr", "AuftrNr", "AdrNr"],
+                "limit": 20,
+            },
+            timeout=180,
+        )
+        customer_erp_nr = (order.customer.erp_nr or "").strip() if order.customer else ""
+        first_beleg_nr = ""
+        for record in result.get("records") or []:
+            beleg_nr = str((record or {}).get("BelegNr") or "").strip()
+            adr_nr = str((record or {}).get("AdrNr") or "").strip()
+            if beleg_nr and not first_beleg_nr:
+                first_beleg_nr = beleg_nr
+            if beleg_nr and customer_erp_nr and adr_nr == customer_erp_nr:
+                self._persist_erp_order_id(order=order, erp_order_id=beleg_nr)
+                return beleg_nr
+        if first_beleg_nr:
+            self._persist_erp_order_id(order=order, erp_order_id=first_beleg_nr)
+            return first_beleg_nr
+        return ""
+
+    def _upsert_order_graphql(self, *, order: Order, client: MicrotechGraphQLClientService) -> OrderUpsertResult:
+        resolved_rule = OrderRuleResolverService().resolve_for_order(order=order)
+        self._ensure_customer_synced(
+            order,
+            na1_mode=resolved_rule.na1_mode,
+            na1_static_value=resolved_rule.na1_static_value,
+            erp=client,
+        )
+        order_defaults = self._load_order_defaults()
+        order_type_number = self._coerce_positive_int(resolved_rule.vorgangsart_id, order_defaults.order_type_number)
+        positions, rule_debug = self._build_graphql_positions(order=order, resolved_rule=resolved_rule, client=client)
+        description = order.description or f"Shopware Bestellung {order.order_number}"
+        input_data = {
+            "orderNumber": (order.order_number or "").strip() or (order.api_id or "").strip(),
+            "description": description,
+            "currency": "EUR",
+            "positions": positions,
+        }
+
+        existing_beleg_nr = self._refresh_erp_order_id_graphql(order=order, client=client)
+        if existing_beleg_nr:
+            job = client.update_vorgang(existing_beleg_nr, input_data)
+            is_new = False
+        else:
+            create_input = {
+                **input_data,
+                "vorgangArt": order_type_number,
+                "customerNumber": order.customer.erp_nr,
+            }
+            job = client.create_vorgang(create_input)
+            is_new = True
+
+        vorgang = job.get("vorgang") or {}
+        erp_order_id = str(vorgang.get("belegNr") or existing_beleg_nr or "").strip()
+        if erp_order_id:
+            self._persist_erp_order_id(order=order, erp_order_id=erp_order_id)
+
+        return OrderUpsertResult(
+            order=order,
+            erp_order_id=erp_order_id,
+            is_new=is_new,
+            rule_debug=rule_debug,
+        )
+
+    def _build_graphql_positions(
+        self,
+        *,
+        order: Order,
+        resolved_rule: ResolvedOrderRule,
+        client: MicrotechGraphQLClientService,
+    ) -> tuple[list[dict[str, str]], OrderRuleDebugInfo]:
+        details: list[OrderDetail] = list(order.details.all())
+        artikel_service = MicrotechArtikelService(erp=client)
+        article_name_cache: dict[str, str] = {}
+        article_raw_unit_cache: dict[str, str] = {}
+        product_unit_map = self._build_product_unit_map(details)
+        product_export_text_map = self._build_product_export_text_map(details)
+        append_customs_metadata = self._has_swiss_billing_address(order)
+        positions: list[dict[str, str]] = []
+
+        for detail in details:
+            erp_nr = (detail.erp_nr or "").strip()
+            if not erp_nr:
+                continue
+            unit = self._resolve_position_unit(
+                detail=detail,
+                erp_nr=erp_nr,
+                artikel_service=artikel_service,
+                product_unit_map=product_unit_map,
+                article_name_cache=article_name_cache,
+                article_raw_unit_cache=article_raw_unit_cache,
+            )
+            position = {
+                "erpNumber": erp_nr,
+                "quantity": str(detail.quantity or 1),
+                "unit": unit,
+                "price": self._format_graphql_decimal(detail.unit_price),
+            }
+            self._resolve_position_name(
+                detail=detail,
+                erp_nr=erp_nr,
+                artikel_service=artikel_service,
+                article_name_cache=article_name_cache,
+                product_export_text_map=product_export_text_map,
+                append_customs_metadata=append_customs_metadata,
+            )
+            positions.append(position)
+
+        if order.shipping_costs and order.shipping_costs > Decimal("0"):
+            positions.append(
+                {
+                    "erpNumber": DEFAULT_SHIPPING_ERP_NR,
+                    "quantity": "1",
+                    "unit": DEFAULT_UNIT,
+                    "price": self._format_graphql_decimal(order.shipping_costs),
+                }
+            )
+
+        rule_debug = self._build_graphql_rule_debug(
+            order=order,
+            resolved_rule=resolved_rule,
+            positions=positions,
+        )
+        return positions, rule_debug
+
+    def _build_graphql_rule_debug(
+        self,
+        *,
+        order: Order,
+        resolved_rule: ResolvedOrderRule,
+        positions: list[dict[str, str]],
+    ) -> OrderRuleDebugInfo:
+        extra_created: list[str] = []
+        for action in resolved_rule.dataset_actions:
+            if action.action_type != MicrotechOrderRuleAction.ActionType.CREATE_EXTRA_POSITION:
+                continue
+            erp_nr = (action.target_value or "").strip()
+            if not erp_nr or erp_nr in extra_created:
+                continue
+            positions.append({"erpNumber": erp_nr, "quantity": "1", "unit": DEFAULT_UNIT})
+            extra_created.append(erp_nr)
+
+        payment_info = self._build_graphql_payment_position(order=order, resolved_rule=resolved_rule, positions=positions)
+        return replace(
+            payment_info,
+            dataset_actions_total=len(resolved_rule.dataset_actions),
+            dataset_actions_applied=len(extra_created),
+            dataset_create_position_requested=sum(
+                1
+                for action in resolved_rule.dataset_actions
+                if action.action_type == MicrotechOrderRuleAction.ActionType.CREATE_EXTRA_POSITION
+            ),
+            dataset_create_position_applied=len(extra_created),
+            dataset_created_position_erp_nrs=tuple(extra_created),
+            dataset_actions_note="Dataset-Feldaktionen werden erst nach Wrapper-Erweiterung fuer Vorgang-Felder angewendet.",
+        )
+
+    def _build_graphql_payment_position(
+        self,
+        *,
+        order: Order,
+        resolved_rule: ResolvedOrderRule,
+        positions: list[dict[str, str]],
+    ) -> OrderRuleDebugInfo:
+        rule_id = resolved_rule.rule_id
+        rule_name = (resolved_rule.rule_name or "").strip()
+        if not resolved_rule.add_payment_position:
+            return OrderRuleDebugInfo(
+                rule_id=rule_id,
+                rule_name=rule_name,
+                payment_position_requested=False,
+                payment_position_added=False,
+                payment_position_reason="Regel fordert keine Zahlungs-Zusatzposition an.",
+                payment_position_erp_nr=(resolved_rule.payment_position_erp_nr or "").strip(),
+            )
+        erp_nr = (resolved_rule.payment_position_erp_nr or "").strip()
+        if not erp_nr:
+            return OrderRuleDebugInfo(
+                rule_id=rule_id,
+                rule_name=rule_name,
+                payment_position_requested=True,
+                payment_position_added=False,
+                payment_position_reason="Zahlungs-Zusatzposition aktiviert, aber ERP-Nr ist leer.",
+                payment_position_erp_nr="",
+            )
+        amount = self._resolve_payment_position_amount(order=order, resolved_rule=resolved_rule)
+        position = {"erpNumber": erp_nr, "quantity": "1", "unit": DEFAULT_UNIT}
+        if amount is not None:
+            position["price"] = self._format_graphql_decimal(amount)
+        positions.append(position)
+        return OrderRuleDebugInfo(
+            rule_id=rule_id,
+            rule_name=rule_name,
+            payment_position_requested=True,
+            payment_position_added=True,
+            payment_position_reason=f"Zahlungs-Zusatzposition '{erp_nr}' wurde fuer GraphQL vorgemerkt.",
+            payment_position_erp_nr=erp_nr,
+            payment_position_amount=amount,
+        )
+
+    @staticmethod
+    def _format_graphql_decimal(value: Decimal | None) -> str:
+        if value is None:
+            return ""
+        return format(value.quantize(Decimal("0.01")), "f")
 
     def _ensure_customer_synced(
         self,

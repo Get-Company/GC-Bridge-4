@@ -211,33 +211,26 @@ def customer_delete_addresses_api(request):
         logger.info("Delete-addresses: Shopware phase done")
 
         # Delete in Microtech
-        mt_addresses = [(a.customer.erp_nr, a.erp_ans_nr) for a in addresses if a.erp_ans_nr is not None]
+        mt_addresses = [
+            (a.customer.erp_nr, a.erp_ans_nr, a.erp_asp_nr)
+            for a in addresses
+            if a.erp_ans_nr is not None
+        ]
         logger.info("Delete-addresses: {} Microtech-Anschriften to delete: {}", len(mt_addresses), mt_addresses)
         if mt_addresses:
             try:
-                from microtech.services import (
-                    MicrotechAnschriftService,
-                    MicrotechAnsprechpartnerService,
-                    microtech_connection,
-                )
+                from microtech.services import microtech_connection
                 logger.info("Delete-addresses: Microtech connecting...")
-                with microtech_connection() as erp:
+                with microtech_connection() as client:
                     logger.info("Delete-addresses: Microtech connected")
-                    anschrift = MicrotechAnschriftService(erp=erp)
-                    ansprechpartner = MicrotechAnsprechpartnerService(erp=erp)
-                    for erp_nr, ans_nr in mt_addresses:
+                    for erp_nr, ans_nr, asp_nr in mt_addresses:
                         try:
                             logger.info("Delete-addresses: Microtech deleting {}/{}", erp_nr, ans_nr)
-                            # Delete Ansprechpartner first
-                            if ansprechpartner.set_range(
-                                from_range=[erp_nr, ans_nr, 0],
-                                to_range=[erp_nr, ans_nr, 999],
-                            ):
-                                while not ansprechpartner.range_eof():
-                                    ansprechpartner.delete()
-                            # Delete Anschrift
-                            if anschrift.find([erp_nr, ans_nr]):
-                                anschrift.delete()
+                            address_number = int(erp_nr)
+                            address_sub_number = int(ans_nr)
+                            if asp_nr is not None:
+                                client.delete_contact_person(address_number, address_sub_number, int(asp_nr))
+                            client.delete_postal_address(address_number, address_sub_number)
                             logger.info("Delete-addresses: Microtech deleted {}/{}", erp_nr, ans_nr)
                         except Exception as exc:
                             errors.append(f"Microtech {erp_nr}/{ans_nr}: {exc}")

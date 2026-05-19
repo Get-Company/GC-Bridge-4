@@ -149,6 +149,7 @@ class LeaveService(BaseService):
         working_time_service: WorkingTimeService | None = None,
     ) -> Decimal:
         working_time_service = working_time_service or WorkingTimeService()
+        holiday_service = HolidayService()
         year_start = date(year, 1, 1)
         year_end = date(year, 12, 31)
         bridge_holidays = (
@@ -166,7 +167,10 @@ class LeaveService(BaseService):
             day_fraction = Decimal(str(bridge.day_fraction))
             while current_date <= last_date:
                 if working_time_service.get_scheduled_target_minutes_for_date(employee, current_date) > 0:
-                    total += day_fraction
+                    # A public holiday already grants the day off without costing vacation.
+                    # If a bridge day coincides with a public holiday, don't deduct vacation.
+                    if not holiday_service.is_public_holiday(employee, current_date):
+                        total += day_fraction
                 current_date = current_date + timedelta(days=1)
         return self._quantize_days(total)
 

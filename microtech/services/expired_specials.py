@@ -7,6 +7,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from core.services import BaseService
+from microtech.services.graphql_client import MicrotechGraphQLClientService
 from microtech.services.artikel import MicrotechArtikelService
 from products.models import Price
 
@@ -57,7 +58,11 @@ class MicrotechExpiredSpecialSyncService(BaseService):
             if not artikel_service.find(erp_nr):
                 continue
 
-            artikel_service.edit()
+            input_data = {
+                "specialPrice": "",
+                "specialStartDate": "",
+                "specialEndDate": "",
+            }
             if write_base_price_back:
                 current_microtech_price = self._to_decimal(artikel_service.get_price())
                 if self._is_suspicious_price_ratio(
@@ -66,11 +71,11 @@ class MicrotechExpiredSpecialSyncService(BaseService):
                 ):
                     skipped_price_writes += 1
                 else:
-                    artikel_service.set_field("Vk0.Preis", self._format_decimal(price.price))
-            artikel_service.set_field("Vk0.SPr", "")
-            artikel_service.set_field("Vk0.SVonDat", "")
-            artikel_service.set_field("Vk0.SBisDat", "")
-            artikel_service.post()
+                    input_data["price"] = self._format_decimal(price.price)
+            if isinstance(erp, MicrotechGraphQLClientService):
+                erp.update_product(erp_nr, input_data)
+            else:
+                raise RuntimeError("Microtech writes must use the GraphQL client.")
             updated += 1
         return updated, skipped_price_writes
 

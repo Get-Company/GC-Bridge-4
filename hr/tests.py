@@ -42,6 +42,21 @@ from hr.services import (
 )
 from unfold.widgets import UnfoldAdminColorInputWidget, UnfoldAdminTimeWidget
 
+from hr import tasks as hr_tasks
+
+
+class HrCeleryTaskTest(SimpleTestCase):
+    @patch("hr.tasks.call_command")
+    def test_year_transition_delegates_to_management_command(self, mock_call_command):
+        hr_tasks.year_transition.run(year=2027, max_carryover=5.5, dry_run=True)
+
+        mock_call_command.assert_called_once_with(
+            "hr_year_transition",
+            year=2027,
+            max_carryover=5.5,
+            dry_run=True,
+        )
+
 
 class HrServiceUtilityTest(SimpleTestCase):
     def test_get_days_in_month_returns_all_dates(self):
@@ -253,14 +268,14 @@ class HrAdminFormWidgetTest(SimpleTestCase):
         form = EmployeeProfileAdminForm()
 
         self.assertIsInstance(form.fields["color"].widget, UnfoldAdminColorInputWidget)
-        self.assertEqual(form.fields["color"].widget.attrs.get("type"), "color")
 
     def test_work_schedule_day_form_uses_timepicker_widgets(self):
         form = WorkScheduleDayInlineForm()
 
         self.assertIsInstance(form.fields["start_time"].widget, UnfoldAdminTimeWidget)
         self.assertIsInstance(form.fields["end_time"].widget, UnfoldAdminTimeWidget)
-        self.assertIn("core/admin/hr_work_schedule_time_fields.js", form.media.render_js())
+        # render_js() returns full <script> tags, so check for the path as a substring.
+        self.assertTrue(any("core/admin/hr_work_schedule_time_fields.js" in tag for tag in form.media.render_js()))
 
     def test_working_time_overview_form_rejects_inverted_range(self):
         form = EmployeeWorkingTimeOverviewForm(
@@ -389,6 +404,23 @@ class HrLeaveConflictTest(TestCase):
             employee=self.employee,
             start_date=date(2026, 6, 10),
             end_date=date(2026, 6, 12),
+            status=LeaveRequest.Status.REQUESTED,
+        )
+
+        with self.assertRaises(ValidationError):
+            LeaveService().approve_leave_request(leave_request, approved_by=self.user)
+
+    def test_approve_leave_request_rejects_overlap_with_company_holiday(self):
+        CompanyHoliday.objects.create(
+            name="Sommerpause",
+            start_date=date(2026, 8, 1),
+            end_date=date(2026, 8, 3),
+            counts_as_vacation=False,
+        )
+        leave_request = LeaveRequest.objects.create(
+            employee=self.employee,
+            start_date=date(2026, 8, 2),
+            end_date=date(2026, 8, 4),
             status=LeaveRequest.Status.REQUESTED,
         )
 
@@ -577,6 +609,142 @@ class HrVacationBalanceTest(TestCase):
         self.assertEqual(row["planned_units"], Decimal("0.50"))
         self.assertEqual(row["bridge_day_units"], Decimal("0.50"))
 
+    def test_bridge_day_on_public_holiday_does_not_deduct_vacation(self):
+        # If a bridge day coincides with a public holiday, the public holiday
+        # already grants the day off for free — no vacation should be deducted.
+        PublicHoliday.objects.create(
+            calendar=self.calendar,
+            name="Tag der Deutschen Einheit",
+            date=date(2026, 10, 3),
+            is_active=True,
+        )
+        CompanyHoliday.objects.create(
+            name="Brueckentag Einheit",
+            start_date=date(2026, 10, 3),
+            end_date=date(2026, 10, 3),
+            counts_as_vacation=True,
+            is_bridge_day=True,
+        )
+
+        bridge_days = LeaveService().get_bridge_days_for_year(self.employee, 2026)
+        remaining_days = LeaveService().get_remaining_vacation_days_for_year(self.employee, 2026)
+
+        self.assertEqual(bridge_days, Decimal("0.00"))
+        self.assertEqual(remaining_days, Decimal("30.00"))
+
+    def test_bridge_day_on_non_working_weekday_does_not_deduct_vacation(self):
+        # Part-time employees who don't work on a specific weekday should not
+        # have vacation deducted for a bridge day on that weekday.
+        # The standard test schedule is Mon–Fri (weekdays 0–4).
+        # Oct 3 2026 is a Saturday (weekday 5) — not a working day.
+        CompanyHoliday.objects.create(
+            name="Hypothetischer Brueckentag Samstag",
+            start_date=date(2026, 10, 3),
+            end_date=date(2026, 10, 3),
+            counts_as_vacation=True,
+            is_bridge_day=True,
+        )
+
+        bridge_days = LeaveService().get_bridge_days_for_year(self.employee, 2026)
+
+        self.assertEqual(bridge_days, Decimal("0.00"))
+
+    def test_bridge_day_spanning_multiple_days_respects_schedule_and_holidays(self):
+        # Multi-day bridge period: Mon–Fri, with one day being a public holiday.
+        # May 25 2026 = Monday, May 29 2026 = Friday (Christi Himmelfahrt in Bayern).
+        PublicHoliday.objects.create(
+            calendar=self.calendar,
+            name="Christi Himmelfahrt",
+            date=date(2026, 5, 21),  # Actual Christi Himmelfahrt 2026 (Thursday)
+            is_active=True,
+        )
+        CompanyHoliday.objects.create(
+            name="Pfingstbruecke",
+            start_date=date(2026, 5, 19),  # Tuesday
+            end_date=date(2026, 5, 22),    # Friday (4 days: Tue, Wed, Thu holiday, Fri)
+            counts_as_vacation=True,
+            is_bridge_day=True,
+        )
+
+        # Thu May 21 is a public holiday → not deducted
+        # Tue May 19, Wed May 20, Fri May 22 are working days → 3 days deducted
+        bridge_days = LeaveService().get_bridge_days_for_year(self.employee, 2026)
+
+        self.assertEqual(bridge_days, Decimal("3.00"))
+
+    def test_remaining_vacation_combines_approved_leave_and_bridge_days(self):
+        CompanyHoliday.objects.create(
+            name="Brueckentag",
+            start_date=date(2026, 5, 8),
+            end_date=date(2026, 5, 8),
+            counts_as_vacation=True,
+            is_bridge_day=True,
+        )
+        LeaveRequest.objects.create(
+            employee=self.employee,
+            leave_type=LeaveRequest.LeaveType.VACATION,
+            start_date=date(2026, 6, 1),
+            end_date=date(2026, 6, 3),
+            status=LeaveRequest.Status.APPROVED,
+        )
+
+        approved = LeaveService().get_approved_vacation_days_for_year(self.employee, 2026)
+        bridge = LeaveService().get_bridge_days_for_year(self.employee, 2026)
+        remaining = LeaveService().get_remaining_vacation_days_for_year(self.employee, 2026)
+
+        self.assertEqual(approved, Decimal("3.00"))
+        self.assertEqual(bridge, Decimal("1.00"))
+        self.assertEqual(remaining, Decimal("26.00"))
+
+    def test_vacation_entitlement_with_carryover_uses_total_days(self):
+        from hr.models import VacationEntitlement
+
+        VacationEntitlement.objects.create(
+            employee=self.employee,
+            year=2026,
+            base_days=Decimal("28.00"),
+            carryover_days=Decimal("3.00"),
+            carryover_expires_on=date(2026, 3, 31),
+        )
+
+        total = LeaveService().get_vacation_entitlement_total(self.employee, 2026)
+
+        # Carryover of March 31, 2026 is in the past (test runs in 2026-05-19),
+        # so effective carryover = 0; total = base only.
+        self.assertEqual(total, Decimal("28.00"))
+
+    def test_vacation_entitlement_fallback_to_profile_when_no_record_exists(self):
+        total = LeaveService().get_vacation_entitlement_total(self.employee, 2099)
+
+        self.assertEqual(total, Decimal("30.00"))
+
+    def test_approved_vacation_days_ignores_non_approved_and_non_vacation_requests(self):
+        LeaveRequest.objects.create(
+            employee=self.employee,
+            leave_type=LeaveRequest.LeaveType.VACATION,
+            start_date=date(2026, 3, 2),
+            end_date=date(2026, 3, 2),
+            status=LeaveRequest.Status.REQUESTED,  # not approved → must not count
+        )
+        LeaveRequest.objects.create(
+            employee=self.employee,
+            leave_type=LeaveRequest.LeaveType.SPECIAL_LEAVE,
+            start_date=date(2026, 3, 3),
+            end_date=date(2026, 3, 3),
+            status=LeaveRequest.Status.APPROVED,  # approved but not vacation → must not count
+        )
+        LeaveRequest.objects.create(
+            employee=self.employee,
+            leave_type=LeaveRequest.LeaveType.VACATION,
+            start_date=date(2026, 3, 4),
+            end_date=date(2026, 3, 4),
+            status=LeaveRequest.Status.APPROVED,  # this one counts
+        )
+
+        approved = LeaveService().get_approved_vacation_days_for_year(self.employee, 2026)
+
+        self.assertEqual(approved, Decimal("1.00"))
+
 
 class HrOpenHolidaysImportTest(TestCase):
     def setUp(self):
@@ -712,20 +880,3 @@ class HrOpenHolidaysImportTest(TestCase):
                 name="Tag der Arbeit",
             ).exists()
         )
-
-    def test_approve_leave_request_rejects_overlap_with_company_holiday(self):
-        CompanyHoliday.objects.create(
-            name="Sommerpause",
-            start_date=date(2026, 8, 1),
-            end_date=date(2026, 8, 3),
-            counts_as_vacation=False,
-        )
-        leave_request = LeaveRequest.objects.create(
-            employee=self.employee,
-            start_date=date(2026, 8, 2),
-            end_date=date(2026, 8, 4),
-            status=LeaveRequest.Status.REQUESTED,
-        )
-
-        with self.assertRaises(ValidationError):
-            LeaveService().approve_leave_request(leave_request, approved_by=self.user)

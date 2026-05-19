@@ -9,6 +9,33 @@ from .base import MicrotechDatasetService
 class MicrotechArtikelService(MicrotechDatasetService):
     dataset_name = "Artikel"
     index_field = "Nr"
+    default_fields = (
+        "Nr",
+        "ArtNr",
+        "KuBez5",
+        "Bez5",
+        "Bez2",
+        "WShopKz",
+        "Sel6",
+        "Einh",
+        "Sel10",
+        "Sel11",
+        "Sel19",
+        "Vk0.Preis",
+        "Vk0.Rab0.Mge",
+        "Vk0.Rab0.Pr",
+        "Vk0.SPr",
+        "Vk0.SVonDat",
+        "Vk0.SBisDat",
+        "StSchl",
+        "StSchlSz",
+        "Bez3",
+        "Bild",
+        "Bild2",
+        "Bild3",
+        "Bild4",
+        "Bild5",
+    )
 
     def set_range_all(self) -> bool:
         return self.set_range(from_range="00000000", to_range="99999999", field=self.index_field)

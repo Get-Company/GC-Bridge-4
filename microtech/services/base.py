@@ -1,23 +1,23 @@
 from __future__ import annotations
 
 import re
-from datetime import date, datetime
 from typing import Any
 
 from loguru import logger
 
 from core.services import BaseService
+from microtech.services.graphql_client import MicrotechGraphQLClientService
 
-try:
-    import pywintypes
-    COM_ERROR = pywintypes.com_error
-except ImportError:  # pragma: no cover
-    COM_ERROR = Exception
+
+class MicrotechGraphQLDatasetUnsupported(RuntimeError):
+    pass
 
 
 class MicrotechDatasetService(BaseService):
     dataset_name: str | None = None
     index_field: str | None = None
+    default_fields: tuple[str, ...] = ()
+    page_limit: int = 500
 
     def __init__(
         self,
@@ -27,176 +27,214 @@ class MicrotechDatasetService(BaseService):
         index_field: str | None = None,
         dataset: Any | None = None,
     ) -> None:
-        self.erp = erp
+        self.client = erp if isinstance(erp, MicrotechGraphQLClientService) else MicrotechGraphQLClientService()
         self.dataset_name = dataset_name or self.dataset_name
         self.index_field = index_field or self.index_field
         if not self.dataset_name:
             raise ValueError("dataset_name is required for Microtech datasets.")
-        if not self.index_field:
-            raise ValueError("index_field is required for Microtech datasets.")
-        self.dataset = dataset or self._create_dataset()
-
-    def _create_dataset(self) -> Any:
-        if not self.erp:
-            raise ValueError("An active ERP connection is required.")
-        try:
-            return self.erp.DataSetInfos.Item(self.dataset_name).CreateDataSet()
-        except COM_ERROR as exc:
-            logger.error("Failed to create dataset '{}': {}", self.dataset_name, exc)
-            raise
-
-    def _require_dataset(self) -> None:
-        if self.dataset is None:
-            raise ValueError(f"Kein Dataset geladen für {self.dataset_name}.")
+        self.dataset = dataset
+        self._records: list[dict[str, Any]] = []
+        self._cursor = 0
+        self._loaded = False
+        self._has_more = False
+        self._next_cursor: list[Any] | None = None
+        self._range: dict[str, Any] | None = None
+        self._filters: list[dict[str, Any]] = []
+        self._last_result: dict[str, Any] = {}
 
     def find(self, search_value: Any, index_field: str | None = None) -> bool:
-        self._require_dataset()
         index_field = index_field or self.index_field
-        try:
-            found = bool(self.dataset.FindKey(index_field, search_value))
-            logger.debug(
-                "Dataset '{}' FindKey({}, {}) -> {}",
-                self.dataset_name,
-                index_field,
-                search_value,
-                found,
-            )
-            return found
-        except COM_ERROR as exc:
-            logger.error(
-                "Error finding record in '{}' with {} = '{}': {}",
-                self.dataset_name,
-                index_field,
-                search_value,
-                exc,
-            )
-            return False
-
-    def _read_field(self, field: Any) -> Any:
-        field_type_map = {
-            "WideString": "AsString",
-            "String": "AsString",
-            "Double": "AsString",
-            "Float": "AsFloat",
-            "Blob": "Text",
-            "Info": "Text",
-            "Date": "AsDatetime",
-            "DateTime": "AsDatetime",
-            "Integer": "AsInteger",
-            "Boolean": "AsInteger",
-            "Byte": "AsInteger",
-            "AutoInc": "AsInteger",
-        }
-        cast_type = field_type_map.get(field.FieldType)
-        if not cast_type:
-            logger.warning("Unknown FieldType: {}", field.FieldType)
-            return None
-        try:
-            return getattr(field, cast_type)
-        except AttributeError:
-            logger.error("Field missing attribute '{}'.", cast_type)
-            return None
-        except Exception as exc:
-            logger.error("Error while casting field: {}", exc)
-            return None
+        input_data = self._build_request(
+            index_field=index_field,
+            find_key=self._as_values(search_value),
+            limit=1,
+        )
+        result = self.client.poll_dataset_records(input_data, timeout=60)
+        self._load_result(result)
+        logger.debug(
+            "Dataset '{}' GraphQL FindKey({}, {}) -> {}",
+            self.dataset_name,
+            index_field,
+            search_value,
+            bool(self._records),
+        )
+        return bool(self._records)
 
     def get_field(self, field_name: str, *, silent: bool = False) -> Any:
-        self._require_dataset()
-        try:
-            field = self.dataset.Fields(field_name)
-            return self._read_field(field)
-        except COM_ERROR as exc:
+        record = self._current_record()
+        if record is None:
             if silent:
                 return None
-            else:
-                logger.error("Error reading field '{}': {}", field_name, exc)
+            logger.warning("Dataset '{}' has no current record for field '{}'.", self.dataset_name, field_name)
             return None
+        return record.get(field_name)
 
-    def set_field(self, field_name: str, value: Any) -> bool:
-        self._require_dataset()
-        if value is None:
-            logger.debug("Value for field '{}' is None. Skipping.", field_name)
-            return True
-
-        try:
-            field = self.dataset.Fields.Item(field_name)
-            field_type_map = {
-                "WideString": "AsString",
-                "String": "AsString",
-                "Double": "AsString",
-                "Float": "AsFloat",
-                "Blob": "Text",
-                "Info": "Text",
-                "Date": "AsString",
-                "DateTime": "AsString",
-                "Integer": "AsInteger",
-                "Boolean": "AsInteger",
-                "Byte": "AsInteger",
-            }
-            cast_type = field_type_map.get(field.FieldType)
-            if not cast_type:
-                logger.warning("Unknown FieldType for writing: {}", field.FieldType)
-                return False
-
-            if isinstance(value, bool):
-                value = 1 if value else 0
-            elif isinstance(value, datetime):
-                value = value.strftime("%d.%m.%Y %H:%M:%S.%f")
-            elif isinstance(value, date):
-                value = value.strftime("%d.%m.%Y")
-
-            setattr(field, cast_type, value)
-            logger.debug(
-                "Value '{}' set in field '{}' of dataset '{}'.",
-                value,
-                field_name,
-                self.dataset_name,
-            )
-            return True
-        except COM_ERROR as exc:
-            logger.error("Error writing to field '{}' with value '{}': {}", field_name, value, exc)
-            return False
-        except Exception as exc:
-            logger.error("Unexpected error setting field '{}': {}", field_name, exc)
-            return False
-
-    def get_special_object(self, special_object_name: str) -> Any | None:
-        special_objects = {
-            "soLager": 0,
-            "soVorgang": 1,
-            "soDokumente": 2,
-            "soKontenAnalyse": 3,
-            "soAppObject": 4,
-            "soWandeln": 5,
-            "soDoublette": 6,
-            "soEvents": 7,
-            "soNachricht": 8,
-            "soVariablen": 9,
-            "soDrucken": 10,
-            "soBanking": 11,
-            "soBuchungen": 12,
-            "soEBilanz": 13,
-            "soOffenePosten": 14,
-            "soZahlungsverkehr": 15,
-            "soAusgabeVerzeichnis": 16,
-            "soTableDefinition": 17,
-            "soAdrSpezPr": 18,
-            "soModificationMonitor": 19,
-            "soProjekte": 20,
+    def set_range(self, from_range: Any, to_range: Any, *, field: str | None = None) -> bool:
+        self._range = {
+            "indexField": field or self.index_field,
+            "fromValues": self._as_values(from_range),
+            "toValues": self._as_values(to_range),
         }
-        obj_code = special_objects.get(special_object_name)
-        if obj_code is None:
-            return None
-        return self.erp.GetSpecialObject(obj_code)
+        self._reset_records()
+        return True
+
+    def set_filter(self, filters: dict[str, Any]) -> bool:
+        self._filters = [
+            {"field": field, "op": "EQ", "value": value}
+            for field, value in (filters or {}).items()
+        ]
+        self._reset_records()
+        return True
+
+    def clear_filter(self) -> bool:
+        self._filters = []
+        self._reset_records()
+        return True
+
+    def is_ranged(self) -> bool:
+        self._ensure_loaded()
+        return bool(self._records)
+
+    def range_first(self) -> None:
+        self._ensure_loaded()
+        self._cursor = 0
+
+    def range_last(self) -> None:
+        self._ensure_loaded()
+        while self._has_more:
+            self._fetch_next_page()
+        self._cursor = max(0, len(self._records) - 1)
+
+    def range_next(self) -> None:
+        self._ensure_loaded()
+        self._cursor += 1
+        if self._cursor >= len(self._records) and self._has_more:
+            self._fetch_next_page()
+
+    def range_eof(self) -> bool:
+        self._ensure_loaded()
+        return self._cursor >= len(self._records)
+
+    def range_count(self) -> int:
+        self._ensure_loaded()
+        return int(self._last_result.get("recordCount") or len(self._records))
 
     def get_field_img_filename(self, field_name: str) -> str | None:
-        self._require_dataset()
-        try:
-            link_filename = self.dataset.Fields.Item(field_name).GetEditObject(4).LinkFileName
-            return self._find_image_filename_in_path(link_filename)
-        except COM_ERROR as exc:
-            logger.error("Error getting image filename from field '{}': {}", field_name, exc)
+        return self._find_image_filename_in_path(self.get_field(field_name, silent=True))
+
+    def edit(self) -> None:
+        raise MicrotechGraphQLDatasetUnsupported("Dataset edit is not available in GC-Bridge. Use GraphQL mutations.")
+
+    def append(self) -> None:
+        raise MicrotechGraphQLDatasetUnsupported("Dataset append is not available in GC-Bridge. Use GraphQL mutations.")
+
+    def post(self) -> None:
+        raise MicrotechGraphQLDatasetUnsupported("Dataset post is not available in GC-Bridge. Use GraphQL mutations.")
+
+    def cancel(self) -> None:
+        return None
+
+    def delete(self) -> None:
+        raise MicrotechGraphQLDatasetUnsupported("Dataset delete is not available in GC-Bridge. Use GraphQL mutations.")
+
+    def set_field(self, field_name: str, value: Any) -> bool:
+        raise MicrotechGraphQLDatasetUnsupported("Dataset field writes are not available in GC-Bridge. Use GraphQL mutations.")
+
+    def get_special_object(self, special_object_name: str) -> Any | None:
+        raise MicrotechGraphQLDatasetUnsupported(
+            f"SpecialObject '{special_object_name}' is not available in GC-Bridge. Use GraphQL mutations."
+        )
+
+    def _build_request(
+        self,
+        *,
+        index_field: str | None,
+        find_key: list[Any] | None = None,
+        after: list[Any] | None = None,
+        limit: int | None = None,
+    ) -> dict[str, Any]:
+        input_data: dict[str, Any] = {
+            "dataset": self.dataset_name,
+            "fields": list(self.default_fields),
+            "limit": limit or self.page_limit,
+        }
+        if index_field:
+            input_data["indexField"] = index_field
+        if find_key is not None:
+            input_data["findKey"] = find_key
+            return input_data
+        if not self._range:
+            raise ValueError("Range is required for dataset page reads.")
+        input_data["range"] = {
+            "fromValues": self._range["fromValues"],
+            "toValues": self._range["toValues"],
+        }
+        if self._range.get("indexField"):
+            input_data["indexField"] = self._range["indexField"]
+        if self._filters:
+            input_data["filters"] = self._filters
+        if after:
+            input_data["after"] = after
+        return input_data
+
+    def _ensure_loaded(self) -> None:
+        if self._loaded:
+            return
+        if not self._range:
+            self._records = []
+            self._loaded = True
+            return
+        result = self.client.poll_dataset_records(self._build_request(index_field=self._range.get("indexField")), timeout=180)
+        self._load_result(result)
+
+    def _fetch_next_page(self) -> None:
+        if not self._has_more or not self._next_cursor:
+            return
+        previous_len = len(self._records)
+        result = self.client.poll_dataset_records(
+            self._build_request(index_field=self._range.get("indexField"), after=self._next_cursor),
+            timeout=180,
+        )
+        new_records = self._normalize_records(result.get("records") or [])
+        self._records.extend(new_records)
+        self._last_result = result
+        self._has_more = bool(result.get("hasMore"))
+        self._next_cursor = result.get("nextCursor")
+        self._cursor = previous_len
+
+    def _load_result(self, result: dict[str, Any]) -> None:
+        self._records = self._normalize_records(result.get("records") or [])
+        self._cursor = 0
+        self._loaded = True
+        self._last_result = result
+        self._has_more = bool(result.get("hasMore"))
+        self._next_cursor = result.get("nextCursor")
+
+    def _reset_records(self) -> None:
+        self._records = []
+        self._cursor = 0
+        self._loaded = False
+        self._has_more = False
+        self._next_cursor = None
+        self._last_result = {}
+
+    def _current_record(self) -> dict[str, Any] | None:
+        self._ensure_loaded()
+        if self._cursor < 0 or self._cursor >= len(self._records):
             return None
+        return self._records[self._cursor]
+
+    @staticmethod
+    def _normalize_records(records: Any) -> list[dict[str, Any]]:
+        if not isinstance(records, list):
+            return []
+        return [record for record in records if isinstance(record, dict)]
+
+    @staticmethod
+    def _as_values(value: Any) -> list[Any]:
+        if isinstance(value, (list, tuple)):
+            return list(value)
+        return [value]
 
     @staticmethod
     def _find_image_filename_in_path(image_link_or_path: str | None) -> str | None:
@@ -210,116 +248,3 @@ class MicrotechDatasetService(BaseService):
         if match:
             return match.group(0).replace("\\", "/").split("/")[-1]
         return None
-
-    def edit(self) -> None:
-        self._require_dataset()
-        try:
-            self.dataset.Edit()
-            logger.debug("Dataset '{}' is in edit mode.", self.dataset_name)
-        except COM_ERROR as exc:
-            logger.error("Error entering edit mode for dataset '{}': {}", self.dataset_name, exc)
-
-    def append(self) -> None:
-        self._require_dataset()
-        try:
-            self.dataset.Append()
-            logger.debug("Append on dataset '{}'.", self.dataset_name)
-        except COM_ERROR as exc:
-            logger.error("Error appending to dataset '{}': {}", self.dataset_name, exc)
-
-    def post(self) -> None:
-        self._require_dataset()
-        try:
-            self.dataset.Post()
-            logger.debug("Posted changes to dataset '{}'.", self.dataset_name)
-        except COM_ERROR as exc:
-            logger.error("Error posting changes to dataset '{}': {}", self.dataset_name, exc)
-            self.cancel()
-
-    def cancel(self) -> None:
-        self._require_dataset()
-        try:
-            self.dataset.Cancel()
-            logger.debug("Canceled changes to dataset '{}'.", self.dataset_name)
-        except COM_ERROR as exc:
-            logger.error("Error canceling changes to dataset '{}': {}", self.dataset_name, exc)
-
-    def delete(self) -> None:
-        self._require_dataset()
-        try:
-            if self.dataset.CheckDelete(False, True):
-                self.dataset.Delete()
-                logger.debug("Record deleted successfully.")
-            else:
-                logger.warning("Deletion canceled by ERP.")
-        except COM_ERROR as exc:
-            logger.error("Error deleting record: {}", exc)
-
-    def set_range(self, from_range: Any, to_range: Any, *, field: str | None = None) -> bool:
-        self._require_dataset()
-        field = field or self.index_field
-        self.dataset.SetRange(field, from_range, to_range)
-        self.dataset.ApplyRange()
-        if self.is_ranged():
-            self.dataset.First()
-            return True
-        logger.warning("Dataset '{}' is not ranged.", self.dataset_name)
-        return False
-
-    def is_ranged(self) -> bool:
-        self._require_dataset()
-        return self.dataset.RecordCount > 0
-
-    def range_first(self) -> None:
-        self._require_dataset()
-        self.dataset.First()
-
-    def range_last(self) -> None:
-        self._require_dataset()
-        self.dataset.Last()
-
-    def range_next(self) -> None:
-        self._require_dataset()
-        self.dataset.Next()
-
-    def range_eof(self) -> bool:
-        self._require_dataset()
-        return self.dataset.Eof
-
-    def range_count(self) -> int:
-        self._require_dataset()
-        return self.dataset.RecordCount
-
-    def set_filter(self, filters: dict[str, Any]) -> bool:
-        self._require_dataset()
-        filter_parts = []
-        for field, value in filters.items():
-            if isinstance(value, str):
-                filter_parts.append(f"[{field}] = '{value}'")
-            else:
-                filter_parts.append(f"[{field}] = {value}")
-
-        filter_expression = " AND ".join(filter_parts)
-        try:
-            self.dataset.Filter = filter_expression
-            self.dataset.Filtered = True
-            logger.info("Filter applied to dataset '{}': {}", self.dataset_name, filter_expression)
-            return True
-        except COM_ERROR as exc:
-            logger.error("Error applying filter to dataset '{}': {}", self.dataset_name, exc)
-            return False
-
-    def clear_filter(self) -> bool:
-        self._require_dataset()
-        try:
-            self.dataset.Filtered = False
-            self.dataset.Filter = ""
-            logger.info("Filter cleared for dataset '{}'.", self.dataset_name)
-            return True
-        except COM_ERROR as exc:
-            logger.error("Error clearing filter for dataset '{}': {}", self.dataset_name, exc)
-            return False
-
-    def is_filtered(self) -> bool:
-        self._require_dataset()
-        return bool(self.dataset.Filtered)

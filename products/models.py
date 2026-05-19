@@ -259,7 +259,6 @@ class Product(BaseModel):
 
     def sync_to_microtech(self, *, erp: object | None = None) -> dict[str, object]:
         from microtech.services import microtech_connection
-        from microtech.services.artikel import MicrotechArtikelService
 
         erp_nr = str(self.erp_nr or "").strip()
         if not erp_nr:
@@ -269,26 +268,14 @@ class Product(BaseModel):
             with microtech_connection() as erp_connection:
                 return self.sync_to_microtech(erp=erp_connection)
 
-        artikel_service = MicrotechArtikelService(erp=erp)
-        if not artikel_service.find(erp_nr):
-            raise ValueError(f"Microtech Artikel {erp_nr} nicht gefunden.")
-
-        payload = self.get_microtech_sync_payload()
-        artikel_service.edit()
-
-        failed_fields: list[str] = []
-        for field_name, value in payload.items():
-            if not artikel_service.set_field(field_name, value):
-                failed_fields.append(field_name)
-
-        if failed_fields:
-            artikel_service.cancel()
-            raise ValueError(
-                f"Microtech Artikel {erp_nr} konnte nicht geschrieben werden: {', '.join(failed_fields)}"
-            )
-
-        artikel_service.post()
-        return payload
+        input_data = {
+            "name": self.name or "",
+            "description": self.description or "",
+            "descriptionShort": self.description_short or "",
+            "isActive": bool(self.is_active),
+        }
+        erp.update_product(erp_nr, input_data)
+        return self.get_microtech_sync_payload()
 
     def get_ordered_product_images(self) -> list["ProductImage"]:
         if hasattr(self, "ordered_product_images"):
