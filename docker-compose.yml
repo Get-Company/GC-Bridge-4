@@ -50,6 +50,7 @@ services:
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/1
       LOGS_ROOT: /app/tmp/logs
+      DB_BACKUP_DIR: /app/tmp/backups
       MICROTECH_GRAPHQL_URL: ${MICROTECH_GRAPHQL_URL:-http://10.0.0.5:8888/graphql/}
       RUN_DJANGO_CHECK: ${RUN_DJANGO_CHECK:-true}
       RUN_COLLECTSTATIC: ${RUN_COLLECTSTATIC:-true}
@@ -65,6 +66,7 @@ services:
       - staticfiles:/app/staticfiles
       - media:/app/media
       - applogs:/app/tmp/logs
+      - backups:/app/tmp/backups
     depends_on:
       db:
         condition: service_healthy
@@ -168,3 +170,4 @@ volumes:
   media:
   applogs:
   celerybeat:
+  backups:
