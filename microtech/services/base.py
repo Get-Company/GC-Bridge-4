@@ -39,7 +39,7 @@ class MicrotechDatasetService(BaseService):
         self._has_more = False
         self._next_cursor: list[Any] | None = None
         self._range: dict[str, Any] | None = None
-        self._filters: list[dict[str, Any]] = []
+        self._filter: str = ""
         self._last_result: dict[str, Any] = {}
 
     def find(self, search_value: Any, index_field: str | None = None) -> bool:
@@ -79,15 +79,15 @@ class MicrotechDatasetService(BaseService):
         return True
 
     def set_filter(self, filters: dict[str, Any]) -> bool:
-        self._filters = [
-            {"field": field, "op": "EQ", "value": value}
+        self._filter = " AND ".join(
+            f"{field} = {self._format_filter_value(value)}"
             for field, value in (filters or {}).items()
-        ]
+        )
         self._reset_records()
         return True
 
     def clear_filter(self) -> bool:
-        self._filters = []
+        self._filter = ""
         self._reset_records()
         return True
 
@@ -171,8 +171,8 @@ class MicrotechDatasetService(BaseService):
         }
         if self._range.get("indexField"):
             input_data["indexField"] = self._range["indexField"]
-        if self._filters:
-            input_data["filters"] = self._filters
+        if self._filter:
+            input_data["filter"] = self._filter
         if after:
             input_data["after"] = after
         return input_data
@@ -217,6 +217,15 @@ class MicrotechDatasetService(BaseService):
         self._has_more = False
         self._next_cursor = None
         self._last_result = {}
+
+    @staticmethod
+    def _format_filter_value(value: Any) -> str:
+        if isinstance(value, bool):
+            return "1" if value else "0"
+        if isinstance(value, (int, float)):
+            return str(value)
+        text = str(value).replace("'", "''")
+        return f"'{text}'"
 
     def _current_record(self) -> dict[str, Any] | None:
         self._ensure_loaded()

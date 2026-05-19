@@ -2,14 +2,84 @@ from datetime import timedelta
 from decimal import Decimal
 from unittest.mock import MagicMock
 
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 
 from microtech.management.commands.microtech_sync_products import Command as MicrotechSyncProductsCommand
 from microtech.services.base import MicrotechDatasetService
 from microtech.services.artikel import MicrotechArtikelService
+from microtech.services.graphql_client import MicrotechGraphQLClientService
 from products.models import Price, Product, ProductImage, Tax
 from shopware.models import ShopwareSettings
+
+
+class _FakeGraphQLClient(MicrotechGraphQLClientService):
+    def __init__(self, product_result):
+        self.request_product = MagicMock(return_value=product_result)
+
+
+class MicrotechArtikelServiceProductJobTest(SimpleTestCase):
+    def test_range_request_uses_graphql_filter_string(self):
+        client = _FakeGraphQLClient({})
+        service = MicrotechArtikelService(erp=client)
+        service.set_range(from_range="091300", to_range="091399", field="Nr")
+        service.set_filter({"WBSHpKZ": 1})
+
+        request = service._build_request(index_field="Nr")
+
+        self.assertEqual(request["dataset"], "Artikel")
+        self.assertEqual(request["indexField"], "Nr")
+        self.assertEqual(request["range"], {"fromValues": ["091300"], "toValues": ["091399"]})
+        self.assertEqual(request["filter"], "WBSHpKZ = 1")
+        self.assertNotIn("filters", request)
+
+    def test_find_uses_request_product_and_maps_product_job_result(self):
+        client = _FakeGraphQLClient({
+            "status": "DONE",
+            "product": {
+                "erpNumber": "091300",
+                "name": "Graph Produkt",
+                "description": "Langtext",
+                "descriptionShort": "Kurztext",
+                "isActive": True,
+                "factor": 1,
+                "unit": "Stk",
+                "minPurchase": 2,
+                "purchaseUnit": 1,
+                "sortOrder": 10,
+                "price": "12.95",
+                "rebateQuantity": 5,
+                "rebatePrice": "11.95",
+                "specialPrice": "9.95",
+                "specialStartDate": "2026-05-01",
+                "specialEndDate": "2026-05-31",
+                "taxKey": "M19",
+                "taxRate": "19.00",
+                "customsTariffNumber": "48203000",
+                "weightGrossKg": "1.25",
+                "weightNetKg": "1.00",
+                "stock": 7,
+                "storageLocation": "A1",
+                "images": ["https://cdn.example.test/img/first.jpg", {"fileName": "second.png"}],
+            },
+        })
+        service = MicrotechArtikelService(erp=client)
+
+        self.assertTrue(service.find("091300"))
+
+        client.request_product.assert_called_once_with("091300")
+        self.assertEqual(service.get_erp_nr(), "091300")
+        self.assertEqual(service.get_name(), "Graph Produkt")
+        self.assertEqual(service.get_description_short(), "Kurztext")
+        self.assertTrue(service.get_is_active())
+        self.assertEqual(service.get_price(), "12.95")
+        self.assertEqual(service.get_tax_rate(), Decimal("19.00"))
+        self.assertEqual(service.get_customs_tariff_number(), "48203000")
+        self.assertEqual(service.get_weight_gross(), Decimal("1.25"))
+        self.assertEqual(service.get_weight_net(), Decimal("1.00"))
+        self.assertEqual(service.get_stock(), 7)
+        self.assertEqual(service.get_storage_location(), "A1")
+        self.assertEqual(service.get_image_list(), ["first.jpg", "second.png"])
 
 
 class MicrotechSyncProductsCommandTest(TestCase):
@@ -108,6 +178,28 @@ class MicrotechSyncProductsCommandTest(TestCase):
             ["second.png", "first.jpg"],
         )
         self.assertEqual([image.path for image in product.get_images()], ["second.png", "first.jpg"])
+
+    def test_sync_uses_product_job_stock_without_lager_lookup(self):
+        cmd = MicrotechSyncProductsCommand()
+        artikel_service = self._build_artikel_service(erp_nr="1008", is_active=True)
+        artikel_service.get_stock.return_value = "12"
+        artikel_service.get_storage_location.return_value = "B2"
+        lager_service = self._build_lager_service()
+
+        cmd._sync_current_record(
+            artikel_service,
+            lager_service,
+            tax_map={
+                Decimal("19.00"): self.tax_19,
+                Decimal("7.00"): self.tax_7,
+            },
+            preserve_is_active=False,
+        )
+
+        storage = Product.objects.get(erp_nr="1008").storage
+        self.assertEqual(storage.stock, 12)
+        self.assertEqual(storage.location, "B2")
+        lager_service.get_stock_and_location.assert_not_called()
 
     def test_sync_preserves_microtech_special_price_without_percentage(self):
         cmd = MicrotechSyncProductsCommand()

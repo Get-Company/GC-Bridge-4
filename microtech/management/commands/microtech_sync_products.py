@@ -223,7 +223,7 @@ class Command(BaseCommand):
         if sync_all:
             artikel_service.set_range(from_range="000000", to_range="99999999ZZ", field=artikel_service.index_field)
             if not include_inactive:
-                artikel_service.set_filter({"WShopKz": 1})
+                artikel_service.set_filter({"WBSHpKZ": 1})
 
             while not artikel_service.range_eof():
                 if limit and processed >= limit:
@@ -379,7 +379,12 @@ class Command(BaseCommand):
         product.save()
 
         storage, _ = Storage.objects.get_or_create(product=product)
-        stock, location = lager_service.get_stock_and_location(art_nr=product.erp_nr)
+        stock_value = artikel_service.get_stock() if hasattr(artikel_service, "get_stock") else None
+        location_value = artikel_service.get_storage_location() if hasattr(artikel_service, "get_storage_location") else None
+        if stock_value in (None, "") and location_value in (None, ""):
+            stock, location = lager_service.get_stock_and_location(art_nr=product.erp_nr)
+        else:
+            stock, location = _to_int(stock_value), location_value
         storage.stock = stock
         storage.location = location
         storage.save()
