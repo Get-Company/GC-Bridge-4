@@ -70,6 +70,7 @@ from core.admin_utils import log_admin_change
 from mappei.models import MappeiPriceSnapshot, MappeiProductMapping
 from shopware.models import ShopwareSettings
 from .services import PriceIncreaseService
+from .tasks import microtech_sync_products as microtech_sync_products_task
 from .models import (
     Category,
     Image,
@@ -648,17 +649,10 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
     def sync_from_microtech(self, request, queryset):
         erp_nrs = list(queryset.values_list("erp_nr", flat=True))
         if not erp_nrs:
-            self.message_user(request, "Keine Produkte ausgewaehlt.", level=messages.WARNING)
+            self.message_user(request, "Keine Produkte ausgewählt.", level=messages.WARNING)
             return
-        try:
-            call_command("microtech_sync_products", *erp_nrs)
-            self.message_user(request, f"{len(erp_nrs)} Produkt(e) von Microtech synchronisiert.")
-        except Exception as exc:
-            self._log_admin_error(
-                request,
-                f"Microtech sync failed: {exc}",
-            )
-            self.message_user(request, f"Microtech Sync fehlgeschlagen: {exc}", level=messages.ERROR)
+        microtech_sync_products_task.delay(erp_nrs)
+        self.message_user(request, f"{len(erp_nrs)} Produkt(e) zur Microtech-Synchronisierung in die Warteschlange eingereiht.")
 
     @action(
         description="Von Microtech synchronisieren",
@@ -670,16 +664,8 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
         if not product:
             self.message_user(request, "Produkt nicht gefunden.", level=messages.ERROR)
             return self._redirect_to_change_page(object_id)
-        try:
-            call_command("microtech_sync_products", product.erp_nr)
-            self.message_user(request, f"Produkt {product.erp_nr} von Microtech synchronisiert.")
-        except Exception as exc:
-            self._log_admin_error(
-                request,
-                f"Microtech sync failed for {product.erp_nr}: {exc}",
-                obj=product,
-            )
-            self.message_user(request, f"Microtech Sync fehlgeschlagen: {exc}", level=messages.ERROR)
+        microtech_sync_products_task.delay([product.erp_nr])
+        self.message_user(request, f"Produkt {product.erp_nr} zur Microtech-Synchronisierung in die Warteschlange eingereiht.")
         return self._redirect_to_change_page(object_id)
 
     @action(
