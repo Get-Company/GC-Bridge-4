@@ -13,15 +13,18 @@ from unfold.admin import StackedInline as UnfoldStackedInline
 from unfold.admin import TabularInline as UnfoldTabularInline
 from unfold.contrib.forms.widgets import WysiwygWidget
 from unfold.forms import AdminPasswordChangeForm, UserChangeForm, UserCreationForm
+from unfold.widgets import UnfoldAdminSelectWidget, UnfoldAdminTextInputWidget
 
 from django_celery_beat.admin import (
     ClockedScheduleAdmin as BeatClockedScheduleAdmin,
     CrontabScheduleAdmin as BeatCrontabScheduleAdmin,
     IntervalScheduleAdmin as BeatIntervalScheduleAdmin,
     PeriodicTaskAdmin as BeatPeriodicTaskAdmin,
+    PeriodicTaskForm as BeatPeriodicTaskForm,
     PeriodicTaskInline as BeatPeriodicTaskInline,
     ScheduleAdmin as BeatScheduleAdmin,
     SolarScheduleAdmin as BeatSolarScheduleAdmin,
+    TaskSelectWidget as BeatTaskSelectWidget,
 )
 from django_celery_beat.models import (
     ClockedSchedule,
@@ -122,16 +125,31 @@ class CeleryBeatIntervalScheduleAdmin(BeatIntervalScheduleAdmin, CeleryBeatSched
     pass
 
 
+class UnfoldTaskSelectWidget(UnfoldAdminSelectWidget, BeatTaskSelectWidget):
+    pass
+
+
+class _PeriodicTaskForm(BeatPeriodicTaskForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["task"].widget = UnfoldAdminTextInputWidget()
+        self.fields["regtask"].widget = UnfoldTaskSelectWidget()
+
+    def clean_args(self):
+        if not (self.cleaned_data.get("args") or "").strip():
+            self.cleaned_data["args"] = "[]"
+        return super().clean_args()
+
+    def clean_kwargs(self):
+        if not (self.cleaned_data.get("kwargs") or "").strip():
+            self.cleaned_data["kwargs"] = "{}"
+        return super().clean_kwargs()
+
+
 class CeleryBeatPeriodicTaskAdmin(BeatPeriodicTaskAdmin, CeleryBeatBaseAdmin):
+    form = _PeriodicTaskForm
     readonly_fields = BeatPeriodicTaskAdmin.readonly_fields
     ordering = ("name",)
-
-    def save_model(self, request, obj, form, change):
-        if not obj.args or not obj.args.strip():
-            obj.args = "[]"
-        if not obj.kwargs or not obj.kwargs.strip():
-            obj.kwargs = "{}"
-        super().save_model(request, obj, form, change)
 
 
 for model in (ClockedSchedule, CrontabSchedule, IntervalSchedule, PeriodicTask, SolarSchedule):

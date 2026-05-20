@@ -211,3 +211,69 @@ Connection values:
 - User: value of `POSTGRES_USER`
 - Password: value of `POSTGRES_PASSWORD`
 - Database: value of `POSTGRES_DB`
+
+
+#: 1
+Task-Name (Code): mappei.scrape_daily_prices
+Empfohlener Titel: Mappei Tagespreise scrapen
+Zeitplan: täglich 20:00 Uhr
+Beschreibung: Ruft aktuelle Preise von der Mappei-Website ab und speichert sie als Snapshot in der Datenbank. Immer aktiv.
+────────────────────────────────────────
+#: 2
+Task-Name (Code): products.scheduled_product_sync
+Empfohlener Titel: Produkt-Vollsync (Microtech → Shopware)
+Zeitplan: konfigurierbar via Env (Standard: jede Stunde, :00)
+Beschreibung: Führt alle 4 Sync-Stufen durch: Microtech Import → Django → Shopware Export. Aktivierbar via CELERY_SCHEDULED_PRODUCT_SYNC_ENABLED.
+────────────────────────────────────────
+#: 3
+Task-Name (Code): orders.shopware_sync_open_orders
+Empfohlener Titel: Offene Bestellungen aus Shopware importieren
+Zeitplan: konfigurierbar via Env (Standard: jede Stunde, :15)
+Beschreibung: Holt neue offene Bestellungen aus Shopware und legt sie in Django an. Aktivierbar via CELERY_SHOPWARE_OPEN_ORDERS_SYNC_ENABLED.
+────────────────────────────────────────
+#: 4
+Task-Name (Code): hr.sync_holidays
+Empfohlener Titel: Feiertage synchronisieren (OpenHolidays API)
+Zeitplan: konfigurierbar via Env (Standard: 1. des Monats, 03:00)
+Beschreibung: Lädt öffentliche und Schulferien für alle aktiven Urlaubskalender aus der OpenHolidays-API und aktualisiert die Datenbank. Aktivierbar via CELERY_HR_HOLIDAY_SYNC_ENABLED.
+  
+---
+Manuelle / event-getriggerte Tasks (kein Beat-Schedule)
+
+#: 5
+Task-Name (Code): products.microtech_sync_products
+Empfohlener Titel: Produkte von Microtech importieren
+Beschreibung: Lädt einzelne oder alle Produkte aus dem Microtech ERP via GraphQL und aktualisiert die lokale Datenbank. Wird auch aus der Admin-Action aufgerufen.
+────────────────────────────────────────
+#: 6
+Task-Name (Code): products.shopware_sync_products
+Empfohlener Titel: Produkte nach Shopware exportieren
+Beschreibung: Überträgt ausgewählte oder alle Produkte aus Django in den Shopware-Shop.
+────────────────────────────────────────
+#: 7
+Task-Name (Code): products.shopware_force_product_image_uploads
+Empfohlener Titel: Produktbilder neu zu Shopware hochladen
+Beschreibung: Erzwingt den erneuten Upload aller Produktbilder zu Shopware, auch wenn sie bereits vorhanden sind.                                        
+────────────────────────────────────────
+#: 8
+Task-Name (Code): orders.microtech_order_upsert
+Empfohlener Titel: Bestellung in Microtech anlegen/aktualisieren
+Beschreibung: Überträgt eine einzelne Shopware-Bestellung per Belegnummer oder ID als Vorgang nach Microtech ERP.                                        
+────────────────────────────────────────
+#: 9
+Task-Name (Code): customer.microtech_customer_upsert
+Empfohlener Titel: Kunden in Microtech anlegen/aktualisieren
+Beschreibung: Synchronisiert einen einzelnen Kunden (per ERP-Nummer oder Django-ID) von Django nach Microtech ERP.                                       
+────────────────────────────────────────
+#: 10
+Task-Name (Code): customer.microtech_customer_lookup
+Empfohlener Titel: Kundendaten von Microtech abrufen
+Beschreibung: Lädt die aktuellen Stammdaten eines Kunden aus Microtech ERP und aktualisiert den lokalen Datensatz.                                       
+────────────────────────────────────────
+#: 11
+Task-Name (Code): hr.year_transition
+Empfohlener Titel: Jahreswechsel Urlaubskonto verarbeiten
+Beschreibung: Führt den Jahresabschluss der Urlaubskonten durch: Resturlaub wird nach Konfiguration übertragen oder verfällt. Unterstützt Dry-Run-Modus.
+  
+---
+Tipp: Tasks 2–4 sind per Env-Variable deaktivierbar — falls du in der PeriodicTask-Verwaltung nur bestimmte Tasks siehst, sind die anderen wahrscheinlich nicht aktiviert (kein Eintrag in der DB).

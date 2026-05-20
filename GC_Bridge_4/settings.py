@@ -331,6 +331,19 @@ if env_bool("CELERY_SHOPWARE_OPEN_ORDERS_SYNC_ENABLED", False):
         },
     }
 
+if env_bool("CELERY_FORCE_IMAGE_UPLOAD_ENABLED", False):
+    CELERY_BEAT_SCHEDULE["products-shopware-force-product-image-uploads"] = {
+        "task": "products.shopware_force_product_image_uploads",
+        "schedule": crontab(
+            hour=os.getenv("CELERY_FORCE_IMAGE_UPLOAD_HOUR", "2").strip() or "2",
+            minute=os.getenv("CELERY_FORCE_IMAGE_UPLOAD_MINUTE", "0").strip() or "0",
+        ),
+        "kwargs": {
+            "sync_all": True,
+            "limit": env_int("CELERY_FORCE_IMAGE_UPLOAD_LIMIT", 0) or None,
+        },
+    }
+
 if env_bool("CELERY_HR_HOLIDAY_SYNC_ENABLED", False):
     CELERY_BEAT_SCHEDULE["hr-holiday-sync"] = {
         "task": "hr.sync_holidays",
