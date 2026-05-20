@@ -55,35 +55,40 @@ class Command(BaseCommand):
         input_data = {
             "name": product.name or "",
             "description": product.description or "",
-            "description_short": product.description_short or "",
-            "is_active": product.is_active,
+            "descriptionShort": product.description_short or "",
+            "isActive": product.is_active,
             "factor": product.factor,
             "unit": product.unit or "",
-            "min_purchase": product.min_purchase,
-            "purchase_unit": product.purchase_unit,
-            "sort_order": product.sort_order,
+            "minPurchase": product.min_purchase,
+            "purchaseUnit": product.purchase_unit,
+            "sortOrder": product.sort_order,
         }
 
         if product.tax:
             # Map tax rate to common Microtech keys
             rate = product.tax.rate
             if rate == Decimal("19.00"):
-                input_data["tax_key"] = "M19"
+                input_data["taxKey"] = "M19"
             elif rate == Decimal("7.00"):
-                input_data["tax_key"] = "M7"
+                input_data["taxKey"] = "M7"
             else:
-                input_data["tax_key"] = product.tax.name
+                input_data["taxKey"] = product.tax.name
 
         if price_entry:
             input_data.update({
-                "price": str(price_entry.price),
-                "rebate_quantity": price_entry.rebate_quantity,
-                "rebate_price": str(price_entry.rebate_price) if price_entry.rebate_price else None,
-                "special_price": str(price_entry.special_price) if price_entry.special_price else None,
-                "special_start_date": price_entry.special_start_date.isoformat() if price_entry.special_start_date else None,
-                "special_end_date": price_entry.special_end_date.isoformat() if price_entry.special_end_date else None,
+                "price": self._format_price(price_entry.price),
+                "rebateQuantity": price_entry.rebate_quantity,
+                "rebatePrice": self._format_price(price_entry.rebate_price) if price_entry.rebate_price else None,
+                "specialPrice": self._format_price(price_entry.special_price) if price_entry.special_price else None,
+                "specialStartDate": price_entry.special_start_date.isoformat() if price_entry.special_start_date else None,
+                "specialEndDate": price_entry.special_end_date.isoformat() if price_entry.special_end_date else None,
             })
 
         # Remove None values to avoid sending them if not explicitly needed,
         # but keep empty strings if that's the intent.
         return {k: v for k, v in input_data.items() if v is not None}
+
+    def _format_price(self, value: Decimal | None) -> str | None:
+        if value is None:
+            return None
+        return str(value).replace(".", ",")

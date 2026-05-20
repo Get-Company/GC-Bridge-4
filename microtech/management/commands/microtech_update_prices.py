@@ -96,7 +96,12 @@ class Command(BaseCommand):
             return {}
 
         return {
-            "price": str(price_entry.price),
-            "rebate_quantity": price_entry.rebate_quantity,
-            "rebate_price": str(price_entry.rebate_price) if price_entry.rebate_price else None,
+            "price": self._format_price(price_entry.price),
+            "rebateQuantity": price_entry.rebate_quantity,
+            "rebatePrice": self._format_price(price_entry.rebate_price) if price_entry.rebate_price else None,
         }
+
+    def _format_price(self, value: Decimal | None) -> str | None:
+        if value is None:
+            return None
+        return str(value).replace(".", ",")
