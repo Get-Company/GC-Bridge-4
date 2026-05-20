@@ -277,3 +277,7 @@ Beschreibung: Führt den Jahresabschluss der Urlaubskonten durch: Resturlaub wir
   
 ---
 Tipp: Tasks 2–4 sind per Env-Variable deaktivierbar — falls du in der PeriodicTask-Verwaltung nur bestimmte Tasks siehst, sind die anderen wahrscheinlich nicht aktiviert (kein Eintrag in der DB).
+
+
+8bdf02534d20
+docker exec -it 8bdf02534d20 python manage.py microtech_update_prices 091300

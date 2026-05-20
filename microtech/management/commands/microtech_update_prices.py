@@ -23,24 +23,40 @@ class Command(BaseCommand):
         parser.add_argument(
             "--from",
             dest="range_from",
-            help="Start einer numerischen ERP-Range (inklusive).",
+            help="Start einer ERP-Range (inklusiv, Datenbank-Suche).",
         )
         parser.add_argument(
             "--to",
             dest="range_to",
-            help="Ende einer numerischen ERP-Range (inklusive).",
+            help="Ende einer ERP-Range (inklusiv, Datenbank-Suche).",
+        )
+        parser.add_argument(
+            "--all",
+            action="store_true",
+            help="Alle in Django existierenden Produkte updaten.",
         )
 
     def handle(self, *args, **options):
         erp_nrs = options.get("erp_nrs") or []
         range_from = options.get("range_from")
         range_to = options.get("range_to")
+        update_all = options.get("all", False)
 
-        if range_from and range_to:
-            erp_nrs.extend(self._generate_range(range_from, range_to))
+        if update_all:
+            erp_nrs = list(Product.objects.values_list("erp_nr", flat=True))
+        elif range_from and range_to:
+            # String comparison in DB includes variants like /00 naturally
+            # if they fall between the start and end strings.
+            db_nrs = Product.objects.filter(
+                erp_nr__gte=range_from,
+                erp_nr__lte=range_to
+            ).values_list("erp_nr", flat=True)
+            erp_nrs.extend(list(db_nrs))
 
         if not erp_nrs:
-            raise CommandError("Bitte ERP-Nummern oder eine Range (--from und --to) angeben.")
+            raise CommandError(
+                "Bitte ERP-Nummern, eine Range (--from und --to) oder --all angeben."
+            )
 
         # De-duplicate while preserving order
         seen = set()
