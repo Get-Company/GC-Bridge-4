@@ -167,6 +167,53 @@
       </div>
       {% endif %}
 
+      {# -- Microtech GraphQL API Health ----------------------------- #}
+      <div class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+        <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+          <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300">
+            Microtech GraphQL API
+          </h2>
+          <button
+            type="button"
+            onclick="checkGraphQLHealth(this)"
+            class="inline-flex items-center gap-1 px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-600 dark:text-gray-300 disabled:opacity-50"
+            title="Verbindung jetzt prüfen"
+          >
+            <span class="material-symbols-outlined" style="font-size:14px">refresh</span>
+            Prüfen
+          </button>
+        </div>
+        <div id="graphql-health" class="px-4 py-3">
+          {% with h=graphql_health %}
+          <div class="flex items-start gap-3">
+            <span class="mt-1 w-2 h-2 rounded-full flex-shrink-0
+              {% if h.status == 'not_configured' %}bg-gray-400
+              {% elif h.ok %}bg-green-500
+              {% else %}bg-red-500 animate-pulse{% endif %}"></span>
+            <div class="min-w-0 flex-1">
+              {% if h.status == 'not_configured' %}
+                <div class="text-sm font-medium text-gray-500 dark:text-gray-400">Nicht konfiguriert</div>
+                <div class="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{{ h.error }}</div>
+              {% else %}
+                <div class="flex items-center gap-2">
+                  <span class="text-sm font-medium {% if h.ok %}text-green-700 dark:text-green-400{% else %}text-red-700 dark:text-red-400{% endif %}">
+                    {% if h.ok %}OK{% else %}Fehler{% endif %}
+                  </span>
+                  {% if h.latency_ms is not None %}
+                    <span class="text-xs text-gray-400 dark:text-gray-500">{{ h.latency_ms }} ms</span>
+                  {% endif %}
+                </div>
+                <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5 font-mono truncate" title="{{ h.url }}">{{ h.url }}</div>
+                {% if h.error %}
+                  <div class="text-xs text-red-600 dark:text-red-400 mt-1 break-words">{{ h.error }}</div>
+                {% endif %}
+              {% endif %}
+            </div>
+          </div>
+          {% endwith %}
+        </div>
+      </div>
+
       {# -- Windows Scheduled Tasks (nur Windows) ------------------- #}
       {% if scheduled_tasks is not None %}
       <div class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
@@ -393,6 +440,52 @@
     }
   }
 
+  // -- Microtech GraphQL Health rendern ------------------------
+  function renderGraphQLHealth(health) {
+    const container = document.getElementById("graphql-health");
+    if (!container || !health) return;
+
+    const dotClass = health.status === "not_configured"
+      ? "bg-gray-400"
+      : (health.ok ? "bg-green-500" : "bg-red-500 animate-pulse");
+    const url = health.url
+      ? `<div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5 font-mono truncate" title="${escHtml(health.url)}">${escHtml(health.url)}</div>`
+      : "";
+    const latency = health.latency_ms !== null && health.latency_ms !== undefined
+      ? `<span class="text-xs text-gray-400 dark:text-gray-500">${health.latency_ms} ms</span>`
+      : "";
+    const error = health.error
+      ? `<div class="text-xs ${health.status === "not_configured" ? "text-gray-400 dark:text-gray-500" : "text-red-600 dark:text-red-400"} mt-1 break-words">${escHtml(health.error)}</div>`
+      : "";
+
+    if (health.status === "not_configured") {
+      container.innerHTML = `
+        <div class="flex items-start gap-3">
+          <span class="mt-1 w-2 h-2 rounded-full flex-shrink-0 ${dotClass}"></span>
+          <div class="min-w-0 flex-1">
+            <div class="text-sm font-medium text-gray-500 dark:text-gray-400">Nicht konfiguriert</div>
+            ${error}
+          </div>
+        </div>`;
+      return;
+    }
+
+    container.innerHTML = `
+      <div class="flex items-start gap-3">
+        <span class="mt-1 w-2 h-2 rounded-full flex-shrink-0 ${dotClass}"></span>
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center gap-2">
+            <span class="text-sm font-medium ${health.ok ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400"}">
+              ${health.ok ? "OK" : "Fehler"}
+            </span>
+            ${latency}
+          </div>
+          ${url}
+          ${error}
+        </div>
+      </div>`;
+  }
+
   // -- Laufende Jobs rendern ------------------------------------
   function renderJobs(entries) {
     const container = document.getElementById("running-jobs");
@@ -451,6 +544,69 @@
     logEl.textContent = text;
     if (autoScroll) logEl.scrollTop = logEl.scrollHeight;
   }
+
+  // -- GraphQL-Health rendern -----------------------------------
+  function renderGraphQLHealth(h) {
+    const container = document.getElementById("graphql-health");
+    if (!container || !h) return;
+
+    let dotCls, statusText, statusCls;
+    if (h.status === "not_configured") {
+      dotCls = "bg-gray-400";
+      statusText = "Nicht konfiguriert";
+      statusCls = "text-gray-500 dark:text-gray-400";
+    } else if (h.ok) {
+      dotCls = "bg-green-500";
+      statusText = "OK";
+      statusCls = "text-green-700 dark:text-green-400";
+    } else {
+      dotCls = "bg-red-500 animate-pulse";
+      statusText = "Fehler";
+      statusCls = "text-red-700 dark:text-red-400";
+    }
+
+    const latency = h.latency_ms != null
+      ? `<span class="text-xs text-gray-400 dark:text-gray-500">${h.latency_ms} ms</span>`
+      : "";
+    const url = h.url
+      ? `<div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5 font-mono truncate" title="${escHtml(h.url)}">${escHtml(h.url)}</div>`
+      : "";
+    const error = h.error
+      ? `<div class="text-xs text-red-600 dark:text-red-400 mt-1 break-words">${escHtml(h.error)}</div>`
+      : "";
+
+    container.innerHTML = `
+      <div class="flex items-start gap-3">
+        <span class="mt-1 w-2 h-2 rounded-full flex-shrink-0 ${dotCls}"></span>
+        <div class="min-w-0 flex-1">
+          ${h.status === "not_configured"
+            ? `<div class="text-sm font-medium ${statusCls}">Nicht konfiguriert</div>
+               <div class="text-xs text-gray-400 dark:text-gray-500 mt-0.5">${escHtml(h.error || "")}</div>`
+            : `<div class="flex items-center gap-2">
+                 <span class="text-sm font-medium ${statusCls}">${statusText}</span>
+                 ${latency}
+               </div>
+               ${url}${error}`
+          }
+        </div>
+      </div>`;
+  }
+
+  window.checkGraphQLHealth = async function (btn) {
+    btn.disabled = true;
+    try {
+      const resp = await fetch(`/admin/system/api/?file=0&lines=1`, {
+        headers: { "X-Requested-With": "XMLHttpRequest" },
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+      renderGraphQLHealth(data.graphql_health);
+    } catch (err) {
+      console.warn("GraphQL-Health-Check fehlgeschlagen:", err);
+    } finally {
+      btn.disabled = false;
+    }
+  };
 
   // -- Systemd-Units rendern ------------------------------------
   function renderSystemdUnits(units) {
@@ -548,7 +704,9 @@
       const data = await resp.json();
 
       renderActiveProcesses(data.active_processes);
+      renderGraphQLHealth(data.graphql_health);
       renderMicrotechSlot(data.microtech_slot);
+      renderGraphQLHealth(data.graphql_health);
       renderJobs(data.runtime_entries);
       renderLog(data.log_lines);
       renderSystemdUnits(data.systemd_units);
@@ -615,6 +773,19 @@
         btn.innerHTML = originalHtml;
       }, 2000);
       setTimeout(fetchStatus, 1500);
+    }
+  };
+
+  window.checkGraphQLHealth = async function (btn) {
+    const originalHtml = btn ? btn.innerHTML : "";
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<span class="material-symbols-outlined" style="font-size:14px">hourglass_empty</span> Prüfe';
+    }
+    await fetchStatus();
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = originalHtml;
     }
   };
 

@@ -5,6 +5,7 @@ import os
 import platform
 import subprocess
 import sys
+import time
 from datetime import timedelta
 from pathlib import Path
 
@@ -124,6 +125,40 @@ def _get_active_processes() -> list[dict]:
             pass
 
     return sorted(processes, key=lambda p: p.get("pid", 0))
+
+
+def _get_graphql_health() -> dict:
+    """Probe the configured Microtech GraphQL endpoint and return health details."""
+    from microtech.services.graphql_client import MicrotechGraphQLConfig
+
+    try:
+        cfg = MicrotechGraphQLConfig.from_settings()
+        url = cfg.url
+    except ValueError:
+        return {"url": "", "status": "not_configured", "ok": False, "latency_ms": None, "error": "MICROTECH_GRAPHQL_URL nicht gesetzt"}
+
+    t0 = time.monotonic()
+    try:
+        from microtech.services import MicrotechGraphQLClientService
+        result = MicrotechGraphQLClientService(config=cfg).health()
+        latency_ms = round((time.monotonic() - t0) * 1000)
+        ok = result == "ok"
+        return {
+            "url": url,
+            "status": result if result else "leer",
+            "ok": ok,
+            "latency_ms": latency_ms,
+            "error": None if ok else f"Unerwartete Antwort: {result!r}",
+        }
+    except Exception as exc:
+        latency_ms = round((time.monotonic() - t0) * 1000)
+        return {
+            "url": url,
+            "status": "error",
+            "ok": False,
+            "latency_ms": latency_ms,
+            "error": str(exc),
+        }
 
 
 def _get_microtech_slot_status() -> dict:
@@ -339,6 +374,7 @@ def system_status_view(request):
         "title": "System-Status",
         "runtime_entries": _get_runtime_entries(),
         "active_processes": _get_active_processes(),
+        "graphql_health": _get_graphql_health(),
         "microtech_slot": _get_microtech_slot_status(),
         "triggerable_jobs": TRIGGERABLE_JOBS,
         "scheduled_tasks": _get_scheduled_tasks_status(),
@@ -370,6 +406,7 @@ def system_status_api(request):
         {
             "runtime_entries": _get_runtime_entries(),
             "active_processes": _get_active_processes(),
+            "graphql_health": _get_graphql_health(),
             "microtech_slot": _get_microtech_slot_status(),
             "log_lines": log_lines,
             "log_filename": file_name,
