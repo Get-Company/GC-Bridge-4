@@ -70,7 +70,10 @@ from core.admin_utils import log_admin_change
 from mappei.models import MappeiPriceSnapshot, MappeiProductMapping
 from shopware.models import ShopwareSettings
 from .services import PriceIncreaseService
-from .tasks import microtech_sync_products as microtech_sync_products_task
+from .tasks import (
+    microtech_sync_products as microtech_sync_products_task,
+    microtech_update_product as microtech_update_product_task,
+)
 from .models import (
     Category,
     Image,
@@ -437,15 +440,29 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
     exclude = ("images",)
     filter_horizontal = ("categories",)
     action_form = ProductSpecialPriceActionForm
-    actions = (
-        "sync_from_microtech",
-        "sync_to_shopware",
+    actions_list = (
+        {
+            "title": "Synchronisation",
+            "icon": "sync",
+            "items": [
+                "sync_from_microtech",
+                "sync_to_microtech",
+                "sync_to_shopware",
+            ],
+        },
         "set_special_price_for_channel",
         "clear_special_price_for_channel",
     )
     actions_detail = (
-        "sync_from_microtech_detail",
-        "sync_to_shopware_detail",
+        {
+            "title": "Synchronisation",
+            "icon": "sync",
+            "items": [
+                "sync_from_microtech_detail",
+                "sync_to_microtech_detail",
+                "sync_to_shopware_detail",
+            ],
+        },
     )
     change_form_after_template = "admin/products/includes/ai_rewrite_field_buttons.html"
 
@@ -726,10 +743,44 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
             )
             self.message_user(
                 request,
-                f"Sync fehlgeschlagen: {exc} — Details im Produkt-Verlauf (History).",
+                f"Sync fehlgeschlagen: {detail} — Details im Produkt-Verlauf (History).",
                 level=messages.ERROR,
             )
         return self._redirect_to_change_page(object_id)
+
+    @action(
+        description="Nach Microtech synchronisieren",
+        icon="sync",
+        variant=ActionVariant.PRIMARY,
+    )
+    def sync_to_microtech(self, request, queryset):
+        erp_nrs = list(queryset.values_list("erp_nr", flat=True))
+        if not erp_nrs:
+            self.message_user(request, "Keine Produkte ausgewählt.", level=messages.WARNING)
+            return
+        microtech_update_product_task.delay(erp_nrs)
+        self.message_user(
+            request,
+            f"{len(erp_nrs)} Produkt(e) zur Microtech-Synchronisierung (Update) in die Warteschlange eingereiht.",
+        )
+
+    @action(
+        description="Nach Microtech synchronisieren",
+        icon="sync",
+        variant=ActionVariant.PRIMARY,
+    )
+    def sync_to_microtech_detail(self, request, object_id: str):
+        product = self.get_object(request, object_id)
+        if not product:
+            self.message_user(request, "Produkt nicht gefunden.", level=messages.ERROR)
+            return self._redirect_to_change_page(object_id)
+        microtech_update_product_task.delay([product.erp_nr])
+        self.message_user(
+            request,
+            f"Produkt {product.erp_nr} zur Microtech-Synchronisierung (Update) in die Warteschlange eingereiht.",
+        )
+        return self._redirect_to_change_page(object_id)
+
 
     @admin.action(description="Sonderpreis fuer Sales-Channel setzen")
     def set_special_price_for_channel(self, request, queryset):
