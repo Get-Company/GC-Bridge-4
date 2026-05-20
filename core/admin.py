@@ -23,6 +23,7 @@ from django_celery_beat.admin import (
     ScheduleAdmin as BeatScheduleAdmin,
     SolarScheduleAdmin as BeatSolarScheduleAdmin,
 )
+from django_celery_beat.forms import PeriodicTaskForm as BeatPeriodicTaskForm
 from django_celery_beat.models import (
     ClockedSchedule,
     CrontabSchedule,
@@ -122,7 +123,18 @@ class CeleryBeatIntervalScheduleAdmin(BeatIntervalScheduleAdmin, CeleryBeatSched
     pass
 
 
+class PeriodicTaskForm(BeatPeriodicTaskForm):
+    def clean_args(self):
+        value = self.cleaned_data.get("args", "").strip()
+        return value or "[]"
+
+    def clean_kwargs(self):
+        value = self.cleaned_data.get("kwargs", "").strip()
+        return value or "{}"
+
+
 class CeleryBeatPeriodicTaskAdmin(BeatPeriodicTaskAdmin, CeleryBeatBaseAdmin):
+    form = PeriodicTaskForm
     readonly_fields = BeatPeriodicTaskAdmin.readonly_fields
     ordering = ("name",)
 
