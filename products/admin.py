@@ -440,16 +440,10 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
     exclude = ("images",)
     filter_horizontal = ("categories",)
     action_form = ProductSpecialPriceActionForm
-    actions_list = (
-        {
-            "title": "Synchronisation",
-            "icon": "sync",
-            "items": [
-                "sync_from_microtech",
-                "sync_to_microtech",
-                "sync_to_shopware",
-            ],
-        },
+    actions = (
+        "sync_from_microtech",
+        "sync_to_microtech",
+        "sync_to_shopware",
         "set_special_price_for_channel",
         "clear_special_price_for_channel",
     )

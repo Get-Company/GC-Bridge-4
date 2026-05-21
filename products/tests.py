@@ -50,6 +50,41 @@ from products import tasks as product_tasks
 from shopware.models import ShopwareSettings
 
 
+class ProductAdminActionConfigurationTest(SimpleTestCase):
+    def test_product_queryset_actions_are_not_registered_as_unfold_navigation(self):
+        request = RequestFactory().get("/admin/products/product/")
+        admin_instance = ProductAdmin(Product, AdminSite())
+
+        actions = admin_instance.get_actions_list(request)
+        navigation = admin_instance._get_actions_navigation(admin_instance.actions_list, actions)
+        action_names = set(admin_instance._extract_action_names(admin_instance.actions_list))
+
+        self.assertEqual(actions, [])
+        self.assertEqual(navigation, [])
+        self.assertFalse(
+            {
+                "sync_from_microtech",
+                "sync_to_microtech",
+                "sync_to_shopware",
+                "set_special_price_for_channel",
+                "clear_special_price_for_channel",
+            }
+            & action_names
+        )
+
+    def test_product_special_price_actions_are_registered_as_bulk_actions(self):
+        self.assertEqual(
+            ProductAdmin.actions,
+            (
+                "sync_from_microtech",
+                "sync_to_microtech",
+                "sync_to_shopware",
+                "set_special_price_for_channel",
+                "clear_special_price_for_channel",
+            ),
+        )
+
+
 class PriceIncreasePdfHtmlCleanupTest(SimpleTestCase):
     def test_clean_pdf_html_normalizes_trix_blocks_and_br_tags(self):
         html = (
