@@ -278,6 +278,10 @@ Beschreibung: Führt den Jahresabschluss der Urlaubskonten durch: Resturlaub wir
 ---
 Tipp: Tasks 2–4 sind per Env-Variable deaktivierbar — falls du in der PeriodicTask-Verwaltung nur bestimmte Tasks siehst, sind die anderen wahrscheinlich nicht aktiviert (kein Eintrag in der DB).
 
+Beispiel-Befehle:
 
-8bdf02534d20
-docker exec -it 8bdf02534d20 python manage.py microtech_update_prices 091300
+1 # Bereich inkl. Suffixe (automatisch via DB)
+2 docker exec -it gc_bridge_4_web python manage.py microtech_update_prices --from 204045 --to 204046
+3
+4 # Alle Produkte synchronisieren
+5 docker exec -it gc_bridge_4_web python manage.py microtech_update_prices --all
