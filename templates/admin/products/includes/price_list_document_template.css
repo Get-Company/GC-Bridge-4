@@ -1,0 +1,158 @@
+@page {
+    size: A4 portrait;
+    margin: 14mm 12mm;
+}
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+body {
+    background: #f5f6f8;
+    color: #111827;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 9pt;
+    line-height: 1.35;
+    margin: 0;
+}
+
+section {
+    background: #ffffff;
+    margin: 0 auto 12mm;
+    max-width: 210mm;
+    padding: 14mm 12mm;
+}
+
+.price-list-cover {
+    min-height: 260mm;
+}
+
+.cover-kicker {
+    color: #4b5563;
+    font-size: 11pt;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    margin-bottom: 8mm;
+    text-transform: uppercase;
+}
+
+h1 {
+    color: #111827;
+    font-size: 24pt;
+    line-height: 1.1;
+    margin: 0 0 8mm;
+}
+
+h1[data-pdf-full-width-bar="true"] {
+    background: #d9dde3;
+    font-size: 18pt;
+    margin-left: -12mm;
+    margin-right: -12mm;
+    padding: 3mm 12mm;
+}
+
+h2 {
+    border-bottom: 1px solid #c8ced8;
+    color: #111827;
+    font-size: 12pt;
+    margin: 8mm 0 3mm;
+    padding-bottom: 1.5mm;
+}
+
+p {
+    margin: 0 0 4mm;
+}
+
+.cover-meta {
+    display: grid;
+    gap: 2mm;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin: 0 0 8mm;
+}
+
+.cover-meta div {
+    border: 1px solid #d8dee8;
+    padding: 3mm;
+}
+
+.cover-meta dt {
+    color: #4b5563;
+    font-size: 7pt;
+    font-weight: 700;
+    margin: 0 0 1mm;
+    text-transform: uppercase;
+}
+
+.cover-meta dd {
+    font-size: 11pt;
+    font-weight: 700;
+    margin: 0;
+}
+
+.price-list-table {
+    border-collapse: collapse;
+    margin-bottom: 6mm;
+    table-layout: fixed;
+    width: 100%;
+}
+
+.price-list-table th {
+    background: #111827;
+    border: 1px solid #111827;
+    color: #ffffff;
+    font-size: 7pt;
+    font-weight: 700;
+    padding: 2mm 1.5mm;
+    text-align: left;
+    text-transform: uppercase;
+}
+
+.price-list-table td {
+    border: 1px solid #d1d5db;
+    font-size: 7.5pt;
+    padding: 1.7mm 1.5mm;
+    vertical-align: top;
+}
+
+.price-list-table tbody tr:nth-child(even) td {
+    background: #f8fafc;
+}
+
+.price-list-table th[data-align="right"],
+.price-list-table td[data-align="right"] {
+    text-align: right;
+}
+
+.empty-message {
+    background: #f3f4f6;
+    border: 1px solid #d1d5db;
+    color: #4b5563;
+    padding: 4mm;
+}
+
+.price-list-closing ul {
+    margin: 0 0 5mm 5mm;
+    padding: 0;
+}
+
+.price-list-closing li {
+    margin-bottom: 2mm;
+}
+
+@media print {
+    body {
+        background: #ffffff;
+    }
+
+    section {
+        margin: 0;
+        max-width: none;
+        page-break-before: always;
+    }
+
+    section:first-of-type {
+        page-break-before: auto;
+    }
+}

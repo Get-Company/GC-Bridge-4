@@ -1,0 +1,134 @@
+{% comment %}
+Kopier-Template fuer Dokumenttyp "Preisliste".
+
+Nutzung im Dokument-Admin:
+- Diese Datei als HTML-Template hochladen oder den Inhalt ins Legacy-HTML-Feld kopieren.
+- Den Inhalt von price_list_document_template.css in das CSS-Feld kopieren.
+- Bei vollstaendigem HTML muss {{ css|safe }} im <style>-Block bleiben.
+
+Wichtige Kontextvariablen:
+- price_increase.title
+- created_at_display
+- general_percentage_display
+- sales_channel
+- scope_label
+- row_count
+- category_sections
+- section.category_name
+- section.groups
+- group.category_name
+- group.rows
+- row.erp_nr
+- row.product_name
+- row.attributes
+- row.vpe_display
+- row.price_display
+- row.rebate_quantity_display
+- row.rebate_price_display
+{% endcomment %}
+<!doctype html>
+<html lang="de">
+<head>
+    <meta charset="utf-8">
+    <title>Preisliste{% if price_increase %} - {{ price_increase.title }}{% endif %}</title>
+    <style>{{ css|safe }}</style>
+</head>
+<body>
+    <section class="price-list-cover" data-pdf-section="cover">
+        <div class="cover-kicker">Preisliste</div>
+        <h1>{{ price_increase.title|default:"Preisliste" }}</h1>
+        <dl class="cover-meta">
+            <div>
+                <dt>Bereich</dt>
+                <dd>{{ scope_label|default:"-" }}</dd>
+            </div>
+            <div>
+                <dt>Verkaufskanal</dt>
+                <dd>{{ sales_channel|default:"-" }}</dd>
+            </div>
+            <div>
+                <dt>Generelle Erhoehung</dt>
+                <dd>{{ general_percentage_display|default:"-" }} %</dd>
+            </div>
+            <div>
+                <dt>Artikelanzahl</dt>
+                <dd>{{ row_count|default:"0" }}</dd>
+            </div>
+            <div>
+                <dt>Erstellt am</dt>
+                <dd>{{ created_at_display|default:"-" }}</dd>
+            </div>
+        </dl>
+        <p>
+            Diese Preisliste enthaelt die ausgewaehlten aktiven Produkte aus dem Bereich
+            {{ scope_label|default:"-" }} und deren neue bzw. aktuelle Preise.
+        </p>
+    </section>
+
+    {% for section in category_sections %}
+        <section class="price-list-category" data-pdf-section="category">
+            <h1 data-pdf-full-width-bar="true">{{ section.category_name }}</h1>
+
+            {% for group in section.groups %}
+                <h2>{{ group.category_name }}</h2>
+                <table class="price-list-table" data-pdf-table="price-list">
+                    <thead>
+                        <tr>
+                            <th data-width="68">Artikelnr</th>
+                            <th data-width="116">Produkt</th>
+                            <th data-width="160">Attribute</th>
+                            <th data-width="58">VPE</th>
+                            <th data-width="68" data-align="right">Preis</th>
+                            <th data-width="70" data-align="right">Staffelmenge</th>
+                            <th data-width="80" data-align="right">Staffelpreis</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in group.rows %}
+                            <tr>
+                                <td>{{ row.erp_nr }}</td>
+                                <td>{{ row.product_name|default:"-" }}</td>
+                                <td>{{ row.attributes|safe }}</td>
+                                <td>{{ row.vpe_display|safe }}</td>
+                                <td data-align="right">{{ row.price_display }}</td>
+                                <td data-align="right">{{ row.rebate_quantity_display|default:"-" }}</td>
+                                <td data-align="right">{{ row.rebate_price_display|default:"-" }}</td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td>-</td>
+                                <td colspan="2">Keine aktiven Produkte fuer diese Kategorie vorhanden.</td>
+                                <td>-</td>
+                                <td data-align="right">-</td>
+                                <td data-align="right">-</td>
+                                <td data-align="right">-</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% empty %}
+                <p class="empty-message">Keine Gruppen fuer diese Kategorie vorhanden.</p>
+            {% endfor %}
+        </section>
+    {% empty %}
+        <section class="price-list-category" data-pdf-section="category">
+            <h1 data-pdf-full-width-bar="true">Keine Kategorien</h1>
+            <p class="empty-message">Es wurden keine Produktkategorien an das Template uebergeben.</p>
+        </section>
+    {% endfor %}
+
+    <section class="price-list-closing" data-pdf-section="closing">
+        <h1>Hinweise</h1>
+        <p>
+            Bitte pruefen Sie die Preisliste vor der Weitergabe. Massgeblich sind die im System
+            gespeicherten Preise zum Zeitpunkt der PDF-Erstellung.
+        </p>
+        <ul>
+            <li>Preisangaben ohne Gewaehr bei nachtraeglichen Aenderungen.</li>
+            <li>Sonderpreise und Staffelpreise werden nur angezeigt, wenn sie in der Preiserhoehung vorhanden sind.</li>
+            <li>Bei Rueckfragen bitte die interne Preiserhoehung "{{ price_increase.title|default:"-" }}" referenzieren.</li>
+        </ul>
+        <p><strong>Erstellt mit GC-Bridge am {{ created_at_display|default:"-" }}.</strong></p>
+    </section>
+</body>
+</html>

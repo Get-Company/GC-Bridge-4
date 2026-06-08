@@ -1,0 +1,168 @@
+.document-editor-shell {
+    border: 1px solid var(--color-base-200, #e5e7eb);
+    border-radius: 8px;
+    margin-top: 6px;
+    max-width: min(100%, 1180px);
+    overflow: hidden;
+}
+
+.document-editor-shell trix-toolbar {
+    background: var(--color-base-50, #f9fafb);
+    border-bottom: 1px solid var(--color-base-200, #e5e7eb);
+    padding: 8px;
+}
+
+.document-editor-shell trix-editor {
+    border: 0;
+    min-height: 620px;
+    padding: 18px;
+}
+
+.document-editor-shell > .max-w-4xl,
+.document-editor-shell > .relative {
+    max-width: none;
+}
+
+.document-editor-controls {
+    align-items: center;
+    background: var(--color-base-50, #f9fafb);
+    border-bottom: 1px solid var(--color-base-200, #e5e7eb);
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    padding: 8px;
+}
+
+.document-textarea-controls {
+    border: 1px solid var(--color-base-200, #e5e7eb);
+    border-bottom: 0;
+    border-radius: 8px 8px 0 0;
+    max-width: min(100%, 1180px);
+}
+
+.document-editor-action,
+.document-token-button {
+    background: var(--color-base-100, #f3f4f6);
+    border: 1px solid var(--color-base-300, #d1d5db);
+    border-radius: 6px;
+    color: var(--color-base-700, #374151);
+    cursor: pointer;
+    font-size: 12px;
+    line-height: 1.2;
+    padding: 7px 10px;
+}
+
+.document-editor-action:hover,
+.document-token-button:hover {
+    background: var(--color-primary-50, #fff7ed);
+    border-color: var(--color-primary-300, #fdba74);
+}
+
+.document-token-palette {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 8px 0 14px;
+}
+
+.document-reference details {
+    border: 1px solid var(--color-base-200, #e5e7eb);
+    border-radius: 8px;
+    margin: 8px 0;
+    padding: 8px 10px;
+}
+
+.document-reference summary {
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.document-reference-model {
+    margin-left: 12px;
+}
+
+.document-reference-fields {
+    display: grid;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.document-reference-field {
+    align-items: baseline;
+    display: grid;
+    gap: 8px;
+    grid-template-columns: minmax(160px, 0.35fr) minmax(0, 1fr);
+}
+
+.document-reference-field span {
+    color: var(--color-base-600, #4b5563);
+}
+
+textarea[data-document-editor="html"],
+textarea[data-document-editor="css"] {
+    border-radius: 0 0 8px 8px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    min-height: 520px;
+    width: min(100%, 1180px);
+}
+
+textarea[data-document-editor="html"] {
+    min-height: 720px;
+}
+
+.document-textarea-shell {
+    max-width: min(100%, 1180px);
+}
+
+.document-editor-shell.is-document-fullscreen {
+    background: var(--color-base-50, #f9fafb);
+    bottom: 0;
+    box-shadow: 0 24px 80px rgba(15, 23, 42, 0.35);
+    left: 0;
+    margin: 0;
+    max-width: none;
+    overflow: auto;
+    padding: 12px;
+    position: fixed;
+    right: 0;
+    top: 0;
+    z-index: 9999;
+}
+
+.document-editor-shell.is-document-fullscreen trix-editor {
+    min-height: calc(100vh - 150px);
+}
+
+textarea[data-document-editor="html"].is-document-fullscreen,
+textarea[data-document-editor="css"].is-document-fullscreen {
+    background: var(--color-base-50, #ffffff);
+    bottom: 12px;
+    box-shadow: 0 24px 80px rgba(15, 23, 42, 0.35);
+    left: 12px;
+    margin: 0;
+    max-width: none;
+    height: calc(100vh - 66px);
+    min-height: auto;
+    padding: 14px;
+    position: fixed;
+    right: 12px;
+    top: 54px;
+    width: calc(100vw - 24px);
+    z-index: 9999;
+}
+
+.document-editor-controls.is-document-fullscreen-controls {
+    border: 0;
+    border-radius: 0;
+    box-shadow: 0 1px 0 rgba(15, 23, 42, 0.12);
+    left: 0;
+    max-width: none;
+    position: fixed;
+    right: 0;
+    top: 0;
+    z-index: 10000;
+}
+
+body.document-editor-fullscreen {
+    overflow: hidden;
+}
