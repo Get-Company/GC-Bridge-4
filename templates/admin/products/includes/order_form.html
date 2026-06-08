@@ -1,0 +1,595 @@
+{% comment %}
+=======================================================================
+  Bestellschein – Classei  (Seite 1: Katalog · Seite 2: Freierfassung)
+=======================================================================
+
+VERFÜGBARE TEMPLATE-VARIABLEN
+──────────────────────────────
+  price_increase              PriceIncrease-Objekt
+    .title                    Titel der Preiserhöhung
+    .general_percentage       Globaler Prozentwert (Decimal)
+    .sales_channel            ShopwareSettings-Objekt
+    .status                   "draft" oder "applied"
+
+  created_at_display          Datum/Uhrzeit-String  →  "08.06.2026 09:30"
+  general_percentage_display  Prozentzahl           →  "5,00"
+  scope_label                 Bereichsname          →  "Orga-Mappen"
+  sales_channel               Kanalname             →  "Deutschland"
+  row_count                   Anzahl Produktzeilen  →  42
+
+  category_sections           Liste von Hauptkategorien
+    .category_name            Name der Hauptkategorie   →  "Orga-Mappen"
+    .groups                   Liste der Untergruppen
+      .category_name          Name der Untergruppe      →  "Dehnmappen"
+      .rows                   Zeilen dieser Gruppe (s.u.)
+
+  rows                        Flache Gesamtliste aller Produkt-Zeilen
+    .erp_nr                   Artikelnummer             →  "20 40 09"
+    .product_name             Produktname               →  "Standard 90g"
+    .attributes               Attribute als HTML        →  "hellbraun<br/>90g"
+    .price_display            Preis formatiert          →  "34,10 €"
+    .price                    Preis roh (Decimal)       →  Decimal("34.10")
+    .rebate_quantity_display  Staffelmenge              →  "250"
+    .rebate_quantity          Staffelmenge roh          →  250
+    .rebate_price_display     Staffelpreis formatiert   →  "33,40 €"
+    .rebate_price             Staffelpreis roh (Decimal)
+    .vpe_display              VPE-Info (HTML)           →  "100<br/>Min: 1…"
+    .unit                     Einheit                   →  "St."
+    .factor                   VPE-Faktor (int/None)     →  100
+    .min_purchase             Mindestabnahme (int/None) →  1
+    .purchase_unit            Schrittmenge (int/None)   →  1
+    .category_level1_name     Hauptkategorie            →  "Orga-Mappen"
+    .category_level1_id       ID der Hauptkategorie
+    .category_level2_name     Untergruppe               →  "Dehnmappen"
+    .category_level2_id       ID der Untergruppe
+    .price_source             "neu" / "aktuell" / "gemischt"
+
+SYNTAX-BEISPIELE
+────────────────
+  {{ price_increase.title }}
+  {{ created_at_display }}
+  {{ created_at_display|slice:"3:5" }}/{{ created_at_display|slice:"6:10" }}
+  {% for section in category_sections %}{{ section.category_name }}{% endfor %}
+  {% for row in rows %}{{ row.erp_nr }} – {{ row.price_display }}{% endfor %}
+  {% for section in category_sections|slice:":2" %}…linke Spalte…{% endfor %}
+  {% for section in category_sections|slice:"2:" %}…rechte Spalte…{% endfor %}
+
+HINWEISE ZUR SPALTEN-AUFTEILUNG (Seite 1)
+──────────────────────────────────────────
+  category_sections|slice:":2"   → linke Spalte (Orga-Mappen, Orga-Boxen)
+  category_sections|slice:"2:"   → rechte Spalte (Orga-Tabs, Zubehör)
+  Passe die slice-Werte an deine Kategorienanzahl an.
+{% endcomment %}
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Bestellschein{% if price_increase %} – {{ price_increase.title }}{% endif %}</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 8pt;
+    color: #000;
+    background: #f0f0f0;
+    line-height: 1.25;
+  }
+
+  .page {
+    width: 210mm;
+    min-height: 297mm;
+    margin: 0 auto 8mm auto;
+    padding: 8mm 10mm 6mm 10mm;
+    background: #fff;
+  }
+
+  @page { size: A4 portrait; margin: 0; }
+
+  @media print {
+    body { background: #fff; }
+    .page { margin: 0; }
+    .page-break { page-break-before: always; break-before: page; }
+  }
+
+  .page-break { page-break-before: always; break-before: page; }
+
+  /* ── Header ───────────────────────────────── */
+  .hdr {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 2mm;
+  }
+  .hdr-title h1 {
+    font-size: 22pt;
+    font-weight: bold;
+    background: #c8c8c8;
+    padding: 2px 10px 4px 10px;
+    display: inline-block;
+    letter-spacing: 0.5px;
+  }
+  .hdr-version {
+    font-size: 8.5pt;
+    display: inline-block;
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+  .hdr-logo {
+    border: 2pt solid #000;
+    padding: 3px 8px;
+    text-align: center;
+    font-size: 13pt;
+    font-weight: bold;
+    line-height: 1.25;
+    min-width: 28mm;
+  }
+  .hdr-logo .logo-sub {
+    font-size: 5.5pt;
+    font-weight: normal;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    display: block;
+  }
+
+  /* ── Kontaktleiste ────────────────────────── */
+  .contact-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    padding-bottom: 2mm;
+    border-bottom: 1pt solid #000;
+    margin-bottom: 3mm;
+  }
+  .contact-slogan { font-style: italic; font-size: 8.5pt; }
+  .contact-info { text-align: right; }
+  .contact-fax { font-size: 12pt; font-weight: bold; }
+  .contact-line { font-size: 7.5pt; }
+  .contact-web { color: #cc0000; font-size: 7.5pt; }
+
+  /* ── Adressblock ──────────────────────────── */
+  .addr-wrap { display: flex; gap: 6mm; margin-bottom: 2mm; }
+  .addr-left { flex: 0 0 62mm; }
+  .addr-right { flex: 1; }
+  .addr-box {
+    border: 0.5pt dashed #888;
+    padding: 2.5mm 3mm;
+    min-height: 26mm;
+    font-size: 8pt;
+  }
+  .addr-box strong { display: block; }
+  .addr-label { font-size: 7.5pt; margin-bottom: 1mm; }
+  .addr-field { margin-top: 2.5mm; }
+  .addr-field-label { font-size: 7.5pt; font-weight: bold; }
+  .addr-field-line { border-bottom: 0.5pt solid #000; min-height: 8mm; margin-top: 1mm; }
+  .addr-field-note { font-size: 6pt; color: #555; }
+
+  /* ── Kundendatenzeile ─────────────────────── */
+  .cust-row {
+    display: flex;
+    gap: 4mm;
+    padding: 1.5mm 0;
+    border-top: 0.5pt solid #aaa;
+    border-bottom: 0.5pt solid #aaa;
+    margin-bottom: 2mm;
+  }
+  .cust-field { flex: 1; }
+  .cust-field-label { font-size: 7.5pt; font-weight: bold; display: block; }
+  .cust-field-note { font-size: 6pt; color: #555; display: block; }
+  .cust-field-line { border-bottom: 0.5pt solid #000; margin-top: 4.5mm; }
+
+  /* ── Hinweistext ──────────────────────────── */
+  .disclaimer { font-size: 7pt; margin-bottom: 2mm; }
+
+  /* ── Produkt-Zweispalter ──────────────────── */
+  .products-wrap { display: flex; gap: 2.5mm; font-size: 7pt; }
+  .prod-col-left  { flex: 0 0 57%; }
+  .prod-col-right { flex: 1; }
+
+  /* ── Abschnitts-Header ────────────────────── */
+  .sec-hdr {
+    background: #b4b4b4;
+    padding: 1.5px 4px;
+    font-size: 9pt;
+    font-weight: bold;
+    margin-bottom: 0;
+  }
+  .sec-sub-hdr {
+    padding: 1px 4px;
+    font-size: 6pt;
+    background: #e0e0e0;
+    border-bottom: 0.5pt solid #aaa;
+  }
+
+  /* ── Produkt-Tabellen ─────────────────────── */
+  .pt { border-collapse: collapse; width: 100%; margin-bottom: 2.5mm; font-size: 6.5pt; }
+  .pt th {
+    background: #d0d0d0;
+    border: 0.5pt solid #aaa;
+    padding: 1px 2px;
+    text-align: center;
+    font-size: 6pt;
+    font-weight: bold;
+    vertical-align: bottom;
+  }
+  .pt td {
+    border: 0.5pt solid #ccc;
+    border-bottom: 0.5pt solid #bbb;
+    padding: 1px 2px;
+    vertical-align: middle;
+  }
+  .pt td.qty  { background: #f0f0f0; border: 0.5pt solid #999; min-width: 14px; }
+  .pt td.r    { text-align: right; }
+  .pt td.c    { text-align: center; }
+  .pt td.b    { font-weight: bold; }
+  .pt .span-th { text-align: center; background: #d8d8d8; font-size: 6pt; border: 0.5pt solid #aaa; padding: 1px; }
+
+  /* ── Fußnote ──────────────────────────────── */
+  .footer-note {
+    font-size: 5.5pt;
+    margin-top: 2mm;
+    padding-top: 1.5mm;
+    border-top: 0.5pt solid #999;
+    line-height: 1.35;
+  }
+
+  /* ── Seite 2: Bestelltabelle ──────────────── */
+  .order-table { border-collapse: collapse; width: 100%; margin: 2mm 0 3mm 0; }
+  .order-table th {
+    background: #000;
+    color: #fff;
+    border: 0.75pt solid #000;
+    padding: 3px 6px;
+    font-size: 9pt;
+    font-weight: bold;
+    text-align: left;
+  }
+  .order-table th.r { text-align: right; }
+  .order-table td {
+    border: 0.5pt solid #999;
+    height: 12mm;
+    padding: 2px 4px;
+    vertical-align: top;
+  }
+  .order-table .col-qty  { width: 15mm; }
+  .order-table .col-nr   { width: 25mm; }
+  .order-table .col-ep   { width: 23mm; text-align: right; }
+  .order-table .col-gp   { width: 23mm; text-align: right; }
+
+  /* ── Seite 2: Bestelldaten ────────────────── */
+  .order-data { border-top: 1pt solid #000; padding-top: 2mm; margin-top: 2mm; }
+  .order-data-row { display: flex; gap: 8mm; margin-top: 1.5mm; }
+  .order-data-left { flex: 1; font-size: 7.5pt; }
+  .order-data-right { flex: 0 0 58mm; }
+  .order-total-label { font-size: 8.5pt; font-weight: bold; }
+  .order-total-line { border-bottom: 0.5pt solid #000; margin-top: 6mm; }
+  .order-total-note { font-size: 7pt; margin-top: 1mm; }
+</style>
+</head>
+<body>
+
+{# ================================================================ #}
+{# SEITE 1 – Produktkatalog mit Preisen                             #}
+{# ================================================================ #}
+<div class="page">
+
+  {# ── Header ── #}
+  <div class="hdr">
+    <div class="hdr-title">
+      <h1>Bestellschein</h1>
+      <span class="hdr-version">{{ created_at_display|slice:"3:5" }}/{{ created_at_display|slice:"6:10" }}</span>
+    </div>
+    <div class="hdr-logo">
+      Classei
+      <span class="logo-sub">office-management</span>
+    </div>
+  </div>
+
+  {# ── Kontaktleiste ── #}
+  <div class="contact-bar">
+    <div class="contact-slogan">.. . . . und per Fax geht's am schnellsten</div>
+    <div class="contact-info">
+      <div class="contact-fax">Fax: +49 (0)86 41 - 97 59 20</div>
+      <div class="contact-line">E-Mail: service@classei.de</div>
+      <div class="contact-line">Fon: +49 (0)86 41 - 97 59 - 0</div>
+      <div class="contact-line">online-order: <span class="contact-web">www.classei-shop.de</span></div>
+    </div>
+  </div>
+
+  {# ── Adressblock ── #}
+  <div class="addr-wrap">
+    <div class="addr-left">
+      <div class="addr-box">
+        Egon Heimann GmbH<br>
+        <strong>Classei-Büroorganisation</strong>
+        Staudacher Str. 7<br>
+        &nbsp;<br>
+        D-83250 Marquartstein
+      </div>
+    </div>
+    <div class="addr-right">
+      <div class="addr-label">Absender:</div>
+      <div class="addr-field-line"></div>
+      <div class="addr-field">
+        <span class="addr-field-label">z.Hd.:</span>
+        <div class="addr-field-line"></div>
+      </div>
+      <div class="addr-field">
+        <span class="addr-field-label">Lieferadresse:</span>
+        <div class="addr-field-line"></div>
+      </div>
+    </div>
+  </div>
+
+  {# ── Kundendatenzeile ── #}
+  <div class="cust-row">
+    <div class="cust-field" style="flex:0 0 42mm;">
+      <span class="cust-field-label">Kunden Nr.:</span>
+      <span class="cust-field-note">falls bekannt</span>
+      <div class="cust-field-line"></div>
+    </div>
+    <div class="cust-field" style="flex:0 0 32mm;">
+      <span class="cust-field-label">Datum:</span>
+      <div class="cust-field-line"></div>
+    </div>
+    <div class="cust-field">
+      <span class="cust-field-label">Fon:</span>
+      <span class="cust-field-note">für evtl. Rückfragen</span>
+      <div class="cust-field-line"></div>
+    </div>
+    <div class="cust-field" style="flex:0 0 36mm;">
+      <span class="cust-field-label">Unterschrift:</span>
+      <div class="cust-field-line"></div>
+    </div>
+  </div>
+
+  <div class="disclaimer">
+    Hiermit bestelle(n) ich/wir zu Ihren Liefer- und Zahlungskonditionen die unten eingetragenen Artikel.
+    Alle Preise in &euro;uro und ohne Mwst.
+  </div>
+
+  {# ── Produktbereich (2 Spalten) ── #}
+  <div class="products-wrap">
+
+    {# ── LINKE SPALTE: erste 2 Kategorien (z.B. Orga-Mappen, Orga-Boxen) ── #}
+    <div class="prod-col-left">
+      {% for section in category_sections|slice:":2" %}
+      <div class="sec-hdr">{{ section.category_name }}</div>
+      <div class="sec-sub-hdr">Preis für 100&nbsp;St. oder Stk. bei</div>
+      <table class="pt">
+        <thead>
+          <tr>
+            <th rowspan="2">Art.Nr.</th>
+            <th rowspan="2">Ausführung</th>
+            <th rowspan="2">Farbe</th>
+            <th colspan="2" class="span-th">Verpackungseinheit&nbsp;1</th>
+            <th rowspan="2" class="qty" style="min-width:14px;">Menge</th>
+            <th colspan="2" class="span-th">Verpackungseinheit&nbsp;2</th>
+            <th rowspan="2" class="qty" style="min-width:14px;">Menge</th>
+          </tr>
+          <tr>
+            <th>Stk.</th>
+            <th>Preis/100</th>
+            <th>Stk.</th>
+            <th>Preis/100</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for group in section.groups %}
+            {% for row in group.rows %}
+            <tr>
+              <td>{{ row.erp_nr }}</td>
+              <td class="b">{{ row.product_name }}</td>
+              <td>{{ row.attributes|striptags }}</td>
+              <td class="c">{{ row.factor|default:row.min_purchase }}</td>
+              <td class="r">{{ row.price_display }}</td>
+              <td class="qty"></td>
+              <td class="c">{{ row.rebate_quantity_display }}</td>
+              <td class="r">{{ row.rebate_price_display }}</td>
+              <td class="qty"></td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="9" style="color:#999;font-style:italic;padding:3px;">Keine Produkte in dieser Kategorie</td></tr>
+            {% endfor %}
+          {% endfor %}
+        </tbody>
+      </table>
+      {% empty %}
+      <p style="font-size:7pt;color:#999;padding:3px;">Keine Kategorien verfügbar.</p>
+      {% endfor %}
+    </div>{# /prod-col-left #}
+
+    {# ── RECHTE SPALTE: restliche Kategorien (z.B. Orga-Tabs, Zubehör) ── #}
+    <div class="prod-col-right">
+      {% for section in category_sections|slice:"2:" %}
+      <div class="sec-hdr">{{ section.category_name }}</div>
+      <table class="pt">
+        <thead>
+          <tr>
+            <th>Art.Nr.</th>
+            <th>Ausführung</th>
+            <th>Menge<br>VPE1</th>
+            <th>Preis<br>VPE1</th>
+            <th class="qty">Menge</th>
+            <th>Menge<br>VPE2</th>
+            <th>Preis<br>VPE2</th>
+            <th class="qty">Menge</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for group in section.groups %}
+            {% for row in group.rows %}
+            <tr>
+              <td>{{ row.erp_nr }}</td>
+              <td>{{ row.product_name }}</td>
+              <td class="c">{{ row.factor|default:row.min_purchase }}</td>
+              <td class="r">{{ row.price_display }}</td>
+              <td class="qty"></td>
+              <td class="c">{{ row.rebate_quantity_display }}</td>
+              <td class="r">{{ row.rebate_price_display }}</td>
+              <td class="qty"></td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="8" style="color:#999;font-style:italic;padding:3px;">Keine Produkte</td></tr>
+            {% endfor %}
+          {% endfor %}
+        </tbody>
+      </table>
+      {% empty %}
+      <p style="font-size:7pt;color:#999;padding:3px;">Keine weiteren Kategorien.</p>
+      {% endfor %}
+    </div>{# /prod-col-right #}
+
+  </div>{# /products-wrap #}
+
+  <div class="footer-note">
+    Es gelten unsere allgemeinen Geschäftsbedingungen - Preise Deutschland.
+    Ab 99,- &euro; Nettowarenwert frachtfrei (Möbel + Ausland ausgenommen.)
+    Unter &euro; 99,- Nettowarenwert Versandpauschale: &euro; 4,95 netto.
+    Zahlungsbedingungen (Inland): 14 Tage - 2% Skonto, 30 Tage - rein netto.
+    * Preise ohne Ust. &nbsp;* Irrtümer, Druckfehler, Änderungen und Preisanpassungen vorbehalten.
+    In den leeren Feldern können Sie zusätzliche Artikel eintragen.
+  </div>
+
+</div>{# /Seite 1 #}
+
+
+{# ================================================================ #}
+{# SEITE 2 – Freier Bestellschein (Kundeneingabe)                   #}
+{# ================================================================ #}
+<div class="page page-break">
+
+  {# ── Header (identisch Seite 1) ── #}
+  <div class="hdr">
+    <div class="hdr-title">
+      <h1>Bestellschein</h1>
+      <span class="hdr-version">{{ created_at_display|slice:"3:5" }}/{{ created_at_display|slice:"6:10" }}</span>
+    </div>
+    <div class="hdr-logo">
+      Classei
+      <span class="logo-sub">office-management</span>
+    </div>
+  </div>
+
+  {# ── Kontaktleiste ── #}
+  <div class="contact-bar">
+    <div class="contact-slogan">.. . . . und per Fax geht's am schnellsten</div>
+    <div class="contact-info">
+      <div class="contact-fax">Fax: +49 (0)86 41 - 97 59 20</div>
+      <div class="contact-line">E-Mail: service@classei.de</div>
+      <div class="contact-line">Fon: +49 (0)86 41 - 97 59 - 0</div>
+      <div class="contact-line">online-order: <span class="contact-web">www.classei-shop.de</span></div>
+    </div>
+  </div>
+
+  {# ── Adressblock ── #}
+  <div class="addr-wrap">
+    <div class="addr-left">
+      <div class="addr-box">
+        Egon Heimann GmbH<br>
+        <strong>Classei-Büroorganisation</strong>
+        Staudacher Str. 7<br>
+        &nbsp;<br>
+        D-83250 Marquartstein
+      </div>
+    </div>
+    <div class="addr-right">
+      <div class="addr-label">Absender:</div>
+      <div class="addr-field-line"></div>
+      <div class="addr-field" style="margin-top:2mm;">
+        <span class="addr-field-label">z.Hd.:</span>
+        <div class="addr-field-line"></div>
+      </div>
+      <div class="addr-field" style="margin-top:2mm;">
+        <div style="font-size:7pt;color:#666;margin-top:4mm;border-bottom:0.5pt solid #aaa;">
+          Lieferadresse siehe unten
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="disclaimer" style="margin:2mm 0;">
+    Hiermit bestelle(n) ich/wir zu Ihren Liefer- und Zahlungskonditionen die unten eingetragenen Artikel.
+    Alle Preise in &euro;uro und ohne Ust.
+  </div>
+
+  {# ── Bestelltabelle (leer, für Kundeneingabe) ── #}
+  <table class="order-table">
+    <thead>
+      <tr>
+        <th class="col-qty">Menge</th>
+        <th class="col-nr">Art.Nr.</th>
+        <th>Artikelbezeichnung</th>
+        <th class="col-ep r">Einzelpreis</th>
+        <th class="col-gp r">Gesamtpreis</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td class="col-qty"></td><td class="col-nr"></td><td></td><td class="col-ep"></td><td class="col-gp"></td></tr>
+      <tr><td class="col-qty"></td><td class="col-nr"></td><td></td><td class="col-ep"></td><td class="col-gp"></td></tr>
+      <tr><td class="col-qty"></td><td class="col-nr"></td><td></td><td class="col-ep"></td><td class="col-gp"></td></tr>
+      <tr><td class="col-qty"></td><td class="col-nr"></td><td></td><td class="col-ep"></td><td class="col-gp"></td></tr>
+      <tr><td class="col-qty"></td><td class="col-nr"></td><td></td><td class="col-ep"></td><td class="col-gp"></td></tr>
+      <tr><td class="col-qty"></td><td class="col-nr"></td><td></td><td class="col-ep"></td><td class="col-gp"></td></tr>
+      <tr><td class="col-qty"></td><td class="col-nr"></td><td></td><td class="col-ep"></td><td class="col-gp"></td></tr>
+      <tr><td class="col-qty"></td><td class="col-nr"></td><td></td><td class="col-ep"></td><td class="col-gp"></td></tr>
+      <tr><td class="col-qty"></td><td class="col-nr"></td><td></td><td class="col-ep"></td><td class="col-gp"></td></tr>
+      <tr><td class="col-qty"></td><td class="col-nr"></td><td></td><td class="col-ep"></td><td class="col-gp"></td></tr>
+      <tr><td class="col-qty"></td><td class="col-nr"></td><td></td><td class="col-ep"></td><td class="col-gp"></td></tr>
+      <tr><td class="col-qty"></td><td class="col-nr"></td><td></td><td class="col-ep"></td><td class="col-gp"></td></tr>
+      <tr><td class="col-qty"></td><td class="col-nr"></td><td></td><td class="col-ep"></td><td class="col-gp"></td></tr>
+    </tbody>
+  </table>
+
+  {# ── Bestelldaten / Gesamt ── #}
+  <div class="order-data">
+    <strong style="font-size:8.5pt;">Ihre Bestelldaten:</strong>
+    <div class="order-data-row">
+      <div class="order-data-left">
+        <div>evtl. Lieferanschrift</div>
+        <div style="font-size:6.5pt;color:#555;">falls oben abweichend:</div>
+        <div style="border-bottom:0.5pt solid #000;margin-top:18mm;"></div>
+      </div>
+      <div class="order-data-right">
+        <div class="order-total-label">Gesamt</div>
+        <div class="order-total-line"></div>
+        <div class="order-total-note">und evtl. Versandkosten</div>
+        <div class="order-total-note">zzgl. gesetzl. Ust.</div>
+      </div>
+    </div>
+  </div>
+
+  {# ── Kundendatenzeile ── #}
+  <div class="cust-row" style="margin-top:5mm;">
+    <div class="cust-field" style="flex:0 0 42mm;">
+      <span class="cust-field-label">Kunden Nr.:</span>
+      <span class="cust-field-note">falls bekannt</span>
+      <div class="cust-field-line"></div>
+    </div>
+    <div class="cust-field" style="flex:0 0 32mm;">
+      <span class="cust-field-label">Datum:</span>
+      <div class="cust-field-line"></div>
+    </div>
+    <div class="cust-field">
+      <span class="cust-field-label">Fon:</span>
+      <span class="cust-field-note">für evtl. Rückfragen</span>
+      <div class="cust-field-line"></div>
+    </div>
+    <div class="cust-field" style="flex:0 0 36mm;">
+      <span class="cust-field-label">Unterschrift:</span>
+      <div class="cust-field-line"></div>
+    </div>
+  </div>
+
+  <div class="footer-note">
+    Es gelten unsere allgem. Geschäftsbedingungen - Preise Deutschland.
+    Ab 99,- &euro; Nettowarenwert frachtfrei (Möbel + Ausland ausgenommen.)
+    Unter &euro; 99,- Nettowarenwert Versandpauschale: &euro; 5,95 netto.
+    Zahlungsbedingungen (Inland): 14 Tage - 2% Skonto, 30 Tage - rein netto.
+    * Preise ohne Mwst. &nbsp;* Irrtümer, Druckfehler, Änderungen und Preisanpassungen vorbehalten.
+  </div>
+
+</div>{# /Seite 2 #}
+
+</body>
+</html>

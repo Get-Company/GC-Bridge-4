@@ -50,6 +50,7 @@ from reportlab.platypus import (
 )
 from django.views.generic import TemplateView
 from pypdf import PdfReader, PdfWriter
+from weasyprint import HTML as WeasyHTML
 
 from ai.models import AIRewriteJob, AIRewritePrompt
 from ai.rewrite_fields import get_rewriteable_product_field_names
@@ -995,6 +996,7 @@ class PriceIncreaseAdmin(BaseAdmin):
         "dezember": 12,
     }
     price_list_pdf_template_name = "admin/products/price_list_pdf.html"
+    order_form_pdf_template_name = "admin/products/includes/order_form.html"
     price_list_cover_pdf_path = Path("templates/admin/products/includes/cover_pricelist.pdf")
     price_list_closing_pdf_path = Path("products/static/products/pdf/price_list_back.pdf")
     price_list_cover_date_page_index = 0
@@ -1024,13 +1026,14 @@ class PriceIncreaseAdmin(BaseAdmin):
         ("created_at", RangeDateTimeFilter),
         ("applied_at", RangeDateTimeFilter),
     ]
-    actions = ("export_price_list_pdf",)
+    actions = ("export_price_list_pdf", "export_order_form_pdf")
     actions_detail = [
         {
             "title": "Aktionen",
             "icon": "more_vert",
             "items": [
                 "export_price_list_pdf_detail",
+                "export_order_form_pdf_detail",
                 "reload_products_detail",
                 "apply_price_increase_detail",
             ],
@@ -2932,6 +2935,38 @@ class PriceIncreaseAdmin(BaseAdmin):
         )
         return response
 
+    def _build_order_form_response(self, price_increase: PriceIncrease) -> HttpResponse:
+        if price_increase.status != PriceIncrease.Status.APPLIED:
+            PriceIncreaseService().sync_items(price_increase)
+
+        root_categories = self._get_price_list_root_categories(price_increase)
+        rows: list[dict] = []
+        for root_category in root_categories:
+            rows.extend(
+                self._build_price_list_items(
+                    price_increase=price_increase,
+                    root_category=root_category,
+                )
+            )
+
+        scope_label = self._build_price_list_scope_label(root_categories)
+        context = self._build_price_list_template_context(
+            price_increase=price_increase,
+            root_category=root_categories[0] if len(root_categories) == 1 else None,
+            rows=rows,
+            scope_label=scope_label,
+        )
+        html_string = render_to_string(self.order_form_pdf_template_name, context)
+        pdf_bytes = WeasyHTML(string=html_string).write_pdf()
+
+        filename_title = slugify(price_increase.title) or f"preiserhoehung-{price_increase.pk}"
+        filename_scope = slugify(scope_label) or "standard-verkaufskanal"
+        response = HttpResponse(pdf_bytes, content_type="application/pdf")
+        response["Content-Disposition"] = (
+            f'attachment; filename="{filename_title}-{filename_scope}-bestellschein.pdf"'
+        )
+        return response
+
     @admin.action(description="PDF Preisliste")
     def export_price_list_pdf(self, request, queryset):
         selected_ids = list(queryset.values_list("pk", flat=True))
@@ -2958,6 +2993,32 @@ class PriceIncreaseAdmin(BaseAdmin):
             self.message_user(request, str(exc), level=messages.ERROR)
             return
 
+    @admin.action(description="PDF Bestellschein")
+    def export_order_form_pdf(self, request, queryset):
+        selected_ids = list(queryset.values_list("pk", flat=True))
+        if len(selected_ids) != 1:
+            self.message_user(
+                request,
+                "Bitte genau eine Preiserhoehung markieren, damit ein eindeutiger Bestellschein erzeugt werden kann.",
+                level=messages.ERROR,
+            )
+            return
+
+        price_increase = (
+            PriceIncrease.objects.filter(pk=selected_ids[0])
+            .select_related("sales_channel")
+            .first()
+        )
+        if not price_increase:
+            self.message_user(request, "Preiserhoehung nicht gefunden.", level=messages.ERROR)
+            return
+
+        try:
+            return self._build_order_form_response(price_increase)
+        except ValueError as exc:
+            self.message_user(request, str(exc), level=messages.ERROR)
+            return
+
     @action(
         description="PDF Preisliste",
         icon="picture_as_pdf",
@@ -2970,6 +3031,22 @@ class PriceIncreaseAdmin(BaseAdmin):
             return HttpResponseRedirect(reverse("admin:products_priceincrease_changelist"))
         try:
             return self._build_default_price_list_response(obj)
+        except ValueError as exc:
+            self.message_user(request, str(exc), level=messages.ERROR)
+        return HttpResponseRedirect(reverse("admin:products_priceincrease_change", args=(object_id,)))
+
+    @action(
+        description="PDF Bestellschein",
+        icon="order_approve",
+        variant=ActionVariant.DEFAULT,
+    )
+    def export_order_form_pdf_detail(self, request, object_id: str):
+        obj = self.get_object(request, object_id)
+        if not obj:
+            self.message_user(request, "Preiserhoehung nicht gefunden.", level=messages.ERROR)
+            return HttpResponseRedirect(reverse("admin:products_priceincrease_changelist"))
+        try:
+            return self._build_order_form_response(obj)
         except ValueError as exc:
             self.message_user(request, str(exc), level=messages.ERROR)
         return HttpResponseRedirect(reverse("admin:products_priceincrease_change", args=(object_id,)))
