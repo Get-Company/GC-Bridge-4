@@ -16,7 +16,17 @@ RUN apt-get update \
        https://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" \
        > /etc/apt/sources.list.d/pgdg.list \
     && apt-get update \
-    && apt-get install -y --no-install-recommends postgresql-client-16 \
+    && apt-get install -y --no-install-recommends \
+       postgresql-client-16 \
+       libglib2.0-0 \
+       libpango-1.0-0 \
+       libpangoft2-1.0-0 \
+       libharfbuzz0b \
+       libharfbuzz-subset0 \
+       libfontconfig1 \
+       libfreetype6 \
+       fonts-dejavu-core \
+       shared-mime-info \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=ghcr.io/astral-sh/uv:0.9.9 /uv /uvx /bin/
