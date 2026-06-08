@@ -148,6 +148,7 @@ INSTALLED_APPS = [
     'customer.apps.CustomerConfig',
     'orders.apps.OrdersConfig',
     'products.apps.ProductsConfig',
+    'documents.apps.DocumentsConfig',
     'shopware.apps.ShopwareConfig',
     'microtech.apps.MicrotechConfig',
     'mappei.apps.MappeiConfig',
@@ -292,6 +293,7 @@ STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+DOCUMENT_PDF_ROOT = BASE_DIR / 'Dokumente'
 
 CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
 CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/1")
@@ -515,6 +517,19 @@ UNFOLD = {
                         "icon": "label",
                         "link": reverse_lazy("admin:products_propertyvalue_changelist"),
                         "permission": sidebar_model_view_permission("products", "PropertyValue"),
+                    },
+                ],
+            },
+            {
+                "title": _("Dokumente"),
+                "separator": True,
+                "collapsible": True,
+                "items": [
+                    {
+                        "title": _("Dokumente"),
+                        "icon": "description",
+                        "link": reverse_lazy("admin:documents_document_changelist"),
+                        "permission": sidebar_model_view_permission("documents", "Document"),
                     },
                 ],
             },
