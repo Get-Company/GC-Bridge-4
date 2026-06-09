@@ -61,6 +61,7 @@ class DocumentAdmin(BaseAdmin):
     readonly_fields = BaseAdmin.readonly_fields + (
         "template_source_status",
         "template_preview_link",
+        "live_preview_button",
         "template_variables",
         "template_syntax",
         "pdf_filename",
@@ -99,6 +100,7 @@ class DocumentAdmin(BaseAdmin):
                     "template_file",
                     "template_source_status",
                     "template_preview_link",
+                    "live_preview_button",
                     "html_content",
                     "css_content",
                 ),
@@ -172,6 +174,46 @@ class DocumentAdmin(BaseAdmin):
             return "-"
         return format_html('<span class="text-xs text-gray-500">{}</span>', obj.end_pdf.name)
 
+    @admin.display(description="Live-Vorschau")
+    def live_preview_button(self, obj=None):
+        url = reverse("admin:documents_document_preview_template_live")
+        return format_html(
+            '<button type="button" class="document-editor-action" data-live-preview="{}">'
+            "Live-Vorschau (ohne Speichern)"
+            "</button>",
+            url,
+        )
+
+    def preview_template_live_view(self, request):
+        if request.method != "POST":
+            return HttpResponse(status=405)
+        html_content = request.POST.get("html_content", "")
+        css_content = request.POST.get("css_content", "")
+        use_jinja2 = request.POST.get("use_jinja2") == "true"
+        doc = Document(
+            title="Live-Vorschau",
+            html_content=html_content,
+            css_content=css_content,
+            use_jinja2=use_jinja2,
+        )
+        try:
+            context = DocumentTemplateContextService().build_preview_context(doc)
+            html = DocumentPdfService().build_pdf_html(doc, context)
+        except Exception as exc:
+            return HttpResponse(
+                format_html(
+                    '<!doctype html><html lang="de"><head><meta charset="utf-8"><title>Fehler</title></head>'
+                    '<body style="font-family:sans-serif;padding:24px;"><h1>Fehler</h1>'
+                    "<p><strong>{}</strong></p>"
+                    '<pre style="white-space:pre-wrap;background:#f3f4f6;padding:16px;">{}</pre></body></html>',
+                    exc.__class__.__name__,
+                    str(exc),
+                ),
+                status=400,
+                content_type="text/html; charset=utf-8",
+            )
+        return HttpResponse(html, content_type="text/html; charset=utf-8")
+
     def get_urls(self):
         return [
             path(
@@ -183,6 +225,11 @@ class DocumentAdmin(BaseAdmin):
                 "<path:object_id>/preview-template/",
                 self.admin_site.admin_view(self.preview_template_view),
                 name="documents_document_preview_template",
+            ),
+            path(
+                "preview-template-live/",
+                self.admin_site.admin_view(self.preview_template_live_view),
+                name="documents_document_preview_template_live",
             ),
         ] + super().get_urls()
 
