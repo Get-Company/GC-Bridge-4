@@ -84,19 +84,13 @@ class DocumentTemplateContextService(BaseService):
     model = Document
 
     def _product_to_row(self, product) -> dict:
-        from products.models import ProductPrice
-
         price_obj = product.prices.order_by("price").first()
         price = price_obj.price if price_obj else None
         rebate_price = price_obj.rebate_price if price_obj else None
         factor = product.factor or 1
         unit = product.unit or "Stk"
-        cat1 = product.category
-        cat2 = cat1.parent if cat1 else None
-        # resolve level1 = root ancestor, level2 = direct parent
-        ancestors = list(cat1.get_ancestors()) if cat1 else []
-        level1 = ancestors[0] if ancestors else cat1
-        level2 = cat1
+        cat2 = next(iter(product.categories.all()), None)
+        cat1 = cat2.parent if cat2 and hasattr(cat2, "parent") and cat2.parent else cat2
 
         def fmt(val):
             return f"{val:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") + " EUR" if val else "-"
@@ -117,10 +111,10 @@ class DocumentTemplateContextService(BaseService):
             "factor": factor,
             "min_purchase": product.min_purchase or 1,
             "purchase_unit": product.purchase_unit or 1,
-            "category_level1_name": level1.name if level1 else "",
-            "category_level1_id": level1.pk if level1 else None,
-            "category_level2_name": level2.name if level2 else "",
-            "category_level2_id": level2.pk if level2 else None,
+            "category_level1_name": cat1.name if cat1 else "",
+            "category_level1_id": cat1.pk if cat1 else None,
+            "category_level2_name": cat2.name if cat2 else "",
+            "category_level2_id": cat2.pk if cat2 else None,
         }
 
     def build_preview_context(self, document: Document) -> dict:
@@ -129,9 +123,9 @@ class DocumentTemplateContextService(BaseService):
 
         created_at = timezone.now()
         products = list(
-            Product.objects.select_related("category", "tax")
-            .prefetch_related("prices", "category__parent")
-            .order_by("category__name", "erp_nr")[:200]
+            Product.objects.select_related("tax")
+            .prefetch_related("prices", "categories", "categories__parent")
+            .order_by("erp_nr")[:200]
         )
         rows = [self._product_to_row(p) for p in products]
 
