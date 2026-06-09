@@ -1,5 +1,6 @@
 from django import forms
 from django.contrib import admin, messages
+from django.core.files.uploadedfile import UploadedFile
 from django.http import FileResponse, Http404, HttpResponse, HttpResponseRedirect
 from django.template import TemplateSyntaxError
 from django.urls import path, reverse
@@ -65,6 +66,8 @@ class DocumentAdmin(BaseAdmin):
         "pdf_filename",
         "pdf_generated_at",
         "pdf_download_link",
+        "cover_pdf_preview",
+        "end_pdf_preview",
     )
     actions = ("generate_pdf",)
     actions_detail = ("preview_template_detail", "generate_pdf_detail")
@@ -92,6 +95,7 @@ class DocumentAdmin(BaseAdmin):
             "Template",
             {
                 "fields": (
+                    "use_jinja2",
                     "template_file",
                     "template_source_status",
                     "template_preview_link",
@@ -99,7 +103,7 @@ class DocumentAdmin(BaseAdmin):
                     "css_content",
                 ),
                 "classes": ("tab",),
-                "description": "Die hochgeladene HTML-Datei ist die primaere Vorlage. Das HTML-Feld bleibt als Fallback fuer bestehende Dokumente erhalten.",
+                "description": "HTML-Datei hochladen: Inhalt wird automatisch ins HTML-Feld uebernommen. Jinja2 aktiviert DB-Zugriff im Template.",
             },
         ),
         (
@@ -109,6 +113,10 @@ class DocumentAdmin(BaseAdmin):
                     "pdf_generated_at",
                     "pdf_filename",
                     "pdf_download_link",
+                    "cover_pdf",
+                    "cover_pdf_preview",
+                    "end_pdf",
+                    "end_pdf_preview",
                 ),
                 "classes": ("tab",),
             },
@@ -143,6 +151,26 @@ class DocumentAdmin(BaseAdmin):
             },
         ),
     )
+
+    def save_model(self, request, obj, form, change):
+        uploaded = form.cleaned_data.get("template_file")
+        if isinstance(uploaded, UploadedFile):
+            uploaded.seek(0)
+            obj.html_content = uploaded.read().decode("utf-8")
+            uploaded.seek(0)
+        super().save_model(request, obj, form, change)
+
+    @admin.display(description="Cover-PDF Vorschau")
+    def cover_pdf_preview(self, obj: Document | None = None):
+        if not obj or not obj.cover_pdf:
+            return "-"
+        return format_html('<span class="text-xs text-gray-500">{}</span>', obj.cover_pdf.name)
+
+    @admin.display(description="End-PDF Vorschau")
+    def end_pdf_preview(self, obj: Document | None = None):
+        if not obj or not obj.end_pdf:
+            return "-"
+        return format_html('<span class="text-xs text-gray-500">{}</span>', obj.end_pdf.name)
 
     def get_urls(self):
         return [
@@ -196,75 +224,238 @@ class DocumentAdmin(BaseAdmin):
         return mark_safe(
             """
             <div class="prose prose-sm max-w-none dark:prose-invert">
+
+                <h3>Engine</h3>
                 <p>
-                    <strong>Parser:</strong> Die hochgeladene HTML-Datei wird bei jedem Rendern
-                    mit der Django Template Engine (<code>django.template.Template</code>) geladen
-                    und geparsed. Das CSS-Feld steht als Variable <code>{{ css }}</code> zur
-                    Verfuegung.
+                    Templates werden mit <strong>Jinja2</strong> gerendert (Schalter &bdquo;Jinja2-Engine&ldquo; im Template-Tab).
+                    Jinja2 hat Zugriff auf die komplette Django-ORM-API &mdash; Daten koennen direkt im Template aus der
+                    Datenbank geladen werden. Als Fallback steht die klassische Django-Template-Engine zur Verfuegung.
                 </p>
                 <p>
-                    <strong>PDF-Erzeugung:</strong> Die zentrale Dokument-Aktion rendert HTML/CSS
-                    mit WeasyPrint und speichert das Ergebnis im Verzeichnis <code>Dokumente/</code>.
-                    Preisliste und Bestellschein koennen weiterhin dynamische Variablen aus der
-                    Preiserhoehung verwenden, wenn sie ueber die Preiserhoehungs-Actions erzeugt werden.
+                    <strong>Immer verfuegbar:</strong> <code>document</code> (dieses Objekt),
+                    <code>css</code> (CSS-Feld), <code>products</code> (alle Produkte als Queryset),
+                    <code>rows</code>, <code>category_sections</code>, <code>row_count</code>,
+                    <code>created_at_display</code>.
+                </p>
+                <p>
+                    <strong>DB-Klassen im Template:</strong> <code>Product</code>, <code>Category</code>, <code>Tax</code>.
+                    Weitere koennen in <code>documents/jinja2_env.py</code> eingetragen werden.
                 </p>
 
-                <h3>Allgemeine Syntax</h3>
-                <ul>
-                    <li><code>{{ document.title }}</code> gibt einen Wert aus.</li>
-                    <li><code>{{ css }}</code> gibt den Inhalt des CSS-Feldes aus.</li>
-                    <li><code>{% if document.is_active %}...{% elif rows %}...{% else %}...{% endif %}</code> verzweigt bedingt. Ein eigenes <code>then</code>-Keyword gibt es nicht; der Inhalt direkt nach <code>if</code> ist der Then-Zweig.</li>
-                    <li><code>{% for row in rows %}...{% empty %}Keine Zeilen{% endfor %}</code> wiederholt Inhalte.</li>
-                    <li>Eine <code>while</code>-Schleife gibt es in Django Templates nicht. Fuer Dokumente bitte <code>for</code>-Schleifen ueber vorbereitete Listen verwenden.</li>
-                    <li><code>{{ value|default:"-" }}</code>, <code>{{ value|safe }}</code> und <code>{{ value|slice:"0:10" }}</code> nutzen Django-Filter.</li>
-                </ul>
+                <hr/>
 
-                <h3>Immer verfuegbar</h3>
-                <div class="document-token-palette">
-                    <button type="button" class="document-token-button js-document-token" data-token="{{ document.title }}">document.title</button>
-                    <button type="button" class="document-token-button js-document-token" data-token="{{ document.slug }}">document.slug</button>
-                    <button type="button" class="document-token-button js-document-token" data-token="{{ document.document_type }}">document.document_type</button>
-                    <button type="button" class="document-token-button js-document-token" data-token="{{ css }}">css</button>
-                </div>
-                <ul>
-                    <li><code>document</code> - dieses Dokument mit <code>.title</code>, <code>.slug</code>, <code>.document_type</code>, <code>.is_active</code>.</li>
-                    <li><code>css</code> - Inhalt des CSS-Feldes.</li>
-                </ul>
+                <h3>Ausgabe</h3>
+                <pre><code>{{ product.erp_nr }}
+{{ product.name }}
+{{ product.tax.name }}          {# Relation per Dot-Notation #}
+{{ product.tax.rate }}
+{{ product.category.name }}
+{{ document.title }}</code></pre>
+                <p>HTML-Sonderzeichen werden automatisch maskiert. Fuer rohen HTML-Inhalt <code>| safe</code> anhaengen:</p>
+                <pre><code>{{ product.description | safe }}</code></pre>
 
-                <h3>Bei Preislisten und Bestellscheinen ueber Preiserhoehungs-Actions</h3>
-                <div class="document-token-palette">
-                    <button type="button" class="document-token-button js-document-token" data-token="{{ price_increase.title }}">price_increase.title</button>
-                    <button type="button" class="document-token-button js-document-token" data-token="{{ created_at_display }}">created_at_display</button>
-                    <button type="button" class="document-token-button js-document-token" data-token="{{ scope_label }}">scope_label</button>
-                    <button type="button" class="document-token-button js-document-token" data-token="{{ row_count }}">row_count</button>
-                    <button type="button" class="document-token-button js-document-token" data-token="{% for section in category_sections %}...{% endfor %}">for category_sections</button>
-                    <button type="button" class="document-token-button js-document-token" data-token="{% for row in rows %}...{% endfor %}">for rows</button>
-                </div>
-                <ul>
-                    <li><code>price_increase</code> - Preiserhoehungsobjekt mit <code>.title</code>, <code>.general_percentage</code>, <code>.sales_channel</code>, <code>.status</code>.</li>
-                    <li><code>created_at</code> und <code>created_at_display</code> - Erstellzeitpunkt.</li>
-                    <li><code>general_percentage_display</code>, <code>sales_channel</code>, <code>scope_label</code>, <code>root_category</code>, <code>row_count</code>.</li>
-                    <li><code>category_sections</code> - Hauptkategorien mit <code>section.category_name</code>, <code>section.groups</code>, <code>group.category_name</code>, <code>group.rows</code>.</li>
-                    <li><code>rows</code> - flache Produktliste.</li>
-                </ul>
+                <hr/>
 
-                <h3>Produktzeilen</h3>
-                <div class="document-token-palette">
-                    <button type="button" class="document-token-button js-document-token" data-token="{{ row.erp_nr }}">row.erp_nr</button>
-                    <button type="button" class="document-token-button js-document-token" data-token="{{ row.product_name }}">row.product_name</button>
-                    <button type="button" class="document-token-button js-document-token" data-token="{{ row.attributes|safe }}">row.attributes</button>
-                    <button type="button" class="document-token-button js-document-token" data-token="{{ row.price_display }}">row.price_display</button>
-                    <button type="button" class="document-token-button js-document-token" data-token="{{ row.rebate_price_display }}">row.rebate_price_display</button>
-                    <button type="button" class="document-token-button js-document-token" data-token="{{ row.vpe_display|safe }}">row.vpe_display</button>
-                </div>
-                <ul>
-                    <li><code>row.erp_nr</code>, <code>row.product_name</code>, <code>row.attributes</code></li>
-                    <li><code>row.price</code>, <code>row.price_display</code>, <code>row.price_source</code></li>
-                    <li><code>row.rebate_quantity</code>, <code>row.rebate_quantity_display</code></li>
-                    <li><code>row.rebate_price</code>, <code>row.rebate_price_display</code></li>
-                    <li><code>row.vpe_display</code>, <code>row.unit</code>, <code>row.factor</code>, <code>row.min_purchase</code>, <code>row.purchase_unit</code></li>
-                    <li><code>row.category_level1_name</code>, <code>row.category_level1_id</code>, <code>row.category_level2_name</code>, <code>row.category_level2_id</code></li>
-                </ul>
+                <h3>Bedingungen</h3>
+                <pre><code>{% if product.erp_nr == '204109' %}
+  Sonderartikel
+{% elif product.price > 100 %}
+  Hochpreisig
+{% else %}
+  Standard
+{% endif %}</code></pre>
+                <p>Vergleichsoperatoren: <code>==</code> <code>!=</code> <code>&lt;</code> <code>&gt;</code> <code>&lt;=</code> <code>&gt;=</code> <code>in</code> <code>not in</code> <code>is none</code> <code>is not none</code></p>
+                <pre><code>{% if product.rebate_price is not none %}
+  Rabattpreis: {{ product.rebate_price }}
+{% endif %}
+
+{% if 'Glas' in product.category.name %}
+  Glasartikel
+{% endif %}</code></pre>
+
+                <hr/>
+
+                <h3>Schleifen</h3>
+                <pre><code>{# Ueber vorbereitete Zeilen #}
+{% for row in rows %}
+  {{ row.erp_nr }} | {{ row.product_name }}
+{% else %}
+  Keine Produkte vorhanden.
+{% endfor %}
+
+{# Direkt aus der DB #}
+{% for product in Product.objects.all().order_by('erp_nr') %}
+  {{ product.erp_nr }} | {{ product.name }}
+{% endfor %}
+
+{# Mit Schleifenzaehler #}
+{% for product in products %}
+  {{ loop.index }}. {{ product.name }}   {# 1-basiert #}
+  {{ loop.index0 }}                       {# 0-basiert #}
+  {% if loop.first %}Erster Eintrag{% endif %}
+  {% if loop.last %}Letzter Eintrag{% endif %}
+{% endfor %}</code></pre>
+
+                <hr/>
+
+                <h3>Variablen setzen</h3>
+                <pre><code>{# Einzelnes Objekt laden #}
+{% set product = Product.objects.get(erp_nr='204109') %}
+{{ product.name }}
+
+{# Queryset einer Variable zuweisen #}
+{% set glasartikel = Product.objects.filter(category__name='Glas').order_by('name') %}
+{% for p in glasartikel %}
+  {{ p.erp_nr }}
+{% endfor %}
+
+{# Berechneter Wert #}
+{% set netto = product.price / 1.19 %}
+Netto: {{ '%.2f'|format(netto) }} EUR</code></pre>
+
+                <hr/>
+
+                <h3>filter &mdash; Datensaetze einschraenken</h3>
+                <pre><code>{# Einfacher Filter #}
+{% for p in Product.objects.filter(category__name='Reinigung') %}
+  {{ p.erp_nr }} | {{ p.name }}
+{% endfor %}
+
+{# Mehrere Kriterien (AND) #}
+{% for p in Product.objects.filter(category__name='Glas', tax__rate=19) %}
+  {{ p.erp_nr }}
+{% endfor %}
+
+{# Teilstring (icontains = Gross/Kleinschreibung egal) #}
+{% for p in Product.objects.filter(name__icontains='flasche') %}
+  {{ p.name }}
+{% endfor %}
+
+{# Numerischer Vergleich #}
+{% for p in Product.objects.filter(price__gte=10, price__lte=50) %}
+  {{ p.erp_nr }} | {{ p.price }}
+{% endfor %}
+
+{# Relation traversieren #}
+{% for p in Product.objects.filter(tax__name='MwSt. 19%') %}
+  {{ p.name }}
+{% endfor %}
+
+{# In-Liste #}
+{% set nummern = ['204109', '204110', '204111'] %}
+{% for p in Product.objects.filter(erp_nr__in=nummern) %}
+  {{ p.erp_nr }}
+{% endfor %}</code></pre>
+
+                <hr/>
+
+                <h3>exclude &mdash; Datensaetze ausschliessen</h3>
+                <pre><code>{# Alles ausser einer Kategorie #}
+{% for p in Product.objects.exclude(category__name='Intern') %}
+  {{ p.erp_nr }}
+{% endfor %}
+
+{# Kombination filter + exclude #}
+{% for p in Product.objects.filter(tax__rate=19).exclude(category__name='Aktionsware') %}
+  {{ p.erp_nr }}
+{% endfor %}</code></pre>
+
+                <hr/>
+
+                <h3>Sortieren und begrenzen</h3>
+                <pre><code>{# Sortierung #}
+Product.objects.order_by('name')           {# aufsteigend #}
+Product.objects.order_by('-price')         {# absteigend #}
+Product.objects.order_by('category__name', 'erp_nr')
+
+{# Begrenzung (Slicing) #}
+Product.objects.all()[:10]                 {# erste 10 #}
+Product.objects.order_by('-price')[:5]    {# Top 5 teuerste #}
+
+{# Anzahl #}
+{% set anzahl = Product.objects.filter(category__name='Glas').count() %}
+{{ anzahl }} Glasartikel</code></pre>
+
+                <hr/>
+
+                <h3>get &mdash; Einzelnes Objekt</h3>
+                <pre><code>{# Wirft Fehler wenn nicht genau 1 Treffer #}
+{% set p = Product.objects.get(erp_nr='204109') %}
+{{ p.name }} | {{ p.tax.name }}
+
+{# Sicherer: first() gibt None zurueck wenn nicht gefunden #}
+{% set p = Product.objects.filter(erp_nr='204109').first() %}
+{% if p %}
+  {{ p.name }}
+{% else %}
+  Produkt nicht gefunden.
+{% endif %}</code></pre>
+
+                <hr/>
+
+                <h3>Relationen</h3>
+                <pre><code>{# ForeignKey vorwaerts #}
+{{ product.tax.name }}
+{{ product.tax.rate }}
+{{ product.category.name }}
+{{ product.category.parent.name }}    {# verschachtelt #}
+
+{# Rueckwaerts (related_name) #}
+{% for price in product.prices.all() %}
+  {{ price.sales_channel }} | {{ price.price }}
+{% endfor %}
+
+{# Unterkategorien einer Kategorie #}
+{% set kat = Category.objects.get(slug='getraenke') %}
+{% for sub in kat.children.all() %}
+  {{ sub.name }}
+{% endfor %}</code></pre>
+
+                <hr/>
+
+                <h3>Filter (Ausgabeformatierung)</h3>
+                <pre><code>{{ product.name | upper }}          Grossbuchstaben
+{{ product.name | lower }}          Kleinbuchstaben
+{{ product.name | truncate(40) }}   Abschneiden auf 40 Zeichen
+{{ product.name | default('–') }}   Fallback wenn leer
+{{ product.description | safe }}    Kein HTML-Escaping
+{{ product.price | round(2) }}      Runden
+{{ '%.2f'|format(product.price) }}  Dezimalformat (z.B. 12.50)</code></pre>
+
+                <hr/>
+
+                <h3>Kategoriestruktur (aus Vorschau-Kontext)</h3>
+                <pre><code>{% for section in category_sections %}
+  <h2>{{ section.category_name }}</h2>
+  {% for group in section.groups %}
+    <h3>{{ group.category_name }}</h3>
+    {% for row in group.rows %}
+      {{ row.erp_nr }} | {{ row.product_name }} | {{ row.price_display }}
+    {% endfor %}
+  {% endfor %}
+{% endfor %}</code></pre>
+                <p>Felder in <code>row</code>: <code>erp_nr</code>, <code>product_name</code>, <code>attributes</code>,
+                <code>price</code>, <code>price_display</code>, <code>price_source</code>,
+                <code>rebate_quantity</code>, <code>rebate_price</code>, <code>rebate_price_display</code>,
+                <code>vpe_display</code>, <code>unit</code>, <code>factor</code>, <code>min_purchase</code>,
+                <code>purchase_unit</code>, <code>category_level1_name</code>, <code>category_level2_name</code>.</p>
+
+                <hr/>
+
+                <h3>Unterschiede Django-Template vs. Jinja2</h3>
+                <table>
+                    <thead><tr><th>Django</th><th>Jinja2</th></tr></thead>
+                    <tbody>
+                        <tr><td><code>{% with x=y %}</code></td><td><code>{% set x = y %}</code></td></tr>
+                        <tr><td><code>{{ val|default:"-" }}</code></td><td><code>{{ val|default('–') }}</code></td></tr>
+                        <tr><td><code>{% empty %}</code> in for</td><td><code>{% else %}</code> in for</td></tr>
+                        <tr><td>forloop.counter</td><td>loop.index</td></tr>
+                        <tr><td>forloop.first/last</td><td>loop.first / loop.last</td></tr>
+                        <tr><td>{% load ... %}</td><td>nicht noetig</td></tr>
+                        <tr><td>kein DB-Zugriff</td><td>Product.objects.filter(...)</td></tr>
+                    </tbody>
+                </table>
+
             </div>
             """
         )

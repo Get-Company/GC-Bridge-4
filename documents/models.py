@@ -15,6 +15,16 @@ def document_template_upload_to(instance: "Document", filename: str) -> str:
     return f"documents/templates/{filename_slug}{extension}"
 
 
+def document_cover_pdf_upload_to(instance: "Document", filename: str) -> str:
+    slug = slugify(instance.slug or instance.title or "cover") or "cover"
+    return f"documents/pdfs/{slug}-cover.pdf"
+
+
+def document_end_pdf_upload_to(instance: "Document", filename: str) -> str:
+    slug = slugify(instance.slug or instance.title or "end") or "end"
+    return f"documents/pdfs/{slug}-end.pdf"
+
+
 class Document(BaseModel):
     class DocumentType(models.TextChoices):
         PRICE_LIST = "price_list", _("Preisliste")
@@ -60,6 +70,25 @@ class Document(BaseModel):
         editable=False,
         verbose_name=_("PDF erzeugt am"),
     )
+    cover_pdf = models.FileField(
+        upload_to=document_cover_pdf_upload_to,
+        blank=True,
+        validators=[FileExtensionValidator(["pdf"])],
+        verbose_name=_("Cover-PDF"),
+        help_text=_("Wird dem generierten PDF vorangestellt."),
+    )
+    end_pdf = models.FileField(
+        upload_to=document_end_pdf_upload_to,
+        blank=True,
+        validators=[FileExtensionValidator(["pdf"])],
+        verbose_name=_("End-PDF"),
+        help_text=_("Wird dem generierten PDF angehaengt."),
+    )
+    use_jinja2 = models.BooleanField(
+        default=True,
+        verbose_name=_("Jinja2-Engine"),
+        help_text=_("Jinja2 erlaubt DB-Zugriff im Template, z. B. Product.objects.get(erp_nr='123')."),
+    )
 
     class Meta:
         verbose_name = _("Dokument")
@@ -79,5 +108,9 @@ class Document(BaseModel):
         return self.html_content
 
     def render(self, context: dict | None = None) -> str:
-        template_context = {**(context or {}), "document": self, "css": self.css_content}
-        return Template(self.get_template_source()).render(Context(template_context))
+        ctx = {**(context or {}), "document": self, "css": self.css_content}
+        source = self.get_template_source()
+        if self.use_jinja2:
+            from documents.jinja2_env import build_env
+            return build_env().from_string(source).render(**ctx)
+        return Template(source).render(Context(ctx))
