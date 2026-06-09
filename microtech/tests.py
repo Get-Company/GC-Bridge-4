@@ -6,9 +6,12 @@ from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 
 from microtech.management.commands.microtech_sync_products import Command as MicrotechSyncProductsCommand
+from microtech.management.commands.microtech_update_prices import Command as MicrotechUpdatePricesCommand
+from microtech.management.commands.microtech_update_product import Command as MicrotechUpdateProductCommand
 from microtech.services.base import MicrotechDatasetService
 from microtech.services.artikel import MicrotechArtikelService
 from microtech.services.graphql_client import MicrotechGraphQLClientService
+from microtech.services.product_payload import MicrotechProductPayloadService
 from products.models import Price, Product, ProductImage, Tax
 from shopware.models import ShopwareSettings
 
@@ -80,6 +83,50 @@ class MicrotechArtikelServiceProductJobTest(SimpleTestCase):
         self.assertEqual(service.get_stock(), 7)
         self.assertEqual(service.get_storage_location(), "A1")
         self.assertEqual(service.get_image_list(), ["first.jpg", "second.png"])
+
+
+class MicrotechProductPayloadServiceTest(SimpleTestCase):
+    def test_duplicate_vk0_prices_to_vk1_writes_vk0_and_vk1_price_trees(self):
+        payload = {
+            "name": "Artikel",
+            "price": "10,25",
+            "rebateQuantity": 5,
+            "rebatePrice": "9,25",
+            "specialPrice": "",
+            "specialStartDate": "",
+            "specialEndDate": "",
+        }
+
+        result = MicrotechProductPayloadService.duplicate_vk0_prices_to_vk1(payload)
+
+        self.assertNotIn("price", result)
+        self.assertNotIn("rebateQuantity", result)
+        self.assertNotIn("rebatePrice", result)
+        self.assertNotIn("specialPrice", result)
+        self.assertEqual(
+            result["priceTrees"],
+            [
+                {
+                    "tree": "Vk0",
+                    "price": "10,25",
+                    "rebateQuantity": 5,
+                    "rebatePrice": "9,25",
+                    "specialPrice": "",
+                    "specialStartDate": "",
+                    "specialEndDate": "",
+                },
+                {
+                    "tree": "Vk1",
+                    "price": "10,25",
+                    "rebateQuantity": 5,
+                    "rebatePrice": "9,25",
+                    "specialPrice": "",
+                    "specialStartDate": "",
+                    "specialEndDate": "",
+                }
+            ],
+        )
+        self.assertNotIn("priceTrees", payload)
 
 
 class MicrotechSyncProductsCommandTest(TestCase):
@@ -418,6 +465,82 @@ class MicrotechSyncProductsCommandTest(TestCase):
         self.assertEqual(derived_price.rebate_quantity, 10)
         self.assertEqual(derived_price.rebate_price, Decimal("118.75"))
         self.assertEqual(derived_price.special_price, Decimal("100.00"))
+
+    def test_update_product_payload_writes_default_price_to_vk0_and_vk1(self):
+        product = Product.objects.create(erp_nr="1008", name="Payload Artikel", tax=self.tax_19)
+        Price.objects.create(
+            product=product,
+            sales_channel=self.default_channel,
+            price=Decimal("10.25"),
+            rebate_quantity=5,
+            rebate_price=Decimal("9.25"),
+            special_price=Decimal("8.25"),
+            special_start_date=timezone.now(),
+            special_end_date=timezone.now() + timedelta(days=7),
+        )
+
+        payload = MicrotechUpdateProductCommand()._build_input_data(product)
+
+        self.assertNotIn("price", payload)
+        self.assertNotIn("rebateQuantity", payload)
+        self.assertNotIn("rebatePrice", payload)
+        self.assertNotIn("specialPrice", payload)
+        self.assertEqual(
+            payload["priceTrees"],
+            [
+                {
+                    "tree": "Vk0",
+                    "price": "10,25",
+                    "rebateQuantity": 5,
+                    "rebatePrice": "9,25",
+                    "specialPrice": "8,25",
+                    "specialStartDate": payload["priceTrees"][0]["specialStartDate"],
+                    "specialEndDate": payload["priceTrees"][0]["specialEndDate"],
+                },
+                {
+                    "tree": "Vk1",
+                    "price": "10,25",
+                    "rebateQuantity": 5,
+                    "rebatePrice": "9,25",
+                    "specialPrice": "8,25",
+                    "specialStartDate": payload["priceTrees"][0]["specialStartDate"],
+                    "specialEndDate": payload["priceTrees"][0]["specialEndDate"],
+                }
+            ],
+        )
+
+    def test_update_prices_payload_writes_default_price_to_vk0_and_vk1(self):
+        product = Product.objects.create(erp_nr="1009", name="Nur Preis")
+        Price.objects.create(
+            product=product,
+            sales_channel=self.default_channel,
+            price=Decimal("11.25"),
+            rebate_quantity=10,
+            rebate_price=Decimal("10.25"),
+        )
+
+        payload = MicrotechUpdatePricesCommand()._get_price_data(product)
+
+        self.assertNotIn("price", payload)
+        self.assertNotIn("rebateQuantity", payload)
+        self.assertNotIn("rebatePrice", payload)
+        self.assertEqual(
+            payload["priceTrees"],
+            [
+                {
+                    "tree": "Vk0",
+                    "price": "11,25",
+                    "rebateQuantity": 10,
+                    "rebatePrice": "10,25",
+                },
+                {
+                    "tree": "Vk1",
+                    "price": "11,25",
+                    "rebateQuantity": 10,
+                    "rebatePrice": "10,25",
+                }
+            ],
+        )
 
 
 class MicrotechArtikelServiceTaxTest(TestCase):

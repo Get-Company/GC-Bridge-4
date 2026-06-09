@@ -9,6 +9,7 @@ from django.utils import timezone
 from core.services import BaseService
 from microtech.services.graphql_client import MicrotechGraphQLClientService
 from microtech.services.artikel import MicrotechArtikelService
+from microtech.services.product_payload import MicrotechProductPayloadService
 from products.models import Price
 
 
@@ -72,6 +73,7 @@ class MicrotechExpiredSpecialSyncService(BaseService):
                     skipped_price_writes += 1
                 else:
                     input_data["price"] = self._format_decimal(price.price)
+            input_data = MicrotechProductPayloadService.duplicate_vk0_prices_to_vk1(input_data)
             if isinstance(erp, MicrotechGraphQLClientService):
                 erp.update_product(erp_nr, input_data)
             else:

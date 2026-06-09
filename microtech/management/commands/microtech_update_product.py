@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import Any
 
 from django.core.management.base import BaseCommand
-from microtech.services import microtech_connection
+from microtech.services import MicrotechProductPayloadService, microtech_connection
 from products.models import Price, Product
 from shopware.models import ShopwareSettings
 
@@ -83,6 +83,8 @@ class Command(BaseCommand):
                 "specialStartDate": price_entry.special_start_date.isoformat() if price_entry.special_start_date else None,
                 "specialEndDate": price_entry.special_end_date.isoformat() if price_entry.special_end_date else None,
             })
+
+        input_data = MicrotechProductPayloadService.duplicate_vk0_prices_to_vk1(input_data)
 
         # Remove None values to avoid sending them if not explicitly needed,
         # but keep empty strings if that's the intent.

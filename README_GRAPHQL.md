@@ -828,7 +828,10 @@ mutation {
   updateProduct(
     erpNumber: "ART-001"
     input: {
-      price: "59.90"
+      priceTrees: [
+        { tree: "Vk0", price: "59.90" }
+        { tree: "Vk1", price: "59.90" }
+      ]
       isActive: true
       description: "Neue Beschreibung"
     }
@@ -838,7 +841,11 @@ mutation {
 }
 ```
 
-`UpdateProductInput` fields (all optional): `name`, `description`, `descriptionShort`, `isActive`, `factor`, `unit`, `minPurchase`, `purchaseUnit`, `sortOrder`, `taxKey`, `price`, `rebateQuantity`, `rebatePrice`, `specialPrice`, `specialStartDate`, `specialEndDate`. At least one field must be set.
+`UpdateProductInput` fields (all optional): `name`, `description`, `descriptionShort`, `isActive`, `factor`, `unit`, `minPurchase`, `purchaseUnit`, `sortOrder`, `taxKey`, `price`, `rebateQuantity`, `rebatePrice`, `specialPrice`, `specialStartDate`, `specialEndDate`, `priceTrees`. At least one field must be set.
+
+Use `priceTrees` to write explicit Microtech sales price trees. Valid `tree` values are `Vk0` through `Vk99`. Each entry may contain `price`, `rebateQuantity`, `rebatePrice`, `specialPrice`, `specialStartDate`, and `specialEndDate`. The legacy top-level price fields write only to `Vk0`.
+
+Project rule: product price writes must use `priceTrees` and send both `Vk0` and `Vk1`. Product reads still use the default `Vk0` fields returned by `ProductType`.
 
 ---
 

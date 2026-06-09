@@ -4,7 +4,7 @@ import logging
 from typing import Any
 
 from django.core.management.base import BaseCommand, CommandError
-from microtech.services import microtech_connection
+from microtech.services import MicrotechProductPayloadService, microtech_connection
 from products.models import Price, Product
 from shopware.models import ShopwareSettings
 
@@ -111,11 +111,11 @@ class Command(BaseCommand):
         if not price_entry:
             return {}
 
-        return {
+        return MicrotechProductPayloadService.duplicate_vk0_prices_to_vk1({
             "price": self._format_price(price_entry.price),
             "rebateQuantity": price_entry.rebate_quantity,
             "rebatePrice": self._format_price(price_entry.rebate_price) if price_entry.rebate_price else None,
-        }
+        })
 
     def _format_price(self, value: Decimal | None) -> str | None:
         if value is None:

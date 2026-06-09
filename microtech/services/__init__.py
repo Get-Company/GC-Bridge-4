@@ -8,6 +8,7 @@ from .adresse import MicrotechAdresseService
 from .anschrift import MicrotechAnschriftService
 from .ansprechpartner import MicrotechAnsprechpartnerService
 from .expired_specials import MicrotechExpiredSpecialSyncService
+from .product_payload import MicrotechProductPayloadService
 from .dataset_field_catalog_import import (
     CORE_DATASET_SELECTORS,
     DatasetFieldImportReport,
@@ -29,6 +30,7 @@ __all__ = [
     "MicrotechAnschriftService",
     "MicrotechAnsprechpartnerService",
     "MicrotechExpiredSpecialSyncService",
+    "MicrotechProductPayloadService",
     "CORE_DATASET_SELECTORS",
     "DatasetFieldImportReport",
     "MicrotechDatasetFieldCatalogImportService",
