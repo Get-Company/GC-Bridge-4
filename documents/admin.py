@@ -154,6 +154,13 @@ class DocumentAdmin(BaseAdmin):
         ),
     )
 
+    def response_change(self, request, obj):
+        if "_continue" in request.POST:
+            return HttpResponseRedirect(
+                reverse("admin:documents_document_change", args=(obj.pk,))
+            )
+        return super().response_change(request, obj)
+
     def save_model(self, request, obj, form, change):
         uploaded = form.cleaned_data.get("template_file")
         if isinstance(uploaded, UploadedFile):
