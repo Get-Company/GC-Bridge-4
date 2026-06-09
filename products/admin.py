@@ -73,6 +73,7 @@ from shopware.models import ShopwareSettings
 from .services import PriceIncreaseService
 from .tasks import (
     microtech_sync_products as microtech_sync_products_task,
+    microtech_update_prices as microtech_update_prices_task,
     microtech_update_product as microtech_update_product_task,
 )
 from .models import (
@@ -444,6 +445,7 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
     actions = (
         "sync_from_microtech",
         "sync_to_microtech",
+        "sync_prices_to_microtech",
         "sync_to_shopware",
         "set_special_price_for_channel",
         "clear_special_price_for_channel",
@@ -455,6 +457,7 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
             "items": [
                 "sync_from_microtech_detail",
                 "sync_to_microtech_detail",
+                "sync_prices_to_microtech_detail",
                 "sync_to_shopware_detail",
             ],
         },
@@ -776,6 +779,39 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
         )
         return self._redirect_to_change_page(object_id)
 
+    @action(
+        description="Preise nach Microtech übertragen",
+        icon="price_check",
+        variant=ActionVariant.DEFAULT,
+    )
+    def sync_prices_to_microtech(self, request, queryset):
+        erp_nrs = list(queryset.values_list("erp_nr", flat=True))
+        if not erp_nrs:
+            self.message_user(request, "Keine Produkte ausgewählt.", level=messages.WARNING)
+            return
+        microtech_update_prices_task.delay(erp_nrs)
+        self.message_user(
+            request,
+            f"{len(erp_nrs)} Produktpreis(e) zur Microtech-Aktualisierung (nur PriceTrees Vk0/Vk1) eingereiht.",
+        )
+
+    @action(
+        description="Preise nach Microtech übertragen",
+        icon="price_check",
+        variant=ActionVariant.DEFAULT,
+    )
+    def sync_prices_to_microtech_detail(self, request, object_id: str):
+        product = self.get_object(request, object_id)
+        if not product:
+            self.message_user(request, "Produkt nicht gefunden.", level=messages.ERROR)
+            return self._redirect_to_change_page(object_id)
+        microtech_update_prices_task.delay([product.erp_nr])
+        self.message_user(
+            request,
+            f"Produktpreis {product.erp_nr} zur Microtech-Aktualisierung (nur PriceTrees Vk0/Vk1) eingereiht.",
+        )
+        return self._redirect_to_change_page(object_id)
+
 
     @admin.action(description="Sonderpreis fuer Sales-Channel setzen")
     def set_special_price_for_channel(self, request, queryset):
@@ -1036,6 +1072,7 @@ class PriceIncreaseAdmin(BaseAdmin):
                 "export_order_form_pdf_detail",
                 "reload_products_detail",
                 "apply_price_increase_detail",
+                "sync_price_increase_prices_to_microtech_detail",
             ],
         }
     ]
@@ -3099,6 +3136,51 @@ class PriceIncreaseAdmin(BaseAdmin):
             self.message_user(request, str(exc), level=messages.ERROR)
         else:
             self.message_user(request, f"Preiserhoehung uebernommen. {updated} Standardpreis(e) aktualisiert.")
+        return HttpResponseRedirect(reverse("admin:products_priceincrease_change", args=(object_id,)))
+
+    @staticmethod
+    def _get_price_increase_product_erp_nrs(price_increase: PriceIncrease) -> list[str]:
+        seen = set()
+        erp_nrs = []
+        for erp_nr in price_increase.items.order_by("product__erp_nr", "id").values_list("product__erp_nr", flat=True):
+            cleaned = str(erp_nr or "").strip()
+            if cleaned and cleaned not in seen:
+                seen.add(cleaned)
+                erp_nrs.append(cleaned)
+        return erp_nrs
+
+    @action(
+        description="Microtech Preise nachschreiben",
+        icon="sync",
+        variant=ActionVariant.DEFAULT,
+    )
+    def sync_price_increase_prices_to_microtech_detail(self, request, object_id: str):
+        obj = self.get_object(request, object_id)
+        if not obj:
+            self.message_user(request, "Preiserhoehung nicht gefunden.", level=messages.ERROR)
+            return HttpResponseRedirect(reverse("admin:products_priceincrease_changelist"))
+        if obj.status != PriceIncrease.Status.APPLIED:
+            self.message_user(
+                request,
+                "Microtech-Preise koennen erst nach dem Uebernehmen der Preiserhoehung nachgeschrieben werden.",
+                level=messages.ERROR,
+            )
+            return HttpResponseRedirect(reverse("admin:products_priceincrease_change", args=(object_id,)))
+
+        erp_nrs = self._get_price_increase_product_erp_nrs(obj)
+        if not erp_nrs:
+            self.message_user(
+                request,
+                "Keine Produktnummern fuer die Microtech-Aktualisierung gefunden.",
+                level=messages.WARNING,
+            )
+            return HttpResponseRedirect(reverse("admin:products_priceincrease_change", args=(object_id,)))
+
+        microtech_update_prices_task.delay(erp_nrs)
+        self.message_user(
+            request,
+            f"{len(erp_nrs)} Produkt(e) zur Microtech-Preisaktualisierung (VK0/VK1) eingereiht.",
+        )
         return HttpResponseRedirect(reverse("admin:products_priceincrease_change", args=(object_id,)))
 
 

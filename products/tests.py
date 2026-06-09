@@ -5,7 +5,7 @@ from decimal import Decimal
 import sqlite3
 from tempfile import TemporaryDirectory
 from tempfile import NamedTemporaryFile
-from unittest.mock import call, patch
+from unittest.mock import Mock, call, patch
 
 from django.core.management import call_command
 from django.contrib import messages
@@ -65,6 +65,7 @@ class ProductAdminActionConfigurationTest(SimpleTestCase):
             {
                 "sync_from_microtech",
                 "sync_to_microtech",
+                "sync_prices_to_microtech",
                 "sync_to_shopware",
                 "set_special_price_for_channel",
                 "clear_special_price_for_channel",
@@ -78,11 +79,40 @@ class ProductAdminActionConfigurationTest(SimpleTestCase):
             (
                 "sync_from_microtech",
                 "sync_to_microtech",
+                "sync_prices_to_microtech",
                 "sync_to_shopware",
                 "set_special_price_for_channel",
                 "clear_special_price_for_channel",
             ),
         )
+
+    @patch("products.admin.microtech_update_prices_task.delay")
+    def test_product_price_sync_action_queues_price_update_task(self, mock_delay):
+        request = RequestFactory().get("/admin/products/product/")
+        queryset = Mock()
+        queryset.values_list.return_value = ["A-1000", "A-1001"]
+        admin_instance = ProductAdmin(Product, AdminSite())
+        admin_instance.message_user = Mock()
+
+        admin_instance.sync_prices_to_microtech(request, queryset)
+
+        mock_delay.assert_called_once_with(["A-1000", "A-1001"])
+        admin_instance.message_user.assert_called_once()
+
+    @patch("products.admin.microtech_update_prices_task.delay")
+    def test_product_price_sync_detail_action_queues_price_update_task(self, mock_delay):
+        request = RequestFactory().get("/admin/products/product/1/change/")
+        product = Mock(erp_nr="A-1000")
+        admin_instance = ProductAdmin(Product, AdminSite())
+        admin_instance.get_object = Mock(return_value=product)
+        admin_instance.message_user = Mock()
+        admin_instance._redirect_to_change_page = Mock(return_value="redirect")
+
+        result = admin_instance.sync_prices_to_microtech_detail(request, "1")
+
+        self.assertEqual(result, "redirect")
+        mock_delay.assert_called_once_with(["A-1000"])
+        admin_instance.message_user.assert_called_once()
 
 
 class PriceIncreasePdfHtmlCleanupTest(SimpleTestCase):
@@ -128,6 +158,7 @@ class ProductCeleryTaskTest(SimpleTestCase):
             preserve_is_active=True,
             limit=10,
         )
+        product_tasks.microtech_update_prices.run([" 204114 ", "", "A-3"])
         product_tasks.shopware_sync_products.run(
             [" 204113 "],
             sync_all=False,
@@ -137,7 +168,7 @@ class ProductCeleryTaskTest(SimpleTestCase):
             log_images=True,
         )
 
-        self.assertEqual(mock_call_command.call_count, 2)
+        self.assertEqual(mock_call_command.call_count, 3)
         mock_call_command.assert_has_calls(
             [
                 call(
@@ -149,6 +180,7 @@ class ProductCeleryTaskTest(SimpleTestCase):
                     preserve_is_active=True,
                     limit=10,
                 ),
+                call("microtech_update_prices", "204114", "A-3"),
                 call(
                     "shopware_sync_products",
                     "204113",
@@ -478,6 +510,45 @@ class PriceIncreaseServiceTest(TestCase):
 
         with self.assertRaisesMessage(ValueError, "blockierende Preispruefungen"):
             PriceIncreaseService().apply(price_increase)
+
+    @patch("products.admin.microtech_update_prices_task.delay")
+    def test_price_increase_microtech_resync_action_queues_applied_products(self, mock_delay):
+        price_increase = PriceIncrease.objects.create(
+            title="VK1 Nachschreiben",
+            status=PriceIncrease.Status.APPLIED,
+            applied_at=timezone.now(),
+        )
+        PriceIncreaseItem.objects.create(
+            price_increase=price_increase,
+            product=self.product,
+            source_price=self.default_price,
+            unit="Stk",
+            current_price=Decimal("10.00"),
+            current_rebate_quantity=5,
+            current_rebate_price=Decimal("9.00"),
+        )
+        request = RequestFactory().get("/")
+        admin_instance = PriceIncreaseAdmin(PriceIncrease, AdminSite())
+        admin_instance.get_object = Mock(return_value=price_increase)
+        admin_instance.message_user = Mock()
+
+        admin_instance.sync_price_increase_prices_to_microtech_detail(request, str(price_increase.pk))
+
+        mock_delay.assert_called_once_with(["A-5000"])
+        admin_instance.message_user.assert_called_once()
+
+    @patch("products.admin.microtech_update_prices_task.delay")
+    def test_price_increase_microtech_resync_action_requires_applied_status(self, mock_delay):
+        price_increase = PriceIncrease.objects.create(title="Noch offen")
+        request = RequestFactory().get("/")
+        admin_instance = PriceIncreaseAdmin(PriceIncrease, AdminSite())
+        admin_instance.get_object = Mock(return_value=price_increase)
+        admin_instance.message_user = Mock()
+
+        admin_instance.sync_price_increase_prices_to_microtech_detail(request, str(price_increase.pk))
+
+        mock_delay.assert_not_called()
+        admin_instance.message_user.assert_called_once()
 
     def test_cover_effective_date_is_extracted_from_german_month_title(self):
         price_increase = PriceIncrease.objects.create(title="Mai 2026")

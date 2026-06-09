@@ -49,6 +49,11 @@ def microtech_update_product(erp_nrs: Sequence[str]) -> None:
     call_command("microtech_update_product", *_clean_erp_nrs(erp_nrs))
 
 
+@shared_task(name="products.microtech_update_prices")
+def microtech_update_prices(erp_nrs: Sequence[str]) -> None:
+    call_command("microtech_update_prices", *_clean_erp_nrs(erp_nrs))
+
+
 @shared_task(name="products.shopware_sync_products")
 def shopware_sync_products(
     erp_nrs: Sequence[str] | None = None,
