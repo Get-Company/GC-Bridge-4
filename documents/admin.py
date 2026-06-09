@@ -512,7 +512,7 @@ Product.objects.order_by('-price')[:5]    {# Top 5 teuerste #}
         try:
             context = DocumentTemplateContextService().build_preview_context(document)
             html = DocumentPdfService().build_pdf_html(document, context)
-        except (TemplateSyntaxError, UnicodeDecodeError, OSError) as exc:
+        except Exception as exc:
             return HttpResponse(
                 format_html(
                     "<!doctype html><html lang=\"de\"><head><meta charset=\"utf-8\"><title>Template-Fehler</title></head>"
