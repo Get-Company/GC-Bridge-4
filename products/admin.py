@@ -2217,10 +2217,16 @@ class PriceIncreaseAdmin(BaseAdmin):
         slug: str,
         fallback_template_name: str,
         context: dict,
+        require_database_document: bool = False,
     ) -> str:
         document = Document.objects.filter(slug=slug, is_active=True).first()
         if document:
             return document.render(context)
+        if require_database_document:
+            raise ValueError(
+                "Kein aktives Dokument-Template in der Datenbank gefunden. "
+                "Bitte im Dokument-Admin ein aktives Template fuer die Preisliste hinterlegen."
+            )
         return render_to_string(fallback_template_name, context)
 
     def _build_price_list_pdf(
@@ -2241,6 +2247,7 @@ class PriceIncreaseAdmin(BaseAdmin):
             slug=Document.Slug.PRICE_LIST,
             fallback_template_name=self.price_list_pdf_template_name,
             context=context,
+            require_database_document=True,
         )
         soup = BeautifulSoup(html, "html.parser")
 

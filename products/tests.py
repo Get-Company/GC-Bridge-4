@@ -137,7 +137,29 @@ class PriceIncreasePdfHtmlCleanupTest(SimpleTestCase):
 class PriceIncreaseDocumentRenderingTest(SimpleTestCase):
     @patch("products.admin.render_to_string")
     @patch("products.admin.Document.objects")
-    def test_price_increase_admin_falls_back_to_file_template_when_no_db_template(
+    def test_price_list_requires_db_document_when_requested(
+        self,
+        document_manager,
+        render_to_string_mock,
+    ):
+        document_manager.filter.return_value.first.return_value = None
+        admin_instance = PriceIncreaseAdmin(PriceIncrease, AdminSite())
+        context = {"title": "Fallback-Test"}
+
+        with self.assertRaisesMessage(ValueError, "Kein aktives Dokument-Template"):
+            admin_instance._render_document(
+                slug=Document.Slug.PRICE_LIST,
+                fallback_template_name="admin/products/price_list_pdf.html",
+                context=context,
+                require_database_document=True,
+            )
+
+        document_manager.filter.assert_called_once_with(slug=Document.Slug.PRICE_LIST, is_active=True)
+        render_to_string_mock.assert_not_called()
+
+    @patch("products.admin.render_to_string")
+    @patch("products.admin.Document.objects")
+    def test_price_increase_admin_falls_back_to_file_template_when_allowed(
         self,
         document_manager,
         render_to_string_mock,
@@ -148,14 +170,14 @@ class PriceIncreaseDocumentRenderingTest(SimpleTestCase):
         context = {"title": "Fallback-Test"}
 
         rendered = admin_instance._render_document(
-            slug=Document.Slug.PRICE_LIST,
-            fallback_template_name="admin/products/price_list_pdf.html",
+            slug=Document.Slug.ORDER_FORM,
+            fallback_template_name="admin/products/includes/order_form.html",
             context=context,
         )
 
         self.assertEqual(rendered, "<section>Fallback</section>")
-        document_manager.filter.assert_called_once_with(slug=Document.Slug.PRICE_LIST, is_active=True)
-        render_to_string_mock.assert_called_once_with("admin/products/price_list_pdf.html", context)
+        document_manager.filter.assert_called_once_with(slug=Document.Slug.ORDER_FORM, is_active=True)
+        render_to_string_mock.assert_called_once_with("admin/products/includes/order_form.html", context)
 
     @patch("products.admin.render_to_string")
     @patch("products.admin.Document.objects")
