@@ -46,24 +46,23 @@ class DocumentRenderingTest(SimpleTestCase):
 
     def test_document_admin_exposes_template_reference(self):
         admin_instance = DocumentAdmin(Document, AdminSite())
-        html = admin_instance.template_syntax()
-        variables_html = admin_instance.template_variables()
+        help_html = admin_instance.template_help()
 
-        self.assertIn("Django Template Engine", html)
-        self.assertIn("{{ css }}", html)
-        self.assertIn("Dokumente/", html)
-        self.assertIn("while", html)
-        self.assertIn("then", html)
-        self.assertIn("category_sections", html)
-        self.assertIn("row.price_display", html)
-        self.assertIn("js-document-token", html)
-        self.assertIn("{{ document.title }}", html)
-        self.assertIn("documents_document", variables_html)
-        self.assertIn("document_type", variables_html)
+        self.assertIn("Jinja2", help_html)
+        self.assertIn("price_list_catalog_sections()", help_html)
+        self.assertIn("category_sections", help_html)
+        self.assertIn("row.price_display", help_html)
+        self.assertIn("{{ document.title }}", help_html)
+        self.assertIn("documents_document", help_html)
+        self.assertIn("document_type", help_html)
+        self.assertNotIn("Live-Vorschau", help_html)
 
         media = str(admin_instance.media)
         self.assertIn("documents/admin/document_editor.css", media)
         self.assertIn("documents/admin/document_editor.js", media)
+        self.assertNotIn("template_preview_link", admin_instance.readonly_fields)
+        self.assertNotIn("live_preview_button", admin_instance.readonly_fields)
+        self.assertEqual(admin_instance.actions_detail[0]["items"], ["generate_pdf_detail", "preview_template_detail"])
 
 
 class DocumentPriceListCatalogSectionsTest(TestCase):

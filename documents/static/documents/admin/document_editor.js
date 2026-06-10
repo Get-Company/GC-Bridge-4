@@ -128,44 +128,9 @@
         setupTrixEditor(event.target);
     });
 
-    function setupLivePreview() {
-        var btn = document.querySelector("[data-live-preview]");
-        if (!btn || btn.dataset.documentEnhanced === "1") return;
-        btn.dataset.documentEnhanced = "1";
-        btn.addEventListener("click", function () {
-            var url = btn.dataset.livePreview;
-            var html = (document.querySelector('textarea[data-document-editor="html"]') || {}).value || "";
-            var css = (document.querySelector('textarea[data-document-editor="css"]') || {}).value || "";
-            var jinja2Checkbox = document.querySelector('[name="use_jinja2"]');
-            var jinja2 = jinja2Checkbox && jinja2Checkbox.checked ? "true" : "false";
-            var csrf = (document.querySelector('[name="csrfmiddlewaretoken"]') || {}).value || "";
-            var label = btn.textContent;
-            btn.textContent = "Laden…";
-            btn.disabled = true;
-            fetch(url, {
-                method: "POST",
-                headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                body: new URLSearchParams({
-                    html_content: html,
-                    css_content: css,
-                    use_jinja2: jinja2,
-                    csrfmiddlewaretoken: csrf,
-                }).toString(),
-            })
-            .then(function (resp) { return resp.text(); })
-            .then(function (text) {
-                var win = window.open("", "_blank");
-                if (win) { win.document.write(text); win.document.close(); }
-            })
-            .catch(function (e) { alert("Fehler: " + e.message); })
-            .finally(function () { btn.textContent = label; btn.disabled = false; });
-        });
-    }
-
     document.addEventListener("DOMContentLoaded", function () {
         document.querySelectorAll("trix-editor").forEach(setupTrixEditor);
         document.querySelectorAll('textarea[data-document-editor="html"], textarea[data-document-editor="css"]').forEach(setupTextarea);
         setupTokenButtons();
-        setupLivePreview();
     });
 })();
