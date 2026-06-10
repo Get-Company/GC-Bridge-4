@@ -20,22 +20,33 @@
 
     .price-list-section h2 {
         background: #f0f0f0;
-        font-size: 15px;
+        font-size: 19px;
         margin: 0 0 8px;
-        padding: 7px 9px;
+        padding: 9px 11px;
     }
 
     .price-list-section h3 {
         border-bottom: 1px solid #ddd;
-        font-size: 12px;
-        margin: 14px 0 6px;
-        padding-bottom: 4px;
+        font-size: 15px;
+        margin: 16px 0 7px;
+        padding-bottom: 5px;
     }
 
     .price-list-table {
         border-collapse: collapse;
         margin: 0 0 10px;
+        table-layout: fixed;
         width: 100%;
+    }
+
+    .price-list-table .col-artikel-nr,
+    .price-list-table .col-artikel,
+    .price-list-table .col-attribute,
+    .price-list-table .col-vpe,
+    .price-list-table .col-preis,
+    .price-list-table .col-staffelmenge,
+    .price-list-table .col-staffelpreis {
+        width: 14.285%;
     }
 
     .price-list-table th,
@@ -58,6 +69,15 @@
         white-space: nowrap;
     }
 
+    .price-list-table .price-factor-note {
+        color: #777;
+        display: block;
+        font-size: 8px;
+        font-weight: 400;
+        line-height: 1.1;
+        margin-bottom: 2px;
+    }
+
     .price-list-table .muted {
         color: #777;
     }
@@ -65,6 +85,13 @@
 </style>
 
 {% set sections = price_list_catalog_sections() %}
+
+{% macro price_cell(row, price_display) -%}
+    {% if row.factor %}
+        <span class="price-factor-note">Preis pro {{ row.factor }} St.</span>
+    {% endif %}
+    {{ price_display|default("-") }}
+{%- endmacro %}
 
 <h1 class="price-list-title">{{ document.title|default("Preisliste") }}</h1>
 
@@ -75,6 +102,15 @@
 
             {% if section.direct_rows %}
                 <table class="price-list-table">
+                    <colgroup>
+                        <col class="col-artikel-nr">
+                        <col class="col-artikel">
+                        <col class="col-attribute">
+                        <col class="col-vpe">
+                        <col class="col-preis">
+                        <col class="col-staffelmenge">
+                        <col class="col-staffelpreis">
+                    </colgroup>
                     <thead>
                         <tr>
                             <th>Artikelnr</th>
@@ -101,9 +137,9 @@
                                     {% endif %}
                                 </td>
                                 <td>{{ row.vpe_display|default("-") }}</td>
-                                <td class="number">{{ row.price_display|default("-") }}</td>
+                                <td class="number">{{ price_cell(row, row.price_display) }}</td>
                                 <td class="number">{{ row.rebate_quantity_display|default("-") }}</td>
-                                <td class="number">{{ row.rebate_price_display|default("-") }}</td>
+                                <td class="number">{{ price_cell(row, row.rebate_price_display) }}</td>
                             </tr>
                         {% endfor %}
                     </tbody>
@@ -113,6 +149,15 @@
             {% for group in section.groups %}
                 <h3>{{ group.name|default("Ohne Kategoriebezeichnung") }}</h3>
                 <table class="price-list-table">
+                    <colgroup>
+                        <col class="col-artikel-nr">
+                        <col class="col-artikel">
+                        <col class="col-attribute">
+                        <col class="col-vpe">
+                        <col class="col-preis">
+                        <col class="col-staffelmenge">
+                        <col class="col-staffelpreis">
+                    </colgroup>
                     <thead>
                         <tr>
                             <th>Artikelnr</th>
@@ -140,9 +185,9 @@
                                         {% endif %}
                                     </td>
                                     <td>{{ row.vpe_display|default("-") }}</td>
-                                    <td class="number">{{ row.price_display|default("-") }}</td>
+                                    <td class="number">{{ price_cell(row, row.price_display) }}</td>
                                     <td class="number">{{ row.rebate_quantity_display|default("-") }}</td>
-                                    <td class="number">{{ row.rebate_price_display|default("-") }}</td>
+                                    <td class="number">{{ price_cell(row, row.rebate_price_display) }}</td>
                                 </tr>
                             {% endfor %}
                         {% else %}

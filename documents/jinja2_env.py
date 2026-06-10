@@ -49,6 +49,7 @@ def _build_price_list_row(product) -> dict:
         "erp_nr": (product.erp_nr or "").strip() or "-",
         "name": (product.name or "").strip() or "Ohne Bezeichnung",
         "attributes": _build_price_list_attribute_rows(product),
+        "factor": product.factor,
         "vpe_display": _build_price_list_vpe_display(product),
         "price_display": _format_price_list_currency(price.price if price else None),
         "rebate_quantity_display": _format_price_list_quantity(price.rebate_quantity if price else None),
