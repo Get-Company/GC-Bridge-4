@@ -1050,7 +1050,6 @@ class PriceIncreaseAdmin(BaseAdmin):
     price_list_cover_date_font_size = 5 * mm
     price_list_cover_date_font_name = "Arial"
     price_list_cover_date_font_bold_name = "Arial-Bold"
-    price_list_page_number_font_name = "Helvetica"
     price_list_page_number_font_size = 9
     price_list_page_number_y = 8 * mm
     change_form_before_template = "admin/products/includes/price_increase_change_tabs_nav.html"
@@ -1489,10 +1488,11 @@ class PriceIncreaseAdmin(BaseAdmin):
 
     def _price_list_pdf_styles(self) -> dict[str, ParagraphStyle]:
         sample_styles = getSampleStyleSheet()
+        regular_font_name, bold_font_name = self._ensure_price_list_fonts_registered()
         body = ParagraphStyle(
             name="PriceListPdfBody",
             parent=sample_styles["Normal"],
-            fontName="Helvetica",
+            fontName=regular_font_name,
             fontSize=5,
             leading=7,
             spaceAfter=3,
@@ -1501,7 +1501,7 @@ class PriceIncreaseAdmin(BaseAdmin):
             "h1": ParagraphStyle(
                 name="PriceListPdfHeading1",
                 parent=sample_styles["Heading1"],
-                fontName="Helvetica-Bold",
+                fontName=bold_font_name,
                 fontSize=13,
                 leading=16,
                 spaceAfter=7,
@@ -1509,7 +1509,7 @@ class PriceIncreaseAdmin(BaseAdmin):
             "h2": ParagraphStyle(
                 name="PriceListPdfHeading2",
                 parent=sample_styles["Heading2"],
-                fontName="Helvetica-Bold",
+                fontName=bold_font_name,
                 fontSize=8,
                 leading=10,
                 spaceAfter=4,
@@ -1517,7 +1517,7 @@ class PriceIncreaseAdmin(BaseAdmin):
             "h3": ParagraphStyle(
                 name="PriceListPdfHeading3",
                 parent=sample_styles["Heading3"],
-                fontName="Helvetica-Bold",
+                fontName=bold_font_name,
                 fontSize=6,
                 leading=8,
                 spaceAfter=3,
@@ -1525,7 +1525,7 @@ class PriceIncreaseAdmin(BaseAdmin):
             "category_heading": ParagraphStyle(
                 name="PriceListPdfCategoryHeading",
                 parent=sample_styles["Heading1"],
-                fontName="Helvetica-Bold",
+                fontName=bold_font_name,
                 fontSize=8,
                 leading=9,
                 spaceAfter=0,
@@ -1540,14 +1540,14 @@ class PriceIncreaseAdmin(BaseAdmin):
             "table_header": ParagraphStyle(
                 name="PriceListPdfTableHeader",
                 parent=sample_styles["Normal"],
-                fontName="Helvetica-Bold",
+                fontName=bold_font_name,
                 fontSize=4.5,
                 leading=5.5,
             ),
             "table_header_right": ParagraphStyle(
                 name="PriceListPdfTableHeaderRight",
                 parent=sample_styles["Normal"],
-                fontName="Helvetica-Bold",
+                fontName=bold_font_name,
                 fontSize=4.5,
                 leading=5.5,
                 alignment=TA_RIGHT,
@@ -1555,16 +1555,16 @@ class PriceIncreaseAdmin(BaseAdmin):
             "table_cell": ParagraphStyle(
                 name="PriceListPdfTableCell",
                 parent=sample_styles["Normal"],
-                fontName="Helvetica",
-                fontSize=4,
-                leading=4.8,
+                fontName=regular_font_name,
+                fontSize=7.5,
+                leading=9,
             ),
             "table_cell_right": ParagraphStyle(
                 name="PriceListPdfTableCellRight",
                 parent=sample_styles["Normal"],
-                fontName="Helvetica",
-                fontSize=4,
-                leading=4.8,
+                fontName=regular_font_name,
+                fontSize=7.5,
+                leading=9,
                 alignment=TA_RIGHT,
             ),
         }
@@ -1639,7 +1639,7 @@ class PriceIncreaseAdmin(BaseAdmin):
         return font_file or None
 
     @classmethod
-    def _ensure_cover_date_fonts_registered(cls) -> tuple[str, str]:
+    def _ensure_price_list_fonts_registered(cls) -> tuple[str, str]:
         regular_font_name = cls.price_list_cover_date_font_name
         bold_font_name = cls.price_list_cover_date_font_bold_name
         try:
@@ -1662,6 +1662,10 @@ class PriceIncreaseAdmin(BaseAdmin):
             return regular_font_name, bold_font_name
 
         return "Helvetica", "Helvetica-Bold"
+
+    @classmethod
+    def _ensure_cover_date_fonts_registered(cls) -> tuple[str, str]:
+        return cls._ensure_price_list_fonts_registered()
 
     @classmethod
     def _extract_cover_date_from_title(cls, title: str) -> str | None:
@@ -1742,6 +1746,7 @@ class PriceIncreaseAdmin(BaseAdmin):
     def _overlay_page_numbers_on_pdf(self, pdf_content: bytes) -> bytes:
         reader = self._bytes_to_pdf_reader(pdf_content)
         writer = PdfWriter()
+        regular_font_name, _ = self._ensure_price_list_fonts_registered()
         total_pages = len(reader.pages)
 
         for page_index, page in enumerate(reader.pages, start=1):
@@ -1749,7 +1754,7 @@ class PriceIncreaseAdmin(BaseAdmin):
             page_width = float(page.mediabox.width)
             page_height = float(page.mediabox.height)
             overlay = pdf_canvas.Canvas(overlay_buffer, pagesize=(page_width, page_height))
-            overlay.setFont(self.price_list_page_number_font_name, self.price_list_page_number_font_size)
+            overlay.setFont(regular_font_name, self.price_list_page_number_font_size)
             overlay.drawCentredString(
                 page_width / 2,
                 float(self.price_list_page_number_y),
