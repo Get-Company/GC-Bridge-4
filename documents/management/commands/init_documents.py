@@ -23,6 +23,7 @@ class Command(BaseCommand):
 
     def _init_price_list(self, Document, *, force: bool) -> None:
         template_path = Path("templates/admin/products/price_list_pdf.html")
+        css_path = Path("templates/admin/products/includes/price_list_document_template.css")
         if not template_path.exists():
             self.stderr.write(f"Datei nicht gefunden: {template_path}")
             return
@@ -31,7 +32,7 @@ class Command(BaseCommand):
             "document_type": Document.DocumentType.PRICE_LIST,
             "title": "Preisliste",
             "html_content": template_path.read_text(encoding="utf-8"),
-            "css_content": "",
+            "css_content": css_path.read_text(encoding="utf-8") if css_path.exists() else "",
             "is_active": True,
         }
         self._upsert(Document, Document.Slug.PRICE_LIST, defaults, force=force)

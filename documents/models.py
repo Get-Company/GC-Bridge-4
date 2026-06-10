@@ -108,7 +108,7 @@ class Document(BaseModel):
         return self.html_content
 
     def render(self, context: dict | None = None) -> str:
-        ctx = {**(context or {}), "document": self, "css": self.css_content}
+        ctx = {"document": self, "css": self.css_content, **(context or {})}
         source = self.get_template_source()
         if self.use_jinja2:
             from documents.jinja2_env import build_env

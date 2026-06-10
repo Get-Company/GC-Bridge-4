@@ -127,3 +127,25 @@ class DocumentPdfServiceTest(SimpleTestCase):
         self.assertIn("<!doctype html>", html)
         self.assertIn("<h1>AGB</h1>", html)
         self.assertIn("body { font-family: sans-serif; }", html)
+
+    def test_render_allows_css_context_override(self):
+        document = Document(
+            title="Preisliste",
+            html_content="<style>{{ css }}</style>",
+        )
+
+        html = document.render({"css": "body { font-family: Arial; }"})
+
+        self.assertIn("font-family: Arial", html)
+
+    def test_build_pdf_html_uses_default_price_list_css_when_empty(self):
+        document = Document(
+            slug=Document.Slug.PRICE_LIST,
+            title="Preisliste",
+            html_content="<html><head><style>{{ css }}</style></head><body></body></html>",
+            css_content="",
+        )
+
+        html = DocumentPdfService().build_pdf_html(document)
+
+        self.assertIn("font-family: Arial, Helvetica, sans-serif", html)

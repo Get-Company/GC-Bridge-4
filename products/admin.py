@@ -103,8 +103,8 @@ class FullWidthHeadingBar(Flowable):
         page_width: float,
         left_margin: float,
         background_color=colors.HexColor("#e9ecef"),
-        padding_top: float = 7,
-        padding_bottom: float = 7,
+        padding_top: float = 3.5,
+        padding_bottom: float = 3.5,
     ):
         super().__init__()
         self.paragraph = Paragraph(html, style)
@@ -1493,41 +1493,41 @@ class PriceIncreaseAdmin(BaseAdmin):
             name="PriceListPdfBody",
             parent=sample_styles["Normal"],
             fontName="Helvetica",
-            fontSize=10,
-            leading=14,
-            spaceAfter=6,
+            fontSize=5,
+            leading=7,
+            spaceAfter=3,
         )
         return {
             "h1": ParagraphStyle(
                 name="PriceListPdfHeading1",
                 parent=sample_styles["Heading1"],
                 fontName="Helvetica-Bold",
-                fontSize=26,
-                leading=31,
-                spaceAfter=14,
+                fontSize=13,
+                leading=16,
+                spaceAfter=7,
             ),
             "h2": ParagraphStyle(
                 name="PriceListPdfHeading2",
                 parent=sample_styles["Heading2"],
                 fontName="Helvetica-Bold",
-                fontSize=16,
-                leading=20,
-                spaceAfter=8,
+                fontSize=8,
+                leading=10,
+                spaceAfter=4,
             ),
             "h3": ParagraphStyle(
                 name="PriceListPdfHeading3",
                 parent=sample_styles["Heading3"],
                 fontName="Helvetica-Bold",
-                fontSize=12,
-                leading=16,
-                spaceAfter=6,
+                fontSize=6,
+                leading=8,
+                spaceAfter=3,
             ),
             "category_heading": ParagraphStyle(
                 name="PriceListPdfCategoryHeading",
                 parent=sample_styles["Heading1"],
                 fontName="Helvetica-Bold",
-                fontSize=15,
-                leading=18,
+                fontSize=8,
+                leading=9,
                 spaceAfter=0,
             ),
             "body": body,
@@ -1541,30 +1541,30 @@ class PriceIncreaseAdmin(BaseAdmin):
                 name="PriceListPdfTableHeader",
                 parent=sample_styles["Normal"],
                 fontName="Helvetica-Bold",
-                fontSize=9,
-                leading=11,
+                fontSize=4.5,
+                leading=5.5,
             ),
             "table_header_right": ParagraphStyle(
                 name="PriceListPdfTableHeaderRight",
                 parent=sample_styles["Normal"],
                 fontName="Helvetica-Bold",
-                fontSize=9,
-                leading=11,
+                fontSize=4.5,
+                leading=5.5,
                 alignment=TA_RIGHT,
             ),
             "table_cell": ParagraphStyle(
                 name="PriceListPdfTableCell",
                 parent=sample_styles["Normal"],
                 fontName="Helvetica",
-                fontSize=8,
-                leading=9,
+                fontSize=4,
+                leading=4.8,
             ),
             "table_cell_right": ParagraphStyle(
                 name="PriceListPdfTableCellRight",
                 parent=sample_styles["Normal"],
                 fontName="Helvetica",
-                fontSize=8,
-                leading=9,
+                fontSize=4,
+                leading=4.8,
                 alignment=TA_RIGHT,
             ),
         }
@@ -1933,14 +1933,33 @@ class PriceIncreaseAdmin(BaseAdmin):
             table_rows.append(rendered_cells)
         return table_rows, column_widths, column_alignments
 
-    @staticmethod
     def _create_price_list_pdf_table(
+        self,
         table_rows: list[list],
         column_widths: list[float | None],
         column_alignments: list[str],
+        *,
+        available_width: float,
+        width_ratio: float = 0.9,
     ) -> Table | Spacer:
         if not table_rows:
             return Spacer(1, 1)
+
+        target_width = available_width * width_ratio
+        col_count = max((len(row) for row in table_rows), default=0)
+        resolved_widths: list[float] | None = None
+        if col_count:
+            if any(width is not None for width in column_widths):
+                base_widths = [
+                    float(width) if width is not None else 1.0
+                    for width in column_widths[:col_count]
+                ]
+                while len(base_widths) < col_count:
+                    base_widths.append(1.0)
+                base_total = sum(base_widths) or col_count
+                resolved_widths = [(width / base_total) * target_width for width in base_widths]
+            else:
+                resolved_widths = [target_width / col_count] * col_count
 
         style_commands = [
             ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f1f3f5")),
@@ -1948,10 +1967,10 @@ class PriceIncreaseAdmin(BaseAdmin):
             ("LINEBELOW", (0, 0), (-1, 0), 0.8, colors.HexColor("#adb5bd")),
             ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#dee2e6")),
             ("VALIGN", (0, 0), (-1, -1), "TOP"),
-            ("LEFTPADDING", (0, 0), (-1, -1), 5),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 5),
-            ("TOPPADDING", (0, 0), (-1, -1), 4),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ("LEFTPADDING", (0, 0), (-1, -1), 2.5),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 2.5),
+            ("TOPPADDING", (0, 0), (-1, -1), 2),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
         ]
         for column_index, align in enumerate(column_alignments):
             if align in {"center", "left", "right"}:
@@ -1960,14 +1979,26 @@ class PriceIncreaseAdmin(BaseAdmin):
         table = Table(
             table_rows,
             repeatRows=1,
-            colWidths=column_widths if any(width is not None for width in column_widths) else None,
+            colWidths=resolved_widths,
+            hAlign="CENTER",
         )
         table.setStyle(TableStyle(style_commands))
         return table
 
-    def _build_price_list_pdf_table(self, table_node, styles: dict[str, ParagraphStyle]) -> Table | Spacer:
+    def _build_price_list_pdf_table(
+        self,
+        table_node,
+        styles: dict[str, ParagraphStyle],
+        *,
+        available_width: float,
+    ) -> Table | Spacer:
         table_rows, column_widths, column_alignments = self._parse_price_list_pdf_table(table_node, styles)
-        return self._create_price_list_pdf_table(table_rows, column_widths, column_alignments)
+        return self._create_price_list_pdf_table(
+            table_rows,
+            column_widths,
+            column_alignments,
+            available_width=available_width,
+        )
 
     def _build_price_list_heading_table_block(
         self,
@@ -1975,6 +2006,7 @@ class PriceIncreaseAdmin(BaseAdmin):
         heading: Paragraph | None,
         table_node,
         styles: dict[str, ParagraphStyle],
+        available_width: float,
         leading_elements: list | None = None,
         first_body_rows: int = 1,
     ) -> list:
@@ -1984,6 +2016,7 @@ class PriceIncreaseAdmin(BaseAdmin):
         first_table, remaining_table = self._build_price_list_pdf_table_parts(
             table_node,
             styles,
+            available_width=available_width,
             first_body_rows=first_body_rows,
         )
         block_elements.append(first_table)
@@ -1998,11 +2031,17 @@ class PriceIncreaseAdmin(BaseAdmin):
         table_node,
         styles: dict[str, ParagraphStyle],
         *,
+        available_width: float,
         first_body_rows: int = 1,
     ) -> tuple[Table | Spacer, Table | Spacer | None]:
         table_rows, column_widths, column_alignments = self._parse_price_list_pdf_table(table_node, styles)
         if len(table_rows) <= 1:
-            table = self._create_price_list_pdf_table(table_rows, column_widths, column_alignments)
+            table = self._create_price_list_pdf_table(
+                table_rows,
+                column_widths,
+                column_alignments,
+                available_width=available_width,
+            )
             return table, None
 
         split_index = min(len(table_rows), 1 + max(1, first_body_rows))
@@ -2010,6 +2049,7 @@ class PriceIncreaseAdmin(BaseAdmin):
             table_rows[:split_index],
             column_widths,
             column_alignments,
+            available_width=available_width,
         )
         remaining_rows = table_rows[split_index:]
         if not remaining_rows:
@@ -2018,6 +2058,7 @@ class PriceIncreaseAdmin(BaseAdmin):
             [table_rows[0], *remaining_rows],
             column_widths,
             column_alignments,
+            available_width=available_width,
         )
         return first_table, remaining_table
 
@@ -2045,7 +2086,8 @@ class PriceIncreaseAdmin(BaseAdmin):
             next_child = children[child_index + 1] if child_index + 1 < len(children) else None
             next_next_child = children[child_index + 2] if child_index + 2 < len(children) else None
             if name in {"h1", "h2", "h3", "p"}:
-                if child.get("data-pdf-full-width-bar"):
+                use_full_width_bar = bool(child.get("data-pdf-full-width-bar")) or name in {"h2", "h3"}
+                if use_full_width_bar:
                     if (
                         next_child is not None
                         and next_next_child is not None
@@ -2058,7 +2100,18 @@ class PriceIncreaseAdmin(BaseAdmin):
                             page_width=page_width,
                             left_margin=left_margin,
                         )
-                        subsection_heading = self._paragraph_from_tag(next_child, styles["h2"])
+                        if (
+                            next_child.get("data-pdf-full-width-bar")
+                            or next_child.name.lower() in {"h2", "h3"}
+                        ):
+                            subsection_heading = self._full_width_heading_from_tag(
+                                next_child,
+                                styles.get(next_child.name.lower(), styles["h2"]),
+                                page_width=page_width,
+                                left_margin=left_margin,
+                            )
+                        else:
+                            subsection_heading = self._paragraph_from_tag(next_child, styles["h2"])
                         leading_elements = []
                         if full_width_heading is not None:
                             leading_elements.extend([full_width_heading, Spacer(1, 10)])
@@ -2067,6 +2120,7 @@ class PriceIncreaseAdmin(BaseAdmin):
                                 heading=subsection_heading,
                                 table_node=next_next_child,
                                 styles=styles,
+                                available_width=page_width - (left_margin * 2),
                                 leading_elements=leading_elements,
                             )
                         )
@@ -2076,11 +2130,26 @@ class PriceIncreaseAdmin(BaseAdmin):
                         elements.append(CondPageBreak(130))
                     paragraph = self._full_width_heading_from_tag(
                         child,
-                        styles["category_heading"],
+                        styles.get(name, styles["category_heading"]),
                         page_width=page_width,
                         left_margin=left_margin,
                     )
                     if paragraph is not None:
+                        if (
+                            name in {"h2", "h3"}
+                            and next_child is not None
+                            and next_child.name.lower() == "table"
+                        ):
+                            elements.extend(
+                                self._build_price_list_heading_table_block(
+                                    heading=paragraph,
+                                    table_node=next_child,
+                                    styles=styles,
+                                    available_width=page_width - (left_margin * 2),
+                                )
+                            )
+                            child_index += 2
+                            continue
                         elements.append(paragraph)
                         elements.append(Spacer(1, 10))
                     child_index += 1
@@ -2093,6 +2162,7 @@ class PriceIncreaseAdmin(BaseAdmin):
                                 heading=paragraph,
                                 table_node=next_child,
                                 styles=styles,
+                                available_width=page_width - (left_margin * 2),
                             )
                         )
                         child_index += 2
@@ -2120,7 +2190,13 @@ class PriceIncreaseAdmin(BaseAdmin):
                 child_index += 1
                 continue
             if name == "table":
-                elements.append(self._build_price_list_pdf_table(child, styles))
+                elements.append(
+                    self._build_price_list_pdf_table(
+                        child,
+                        styles,
+                        available_width=page_width - (left_margin * 2),
+                    )
+                )
                 child_index += 1
                 continue
 

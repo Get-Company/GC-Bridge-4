@@ -14,6 +14,7 @@ from documents.models import Document
 
 class DocumentPdfService(BaseService):
     model = Document
+    default_price_list_css_path = Path("templates/admin/products/includes/price_list_document_template.css")
 
     def get_output_dir(self) -> Path:
         return Path(getattr(settings, "DOCUMENT_PDF_ROOT", settings.BASE_DIR / "Dokumente"))
@@ -27,8 +28,19 @@ class DocumentPdfService(BaseService):
         filename = slugify(document.slug or document.title) or f"dokument-{document.pk or 'neu'}"
         return f"{filename}.pdf"
 
+    def get_css_content(self, document: Document) -> str:
+        if document.css_content:
+            return document.css_content
+        if document.slug == Document.Slug.PRICE_LIST:
+            css_path = settings.BASE_DIR / self.default_price_list_css_path
+            if css_path.exists():
+                return css_path.read_text(encoding="utf-8")
+        return ""
+
     def build_pdf_html(self, document: Document, context: dict | None = None) -> str:
-        rendered_html = document.render(context)
+        css_content = self.get_css_content(document)
+        render_context = {**(context or {}), "css": css_content}
+        rendered_html = document.render(render_context)
         if "<html" in rendered_html.lower():
             return rendered_html
         return (
@@ -37,7 +49,7 @@ class DocumentPdfService(BaseService):
             "<head>"
             "<meta charset=\"utf-8\">"
             f"<title>{escape(document.title)}</title>"
-            f"<style>{document.css_content}</style>"
+            f"<style>{css_content}</style>"
             "</head>"
             "<body>"
             f"{rendered_html}"
@@ -146,7 +158,7 @@ class DocumentTemplateContextService(BaseService):
 
         return {
             "document": document,
-            "css": document.css_content,
+            "css": DocumentPdfService().get_css_content(document),
             "products": products,
             "created_at": created_at,
             "created_at_display": created_at.strftime("%d.%m.%Y"),

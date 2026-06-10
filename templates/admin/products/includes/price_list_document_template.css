@@ -13,8 +13,8 @@ body {
     background: #f5f6f8;
     color: #111827;
     font-family: Arial, Helvetica, sans-serif;
-    font-size: 9pt;
-    line-height: 1.35;
+    font-size: 4.5pt;
+    line-height: 1.25;
     margin: 0;
 }
 
@@ -31,7 +31,7 @@ section {
 
 .cover-kicker {
     color: #4b5563;
-    font-size: 11pt;
+    font-size: 5.5pt;
     font-weight: 700;
     letter-spacing: 0.08em;
     margin-bottom: 8mm;
@@ -40,25 +40,40 @@ section {
 
 h1 {
     color: #111827;
-    font-size: 24pt;
+    font-size: 12pt;
     line-height: 1.1;
     margin: 0 0 8mm;
 }
 
 h1[data-pdf-full-width-bar="true"] {
     background: #d9dde3;
-    font-size: 18pt;
+    font-size: 9pt;
     margin-left: -12mm;
     margin-right: -12mm;
     padding: 3mm 12mm;
 }
 
-h2 {
-    border-bottom: 1px solid #c8ced8;
+h2,
+h3 {
+    background: #e9ecef;
     color: #111827;
-    font-size: 12pt;
+    margin-left: -12mm;
+    margin-right: -12mm;
+    padding: 2.5mm 12mm;
+}
+
+h2 {
+    font-size: 6pt;
     margin: 8mm 0 3mm;
-    padding-bottom: 1.5mm;
+    margin-left: -12mm;
+    margin-right: -12mm;
+}
+
+h3 {
+    font-size: 5pt;
+    margin: 5mm 0 3mm;
+    margin-left: -12mm;
+    margin-right: -12mm;
 }
 
 p {
@@ -79,30 +94,32 @@ p {
 
 .cover-meta dt {
     color: #4b5563;
-    font-size: 7pt;
+    font-size: 3.5pt;
     font-weight: 700;
     margin: 0 0 1mm;
     text-transform: uppercase;
 }
 
 .cover-meta dd {
-    font-size: 11pt;
+    font-size: 5.5pt;
     font-weight: 700;
     margin: 0;
 }
 
 .price-list-table {
     border-collapse: collapse;
+    margin-left: auto;
+    margin-right: auto;
     margin-bottom: 6mm;
     table-layout: fixed;
-    width: 100%;
+    width: 90%;
 }
 
 .price-list-table th {
     background: #111827;
     border: 1px solid #111827;
     color: #ffffff;
-    font-size: 7pt;
+    font-size: 3.5pt;
     font-weight: 700;
     padding: 2mm 1.5mm;
     text-align: left;
@@ -111,7 +128,7 @@ p {
 
 .price-list-table td {
     border: 1px solid #d1d5db;
-    font-size: 7.5pt;
+    font-size: 3.75pt;
     padding: 1.7mm 1.5mm;
     vertical-align: top;
 }

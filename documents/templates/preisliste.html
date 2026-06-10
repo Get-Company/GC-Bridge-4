@@ -2,13 +2,13 @@
     body {
         color: #222;
         font-family: Arial, sans-serif;
-        font-size: 10px;
-        line-height: 1.35;
+        font-size: 5px;
+        line-height: 1.25;
     }
 
     .price-list-title {
         border-bottom: 1px solid #222;
-        font-size: 24px;
+        font-size: 12px;
         font-weight: 700;
         margin: 0 0 18px;
         padding-bottom: 8px;
@@ -18,25 +18,32 @@
         margin: 0 0 24px;
     }
 
-    .price-list-section h2 {
+    .price-list-section h2,
+    .price-list-section h3 {
         background: #f0f0f0;
-        font-size: 19px;
+        box-sizing: border-box;
+        color: #222;
+        display: block;
+        width: 100%;
+    }
+
+    .price-list-section h2 {
         margin: 0 0 8px;
-        padding: 9px 11px;
+        font-size: 9.5px;
+        padding: 5px 6px;
     }
 
     .price-list-section h3 {
-        border-bottom: 1px solid #ddd;
-        font-size: 15px;
+        font-size: 7.5px;
         margin: 16px 0 7px;
-        padding-bottom: 5px;
+        padding: 4px 5px;
     }
 
     .price-list-table {
         border-collapse: collapse;
-        margin: 0 0 10px;
+        margin: 0 auto 10px;
         table-layout: fixed;
-        width: 100%;
+        width: 90%;
     }
 
     .price-list-table .col-artikel-nr,
@@ -52,14 +59,14 @@
     .price-list-table th,
     .price-list-table td {
         border-bottom: 1px solid #e5e5e5;
-        padding: 5px 6px;
+        padding: 3px 4px;
         text-align: left;
         vertical-align: top;
     }
 
     .price-list-table th {
         color: #555;
-        font-size: 9px;
+        font-size: 4.5px;
         font-weight: 700;
         text-transform: uppercase;
     }
@@ -72,7 +79,7 @@
     .price-list-table .price-factor-note {
         color: #777;
         display: block;
-        font-size: 8px;
+        font-size: 4px;
         font-weight: 400;
         line-height: 1.1;
         margin-bottom: 2px;
