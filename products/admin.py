@@ -1945,7 +1945,7 @@ class PriceIncreaseAdmin(BaseAdmin):
         column_alignments: list[str],
         *,
         available_width: float,
-        width_ratio: float = 0.9,
+        width_ratio: float = 1.0,
     ) -> Table | Spacer:
         if not table_rows:
             return Spacer(1, 1)

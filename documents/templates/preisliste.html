@@ -1,7 +1,21 @@
 <style>
+    html,
+    body,
+    table,
+    th,
+    td,
+    h1,
+    h2,
+    h3,
+    p,
+    span,
+    b,
+    strong {
+        font-family: Arial, Arimo, "Liberation Sans", sans-serif;
+    }
+
     body {
         color: #222;
-        font-family: Arial, sans-serif;
         font-size: 10px;
         line-height: 1.25;
     }
@@ -44,20 +58,17 @@
 
     .price-list-table {
         border-collapse: collapse;
-        margin: 0 auto 10px;
+        margin: 0 0 10px;
         table-layout: fixed;
-        width: 90%;
+        width: 100%;
     }
 
-    .price-list-table .col-artikel-nr,
-    .price-list-table .col-artikel,
-    .price-list-table .col-attribute,
-    .price-list-table .col-vpe,
-    .price-list-table .col-preis,
-    .price-list-table .col-staffelmenge,
-    .price-list-table .col-staffelpreis {
-        width: 14.285%;
-    }
+    .price-list-table .col-artikel-nr { width: 13%; }
+    .price-list-table .col-attribute { width: 31%; }
+    .price-list-table .col-vpe { width: 10%; }
+    .price-list-table .col-preis { width: 14%; }
+    .price-list-table .col-staffelmenge { width: 16%; }
+    .price-list-table .col-staffelpreis { width: 16%; }
 
     .price-list-table th,
     .price-list-table td {
@@ -73,7 +84,7 @@
 
     .price-list-table th {
         color: #555;
-        font-size: 11px;
+        font-size: 10px;
         font-weight: 700;
         text-transform: uppercase;
     }
@@ -118,7 +129,6 @@
                 <table class="price-list-table">
                     <colgroup>
                         <col class="col-artikel-nr">
-                        <col class="col-artikel">
                         <col class="col-attribute">
                         <col class="col-vpe">
                         <col class="col-preis">
@@ -128,7 +138,6 @@
                     <thead>
                         <tr>
                             <th>Artikelnr</th>
-                            <th>Artikel</th>
                             <th>Attribute</th>
                             <th>VPE</th>
                             <th class="number">Preis</th>
@@ -140,7 +149,6 @@
                         {% for row in section.direct_rows %}
                             <tr class="tr-row">
                                 <td>{{ row.erp_nr|default("-") }}</td>
-                                <td>{{ row.name|default("Ohne Bezeichnung") }}</td>
                                 <td>
                                     {% if row.attributes %}
                                         {% for attribute in row.attributes %}
@@ -165,7 +173,6 @@
                 <table class="price-list-table">
                     <colgroup>
                         <col class="col-artikel-nr">
-                        <col class="col-artikel">
                         <col class="col-attribute">
                         <col class="col-vpe">
                         <col class="col-preis">
@@ -175,7 +182,6 @@
                     <thead>
                         <tr>
                             <th>Artikelnr</th>
-                            <th>Artikel</th>
                             <th>Attribute</th>
                             <th>VPE</th>
                             <th class="number">Preis</th>
@@ -188,7 +194,6 @@
                             {% for row in group.rows %}
                                 <tr>
                                     <td>{{ row.erp_nr|default("-") }}</td>
-                                    <td>{{ row.name|default("Ohne Bezeichnung") }}</td>
                                     <td>
                                         {% if row.attributes %}
                                             {% for attribute in row.attributes %}
@@ -206,7 +211,7 @@
                             {% endfor %}
                         {% else %}
                             <tr>
-                                <td class="muted" colspan="7">Keine Produkte in dieser Kategorie vorhanden.</td>
+                                <td class="muted" colspan="6">Keine Produkte in dieser Kategorie vorhanden.</td>
                             </tr>
                         {% endif %}
                     </tbody>

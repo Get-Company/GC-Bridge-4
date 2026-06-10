@@ -19,7 +19,6 @@ Wichtige Kontextvariablen:
 - group.category_name
 - group.rows
 - row.erp_nr
-- row.product_name
 - row.attributes
 - row.vpe_display
 - row.price_display
@@ -75,8 +74,7 @@ Wichtige Kontextvariablen:
                     <thead>
                         <tr>
                             <th data-width="68">Artikelnr</th>
-                            <th data-width="116">Produkt</th>
-                            <th data-width="160">Attribute</th>
+                            <th data-width="276">Attribute</th>
                             <th data-width="58">VPE</th>
                             <th data-width="68" data-align="right">Preis</th>
                             <th data-width="70" data-align="right">Staffelmenge</th>
@@ -87,7 +85,6 @@ Wichtige Kontextvariablen:
                         {% for row in group.rows %}
                             <tr>
                                 <td>{{ row.erp_nr }}</td>
-                                <td>{{ row.product_name|default:"-" }}</td>
                                 <td>{{ row.attributes|safe }}</td>
                                 <td>{{ row.vpe_display|safe }}</td>
                                 <td data-align="right">{{ row.price_display }}</td>
@@ -97,7 +94,7 @@ Wichtige Kontextvariablen:
                         {% empty %}
                             <tr>
                                 <td>-</td>
-                                <td colspan="2">Keine aktiven Produkte fuer diese Kategorie vorhanden.</td>
+                                <td>Keine aktiven Produkte fuer diese Kategorie vorhanden.</td>
                                 <td>-</td>
                                 <td data-align="right">-</td>
                                 <td data-align="right">-</td>
