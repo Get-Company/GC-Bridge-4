@@ -84,7 +84,7 @@ class DocumentTemplateContextService(BaseService):
     model = Document
 
     def _product_to_row(self, product) -> dict:
-        price_obj = product.prices.order_by("price").first()
+        price_obj = product.prices.filter(sales_channel__is_default=True).first()
         price = price_obj.price if price_obj else None
         rebate_price = price_obj.rebate_price if price_obj else None
         factor = product.factor or 1

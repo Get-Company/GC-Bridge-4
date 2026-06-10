@@ -25,3 +25,4 @@ database.sql
 /.claude-flow/security/
 /.claude-flow/swarm/
 /graphify-out
+/Dokumente/*.pdf

@@ -68,6 +68,7 @@ from unfold.views import UnfoldModelAdminViewMixin
 
 from core.admin import BaseAdmin, BaseStackedInline, BaseTabularInline
 from core.admin_utils import log_admin_change
+from documents.models import Document
 from mappei.models import MappeiPriceSnapshot, MappeiProductMapping
 from shopware.models import ShopwareSettings
 from .services import PriceIncreaseService
@@ -171,8 +172,16 @@ class PriceInline(BaseTabularInline):
         "special_active",
         "rebate_quantity",
         "rebate_price",
+        "history_link",
     )
-    readonly_fields = BaseTabularInline.readonly_fields + ("special_price", "special_active")
+    readonly_fields = BaseTabularInline.readonly_fields + ("special_price", "special_active", "history_link")
+
+    @admin.display(description="Verlauf")
+    def history_link(self, obj: Price):
+        if not obj.pk:
+            return "-"
+        url = reverse("admin:products_price_change", args=[obj.pk])
+        return format_html('<a href="{}#pricehistory_set-group">Verlauf</a>', url)
 
     def get_queryset(self, request):
         queryset = super().get_queryset(request)
@@ -2121,6 +2130,18 @@ class PriceIncreaseAdmin(BaseAdmin):
             child_index += 1
         return elements
 
+    def _render_document(
+        self,
+        *,
+        slug: str,
+        fallback_template_name: str,
+        context: dict,
+    ) -> str:
+        document = Document.objects.filter(slug=slug, is_active=True).first()
+        if document:
+            return document.render(context)
+        return render_to_string(fallback_template_name, context)
+
     def _build_price_list_pdf(
         self,
         *,
@@ -2135,7 +2156,11 @@ class PriceIncreaseAdmin(BaseAdmin):
             rows=rows,
             scope_label=scope_label,
         )
-        html = render_to_string(self.price_list_pdf_template_name, context)
+        html = self._render_document(
+            slug=Document.Slug.PRICE_LIST,
+            fallback_template_name=self.price_list_pdf_template_name,
+            context=context,
+        )
         soup = BeautifulSoup(html, "html.parser")
 
         cover_pdf = self._load_optional_pdf_asset(self.price_list_cover_pdf_path)
@@ -2993,7 +3018,11 @@ class PriceIncreaseAdmin(BaseAdmin):
             rows=rows,
             scope_label=scope_label,
         )
-        html_string = render_to_string(self.order_form_pdf_template_name, context)
+        html_string = self._render_document(
+            slug=Document.Slug.ORDER_FORM,
+            fallback_template_name=self.order_form_pdf_template_name,
+            context=context,
+        )
         pdf_bytes = WeasyHTML(string=html_string).write_pdf()
 
         filename_title = slugify(price_increase.title) or f"preiserhoehung-{price_increase.pk}"

@@ -2,11 +2,13 @@ import tempfile
 
 from django.contrib.admin.sites import AdminSite
 from django.core.files.base import ContentFile
-from django.test import SimpleTestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
 
 from documents.admin import DocumentAdmin
+from documents.jinja2_env import price_list_catalog_sections
 from documents.models import Document
 from documents.services import DocumentPdfService
+from products.models import Category, Price, Product, ProductProperty, PropertyGroup, PropertyValue
 
 
 class DocumentRenderingTest(SimpleTestCase):
@@ -62,6 +64,46 @@ class DocumentRenderingTest(SimpleTestCase):
         media = str(admin_instance.media)
         self.assertIn("documents/admin/document_editor.css", media)
         self.assertIn("documents/admin/document_editor.js", media)
+
+
+class DocumentPriceListCatalogSectionsTest(TestCase):
+    def test_price_list_catalog_sections_prefetches_rows_and_formats_missing_values(self):
+        root = Category.objects.create(name="Ordner", slug="ordner", sort_order=10)
+        child = Category.objects.create(name="Hebelordner", slug="hebelordner", parent=root, sort_order=20)
+        product = Product.objects.create(erp_nr="A-1000", name="", unit="", factor=None)
+        product.categories.add(child)
+
+        sections = price_list_catalog_sections(root_level=0)
+
+        self.assertEqual(len(sections), 1)
+        self.assertEqual(sections[0]["name"], "Ordner")
+        self.assertEqual(sections[0]["groups"][0]["name"], "Hebelordner")
+        row = sections[0]["groups"][0]["rows"][0]
+        self.assertEqual(row["erp_nr"], "A-1000")
+        self.assertEqual(row["name"], "Ohne Bezeichnung")
+        self.assertEqual(row["attributes"], [])
+        self.assertEqual(row["vpe_display"], "-")
+        self.assertEqual(row["price_display"], "-")
+        self.assertEqual(row["rebate_quantity_display"], "-")
+        self.assertEqual(row["rebate_price_display"], "-")
+
+    def test_price_list_catalog_sections_includes_price_and_attributes(self):
+        root = Category.objects.create(name="Papier", slug="papier", sort_order=10)
+        product = Product.objects.create(erp_nr="A-2000", name="Kopierpapier", unit="Pack", factor=5)
+        product.categories.add(root)
+        group = PropertyGroup.objects.create(name="Farbe")
+        value = PropertyValue.objects.create(group=group, name="Weiss")
+        ProductProperty.objects.create(product=product, value=value)
+        Price.objects.create(product=product, price="12.50", rebate_quantity=10, rebate_price="11.00")
+
+        sections = price_list_catalog_sections(root_level=0)
+
+        row = sections[0]["direct_rows"][0]
+        self.assertEqual(row["attributes"], [{"group": "Farbe", "value": "Weiss"}])
+        self.assertEqual(row["vpe_display"], "5 Pack")
+        self.assertEqual(row["price_display"], "12,50 EUR")
+        self.assertEqual(row["rebate_quantity_display"], "10")
+        self.assertEqual(row["rebate_price_display"], "11,00 EUR")
 
 
 class DocumentPdfServiceTest(SimpleTestCase):

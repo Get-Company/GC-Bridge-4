@@ -153,6 +153,7 @@ INSTALLED_APPS = [
     'microtech.apps.MicrotechConfig',
     'mappei.apps.MappeiConfig',
     'hr.apps.HrConfig',
+    'organization.apps.OrganizationConfig',
 ]
 
 MIDDLEWARE = [
@@ -733,6 +734,31 @@ UNFOLD = {
                         "icon": "event_busy",
                         "link": reverse_lazy("admin:hr_companyholiday_changelist"),
                         "permission": sidebar_model_view_permission("hr", "CompanyHoliday"),
+                    },
+                ],
+            },
+            {
+                "title": _("Organisation"),
+                "separator": True,
+                "collapsible": True,
+                "items": [
+                    {
+                        "title": _("Firmendaten"),
+                        "icon": "business",
+                        "link": reverse_lazy("admin:organization_companyprofile_changelist"),
+                        "permission": sidebar_model_view_permission("organization", "CompanyProfile"),
+                    },
+                    {
+                        "title": _("Ansprechpartner"),
+                        "icon": "contact_phone",
+                        "link": reverse_lazy("admin:organization_organizationcontact_changelist"),
+                        "permission": sidebar_model_view_permission("organization", "OrganizationContact"),
+                    },
+                    {
+                        "title": _("Rollen"),
+                        "icon": "assignment_ind",
+                        "link": reverse_lazy("admin:organization_organizationrole_changelist"),
+                        "permission": sidebar_model_view_permission("organization", "OrganizationRole"),
                     },
                 ],
             },

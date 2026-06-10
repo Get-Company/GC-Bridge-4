@@ -30,6 +30,7 @@ from products.admin import (
 )
 from core.admin_utils import log_admin_change
 from mappei.models import MappeiPriceSnapshot, MappeiProduct, MappeiProductMapping
+from documents.models import Document
 from products.management.commands.import_legacy_product_properties import Command as ImportLegacyProductPropertiesCommand
 from products.management.commands.scheduled_product_sync import Command as ScheduledProductSyncCommand
 from products.models import (
@@ -131,6 +132,53 @@ class PriceIncreasePdfHtmlCleanupTest(SimpleTestCase):
         self.assertNotIn("</br>", cleaned)
         self.assertIn("<br/>", cleaned)
         self.assertIn("<b>viel Zubeh", cleaned)
+
+
+class PriceIncreaseDocumentRenderingTest(SimpleTestCase):
+    @patch("products.admin.render_to_string")
+    @patch("products.admin.Document.objects")
+    def test_price_increase_admin_falls_back_to_file_template_when_no_db_template(
+        self,
+        document_manager,
+        render_to_string_mock,
+    ):
+        document_manager.filter.return_value.first.return_value = None
+        render_to_string_mock.return_value = "<section>Fallback</section>"
+        admin_instance = PriceIncreaseAdmin(PriceIncrease, AdminSite())
+        context = {"title": "Fallback-Test"}
+
+        rendered = admin_instance._render_document(
+            slug=Document.Slug.PRICE_LIST,
+            fallback_template_name="admin/products/price_list_pdf.html",
+            context=context,
+        )
+
+        self.assertEqual(rendered, "<section>Fallback</section>")
+        document_manager.filter.assert_called_once_with(slug=Document.Slug.PRICE_LIST, is_active=True)
+        render_to_string_mock.assert_called_once_with("admin/products/price_list_pdf.html", context)
+
+    @patch("products.admin.render_to_string")
+    @patch("products.admin.Document.objects")
+    def test_price_increase_admin_renders_db_document_when_present(
+        self,
+        document_manager,
+        render_to_string_mock,
+    ):
+        document = Mock()
+        document.render.return_value = "<section>Aus Datenbank</section>"
+        document_manager.filter.return_value.first.return_value = document
+        admin_instance = PriceIncreaseAdmin(PriceIncrease, AdminSite())
+        context = {"title": "DB-Test"}
+
+        rendered = admin_instance._render_document(
+            slug=Document.Slug.ORDER_FORM,
+            fallback_template_name="admin/products/includes/order_form.html",
+            context=context,
+        )
+
+        self.assertEqual(rendered, "<section>Aus Datenbank</section>")
+        document.render.assert_called_once_with(context)
+        render_to_string_mock.assert_not_called()
 
 
 class ProductCeleryTaskTest(SimpleTestCase):

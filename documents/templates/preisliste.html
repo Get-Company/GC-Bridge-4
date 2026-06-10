@@ -1,10 +1,164 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>$Title$</title>
-</head>
-<body>
-$END$
-</body>
-</html>
+<style>
+    body {
+        color: #222;
+        font-family: Arial, sans-serif;
+        font-size: 10px;
+        line-height: 1.35;
+    }
+
+    .price-list-title {
+        border-bottom: 1px solid #222;
+        font-size: 24px;
+        font-weight: 700;
+        margin: 0 0 18px;
+        padding-bottom: 8px;
+    }
+
+    .price-list-section {
+        margin: 0 0 24px;
+    }
+
+    .price-list-section h2 {
+        background: #f0f0f0;
+        font-size: 15px;
+        margin: 0 0 8px;
+        padding: 7px 9px;
+    }
+
+    .price-list-section h3 {
+        border-bottom: 1px solid #ddd;
+        font-size: 12px;
+        margin: 14px 0 6px;
+        padding-bottom: 4px;
+    }
+
+    .price-list-table {
+        border-collapse: collapse;
+        margin: 0 0 10px;
+        width: 100%;
+    }
+
+    .price-list-table th,
+    .price-list-table td {
+        border-bottom: 1px solid #e5e5e5;
+        padding: 5px 6px;
+        text-align: left;
+        vertical-align: top;
+    }
+
+    .price-list-table th {
+        color: #555;
+        font-size: 9px;
+        font-weight: 700;
+        text-transform: uppercase;
+    }
+
+    .price-list-table .number {
+        text-align: right;
+        white-space: nowrap;
+    }
+
+    .price-list-table .muted {
+        color: #777;
+    }
+
+</style>
+
+{% set sections = price_list_catalog_sections() %}
+
+<h1 class="price-list-title">{{ document.title|default("Preisliste") }}</h1>
+
+{% if sections %}
+    {% for section in sections %}
+        <section class="price-list-section">
+            <h2>{{ section.name|default("Ohne Kategoriebezeichnung") }}</h2>
+
+            {% if section.direct_rows %}
+                <table class="price-list-table">
+                    <thead>
+                        <tr>
+                            <th>Artikelnr</th>
+                            <th>Artikel</th>
+                            <th>Attribute</th>
+                            <th>VPE</th>
+                            <th class="number">Preis</th>
+                            <th class="number">Staffelmenge</th>
+                            <th class="number">Staffelpreis</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in section.direct_rows %}
+                            <tr>
+                                <td>{{ row.erp_nr|default("-") }}</td>
+                                <td>{{ row.name|default("Ohne Bezeichnung") }}</td>
+                                <td>
+                                    {% if row.attributes %}
+                                        {% for attribute in row.attributes %}
+                                            {% if attribute.group %}<b>{{ attribute.group }}:</b> {% endif %}{{ attribute.value }}<br/>
+                                        {% endfor %}
+                                    {% else %}
+                                        <span class="muted">-</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ row.vpe_display|default("-") }}</td>
+                                <td class="number">{{ row.price_display|default("-") }}</td>
+                                <td class="number">{{ row.rebate_quantity_display|default("-") }}</td>
+                                <td class="number">{{ row.rebate_price_display|default("-") }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% endif %}
+
+            {% for group in section.groups %}
+                <h3>{{ group.name|default("Ohne Kategoriebezeichnung") }}</h3>
+                <table class="price-list-table">
+                    <thead>
+                        <tr>
+                            <th>Artikelnr</th>
+                            <th>Artikel</th>
+                            <th>Attribute</th>
+                            <th>VPE</th>
+                            <th class="number">Preis</th>
+                            <th class="number">Staffelmenge</th>
+                            <th class="number">Staffelpreis</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if group.rows %}
+                            {% for row in group.rows %}
+                                <tr>
+                                    <td>{{ row.erp_nr|default("-") }}</td>
+                                    <td>{{ row.name|default("Ohne Bezeichnung") }}</td>
+                                    <td>
+                                        {% if row.attributes %}
+                                            {% for attribute in row.attributes %}
+                                                {% if attribute.group %}<b>{{ attribute.group }}:</b> {% endif %}{{ attribute.value }}<br/>
+                                            {% endfor %}
+                                        {% else %}
+                                            <span class="muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ row.vpe_display|default("-") }}</td>
+                                    <td class="number">{{ row.price_display|default("-") }}</td>
+                                    <td class="number">{{ row.rebate_quantity_display|default("-") }}</td>
+                                    <td class="number">{{ row.rebate_price_display|default("-") }}</td>
+                                </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td class="muted" colspan="7">Keine Produkte in dieser Kategorie vorhanden.</td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            {% endfor %}
+
+            {% if not section.direct_rows and not section.groups %}
+                <p class="muted">Keine Produkte in dieser Kategorie vorhanden.</p>
+            {% endif %}
+        </section>
+    {% endfor %}
+{% else %}
+    <p class="muted">Keine Kategorien fuer die Preisliste vorhanden.</p>
+{% endif %}
