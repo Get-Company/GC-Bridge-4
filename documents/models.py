@@ -89,6 +89,14 @@ class Document(BaseModel):
         verbose_name=_("Jinja2-Engine"),
         help_text=_("Jinja2 erlaubt DB-Zugriff im Template, z. B. Product.objects.get(erp_nr='123')."),
     )
+    shopware_media_id = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        editable=False,
+        verbose_name=_("Shopware Media-ID"),
+        help_text=_("Wird beim Hochladen automatisch gesetzt und identifiziert die Datei dauerhaft in Shopware."),
+    )
 
     class Meta:
         verbose_name = _("Dokument")

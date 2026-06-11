@@ -65,6 +65,7 @@ class DocumentAdmin(BaseAdmin):
         "pdf_download_link",
         "cover_pdf_preview",
         "end_pdf_preview",
+        "shopware_media_id",
     )
     actions = ("generate_pdf",)
     actions_detail = (
@@ -73,6 +74,7 @@ class DocumentAdmin(BaseAdmin):
             "icon": "more_vert",
             "items": [
                 "generate_pdf_detail",
+                "upload_to_shopware_detail",
                 "preview_template_detail",
             ],
         },
@@ -122,6 +124,7 @@ class DocumentAdmin(BaseAdmin):
                     "cover_pdf_preview",
                     "end_pdf",
                     "end_pdf_preview",
+                    "shopware_media_id",
                 ),
                 "classes": ("tab",),
             },
@@ -335,4 +338,22 @@ class DocumentAdmin(BaseAdmin):
             return HttpResponseRedirect(reverse("admin:documents_document_changelist"))
         DocumentPdfService().generate_pdf(document)
         self.message_user(request, "PDF-Datei im Verzeichnis Dokumente gespeichert.")
+        return HttpResponseRedirect(reverse("admin:documents_document_change", args=(object_id,)))
+
+    @action(
+        description="Hochladen",
+        icon="cloud_upload",
+        variant=ActionVariant.WARNING,
+    )
+    def upload_to_shopware_detail(self, request, object_id: str):
+        from documents.shopware_upload_service import DocumentShopwareUploadService
+        document = self.get_object(request, object_id)
+        if not document:
+            self.message_user(request, "Dokument nicht gefunden.", level=messages.ERROR)
+            return HttpResponseRedirect(reverse("admin:documents_document_changelist"))
+        try:
+            media_id = DocumentShopwareUploadService().upload_pdf(document)
+            self.message_user(request, f"PDF erfolgreich zu Shopware hochgeladen (Media-ID: {media_id}).")
+        except Exception as exc:
+            self.message_user(request, f"Shopware-Upload fehlgeschlagen: {exc}", level=messages.ERROR)
         return HttpResponseRedirect(reverse("admin:documents_document_change", args=(object_id,)))

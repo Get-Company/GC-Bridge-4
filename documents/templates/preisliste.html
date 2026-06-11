@@ -1,92 +1,95 @@
 <style>
-    html,
-    body,
-    table,
-    th,
-    td,
-    h1,
-    h2,
-    h3,
-    p,
-    span,
-    b,
-    strong {
+    @page {
+        size: A4 portrait;
+        margin: 12mm 14mm 18mm;
+
+        @bottom-center {
+            content: "Seite " counter(page) " von " counter(pages);
+            font-family: Arial, Arimo, "Liberation Sans", sans-serif;
+            font-size: 8px;
+            color: #888;
+        }
+    }
+
+    html, body,
+    table, th, td,
+    h1, h2, h3, p, span, b, strong {
         font-family: Arial, Arimo, "Liberation Sans", sans-serif;
     }
 
     body {
         color: #222;
-        font-size: 10px;
-        line-height: 1.25;
-    }
-    .tr-row{
-        font-size: 10px;
+        font-size: 9px;
+        line-height: 1.3;
+        margin: 0;
     }
 
     .price-list-title {
-        border-bottom: 1px solid #222;
-        font-size: 30px;
+        border-bottom: 2px solid #222;
+        font-size: 22px;
         font-weight: 700;
-        margin: 0 0 18px;
-        padding-bottom: 8px;
+        margin: 0 0 14px;
+        padding-bottom: 6px;
     }
 
     .price-list-section {
-        margin: 0 0 24px;
-    }
-
-    .price-list-section h2,
-    .price-list-section h3 {
-        background: #f0f0f0;
-        box-sizing: border-box;
-        color: #222;
-        display: block;
-        width: 100%;
+        margin: 0 0 20px;
     }
 
     .price-list-section h2 {
-        margin: 0 0 8px;
-        font-size: 25px;
-        padding: 5px 6px;
+        background: #e0e0e0;
+        color: #111;
+        font-size: 13px;
+        font-weight: 700;
+        margin: 0 0 6px;
+        padding: 4px 6px;
     }
 
     .price-list-section h3 {
-        font-size: 16px;
-        margin: 16px 0 7px;
-        padding: 4px 5px;
+        background: #f0f0f0;
+        color: #333;
+        font-size: 10px;
+        font-weight: 700;
+        margin: 10px 0 4px;
+        padding: 3px 6px;
     }
 
     .price-list-table {
         border-collapse: collapse;
-        margin: 0 0 10px;
+        margin: 0 0 8px;
         table-layout: fixed;
         width: 100%;
     }
 
-    .price-list-table .col-artikel-nr { width: 13%; }
-    .price-list-table .col-attribute { width: 31%; }
-    .price-list-table .col-vpe { width: 10%; }
-    .price-list-table .col-preis { width: 14%; }
-    .price-list-table .col-staffelmenge { width: 16%; }
-    .price-list-table .col-staffelpreis { width: 16%; }
+    .price-list-table .col-name        { width: 46%; }
+    .price-list-table .col-vpe         { width: 12%; }
+    .price-list-table .col-preis       { width: 18%; }
+    .price-list-table .col-staffelmenge { width: 11%; }
+    .price-list-table .col-staffelpreis { width: 13%; }
 
-    .price-list-table th,
-    .price-list-table td {
-        border-bottom: 1px solid #e5e5e5;
+    .price-list-table th {
+        background: #e0e0e0;
+        color: #333;
+        font-size: 8px;
+        font-weight: 700;
         padding: 3px 4px;
         text-align: left;
+        text-transform: uppercase;
+    }
+
+    .price-list-table td {
+        border-bottom: 1px solid #ddd;
+        font-size: 9px;
+        padding: 3px 4px;
         vertical-align: top;
     }
 
-    .price-list-table td {
-        font-size: 10px;
+    .price-list-table tbody tr {
+        break-inside: avoid;
     }
 
-    .price-list-table th {
-        color: #555;
-        font-size: 10px;
-        font-weight: 700;
-        text-transform: uppercase;
+    .price-list-table tbody tr:nth-child(even) td {
+        background: #f9f9f9;
     }
 
     .price-list-table .number {
@@ -94,26 +97,34 @@
         white-space: nowrap;
     }
 
-    .price-list-table .price-factor-note {
-        color: #777;
+    .price-factor-note {
+        color: #888;
         display: block;
-        font-size: 10px;
-        font-weight: 400;
+        font-size: 8px;
         line-height: 1.1;
-        margin-bottom: 2px;
+        margin-bottom: 1px;
     }
 
-    .price-list-table .muted {
-        color: #777;
+    .product-name {
+        font-weight: 600;
     }
 
+    .attr-line {
+        color: #444;
+        display: block;
+        font-size: 8px;
+    }
+
+    .muted {
+        color: #999;
+    }
 </style>
 
 {% set sections = price_list_catalog_sections() %}
 
 {% macro price_cell(row, price_display) -%}
-    {% if row.factor %}
-        <span class="price-factor-note">Preis pro {{ row.factor }} St.</span>
+    {% if row.factor and row.factor != 1 %}
+        <span class="price-factor-note">je {{ row.factor }} St.</span>
     {% endif %}
     {{ price_display|default("-") }}
 {%- endmacro %}
@@ -123,13 +134,12 @@
 {% if sections %}
     {% for section in sections %}
         <section class="price-list-section">
-
             <h2>{{ section.name|default("Ohne Kategoriebezeichnung") }}</h2>
+
             {% if section.direct_rows %}
                 <table class="price-list-table">
                     <colgroup>
-                        <col class="col-artikel-nr">
-                        <col class="col-attribute">
+                        <col class="col-name">
                         <col class="col-vpe">
                         <col class="col-preis">
                         <col class="col-staffelmenge">
@@ -137,8 +147,7 @@
                     </colgroup>
                     <thead>
                         <tr>
-                            <th>Artikelnr</th>
-                            <th>Attribute</th>
+                            <th>Bezeichnung</th>
                             <th>VPE</th>
                             <th class="number">Preis</th>
                             <th class="number">Staffelmenge</th>
@@ -147,16 +156,12 @@
                     </thead>
                     <tbody>
                         {% for row in section.direct_rows %}
-                            <tr class="tr-row">
-                                <td>{{ row.erp_nr|default("-") }}</td>
+                            <tr>
                                 <td>
-                                    {% if row.attributes %}
-                                        {% for attribute in row.attributes %}
-                                            {% if attribute.group %}<b>{{ attribute.group }}:</b> {% endif %}{{ attribute.value }}<br/>
-                                        {% endfor %}
-                                    {% else %}
-                                        <span class="muted">-</span>
-                                    {% endif %}
+                                    <span class="product-name">{{ row.name }}</span>
+                                    {% for attribute in row.attributes %}
+                                        <span class="attr-line">{% if attribute.group %}<b>{{ attribute.group }}:</b> {% endif %}{{ attribute.value }}</span>
+                                    {% endfor %}
                                 </td>
                                 <td>{{ row.vpe_display|default("-") }}</td>
                                 <td class="number">{{ price_cell(row, row.price_display) }}</td>
@@ -169,11 +174,11 @@
             {% endif %}
 
             {% for group in section.groups %}
+                {% if group.rows %}
                 <h3>{{ group.name|default("Ohne Kategoriebezeichnung") }}</h3>
                 <table class="price-list-table">
                     <colgroup>
-                        <col class="col-artikel-nr">
-                        <col class="col-attribute">
+                        <col class="col-name">
                         <col class="col-vpe">
                         <col class="col-preis">
                         <col class="col-staffelmenge">
@@ -181,8 +186,7 @@
                     </colgroup>
                     <thead>
                         <tr>
-                            <th>Artikelnr</th>
-                            <th>Attribute</th>
+                            <th>Bezeichnung</th>
                             <th>VPE</th>
                             <th class="number">Preis</th>
                             <th class="number">Staffelmenge</th>
@@ -190,39 +194,27 @@
                         </tr>
                     </thead>
                     <tbody>
-                        {% if group.rows %}
-                            {% for row in group.rows %}
-                                <tr>
-                                    <td>{{ row.erp_nr|default("-") }}</td>
-                                    <td>
-                                        {% if row.attributes %}
-                                            {% for attribute in row.attributes %}
-                                                {% if attribute.group %}<b>{{ attribute.group }}:</b> {% endif %}{{ attribute.value }}<br/>
-                                            {% endfor %}
-                                        {% else %}
-                                            <span class="muted">-</span>
-                                        {% endif %}
-                                    </td>
-                                    <td>{{ row.vpe_display|default("-") }}</td>
-                                    <td class="number">{{ price_cell(row, row.price_display) }}</td>
-                                    <td class="number">{{ row.rebate_quantity_display|default("-") }}</td>
-                                    <td class="number">{{ price_cell(row, row.rebate_price_display) }}</td>
-                                </tr>
-                            {% endfor %}
-                        {% else %}
+                        {% for row in group.rows %}
                             <tr>
-                                <td class="muted" colspan="6">Keine Produkte in dieser Kategorie vorhanden.</td>
+                                <td>
+                                    <span class="product-name">{{ row.name }}</span>
+                                    {% for attribute in row.attributes %}
+                                        <span class="attr-line">{% if attribute.group %}<b>{{ attribute.group }}:</b> {% endif %}{{ attribute.value }}</span>
+                                    {% endfor %}
+                                </td>
+                                <td>{{ row.vpe_display|default("-") }}</td>
+                                <td class="number">{{ price_cell(row, row.price_display) }}</td>
+                                <td class="number">{{ row.rebate_quantity_display|default("-") }}</td>
+                                <td class="number">{{ price_cell(row, row.rebate_price_display) }}</td>
                             </tr>
-                        {% endif %}
+                        {% endfor %}
                     </tbody>
                 </table>
+                {% endif %}
             {% endfor %}
 
-            {% if not section.direct_rows and not section.groups %}
-                <p class="muted">Keine Produkte in dieser Kategorie vorhanden.</p>
-            {% endif %}
         </section>
     {% endfor %}
 {% else %}
-    <p class="muted">Keine Kategorien fuer die Preisliste vorhanden.</p>
+    <p class="muted">Keine Kategorien vorhanden.</p>
 {% endif %}
