@@ -65,7 +65,7 @@ class Shopware6Service(ShopwareBaseService):
         else:
             raise ValueError(f"Unsupported grant type: {self.grant_type}")
 
-        response = self.request("POST", "/api/oauth/token", payload=payload, require_auth=False)
+        response = self.request("POST", "/oauth/token", payload=payload, require_auth=False)
         token = response.get("access_token") if isinstance(response, dict) else None
         if not token:
             raise RuntimeError("Failed to obtain Shopware access token.")
