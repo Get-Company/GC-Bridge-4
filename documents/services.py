@@ -17,7 +17,8 @@ class DocumentPdfService(BaseService):
     default_price_list_css_path = Path("templates/admin/products/includes/price_list_document_template.css")
 
     def get_output_dir(self) -> Path:
-        return Path(getattr(settings, "DOCUMENT_PDF_ROOT", settings.BASE_DIR / "Dokumente"))
+        default = Path(settings.MEDIA_ROOT) / "documents"
+        return Path(getattr(settings, "DOCUMENT_PDF_ROOT", default))
 
     def get_pdf_path(self, document: Document) -> Path | None:
         if not document.pdf_filename:
