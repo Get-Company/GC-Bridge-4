@@ -42,7 +42,8 @@ class DocumentShopwareUploadService(Shopware6Service):
             data=pdf_path.read_bytes(),
             headers={
                 "Authorization": f"Bearer {self.access_token}",
-                "Content-Type": "application/pdf",
+                "Content-Type": "application/octet-stream",
+                "Accept": "application/json",
             },
             method="POST",
         )
