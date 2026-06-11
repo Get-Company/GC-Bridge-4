@@ -29,7 +29,10 @@ class DocumentShopwareUploadService(Shopware6Service):
             self.access_token = self.authenticate()
 
         # Create or ensure the media entity exists (idempotent)
-        self.request("POST", "/media", payload={"id": media_id})
+        self.request("POST", "/media", payload={
+            "id": media_id,
+            "mediaFolderId": "d6460afa064f4c8196ed5bd0f6ccbcb5",
+        })
 
         # Upload binary PDF — overwrites existing file on same media_id
         file_name = pdf_path.stem
