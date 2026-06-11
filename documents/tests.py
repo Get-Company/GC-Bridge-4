@@ -1,4 +1,6 @@
 import tempfile
+from pathlib import Path
+from unittest.mock import MagicMock
 
 from django.contrib.admin.sites import AdminSite
 from django.core.files.base import ContentFile
@@ -7,6 +9,7 @@ from django.test import SimpleTestCase, TestCase, override_settings
 from documents.admin import DocumentAdmin
 from documents.jinja2_env import price_list_catalog_sections
 from documents.models import Document
+from documents.shopware_upload_service import DocumentShopwareUploadService
 from documents.services import DocumentPdfService
 from products.models import Category, Price, Product, ProductProperty, PropertyGroup, PropertyValue
 
@@ -149,3 +152,62 @@ class DocumentPdfServiceTest(SimpleTestCase):
         html = DocumentPdfService().build_pdf_html(document)
 
         self.assertIn("font-family: Arial, Helvetica, sans-serif", html)
+
+
+class DocumentShopwareUploadServiceTest(SimpleTestCase):
+    def test_upload_pdf_reuses_existing_shopware_media_id(self):
+        with tempfile.TemporaryDirectory() as tmpdir, override_settings(DOCUMENT_PDF_ROOT=tmpdir):
+            Path(tmpdir, "agb.pdf").write_bytes(b"%PDF-1.4")
+            document = Document(
+                slug="agb",
+                title="AGB",
+                pdf_filename="agb.pdf",
+                shopware_media_id="existing-media-id",
+            )
+            document.save = MagicMock()
+            service = DocumentShopwareUploadService.__new__(DocumentShopwareUploadService)
+            service.access_token = "token"
+            service.request = MagicMock()
+            service.delete_conflicting_media_by_filename = MagicMock(return_value=0)
+            service._upload_pdf_file = MagicMock()
+
+            media_id = DocumentShopwareUploadService.upload_pdf(service, document)
+
+            self.assertEqual(media_id, "existing-media-id")
+            service.request.assert_called_once_with(
+                "POST",
+                "/media",
+                payload={
+                    "id": "existing-media-id",
+                    "mediaFolderId": "d6460afa064f4c8196ed5bd0f6ccbcb5",
+                },
+            )
+            service.delete_conflicting_media_by_filename.assert_called_once_with(
+                file_name="agb",
+                extension="pdf",
+                exclude_media_id="existing-media-id",
+            )
+            service._upload_pdf_file.assert_called_once()
+            document.save.assert_called_once_with(update_fields=["shopware_media_id", "updated_at"])
+
+    def test_upload_pdf_retries_after_duplicate_filename_conflict(self):
+        with tempfile.TemporaryDirectory() as tmpdir, override_settings(DOCUMENT_PDF_ROOT=tmpdir):
+            Path(tmpdir, "agb.pdf").write_bytes(b"%PDF-1.4")
+            document = Document(slug="agb", title="AGB", pdf_filename="agb.pdf")
+            document.save = MagicMock()
+            service = DocumentShopwareUploadService.__new__(DocumentShopwareUploadService)
+            service.access_token = "token"
+            service.request = MagicMock()
+            service.delete_conflicting_media_by_filename = MagicMock(return_value=1)
+            service._upload_pdf_file = MagicMock(
+                side_effect=[
+                    RuntimeError("Shopware Media-Upload fehlgeschlagen (400): CONTENT__MEDIA_DUPLICATED_FILE_NAME"),
+                    None,
+                ]
+            )
+
+            media_id = DocumentShopwareUploadService.upload_pdf(service, document)
+
+            self.assertEqual(media_id, DocumentShopwareUploadService.build_media_id(document))
+            self.assertEqual(service.delete_conflicting_media_by_filename.call_count, 2)
+            self.assertEqual(service._upload_pdf_file.call_count, 2)
