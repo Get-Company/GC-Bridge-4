@@ -222,12 +222,15 @@ class CalendarService(BaseService):
         employees=None,
     ) -> list[dict[str, str]]:
         access_service = AccessService()
-        employee_queryset = employees or access_service.get_visible_employee_queryset(user)
+        employee_queryset = (
+            employees if employees is not None else access_service.get_visible_employee_queryset(user)
+        )
+        leave_employee_queryset = self.get_calendar_leave_employee_queryset()
         events = []
         events.extend(self.get_public_holiday_events(start_date, end_date, employees=employee_queryset))
         events.extend(self.get_school_holiday_events(start_date, end_date, employees=employee_queryset))
         events.extend(self.get_company_holiday_events(start_date, end_date))
-        events.extend(self.get_leave_events(start_date, end_date, employees=employee_queryset))
+        events.extend(self.get_leave_events(start_date, end_date, employees=leave_employee_queryset))
         events.extend(
             self.get_sick_leave_events(
                 start_date,
@@ -238,3 +241,6 @@ class CalendarService(BaseService):
         )
         events.extend(self.get_time_account_events(start_date, end_date, employees=employee_queryset))
         return sorted(events, key=lambda event: (event["start"], event["title"]))
+
+    def get_calendar_leave_employee_queryset(self):
+        return EmployeeProfile.objects.select_related("user", "department").all()

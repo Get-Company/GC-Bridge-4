@@ -381,6 +381,46 @@ class HrAccessServiceVisibilityTest(TestCase):
         self.assertSetEqual(visible_ids, {lead_profile.id, same_department.id})
         self.assertNotIn(other_department.id, visible_ids)
 
+    def test_regular_employee_calendar_includes_other_leave_only(self):
+        own_profile = self._create_employee("own-user", department=self.department_a)
+        other_profile = self._create_employee("other-user", department=self.department_b)
+        LeaveRequest.objects.create(
+            employee=other_profile,
+            leave_type=LeaveRequest.LeaveType.VACATION,
+            start_date=date(2026, 5, 4),
+            end_date=date(2026, 5, 4),
+            status=LeaveRequest.Status.APPROVED,
+        )
+        SickLeave.objects.create(
+            employee=other_profile,
+            start_date=date(2026, 5, 5),
+            end_date=date(2026, 5, 5),
+        )
+        TimeAccountEntry.objects.create(
+            employee=other_profile,
+            date=date(2026, 5, 6),
+            entry_type=TimeAccountEntry.EntryType.EXTRA_WORK,
+            minutes=60,
+            status=TimeAccountEntry.Status.APPROVED,
+        )
+        own_employee_filter = EmployeeProfile.objects.filter(pk=own_profile.pk)
+
+        events = CalendarService().get_calendar_events_for_user(
+            own_profile.user,
+            start_date=date(2026, 5, 1),
+            end_date=date(2026, 5, 31),
+            employees=own_employee_filter,
+        )
+        other_event_types = {
+            event["type"]
+            for event in events
+            if event["employee_id"] == other_profile.pk
+        }
+
+        self.assertIn(LeaveRequest.LeaveType.VACATION, other_event_types)
+        self.assertNotIn("sick_leave", other_event_types)
+        self.assertNotIn(TimeAccountEntry.EntryType.EXTRA_WORK, other_event_types)
+
 
 class HrLeaveConflictTest(TestCase):
     def setUp(self):

@@ -153,6 +153,7 @@ INSTALLED_APPS = [
     'microtech.apps.MicrotechConfig',
     'mappei.apps.MappeiConfig',
     'hr.apps.HrConfig',
+    'issues.apps.IssuesConfig',
     'organization.apps.OrganizationConfig',
 ]
 
@@ -431,6 +432,25 @@ UNFOLD = {
                         "title": _("Dashboard"),
                         "icon": "dashboard",
                         "link": reverse_lazy("admin:index"),
+                    },
+                ],
+            },
+            {
+                "title": _("Issues"),
+                "separator": True,
+                "collapsible": True,
+                "items": [
+                    {
+                        "title": _("Issues"),
+                        "icon": "bug_report",
+                        "link": reverse_lazy("admin:issues_issue_changelist"),
+                        "permission": sidebar_model_view_permission("issues", "Issue"),
+                    },
+                    {
+                        "title": _("Kategorien"),
+                        "icon": "label",
+                        "link": reverse_lazy("admin:issues_issuecategory_changelist"),
+                        "permission": sidebar_model_view_permission("issues", "IssueCategory"),
                     },
                 ],
             },
