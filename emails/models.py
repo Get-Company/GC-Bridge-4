@@ -103,14 +103,14 @@ class EmailCampaignSalesChannel(BaseModel):
     )
     sales_channel = models.ForeignKey(
         "shopware.ShopwareSettings",
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         verbose_name=_("Sales Channel"),
     )
     enabled = models.BooleanField(default=False, verbose_name=_("Aktiviert"))
 
     class Meta:
-        verbose_name = _("Sales Channel")
-        verbose_name_plural = _("Sales Channels")
+        verbose_name = _("Kampagnen-Sales-Channel")
+        verbose_name_plural = _("Kampagnen-Sales-Channels")
         ordering = ("-sales_channel__is_default", "sales_channel__name")
         unique_together = (("campaign", "sales_channel"),)
 
