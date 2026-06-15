@@ -154,6 +154,7 @@ INSTALLED_APPS = [
     'mappei.apps.MappeiConfig',
     'hr.apps.HrConfig',
     'issues.apps.IssuesConfig',
+    'emails.apps.EmailsConfig',
     'organization.apps.OrganizationConfig',
 ]
 
@@ -451,6 +452,19 @@ UNFOLD = {
                         "icon": "label",
                         "link": reverse_lazy("admin:issues_issuecategory_changelist"),
                         "permission": sidebar_model_view_permission("issues", "IssueCategory"),
+                    },
+                ],
+            },
+            {
+                "title": _("E-Mails"),
+                "separator": True,
+                "collapsible": True,
+                "items": [
+                    {
+                        "title": _("Kampagnen"),
+                        "icon": "mail",
+                        "link": reverse_lazy("admin:emails_emailcampaign_changelist"),
+                        "permission": sidebar_model_view_permission("emails", "EmailCampaign"),
                     },
                 ],
             },
