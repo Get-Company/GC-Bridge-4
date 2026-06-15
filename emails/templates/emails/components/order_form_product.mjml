@@ -1,0 +1,22 @@
+{# emails/templates/emails/components/order_form_product.mjml #}
+<tr style="border-bottom:1px dotted #ff9933; margin:10px 0">
+    <td width="10%">__x</td>
+    <td width="35%" style="color:#ff9933; font-weight:bold; font-size:12px; line-height:1">
+        {{ product.name }}
+    </td>
+    <td width="55%" align="right" style="font-size:12px">
+        {% if product.email_special_price %}
+            Listenpreis: <span style="text-decoration:line-through">{{ product.price|floatformat:2 }} €</span> netto<br/>
+            <span style="color:#ff9933">Aktionspreis: {{ product.email_special_price|floatformat:2 }} €</span> netto
+        {% else %}
+            Listenpreis: {{ product.price|floatformat:2 }} € netto
+        {% endif %}
+        <br/>
+        pro
+        {% if product.factor and product.factor > 0 %}
+            <b>{{ product.factor }} St.</b>
+        {% else %}
+            <b>{{ product.unit|default:"St." }}</b>
+        {% endif %}
+    </td>
+</tr>

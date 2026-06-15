@@ -1,0 +1,10 @@
+{# emails/templates/emails/components/view_online.mjml #}
+<mj-section background-color="#f3f3f3" padding="6px">
+    <mj-column>
+        <mj-text align="center" font-size="11px" color="#888888">
+            <a href="{viewOnline}" style="color:#888888; text-decoration:none;">
+                E-Mail im Browser anzeigen
+            </a>
+        </mj-text>
+    </mj-column>
+</mj-section>

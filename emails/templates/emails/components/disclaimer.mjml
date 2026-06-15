@@ -1,0 +1,23 @@
+{# emails/templates/emails/components/disclaimer.mjml #}
+<mj-section background-color="#ffffff" padding="10px 20px">
+    <mj-column>
+        <mj-text font-size="11px" line-height="16px" color="#888888">
+            <p>
+                * Versandkostenfrei ab Warenwert 99,00 € netto.
+                Warenwert unter 99,00 € netto: Versandkosten 5,95 € netto.
+                | <a style="color:#ff9933" href="https://www.classei-shop.com/Versandinformationen">Versandinfos</a>
+            </p>
+            <p>
+                Classei-Organisation - Egon Heimann GmbH | Staudacher Str. 7e | 83250 Marquartstein<br/>
+                Fon: +49 (0)8641 97 59 0 | Fax: +49 (0)8641 97 59 20 |
+                <a style="color:#ff9933" href="mailto:info@classei.de">info@classei.de</a> |
+                <a href="https://www.classei.de">classei.de</a>
+            </p>
+            <p>
+                Sie erhalten diese E-Mail, weil Sie unser Kunde/Interessent sind.
+                Wenn Sie keine Informationen mehr erhalten möchten, tragen Sie sich bitte
+                <a style="color:#ff9933" href="{modify}">hier</a> aus.
+            </p>
+        </mj-text>
+    </mj-column>
+</mj-section>

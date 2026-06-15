@@ -1,0 +1,11 @@
+{# emails/templates/emails/components/header_logo.mjml #}
+<mj-section background-color="#ffffff" padding="20px">
+    <mj-column>
+        <mj-image
+            src="https://assets.classei.de/img/logos/classei_logo.png"
+            alt="Classei Logo"
+            href="https://www.classei.de"
+            width="200px"
+        />
+    </mj-column>
+</mj-section>

@@ -1,0 +1,24 @@
+{# emails/templates/emails/components/contact_table.mjml #}
+<mj-section background-color="#f3f3f3" padding="20px">
+    <mj-column>
+        <mj-text>
+            <h3 style="color:#ff9933">Bestellung per Fax oder E-Mail</h3>
+            <p style="font-size:12px">
+                Fax: +49 (0)8641 97 59 20<br/>
+                E-Mail: <a href="mailto:shop@classei.de">shop@classei.de</a>
+            </p>
+        </mj-text>
+    </mj-column>
+    <mj-column>
+        <mj-table css-class="contact_table">
+            <tr style="background-color:#ff9933; color:#ffffff; font-size:12px; font-weight:bold">
+                <td width="10%">Anz.</td>
+                <td width="40%">Artikel</td>
+                <td width="50%" align="right">Preis</td>
+            </tr>
+            {% for product in products %}
+            {% include order_form_template %}
+            {% endfor %}
+        </mj-table>
+    </mj-column>
+</mj-section>

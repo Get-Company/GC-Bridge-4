@@ -1,0 +1,94 @@
+{# emails/templates/emails/components/product.mjml #}
+<mj-wrapper>
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text>
+                <a style="text-decoration:none; color:#000000" target="_blank"
+                   href="https://www.classei-shop.com/search?sSearch={{ product.erp_nr }}">
+                    <h4>
+                        <span style="font-size:30px; font-weight:bold; line-height:45px; display:block">
+                            {% if product.name|length > 30 %}
+                                {{ product.name|slice:":30" }} [...]
+                            {% else %}
+                                {{ product.name }}
+                            {% endif %}
+                        </span>
+                    </h4>
+                </a>
+            </mj-text>
+        </mj-column>
+    </mj-section>
+
+    <mj-section background-color="#ffffff">
+        <mj-column>
+            <mj-text line-height="26px">{{ product.description_short|safe }}</mj-text>
+            <mj-button href="https://www.classei-shop.com/search?sSearch={{ product.erp_nr }}">
+                - Mehr Infos zum Artikel -
+            </mj-button>
+
+            {% if not product.email_special_price %}
+            <mj-text align="center" padding-top="20px">
+                <h4 style="color:#ff9933; font-size:24px; line-height:40px">
+                    <strong>Preis</strong>
+                    {{ product.price|floatformat:2 }} €
+                </h4>
+            </mj-text>
+            {% endif %}
+
+            <mj-text align="center" padding="0px">
+                <p style="font-size:14px;">
+                    pro
+                    {% if product.factor and product.factor > 0 %}
+                        {{ product.factor }} St.
+                    {% else %}
+                        {{ product.unit|default:"St." }}
+                    {% endif %}
+                    <br/>
+                    {% if product.shipping_cost_is_free %}
+                        <span style="font-size:14px; color:#ff9933">- kostenloser Versand -</span>
+                    {% else %}
+                        <span style="font-size:12px">- * zuzgl. Versandkosten -</span>
+                    {% endif %}
+                    <br/>
+                    zuzgl. Mwst.
+                </p>
+            </mj-text>
+        </mj-column>
+
+        <mj-column>
+            {% with images=product.get_images %}
+            {% if images %}
+            {% with img=images.0 %}
+            <mj-image
+                href="https://www.classei-shop.com/search?sSearch={{ product.erp_nr }}"
+                src="https://assets.classei.de/img/{{ img.name }}.{{ img.type }}"
+                alt="{{ product.name }}"
+            />
+            {% endwith %}
+            {% endif %}
+            {% endwith %}
+        </mj-column>
+    </mj-section>
+
+    {% if product.email_special_price %}
+    <mj-section background-color="#ffffff">
+        <mj-column padding="0" width="30%">
+            <mj-text align="left" padding="0" line-height="40px">
+                Listenpreis:<br/>
+                <span style="text-decoration:line-through">{{ product.price|floatformat:2 }} €</span>
+            </mj-text>
+        </mj-column>
+        <mj-column padding="0" width="40%">
+            <mj-text align="center" padding="0" font-size="30px" line-height="40px" font-weight="bold">
+                Aktionspreis:<br/>
+                <span style="color:#ff9933">{{ product.email_special_price|floatformat:2 }} €</span>
+            </mj-text>
+        </mj-column>
+        <mj-column padding="0" width="30%">
+            <mj-text align="right" padding="0" font-size="24px" line-height="40px" font-weight="bold" color="#ff9933">
+                - {{ product.discount_pct }} %
+            </mj-text>
+        </mj-column>
+    </mj-section>
+    {% endif %}
+</mj-wrapper>

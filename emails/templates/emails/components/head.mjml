@@ -1,0 +1,11 @@
+{# emails/templates/emails/components/head.mjml #}
+<mj-attributes>
+    <mj-all font-family="Helvetica, Arial, sans-serif" />
+    <mj-text font-size="14px" color="#333333" line-height="22px" />
+    <mj-button background-color="#ff9933" color="#ffffff" border-radius="3px" />
+    <mj-image padding="0" />
+</mj-attributes>
+<mj-style inline="inline">
+    a { color: #ff9933; }
+    h1, h2, h3, h4, h5 { margin: 0; padding: 0; }
+</mj-style>

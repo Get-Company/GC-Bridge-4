@@ -1,0 +1,10 @@
+{# emails/templates/emails/components/nav_items_shop.mjml #}
+<mj-section background-color="#1a1a1a" padding="8px">
+    <mj-column>
+        <mj-text align="center" font-size="12px">
+            <a href="https://www.classei-shop.com" style="color:#ffffff; text-decoration:none; margin:0 8px;">Shop</a>
+            <a href="https://www.classei.de" style="color:#ffffff; text-decoration:none; margin:0 8px;">Classei.de</a>
+            <a href="https://www.classei-shop.com/Versandinformationen" style="color:#ffffff; text-decoration:none; margin:0 8px;">Versand</a>
+        </mj-text>
+    </mj-column>
+</mj-section>

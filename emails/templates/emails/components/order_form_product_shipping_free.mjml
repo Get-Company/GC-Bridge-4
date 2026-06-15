@@ -1,0 +1,2 @@
+{# emails/templates/emails/components/order_form_product_shipping_free.mjml #}
+{% include "emails/components/order_form_product.mjml" %}
