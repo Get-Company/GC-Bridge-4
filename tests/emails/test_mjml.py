@@ -77,7 +77,7 @@ class TestRenderCampaignMjml:
         assert "Testtitel" in mjml
         assert "Einleitung" in mjml
 
-    def test_product_template_selection(self):
+    def test_product_template_selection_shipping_free(self):
         from emails.models import EmailCampaign
         campaign = EmailCampaign.objects.create(
             internal_title="Test2",
@@ -87,3 +87,14 @@ class TestRenderCampaignMjml:
         )
         mjml = render_campaign_mjml(campaign)
         assert "<mjml>" in mjml
+
+    def test_proxy_discount_pct_correct(self):
+        from decimal import Decimal
+        from emails.mjml import ProductEmailProxy
+        from unittest.mock import MagicMock
+
+        product = MagicMock()
+        product.price = Decimal("10.00")
+        proxy = ProductEmailProxy(product, special_price_override=Decimal("8.00"))
+        assert proxy.discount_pct == 20
+        assert proxy.email_special_price == Decimal("8.00")
