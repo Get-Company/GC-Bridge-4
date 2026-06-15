@@ -1,0 +1,38 @@
+{# emails/templates/emails/newsletter_base.mjml #}
+<mjml>
+    <mj-head>
+        {% include "emails/components/head.mjml" %}
+    </mj-head>
+    <mj-body>
+
+        {% include "emails/components/view_online.mjml" %}
+        {% include "emails/components/nav_items_shop.mjml" %}
+        {% include "emails/components/header_logo.mjml" %}
+
+        {% with h1=h1 h1_small=h1_small %}
+        {% include "emails/components/title_txt.mjml" %}
+        {% endwith %}
+
+        {% include "emails/components/salutation.mjml" %}
+
+        {% if intro_text %}
+        <mj-section background-color="#ffffff">
+            <mj-column>
+                <mj-text line-height="26px">{{ intro_text|safe }}</mj-text>
+            </mj-column>
+        </mj-section>
+        {% endif %}
+
+        {# Slot für optionalen Block (Phase 2) #}
+        {% block optional_block %}{% endblock %}
+
+        {% for product in products %}
+        {% include product_component_template %}
+        {% endfor %}
+
+        {% include "emails/components/contact_table.mjml" %}
+
+        {% include "emails/components/disclaimer.mjml" %}
+
+    </mj-body>
+</mjml>
