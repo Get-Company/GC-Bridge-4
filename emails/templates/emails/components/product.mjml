@@ -4,7 +4,7 @@
         <mj-column>
             <mj-text>
                 <a style="text-decoration:none; color:#000000" target="_blank"
-                   href="https://www.classei-shop.com/search?sSearch={{ product.erp_nr }}">
+                   href="https://www.classei-shop.com/search?sSearch={{ product.erp_nr|urlencode }}">
                     <h4>
                         <span style="font-size:30px; font-weight:bold; line-height:45px; display:block">
                             {% if product.name|length > 30 %}
@@ -22,7 +22,7 @@
     <mj-section background-color="#ffffff">
         <mj-column>
             <mj-text line-height="26px">{{ product.description_short|safe }}</mj-text>
-            <mj-button href="https://www.classei-shop.com/search?sSearch={{ product.erp_nr }}">
+            <mj-button href="https://www.classei-shop.com/search?sSearch={{ product.erp_nr|urlencode }}">
                 - Mehr Infos zum Artikel -
             </mj-button>
 
@@ -60,7 +60,7 @@
             {% if images %}
             {% with img=images.0 %}
             <mj-image
-                href="https://www.classei-shop.com/search?sSearch={{ product.erp_nr }}"
+                href="https://www.classei-shop.com/search?sSearch={{ product.erp_nr|urlencode }}"
                 src="https://assets.classei.de/img/{{ img.name }}.{{ img.type }}"
                 alt="{{ product.name }}"
             />
