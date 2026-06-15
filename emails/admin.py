@@ -1,11 +1,15 @@
 # emails/admin.py
 from __future__ import annotations
 
+import logging
+
 from django.contrib import admin
 from django.http import HttpResponse, JsonResponse
 from django.urls import path
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
+
+logger = logging.getLogger(__name__)
 
 from core.admin import BaseAdmin, BaseTabularInline
 from emails.mjml import compile_mjml_to_html, render_campaign_mjml
@@ -109,6 +113,7 @@ class EmailCampaignAdmin(BaseAdmin):
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
         if not change:
+            # Late import avoids circular import between emails and shopware apps at module load time.
             from shopware.models import ShopwareSettings
             default_channel = ShopwareSettings.objects.filter(is_default=True, is_active=True).first()
             if default_channel:
@@ -127,8 +132,9 @@ class EmailCampaignAdmin(BaseAdmin):
         try:
             mjml = render_campaign_mjml(campaign)
             html = compile_mjml_to_html(mjml)
-        except Exception as e:
-            return JsonResponse({"error": str(e)}, status=500)
+        except Exception:
+            logger.exception("MJML export failed for campaign %s", campaign_id)
+            return JsonResponse({"error": "Fehler beim Rendern der Kampagne."}, status=500)
 
         if request.GET.get("download"):
             response = HttpResponse(html, content_type="text/html; charset=utf-8")
