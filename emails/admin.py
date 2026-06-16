@@ -43,7 +43,11 @@ class EmailCampaignSalesChannelInline(BaseTabularInline):
     @admin.display(description=_("Standard"))
     def is_default_display(self, obj: EmailCampaignSalesChannel):
         if obj.sales_channel_id and obj.sales_channel.is_default:
-            return format_html('<span style="color:#16a34a;font-weight:bold">✓ Standard</span>')
+            return format_html(
+                '<span style="color:#16a34a;font-weight:bold">{} {}</span>',
+                "✓",
+                _("Standard"),
+            )
         return "—"
 
 
