@@ -109,7 +109,11 @@ def zeitsteuerung_detail(request, service_id: str):
             put_r = client.put(path, body)
             sent_denied = [d["value"] for d in service["data"] if d.get("name") == "referralDenied"]
             if put_r.status_code < 300:
-                messages.success(request, f"Gespeichert. Gesendete referralDenied: {sent_denied}")
+                try:
+                    resp_denied = [d["value"] for d in put_r.json().get("data",[]) if d.get("name") == "referralDenied"]
+                except Exception:
+                    resp_denied = put_r.text[:100]
+                messages.success(request, f"PUT {put_r.status_code}. Gesendet: {sent_denied} | Antwort referralDenied: {resp_denied}")
             else:
                 messages.error(request, f"API-Fehler {put_r.status_code}: {put_r.text[:300]}")
         except Exception as e:
