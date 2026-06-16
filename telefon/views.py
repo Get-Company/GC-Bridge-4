@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from django.contrib import messages
+from django.utils.html import format_html
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.views.generic import TemplateView
@@ -78,7 +79,14 @@ class ZeitsteuerungDetailView(TelefonAdminViewMixin, TemplateView):
                     result = service.add_denied_date(service_id, form.cleaned_data["date"])
                     self._message_success(result)
                 else:
-                    messages.error(request, "Bitte ein gueltiges Datum auswaehlen.")
+                    messages.error(
+                        request,
+                        format_html(
+                            "Bitte ein gueltiges Datum auswaehlen. Rohwert: <code>{}</code> | Fehler: {}",
+                            request.POST.get("date", ""),
+                            form.errors.as_text(),
+                        ),
+                    )
             elif action == "delete":
                 result = service.delete_denied_date(service_id, request.POST.get("date", "").strip())
                 self._message_success(result)
@@ -119,6 +127,7 @@ class ZeitsteuerungDetailView(TelefonAdminViewMixin, TemplateView):
             self.request,
             (
                 f"PUT {result['status_code']}. Gesendet: {result['sent_denied']} | "
-                f"Antwort referralDenied: {result['response_denied']}"
+                f"Antwort referralDenied: {result['response_denied']} | "
+                f"Nachkontrolle referralDenied: {result.get('persisted_denied', '-')}"
             ),
         )

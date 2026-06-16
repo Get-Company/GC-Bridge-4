@@ -68,10 +68,23 @@ class NfonTimeControlService(BaseService):
 
     def add_denied_date(self, service_id: str, value: date) -> dict[str, Any]:
         formatted = self._format_nfon_date(value)
-        return self._update_denied_dates(
+        result = self._update_denied_dates(
             service_id,
             lambda dates: sorted({*dates, formatted}, key=self._parse_nfon_date),
         )
+        result["submitted_date"] = value.isoformat()
+        result["nfon_date"] = formatted
+        persisted_dates = self.get_time_control_dates(service_id)["denied_dates"]
+        result["persisted_denied"] = persisted_dates
+        if formatted not in persisted_dates:
+            raise ValueError(
+                "NFON hat das Datum nach dem Speichern nicht uebernommen. "
+                f"Eingabe: {value.isoformat()} | NFON-Format: {formatted} | "
+                f"PUT {result['status_code']} | Gesendet: {result['sent_denied']} | "
+                f"PUT-Antwort referralDenied: {result['response_denied']} | "
+                f"Nachkontrolle referralDenied: {persisted_dates}"
+            )
+        return result
 
     def delete_denied_date(self, service_id: str, value: str) -> dict[str, Any]:
         def remove_date(dates: list[str]) -> list[str]:

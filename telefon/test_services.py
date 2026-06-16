@@ -31,7 +31,8 @@ class FakeNfonClient:
 
     def put(self, path, body):
         self.put_calls.append((path, json.loads(body.decode("utf-8"))))
-        return FakeResponse({"data": [{"name": "referralDenied", "value": ["ok"]}]})
+        self.payload = self.put_calls[-1][1]
+        return FakeResponse(self.payload)
 
 
 def test_list_time_controls_normalizes_list_payload():
@@ -96,6 +97,33 @@ def test_date_form_value_is_formatted_for_nfon_payload():
 
     payload = client.put_calls[0][1]
     assert payload["data"] == [{"name": "referralDenied", "value": ["Feb 03, 2026"]}]
+
+
+def test_date_form_accepts_german_date_for_debug_fallback():
+    form = ZeitsteuerungDateForm({"date": "03.02.2026"})
+
+    assert form.is_valid(), form.errors
+    assert form.cleaned_data["date"] == date(2026, 2, 3)
+
+
+def test_add_denied_date_raises_when_nfon_does_not_persist_date():
+    class NonPersistingClient(FakeNfonClient):
+        def put(self, path, body):
+            self.put_calls.append((path, json.loads(body.decode("utf-8"))))
+            return FakeResponse(self.put_calls[-1][1])
+
+    client = NonPersistingClient({"data": [{"name": "referralDenied", "value": []}]})
+    service = NfonTimeControlService(client=client, customer_id="customer")
+
+    try:
+        service.add_denied_date("42", date(2026, 2, 3))
+    except ValueError as error:
+        message = str(error)
+        assert "nicht uebernommen" in message
+        assert "2026-02-03" in message
+        assert "Feb 03, 2026" in message
+    else:
+        raise AssertionError("Expected ValueError")
 
 
 def test_delete_denied_date_raises_when_date_is_missing():

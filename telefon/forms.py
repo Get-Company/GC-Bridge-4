@@ -38,6 +38,6 @@ class UnfoldNativeDateInput(forms.DateInput):
 class ZeitsteuerungDateForm(forms.Form):
     date = forms.DateField(
         label=_("Datum"),
-        input_formats=["%Y-%m-%d"],
+        input_formats=["%Y-%m-%d", "%d.%m.%Y", "%d.%m.%y"],
         widget=UnfoldNativeDateInput,
     )
