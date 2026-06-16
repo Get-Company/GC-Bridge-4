@@ -78,7 +78,8 @@ def zeitsteuerung_detail(request, service_id: str):
 
             if action == "add" and date_str:
                 dt = datetime.strptime(date_str, "%Y-%m-%d")
-                formatted = dt.strftime("%b %d, %Y")
+                _months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
+                formatted = f"{_months[dt.month - 1]} {dt.day:02d}, {dt.year}"
                 if formatted not in current_dates:
                     current_dates.append(formatted)
                     current_dates.sort(key=lambda d: datetime.strptime(d, "%b %d, %Y"))
@@ -103,8 +104,9 @@ def zeitsteuerung_detail(request, service_id: str):
             service["data"] = [d for d in data if d.get("name") in writable_data_fields]
             body = json.dumps(service).encode("utf-8")
             put_r = client.put(path, body)
+            sent_denied = [d["value"] for d in service["data"] if d.get("name") == "referralDenied"]
             if put_r.status_code < 300:
-                messages.success(request, "Gespeichert.")
+                messages.success(request, f"Gespeichert. Gesendete referralDenied: {sent_denied}")
             else:
                 messages.error(request, f"API-Fehler {put_r.status_code}: {put_r.text[:300]}")
         except Exception as e:
