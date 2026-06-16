@@ -84,7 +84,10 @@ def zeitsteuerung_detail(request, service_id: str):
                     current_dates.append(formatted)
                     current_dates.sort(key=lambda d: datetime.strptime(d, "%b %d, %Y"))
             elif action == "delete":
+                before = list(current_dates)
                 current_dates = [d for d in current_dates if d != date_str]
+                if len(current_dates) == len(before):
+                    messages.warning(request, f"Datum nicht gefunden: '{date_str}' in {before}")
 
             if denied_item:
                 denied_item["value"] = current_dates
