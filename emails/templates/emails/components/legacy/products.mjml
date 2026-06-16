@@ -1,0 +1,3 @@
+{% for product in products %}
+{% include product_component_template %}
+{% endfor %}

@@ -11,9 +11,21 @@ from django.utils.translation import gettext_lazy as _
 
 logger = logging.getLogger(__name__)
 
-from core.admin import BaseAdmin, BaseTabularInline
+from core.admin import BaseAdmin, BaseStackedInline, BaseTabularInline
 from emails.mjml import compile_mjml_to_html, render_campaign_mjml
-from emails.models import EmailCampaign, EmailCampaignProduct, EmailCampaignSalesChannel
+from emails.models import (
+    EmailCampaign,
+    EmailCampaignComponent,
+    EmailCampaignProduct,
+    EmailCampaignSalesChannel,
+)
+
+
+class EmailCampaignComponentInline(BaseStackedInline):
+    model = EmailCampaignComponent
+    fields = ("order", "enabled", "component_key", "title", "body_html")
+    extra = 0
+    ordering = ("order", "id")
 
 
 class EmailCampaignProductInline(BaseTabularInline):
@@ -57,7 +69,7 @@ class EmailCampaignAdmin(BaseAdmin):
     list_filter = ("status", "product_template", "created_at")
     search_fields = ("internal_title", "h1")
     list_editable = ("status",)
-    inlines = (EmailCampaignProductInline, EmailCampaignSalesChannelInline)
+    inlines = (EmailCampaignComponentInline, EmailCampaignProductInline, EmailCampaignSalesChannelInline)
 
     fieldsets = (
         (
@@ -98,24 +110,18 @@ class EmailCampaignAdmin(BaseAdmin):
 
     def change_view(self, request, object_id, form_url="", extra_context=None):
         extra_context = extra_context or {}
-        extra_context.update({
-            "fixed_components_top": ["View Online", "Navigation", "Header Logo"],
-            "editable_components": ["Titel", "Anrede", "Einleitung"],
-            "fixed_components_bottom": ["Kontaktformular", "Disclaimer"],
-        })
+        campaign = self.get_object(request, object_id)
+        extra_context.update(self._component_context(campaign))
         return super().change_view(request, object_id, form_url, extra_context)
 
     def add_view(self, request, form_url="", extra_context=None):
         extra_context = extra_context or {}
-        extra_context.update({
-            "fixed_components_top": ["View Online", "Navigation", "Header Logo"],
-            "editable_components": ["Titel", "Anrede", "Einleitung"],
-            "fixed_components_bottom": ["Kontaktformular", "Disclaimer"],
-        })
+        extra_context.update(self._component_context())
         return super().add_view(request, form_url, extra_context)
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
+        self._ensure_default_components(obj)
         if not change:
             # Late import avoids circular import between emails and shopware apps at module load time.
             from shopware.models import ShopwareSettings
@@ -126,6 +132,40 @@ class EmailCampaignAdmin(BaseAdmin):
                     sales_channel=default_channel,
                     defaults={"enabled": True},
                 )
+
+    def _component_context(self, campaign: EmailCampaign | None = None) -> dict:
+        component_library = [
+            {"key": key, "label": label}
+            for key, label in EmailCampaignComponent.ComponentKey.choices
+        ]
+        active_components = []
+        if campaign:
+            active_components = list(campaign.components.order_by("order", "id"))
+
+        return {
+            "component_library": component_library,
+            "active_components": active_components,
+        }
+
+    def _ensure_default_components(self, campaign: EmailCampaign) -> None:
+        if campaign.components.exists():
+            return
+
+        components = []
+        for index, component_key in enumerate(EmailCampaignComponent.DEFAULT_COMPONENTS, start=1):
+            label = EmailCampaignComponent.ComponentKey(component_key).label
+            body_html = campaign.intro_text if component_key == EmailCampaignComponent.ComponentKey.TITLE_INTRO else ""
+            components.append(
+                EmailCampaignComponent(
+                    campaign=campaign,
+                    component_key=component_key,
+                    title=str(label),
+                    body_html=body_html,
+                    order=index * 10,
+                    enabled=True,
+                )
+            )
+        EmailCampaignComponent.objects.bulk_create(components)
 
     def export_html_view(self, request, campaign_id: int):
         try:

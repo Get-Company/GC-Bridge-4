@@ -3,7 +3,7 @@ from decimal import Decimal
 from unittest.mock import MagicMock
 from types import SimpleNamespace
 
-from emails.mjml import ProductEmailProxy, render_campaign_mjml, compile_mjml_to_html
+from emails.mjml import ProductEmailProxy, compile_mjml_to_html, render_campaign_mjml
 
 
 class FakePriceQuerySet:
@@ -37,6 +37,29 @@ class FakePrice:
 
     def get_current_price(self, *, as_float=False):
         return self.price
+
+
+class FakeQuerySet:
+    def __init__(self, entries=None):
+        self.entries = list(entries or [])
+
+    def __iter__(self):
+        return iter(self.entries)
+
+    def filter(self, **kwargs):
+        entries = self.entries
+        if kwargs.get("enabled") is True:
+            entries = [entry for entry in entries if entry.enabled]
+        return type(self)(entries)
+
+    def order_by(self, *args):
+        return type(self)(sorted(self.entries, key=lambda entry: (getattr(entry, "order", 0), id(entry))))
+
+    def select_related(self, *args):
+        return self
+
+    def values_list(self, *args, **kwargs):
+        return []
 
 
 class TestProductEmailProxy:
@@ -140,6 +163,40 @@ class TestCompileMjmlToHtml:
 
         assert html == "<html>compiled</html>"
         assert calls[0][:2] == ["npx", "mjml"]
+
+
+class TestCampaignComponentRendering:
+    def test_render_campaign_uses_enabled_component_order(self, monkeypatch):
+        rendered_templates = []
+
+        def fake_render_to_string(template_name, context):
+            if template_name == "emails/newsletter_base.mjml":
+                return context["body_mjml"]
+            rendered_templates.append(template_name)
+            return context["component"].component_key
+
+        monkeypatch.setattr("emails.mjml.render_to_string", fake_render_to_string)
+        campaign = SimpleNamespace(
+            h1="Titel",
+            h1_small="",
+            intro_text="Intro",
+            product_template="product",
+            sales_channels=FakeQuerySet(),
+            campaign_products=FakeQuerySet(),
+            components=FakeQuerySet([
+                SimpleNamespace(component_key="content_text", title="", body_html="", order=20, enabled=True),
+                SimpleNamespace(component_key="logo", title="", body_html="", order=10, enabled=False),
+                SimpleNamespace(component_key="header_nav", title="", body_html="", order=5, enabled=True),
+            ]),
+        )
+
+        mjml = render_campaign_mjml(campaign)
+
+        assert mjml == "header_nav\ncontent_text"
+        assert rendered_templates == [
+            "emails/components/legacy/header_nav.mjml",
+            "emails/components/legacy/content_text.mjml",
+        ]
 
 
 @pytest.mark.django_db

@@ -1,0 +1,12 @@
+<mj-section background-color="#ffffff" padding="20px">
+    <mj-column>
+        {% if component.title %}
+        <mj-text>
+            <h2 style="color:#ff9933; font-weight:400; line-height:32px">{{ component.title }}</h2>
+        </mj-text>
+        {% endif %}
+        {% if component.body_html %}
+        <mj-text line-height="26px">{{ component.body_html|safe }}</mj-text>
+        {% endif %}
+    </mj-column>
+</mj-section>

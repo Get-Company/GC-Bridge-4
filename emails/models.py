@@ -61,6 +61,65 @@ class EmailCampaign(BaseModel):
         return self.campaign_products.filter(special_price_override__isnull=False).count()
 
 
+class EmailCampaignComponent(BaseModel):
+    class ComponentKey(models.TextChoices):
+        HEADER_NAV = "header_nav", _("Onlineansicht & Navigation")
+        LOGO = "logo", _("Logo")
+        TITLE_INTRO = "title_intro", _("Ueberschrift & Einleitung")
+        PRODUCTS = "products", _("Produkte")
+        CONTENT_TEXT = "content_text", _("Textblock")
+        BLOG = "blog_acymailing", _("Blog Auto-Content")
+        CERTS_GREEN = "certs_logo_green", _("Zertifikate gruen")
+        FOUR_R = "4r", _("4R Nachhaltigkeit")
+        CHRISTMAS = "weihnachten", _("Weihnachten")
+        CONTACT_TABLE = "contact_table", _("Kontaktformular")
+        DISCLAIMER = "disclaimer", _("Disclaimer")
+
+    DEFAULT_COMPONENTS = (
+        ComponentKey.HEADER_NAV,
+        ComponentKey.LOGO,
+        ComponentKey.TITLE_INTRO,
+        ComponentKey.PRODUCTS,
+        ComponentKey.CONTACT_TABLE,
+        ComponentKey.DISCLAIMER,
+    )
+
+    campaign = models.ForeignKey(
+        EmailCampaign,
+        on_delete=models.CASCADE,
+        related_name="components",
+        verbose_name=_("Kampagne"),
+    )
+    component_key = models.CharField(
+        max_length=40,
+        choices=ComponentKey.choices,
+        verbose_name=_("Komponente"),
+    )
+    title = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        verbose_name=_("Titel"),
+        help_text=_("Interner Name oder Ueberschrift fuer Textbloecke."),
+    )
+    body_html = models.TextField(
+        blank=True,
+        default="",
+        verbose_name=_("Inhalt"),
+        help_text=_("HTML erlaubt. Wird fuer bearbeitbare Text-Komponenten verwendet."),
+    )
+    order = models.PositiveIntegerField(default=0, verbose_name=_("Reihenfolge"))
+    enabled = models.BooleanField(default=True, verbose_name=_("Aktiviert"))
+
+    class Meta:
+        verbose_name = _("Kampagnen-Komponente")
+        verbose_name_plural = _("Kampagnen-Komponenten")
+        ordering = ("order", "id")
+
+    def __str__(self) -> str:
+        return self.title or self.get_component_key_display()
+
+
 class EmailCampaignProduct(BaseModel):
     campaign = models.ForeignKey(
         EmailCampaign,
