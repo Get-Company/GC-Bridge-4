@@ -78,10 +78,10 @@ def zeitsteuerung_detail(request, service_id: str):
 
             if action == "add" and date_str:
                 dt = datetime.strptime(date_str, "%Y-%m-%d")
-                formatted = dt.strftime("%b %-d, %Y")
+                formatted = dt.strftime("%b %d, %Y")
                 if formatted not in current_dates:
                     current_dates.append(formatted)
-                    current_dates.sort(key=lambda d: datetime.strptime(d, "%b %d, %Y") if len(d.split()[1]) == 2 else datetime.strptime(d, "%b %-d, %Y"))
+                    current_dates.sort(key=lambda d: datetime.strptime(d, "%b %d, %Y"))
             elif action == "delete":
                 current_dates = [d for d in current_dates if d != date_str]
 
