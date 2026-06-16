@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from datetime import date
 
+from telefon.forms import ZeitsteuerungDateForm
 from telefon.services import NfonTimeControlService
 
 
@@ -75,6 +76,25 @@ def test_add_denied_date_filters_writable_payload_and_sorts_dates():
         {"name": "displayName", "value": "Feiertag"},
         {"name": "referralDenied", "value": ["Feb 03, 2026", "Mar 01, 2026"]},
     ]
+
+
+def test_date_form_uses_admin_calendar_widget_media():
+    form = ZeitsteuerungDateForm()
+
+    assert any("DateTimeShortcuts.js" in script for script in form.media.render_js())
+
+
+def test_date_form_value_is_formatted_for_nfon_payload():
+    client = FakeNfonClient({"data": [{"name": "referralDenied", "value": []}]})
+    form = ZeitsteuerungDateForm({"date": "03.02.2026"})
+
+    assert form.is_valid(), form.errors
+
+    service = NfonTimeControlService(client=client, customer_id="customer")
+    service.add_denied_date("42", form.cleaned_data["date"])
+
+    payload = client.put_calls[0][1]
+    assert payload["data"] == [{"name": "referralDenied", "value": ["Feb 03, 2026"]}]
 
 
 def test_delete_denied_date_raises_when_date_is_missing():
