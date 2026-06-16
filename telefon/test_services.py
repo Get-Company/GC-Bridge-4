@@ -78,15 +78,16 @@ def test_add_denied_date_filters_writable_payload_and_sorts_dates():
     ]
 
 
-def test_date_form_uses_admin_calendar_widget_media():
+def test_date_form_uses_native_calendar_input():
     form = ZeitsteuerungDateForm()
 
-    assert any("DateTimeShortcuts.js" in script for script in form.media.render_js())
+    assert form.fields["date"].widget.input_type == "date"
+    assert 'type="date"' in form.as_p()
 
 
 def test_date_form_value_is_formatted_for_nfon_payload():
     client = FakeNfonClient({"data": [{"name": "referralDenied", "value": []}]})
-    form = ZeitsteuerungDateForm({"date": "03.02.2026"})
+    form = ZeitsteuerungDateForm({"date": "2026-02-03"})
 
     assert form.is_valid(), form.errors
 
