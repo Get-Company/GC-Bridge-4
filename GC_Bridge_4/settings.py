@@ -156,6 +156,7 @@ INSTALLED_APPS = [
     'issues.apps.IssuesConfig',
     'emails.apps.EmailsConfig',
     'organization.apps.OrganizationConfig',
+    'telefon.apps.TelefonConfig',
 ]
 
 MIDDLEWARE = [
@@ -590,6 +591,18 @@ UNFOLD = {
                         "icon": "link",
                         "link": reverse_lazy("admin:mappei_mappeiproductmapping_changelist"),
                         "permission": sidebar_model_view_permission("mappei", "MappeiProductMapping"),
+                    },
+                ],
+            },
+            {
+                "title": _("Telefon"),
+                "separator": True,
+                "collapsible": True,
+                "items": [
+                    {
+                        "title": _("Zeitsteuerung"),
+                        "icon": "schedule",
+                        "link": reverse_lazy("admin:telefon_zeitsteuerung_list"),
                     },
                 ],
             },

@@ -1,0 +1,68 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+<div class="flex flex-col gap-6 p-4 max-w-2xl">
+
+    <div class="flex items-center gap-3">
+        <a href="{% url 'admin:telefon_zeitsteuerung_list' %}"
+           class="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+            ← Zeitsteuerungen
+        </a>
+    </div>
+
+    <h1 class="text-2xl font-semibold text-gray-800 dark:text-gray-100">{{ display_name }}</h1>
+
+    {% if messages %}
+        {% for message in messages %}
+            <div class="rounded p-3 text-sm {% if message.tags == 'error' %}bg-red-100 text-red-800{% else %}bg-green-100 text-green-800{% endif %}">
+                {{ message }}
+            </div>
+        {% endfor %}
+    {% endif %}
+
+    <div class="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="text-base font-semibold text-gray-700 dark:text-gray-200">Ausnahmedaten (referralDenied)</h2>
+            <p class="text-xs text-gray-500 mt-1">An diesen Tagen greift die Zeitsteuerung nicht.</p>
+        </div>
+
+        <ul class="divide-y divide-gray-100 dark:divide-gray-800">
+            {% for date in denied_dates %}
+            <li class="flex items-center justify-between px-6 py-3">
+                <span class="text-sm text-gray-800 dark:text-gray-100">{{ date }}</span>
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="delete">
+                    <input type="hidden" name="date" value="{{ date }}">
+                    <button type="submit"
+                            class="text-xs text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-200 font-medium transition-colors">
+                        Entfernen
+                    </button>
+                </form>
+            </li>
+            {% empty %}
+            <li class="px-6 py-4 text-sm text-gray-500">Keine Ausnahmedaten eingetragen.</li>
+            {% endfor %}
+        </ul>
+    </div>
+
+    <div class="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-6">
+        <h2 class="text-base font-semibold text-gray-700 dark:text-gray-200 mb-4">Datum hinzufügen</h2>
+        <form method="post" class="flex items-end gap-3">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="add">
+            <div class="flex flex-col gap-1">
+                <label for="date-input" class="text-xs font-medium text-gray-600 dark:text-gray-400">Datum</label>
+                <input type="date" id="date-input" name="date" required
+                       class="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+            </div>
+            <button type="submit"
+                    class="rounded px-4 py-2 text-sm font-medium bg-primary-600 text-white hover:bg-primary-700 transition-colors">
+                Hinzufügen
+            </button>
+        </form>
+    </div>
+
+</div>
+{% endblock %}
