@@ -27,7 +27,12 @@ RUN apt-get update \
        libfreetype6 \
        fonts-dejavu-core \
        shared-mime-info \
+       nodejs \
+       npm \
     && rm -rf /var/lib/apt/lists/*
+
+RUN npm install -g mjml@4.16.1 \
+    && npm cache clean --force
 
 COPY --from=ghcr.io/astral-sh/uv:0.9.9 /uv /uvx /bin/
 COPY pyproject.toml uv.lock ./

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import tempfile
 from decimal import Decimal
@@ -123,15 +124,19 @@ def render_campaign_mjml(campaign: "EmailCampaign") -> str:
 
 
 def compile_mjml_to_html(mjml_string: str) -> str:
-    """Compiles a MJML string to HTML using the npx mjml CLI."""
+    """Compiles a MJML string to HTML using the MJML CLI."""
     with tempfile.NamedTemporaryFile(suffix=".mjml", mode="w", encoding="utf-8", delete=False) as f:
         f.write(mjml_string)
         tmp_mjml = f.name
 
     out_html = tmp_mjml.replace(".mjml", ".html")
     try:
+        command = ["mjml", tmp_mjml, "-o", out_html]
+        if shutil.which("mjml") is None:
+            command = ["npx", "mjml", tmp_mjml, "-o", out_html]
+
         subprocess.run(
-            ["npx", "mjml", tmp_mjml, "-o", out_html],
+            command,
             check=True,
             capture_output=True,
             text=True,

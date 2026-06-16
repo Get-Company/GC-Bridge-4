@@ -108,6 +108,40 @@ class TestProductEmailProxy:
         assert proxy.price == Decimal("123.45")
 
 
+class TestCompileMjmlToHtml:
+    def test_uses_installed_mjml_binary_when_available(self, monkeypatch):
+        calls = []
+
+        def fake_run(command, **kwargs):
+            calls.append(command)
+            with open(command[3], "w", encoding="utf-8") as html_file:
+                html_file.write("<html>compiled</html>")
+
+        monkeypatch.setattr("emails.mjml.shutil.which", lambda command: "/usr/local/bin/mjml")
+        monkeypatch.setattr("emails.mjml.subprocess.run", fake_run)
+
+        html = compile_mjml_to_html("<mjml></mjml>")
+
+        assert html == "<html>compiled</html>"
+        assert calls[0][0] == "mjml"
+
+    def test_falls_back_to_npx_when_mjml_binary_is_missing(self, monkeypatch):
+        calls = []
+
+        def fake_run(command, **kwargs):
+            calls.append(command)
+            with open(command[4], "w", encoding="utf-8") as html_file:
+                html_file.write("<html>compiled</html>")
+
+        monkeypatch.setattr("emails.mjml.shutil.which", lambda command: None)
+        monkeypatch.setattr("emails.mjml.subprocess.run", fake_run)
+
+        html = compile_mjml_to_html("<mjml></mjml>")
+
+        assert html == "<html>compiled</html>"
+        assert calls[0][:2] == ["npx", "mjml"]
+
+
 @pytest.mark.django_db
 class TestRenderCampaignMjml:
     def test_renders_without_products(self):
