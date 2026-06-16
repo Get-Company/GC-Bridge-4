@@ -7,6 +7,7 @@ from datetime import datetime
 from django.contrib import messages
 from django.shortcuts import redirect
 from django.template.response import TemplateResponse
+from django.urls import reverse
 
 from core.services.nfon_client import NfonClient
 
@@ -31,27 +32,34 @@ def zeitsteuerung_list(request):
     customer_id = os.environ["NFON_CUSTOMER_ID"]
     path = f"/api/customers/{customer_id}/targets/time-control-services"
 
+    services = []
     try:
         r = client.get(path)
         r.raise_for_status()
         raw = r.json()
         items = raw if isinstance(raw, list) else raw.get("items", [raw])
-        services = []
         for item in items:
             data = item.get("data", [])
             href = item.get("href", "")
             service_id = href.rstrip("/").split("/")[-1]
-            services.append({
-                "id": service_id,
-                "name": _data_value(data, "displayName") or _data_value(data, "name") or service_id,
-            })
+            display_name = _data_value(data, "displayName") or _data_value(data, "name") or service_id
+            detail_url = reverse("admin:telefon_zeitsteuerung_detail", args=[service_id])
+            services.append([
+                f'<a href="{detail_url}" class="font-medium text-primary-600 hover:underline">{display_name}</a>',
+                service_id,
+            ])
     except Exception as e:
-        services = []
         messages.error(request, f"NFON API Fehler: {e}")
+
+    table = {
+        "headers": ["Name", "ID"],
+        "rows": services,
+    }
 
     return TemplateResponse(request, "admin/telefon/zeitsteuerung_list.html", {
         "title": "Zeitsteuerungen",
-        "services": services,
+        "subtitle": "NFON Service Portal",
+        "table": table,
     })
 
 
@@ -75,10 +83,10 @@ def zeitsteuerung_detail(request, service_id: str):
 
             if action == "add" and date_str:
                 dt = datetime.strptime(date_str, "%Y-%m-%d")
-                formatted = dt.strftime("%b %d, %Y").replace(" 0", " ")
+                formatted = dt.strftime("%b %-d, %Y")
                 if formatted not in current_dates:
                     current_dates.append(formatted)
-
+                    current_dates.sort(key=lambda d: datetime.strptime(d, "%b %d, %Y") if len(d.split()[1]) == 2 else datetime.strptime(d, "%b %-d, %Y"))
             elif action == "delete":
                 current_dates = [d for d in current_dates if d != date_str]
 
@@ -93,27 +101,29 @@ def zeitsteuerung_detail(request, service_id: str):
             if put_r.status_code < 300:
                 messages.success(request, "Gespeichert.")
             else:
-                messages.error(request, f"API-Fehler beim Speichern: {put_r.status_code} {put_r.text[:200]}")
+                messages.error(request, f"API-Fehler {put_r.status_code}: {put_r.text[:300]}")
         except Exception as e:
             messages.error(request, f"Fehler: {e}")
 
-        return redirect("admin:telefon_zeitsteuerung_detail", service_id=service_id)
+        return redirect("admin:telefon_zeitsteuerung_detail", service_id)
 
+    display_name = service_id
+    denied_dates = []
     try:
         r = client.get(path)
         r.raise_for_status()
         service = r.json()
         data = service.get("data", [])
         display_name = _data_value(data, "displayName") or _data_value(data, "name") or service_id
-        denied_dates: list = _data_value(data, "referralDenied") or []
+        denied_dates = _data_value(data, "referralDenied") or []
     except Exception as e:
-        display_name = service_id
-        denied_dates = []
         messages.error(request, f"NFON API Fehler: {e}")
 
     return TemplateResponse(request, "admin/telefon/zeitsteuerung_detail.html", {
         "title": display_name,
+        "subtitle": "Zeitsteuerung",
         "service_id": service_id,
         "display_name": display_name,
         "denied_dates": denied_dates,
+        "list_url": reverse("admin:telefon_zeitsteuerung_list"),
     })
