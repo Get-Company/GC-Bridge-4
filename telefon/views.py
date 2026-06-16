@@ -107,6 +107,7 @@ class ZeitsteuerungDetailView(TelefonAdminViewMixin, TemplateView):
                 "display_name": service_id,
                 "denied_dates": [],
                 "allowed_dates": [],
+                "service_debug": {},
                 "form": ZeitsteuerungDateForm(),
                 "list_url": reverse("admin:telefon_zeitsteuerung_list"),
             }
@@ -128,6 +129,7 @@ class ZeitsteuerungDetailView(TelefonAdminViewMixin, TemplateView):
             (
                 f"PUT {result['status_code']}. Gesendet: {result['sent_denied']} | "
                 f"Antwort referralDenied: {result['response_denied']} | "
-                f"Nachkontrolle referralDenied: {result.get('persisted_denied', '-')}"
+                f"Nachkontrolle referralDenied: {result.get('persisted_denied', '-')} | "
+                f"NFON-State: {result.get('service_debug', '-')}"
             ),
         )

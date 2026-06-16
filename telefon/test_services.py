@@ -71,6 +71,8 @@ def test_add_denied_date_filters_writable_payload_and_sorts_dates():
     assert result["status_code"] == 200
     assert client.put_calls[0][0] == "/api/customers/customer/targets/time-control-services/42"
     payload = client.put_calls[0][1]
+    assert result["sent_denied"] == ["Feb 03, 2026", "Mar 01, 2026"]
+    assert result["service_debug"]["referralDenied"] == ["Feb 03, 2026", "Mar 01, 2026"]
     assert "href" not in payload
     assert payload["links"] == [{"rel": "destinationIfDenied", "href": "/allowed"}]
     assert payload["data"] == [
@@ -97,6 +99,30 @@ def test_date_form_value_is_formatted_for_nfon_payload():
 
     payload = client.put_calls[0][1]
     assert payload["data"] == [{"name": "referralDenied", "value": ["Feb 03, 2026"]}]
+
+
+def test_get_time_control_dates_includes_debug_state():
+    client = FakeNfonClient(
+        {
+            "links": [{"rel": "destinationIfDenied"}],
+            "data": [
+                {"name": "displayName", "value": "Feiertag"},
+                {"name": "evaluationStrategy", "value": "DENIED"},
+                {"name": "fromDay", "value": "MONDAY"},
+                {"name": "fromTimeOfDay", "value": "08:00"},
+                {"name": "toDay", "value": "FRIDAY"},
+                {"name": "toTimeOfDay", "value": "17:00"},
+                {"name": "referralDenied", "value": ["Feb 03, 2026"]},
+            ],
+        }
+    )
+    service = NfonTimeControlService(client=client, customer_id="customer")
+
+    result = service.get_time_control_dates("42")
+
+    assert result["denied_dates"] == ["Feb 03, 2026"]
+    assert result["service_debug"]["evaluationStrategy"] == "DENIED"
+    assert result["service_debug"]["links"] == ["destinationIfDenied"]
 
 
 def test_date_form_accepts_german_date_for_debug_fallback():

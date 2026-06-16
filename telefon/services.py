@@ -64,6 +64,7 @@ class NfonTimeControlService(BaseService):
             "display_name": self.data_value(data, "displayName") or self.data_value(data, "name") or service_id,
             "denied_dates": self.data_value(data, "referralDenied") or [],
             "allowed_dates": self.data_value(data, "referralAllowed") or [],
+            "service_debug": self._build_debug_state(service),
         }
 
     def add_denied_date(self, service_id: str, value: date) -> dict[str, Any]:
@@ -74,15 +75,18 @@ class NfonTimeControlService(BaseService):
         )
         result["submitted_date"] = value.isoformat()
         result["nfon_date"] = formatted
-        persisted_dates = self.get_time_control_dates(service_id)["denied_dates"]
+        persisted_service = self._fetch_time_control(service_id)
+        persisted_dates = self.data_value(persisted_service.get("data", []), "referralDenied") or []
         result["persisted_denied"] = persisted_dates
+        result["service_debug"] = self._build_debug_state(persisted_service)
         if formatted not in persisted_dates:
             raise ValueError(
                 "NFON hat das Datum nach dem Speichern nicht uebernommen. "
                 f"Eingabe: {value.isoformat()} | NFON-Format: {formatted} | "
                 f"PUT {result['status_code']} | Gesendet: {result['sent_denied']} | "
                 f"PUT-Antwort referralDenied: {result['response_denied']} | "
-                f"Nachkontrolle referralDenied: {persisted_dates}"
+                f"Nachkontrolle referralDenied: {persisted_dates} | "
+                f"NFON-State: {result['service_debug']}"
             )
         return result
 
@@ -121,13 +125,14 @@ class NfonTimeControlService(BaseService):
         payload = self._build_writable_payload(service, data)
         body = json.dumps(payload).encode("utf-8")
         response = self.client.put(self._detail_path(service_id), body)
-        sent_denied = [item["value"] for item in payload["data"] if item.get("name") == "referralDenied"]
+        sent_denied = self.data_value(payload["data"], "referralDenied") or []
 
         if response.status_code < 300:
             return {
                 "status_code": response.status_code,
                 "sent_denied": sent_denied,
                 "response_denied": self._response_denied_dates(response),
+                "payload_debug": self._build_debug_state(payload),
             }
 
         raise ValueError(self._format_error_response(response))
@@ -146,6 +151,21 @@ class NfonTimeControlService(BaseService):
             if item.get("name") in self.WRITABLE_DATA_FIELDS
         ]
         return payload
+
+    def _build_debug_state(self, service: dict[str, Any]) -> dict[str, Any]:
+        data = service.get("data", [])
+        return {
+            "name": self.data_value(data, "name"),
+            "displayName": self.data_value(data, "displayName"),
+            "evaluationStrategy": self.data_value(data, "evaluationStrategy"),
+            "fromDay": self.data_value(data, "fromDay"),
+            "fromTimeOfDay": self.data_value(data, "fromTimeOfDay"),
+            "toDay": self.data_value(data, "toDay"),
+            "toTimeOfDay": self.data_value(data, "toTimeOfDay"),
+            "referralAllowed": self.data_value(data, "referralAllowed") or [],
+            "referralDenied": self.data_value(data, "referralDenied") or [],
+            "links": [link.get("rel") for link in service.get("links", [])],
+        }
 
     @classmethod
     def _format_nfon_date(cls, value: date) -> str:

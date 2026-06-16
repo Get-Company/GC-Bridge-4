@@ -66,6 +66,26 @@
     {% endcomponent %}
     {% endif %}
 
+    {% if service_debug %}
+    {% component "unfold/components/card.html" with title=_("NFON Debug") %}
+        <dl class="grid gap-3 text-sm md:grid-cols-[180px,minmax(0,1fr)]">
+            <dt class="font-semibold text-font-subtle-light dark:text-font-subtle-dark">evaluationStrategy</dt>
+            <dd class="font-mono text-font-important-light dark:text-font-important-dark">{{ service_debug.evaluationStrategy|default:"-" }}</dd>
+            <dt class="font-semibold text-font-subtle-light dark:text-font-subtle-dark">Zeitfenster</dt>
+            <dd class="font-mono text-font-important-light dark:text-font-important-dark">
+                {{ service_debug.fromDay|default:"-" }} {{ service_debug.fromTimeOfDay|default:"-" }} -
+                {{ service_debug.toDay|default:"-" }} {{ service_debug.toTimeOfDay|default:"-" }}
+            </dd>
+            <dt class="font-semibold text-font-subtle-light dark:text-font-subtle-dark">referralDenied</dt>
+            <dd class="font-mono text-font-important-light dark:text-font-important-dark">{{ service_debug.referralDenied }}</dd>
+            <dt class="font-semibold text-font-subtle-light dark:text-font-subtle-dark">referralAllowed</dt>
+            <dd class="font-mono text-font-important-light dark:text-font-important-dark">{{ service_debug.referralAllowed }}</dd>
+            <dt class="font-semibold text-font-subtle-light dark:text-font-subtle-dark">Links</dt>
+            <dd class="font-mono text-font-important-light dark:text-font-important-dark">{{ service_debug.links }}</dd>
+        </dl>
+    {% endcomponent %}
+    {% endif %}
+
     {% component "unfold/components/card.html" with title=_("Datum hinzufügen") %}
         <form method="post" class="grid gap-4 md:grid-cols-[minmax(0,260px),auto] md:items-end">
             {% csrf_token %}
