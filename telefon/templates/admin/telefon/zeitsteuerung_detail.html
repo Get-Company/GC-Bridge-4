@@ -1,23 +1,34 @@
 {% extends "admin/base_site.html" %}
 {% load i18n unfold %}
 
-{% block content %}
-<div class="lg:px-16 xl:px-0 px-4 flex flex-col gap-6">
+{% block extrahead %}
+    {{ block.super }}
+    {{ form.media }}
+{% endblock %}
 
-    <div class="flex items-center gap-2 text-sm text-font-subtle-light dark:text-font-subtle-dark">
-        <a href="{{ list_url }}" class="hover:text-primary-600 dark:hover:text-primary-400">
-            {% trans "Zeitsteuerungen" %}
+{% block content %}
+<div id="content-main" class="flex flex-col gap-6">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+        <div>
+            <div class="mb-2 flex items-center gap-2 text-sm text-font-subtle-light dark:text-font-subtle-dark">
+                <a href="{{ list_url }}" class="hover:text-primary-600 dark:hover:text-primary-400">{% trans "Zeitsteuerungen" %}</a>
+                <span class="material-symbols-outlined text-base">chevron_right</span>
+                <span class="font-medium text-font-important-light dark:text-font-important-dark">{{ display_name }}</span>
+            </div>
+            <h1 class="text-xl font-semibold text-font-important-light dark:text-font-important-dark">{{ display_name }}</h1>
+            <p class="text-sm text-font-subtle-light dark:text-font-subtle-dark">{{ subtitle }} · {{ service_id }}</p>
+        </div>
+        <a href="{{ list_url }}" class="inline-flex items-center justify-center gap-2 rounded-default border border-base-300 px-3 py-2 text-sm font-medium text-font-default-light transition hover:bg-base-50 dark:border-base-700 dark:text-font-default-dark dark:hover:bg-base-800">
+            <span class="material-symbols-outlined text-base">arrow_back</span>
+            {% trans "Zurueck" %}
         </a>
-        <span class="material-symbols-outlined text-base">chevron_right</span>
-        <span class="text-font-important-light dark:text-font-important-dark font-medium">{{ display_name }}</span>
     </div>
 
     {% component "unfold/components/card.html" with title=_("Ausnahmedaten (referralDenied)") %}
-
         {% if denied_dates %}
-        <div class="divide-y divide-base-200 dark:divide-base-800 -mx-6 -mb-6">
+        <div class="-mx-6 -mb-6 divide-y divide-base-200 dark:divide-base-800">
             {% for date in denied_dates %}
-            <div class="flex items-center justify-between px-6 py-3">
+            <div class="flex flex-wrap items-center justify-between gap-3 px-6 py-3">
                 <div class="flex items-center gap-2">
                     <span class="material-symbols-outlined text-base text-font-subtle-light dark:text-font-subtle-dark">event</span>
                     <span class="text-sm font-medium text-font-important-light dark:text-font-important-dark">{{ date }}</span>
@@ -26,8 +37,7 @@
                     {% csrf_token %}
                     <input type="hidden" name="action" value="delete">
                     <input type="hidden" name="date" value="{{ date }}">
-                    <button type="submit"
-                            class="inline-flex items-center gap-1 text-xs font-medium text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-200 transition-colors px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20">
+                    <button type="submit" class="inline-flex items-center justify-center gap-2 rounded-default border border-red-200 px-3 py-2 text-sm font-medium text-red-700 transition hover:bg-red-50 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-900/20">
                         <span class="material-symbols-outlined text-sm">delete</span>
                         {% trans "Entfernen" %}
                     </button>
@@ -41,17 +51,15 @@
             <span class="text-sm">{% trans "Keine Ausnahmedaten eingetragen." %}</span>
         </div>
         {% endif %}
-
     {% endcomponent %}
 
     {% if allowed_dates %}
     {% component "unfold/components/card.html" with title=_("Erlaubte Ausnahmedaten (referralAllowed)") %}
-        <div class="divide-y divide-base-200 dark:divide-base-800 -mx-6 -mb-6">
+        <div class="-mx-6 -mb-6 divide-y divide-base-200 dark:divide-base-800">
             {% for date in allowed_dates %}
             <div class="flex items-center gap-2 px-6 py-3">
                 <span class="material-symbols-outlined text-base text-green-500">event_available</span>
                 <span class="text-sm text-font-important-light dark:text-font-important-dark">{{ date }}</span>
-                <span class="text-xs text-font-subtle-light dark:text-font-subtle-dark ml-auto">kann nicht in referralDenied gesetzt werden</span>
             </div>
             {% endfor %}
         </div>
@@ -59,29 +67,17 @@
     {% endif %}
 
     {% component "unfold/components/card.html" with title=_("Datum hinzufügen") %}
-
-        <form method="post" class="flex items-end gap-4">
+        <form method="post" class="grid gap-4 md:grid-cols-[minmax(0,260px),auto] md:items-end">
             {% csrf_token %}
             <input type="hidden" name="action" value="add">
-            <div class="flex flex-col gap-1.5">
-                <label for="date-input" class="text-xs font-semibold uppercase tracking-wider text-font-subtle-light dark:text-font-subtle-dark">
-                    {% trans "Datum" %}
-                </label>
-                <input
-                    type="date"
-                    id="date-input"
-                    name="date"
-                    required
-                    class="block w-full rounded-default border border-base-300 bg-white px-3 py-2 text-sm text-font-default-light shadow-xs transition focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-base-700 dark:bg-base-800 dark:text-font-default-dark dark:focus:border-primary-400"
-                >
+            <div>
+                {% include "unfold/helpers/field.html" with field=form.date %}
             </div>
-            <button type="submit" style="background:#4f46e5; color:white; border:none; padding:8px 16px; border-radius:6px; cursor:pointer; font-size:13px; font-weight:500; display:inline-flex; align-items:center; gap:6px;">
-                <span class="material-symbols-outlined" style="font-size:16px;">add</span>
+            <button type="submit" class="inline-flex items-center justify-center gap-2 rounded-default border border-transparent bg-primary-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-primary-700">
+                <span class="material-symbols-outlined text-base">add</span>
                 {% trans "Hinzufügen" %}
             </button>
         </form>
-
     {% endcomponent %}
-
 </div>
 {% endblock %}

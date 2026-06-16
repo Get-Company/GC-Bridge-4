@@ -2,38 +2,54 @@
 {% load i18n unfold %}
 
 {% block content %}
-<div class="lg:px-16 xl:px-0 px-4 flex flex-col gap-6">
+<div id="content-main" class="flex flex-col gap-6">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+        <div>
+            <h1 class="text-xl font-semibold text-font-important-light dark:text-font-important-dark">{{ title }}</h1>
+            <p class="text-sm text-font-subtle-light dark:text-font-subtle-dark">{{ subtitle }}</p>
+        </div>
+        <div class="inline-flex items-center gap-2 rounded-default border border-base-200 bg-white px-3 py-2 text-sm text-font-subtle-light shadow-xs dark:border-base-700 dark:bg-base-900 dark:text-font-subtle-dark">
+            <span class="material-symbols-outlined text-base">schedule</span>
+            <span>{{ services|length }} {% trans "Eintraege" %}</span>
+        </div>
+    </div>
 
     {% component "unfold/components/card.html" with title=_("Zeitsteuerungen") %}
-
-        <table class="w-full text-sm">
-            <thead>
-                <tr class="border-b border-base-200 dark:border-base-800 bg-base-50 dark:bg-base-900">
-                    <th class="px-4 py-2 text-left font-semibold text-font-important-light dark:text-font-important-dark">{% trans "Name" %}</th>
-                    <th class="px-4 py-2 text-left font-semibold text-font-important-light dark:text-font-important-dark">{% trans "ID" %}</th>
-                </tr>
-            </thead>
-            <tbody class="divide-y divide-base-200 dark:divide-base-800">
-                {% for service in services %}
-                <tr class="hover:bg-base-50 dark:hover:bg-base-900 transition-colors">
-                    <td class="px-4 py-3">
-                        <a href="{{ service.url }}" class="font-medium text-primary-600 hover:text-primary-800 dark:text-primary-400 dark:hover:text-primary-200 hover:underline">
-                            {{ service.name }}
-                        </a>
-                    </td>
-                    <td class="px-4 py-3 text-font-subtle-light dark:text-font-subtle-dark">{{ service.id }}</td>
-                </tr>
-                {% empty %}
-                <tr>
-                    <td colspan="2" class="px-4 py-6 text-center text-font-subtle-light dark:text-font-subtle-dark">
-                        {% trans "Keine Zeitsteuerungen gefunden." %}
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-
+        <div class="-mx-6 -mb-6 overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="border-b border-base-200 bg-base-50 text-left dark:border-base-800 dark:bg-base-900">
+                        <th class="px-6 py-3 font-semibold text-font-important-light dark:text-font-important-dark">{% trans "Name" %}</th>
+                        <th class="px-6 py-3 font-semibold text-font-important-light dark:text-font-important-dark">{% trans "ID" %}</th>
+                        <th class="px-6 py-3 text-right font-semibold text-font-important-light dark:text-font-important-dark">{% trans "Aktion" %}</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-base-200 dark:divide-base-800">
+                    {% for service in services %}
+                    <tr class="transition-colors hover:bg-base-50 dark:hover:bg-base-900">
+                        <td class="px-6 py-3">
+                            <a href="{{ service.url }}" class="font-medium text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300">
+                                {{ service.name }}
+                            </a>
+                        </td>
+                        <td class="px-6 py-3 font-mono text-xs text-font-subtle-light dark:text-font-subtle-dark">{{ service.id }}</td>
+                        <td class="px-6 py-3 text-right">
+                            <a href="{{ service.url }}" class="inline-flex items-center justify-center gap-2 rounded-default border border-base-300 px-3 py-2 text-sm font-medium text-font-default-light transition hover:bg-base-50 dark:border-base-700 dark:text-font-default-dark dark:hover:bg-base-800">
+                                <span class="material-symbols-outlined text-base">edit_calendar</span>
+                                {% trans "Oeffnen" %}
+                            </a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="3" class="px-6 py-8 text-center text-sm text-font-subtle-light dark:text-font-subtle-dark">
+                            {% trans "Keine Zeitsteuerungen gefunden." %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     {% endcomponent %}
-
 </div>
 {% endblock %}

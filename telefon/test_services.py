@@ -1,0 +1,91 @@
+from __future__ import annotations
+
+import json
+from datetime import date
+
+from telefon.services import NfonTimeControlService
+
+
+class FakeResponse:
+    def __init__(self, payload=None, status_code=200, text=""):
+        self.payload = payload
+        self.status_code = status_code
+        self.text = text
+
+    def json(self):
+        return self.payload
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise RuntimeError(self.text or self.status_code)
+
+
+class FakeNfonClient:
+    def __init__(self, payload):
+        self.payload = payload
+        self.put_calls = []
+
+    def get(self, path):
+        return FakeResponse(self.payload)
+
+    def put(self, path, body):
+        self.put_calls.append((path, json.loads(body.decode("utf-8"))))
+        return FakeResponse({"data": [{"name": "referralDenied", "value": ["ok"]}]})
+
+
+def test_list_time_controls_normalizes_list_payload():
+    client = FakeNfonClient(
+        [
+            {
+                "href": "/api/customers/customer/targets/time-control-services/42",
+                "data": [{"name": "displayName", "value": "Ferien"}],
+            }
+        ]
+    )
+    service = NfonTimeControlService(client=client, customer_id="customer")
+
+    assert service.list_time_controls() == [{"id": "42", "name": "Ferien"}]
+
+
+def test_add_denied_date_filters_writable_payload_and_sorts_dates():
+    client = FakeNfonClient(
+        {
+            "href": "/readonly",
+            "links": [
+                {"rel": "destinationIfDenied", "href": "/allowed"},
+                {"rel": "readonly", "href": "/blocked"},
+            ],
+            "data": [
+                {"name": "displayName", "value": "Feiertag"},
+                {"name": "readonly", "value": "blocked"},
+                {"name": "referralDenied", "value": ["Mar 01, 2026"]},
+            ],
+        }
+    )
+    service = NfonTimeControlService(client=client, customer_id="customer")
+
+    result = service.add_denied_date("42", date(2026, 2, 3))
+
+    assert result["status_code"] == 200
+    assert client.put_calls[0][0] == "/api/customers/customer/targets/time-control-services/42"
+    payload = client.put_calls[0][1]
+    assert "href" not in payload
+    assert payload["links"] == [{"rel": "destinationIfDenied", "href": "/allowed"}]
+    assert payload["data"] == [
+        {"name": "displayName", "value": "Feiertag"},
+        {"name": "referralDenied", "value": ["Feb 03, 2026", "Mar 01, 2026"]},
+    ]
+
+
+def test_delete_denied_date_raises_when_date_is_missing():
+    client = FakeNfonClient({"data": [{"name": "referralDenied", "value": ["Mar 01, 2026"]}]})
+    service = NfonTimeControlService(client=client, customer_id="customer")
+
+    try:
+        service.delete_denied_date("42", "Apr 01, 2026")
+    except ValueError as error:
+        assert "Datum nicht gefunden" in str(error)
+    else:
+        raise AssertionError("Expected ValueError")
+
+    assert client.put_calls == []
