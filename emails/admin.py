@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import logging
 
+from django import forms
 from django.contrib import admin
+from django.contrib.admin.widgets import AdminTextareaWidget
 from django.http import HttpResponse, JsonResponse
 from django.urls import path
 from django.utils.html import format_html
@@ -12,7 +14,7 @@ from django.utils.translation import gettext_lazy as _
 logger = logging.getLogger(__name__)
 
 from core.admin import BaseAdmin, BaseStackedInline, BaseTabularInline
-from emails.mjml import compile_mjml_to_html, render_campaign_mjml
+from emails.mjml import compile_mjml_to_html, default_component_markup, render_campaign_mjml
 from emails.models import (
     EmailCampaign,
     EmailCampaignComponent,
@@ -21,11 +23,33 @@ from emails.models import (
 )
 
 
+class EmailCampaignComponentForm(forms.ModelForm):
+    class Meta:
+        model = EmailCampaignComponent
+        fields = "__all__"
+        widgets = {
+            "mjml_markup": AdminTextareaWidget(
+                attrs={
+                    "rows": 14,
+                    "style": "font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;",
+                }
+            ),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        component_key = self.initial.get("component_key") or getattr(self.instance, "component_key", "")
+        if component_key and not self.initial.get("mjml_markup") and not getattr(self.instance, "mjml_markup", ""):
+            self.initial["mjml_markup"] = default_component_markup(component_key)
+
+
 class EmailCampaignComponentInline(BaseStackedInline):
     model = EmailCampaignComponent
-    fields = ("order", "enabled", "component_key", "title", "body_html")
+    form = EmailCampaignComponentForm
+    fields = ("order", "enabled", "component_key", "title", "subtitle", "body_html", "mjml_markup")
     extra = 0
     ordering = ("order", "id")
+    collapsible = True
 
 
 class EmailCampaignProductInline(BaseTabularInline):
@@ -65,17 +89,17 @@ class EmailCampaignSalesChannelInline(BaseTabularInline):
 
 @admin.register(EmailCampaign)
 class EmailCampaignAdmin(BaseAdmin):
-    list_display = ("internal_title", "h1", "product_count", "status", "product_template", "created_at")
+    list_display = ("internal_title", "component_count", "product_count", "status", "product_template", "created_at")
     list_filter = ("status", "product_template", "created_at")
-    search_fields = ("internal_title", "h1")
+    search_fields = ("internal_title",)
     list_editable = ("status",)
     inlines = (EmailCampaignComponentInline, EmailCampaignProductInline, EmailCampaignSalesChannelInline)
 
     fieldsets = (
         (
-            _("E-Mail Inhalte"),
+            _("Kampagne"),
             {
-                "fields": ("internal_title", "h1", "h1_small", "intro_text"),
+                "fields": ("internal_title",),
             },
         ),
         (
@@ -96,6 +120,10 @@ class EmailCampaignAdmin(BaseAdmin):
     @admin.display(description=_("Produkte"))
     def product_count(self, obj: EmailCampaign) -> int:
         return obj.campaign_products.count()
+
+    @admin.display(description=_("Komponenten"))
+    def component_count(self, obj: EmailCampaign) -> int:
+        return obj.components.count()
 
     def get_urls(self):
         urls = super().get_urls()
@@ -135,7 +163,11 @@ class EmailCampaignAdmin(BaseAdmin):
 
     def _component_context(self, campaign: EmailCampaign | None = None) -> dict:
         component_library = [
-            {"key": key, "label": label}
+            {
+                "key": key,
+                "label": label,
+                "markup": default_component_markup(key),
+            }
             for key, label in EmailCampaignComponent.ComponentKey.choices
         ]
         active_components = []
@@ -159,8 +191,10 @@ class EmailCampaignAdmin(BaseAdmin):
                 EmailCampaignComponent(
                     campaign=campaign,
                     component_key=component_key,
-                    title=str(label),
+                    title=campaign.h1 if component_key == EmailCampaignComponent.ComponentKey.TITLE_INTRO else str(label),
+                    subtitle=campaign.h1_small if component_key == EmailCampaignComponent.ComponentKey.TITLE_INTRO else "",
                     body_html=body_html,
+                    mjml_markup=default_component_markup(component_key),
                     order=index * 10,
                     enabled=True,
                 )

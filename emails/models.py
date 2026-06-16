@@ -22,7 +22,12 @@ class EmailCampaign(BaseModel):
         verbose_name=_("Interner Titel"),
         help_text=_("Wird nicht in der E-Mail angezeigt."),
     )
-    h1 = models.CharField(max_length=255, verbose_name=_("Hauptüberschrift"))
+    h1 = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        verbose_name=_("Hauptüberschrift"),
+    )
     h1_small = models.CharField(
         max_length=255,
         blank=True,
@@ -102,11 +107,23 @@ class EmailCampaignComponent(BaseModel):
         verbose_name=_("Titel"),
         help_text=_("Interner Name oder Ueberschrift fuer Textbloecke."),
     )
+    subtitle = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        verbose_name=_("Untertitel"),
+    )
     body_html = models.TextField(
         blank=True,
         default="",
         verbose_name=_("Inhalt"),
         help_text=_("HTML erlaubt. Wird fuer bearbeitbare Text-Komponenten verwendet."),
+    )
+    mjml_markup = models.TextField(
+        blank=True,
+        default="",
+        verbose_name=_("MJML Markup"),
+        help_text=_("MJML Vorlage dieser Komponente. Django-Template-Variablen sind erlaubt."),
     )
     order = models.PositiveIntegerField(default=0, verbose_name=_("Reihenfolge"))
     enabled = models.BooleanField(default=True, verbose_name=_("Aktiviert"))
@@ -118,6 +135,9 @@ class EmailCampaignComponent(BaseModel):
 
     def __str__(self) -> str:
         return self.title or self.get_component_key_display()
+
+    def get_inline_title(self) -> str:
+        return f"{self.order} - {self}"
 
 
 class EmailCampaignProduct(BaseModel):

@@ -8,8 +8,9 @@ from decimal import Decimal
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Iterable
 
+from django.template import Context, Template
 from django.template import TemplateDoesNotExist
-from django.template.loader import render_to_string
+from django.template.loader import get_template, render_to_string
 
 if TYPE_CHECKING:
     from emails.models import EmailCampaign, EmailCampaignComponent
@@ -28,6 +29,26 @@ LEGACY_COMPONENT_TEMPLATES = {
     "contact_table": "emails/components/legacy/contact_table.mjml",
     "disclaimer": "emails/components/legacy/disclaimer.mjml",
 }
+
+
+def default_component_markup(component_key: str) -> str:
+    template_name = LEGACY_COMPONENT_TEMPLATES.get(component_key)
+    if not template_name:
+        return ""
+
+    try:
+        template = get_template(template_name)
+    except TemplateDoesNotExist:
+        return ""
+
+    origin = getattr(template, "origin", None)
+    if origin and origin.name:
+        try:
+            with open(origin.name, encoding="utf-8") as template_file:
+                return template_file.read()
+        except OSError:
+            return ""
+    return ""
 
 
 class ProductEmailProxy:
@@ -119,27 +140,27 @@ def _campaign_components(campaign: "EmailCampaign") -> list["EmailCampaignCompon
         SimpleNamespace(
             component_key=component_key,
             title=EmailCampaignComponent.ComponentKey(component_key).label,
+            subtitle="",
             body_html="",
+            mjml_markup=default_component_markup(component_key),
         )
         for component_key in EmailCampaignComponent.DEFAULT_COMPONENTS
     ]
 
 
 def _render_component_mjml(component: "EmailCampaignComponent", context: dict) -> str:
-    template_name = LEGACY_COMPONENT_TEMPLATES.get(component.component_key)
-    if not template_name:
+    markup = getattr(component, "mjml_markup", "") or default_component_markup(component.component_key)
+    if not markup:
         return ""
 
     component_context = {
         **context,
         "component": component,
     }
-    if component.component_key == "title_intro" and component.body_html:
-        component_context["intro_text"] = component.body_html
 
     try:
-        return render_to_string(template_name, component_context)
-    except TemplateDoesNotExist:
+        return Template(markup).render(Context(component_context))
+    except Exception:
         return ""
 
 

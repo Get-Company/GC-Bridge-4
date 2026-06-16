@@ -184,19 +184,16 @@ class TestCampaignComponentRendering:
             sales_channels=FakeQuerySet(),
             campaign_products=FakeQuerySet(),
             components=FakeQuerySet([
-                SimpleNamespace(component_key="content_text", title="", body_html="", order=20, enabled=True),
-                SimpleNamespace(component_key="logo", title="", body_html="", order=10, enabled=False),
-                SimpleNamespace(component_key="header_nav", title="", body_html="", order=5, enabled=True),
+                SimpleNamespace(component_key="content_text", title="", body_html="", mjml_markup="{{ component.component_key }}", order=20, enabled=True),
+                SimpleNamespace(component_key="logo", title="", body_html="", mjml_markup="{{ component.component_key }}", order=10, enabled=False),
+                SimpleNamespace(component_key="header_nav", title="", body_html="", mjml_markup="{{ component.component_key }}", order=5, enabled=True),
             ]),
         )
 
         mjml = render_campaign_mjml(campaign)
 
         assert mjml == "header_nav\ncontent_text"
-        assert rendered_templates == [
-            "emails/components/legacy/header_nav.mjml",
-            "emails/components/legacy/content_text.mjml",
-        ]
+        assert rendered_templates == []
 
 
 @pytest.mark.django_db
