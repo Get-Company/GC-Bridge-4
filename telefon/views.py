@@ -91,6 +91,10 @@ def zeitsteuerung_detail(request, service_id: str):
                 data.append({"name": "referralDenied", "value": current_dates})
 
             service["data"] = data
+            # Strip read-only fields before PUT
+            service.pop("href", None)
+            writable_rels = {"destinationIfAllowed", "destinationIfDenied", "inboundTrunkNumbers", "timezone"}
+            service["links"] = [l for l in service.get("links", []) if l.get("rel") in writable_rels]
             body = json.dumps(service).encode("utf-8")
             put_r = client.put(path, body)
             if put_r.status_code < 300:
