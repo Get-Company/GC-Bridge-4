@@ -44,6 +44,20 @@
 
     {% endcomponent %}
 
+    {% if allowed_dates %}
+    {% component "unfold/components/card.html" with title=_("Erlaubte Ausnahmedaten (referralAllowed)") %}
+        <div class="divide-y divide-base-200 dark:divide-base-800 -mx-6 -mb-6">
+            {% for date in allowed_dates %}
+            <div class="flex items-center gap-2 px-6 py-3">
+                <span class="material-symbols-outlined text-base text-green-500">event_available</span>
+                <span class="text-sm text-font-important-light dark:text-font-important-dark">{{ date }}</span>
+                <span class="text-xs text-font-subtle-light dark:text-font-subtle-dark ml-auto">kann nicht in referralDenied gesetzt werden</span>
+            </div>
+            {% endfor %}
+        </div>
+    {% endcomponent %}
+    {% endif %}
+
     {% component "unfold/components/card.html" with title=_("Datum hinzufügen") %}
 
         <form method="post" class="flex items-end gap-4">

@@ -115,7 +115,12 @@ def zeitsteuerung_detail(request, service_id: str):
                     resp_denied = put_r.text[:100]
                 messages.success(request, f"PUT {put_r.status_code}. Gesendet: {sent_denied} | Antwort referralDenied: {resp_denied}")
             else:
-                messages.error(request, f"API-Fehler {put_r.status_code}: {put_r.text[:300]}")
+                try:
+                    err = put_r.json()
+                    errs = "; ".join(f"{e['path']}: {e['message']}" for e in err.get("errors", []))
+                    messages.error(request, f"{err.get('title','Fehler')}: {errs or err.get('detail','')}")
+                except Exception:
+                    messages.error(request, f"API-Fehler {put_r.status_code}: {put_r.text[:300]}")
         except Exception as e:
             messages.error(request, f"Fehler: {e}")
 
@@ -123,6 +128,7 @@ def zeitsteuerung_detail(request, service_id: str):
 
     display_name = service_id
     denied_dates = []
+    allowed_dates = []
     try:
         r = client.get(path)
         r.raise_for_status()
@@ -130,6 +136,7 @@ def zeitsteuerung_detail(request, service_id: str):
         data = service.get("data", [])
         display_name = _data_value(data, "displayName") or _data_value(data, "name") or service_id
         denied_dates = _data_value(data, "referralDenied") or []
+        allowed_dates = _data_value(data, "referralAllowed") or []
     except Exception as e:
         messages.error(request, f"NFON API Fehler: {e}")
 
@@ -139,5 +146,6 @@ def zeitsteuerung_detail(request, service_id: str):
         "service_id": service_id,
         "display_name": display_name,
         "denied_dates": denied_dates,
+        "allowed_dates": allowed_dates,
         "list_url": reverse("admin:telefon_zeitsteuerung_list"),
     })
