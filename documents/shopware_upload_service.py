@@ -15,6 +15,7 @@ class DocumentShopwareUploadService(Shopware6Service):
     """Uploads a generated Document PDF to Shopware 6 as a Media entity."""
 
     media_base_path = "/media"
+    media_folder_id = "d6460afa064f4c8196ed5bd0f6ccbcb5"
 
     @staticmethod
     def build_media_id(document: Document) -> str:
@@ -35,11 +36,7 @@ class DocumentShopwareUploadService(Shopware6Service):
         if not self.access_token:
             self.access_token = self.authenticate()
 
-        # Create or ensure the media entity exists (idempotent)
-        self.request("POST", "/media", payload={
-            "id": media_id,
-            "mediaFolderId": "d6460afa064f4c8196ed5bd0f6ccbcb5",
-        })
+        self.ensure_media_entity(media_id)
 
         file_name = pdf_path.stem
         self.delete_conflicting_media_by_filename(
@@ -62,6 +59,23 @@ class DocumentShopwareUploadService(Shopware6Service):
         document.shopware_media_id = media_id
         document.save(update_fields=["shopware_media_id", "updated_at"])
         return media_id
+
+    def ensure_media_entity(self, media_id: str) -> None:
+        self.request_post(
+            "/_action/sync",
+            payload={
+                "document-media-upsert": {
+                    "entity": "media",
+                    "action": "upsert",
+                    "payload": [
+                        {
+                            "id": media_id,
+                            "mediaFolderId": self.media_folder_id,
+                        }
+                    ],
+                }
+            },
+        )
 
     def _upload_pdf_file(self, *, media_id: str, pdf_path: Path, file_name: str) -> None:
         url = self._build_url(

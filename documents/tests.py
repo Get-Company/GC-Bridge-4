@@ -167,19 +167,26 @@ class DocumentShopwareUploadServiceTest(SimpleTestCase):
             document.save = MagicMock()
             service = DocumentShopwareUploadService.__new__(DocumentShopwareUploadService)
             service.access_token = "token"
-            service.request = MagicMock()
+            service.request_post = MagicMock()
             service.delete_conflicting_media_by_filename = MagicMock(return_value=0)
             service._upload_pdf_file = MagicMock()
 
             media_id = DocumentShopwareUploadService.upload_pdf(service, document)
 
             self.assertEqual(media_id, "existing-media-id")
-            service.request.assert_called_once_with(
-                "POST",
-                "/media",
+            service.request_post.assert_called_once_with(
+                "/_action/sync",
                 payload={
-                    "id": "existing-media-id",
-                    "mediaFolderId": "d6460afa064f4c8196ed5bd0f6ccbcb5",
+                    "document-media-upsert": {
+                        "entity": "media",
+                        "action": "upsert",
+                        "payload": [
+                            {
+                                "id": "existing-media-id",
+                                "mediaFolderId": "d6460afa064f4c8196ed5bd0f6ccbcb5",
+                            }
+                        ],
+                    }
                 },
             )
             service.delete_conflicting_media_by_filename.assert_called_once_with(
@@ -197,7 +204,7 @@ class DocumentShopwareUploadServiceTest(SimpleTestCase):
             document.save = MagicMock()
             service = DocumentShopwareUploadService.__new__(DocumentShopwareUploadService)
             service.access_token = "token"
-            service.request = MagicMock()
+            service.request_post = MagicMock()
             service.delete_conflicting_media_by_filename = MagicMock(return_value=1)
             service._upload_pdf_file = MagicMock(
                 side_effect=[

@@ -1,54 +1,54 @@
 {
   "version": 1,
-  "updatedAt": 1779342385197,
+  "updatedAt": 1781590188351,
   "nodeCount": 7,
   "nodes": {
     "mem-MEMORY-preferences": {
       "id": "mem-MEMORY-preferences",
       "category": "core",
-      "confidence": 0.5,
+      "confidence": 0.25,
       "accessCount": 0,
       "createdAt": 1777269069937
     },
     "mem-MEMORY-project": {
       "id": "mem-MEMORY-project",
       "category": "core",
-      "confidence": 0.5,
+      "confidence": 0.25,
       "accessCount": 0,
       "createdAt": 1777269069937
     },
     "mem-project_overview----": {
       "id": "mem-project_overview----",
       "category": "project_overview",
-      "confidence": 0.5,
+      "confidence": 0.25,
       "accessCount": 0,
       "createdAt": 1777269069937
     },
     "mem-MEMORY-user-preferences": {
       "id": "mem-MEMORY-user-preferences",
       "category": "core",
-      "confidence": 0.5,
+      "confidence": 0.25,
       "accessCount": 0,
       "createdAt": 1777269069939
     },
     "mem-MEMORY-project--gc-bridge-4": {
       "id": "mem-MEMORY-project--gc-bridge-4",
       "category": "core",
-      "confidence": 0.5,
+      "confidence": 0.25,
       "accessCount": 0,
       "createdAt": 1777269069939
     },
     "mem-project_microtech_testing----": {
       "id": "mem-project_microtech_testing----",
       "category": "project_microtech_testing",
-      "confidence": 0.5,
+      "confidence": 0.25,
       "accessCount": 0,
       "createdAt": 1777269069939
     },
     "insight-1777271652123-bb4d": {
       "id": "insight-1777271652123-bb4d",
       "category": "insights",
-      "confidence": 0.5,
+      "confidence": 0.255,
       "accessCount": 0,
       "createdAt": 1777271652123
     }
