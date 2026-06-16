@@ -62,7 +62,6 @@ class NfonClient:
             "Content-MD5": content_md5,
             "Content-Type": content_type,
             "User-Agent": self.user_agent,
-            "Accept": "application/json",
         }
         return self.session.post(f"{BASE_URL}{path}", data=body, headers=headers, timeout=15)
 
@@ -75,7 +74,6 @@ class NfonClient:
             "Content-MD5": content_md5,
             "Content-Type": content_type,
             "User-Agent": self.user_agent,
-            "Accept": "application/json",
         }
         return self.session.put(f"{BASE_URL}{path}", data=body, headers=headers, timeout=15)
 
