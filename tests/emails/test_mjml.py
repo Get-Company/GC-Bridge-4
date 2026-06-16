@@ -1,8 +1,42 @@
 import pytest
 from decimal import Decimal
 from unittest.mock import MagicMock
+from types import SimpleNamespace
 
 from emails.mjml import ProductEmailProxy, render_campaign_mjml, compile_mjml_to_html
+
+
+class FakePriceQuerySet:
+    def __init__(self, entries):
+        self.entries = list(entries)
+
+    def all(self):
+        return self
+
+    def filter(self, **kwargs):
+        entries = self.entries
+        if "sales_channel_id__in" in kwargs:
+            channel_ids = set(kwargs["sales_channel_id__in"])
+            entries = [entry for entry in entries if entry.sales_channel_id in channel_ids]
+        if kwargs.get("sales_channel__is_default") is True:
+            entries = [entry for entry in entries if entry.sales_channel.is_default]
+        return type(self)(entries)
+
+    def order_by(self, *args):
+        return self
+
+    def first(self):
+        return self.entries[0] if self.entries else None
+
+
+class FakePrice:
+    def __init__(self, price, sales_channel_id=1, is_default=True):
+        self.price = price
+        self.sales_channel_id = sales_channel_id
+        self.sales_channel = SimpleNamespace(is_default=is_default)
+
+    def get_current_price(self, *, as_float=False):
+        return self.price
 
 
 class TestProductEmailProxy:
@@ -58,6 +92,20 @@ class TestProductEmailProxy:
         product.price = Decimal("50.00")
         proxy = ProductEmailProxy(product, special_price_override=None)
         assert proxy.shipping_cost_is_free is False
+
+    def test_shipping_cost_is_free_false_without_product_price_attribute(self):
+        product = SimpleNamespace()
+        proxy = ProductEmailProxy(product, special_price_override=None)
+        assert proxy.shipping_cost_is_free is False
+
+    def test_price_uses_default_sales_channel_price_entry(self):
+        product = SimpleNamespace(
+            prices=FakePriceQuerySet([
+                FakePrice(Decimal("123.45"), sales_channel_id=1, is_default=True),
+            ])
+        )
+        proxy = ProductEmailProxy(product, special_price_override=None)
+        assert proxy.price == Decimal("123.45")
 
 
 @pytest.mark.django_db
