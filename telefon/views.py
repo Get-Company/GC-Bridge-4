@@ -43,23 +43,18 @@ def zeitsteuerung_list(request):
             href = item.get("href", "")
             service_id = href.rstrip("/").split("/")[-1]
             display_name = _data_value(data, "displayName") or _data_value(data, "name") or service_id
-            detail_url = reverse("admin:telefon_zeitsteuerung_detail", args=[service_id])
-            services.append([
-                f'<a href="{detail_url}" class="font-medium text-primary-600 hover:underline">{display_name}</a>',
-                service_id,
-            ])
+            services.append({
+                "id": service_id,
+                "name": display_name,
+                "url": reverse("admin:telefon_zeitsteuerung_detail", args=[service_id]),
+            })
     except Exception as e:
         messages.error(request, f"NFON API Fehler: {e}")
-
-    table = {
-        "headers": ["Name", "ID"],
-        "rows": services,
-    }
 
     return TemplateResponse(request, "admin/telefon/zeitsteuerung_list.html", {
         "title": "Zeitsteuerungen",
         "subtitle": "NFON Service Portal",
-        "table": table,
+        "services": services,
     })
 
 

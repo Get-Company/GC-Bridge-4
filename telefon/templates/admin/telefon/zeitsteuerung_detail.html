@@ -1,49 +1,56 @@
 {% extends "admin/base_site.html" %}
 {% load i18n unfold %}
 
-{% block breadcrumbs %}
-<div class="container mb-6 mx-auto -mt-3 lg:px-16 xl:px-0 px-4">
-    {% include "unfold/helpers/breadcrumbs.html" %}
-</div>
-{% endblock %}
-
 {% block content %}
 <div class="lg:px-16 xl:px-0 px-4 flex flex-col gap-6">
 
-    {% component "unfold/components/card.html" with title="Ausnahmedaten (Brückentage)" %}
+    <div class="flex items-center gap-2 text-sm text-font-subtle-light dark:text-font-subtle-dark">
+        <a href="{{ list_url }}" class="hover:text-primary-600 dark:hover:text-primary-400">
+            {% trans "Zeitsteuerungen" %}
+        </a>
+        <span class="material-symbols-outlined text-base">chevron_right</span>
+        <span class="text-font-important-light dark:text-font-important-dark font-medium">{{ display_name }}</span>
+    </div>
+
+    {% component "unfold/components/card.html" with title=_("Ausnahmedaten (referralDenied)") %}
 
         {% if denied_dates %}
-        <div class="divide-y divide-gray-100 dark:divide-gray-800">
+        <div class="divide-y divide-base-200 dark:divide-base-800 -mx-6 -mb-6">
             {% for date in denied_dates %}
-            <div class="flex items-center justify-between py-3 px-2">
-                {% component "unfold/components/text.html" %}
-                    {{ date }}
-                {% endcomponent %}
+            <div class="flex items-center justify-between px-6 py-3">
+                <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-base text-font-subtle-light dark:text-font-subtle-dark">event</span>
+                    <span class="text-sm font-medium text-font-important-light dark:text-font-important-dark">{{ date }}</span>
+                </div>
                 <form method="post">
                     {% csrf_token %}
                     <input type="hidden" name="action" value="delete">
                     <input type="hidden" name="date" value="{{ date }}">
-                    {% component "unfold/components/button.html" with submit=True danger=True small=True %}
+                    <button type="submit"
+                            class="inline-flex items-center gap-1 text-xs font-medium text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-200 transition-colors px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20">
+                        <span class="material-symbols-outlined text-sm">delete</span>
                         {% trans "Entfernen" %}
-                    {% endcomponent %}
+                    </button>
                 </form>
             </div>
             {% endfor %}
         </div>
         {% else %}
-        {% component "unfold/components/text.html" with class="px-2 py-4 text-gray-500" %}
-            Keine Ausnahmedaten eingetragen.
-        {% endcomponent %}
+        <div class="flex items-center gap-2 py-4 text-font-subtle-light dark:text-font-subtle-dark">
+            <span class="material-symbols-outlined text-base">info</span>
+            <span class="text-sm">{% trans "Keine Ausnahmedaten eingetragen." %}</span>
+        </div>
         {% endif %}
 
     {% endcomponent %}
 
-    {% component "unfold/components/card.html" with title="Datum hinzufügen" %}
-        <form method="post" class="flex items-end gap-4 p-2">
+    {% component "unfold/components/card.html" with title=_("Datum hinzufügen") %}
+
+        <form method="post" class="flex items-end gap-4">
             {% csrf_token %}
             <input type="hidden" name="action" value="add">
-            <div class="flex flex-col gap-1">
-                <label for="date-input" class="text-sm font-medium text-gray-700 dark:text-gray-300">
+            <div class="flex flex-col gap-1.5">
+                <label for="date-input" class="text-xs font-semibold uppercase tracking-wider text-font-subtle-light dark:text-font-subtle-dark">
                     {% trans "Datum" %}
                 </label>
                 <input
@@ -51,13 +58,16 @@
                     id="date-input"
                     name="date"
                     required
-                    class="border-gray-300 rounded-md shadow-sm text-sm dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100 focus:ring-primary-500 focus:border-primary-500"
+                    class="block w-full rounded-default border border-base-300 bg-white px-3 py-2 text-sm text-font-default-light shadow-xs transition focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-base-700 dark:bg-base-800 dark:text-font-default-dark dark:focus:border-primary-400"
                 >
             </div>
-            {% component "unfold/components/button.html" with submit=True %}
+            <button type="submit"
+                    class="inline-flex items-center gap-1.5 rounded-default bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-xs hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 transition-colors dark:bg-primary-500 dark:hover:bg-primary-400">
+                <span class="material-symbols-outlined text-base">add</span>
                 {% trans "Hinzufügen" %}
-            {% endcomponent %}
+            </button>
         </form>
+
     {% endcomponent %}
 
 </div>

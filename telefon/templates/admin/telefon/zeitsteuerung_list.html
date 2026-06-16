@@ -1,17 +1,39 @@
 {% extends "admin/base_site.html" %}
 {% load i18n unfold %}
 
-{% block breadcrumbs %}
-<div class="container mb-6 mx-auto -mt-3 lg:px-16 xl:px-0 px-4">
-    {% include "unfold/helpers/breadcrumbs.html" %}
-</div>
-{% endblock %}
-
 {% block content %}
-<div class="lg:px-16 xl:px-0 px-4">
-    {% component "unfold/components/card.html" with title="Alle Zeitsteuerungen" %}
-        {% component "unfold/components/table.html" with table=table striped=True %}
-        {% endcomponent %}
+<div class="lg:px-16 xl:px-0 px-4 flex flex-col gap-6">
+
+    {% component "unfold/components/card.html" with title=_("Zeitsteuerungen") %}
+
+        <table class="w-full text-sm">
+            <thead>
+                <tr class="border-b border-base-200 dark:border-base-800 bg-base-50 dark:bg-base-900">
+                    <th class="px-4 py-2 text-left font-semibold text-font-important-light dark:text-font-important-dark">{% trans "Name" %}</th>
+                    <th class="px-4 py-2 text-left font-semibold text-font-important-light dark:text-font-important-dark">{% trans "ID" %}</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-base-200 dark:divide-base-800">
+                {% for service in services %}
+                <tr class="hover:bg-base-50 dark:hover:bg-base-900 transition-colors">
+                    <td class="px-4 py-3">
+                        <a href="{{ service.url }}" class="font-medium text-primary-600 hover:text-primary-800 dark:text-primary-400 dark:hover:text-primary-200 hover:underline">
+                            {{ service.name }}
+                        </a>
+                    </td>
+                    <td class="px-4 py-3 text-font-subtle-light dark:text-font-subtle-dark">{{ service.id }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="2" class="px-4 py-6 text-center text-font-subtle-light dark:text-font-subtle-dark">
+                        {% trans "Keine Zeitsteuerungen gefunden." %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
     {% endcomponent %}
+
 </div>
 {% endblock %}
