@@ -66,13 +66,9 @@
 
     {% if original %}
     <div style="margin-bottom:16px">
-      <a href="{% url 'admin:emails_emailcampaign_export_html' original.pk %}?download=1"
-         style="display:block; background:#f97316; color:white; text-align:center; padding:8px; border-radius:6px; text-decoration:none; font-size:13px; font-weight:600; margin-bottom:8px">
-        ⬇ HTML {% trans "Herunterladen" %}
-      </a>
       <button onclick="exportHtml({{ original.pk }})"
-              style="display:block; width:100%; background:#1e293b; color:#e2e8f0; border:none; padding:8px; border-radius:6px; cursor:pointer; font-size:12px">
-        📋 HTML {% trans "anzeigen & kopieren" %}
+              style="display:block; width:100%; background:#f97316; color:white; border:none; padding:8px; border-radius:6px; cursor:pointer; font-size:13px; font-weight:600">
+        HTML {% trans "anzeigen" %}
       </button>
     </div>
 
@@ -93,21 +89,20 @@
 
     {# HTML display modal #}
     <div id="export-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:9999; align-items:center; justify-content:center">
-      <div style="background:#0f172a; border-radius:8px; width:80vw; max-height:80vh; overflow:hidden; display:flex; flex-direction:column">
-        <div style="padding:16px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #334155">
-          <span style="color:#e2e8f0; font-weight:600">HTML Export</span>
+      <div style="background:#ffffff; border-radius:8px; width:90vw; height:86vh; overflow:hidden; display:flex; flex-direction:column">
+        <div style="padding:14px 16px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #e2e8f0">
+          <span style="color:#1e293b; font-weight:600">{% trans "Gerenderte HTML-Vorschau" %}</span>
           <div style="display:flex; gap:8px">
             <button onclick="copyHtml()" style="background:#f97316; color:white; border:none; padding:6px 14px; border-radius:4px; cursor:pointer; font-size:12px">
               {% trans "Kopieren" %}
             </button>
-            <button onclick="closeModal()" style="background:#334155; color:#e2e8f0; border:none; padding:6px 14px; border-radius:4px; cursor:pointer; font-size:12px">
+            <button onclick="closeModal()" style="background:#1e293b; color:#e2e8f0; border:none; padding:6px 14px; border-radius:4px; cursor:pointer; font-size:12px">
               {% trans "Schließen" %}
             </button>
           </div>
         </div>
-        <textarea id="html-output" readonly
-                  style="flex:1; background:#0f172a; color:#7dd3fc; border:none; padding:16px; font-family:monospace; font-size:11px; resize:none; overflow:auto; min-height:400px">
-        </textarea>
+        <iframe id="html-preview" title="HTML Preview" style="border:0; flex:1; width:100%; background:#ffffff"></iframe>
+        <textarea id="html-output" readonly style="display:none"></textarea>
       </div>
     </div>
   </div>
@@ -120,6 +115,7 @@ function exportHtml(campaignId) {
     .then(function(data) {
       if (data.error) { alert('{% trans "Fehler" %}: ' + data.error); return; }
       document.getElementById('html-output').value = data.html;
+      document.getElementById('html-preview').srcdoc = data.html;
       document.getElementById('export-modal').style.display = 'flex';
     })
     .catch(function(e) { alert('{% trans "Fehler beim Export" %}: ' + e); });
