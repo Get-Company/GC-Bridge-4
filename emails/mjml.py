@@ -107,6 +107,7 @@ def _render_component_mjml(component: "EmailCampaignComponent", context: dict) -
 
     component_context = {
         **context,
+        **component.variables,
         "component": component,
     }
 

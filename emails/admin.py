@@ -65,7 +65,7 @@ class EmailCampaignComponentInline(BaseStackedInline):
     tab = False
     sortable = True
     sortable_field_name = "order"
-    fields = ("order", "enabled", "library_component", "title", "subtitle", "body_html")
+    fields = ("order", "enabled", "library_component", "variables")
     autocomplete_fields = ("library_component",)
     collapsible = True
     extra = 0

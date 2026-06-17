@@ -73,24 +73,11 @@ class EmailCampaignComponent(BaseModel):
         related_name="campaign_usages",
         verbose_name=_("Bibliotheks-Komponente"),
     )
-    title = models.CharField(
-        max_length=255,
+    variables = models.JSONField(
+        default=dict,
         blank=True,
-        default="",
-        verbose_name=_("Titel"),
-        help_text=_("Interner Name oder Ueberschrift fuer Textbloecke."),
-    )
-    subtitle = models.CharField(
-        max_length=255,
-        blank=True,
-        default="",
-        verbose_name=_("Untertitel"),
-    )
-    body_html = models.TextField(
-        blank=True,
-        default="",
-        verbose_name=_("Inhalt"),
-        help_text=_("HTML erlaubt. Wird fuer bearbeitbare Text-Komponenten verwendet."),
+        verbose_name=_("Variablen"),
+        help_text=_('Key-Value-Paare fuer Platzhalter im MJML-Template, z.B. {"titel": "Hallo"}'),
     )
     order = models.PositiveIntegerField(default=0, verbose_name=_("Reihenfolge"))
     enabled = models.BooleanField(default=True, verbose_name=_("Aktiviert"))
