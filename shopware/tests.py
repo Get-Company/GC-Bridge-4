@@ -11,7 +11,7 @@ from shopware.management.commands.shopware_force_product_image_uploads import Co
 from shopware.models import ShopwareSettings
 from shopware.services.product import ProductService
 from shopware.services.product_media import ProductMediaSyncService
-from shopware.services.shopware6 import InvalidTokenError, Shopware6Service
+from shopware.services.shopware6 import Criteria, EqualsFilter, InvalidTokenError, Shopware6Service
 
 
 class Shopware6ServiceTokenRetryTest(SimpleTestCase):
@@ -36,6 +36,44 @@ class Shopware6ServiceTokenRetryTest(SimpleTestCase):
         second_client.request_post.assert_called_once_with(
             "/search/product",
             payload={"limit": 1},
+            additional_query_params=None,
+        )
+
+    def test_request_post_strips_empty_criteria_values_recursively(self):
+        client = MagicMock()
+        client.request_post.return_value = {"ok": True}
+        service = Shopware6Service.__new__(Shopware6Service)
+        service.client = client
+
+        criteria = Criteria(limit=10)
+        criteria.associations["stateMachineState"] = Criteria()
+        criteria.associations["orderCustomer"] = Criteria()
+        criteria.associations["orderCustomer"].associations["customer"] = Criteria()
+        criteria.filter.append(EqualsFilter(field="stateMachineState.technicalName", value="open"))
+
+        result = service.request_post("/search/order", payload=criteria)
+
+        self.assertEqual(result, {"ok": True})
+        client.request_post.assert_called_once_with(
+            "/search/order",
+            payload={
+                "limit": 10,
+                "associations": {
+                    "stateMachineState": {},
+                    "orderCustomer": {
+                        "associations": {
+                            "customer": {},
+                        },
+                    },
+                },
+                "filter": [
+                    {
+                        "field": "stateMachineState.technicalName",
+                        "value": "open",
+                        "type": "equals",
+                    },
+                ],
+            },
             additional_query_params=None,
         )
 

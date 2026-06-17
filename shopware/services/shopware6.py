@@ -1,3 +1,5 @@
+from typing import Any
+
 from lib_shopware6_api_base import (
     Shopware6AdminAPIClientBase,
     Criteria,
@@ -41,6 +43,44 @@ class Shopware6Service(ShopwareBaseService):
             retry_method = getattr(self.client, method_name)
             return retry_method(*args, **kwargs)
 
+    @classmethod
+    def _normalize_payload(cls, payload: Any) -> Any:
+        if hasattr(payload, "model_dump"):
+            payload = payload.model_dump(mode="python")
+        return cls._strip_empty_criteria_values(payload)
+
+    @classmethod
+    def _strip_empty_criteria_values(cls, value: Any) -> Any:
+        if hasattr(value, "model_dump"):
+            value = value.model_dump(mode="python")
+
+        if isinstance(value, dict):
+            cleaned: dict[str, Any] = {}
+            for key, item in value.items():
+                if key == "associations" and isinstance(item, dict):
+                    associations = {
+                        association_name: cls._strip_empty_criteria_values(association_value)
+                        for association_name, association_value in item.items()
+                    }
+                    if associations:
+                        cleaned[key] = associations
+                    continue
+
+                item = cls._strip_empty_criteria_values(item)
+                if item in (None, [], {}):
+                    continue
+                cleaned[key] = item
+            return cleaned
+
+        if isinstance(value, list):
+            return [
+                item
+                for item in (cls._strip_empty_criteria_values(item) for item in value)
+                if item not in (None, [], {})
+            ]
+
+        return value
+
     def authenticate(self) -> str:
         if not self.client_id or not self.client_secret:
             raise ValueError("Missing Shopware API credentials.")
@@ -77,7 +117,8 @@ class Shopware6Service(ShopwareBaseService):
         logger.debug("Shopware6 GET {} -> {}", path, result)
         return result
 
-    def request_post(self, path: str, payload: dict | None = None, additional_query_params: dict | None = None):
+    def request_post(self, path: str, payload: Any | None = None, additional_query_params: dict | None = None):
+        payload = self._normalize_payload(payload)
         logger.debug("Shopware6 POST {} payload={}", path, payload)
         result = self._request_with_retry(
             "request_post",
