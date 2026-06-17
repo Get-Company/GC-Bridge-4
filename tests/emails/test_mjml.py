@@ -197,6 +197,19 @@ class TestCampaignComponentRendering:
 
 
 @pytest.mark.django_db
+class TestMjmlComponent:
+    def test_str_returns_name(self):
+        from emails.models import MjmlComponent
+        component = MjmlComponent(name="Logo", placement="body", mjml_markup="<mj-section/>", order=10)
+        assert str(component) == "Logo"
+
+    def test_default_placement_is_body(self):
+        from emails.models import MjmlComponent
+        component = MjmlComponent(name="Test")
+        assert component.placement == "body"
+
+
+@pytest.mark.django_db
 class TestRenderCampaignMjml:
     def test_renders_without_products(self):
         from emails.models import EmailCampaign
