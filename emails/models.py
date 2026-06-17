@@ -8,12 +8,12 @@ from core.models import BaseModel
 
 class MjmlComponent(BaseModel):
     class Placement(models.TextChoices):
-        HEAD = "head", _("Head")
-        BODY = "body", _("Body")
+        HEAD = "head", _("Head (Kopfbereich)")
+        BODY = "body", _("Body (Inhaltsbereich)")
 
     name = models.CharField(max_length=255, verbose_name=_("Name"))
     description = models.TextField(blank=True, default="", verbose_name=_("Beschreibung"))
-    mjml_markup = models.TextField(blank=True, default="", verbose_name=_("MJML Markup"))
+    mjml_markup = models.TextField(blank=True, default="", verbose_name=_("MJML-Markup"))
     placement = models.CharField(
         max_length=10,
         choices=Placement.choices,
