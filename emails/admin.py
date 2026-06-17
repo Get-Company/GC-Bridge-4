@@ -62,6 +62,7 @@ class MjmlComponentAdmin(BaseAdmin):
 
 class EmailCampaignComponentInline(BaseStackedInline):
     model = EmailCampaignComponent
+    tab = False
     sortable = True
     sortable_field_name = "order"
     fields = ("order", "enabled", "library_component", "title", "subtitle", "body_html")
@@ -72,6 +73,7 @@ class EmailCampaignComponentInline(BaseStackedInline):
 
 class EmailCampaignProductInline(BaseTabularInline):
     model = EmailCampaignProduct
+    tab = False
     sortable = True
     sortable_field_name = "order"
     fields = ("order", "product", "special_price_override", "discount_pct", "current_price_display", "prices_synced_at")
@@ -84,7 +86,16 @@ class EmailCampaignProductInline(BaseTabularInline):
         if obj.product_id is None:
             return "—"
         try:
-            price = obj.product.price
+            from shopware.models import ShopwareSettings
+            default_channel = ShopwareSettings.objects.filter(is_default=True, is_active=True).first()
+            price_entry = None
+            if default_channel:
+                price_entry = obj.product.prices.filter(sales_channel=default_channel).first()
+            if price_entry is None:
+                price_entry = obj.product.prices.order_by("pk").first()
+            if price_entry is None:
+                return "—"
+            price = price_entry.price
             return f"{price:,.2f} €".replace(",", "X").replace(".", ",").replace("X", ".")
         except Exception:
             return "—"

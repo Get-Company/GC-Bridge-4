@@ -467,6 +467,12 @@ UNFOLD = {
                         "link": reverse_lazy("admin:emails_emailcampaign_changelist"),
                         "permission": sidebar_model_view_permission("emails", "EmailCampaign"),
                     },
+                    {
+                        "title": _("Komponenten"),
+                        "icon": "widgets",
+                        "link": reverse_lazy("admin:emails_mjmlcomponent_changelist"),
+                        "permission": sidebar_model_view_permission("emails", "MjmlComponent"),
+                    },
                 ],
             },
             {
