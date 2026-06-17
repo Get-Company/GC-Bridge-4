@@ -3,22 +3,19 @@
 
 {% block content %}
 <div class="flex flex-col gap-6">
-
-  {# -- Kopfzeile ------------------------------------------------- #}
   <div class="flex flex-wrap items-center justify-between gap-3">
-    <h1 class="text-xl font-semibold">System-Status</h1>
-    <div class="flex items-center gap-4 text-sm">
-      {# Microtech Verbindungsslot #}
+    <div>
+      <h1 class="text-xl font-semibold">System-Status</h1>
+      <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Live-Uebersicht fuer Syncs, Tasks, Warteschlangen und Logs.</p>
+    </div>
+    <div class="flex flex-wrap items-center gap-4 text-sm">
       <a href="/admin/microtech-queue/" id="microtech-slot" class="flex items-center gap-1.5 text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors" title="Microtech Queue oeffnen">
-        <span id="microtech-slot-dot" class="inline-block w-2 h-2 rounded-full
-          {% if microtech_slot.available %}bg-green-500{% elif microtech_slot.available is None %}bg-gray-400{% else %}bg-red-500 animate-pulse{% endif %}"></span>
-        Microtech-Queue:
-        <span id="microtech-slot-label" class="font-medium
-          {% if microtech_slot.available %}text-green-600 dark:text-green-400{% elif microtech_slot.available is None %}text-gray-400{% else %}text-red-600 dark:text-red-400{% endif %}">
+        <span id="microtech-slot-dot" class="inline-block w-2 h-2 rounded-full {% if microtech_slot.available %}bg-green-500{% elif microtech_slot.available is None %}bg-gray-400{% else %}bg-red-500 animate-pulse{% endif %}"></span>
+        Microtech:
+        <span id="microtech-slot-label" class="font-medium {% if microtech_slot.available %}text-green-600 dark:text-green-400{% elif microtech_slot.available is None %}text-gray-400{% else %}text-red-600 dark:text-red-400{% endif %}">
           {% if microtech_slot.available %}frei{% elif microtech_slot.available is None %}?{% else %}belegt ({{ microtech_slot.running }} aktiv, {{ microtech_slot.queued }} wartend){% endif %}
         </span>
       </a>
-      <span class="text-gray-300 dark:text-gray-600">|</span>
       <span id="refresh-status" class="flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
         <span id="refresh-dot" class="inline-block w-2 h-2 rounded-full bg-green-500"></span>
         Auto-Refresh (5 s)
@@ -27,352 +24,333 @@
     </div>
   </div>
 
-  {# -- Hauptgitter: links Steuerung / rechts Log ----------------- #}
-  <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
-
-    {# == LINKE SPALTE ============================================ #}
-    <div class="flex flex-col gap-6">
-
-      {# -- Aktive Prozesse ---------------------------------------- #}
-      <div class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-        <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
-          <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300">
-            Aktive Prozesse
-          </h2>
+  <div id="dashboard-cards" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+    {% for card in dashboard_cards %}
+    <section class="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-white dark:bg-gray-900">
+      <div class="flex items-start justify-between gap-3">
+        <div class="min-w-0">
+          <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-gray-400" style="font-size:20px">{{ card.icon }}</span>
+            <h2 class="font-semibold text-sm truncate">{{ card.label }}</h2>
+          </div>
+          <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">{{ card.description }}</p>
         </div>
-        <div id="active-processes" class="divide-y divide-gray-100 dark:divide-gray-700">
-          {% if active_processes %}
-            {% for proc in active_processes %}
-            <div class="flex items-start gap-3 px-4 py-3">
-              <span class="mt-1.5 w-2 h-2 rounded-full flex-shrink-0 bg-green-500{% if proc.is_self %} ring-2 ring-green-300 dark:ring-green-700{% endif %}"></span>
-              <div class="min-w-0 flex-1">
-                <div class="flex items-center gap-2">
-                  <span class="font-mono text-sm truncate">{{ proc.command }}</span>
-                  {% if proc.is_self %}
-                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 font-medium flex-shrink-0">SELF</span>
-                  {% endif %}
-                </div>
-                <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                  PID {{ proc.pid }}
-                  {% if proc.user %}&bull; {{ proc.user }}{% endif %}
-                  {% if proc.mem_mb %}&bull; {{ proc.mem_mb }} MB{% endif %}
-                  {% if proc.started %}&bull; Start: {{ proc.started }}{% endif %}
-                </div>
-              </div>
-            </div>
-            {% endfor %}
-          {% else %}
-            <p class="px-4 py-3 text-sm text-gray-400 dark:text-gray-500 italic">Keine GC-Bridge-Prozesse gefunden</p>
-          {% endif %}
+        <span class="text-xs px-2 py-1 rounded font-medium {% if card.status == 'running' %}bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300{% elif card.status == 'waiting' %}bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300{% elif card.status == 'recent' %}bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300{% else %}bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400{% endif %}">
+          {{ card.status_label }}
+        </span>
+      </div>
+      <div class="grid grid-cols-3 gap-2 mt-4 text-xs">
+        <div>
+          <div class="text-gray-400">aktiv</div>
+          <div class="font-semibold text-gray-800 dark:text-gray-200">{{ card.running_count }}</div>
+        </div>
+        <div>
+          <div class="text-gray-400">wartend</div>
+          <div class="font-semibold text-gray-800 dark:text-gray-200">{{ card.waiting_count }}</div>
+        </div>
+        <div>
+          <div class="text-gray-400">Logs</div>
+          <div class="font-semibold text-gray-800 dark:text-gray-200">{{ card.log_count }}</div>
         </div>
       </div>
+      <div class="mt-3 text-xs text-gray-500 dark:text-gray-400 min-h-[36px]">
+        {% if card.stage %}
+          <span class="font-medium text-gray-700 dark:text-gray-300">{{ card.stage }}</span>{% if card.duration %} · {{ card.duration }}{% endif %}
+        {% elif card.latest_log %}
+          Letztes Log: {{ card.latest_log.name }} · {{ card.latest_log.activity }}
+        {% else %}
+          Keine aktuelle Aktivitaet.
+        {% endif %}
+      </div>
+    </section>
+    {% endfor %}
+  </div>
 
-      {# -- Laufende Jobs (CommandRuntime) ------------------------- #}
-      <div class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-        <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
-          <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300">
-            Laufende Jobs
-          </h2>
+  <div class="grid grid-cols-1 2xl:grid-cols-[minmax(0,1.1fr)_minmax(520px,0.9fr)] gap-6 items-start">
+    <div class="flex flex-col gap-6">
+      <section class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+        <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between gap-3">
+          <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300">Laufende Jobs</h2>
+          <span class="text-xs text-gray-400">Runtime-Heartbeat</span>
         </div>
-        <div id="running-jobs" class="p-4 min-h-[60px]">
+        <div id="running-jobs" class="p-4 min-h-[70px]">
           {% if runtime_entries %}
             {% for entry in runtime_entries %}
-            {% with stage=entry.metadata.stage %}
-            <div class="flex items-start gap-3 mb-2 last:mb-0 p-2 rounded
-              {% if stage == 'processing' %}bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800
-              {% elif stage == 'idle' %}bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700
-              {% else %}bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800{% endif %}">
-              <span class="mt-1.5 w-2 h-2 rounded-full flex-shrink-0
-                {% if stage == 'processing' %}bg-green-500 animate-pulse
-                {% elif stage == 'idle' %}bg-gray-400
-                {% else %}bg-amber-500 animate-pulse{% endif %}"></span>
-              <div class="min-w-0 w-full">
-                <div class="flex items-center justify-between gap-2">
-                  <span class="font-medium text-sm truncate">{{ entry.command_name }}</span>
-                  <span class="text-xs px-1.5 py-0.5 rounded font-medium flex-shrink-0
-                    {% if stage == 'processing' %}bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300
-                    {% elif stage == 'idle' %}bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400
-                    {% else %}bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300{% endif %}">
-                    {% if stage %}{{ stage }}{% else %}kein stage{% endif %}
-                  </span>
-                </div>
-                <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                  PID {{ entry.pid }} &bull; {{ entry.hostname }} &bull; {{ entry.duration }}
-                </div>
+            <div class="p-3 rounded border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20 mb-2 last:mb-0">
+              <div class="flex items-center justify-between gap-2">
+                <span class="font-medium text-sm truncate">{{ entry.command_name }}</span>
+                <span class="text-xs px-2 py-0.5 rounded bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300">{{ entry.metadata.stage|default:"aktiv" }}</span>
               </div>
+              <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">PID {{ entry.pid }} · {{ entry.hostname }} · {{ entry.duration }}</div>
+              {% if entry.metadata.log_file %}
+              <button type="button" class="mt-2 text-xs text-blue-600 dark:text-blue-400 hover:underline" onclick="selectLogByPath('{{ entry.metadata.log_file|escapejs }}')">Log oeffnen</button>
+              {% endif %}
             </div>
-            {% endwith %}
             {% endfor %}
           {% else %}
             <p class="text-sm text-gray-400 dark:text-gray-500 italic">Keine laufenden Jobs</p>
           {% endif %}
         </div>
-      </div>
+      </section>
 
-      {# -- Jobs starten ------------------------------------------- #}
-      <div class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-        <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
-          <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300">
-            Jobs starten
-          </h2>
+      <section class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+        <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between gap-3">
+          <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300">Celery Warteschlange</h2>
+          <span id="queue-summary" class="text-xs text-gray-400">
+            {% if queue_status.available %}{{ queue_status.active_count }} aktiv · {{ queue_status.waiting_count }} reserviert · {{ queue_status.scheduled_count }} geplant{% else %}nicht erreichbar{% endif %}
+          </span>
         </div>
-        <div class="p-4 flex flex-col gap-2">
+        <div id="queue-overview" class="divide-y divide-gray-100 dark:divide-gray-700">
+          {% if not queue_status.available %}
+            <p class="px-4 py-3 text-sm text-gray-400 dark:text-gray-500 italic">Celery Inspect nicht erreichbar{% if queue_status.error %}: {{ queue_status.error }}{% endif %}</p>
+          {% elif queue_status.active or queue_status.waiting or queue_status.scheduled %}
+            {% for task in queue_status.active %}
+            <div class="px-4 py-3">
+              <div class="flex items-center justify-between gap-2">
+                <span class="text-sm font-medium truncate">{{ task.label }}</span>
+                <span class="text-xs px-2 py-0.5 rounded bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300">aktiv</span>
+              </div>
+              <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">{{ task.worker }}{% if task.id %} · {{ task.id }}{% endif %}</div>
+            </div>
+            {% endfor %}
+            {% for task in queue_status.waiting %}
+            <div class="px-4 py-3">
+              <div class="flex items-center justify-between gap-2">
+                <span class="text-sm font-medium truncate">{{ task.label }}</span>
+                <span class="text-xs px-2 py-0.5 rounded bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300">wartet</span>
+              </div>
+              <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">{{ task.worker }}{% if task.id %} · {{ task.id }}{% endif %}</div>
+            </div>
+            {% endfor %}
+            {% for task in queue_status.scheduled %}
+            <div class="px-4 py-3">
+              <div class="flex items-center justify-between gap-2">
+                <span class="text-sm font-medium truncate">{{ task.label }}</span>
+                <span class="text-xs px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300">geplant</span>
+              </div>
+              <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">{{ task.worker }}{% if task.eta %} · ETA {{ task.eta }}{% endif %}</div>
+            </div>
+            {% endfor %}
+          {% else %}
+            <p class="px-4 py-3 text-sm text-gray-400 dark:text-gray-500 italic">Keine aktiven oder wartenden Celery Tasks</p>
+          {% endif %}
+        </div>
+      </section>
+
+      <section class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+        <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+          <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300">Log-Zuordnung</h2>
+        </div>
+        <div id="log-overview" class="divide-y divide-gray-100 dark:divide-gray-700">
+          {% for log in log_entries %}
+          <button type="button" class="w-full text-left px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors" onclick="changeLogFile('{{ log.index }}')">
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0">
+                <div class="flex items-center gap-2">
+                  <span class="text-xs px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400">{{ log.area_label }}</span>
+                  <span class="text-sm font-medium truncate">{{ log.name }}</span>
+                </div>
+                <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">{{ log.purpose }}</div>
+                <div class="text-xs text-gray-400 mt-1 font-mono truncate">{{ log.path }}</div>
+              </div>
+              <div class="text-right flex-shrink-0">
+                <div class="text-xs font-medium {% if log.activity_class == 'active' %}text-green-600 dark:text-green-400{% elif log.activity_class == 'recent' %}text-blue-600 dark:text-blue-400{% elif log.activity_class == 'old' %}text-gray-500 dark:text-gray-400{% else %}text-red-500{% endif %}">{{ log.activity }}</div>
+                <div class="text-xs text-gray-400 mt-1">{{ log.size }}</div>
+              </div>
+            </div>
+          </button>
+          {% empty %}
+          <p class="px-4 py-3 text-sm text-gray-400 dark:text-gray-500 italic">Keine Log-Dateien gefunden</p>
+          {% endfor %}
+        </div>
+      </section>
+
+      <section class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+        <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+          <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300">Jobs starten</h2>
+        </div>
+        <div class="p-4 grid grid-cols-1 lg:grid-cols-2 gap-3">
           {% for job in triggerable_jobs %}
           <div class="flex items-center justify-between gap-3 p-3 rounded border border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
             <div class="min-w-0">
               <div class="font-medium text-sm">{{ job.label }}</div>
               <div class="text-xs text-gray-400 dark:text-gray-500">{{ job.description }}</div>
             </div>
-            <button
-              type="button"
-              class="job-trigger-btn flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded border border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              data-command="{{ job.command }}"
-              onclick="triggerJob(this)"
-            >
+            <button type="button" class="job-trigger-btn flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded border border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors" data-command="{{ job.command }}" onclick="triggerJob(this)">
               <span class="material-symbols-outlined" style="font-size:14px">{{ job.icon }}</span>
               Starten
             </button>
           </div>
           {% endfor %}
-
-          {# Toast-Notification #}
-          <div id="job-toast" class="hidden mt-2 p-3 rounded text-sm font-medium"></div>
+          <div id="job-toast" class="hidden lg:col-span-2 p-3 rounded text-sm font-medium"></div>
         </div>
-      </div>
+      </section>
 
-      {# -- Systemd-Dienste (nur Linux) ----------------------------- #}
-      {% if systemd_units is not None %}
-      <div class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-        <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
-          <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300">
-            Systemd-Dienste
-          </h2>
-        </div>
-        <div id="systemd-units" class="divide-y divide-gray-100 dark:divide-gray-700">
-          {% for unit in systemd_units %}
-          <div class="flex items-start gap-3 px-4 py-3">
-            <span class="mt-1 w-2 h-2 rounded-full flex-shrink-0 {% if unit.ok %}bg-green-500{% else %}bg-red-400{% endif %}"></span>
-            <div class="min-w-0 flex-1">
-              <div class="font-medium text-sm">{{ unit.name }}</div>
-              <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                {{ unit.active }}/{{ unit.sub }}
-                {% if unit.description %}&bull; {{ unit.description }}{% endif %}
-              </div>
-            </div>
+      <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <section class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+          <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300">Aktive Prozesse</h2>
           </div>
-          {% empty %}
-          <p class="px-4 py-3 text-sm text-gray-400 italic">Keine GC-Bridge systemd-Units gefunden</p>
-          {% endfor %}
-        </div>
-      </div>
-      {% endif %}
-
-      {# -- Microtech GraphQL API Health ----------------------------- #}
-      <div class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-        <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-          <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300">
-            Microtech GraphQL API
-          </h2>
-          <button
-            type="button"
-            onclick="checkGraphQLHealth(this)"
-            class="inline-flex items-center gap-1 px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-600 dark:text-gray-300 disabled:opacity-50"
-            title="Verbindung jetzt prüfen"
-          >
-            <span class="material-symbols-outlined" style="font-size:14px">refresh</span>
-            Prüfen
-          </button>
-        </div>
-        <div id="graphql-health" class="px-4 py-3">
-          {% with h=graphql_health %}
-          <div class="flex items-start gap-3">
-            <span class="mt-1 w-2 h-2 rounded-full flex-shrink-0
-              {% if h.status == 'not_configured' %}bg-gray-400
-              {% elif h.ok %}bg-green-500
-              {% else %}bg-red-500 animate-pulse{% endif %}"></span>
-            <div class="min-w-0 flex-1">
-              {% if h.status == 'not_configured' %}
-                <div class="text-sm font-medium text-gray-500 dark:text-gray-400">Nicht konfiguriert</div>
-                <div class="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{{ h.error }}</div>
-              {% else %}
-                <div class="flex items-center gap-2">
-                  <span class="text-sm font-medium {% if h.ok %}text-green-700 dark:text-green-400{% else %}text-red-700 dark:text-red-400{% endif %}">
-                    {% if h.ok %}OK{% else %}Fehler{% endif %}
-                  </span>
-                  {% if h.latency_ms is not None %}
-                    <span class="text-xs text-gray-400 dark:text-gray-500">{{ h.latency_ms }} ms</span>
-                  {% endif %}
+          <div id="active-processes" class="divide-y divide-gray-100 dark:divide-gray-700">
+            {% if active_processes %}
+              {% for proc in active_processes %}
+              <div class="flex items-start gap-3 px-4 py-3">
+                <span class="mt-1.5 w-2 h-2 rounded-full flex-shrink-0 bg-green-500{% if proc.is_self %} ring-2 ring-green-300 dark:ring-green-700{% endif %}"></span>
+                <div class="min-w-0 flex-1">
+                  <div class="font-mono text-sm truncate">{{ proc.command }}</div>
+                  <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">PID {{ proc.pid }}{% if proc.user %} · {{ proc.user }}{% endif %}{% if proc.mem_mb %} · {{ proc.mem_mb }} MB{% endif %}{% if proc.started %} · Start: {{ proc.started }}{% endif %}</div>
                 </div>
-                <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5 font-mono truncate" title="{{ h.url }}">{{ h.url }}</div>
-                {% if h.error %}
-                  <div class="text-xs text-red-600 dark:text-red-400 mt-1 break-words">{{ h.error }}</div>
-                {% endif %}
-              {% endif %}
-            </div>
+              </div>
+              {% endfor %}
+            {% else %}
+              <p class="px-4 py-3 text-sm text-gray-400 dark:text-gray-500 italic">Keine GC-Bridge-Prozesse gefunden</p>
+            {% endif %}
           </div>
-          {% endwith %}
-        </div>
+        </section>
+
+        <section class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+          <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+            <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300">Microtech GraphQL API</h2>
+            <button type="button" onclick="checkGraphQLHealth(this)" class="inline-flex items-center gap-1 px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-600 dark:text-gray-300 disabled:opacity-50" title="Verbindung jetzt pruefen">
+              <span class="material-symbols-outlined" style="font-size:14px">refresh</span>
+              Pruefen
+            </button>
+          </div>
+          <div id="graphql-health" class="px-4 py-3"></div>
+        </section>
       </div>
 
-      {# -- Windows Scheduled Tasks (nur Windows) ------------------- #}
+      {% if systemd_units is not None %}
+      <section class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+        <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+          <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300">Systemd-Dienste</h2>
+        </div>
+        <div id="systemd-units" class="divide-y divide-gray-100 dark:divide-gray-700"></div>
+      </section>
+      {% endif %}
+
       {% if scheduled_tasks is not None %}
-      <div class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+      <section class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
         <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
-          <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300">
-            Geplante Aufgaben (Windows)
-          </h2>
+          <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300">Geplante Aufgaben (Windows)</h2>
         </div>
-        <div id="scheduled-tasks" class="divide-y divide-gray-100 dark:divide-gray-700">
-          {% for task in scheduled_tasks %}
-          <div class="flex items-start gap-3 px-4 py-3">
-            <span class="mt-1 w-2 h-2 rounded-full flex-shrink-0 {% if task.ok %}bg-green-500{% else %}bg-red-400{% endif %}"></span>
-            <div class="min-w-0 flex-1">
-              <div class="font-medium text-sm">{{ task.name }}</div>
-              <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                Status: {{ task.status }}
-                {% if task.last_run %}&bull; Zuletzt: {{ task.last_run }}{% endif %}
-                {% if task.next_run %}&bull; Nächste: {{ task.next_run }}{% endif %}
-              </div>
-            </div>
-          </div>
-          {% empty %}
-          <p class="px-4 py-3 text-sm text-gray-400 italic">Keine Tasks abgefragt</p>
-          {% endfor %}
-        </div>
-      </div>
+        <div id="scheduled-tasks" class="divide-y divide-gray-100 dark:divide-gray-700"></div>
+      </section>
       {% endif %}
 
-      {# -- GitHub Runner Dienste (nur Windows) --------------------- #}
       {% if runner_services is not None %}
-      <div class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+      <section class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
         <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
-          <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300">
-            GitHub Runner Dienste
-          </h2>
+          <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300">GitHub Runner Dienste</h2>
         </div>
-        <div id="runner-services" class="divide-y divide-gray-100 dark:divide-gray-700">
-          {% for svc in runner_services %}
-          <div class="flex items-start gap-3 px-4 py-3">
-            <span class="mt-1 w-2 h-2 rounded-full flex-shrink-0 {% if svc.ok %}bg-green-500{% else %}bg-red-400{% endif %}"></span>
-            <div class="min-w-0 flex-1">
-              <div class="font-medium text-sm">{{ svc.name }}</div>
-              <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                Status: {{ svc.state }}
-              </div>
-            </div>
-          </div>
-          {% empty %}
-          <p class="px-4 py-3 text-sm text-gray-400 italic">Keine Runner-Dienste abgefragt</p>
-          {% endfor %}
-        </div>
-      </div>
+        <div id="runner-services" class="divide-y divide-gray-100 dark:divide-gray-700"></div>
+      </section>
       {% endif %}
+    </div>
 
-    </div>{# Ende linke Spalte #}
-
-    {# == RECHTE SPALTE: Log-Viewer =============================== #}
-    <div class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden flex flex-col" style="min-height: 520px;">
+    <section class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden flex flex-col bg-white dark:bg-gray-900" style="min-height: 620px;">
       <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
-        <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300 mb-3">
-          Log-Viewer
-        </h2>
+        <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300 mb-3">Log-Viewer</h2>
         <div class="flex flex-wrap gap-2 items-end">
           <div class="flex flex-col gap-1">
             <label class="text-xs text-gray-500 dark:text-gray-400">Datei</label>
-            <select
-              id="log-file-select"
-              class="text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 max-w-xs"
-              onchange="changeLogFile(this.value)"
-            >
+            <select id="log-file-select" class="text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 max-w-xs" onchange="changeLogFile(this.value)">
               {% for option in file_options %}
-              <option value="{{ option.index }}"{% if option.index == selected_file_index %} selected{% endif %}>
-                {{ option.name }}
-              </option>
+              <option value="{{ option.index }}"{% if option.index == selected_file_index %} selected{% endif %}>{{ option.name }}</option>
               {% endfor %}
             </select>
           </div>
           <div class="flex flex-col gap-1">
             <label class="text-xs text-gray-500 dark:text-gray-400">Zeilen</label>
-            <select
-              id="log-lines-select"
-              class="text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
-              onchange="changeLineCount(this.value)"
-            >
+            <select id="log-lines-select" class="text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200" onchange="changeLineCount(this.value)">
               <option value="50"{% if line_count == 50 %} selected{% endif %}>50 Zeilen</option>
               <option value="100"{% if line_count == 100 %} selected{% endif %}>100 Zeilen</option>
               <option value="200"{% if line_count == 200 %} selected{% endif %}>200 Zeilen</option>
               <option value="500"{% if line_count == 500 %} selected{% endif %}>500 Zeilen</option>
             </select>
           </div>
-          <div class="flex flex-col gap-1">
-            <label class="text-xs text-transparent">.</label>
-            <button
-              type="button"
-              onclick="scrollToBottom()"
-              class="inline-flex items-center gap-1 px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-600 dark:text-gray-300"
-              title="Zum Ende springen"
-            >
-              <span class="material-symbols-outlined" style="font-size:14px">arrow_downward</span>
-              Ende
-            </button>
-          </div>
+          <button type="button" onclick="scrollToBottom()" class="inline-flex items-center gap-1 px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-600 dark:text-gray-300" title="Zum Ende springen">
+            <span class="material-symbols-outlined" style="font-size:14px">arrow_downward</span>
+            Ende
+          </button>
           <div id="autoscroll-indicator" class="flex items-center gap-1.5 text-xs text-gray-400 pb-1 ml-auto">
             <span id="autoscroll-dot" class="w-1.5 h-1.5 rounded-full bg-green-400"></span>
             Auto-Scroll
           </div>
         </div>
       </div>
-
-      {# Log-Inhalt #}
-      <pre
-        id="log-content"
-        class="flex-1 overflow-auto p-4 text-xs font-mono leading-relaxed text-gray-800 dark:text-gray-200 bg-white dark:bg-gray-900"
-        style="max-height: 65vh; white-space: pre-wrap; word-break: break-all;"
-      >{% if not file_options %}Keine Log-Dateien konfiguriert.{% elif not file_exists %}Datei nicht gefunden: {{ selected_path }}{% else %}{% for line in log_lines %}{{ line }}
+      <pre id="log-content" class="flex-1 overflow-auto p-4 text-xs font-mono leading-relaxed text-gray-800 dark:text-gray-200 bg-white dark:bg-gray-900" style="max-height: 75vh; white-space: pre-wrap; word-break: break-word;">{% if not file_options %}Keine Log-Dateien konfiguriert.{% elif not file_exists %}Datei nicht gefunden: {{ selected_path }}{% else %}{% for line in log_lines %}{{ line }}
 {% empty %}(leer){% endfor %}{% endif %}</pre>
-    </div>
-
-  </div>{# Ende Gitter #}
+    </section>
+  </div>
 </div>
 
-{# -- JavaScript ------------------------------------------------- #}
 <script>
 (function () {
   "use strict";
 
   const REFRESH_MS = 5000;
+  const fileOptions = [
+    {% for option in file_options %}
+    { index: {{ option.index }}, path: "{{ option.path|escapejs }}", name: "{{ option.name|escapejs }}" }{% if not forloop.last %},{% endif %}
+    {% endfor %}
+  ];
   let fileIndex = {{ selected_file_index }};
   let lineCount = {{ line_count }};
   let autoScroll = true;
   let timer = null;
 
-  // -- Auto-Scroll-Erkennung ------------------------------------
   const logEl = document.getElementById("log-content");
   const autoscrollDot = document.getElementById("autoscroll-dot");
+
+  function escHtml(s) {
+    return String(s == null ? "" : s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function badgeClass(status) {
+    if (status === "running") return "bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300";
+    if (status === "waiting") return "bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300";
+    if (status === "recent") return "bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300";
+    return "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400";
+  }
+
+  function logActivityClass(activityClass) {
+    if (activityClass === "active") return "text-green-600 dark:text-green-400";
+    if (activityClass === "recent") return "text-blue-600 dark:text-blue-400";
+    if (activityClass === "old") return "text-gray-500 dark:text-gray-400";
+    return "text-red-500";
+  }
 
   if (logEl) {
     logEl.addEventListener("scroll", () => {
       const dist = logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight;
       autoScroll = dist < 40;
-      if (autoscrollDot) {
-        autoscrollDot.style.backgroundColor = autoScroll ? "#4ade80" : "#94a3b8";
-      }
+      if (autoscrollDot) autoscrollDot.style.backgroundColor = autoScroll ? "#4ade80" : "#94a3b8";
     });
     logEl.scrollTop = logEl.scrollHeight;
   }
 
   window.scrollToBottom = function () {
-    if (logEl) {
-      logEl.scrollTop = logEl.scrollHeight;
-      autoScroll = true;
-      if (autoscrollDot) autoscrollDot.style.backgroundColor = "#4ade80";
-    }
+    if (!logEl) return;
+    logEl.scrollTop = logEl.scrollHeight;
+    autoScroll = true;
+    if (autoscrollDot) autoscrollDot.style.backgroundColor = "#4ade80";
   };
 
-  // -- Kontroll-Funktionen --------------------------------------
   window.changeLogFile = function (val) {
     fileIndex = parseInt(val, 10) || 0;
+    const select = document.getElementById("log-file-select");
+    if (select) select.value = String(fileIndex);
     fetchStatus();
+  };
+
+  window.selectLogByPath = function (path) {
+    const option = fileOptions.find((item) => item.path === path);
+    if (option) window.changeLogFile(option.index);
   };
 
   window.changeLineCount = function (val) {
@@ -380,58 +358,143 @@
     fetchStatus();
   };
 
-  // -- Aktive Prozesse rendern ----------------------------------
+  function renderDashboardCards(cards) {
+    const container = document.getElementById("dashboard-cards");
+    if (!container || !cards) return;
+    container.innerHTML = cards.map((card) => {
+      const detail = card.stage
+        ? `<span class="font-medium text-gray-700 dark:text-gray-300">${escHtml(card.stage)}</span>${card.duration ? ` · ${escHtml(card.duration)}` : ""}`
+        : (card.latest_log ? `Letztes Log: ${escHtml(card.latest_log.name)} · ${escHtml(card.latest_log.activity)}` : "Keine aktuelle Aktivitaet.");
+      return `
+        <section class="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-white dark:bg-gray-900">
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
+              <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-gray-400" style="font-size:20px">${escHtml(card.icon)}</span>
+                <h2 class="font-semibold text-sm truncate">${escHtml(card.label)}</h2>
+              </div>
+              <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">${escHtml(card.description)}</p>
+            </div>
+            <span class="text-xs px-2 py-1 rounded font-medium ${badgeClass(card.status)}">${escHtml(card.status_label)}</span>
+          </div>
+          <div class="grid grid-cols-3 gap-2 mt-4 text-xs">
+            <div><div class="text-gray-400">aktiv</div><div class="font-semibold text-gray-800 dark:text-gray-200">${card.running_count || 0}</div></div>
+            <div><div class="text-gray-400">wartend</div><div class="font-semibold text-gray-800 dark:text-gray-200">${card.waiting_count || 0}</div></div>
+            <div><div class="text-gray-400">Logs</div><div class="font-semibold text-gray-800 dark:text-gray-200">${card.log_count || 0}</div></div>
+          </div>
+          <div class="mt-3 text-xs text-gray-500 dark:text-gray-400 min-h-[36px]">${detail}</div>
+        </section>`;
+    }).join("");
+  }
+
+  function renderJobs(entries) {
+    const container = document.getElementById("running-jobs");
+    if (!container) return;
+    if (!entries || !entries.length) {
+      container.innerHTML = '<p class="text-sm text-gray-400 dark:text-gray-500 italic">Keine laufenden Jobs</p>';
+      return;
+    }
+    container.innerHTML = entries.map((entry) => {
+      const meta = entry.metadata || {};
+      const logButton = meta.log_file ? `<button type="button" class="mt-2 text-xs text-blue-600 dark:text-blue-400 hover:underline" onclick="selectLogByPath(${JSON.stringify(meta.log_file)})">Log oeffnen</button>` : "";
+      return `
+        <div class="p-3 rounded border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20 mb-2 last:mb-0">
+          <div class="flex items-center justify-between gap-2">
+            <span class="font-medium text-sm truncate">${escHtml(entry.command_name)}</span>
+            <span class="text-xs px-2 py-0.5 rounded bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300">${escHtml(meta.stage || "aktiv")}</span>
+          </div>
+          <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">PID ${entry.pid || "-"} · ${escHtml(entry.hostname)} · ${escHtml(entry.duration)}</div>
+          ${logButton}
+        </div>`;
+    }).join("");
+  }
+
+  function renderQueue(queue) {
+    const container = document.getElementById("queue-overview");
+    const summary = document.getElementById("queue-summary");
+    if (!container || !queue) return;
+    if (summary) {
+      summary.textContent = queue.available
+        ? `${queue.active_count || 0} aktiv · ${queue.waiting_count || 0} reserviert · ${queue.scheduled_count || 0} geplant`
+        : "nicht erreichbar";
+    }
+    if (!queue.available) {
+      container.innerHTML = `<p class="px-4 py-3 text-sm text-gray-400 dark:text-gray-500 italic">Celery Inspect nicht erreichbar${queue.error ? `: ${escHtml(queue.error)}` : ""}</p>`;
+      return;
+    }
+    const rows = [
+      ...(queue.active || []).map((task) => ({...task, labelState: "aktiv", cls: "bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300"})),
+      ...(queue.waiting || []).map((task) => ({...task, labelState: "wartet", cls: "bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300"})),
+      ...(queue.scheduled || []).map((task) => ({...task, labelState: "geplant", cls: "bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300"})),
+    ];
+    if (!rows.length) {
+      container.innerHTML = '<p class="px-4 py-3 text-sm text-gray-400 dark:text-gray-500 italic">Keine aktiven oder wartenden Celery Tasks</p>';
+      return;
+    }
+    container.innerHTML = rows.map((task) => `
+      <div class="px-4 py-3">
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-sm font-medium truncate">${escHtml(task.label)}</span>
+          <span class="text-xs px-2 py-0.5 rounded ${task.cls}">${task.labelState}</span>
+        </div>
+        <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">${escHtml(task.worker)}${task.id ? ` · ${escHtml(task.id)}` : ""}${task.eta ? ` · ETA ${escHtml(task.eta)}` : ""}</div>
+      </div>`).join("");
+  }
+
+  function renderLogOverview(logEntries) {
+    const container = document.getElementById("log-overview");
+    if (!container) return;
+    if (!logEntries || !logEntries.length) {
+      container.innerHTML = '<p class="px-4 py-3 text-sm text-gray-400 dark:text-gray-500 italic">Keine Log-Dateien gefunden</p>';
+      return;
+    }
+    container.innerHTML = logEntries.map((log) => `
+      <button type="button" class="w-full text-left px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors" onclick="changeLogFile('${log.index}')">
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <div class="flex items-center gap-2">
+              <span class="text-xs px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400">${escHtml(log.area_label)}</span>
+              <span class="text-sm font-medium truncate">${escHtml(log.name)}</span>
+            </div>
+            <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">${escHtml(log.purpose)}</div>
+            <div class="text-xs text-gray-400 mt-1 font-mono truncate">${escHtml(log.path)}</div>
+          </div>
+          <div class="text-right flex-shrink-0">
+            <div class="text-xs font-medium ${logActivityClass(log.activity_class)}">${escHtml(log.activity)}</div>
+            <div class="text-xs text-gray-400 mt-1">${escHtml(log.size)}</div>
+          </div>
+        </div>
+      </button>`).join("");
+  }
+
   function renderActiveProcesses(processes) {
     const container = document.getElementById("active-processes");
     if (!container) return;
-
     if (!processes || !processes.length) {
       container.innerHTML = '<p class="px-4 py-3 text-sm text-gray-400 dark:text-gray-500 italic">Keine GC-Bridge-Prozesse gefunden</p>';
       return;
     }
-
-    let html = "";
-    for (const p of processes) {
-      const selfBadge = p.is_self
-        ? ' <span class="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 font-medium flex-shrink-0">SELF</span>'
-        : "";
-      const ringCls = p.is_self ? " ring-2 ring-green-300 dark:ring-green-700" : "";
-      const user = p.user ? ` &bull; ${escHtml(p.user)}` : "";
-      const mem = p.mem_mb ? ` &bull; ${p.mem_mb} MB` : "";
-      const started = p.started ? ` &bull; Start: ${escHtml(p.started)}` : "";
-
-      html += `
-        <div class="flex items-start gap-3 px-4 py-3">
-          <span class="mt-1.5 w-2 h-2 rounded-full flex-shrink-0 bg-green-500${ringCls}"></span>
-          <div class="min-w-0 flex-1">
-            <div class="flex items-center gap-2">
-              <span class="font-mono text-sm truncate">${escHtml(p.command)}</span>${selfBadge}
-            </div>
-            <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-              PID ${p.pid}${user}${mem}${started}
-            </div>
-          </div>
-        </div>`;
-    }
-    container.innerHTML = html;
+    container.innerHTML = processes.map((p) => `
+      <div class="flex items-start gap-3 px-4 py-3">
+        <span class="mt-1.5 w-2 h-2 rounded-full flex-shrink-0 bg-green-500${p.is_self ? " ring-2 ring-green-300 dark:ring-green-700" : ""}"></span>
+        <div class="min-w-0 flex-1">
+          <div class="font-mono text-sm truncate">${escHtml(p.command)}</div>
+          <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">PID ${p.pid || "-"}${p.user ? ` · ${escHtml(p.user)}` : ""}${p.mem_mb ? ` · ${p.mem_mb} MB` : ""}${p.started ? ` · Start: ${escHtml(p.started)}` : ""}</div>
+        </div>
+      </div>`).join("");
   }
 
-  // -- Microtech-Slot rendern -----------------------------------
   function renderMicrotechSlot(slot) {
     const dot = document.getElementById("microtech-slot-dot");
     const label = document.getElementById("microtech-slot-label");
     if (!dot || !label || !slot) return;
-
     if (slot.available === true) {
       dot.className = "inline-block w-2 h-2 rounded-full bg-green-500";
-      const queued = slot.queued || 0;
-      label.textContent = queued > 0 ? `frei (${queued} wartend)` : "frei";
+      label.textContent = (slot.queued || 0) > 0 ? `frei (${slot.queued} wartend)` : "frei";
       label.className = "font-medium text-green-600 dark:text-green-400";
     } else if (slot.available === false) {
       dot.className = "inline-block w-2 h-2 rounded-full bg-red-500 animate-pulse";
-      const r = slot.running || 0;
-      const q = slot.queued || 0;
-      label.textContent = `belegt (${r} aktiv, ${q} wartend)`;
+      label.textContent = `belegt (${slot.running || 0} aktiv, ${slot.queued || 0} wartend)`;
       label.className = "font-medium text-red-600 dark:text-red-400";
     } else {
       dot.className = "inline-block w-2 h-2 rounded-full bg-gray-400";
@@ -440,103 +503,63 @@
     }
   }
 
-  // -- Microtech GraphQL Health rendern ------------------------
-  function renderGraphQLHealth(health) {
+  function renderGraphQLHealth(h) {
     const container = document.getElementById("graphql-health");
-    if (!container || !health) return;
-
-    const dotClass = health.status === "not_configured"
-      ? "bg-gray-400"
-      : (health.ok ? "bg-green-500" : "bg-red-500 animate-pulse");
-    const url = health.url
-      ? `<div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5 font-mono truncate" title="${escHtml(health.url)}">${escHtml(health.url)}</div>`
-      : "";
-    const latency = health.latency_ms !== null && health.latency_ms !== undefined
-      ? `<span class="text-xs text-gray-400 dark:text-gray-500">${health.latency_ms} ms</span>`
-      : "";
-    const error = health.error
-      ? `<div class="text-xs ${health.status === "not_configured" ? "text-gray-400 dark:text-gray-500" : "text-red-600 dark:text-red-400"} mt-1 break-words">${escHtml(health.error)}</div>`
-      : "";
-
-    if (health.status === "not_configured") {
-      container.innerHTML = `
-        <div class="flex items-start gap-3">
-          <span class="mt-1 w-2 h-2 rounded-full flex-shrink-0 ${dotClass}"></span>
-          <div class="min-w-0 flex-1">
-            <div class="text-sm font-medium text-gray-500 dark:text-gray-400">Nicht konfiguriert</div>
-            ${error}
-          </div>
-        </div>`;
-      return;
-    }
-
+    if (!container || !h) return;
+    const dotCls = h.status === "not_configured" ? "bg-gray-400" : (h.ok ? "bg-green-500" : "bg-red-500 animate-pulse");
+    const statusText = h.status === "not_configured" ? "Nicht konfiguriert" : (h.ok ? "OK" : "Fehler");
+    const statusCls = h.status === "not_configured" ? "text-gray-500 dark:text-gray-400" : (h.ok ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400");
     container.innerHTML = `
       <div class="flex items-start gap-3">
-        <span class="mt-1 w-2 h-2 rounded-full flex-shrink-0 ${dotClass}"></span>
+        <span class="mt-1 w-2 h-2 rounded-full flex-shrink-0 ${dotCls}"></span>
         <div class="min-w-0 flex-1">
           <div class="flex items-center gap-2">
-            <span class="text-sm font-medium ${health.ok ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400"}">
-              ${health.ok ? "OK" : "Fehler"}
-            </span>
-            ${latency}
+            <span class="text-sm font-medium ${statusCls}">${statusText}</span>
+            ${h.latency_ms != null ? `<span class="text-xs text-gray-400 dark:text-gray-500">${h.latency_ms} ms</span>` : ""}
           </div>
-          ${url}
-          ${error}
+          ${h.url ? `<div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5 font-mono truncate" title="${escHtml(h.url)}">${escHtml(h.url)}</div>` : ""}
+          ${h.error ? `<div class="text-xs text-red-600 dark:text-red-400 mt-1 break-words">${escHtml(h.error)}</div>` : ""}
         </div>
       </div>`;
   }
 
-  // -- Laufende Jobs rendern ------------------------------------
-  function renderJobs(entries) {
-    const container = document.getElementById("running-jobs");
-    if (!container) return;
-
-    if (!entries || !entries.length) {
-      container.innerHTML = '<p class="text-sm text-gray-400 dark:text-gray-500 italic">Keine laufenden Jobs</p>';
+  function renderServiceList(containerId, rows, emptyText, rowRenderer) {
+    const container = document.getElementById(containerId);
+    if (!container || rows === null || rows === undefined) return;
+    if (!rows.length) {
+      container.innerHTML = `<p class="px-4 py-3 text-sm text-gray-400 italic">${emptyText}</p>`;
       return;
     }
-
-    let html = "";
-    for (const e of entries) {
-      const meta = e.metadata || {};
-      const stage = meta.stage || "";
-
-      let cardCls, dotCls, stageBadgeCls, stageLabel;
-      if (stage === "processing") {
-        cardCls = "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800";
-        dotCls  = "bg-green-500 animate-pulse";
-        stageBadgeCls = "bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300";
-        stageLabel = "processing";
-      } else if (stage === "idle") {
-        cardCls = "bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700";
-        dotCls  = "bg-gray-400";
-        stageBadgeCls = "bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400";
-        stageLabel = "idle";
-      } else {
-        cardCls = "bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800";
-        dotCls  = "bg-amber-500 animate-pulse";
-        stageBadgeCls = "bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300";
-        stageLabel = stage || "kein stage";
-      }
-
-      html += `
-        <div class="flex items-start gap-3 mb-2 last:mb-0 p-2 rounded border ${cardCls}">
-          <span class="mt-1.5 w-2 h-2 rounded-full flex-shrink-0 ${dotCls}"></span>
-          <div class="min-w-0 w-full">
-            <div class="flex items-center justify-between gap-2">
-              <span class="font-medium text-sm truncate">${escHtml(e.command_name)}</span>
-              <span class="text-xs px-1.5 py-0.5 rounded font-medium flex-shrink-0 ${stageBadgeCls}">${escHtml(stageLabel)}</span>
-            </div>
-            <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-              PID ${e.pid} &bull; ${escHtml(e.hostname)} &bull; ${escHtml(e.duration)}
-            </div>
-          </div>
-        </div>`;
-    }
-    container.innerHTML = html;
+    container.innerHTML = rows.map(rowRenderer).join("");
   }
 
-  // -- Log rendern ----------------------------------------------
+  function renderInfra(data) {
+    renderServiceList("systemd-units", data.systemd_units, "Keine GC-Bridge systemd-Units gefunden", (u) => `
+      <div class="flex items-start gap-3 px-4 py-3">
+        <span class="mt-1 w-2 h-2 rounded-full flex-shrink-0 ${u.ok ? "bg-green-500" : "bg-red-400"}"></span>
+        <div class="min-w-0 flex-1">
+          <div class="font-medium text-sm">${escHtml(u.name)}</div>
+          <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">${escHtml(u.active)}/${escHtml(u.sub)}${u.description ? ` · ${escHtml(u.description)}` : ""}</div>
+        </div>
+      </div>`);
+    renderServiceList("scheduled-tasks", data.scheduled_tasks, "Keine Tasks abgefragt", (t) => `
+      <div class="flex items-start gap-3 px-4 py-3">
+        <span class="mt-1 w-2 h-2 rounded-full flex-shrink-0 ${t.ok ? "bg-green-500" : "bg-red-400"}"></span>
+        <div class="min-w-0 flex-1">
+          <div class="font-medium text-sm">${escHtml(t.name)}</div>
+          <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Status: ${escHtml(t.status)}${t.last_run ? ` · Zuletzt: ${escHtml(t.last_run)}` : ""}${t.next_run ? ` · Naechste: ${escHtml(t.next_run)}` : ""}</div>
+        </div>
+      </div>`);
+    renderServiceList("runner-services", data.runner_services, "Keine Runner-Dienste abgefragt", (s) => `
+      <div class="flex items-start gap-3 px-4 py-3">
+        <span class="mt-1 w-2 h-2 rounded-full flex-shrink-0 ${s.ok ? "bg-green-500" : "bg-red-400"}"></span>
+        <div class="min-w-0 flex-1">
+          <div class="font-medium text-sm">${escHtml(s.name)}</div>
+          <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Status: ${escHtml(s.state || "-")}</div>
+        </div>
+      </div>`);
+  }
+
   function renderLog(lines) {
     if (!logEl) return;
     const text = lines && lines.length ? lines.join("\n") : "(leer)";
@@ -545,174 +568,21 @@
     if (autoScroll) logEl.scrollTop = logEl.scrollHeight;
   }
 
-  // -- GraphQL-Health rendern -----------------------------------
-  function renderGraphQLHealth(h) {
-    const container = document.getElementById("graphql-health");
-    if (!container || !h) return;
-
-    let dotCls, statusText, statusCls;
-    if (h.status === "not_configured") {
-      dotCls = "bg-gray-400";
-      statusText = "Nicht konfiguriert";
-      statusCls = "text-gray-500 dark:text-gray-400";
-    } else if (h.ok) {
-      dotCls = "bg-green-500";
-      statusText = "OK";
-      statusCls = "text-green-700 dark:text-green-400";
-    } else {
-      dotCls = "bg-red-500 animate-pulse";
-      statusText = "Fehler";
-      statusCls = "text-red-700 dark:text-red-400";
-    }
-
-    const latency = h.latency_ms != null
-      ? `<span class="text-xs text-gray-400 dark:text-gray-500">${h.latency_ms} ms</span>`
-      : "";
-    const url = h.url
-      ? `<div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5 font-mono truncate" title="${escHtml(h.url)}">${escHtml(h.url)}</div>`
-      : "";
-    const error = h.error
-      ? `<div class="text-xs text-red-600 dark:text-red-400 mt-1 break-words">${escHtml(h.error)}</div>`
-      : "";
-
-    container.innerHTML = `
-      <div class="flex items-start gap-3">
-        <span class="mt-1 w-2 h-2 rounded-full flex-shrink-0 ${dotCls}"></span>
-        <div class="min-w-0 flex-1">
-          ${h.status === "not_configured"
-            ? `<div class="text-sm font-medium ${statusCls}">Nicht konfiguriert</div>
-               <div class="text-xs text-gray-400 dark:text-gray-500 mt-0.5">${escHtml(h.error || "")}</div>`
-            : `<div class="flex items-center gap-2">
-                 <span class="text-sm font-medium ${statusCls}">${statusText}</span>
-                 ${latency}
-               </div>
-               ${url}${error}`
-          }
-        </div>
-      </div>`;
-  }
-
-  window.checkGraphQLHealth = async function (btn) {
-    btn.disabled = true;
-    try {
-      const resp = await fetch(`/admin/system/api/?file=0&lines=1`, {
-        headers: { "X-Requested-With": "XMLHttpRequest" },
-      });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const data = await resp.json();
-      renderGraphQLHealth(data.graphql_health);
-    } catch (err) {
-      console.warn("GraphQL-Health-Check fehlgeschlagen:", err);
-    } finally {
-      btn.disabled = false;
-    }
-  };
-
-  // -- Systemd-Units rendern ------------------------------------
-  function renderSystemdUnits(units) {
-    const container = document.getElementById("systemd-units");
-    if (!container || units === null || units === undefined) return;
-
-    if (!units.length) {
-      container.innerHTML = '<p class="px-4 py-3 text-sm text-gray-400 italic">Keine GC-Bridge systemd-Units gefunden</p>';
-      return;
-    }
-
-    let html = "";
-    for (const u of units) {
-      const dot = u.ok ? "bg-green-500" : "bg-red-400";
-      const desc = u.description ? ` &bull; ${escHtml(u.description)}` : "";
-      html += `
-        <div class="flex items-start gap-3 px-4 py-3">
-          <span class="mt-1 w-2 h-2 rounded-full flex-shrink-0 ${dot}"></span>
-          <div class="min-w-0 flex-1">
-            <div class="font-medium text-sm">${escHtml(u.name)}</div>
-            <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-              ${escHtml(u.active)}/${escHtml(u.sub)}${desc}
-            </div>
-          </div>
-        </div>`;
-    }
-    container.innerHTML = html;
-  }
-
-  // -- Scheduled Tasks rendern ----------------------------------
-  function renderScheduledTasks(tasks) {
-    const container = document.getElementById("scheduled-tasks");
-    if (!container || tasks === null || tasks === undefined) return;
-
-    if (!tasks.length) {
-      container.innerHTML = '<p class="px-4 py-3 text-sm text-gray-400 italic">Keine Tasks abgefragt</p>';
-      return;
-    }
-
-    let html = "";
-    for (const t of tasks) {
-      const dot = t.ok ? "bg-green-500" : "bg-red-400";
-      const last = t.last_run ? ` &bull; Zuletzt: ${escHtml(t.last_run)}` : "";
-      const next = t.next_run ? ` &bull; Nächste: ${escHtml(t.next_run)}` : "";
-      html += `
-        <div class="flex items-start gap-3 px-4 py-3 border-b border-gray-100 dark:border-gray-700 last:border-0">
-          <span class="mt-1 w-2 h-2 rounded-full flex-shrink-0 ${dot}"></span>
-          <div class="min-w-0 flex-1">
-            <div class="font-medium text-sm">${escHtml(t.name)}</div>
-            <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-              Status: ${escHtml(t.status)}${last}${next}
-            </div>
-          </div>
-        </div>`;
-    }
-    container.innerHTML = html;
-  }
-
-  // -- Runner-Dienste rendern -----------------------------------
-  function renderRunnerServices(services) {
-    const container = document.getElementById("runner-services");
-    if (!container || services === null || services === undefined) return;
-
-    if (!services.length) {
-      container.innerHTML = '<p class="px-4 py-3 text-sm text-gray-400 italic">Keine Runner-Dienste abgefragt</p>';
-      return;
-    }
-
-    let html = "";
-    for (const s of services) {
-      const dot = s.ok ? "bg-green-500" : "bg-red-400";
-      html += `
-        <div class="flex items-start gap-3 px-4 py-3 border-b border-gray-100 dark:border-gray-700 last:border-0">
-          <span class="mt-1 w-2 h-2 rounded-full flex-shrink-0 ${dot}"></span>
-          <div class="min-w-0 flex-1">
-            <div class="font-medium text-sm">${escHtml(s.name)}</div>
-            <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-              Status: ${escHtml(s.state || "-")}
-            </div>
-          </div>
-        </div>`;
-    }
-    container.innerHTML = html;
-  }
-
-  // -- API-Fetch ------------------------------------------------
   async function fetchStatus() {
     const dot = document.getElementById("refresh-dot");
     try {
-      const resp = await fetch(
-        `/admin/system/api/?file=${fileIndex}&lines=${lineCount}`,
-        { headers: { "X-Requested-With": "XMLHttpRequest" } }
-      );
+      const resp = await fetch(`/admin/system/api/?file=${fileIndex}&lines=${lineCount}`, { headers: { "X-Requested-With": "XMLHttpRequest" } });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const data = await resp.json();
-
+      renderDashboardCards(data.dashboard_cards);
+      renderJobs(data.runtime_entries);
+      renderQueue(data.queue_status);
+      renderLogOverview(data.log_entries);
       renderActiveProcesses(data.active_processes);
-      renderGraphQLHealth(data.graphql_health);
       renderMicrotechSlot(data.microtech_slot);
       renderGraphQLHealth(data.graphql_health);
-      renderJobs(data.runtime_entries);
+      renderInfra(data);
       renderLog(data.log_lines);
-      renderSystemdUnits(data.systemd_units);
-      renderScheduledTasks(data.scheduled_tasks);
-      renderRunnerServices(data.runner_services);
-
       const el = document.getElementById("last-updated");
       if (el) el.textContent = "Stand: " + new Date().toLocaleTimeString("de-DE");
       if (dot) dot.style.backgroundColor = "#4ade80";
@@ -722,7 +592,6 @@
     }
   }
 
-  // -- Job-Trigger ----------------------------------------------
   function getCsrfToken() {
     const match = document.cookie.match(/csrftoken=([^;]+)/);
     return match ? decodeURIComponent(match[1]) : "";
@@ -731,38 +600,28 @@
   window.triggerJob = async function (btn) {
     const command = btn.dataset.command;
     if (!command) return;
-
     btn.disabled = true;
     const originalHtml = btn.innerHTML;
-    btn.innerHTML = '<span class="material-symbols-outlined" style="font-size:14px">hourglass_empty</span> Starte…';
-
+    btn.innerHTML = '<span class="material-symbols-outlined" style="font-size:14px">hourglass_empty</span> Starte';
     const toast = document.getElementById("job-toast");
-
     try {
       const resp = await fetch("/admin/system/run/", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRFToken": getCsrfToken(),
-        },
-        body: JSON.stringify({ command }),
+        headers: {"Content-Type": "application/json", "X-CSRFToken": getCsrfToken()},
+        body: JSON.stringify({command}),
       });
       const result = await resp.json();
-
       if (toast) {
-        if (result.success) {
-          toast.className = "mt-2 p-3 rounded text-sm font-medium bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-800 dark:text-green-300";
-          toast.textContent = `Job gestartet (PID ${result.pid})`;
-        } else {
-          toast.className = "mt-2 p-3 rounded text-sm font-medium bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-300";
-          toast.textContent = `Fehler: ${result.error}`;
-        }
+        toast.className = result.success
+          ? "lg:col-span-2 p-3 rounded text-sm font-medium bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-800 dark:text-green-300"
+          : "lg:col-span-2 p-3 rounded text-sm font-medium bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-300";
+        toast.textContent = result.success ? `Job gestartet (PID ${result.pid})` : `Fehler: ${result.error}`;
         toast.classList.remove("hidden");
         setTimeout(() => toast.classList.add("hidden"), 6000);
       }
-    } catch (err) {
+    } catch (_err) {
       if (toast) {
-        toast.className = "mt-2 p-3 rounded text-sm font-medium bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-300";
+        toast.className = "lg:col-span-2 p-3 rounded text-sm font-medium bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-300";
         toast.textContent = "Verbindungsfehler";
         toast.classList.remove("hidden");
         setTimeout(() => toast.classList.add("hidden"), 6000);
@@ -780,7 +639,7 @@
     const originalHtml = btn ? btn.innerHTML : "";
     if (btn) {
       btn.disabled = true;
-      btn.innerHTML = '<span class="material-symbols-outlined" style="font-size:14px">hourglass_empty</span> Prüfe';
+      btn.innerHTML = '<span class="material-symbols-outlined" style="font-size:14px">hourglass_empty</span> Pruefe';
     }
     await fetchStatus();
     if (btn) {
@@ -789,26 +648,15 @@
     }
   };
 
-  // -- Hilfsfunktion --------------------------------------------
-  function escHtml(s) {
-    return String(s)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
-  }
-
-  // -- Start ----------------------------------------------------
   fetchStatus();
   timer = setInterval(fetchStatus, REFRESH_MS);
-
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
       clearInterval(timer);
-    } else {
-      fetchStatus();
-      timer = setInterval(fetchStatus, REFRESH_MS);
+      return;
     }
+    fetchStatus();
+    timer = setInterval(fetchStatus, REFRESH_MS);
   });
 })();
 </script>

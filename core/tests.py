@@ -14,6 +14,7 @@ from core.dashboard import dashboard_callback
 from core.logging import build_managed_log_path, cleanup_old_log_files, get_retention
 from core.log_reader import get_allowed_log_files, tail_log_file
 from core.services import CommandRuntimeService
+from core.system_status_view import _build_dashboard_cards, _build_log_entries, _flatten_celery_tasks
 from customer.models import Customer
 from orders.models import Order
 
@@ -153,6 +154,64 @@ class CommandRuntimeServiceTest(SimpleTestCase):
 
                 handle.close()
                 self.assertEqual(service.list_runs(), [])
+
+
+class SystemStatusAggregationTest(SimpleTestCase):
+    def test_build_log_entries_assigns_area_and_purpose(self):
+        with TemporaryDirectory() as tmp_dir:
+            base_dir = Path(tmp_dir)
+            log_path = base_dir / "tmp" / "logs" / "weekly" / "shopware" / "shopware.2026-03-24.log"
+            log_path.parent.mkdir(parents=True)
+            log_path.write_text("ok\n", encoding="utf-8")
+
+            entries = _build_log_entries([log_path])
+
+        self.assertEqual(entries[0]["log_key"], "shopware")
+        self.assertEqual(entries[0]["area_key"], "shopware")
+        self.assertIn("Shopware API", entries[0]["purpose"])
+
+    def test_flatten_celery_tasks_labels_reserved_tasks(self):
+        rows = _flatten_celery_tasks(
+            {
+                "worker@example": [
+                    {
+                        "id": "task-1",
+                        "name": "products.scheduled_product_sync",
+                        "argsrepr": "()",
+                        "kwargsrepr": "{}",
+                    }
+                ]
+            },
+            state="reserved",
+        )
+
+        self.assertEqual(rows[0]["label"], "Produkt-Sync komplett")
+        self.assertEqual(rows[0]["worker"], "worker@example")
+        self.assertEqual(rows[0]["state"], "reserved")
+
+    def test_dashboard_cards_mark_running_and_waiting_areas(self):
+        runtime_entries = [
+            {
+                "command_name": "shopware_sync_products",
+                "duration": "0:02:00",
+                "metadata": {"stage": "sync_batch"},
+            }
+        ]
+        queue_status = {
+            "active": [],
+            "waiting": [{"name": "orders.shopware_sync_open_orders"}],
+            "scheduled": [],
+        }
+        cards = _build_dashboard_cards(
+            runtime_entries=runtime_entries,
+            queue_status=queue_status,
+            log_entries=[],
+        )
+        shopware_card = next(card for card in cards if card["key"] == "shopware")
+
+        self.assertEqual(shopware_card["status"], "running")
+        self.assertEqual(shopware_card["stage"], "sync_batch")
+        self.assertEqual(shopware_card["waiting_count"], 1)
 
 
 class _SidebarUser:
