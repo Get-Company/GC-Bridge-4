@@ -5,50 +5,13 @@ import shutil
 import subprocess
 import tempfile
 from decimal import Decimal
-from types import SimpleNamespace
 from typing import TYPE_CHECKING, Iterable
 
 from django.template import Context, Template
-from django.template import TemplateDoesNotExist
-from django.template.loader import get_template, render_to_string
+from django.template.loader import render_to_string
 
 if TYPE_CHECKING:
     from emails.models import EmailCampaign, EmailCampaignComponent
-
-
-LEGACY_COMPONENT_TEMPLATES = {
-    "header_nav": "emails/components/legacy/header_nav.mjml",
-    "logo": "emails/components/legacy/logo.mjml",
-    "title_intro": "emails/components/legacy/title_intro.mjml",
-    "products": "emails/components/legacy/products.mjml",
-    "content_text": "emails/components/legacy/content_text.mjml",
-    "blog_acymailing": "emails/components/legacy/blog_acymailing.mjml",
-    "certs_logo_green": "emails/components/legacy/certs_logo_green.mjml",
-    "4r": "emails/components/legacy/4r.mjml",
-    "weihnachten": "emails/components/legacy/weihnachten.mjml",
-    "contact_table": "emails/components/legacy/contact_table.mjml",
-    "disclaimer": "emails/components/legacy/disclaimer.mjml",
-}
-
-
-def default_component_markup(component_key: str) -> str:
-    template_name = LEGACY_COMPONENT_TEMPLATES.get(component_key)
-    if not template_name:
-        return ""
-
-    try:
-        template = get_template(template_name)
-    except TemplateDoesNotExist:
-        return ""
-
-    origin = getattr(template, "origin", None)
-    if origin and origin.name:
-        try:
-            with open(origin.name, encoding="utf-8") as template_file:
-                return template_file.read()
-        except OSError:
-            return ""
-    return ""
 
 
 class ProductEmailProxy:
@@ -122,34 +85,23 @@ class ProductEmailProxy:
 
 
 def _campaign_sales_channel_ids(campaign: "EmailCampaign") -> tuple[int, ...]:
-    return tuple(
-        campaign.sales_channels.filter(enabled=True)
-        .order_by("-sales_channel__is_default", "sales_channel__name", "pk")
-        .values_list("sales_channel_id", flat=True)
-    )
+    from shopware.models import ShopwareSettings
+    default = ShopwareSettings.objects.filter(is_default=True, is_active=True).first()
+    if default:
+        return (default.pk,)
+    return ()
 
 
 def _campaign_components(campaign: "EmailCampaign") -> list["EmailCampaignComponent"]:
-    components = list(campaign.components.filter(enabled=True).order_by("order", "id"))
-    if components:
-        return components
-
-    from emails.models import EmailCampaignComponent
-
-    return [
-        SimpleNamespace(
-            component_key=component_key,
-            title=EmailCampaignComponent.ComponentKey(component_key).label,
-            subtitle="",
-            body_html="",
-            mjml_markup=default_component_markup(component_key),
-        )
-        for component_key in EmailCampaignComponent.DEFAULT_COMPONENTS
-    ]
+    return list(
+        campaign.components.filter(enabled=True)
+        .select_related("library_component")
+        .order_by("order", "id")
+    )
 
 
 def _render_component_mjml(component: "EmailCampaignComponent", context: dict) -> str:
-    markup = getattr(component, "mjml_markup", "") or default_component_markup(component.component_key)
+    markup = component.library_component.mjml_markup if component.library_component_id else ""
     if not markup:
         return ""
 
@@ -166,18 +118,6 @@ def _render_component_mjml(component: "EmailCampaignComponent", context: dict) -
 
 def render_campaign_mjml(campaign: "EmailCampaign") -> str:
     """Renders a campaign to a MJML string using Django template engine."""
-    template_map = {
-        "product": "emails/components/product.mjml",
-        "product_shipping_free": "emails/components/product_shipping_free.mjml",
-        "product_green": "emails/components/product.mjml",
-    }
-    order_form_map = {
-        "product": "emails/components/order_form_product.mjml",
-        "product_shipping_free": "emails/components/order_form_product_shipping_free.mjml",
-        "product_green": "emails/components/order_form_product.mjml",
-    }
-    product_component = template_map.get(campaign.product_template, "emails/components/product.mjml")
-    order_form_template = order_form_map.get(campaign.product_template, "emails/components/order_form_product.mjml")
     sales_channel_ids = _campaign_sales_channel_ids(campaign)
 
     products = [
@@ -185,15 +125,7 @@ def render_campaign_mjml(campaign: "EmailCampaign") -> str:
         for cp in campaign.campaign_products.select_related("product").order_by("order", "id")
     ]
 
-    base_context = {
-        "h1": campaign.h1,
-        "h1_small": campaign.h1_small,
-        "intro_text": campaign.intro_text,
-        "products": products,
-        "product_component_template": product_component,
-        "order_form_template": order_form_template,
-        "special_end_date": None,
-    }
+    base_context = {"products": products}
     component_mjml = [
         _render_component_mjml(component, base_context)
         for component in _campaign_components(campaign)
