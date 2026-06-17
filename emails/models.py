@@ -121,6 +121,14 @@ class EmailCampaignComponent(BaseModel):
         related_name="components",
         verbose_name=_("Kampagne"),
     )
+    library_component = models.ForeignKey(
+        "MjmlComponent",
+        on_delete=models.PROTECT,
+        related_name="campaign_usages",
+        null=True,
+        blank=True,
+        verbose_name=_("Bibliotheks-Komponente"),
+    )
     component_key = models.CharField(
         max_length=40,
         choices=ComponentKey.choices,
@@ -160,6 +168,9 @@ class EmailCampaignComponent(BaseModel):
         ordering = ("order", "id")
 
     def __str__(self) -> str:
+        if self.library_component_id:
+            placement = self.library_component.get_placement_display()
+            return f"{self.order} – {self.library_component.name} ({placement})"
         return self.title or self.get_component_key_display()
 
     def get_inline_title(self) -> str:

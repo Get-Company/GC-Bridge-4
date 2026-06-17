@@ -210,6 +210,20 @@ class TestMjmlComponent:
 
 
 @pytest.mark.django_db
+class TestEmailCampaignComponentStr:
+    def test_str_shows_order_name_and_placement(self):
+        from emails.models import EmailCampaign, EmailCampaignComponent, MjmlComponent
+        lib = MjmlComponent.objects.create(name="Logo", placement="body", order=10)
+        campaign = EmailCampaign.objects.create(internal_title="T", status="draft")
+        comp = EmailCampaignComponent(
+            campaign=campaign,
+            library_component=lib,
+            order=10,
+        )
+        assert str(comp) == "10 – Logo (Body (Inhaltsbereich))"
+
+
+@pytest.mark.django_db
 class TestRenderCampaignMjml:
     def test_renders_without_products(self):
         from emails.models import EmailCampaign
