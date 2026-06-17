@@ -5,57 +5,77 @@ import logging
 
 from django import forms
 from django.contrib import admin
-from django.contrib.admin.widgets import AdminTextareaWidget
 from django.http import HttpResponse, JsonResponse
 from django.urls import path
-from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 
 logger = logging.getLogger(__name__)
 
 from core.admin import BaseAdmin, BaseStackedInline, BaseTabularInline
-from emails.mjml import compile_mjml_to_html, default_component_markup, render_campaign_mjml
+from emails.mjml import compile_mjml_to_html, render_campaign_mjml
 from emails.models import (
     EmailCampaign,
     EmailCampaignComponent,
     EmailCampaignProduct,
-    EmailCampaignSalesChannel,
+    MjmlComponent,
 )
+from emails.tasks import apply_campaign_prices_async
+
+_MONOSPACE_STYLE = "font-family: monospace; width: 100%; min-height: 300px;"
 
 
-class EmailCampaignComponentForm(forms.ModelForm):
-    class Meta:
-        model = EmailCampaignComponent
-        fields = "__all__"
-        widgets = {
-            "mjml_markup": AdminTextareaWidget(
-                attrs={
-                    "rows": 14,
-                    "style": "font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;",
-                }
-            ),
-        }
+@admin.register(MjmlComponent)
+class MjmlComponentAdmin(BaseAdmin):
+    list_display = ("name", "placement", "is_default", "order")
+    list_filter = ("placement", "is_default")
+    list_editable = ("is_default", "order")
+    search_fields = ("name",)
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        component_key = self.initial.get("component_key") or getattr(self.instance, "component_key", "")
-        if component_key and not self.initial.get("mjml_markup") and not getattr(self.instance, "mjml_markup", ""):
-            self.initial["mjml_markup"] = default_component_markup(component_key)
+    def formfield_for_dbfield(self, db_field, request, **kwargs):
+        field = super().formfield_for_dbfield(db_field, request, **kwargs)
+        if db_field.name == "mjml_markup" and field is not None:
+            field.widget = forms.Textarea(attrs={"style": _MONOSPACE_STYLE})
+        return field
+
+    fieldsets = (
+        (
+            _("Komponente"),
+            {
+                "fields": ("name", "placement", "is_default", "order"),
+            },
+        ),
+        (
+            _("MJML-Markup"),
+            {
+                "fields": ("mjml_markup",),
+            },
+        ),
+        (
+            _("System"),
+            {
+                "fields": BaseAdmin.readonly_fields,
+                "classes": ("collapse",),
+            },
+        ),
+    )
 
 
 class EmailCampaignComponentInline(BaseStackedInline):
     model = EmailCampaignComponent
-    form = EmailCampaignComponentForm
-    fields = ("order", "enabled", "component_key", "title", "subtitle", "body_html", "mjml_markup")
-    extra = 0
-    ordering = ("order", "id")
+    sortable = True
+    sortable_field_name = "order"
+    fields = ("order", "enabled", "library_component", "title", "subtitle", "body_html")
+    autocomplete_fields = ("library_component",)
     collapsible = True
+    extra = 0
 
 
 class EmailCampaignProductInline(BaseTabularInline):
     model = EmailCampaignProduct
-    fields = ("order", "product", "special_price_override", "current_price_display")
-    readonly_fields = BaseTabularInline.readonly_fields + ("current_price_display",)
+    sortable = True
+    sortable_field_name = "order"
+    fields = ("order", "product", "special_price_override", "discount_pct", "current_price_display", "prices_synced_at")
+    readonly_fields = BaseTabularInline.readonly_fields + ("current_price_display", "prices_synced_at")
     autocomplete_fields = ("product",)
     extra = 0
 
@@ -70,42 +90,19 @@ class EmailCampaignProductInline(BaseTabularInline):
             return "—"
 
 
-class EmailCampaignSalesChannelInline(BaseTabularInline):
-    model = EmailCampaignSalesChannel
-    fields = ("sales_channel", "enabled", "is_default_display")
-    readonly_fields = BaseTabularInline.readonly_fields + ("is_default_display",)
-    extra = 0
-
-    @admin.display(description=_("Standard"))
-    def is_default_display(self, obj: EmailCampaignSalesChannel):
-        if obj.sales_channel_id and obj.sales_channel.is_default:
-            return format_html(
-                '<span style="color:#16a34a;font-weight:bold">{} {}</span>',
-                "✓",
-                _("Standard"),
-            )
-        return "—"
-
-
 @admin.register(EmailCampaign)
 class EmailCampaignAdmin(BaseAdmin):
-    list_display = ("internal_title", "component_count", "product_count", "status", "product_template", "created_at")
-    list_filter = ("status", "product_template", "created_at")
+    list_display = ("internal_title", "component_count", "product_count", "status", "created_at")
+    list_filter = ("status", "created_at")
     search_fields = ("internal_title",)
     list_editable = ("status",)
-    inlines = (EmailCampaignComponentInline, EmailCampaignProductInline, EmailCampaignSalesChannelInline)
+    inlines = (EmailCampaignComponentInline, EmailCampaignProductInline)
 
     fieldsets = (
         (
             _("Kampagne"),
             {
-                "fields": ("internal_title",),
-            },
-        ),
-        (
-            _("Einstellungen"),
-            {
-                "fields": ("product_template", "status"),
+                "fields": ("internal_title", "status"),
             },
         ),
         (
@@ -125,6 +122,34 @@ class EmailCampaignAdmin(BaseAdmin):
     def component_count(self, obj: EmailCampaign) -> int:
         return obj.components.count()
 
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        if not change:
+            self._ensure_default_components(obj)
+
+    def save_related(self, request, form, formsets, change):
+        super().save_related(request, form, formsets, change)
+        apply_campaign_prices_async.delay(form.instance.pk)
+
+    def _ensure_default_components(self, campaign: EmailCampaign) -> None:
+        if campaign.components.exists():
+            return
+
+        components = []
+        for index, lib_component in enumerate(
+            MjmlComponent.objects.filter(is_default=True).order_by("order", "name"), start=1
+        ):
+            components.append(
+                EmailCampaignComponent(
+                    campaign=campaign,
+                    library_component=lib_component,
+                    title=lib_component.name,
+                    order=index * 10,
+                    enabled=True,
+                )
+            )
+        EmailCampaignComponent.objects.bulk_create(components)
+
     def get_urls(self):
         urls = super().get_urls()
         custom = [
@@ -135,71 +160,6 @@ class EmailCampaignAdmin(BaseAdmin):
             ),
         ]
         return custom + urls
-
-    def change_view(self, request, object_id, form_url="", extra_context=None):
-        extra_context = extra_context or {}
-        campaign = self.get_object(request, object_id)
-        extra_context.update(self._component_context(campaign))
-        return super().change_view(request, object_id, form_url, extra_context)
-
-    def add_view(self, request, form_url="", extra_context=None):
-        extra_context = extra_context or {}
-        extra_context.update(self._component_context())
-        return super().add_view(request, form_url, extra_context)
-
-    def save_model(self, request, obj, form, change):
-        super().save_model(request, obj, form, change)
-        self._ensure_default_components(obj)
-        if not change:
-            # Late import avoids circular import between emails and shopware apps at module load time.
-            from shopware.models import ShopwareSettings
-            default_channel = ShopwareSettings.objects.filter(is_default=True, is_active=True).first()
-            if default_channel:
-                EmailCampaignSalesChannel.objects.get_or_create(
-                    campaign=obj,
-                    sales_channel=default_channel,
-                    defaults={"enabled": True},
-                )
-
-    def _component_context(self, campaign: EmailCampaign | None = None) -> dict:
-        component_library = [
-            {
-                "key": key,
-                "label": label,
-                "markup": default_component_markup(key),
-            }
-            for key, label in EmailCampaignComponent.ComponentKey.choices
-        ]
-        active_components = []
-        if campaign:
-            active_components = list(campaign.components.order_by("order", "id"))
-
-        return {
-            "component_library": component_library,
-            "active_components": active_components,
-        }
-
-    def _ensure_default_components(self, campaign: EmailCampaign) -> None:
-        if campaign.components.exists():
-            return
-
-        components = []
-        for index, component_key in enumerate(EmailCampaignComponent.DEFAULT_COMPONENTS, start=1):
-            label = EmailCampaignComponent.ComponentKey(component_key).label
-            body_html = campaign.intro_text if component_key == EmailCampaignComponent.ComponentKey.TITLE_INTRO else ""
-            components.append(
-                EmailCampaignComponent(
-                    campaign=campaign,
-                    component_key=component_key,
-                    title=campaign.h1 if component_key == EmailCampaignComponent.ComponentKey.TITLE_INTRO else str(label),
-                    subtitle=campaign.h1_small if component_key == EmailCampaignComponent.ComponentKey.TITLE_INTRO else "",
-                    body_html=body_html,
-                    mjml_markup=default_component_markup(component_key),
-                    order=index * 10,
-                    enabled=True,
-                )
-            )
-        EmailCampaignComponent.objects.bulk_create(components)
 
     def export_html_view(self, request, campaign_id: int):
         try:
