@@ -6,7 +6,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 from celery import current_app
 from django.conf import settings
-from django.contrib import admin, messages
+from django.contrib import admin
 from django.core.exceptions import PermissionDenied
 from django.template.response import TemplateResponse
 
@@ -152,27 +152,6 @@ CELERY_ADMIN_TASKS: tuple[TaskDefinition, ...] = (
 )
 
 
-def _task_by_name(task_name: str) -> TaskDefinition | None:
-    for task in CELERY_ADMIN_TASKS:
-        if task.name == task_name:
-            return task
-    return None
-
-
-def _parse_field(request, field: TaskField) -> Any:
-    if field.field_type == "bool":
-        return request.POST.get(field.name) == "on"
-
-    raw_value = (request.POST.get(field.name, "") or "").strip()
-    if field.field_type == "int":
-        return int(raw_value) if raw_value else None
-    if field.field_type == "float":
-        return float(raw_value) if raw_value else None
-    if field.field_type == "csv":
-        return [item.strip() for item in raw_value.split(",") if item.strip()]
-    return raw_value
-
-
 def _visible_task(task: TaskDefinition) -> dict[str, Any]:
     return {
         "name": task.name,
@@ -189,6 +168,37 @@ def _visible_task(task: TaskDefinition) -> dict[str, Any]:
             for field in task.fields
         ],
     }
+
+
+def _task_area(task_name: str) -> str:
+    if "." not in task_name:
+        return "system"
+    return task_name.split(".", 1)[0]
+
+
+def _registered_task_rows() -> list[dict[str, Any]]:
+    configured = {task.name: _visible_task(task) for task in CELERY_ADMIN_TASKS}
+    names = {
+        str(name)
+        for name in current_app.tasks.keys()
+        if str(name) and not str(name).startswith("celery.")
+    }
+    names.update(configured.keys())
+
+    rows: list[dict[str, Any]] = []
+    for name in sorted(names):
+        definition = configured.get(name)
+        rows.append(
+            {
+                "name": name,
+                "label": definition["label"] if definition else name,
+                "description": definition["description"] if definition else "",
+                "area": _task_area(name),
+                "source": "konfiguriert" if definition else "registriert",
+                "parameters": ", ".join(field["label"] for field in definition["fields"]) if definition else "",
+            }
+        )
+    return rows
 
 
 def _beat_schedule_rows() -> list[dict[str, str]]:
@@ -225,30 +235,11 @@ def celery_tasks_admin_view(request):
     if not getattr(request.user, "is_superuser", False):
         raise PermissionDenied
 
-    if request.method == "POST":
-        task_name = (request.POST.get("task_name") or "").strip()
-        task = _task_by_name(task_name)
-        if task is None:
-            messages.error(request, "Unbekannter Celery Task.")
-        else:
-            try:
-                kwargs = {
-                    field.name: _parse_field(request, field)
-                    for field in task.fields
-                }
-                async_result = current_app.send_task(task.name, kwargs=kwargs)
-            except ValueError as exc:
-                messages.error(request, f"Ungueltiger Parameter: {exc}")
-            except Exception as exc:
-                messages.error(request, f"Celery Task konnte nicht gestartet werden: {exc}")
-            else:
-                messages.success(request, f"{task.label} wurde gestartet. Task-ID: {async_result.id}")
-
     context = admin.site.each_context(request)
     context.update(
         {
-            "title": "Celery Tasks",
-            "tasks": [_visible_task(task) for task in CELERY_ADMIN_TASKS],
+            "title": "Task-Uebersicht",
+            "tasks": _registered_task_rows(),
             "beat_schedule": _beat_schedule_rows(),
             "broker_url": _masked_url(getattr(settings, "CELERY_BROKER_URL", "")),
         }

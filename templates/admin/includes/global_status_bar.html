@@ -1,0 +1,95 @@
+<div
+  id="global-admin-status-bar"
+  class="sticky top-0 z-50 flex w-full flex-wrap items-center justify-between gap-2 border-b border-gray-200 bg-white/95 px-4 py-1.5 text-xs shadow-sm backdrop-blur dark:border-gray-700 dark:bg-base-900/95"
+  data-status-url="/admin/status-bar/api/"
+>
+  <div class="flex items-center gap-2 text-gray-500 dark:text-gray-400">
+    <span class="material-symbols-outlined" style="font-size:16px">monitor_heart</span>
+    <span>System</span>
+  </div>
+  <div class="flex flex-wrap items-center gap-2">
+    <span
+      class="global-admin-status-item inline-flex items-center gap-1.5 rounded border border-gray-200 bg-gray-50 px-2 py-0.5 text-gray-500 dark:border-gray-700 dark:bg-base-800 dark:text-gray-400"
+      data-service="graphql"
+      title="GraphQL wird geprueft"
+    >
+      <span class="global-admin-status-dot h-2 w-2 rounded-full bg-gray-400"></span>
+      <span class="global-admin-status-label">GraphQL</span>
+      <span class="global-admin-status-text">pruefe...</span>
+    </span>
+    <span
+      class="global-admin-status-item inline-flex items-center gap-1.5 rounded border border-gray-200 bg-gray-50 px-2 py-0.5 text-gray-500 dark:border-gray-700 dark:bg-base-800 dark:text-gray-400"
+      data-service="shopware"
+      title="Shopware wird geprueft"
+    >
+      <span class="global-admin-status-dot h-2 w-2 rounded-full bg-gray-400"></span>
+      <span class="global-admin-status-label">Shopware</span>
+      <span class="global-admin-status-text">pruefe...</span>
+    </span>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  const root = document.getElementById("global-admin-status-bar");
+  if (!root) return;
+
+  const statusUrl = root.dataset.statusUrl || "/admin/status-bar/api/";
+  const intervalMs = 30000;
+
+  function applyStatus(serviceKey, data) {
+    const item = root.querySelector(`[data-service="${serviceKey}"]`);
+    if (!item || !data) return;
+
+    const dot = item.querySelector(".global-admin-status-dot");
+    const text = item.querySelector(".global-admin-status-text");
+    const detail = data.detail || "";
+
+    item.classList.remove(
+      "border-green-200", "bg-green-50", "text-green-700",
+      "border-red-200", "bg-red-50", "text-red-700",
+      "border-gray-200", "bg-gray-50", "text-gray-500"
+    );
+    if (dot) {
+      dot.classList.remove("bg-green-500", "bg-red-500", "bg-gray-400", "animate-pulse");
+    }
+
+    if (data.ok === true) {
+      item.classList.add("border-green-200", "bg-green-50", "text-green-700");
+      if (dot) dot.classList.add("bg-green-500");
+      if (text) text.textContent = "OK";
+    } else if (data.ok === false) {
+      item.classList.add("border-red-200", "bg-red-50", "text-red-700");
+      if (dot) dot.classList.add("bg-red-500", "animate-pulse");
+      if (text) text.textContent = "Fehler";
+    } else {
+      item.classList.add("border-gray-200", "bg-gray-50", "text-gray-500");
+      if (dot) dot.classList.add("bg-gray-400");
+      if (text) text.textContent = "n/a";
+    }
+
+    item.title = `${data.label || serviceKey}: ${detail || data.status || ""}`;
+  }
+
+  async function refreshStatus() {
+    try {
+      const response = await fetch(statusUrl, {
+        headers: {"X-Requested-With": "XMLHttpRequest"},
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const payload = await response.json();
+      const services = payload.services || {};
+      applyStatus("graphql", services.graphql);
+      applyStatus("shopware", services.shopware);
+    } catch (error) {
+      applyStatus("graphql", {label: "GraphQL", ok: false, detail: String(error)});
+      applyStatus("shopware", {label: "Shopware", ok: false, detail: String(error)});
+    }
+  }
+
+  refreshStatus();
+  setInterval(refreshStatus, intervalMs);
+})();
+</script>

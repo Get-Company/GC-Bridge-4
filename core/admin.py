@@ -34,6 +34,7 @@ from django_celery_beat.models import (
     SolarSchedule,
 )
 
+from core.admin_status import admin_status_bar_api
 from core.celery_admin import celery_tasks_admin_view
 from core.log_reader import get_allowed_log_files, tail_log_file
 from core.services import CommandRuntimeService
@@ -215,6 +216,7 @@ _default_admin_get_urls = admin.site.get_urls
 
 def _admin_get_urls():
     custom_urls = [
+        path("status-bar/api/", admin.site.admin_view(admin_status_bar_api), name="core_status_bar_api"),
         path("celery-tasks/", admin.site.admin_view(celery_tasks_admin_view), name="core_celery_tasks"),
         path("logs/", admin.site.admin_view(admin_log_reader_view), name="core_log_reader"),
         path("system/", admin.site.admin_view(system_status_view), name="core_system_status"),
