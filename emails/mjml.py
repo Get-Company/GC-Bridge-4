@@ -126,13 +126,27 @@ def render_campaign_mjml(campaign: "EmailCampaign") -> str:
     ]
 
     base_context = {"products": products}
-    component_mjml = [
-        _render_component_mjml(component, base_context)
-        for component in _campaign_components(campaign)
-    ]
+    components = _campaign_components(campaign)
+
+    head_mjml = "\n".join(
+        rendered
+        for comp in components
+        if getattr(getattr(comp, "library_component", None), "placement", "body") == "head"
+        for rendered in [_render_component_mjml(comp, base_context)]
+        if rendered.strip()
+    )
+    body_mjml = "\n".join(
+        rendered
+        for comp in components
+        if getattr(getattr(comp, "library_component", None), "placement", "body") == "body"
+        for rendered in [_render_component_mjml(comp, base_context)]
+        if rendered.strip()
+    )
+
     context = {
         **base_context,
-        "body_mjml": "\n".join(component for component in component_mjml if component.strip()),
+        "head_mjml": head_mjml,
+        "body_mjml": body_mjml,
     }
     return render_to_string("emails/newsletter_base.mjml", context)
 

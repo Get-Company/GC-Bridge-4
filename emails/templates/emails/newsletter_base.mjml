@@ -1,7 +1,7 @@
 {# emails/templates/emails/newsletter_base.mjml #}
 <mjml>
     <mj-head>
-        {% include "emails/components/head.mjml" %}
+        {{ head_mjml|safe }}
     </mj-head>
     <mj-body>
         {{ body_mjml|safe }}

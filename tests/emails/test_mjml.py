@@ -167,33 +167,35 @@ class TestCompileMjmlToHtml:
 
 class TestCampaignComponentRendering:
     def test_render_campaign_uses_enabled_component_order(self, monkeypatch):
-        rendered_templates = []
-
         def fake_render_to_string(template_name, context):
             if template_name == "emails/newsletter_base.mjml":
                 return context["body_mjml"]
-            rendered_templates.append(template_name)
-            return context["component"].component_key
+            return ""
 
         monkeypatch.setattr("emails.mjml.render_to_string", fake_render_to_string)
+        monkeypatch.setattr("emails.mjml._campaign_sales_channel_ids", lambda campaign: ())
+
+        def make_comp(name, markup, order, enabled=True):
+            lib = SimpleNamespace(placement="body", name=name, mjml_markup=markup)
+            return SimpleNamespace(
+                library_component=lib,
+                library_component_id=True,
+                title="", body_html="",
+                order=order,
+                enabled=enabled,
+            )
+
         campaign = SimpleNamespace(
-            h1="Titel",
-            h1_small="",
-            intro_text="Intro",
-            product_template="product",
-            sales_channels=FakeQuerySet(),
             campaign_products=FakeQuerySet(),
             components=FakeQuerySet([
-                SimpleNamespace(component_key="content_text", title="", body_html="", mjml_markup="{{ component.component_key }}", order=20, enabled=True),
-                SimpleNamespace(component_key="logo", title="", body_html="", mjml_markup="{{ component.component_key }}", order=10, enabled=False),
-                SimpleNamespace(component_key="header_nav", title="", body_html="", mjml_markup="{{ component.component_key }}", order=5, enabled=True),
+                make_comp("Content", "content_text", order=20),
+                make_comp("Logo", "logo", order=10, enabled=False),
+                make_comp("Header", "header_nav", order=5),
             ]),
         )
 
         mjml = render_campaign_mjml(campaign)
-
         assert mjml == "header_nav\ncontent_text"
-        assert rendered_templates == []
 
 
 @pytest.mark.django_db
@@ -225,31 +227,42 @@ class TestEmailCampaignComponentStr:
 
 @pytest.mark.django_db
 class TestRenderCampaignMjml:
-    def test_renders_without_products(self):
-        from emails.models import EmailCampaign
-        campaign = EmailCampaign.objects.create(
-            internal_title="Test",
-            h1="Testtitel",
-            h1_small="Untertitel",
-            intro_text="<p>Einleitung</p>",
-            product_template="product",
-            status="draft",
+    def test_renders_with_body_component(self):
+        from emails.models import EmailCampaign, EmailCampaignComponent, MjmlComponent
+        lib = MjmlComponent.objects.create(
+            name="Titel",
+            placement="body",
+            mjml_markup="<mj-section><mj-column><mj-text>{{ component.title }}</mj-text></mj-column></mj-section>",
+        )
+        campaign = EmailCampaign.objects.create(internal_title="Test", status="draft")
+        EmailCampaignComponent.objects.create(
+            campaign=campaign,
+            library_component=lib,
+            title="Testtitel",
+            order=10,
+            enabled=True,
         )
         mjml = render_campaign_mjml(campaign)
         assert "<mjml>" in mjml
         assert "Testtitel" in mjml
-        assert "Einleitung" in mjml
 
-    def test_product_template_selection_shipping_free(self):
-        from emails.models import EmailCampaign
-        campaign = EmailCampaign.objects.create(
-            internal_title="Test2",
-            h1="Test",
-            product_template="product_shipping_free",
-            status="draft",
+    def test_head_component_lands_in_mj_head(self):
+        from emails.models import EmailCampaign, EmailCampaignComponent, MjmlComponent
+        lib = MjmlComponent.objects.create(
+            name="CSS",
+            placement="head",
+            mjml_markup="<mj-style>.custom{}</mj-style>",
+        )
+        campaign = EmailCampaign.objects.create(internal_title="HeadTest", status="draft")
+        EmailCampaignComponent.objects.create(
+            campaign=campaign,
+            library_component=lib,
+            order=5,
+            enabled=True,
         )
         mjml = render_campaign_mjml(campaign)
-        assert "<mjml>" in mjml
+        assert "<mj-head>" in mjml
+        assert ".custom{}" in mjml
 
     def test_proxy_discount_pct_correct(self):
         from decimal import Decimal
@@ -269,3 +282,42 @@ class TestEmailCampaignProductFields:
         # Just check the fields exist on the class
         assert hasattr(EmailCampaignProduct, "discount_pct")
         assert hasattr(EmailCampaignProduct, "prices_synced_at")
+
+
+class TestHeadBodySplit:
+    def test_head_components_land_in_head_mjml(self, monkeypatch):
+        from types import SimpleNamespace
+        from emails.mjml import render_campaign_mjml
+
+        def fake_render_to_string(template_name, context):
+            if template_name == "emails/newsletter_base.mjml":
+                return f"HEAD:{context.get('head_mjml', '')}|BODY:{context.get('body_mjml', '')}"
+            return ""
+
+        monkeypatch.setattr("emails.mjml.render_to_string", fake_render_to_string)
+        monkeypatch.setattr("emails.mjml._campaign_sales_channel_ids", lambda campaign: ())
+
+        def make_comp(placement, markup, order, enabled=True):
+            lib = SimpleNamespace(placement=placement, name=f"Comp-{order}", mjml_markup=markup)
+            return SimpleNamespace(
+                library_component=lib,
+                library_component_id=True,
+                title="", subtitle="", body_html="",
+                order=order,
+                enabled=enabled,
+            )
+
+        campaign = SimpleNamespace(
+            campaign_products=FakeQuerySet(),
+            components=FakeQuerySet([
+                make_comp("head", "<mj-style>body{}</mj-style>", order=5),
+                make_comp("body", "<mj-section/>", order=10),
+            ]),
+        )
+
+        result = render_campaign_mjml(campaign)
+        head_part = result.split("|")[0].replace("HEAD:", "")
+        body_part = result.split("|")[1].replace("BODY:", "")
+        assert "<mj-style>body{}</mj-style>" in head_part
+        assert "<mj-section/>" in body_part
+        assert "<mj-style>body{}</mj-style>" not in body_part
