@@ -261,3 +261,11 @@ class TestRenderCampaignMjml:
         proxy = ProductEmailProxy(product, special_price_override=Decimal("8.00"))
         assert proxy.discount_pct == 20
         assert proxy.email_special_price == Decimal("8.00")
+
+
+class TestEmailCampaignProductFields:
+    def test_discount_pct_and_prices_synced_at_exist(self):
+        from emails.models import EmailCampaignProduct
+        # Just check the fields exist on the class
+        assert hasattr(EmailCampaignProduct, "discount_pct")
+        assert hasattr(EmailCampaignProduct, "prices_synced_at")

@@ -198,6 +198,19 @@ class EmailCampaignProduct(BaseModel):
         verbose_name=_("Sonderpreis"),
         help_text=_("Überschreibt den Sonderpreis des Produkts für diese Kampagne."),
     )
+    discount_pct = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name=_("Rabatt (%)"),
+        help_text=_("Alternativ zum absoluten Sonderpreis. Wird auf den Standardkanalpreis angewendet."),
+    )
+    prices_synced_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name=_("Preise synchronisiert am"),
+    )
     order = models.PositiveIntegerField(default=0, verbose_name=_("Reihenfolge"))
 
     class Meta:
@@ -205,6 +218,11 @@ class EmailCampaignProduct(BaseModel):
         verbose_name_plural = _("Kampagnen-Produkte")
         ordering = ("order", "id")
         unique_together = (("campaign", "product"),)
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        if self.special_price_override and self.discount_pct:
+            raise ValidationError(_("Nur Sonderpreis ODER Rabatt (%) angeben, nicht beides."))
 
     def __str__(self) -> str:
         return f"{self.campaign} | {self.product}"
