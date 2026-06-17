@@ -25,6 +25,19 @@
     </div>
 
     {% component "unfold/components/card.html" with title=_("Ausnahmedaten (referralDenied)") %}
+        <div class="mb-4 flex flex-wrap items-center gap-2">
+            {% if api_live %}
+            <span class="inline-flex items-center gap-1.5 rounded-default bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-300">
+                <span class="material-symbols-outlined text-sm">cloud_done</span>
+                {% trans "Live aus API" %}
+            </span>
+            {% elif api_error %}
+            <span class="inline-flex items-center gap-1.5 rounded-default bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:text-red-300">
+                <span class="material-symbols-outlined text-sm">cloud_off</span>
+                {% trans "API nicht erreichbar" %}
+            </span>
+            {% endif %}
+        </div>
         {% if denied_dates %}
         <div class="-mx-6 -mb-6 divide-y divide-base-200 dark:divide-base-800">
             {% for date in denied_dates %}
@@ -63,26 +76,6 @@
             </div>
             {% endfor %}
         </div>
-    {% endcomponent %}
-    {% endif %}
-
-    {% if service_debug %}
-    {% component "unfold/components/card.html" with title=_("NFON Debug") %}
-        <dl class="grid gap-3 text-sm md:grid-cols-[180px,minmax(0,1fr)]">
-            <dt class="font-semibold text-font-subtle-light dark:text-font-subtle-dark">evaluationStrategy</dt>
-            <dd class="font-mono text-font-important-light dark:text-font-important-dark">{{ service_debug.evaluationStrategy|default:"-" }}</dd>
-            <dt class="font-semibold text-font-subtle-light dark:text-font-subtle-dark">Zeitfenster</dt>
-            <dd class="font-mono text-font-important-light dark:text-font-important-dark">
-                {{ service_debug.fromDay|default:"-" }} {{ service_debug.fromTimeOfDay|default:"-" }} -
-                {{ service_debug.toDay|default:"-" }} {{ service_debug.toTimeOfDay|default:"-" }}
-            </dd>
-            <dt class="font-semibold text-font-subtle-light dark:text-font-subtle-dark">referralDenied</dt>
-            <dd class="font-mono text-font-important-light dark:text-font-important-dark">{{ service_debug.referralDenied }}</dd>
-            <dt class="font-semibold text-font-subtle-light dark:text-font-subtle-dark">referralAllowed</dt>
-            <dd class="font-mono text-font-important-light dark:text-font-important-dark">{{ service_debug.referralAllowed }}</dd>
-            <dt class="font-semibold text-font-subtle-light dark:text-font-subtle-dark">Links</dt>
-            <dd class="font-mono text-font-important-light dark:text-font-important-dark">{{ service_debug.links }}</dd>
-        </dl>
     {% endcomponent %}
     {% endif %}
 

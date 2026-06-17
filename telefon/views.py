@@ -108,6 +108,8 @@ class ZeitsteuerungDetailView(TelefonAdminViewMixin, TemplateView):
                 "denied_dates": [],
                 "allowed_dates": [],
                 "service_debug": {},
+                "api_live": False,
+                "api_error": False,
                 "form": ZeitsteuerungDateForm(),
                 "list_url": reverse("admin:telefon_zeitsteuerung_list"),
             }
@@ -117,8 +119,10 @@ class ZeitsteuerungDetailView(TelefonAdminViewMixin, TemplateView):
             service_data = self.get_service().get_time_control_dates(service_id)
             self.display_name = service_data["display_name"]
             context.update(service_data)
+            context["api_live"] = True
             context["title"] = self.display_name
         except Exception as error:
+            context["api_error"] = True
             messages.error(self.request, f"NFON API Fehler: {error}")
 
         return context
