@@ -1,17 +1,17 @@
 <mj-section background-color="#ffffff" padding="20px">
     <mj-column>
-        {% if component.title %}
+        {% if title %}
         <mj-text>
-            <h2 style="color:#ff9933; font-weight:400; line-height:32px">{{ component.title }}</h2>
+            <h2 style="color:#ff9933; font-weight:400; line-height:32px">{{ title }}</h2>
         </mj-text>
         {% endif %}
-        {% if component.subtitle %}
+        {% if subtitle %}
         <mj-text>
-            <h3 style="color:#8a8a8a; font-weight:400; line-height:28px">{{ component.subtitle }}</h3>
+            <h3 style="color:#8a8a8a; font-weight:400; line-height:28px">{{ subtitle }}</h3>
         </mj-text>
         {% endif %}
-        {% if component.body_html %}
-        <mj-text line-height="26px">{{ component.body_html|safe }}</mj-text>
+        {% if body_html %}
+        <mj-text line-height="26px">{{ body_html|safe }}</mj-text>
         {% endif %}
     </mj-column>
 </mj-section>

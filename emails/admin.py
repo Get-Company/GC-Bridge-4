@@ -7,6 +7,7 @@ from django import forms
 from django.contrib import admin
 from django.http import HttpResponse, JsonResponse
 from django.urls import path
+from django.utils.html import format_html, format_html_join
 from django.utils.translation import gettext_lazy as _
 
 logger = logging.getLogger(__name__)
@@ -22,6 +23,21 @@ from emails.models import (
 from emails.tasks import apply_campaign_prices_async
 
 _MONOSPACE_STYLE = "font-family: monospace; width: 100%; min-height: 300px;"
+_PRODUCT_FIELD_EXCLUDES = {
+    "id",
+    "created_at",
+    "updated_at",
+    "shopware_image_sync_hash",
+}
+_PRODUCT_EMAIL_FIELDS = (
+    ("product.price", "Listenpreis aus dem passenden Verkaufskanal"),
+    ("product.email_special_price", "Kampagnen-Aktionspreis"),
+    ("product.current_price", "Aktionspreis, sonst Listenpreis"),
+    ("product.discount_pct", "Rabatt in Prozent"),
+    ("product.shipping_cost_is_free", "kostenloser Versand true/false"),
+    ("product.images", "sortierte Produktbilder"),
+    ("product.first_image", "erstes Produktbild"),
+)
 
 
 @admin.register(MjmlComponent)
@@ -30,6 +46,7 @@ class MjmlComponentAdmin(BaseAdmin):
     list_filter = ("placement", "is_default")
     list_editable = ("is_default", "order")
     search_fields = ("name",)
+    readonly_fields = BaseAdmin.readonly_fields + ("product_template_variables",)
 
     def formfield_for_dbfield(self, db_field, request, **kwargs):
         field = super().formfield_for_dbfield(db_field, request, **kwargs)
@@ -47,7 +64,7 @@ class MjmlComponentAdmin(BaseAdmin):
         (
             _("MJML-Markup"),
             {
-                "fields": ("mjml_markup",),
+                "fields": ("mjml_markup", "product_template_variables"),
             },
         ),
         (
@@ -59,16 +76,52 @@ class MjmlComponentAdmin(BaseAdmin):
         ),
     )
 
+    @admin.display(description=_("Produkt-Variablen"))
+    def product_template_variables(self, obj: MjmlComponent):
+        from products.models import Product
+
+        product_fields = [
+            (f"product.{field.name}", field.verbose_name)
+            for field in Product._meta.fields
+            if field.name not in _PRODUCT_FIELD_EXCLUDES
+        ]
+        return format_html(
+            "<p><strong>Direkte Product-Felder</strong></p><ul>{}</ul>"
+            "<p><strong>E-Mail-spezifische Felder</strong></p><ul>{}</ul>"
+            "<p>Preisformatierung: <code>{{{{ product.price|format_price }}}}</code></p>",
+            format_html_join(
+                "",
+                "<li><code>{{{{ {} }}}}</code> <span style='color:#666'>({})</span></li>",
+                product_fields,
+            ),
+            format_html_join(
+                "",
+                "<li><code>{{{{ {} }}}}</code> <span style='color:#666'>({})</span></li>",
+                _PRODUCT_EMAIL_FIELDS,
+            ),
+        )
+
 
 class EmailCampaignComponentInline(BaseStackedInline):
     model = EmailCampaignComponent
     tab = False
     sortable = True
     sortable_field_name = "order"
-    fields = ("order", "enabled", "library_component", "variables")
+    fields = ("order", "enabled", "library_component", "campaign_product", "variables")
     autocomplete_fields = ("library_component",)
     collapsible = True
     extra = 0
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "campaign_product":
+            campaign_id = request.resolver_match.kwargs.get("object_id") if request.resolver_match else None
+            if campaign_id:
+                kwargs["queryset"] = EmailCampaignProduct.objects.filter(campaign_id=campaign_id).select_related(
+                    "product"
+                ).order_by("order", "id")
+            else:
+                kwargs["queryset"] = EmailCampaignProduct.objects.none()
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
 class EmailCampaignProductInline(BaseTabularInline):
@@ -154,7 +207,7 @@ class EmailCampaignAdmin(BaseAdmin):
                 EmailCampaignComponent(
                     campaign=campaign,
                     library_component=lib_component,
-                    title=lib_component.name,
+                    variables={},
                     order=index * 10,
                     enabled=True,
                 )

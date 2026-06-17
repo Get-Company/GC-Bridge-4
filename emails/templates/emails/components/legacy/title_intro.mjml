@@ -2,16 +2,16 @@
     <mj-column>
         <mj-text>
             <h1 align="center" style="color: #ff9933; font-weight:400; line-height:40px">
-                {{ component.title|default:h1 }}
+                {{ title|default(h1, true) }}
             </h1>
-            {% if component.subtitle or h1_small %}
+            {% if subtitle or h1_small %}
             <h1 align="right" style="color: #8a8a8a; font-weight:400; line-height:36px">
-                <small>{{ component.subtitle|default:h1_small }}</small>
+                <small>{{ subtitle|default(h1_small, true) }}</small>
             </h1>
             {% endif %}
         </mj-text>
-        {% if component.body_html or intro_text %}
-        <mj-text line-height="26px">{{ component.body_html|default:intro_text|safe }}</mj-text>
+        {% if body_html or intro_text %}
+        <mj-text line-height="26px">{{ body_html|default(intro_text, true)|safe }}</mj-text>
         {% endif %}
     </mj-column>
 </mj-section>

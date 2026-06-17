@@ -82,37 +82,44 @@ class TestProductEmailProxy:
         assert proxy.email_special_price is None
 
     def test_discount_pct_calculated_correctly(self):
-        product = MagicMock()
-        product.price = Decimal("10.00")
+        product = SimpleNamespace(
+            prices=FakePriceQuerySet([
+                FakePrice(Decimal("10.00"), sales_channel_id=1, is_default=True),
+            ])
+        )
         proxy = ProductEmailProxy(product, special_price_override=Decimal("8.00"))
         assert proxy.discount_pct == 20
 
+    def test_discount_pct_override_calculates_email_special_price(self):
+        product = SimpleNamespace(
+            prices=FakePriceQuerySet([
+                FakePrice(Decimal("10.00"), sales_channel_id=1, is_default=True),
+            ])
+        )
+        proxy = ProductEmailProxy(product, discount_pct=Decimal("15.00"))
+        assert proxy.email_special_price == Decimal("8.50")
+        assert proxy.discount_pct == 15
+
     def test_discount_pct_is_zero_without_override(self):
-        product = MagicMock()
+        product = SimpleNamespace()
         proxy = ProductEmailProxy(product, special_price_override=None)
         assert proxy.discount_pct == 0
 
-    def test_shipping_cost_is_free_delegates_to_product(self):
-        product = MagicMock()
-        product.get_shipping_cost.return_value = 0
+    def test_shipping_cost_is_free_for_high_current_price(self):
+        product = SimpleNamespace(
+            prices=FakePriceQuerySet([
+                FakePrice(Decimal("100.00"), sales_channel_id=1, is_default=True),
+            ])
+        )
         proxy = ProductEmailProxy(product, special_price_override=None)
         assert proxy.shipping_cost_is_free is True
 
-    def test_shipping_cost_is_free_false_when_cost_exists(self):
-        product = MagicMock()
-        product.get_shipping_cost.return_value = 5.95
-        proxy = ProductEmailProxy(product, special_price_override=None)
-        assert proxy.shipping_cost_is_free is False
-
-    def test_shipping_cost_is_free_falls_back_to_price_when_no_method(self):
-        product = MagicMock(spec=["price"])
-        product.price = Decimal("99.00")
-        proxy = ProductEmailProxy(product, special_price_override=None)
-        assert proxy.shipping_cost_is_free is True
-
-    def test_shipping_cost_is_free_false_for_low_price_without_method(self):
-        product = MagicMock(spec=["price"])
-        product.price = Decimal("50.00")
+    def test_shipping_cost_is_free_false_for_low_current_price(self):
+        product = SimpleNamespace(
+            prices=FakePriceQuerySet([
+                FakePrice(Decimal("50.00"), sales_channel_id=1, is_default=True),
+            ])
+        )
         proxy = ProductEmailProxy(product, special_price_override=None)
         assert proxy.shipping_cost_is_free is False
 
@@ -129,6 +136,16 @@ class TestProductEmailProxy:
         )
         proxy = ProductEmailProxy(product, special_price_override=None)
         assert proxy.price == Decimal("123.45")
+
+    def test_current_price_uses_email_special_price_before_list_price(self):
+        product = SimpleNamespace(
+            prices=FakePriceQuerySet([
+                FakePrice(Decimal("123.45"), sales_channel_id=1, is_default=True),
+            ])
+        )
+        proxy = ProductEmailProxy(product, special_price_override=Decimal("99.00"))
+        assert proxy.price == Decimal("123.45")
+        assert proxy.current_price == Decimal("99.00")
 
 
 class TestCompileMjmlToHtml:
@@ -232,13 +249,13 @@ class TestRenderCampaignMjml:
         lib = MjmlComponent.objects.create(
             name="Titel",
             placement="body",
-            mjml_markup="<mj-section><mj-column><mj-text>{{ component.title }}</mj-text></mj-column></mj-section>",
+            mjml_markup="<mj-section><mj-column><mj-text>{{ title }}</mj-text></mj-column></mj-section>",
         )
         campaign = EmailCampaign.objects.create(internal_title="Test", status="draft")
         EmailCampaignComponent.objects.create(
             campaign=campaign,
             library_component=lib,
-            title="Testtitel",
+            variables={"title": "Testtitel"},
             order=10,
             enabled=True,
         )
@@ -267,10 +284,12 @@ class TestRenderCampaignMjml:
     def test_proxy_discount_pct_correct(self):
         from decimal import Decimal
         from emails.mjml import ProductEmailProxy
-        from unittest.mock import MagicMock
 
-        product = MagicMock()
-        product.price = Decimal("10.00")
+        product = SimpleNamespace(
+            prices=FakePriceQuerySet([
+                FakePrice(Decimal("10.00"), sales_channel_id=1, is_default=True),
+            ])
+        )
         proxy = ProductEmailProxy(product, special_price_override=Decimal("8.00"))
         assert proxy.discount_pct == 20
         assert proxy.email_special_price == Decimal("8.00")

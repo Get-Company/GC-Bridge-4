@@ -73,6 +73,15 @@ class EmailCampaignComponent(BaseModel):
         related_name="campaign_usages",
         verbose_name=_("Bibliotheks-Komponente"),
     )
+    campaign_product = models.ForeignKey(
+        "EmailCampaignProduct",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="components",
+        verbose_name=_("Produkt"),
+        help_text=_("Optionales Produkt fuer Produkt-Komponenten."),
+    )
     variables = models.JSONField(
         default=dict,
         blank=True,

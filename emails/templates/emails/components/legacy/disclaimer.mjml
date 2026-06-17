@@ -6,7 +6,7 @@
                    href="https://www.classei-shop.com/Versandinformationen?sPartner=email"
                    target="_blank">Naehere Infos zu Versandkosten hier</a>
                 {% if special_end_date %}
-                    Angebot gueltig bis {{ special_end_date|date:"d.m.Y" }}
+                    Angebot gueltig bis {{ special_end_date|format_date }}
                 {% endif %}
             </p>
             <p>

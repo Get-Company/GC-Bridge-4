@@ -6,17 +6,17 @@
     </td>
     <td width="55%" align="right" style="font-size:12px">
         {% if product.email_special_price %}
-            Listenpreis: <span style="text-decoration:line-through">{{ product.price|floatformat:2 }} €</span> netto<br/>
-            <span style="color:#ff9933">Aktionspreis: {{ product.email_special_price|floatformat:2 }} €</span> netto
+            Listenpreis: <span style="text-decoration:line-through">{{ product.price|format_price }} €</span> netto<br/>
+            <span style="color:#ff9933">Aktionspreis: {{ product.email_special_price|format_price }} €</span> netto
         {% else %}
-            Listenpreis: {{ product.price|floatformat:2 }} € netto
+            Listenpreis: {{ product.price|format_price }} € netto
         {% endif %}
         <br/>
         pro
         {% if product.factor and product.factor > 0 %}
             <b>{{ product.factor }} St.</b>
         {% else %}
-            <b>{{ product.unit|default:"St." }}</b>
+            <b>{{ product.unit|default("St.", true) }}</b>
         {% endif %}
     </td>
 </tr>
