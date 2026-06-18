@@ -43,7 +43,4 @@ def build_mjml_from_blocks(campaign: EmailBuilderCampaign) -> str:
 
 
 def render_campaign_preview(campaign: EmailBuilderCampaign) -> str:
-    try:
-        return compile_mjml_to_html(build_mjml_from_blocks(campaign))
-    except Exception:
-        return build_mjml_from_blocks(campaign)
+    return compile_mjml_to_html(build_mjml_from_blocks(campaign))
