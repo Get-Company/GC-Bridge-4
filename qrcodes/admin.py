@@ -1,13 +1,26 @@
+from django import forms
 from django.contrib import admin
 from django.urls import reverse
 from django.utils.html import format_html
+from unfold.widgets import UnfoldAdminColorInputWidget
 
 from core.admin import BaseAdmin
 from qrcodes.models import QrCode
 
 
+class QrCodeAdminForm(forms.ModelForm):
+    class Meta:
+        model = QrCode
+        fields = "__all__"
+        widgets = {
+            "foreground_color": UnfoldAdminColorInputWidget(),
+            "background_color": UnfoldAdminColorInputWidget(),
+        }
+
+
 @admin.register(QrCode)
 class QrCodeAdmin(BaseAdmin):
+    form = QrCodeAdminForm
     list_display = ("title", "target_url", "center_mode", "is_active", "download_links", "updated_at")
     list_filter = ("center_mode", "is_active")
     search_fields = ("title", "target_url", "description", "center_text")
