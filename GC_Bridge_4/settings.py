@@ -609,18 +609,6 @@ UNFOLD = {
                 ],
             },
             {
-                "title": _("Telefon"),
-                "separator": True,
-                "collapsible": True,
-                "items": [
-                    {
-                        "title": _("Zeitsteuerung"),
-                        "icon": "schedule",
-                        "link": reverse_lazy("admin:telefon_zeitsteuerung_list"),
-                    },
-                ],
-            },
-            {
                 "title": _("AI"),
                 "separator": True,
                 "collapsible": True,
@@ -820,6 +808,11 @@ UNFOLD = {
                         "icon": "assignment_ind",
                         "link": reverse_lazy("admin:organization_organizationrole_changelist"),
                         "permission": sidebar_model_view_permission("organization", "OrganizationRole"),
+                    },
+                    {
+                        "title": _("Telefon Zeitsteuerung"),
+                        "icon": "schedule",
+                        "link": reverse_lazy("admin:telefon_zeitsteuerung_list"),
                     },
                 ],
             },
