@@ -57,4 +57,65 @@
     </form>
   </div>
   {% endif %}
+
+  <div class="pt-3 mt-4 border-t">
+    <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Produkt-Kontext</p>
+
+    <form hx-post="{% url 'email_builder:htmx_block_product_assign' block.id %}"
+          hx-target="#variable-panel"
+          hx-swap="innerHTML"
+          class="mb-3">
+      {% csrf_token %}
+      <label class="block text-xs text-gray-400 mb-1">Kampagnenprodukt</label>
+      <select name="campaign_product_id"
+              class="w-full border border-gray-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:border-indigo-400"
+              onchange="this.form.requestSubmit()">
+        <option value="">Kein Produkt</option>
+        {% for campaign_product in campaign_products %}
+        <option value="{{ campaign_product.id }}" {% if block.campaign_product_id == campaign_product.id %}selected{% endif %}>
+          {{ campaign_product.product.erp_nr }} - {{ campaign_product.product.name|default:"" }}
+        </option>
+        {% endfor %}
+      </select>
+    </form>
+
+    {% if block.campaign_product %}
+    <div class="rounded border border-indigo-100 bg-indigo-50 p-2 mb-3">
+      <p class="text-xs font-medium text-indigo-700 truncate">
+        {{ block.campaign_product.product.erp_nr }} - {{ block.campaign_product.product.name|default:"" }}
+      </p>
+      <form hx-post="{% url 'email_builder:htmx_block_product_update' block.id %}"
+            hx-trigger="change delay:500ms"
+            hx-swap="none"
+            hx-on::after-request="saved = true; setTimeout(() => saved = false, 2000)"
+            class="grid grid-cols-2 gap-2 mt-2">
+        {% csrf_token %}
+        <div>
+          <label class="block text-xs text-indigo-400 mb-0.5">Sonderpreis</label>
+          <input type="number" step="0.01" name="special_price_override"
+                 value="{{ block.campaign_product.special_price_override|default_if_none:'' }}"
+                 class="w-full border border-indigo-100 rounded px-2 py-1 text-xs focus:outline-none focus:border-indigo-400">
+        </div>
+        <div>
+          <label class="block text-xs text-indigo-400 mb-0.5">Rabatt %</label>
+          <input type="number" step="0.01" name="discount_pct"
+                 value="{{ block.campaign_product.discount_pct|default_if_none:'' }}"
+                 class="w-full border border-indigo-100 rounded px-2 py-1 text-xs focus:outline-none focus:border-indigo-400">
+        </div>
+      </form>
+    </div>
+    {% endif %}
+
+    <div>
+      <label class="block text-xs text-gray-400 mb-1">Produkt suchen</label>
+      <input type="search"
+             name="q"
+             placeholder="ERP, SKU oder Name"
+             hx-get="{% url 'email_builder:htmx_product_search' block.id %}"
+             hx-trigger="keyup changed delay:300ms, search"
+             hx-target="#product-search-results"
+             class="w-full border border-gray-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:border-indigo-400">
+      <div id="product-search-results" class="mt-2"></div>
+    </div>
+  </div>
 </div>

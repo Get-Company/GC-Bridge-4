@@ -2,17 +2,18 @@ from __future__ import annotations
 from django.contrib.admin.views.decorators import staff_member_required
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, render, redirect
+from django.db.models import Q
 from django.views.decorators.http import require_http_methods
 
 from emails.models import MjmlComponent
 from emails_v2.catalog import MJML_TAGS, MJML_TAG_MAP
-from emails_v2.models import EmailBuilderCampaign, EmailBlock
+from emails_v2.models import EmailBuilderCampaign, EmailBlock, EmailBuilderCampaignProduct
 from emails_v2.mjml import render_campaign_preview
 from emails_v2.variable_parser import infer_field_type
 
 
 def _child_map(campaign: EmailBuilderCampaign) -> dict:
-    blocks = list(campaign.blocks.select_related("component").all())
+    blocks = list(campaign.blocks.select_related("component", "campaign_product__product").all())
     result: dict = {}
     for b in blocks:
         result.setdefault(b.parent_id, []).append(b)
@@ -21,6 +22,7 @@ def _child_map(campaign: EmailBuilderCampaign) -> dict:
 
 _SECTION_CHILD_TAGS = {"mj-column", "mj-group"}
 _LAYOUT_TAGS = {"mj-section", "mj-column", "mj-wrapper", "mj-group", "mj-hero"}
+_CONTENT_TAGS = {"mj-text", "mj-button", "mj-raw"}
 
 
 def _default_attributes_for_tag(tag: str) -> dict:
@@ -67,18 +69,22 @@ def _create_block(
             attributes=_default_attributes_for_tag("mj-column"),
         )
         parent_id = column.id
-    elif (
-        parent
-        and parent.tag == "mj-section"
-        and (component_id or tag not in _SECTION_CHILD_TAGS | _LAYOUT_TAGS)
+    elif parent and parent.tag == "mj-section" and (
+        component_id or tag not in _SECTION_CHILD_TAGS | _LAYOUT_TAGS
     ):
-        column = EmailBlock.objects.create(
-            campaign=campaign,
-            tag="mj-column",
-            parent=parent,
-            order=_next_order(campaign, parent.id),
-            attributes=_default_attributes_for_tag("mj-column"),
+        column = (
+            EmailBlock.objects.filter(campaign=campaign, parent=parent, tag="mj-column")
+            .order_by("order", "id")
+            .first()
         )
+        if column is None:
+            column = EmailBlock.objects.create(
+                campaign=campaign,
+                tag="mj-column",
+                parent=parent,
+                order=_next_order(campaign, parent.id),
+                attributes=_default_attributes_for_tag("mj-column"),
+            )
         parent_id = column.id
 
     return EmailBlock.objects.create(
@@ -89,6 +95,42 @@ def _create_block(
         order=_next_order(campaign, parent_id),
         attributes=_default_attributes_for_tag(tag),
     )
+
+
+def _campaign_products(campaign: EmailBuilderCampaign):
+    return campaign.campaign_products.select_related("product").order_by("order", "id")
+
+
+def _variable_fields(block: EmailBlock) -> list[dict]:
+    variable_fields = []
+    if block.component_id and block.component:
+        for var_name in block.component.detected_variables:
+            variable_fields.append({
+                "name": var_name,
+                "field_type": infer_field_type(var_name),
+                "value": block.variables.get(var_name, ""),
+                "label": block.component.variable_labels.get(var_name, var_name.replace("_", " ").title()),
+            })
+    elif block.tag in _CONTENT_TAGS:
+        variable_fields.append({
+            "name": "content",
+            "field_type": "textarea",
+            "value": block.variables.get("content", ""),
+            "label": "Inhalt",
+        })
+    return variable_fields
+
+
+def _render_variable_panel(request, block: EmailBlock):
+    block = get_object_or_404(
+        EmailBlock.objects.select_related("component", "campaign_product__product", "campaign"),
+        pk=block.pk,
+    )
+    return render(request, "email_builder/_variable_panel.html", {
+        "block": block,
+        "variable_fields": _variable_fields(block),
+        "campaign_products": _campaign_products(block.campaign),
+    })
 
 
 @staff_member_required
@@ -113,6 +155,16 @@ def campaign_duplicate(request, campaign_id):
         internal_title=f"{source.internal_title} (Kopie)",
         global_css=source.global_css,
     )
+    campaign_product_map: dict[int, int] = {}
+    for campaign_product in source.campaign_products.all():
+        new_campaign_product = EmailBuilderCampaignProduct.objects.create(
+            campaign=new_campaign,
+            product=campaign_product.product,
+            special_price_override=campaign_product.special_price_override,
+            discount_pct=campaign_product.discount_pct,
+            order=campaign_product.order,
+        )
+        campaign_product_map[campaign_product.id] = new_campaign_product.id
     blocks = list(source.blocks.all())
     id_map: dict[int, int] = {}
     for block in sorted(blocks, key=lambda b: (b.parent_id or 0, b.order, b.id)):
@@ -121,6 +173,9 @@ def campaign_duplicate(request, campaign_id):
             parent_id=id_map.get(block.parent_id) if block.parent_id else None,
             tag=block.tag,
             component_id=block.component_id,
+            campaign_product_id=campaign_product_map.get(block.campaign_product_id)
+            if block.campaign_product_id
+            else None,
             attributes=dict(block.attributes),
             variables=dict(block.variables),
             order=block.order,
@@ -215,31 +270,10 @@ def htmx_block_delete(request, block_id):
     })
 
 
-_CONTENT_TAGS = {"mj-text", "mj-button", "mj-raw"}
-
 @staff_member_required
 def htmx_variable_panel(request, block_id):
-    block = get_object_or_404(EmailBlock.objects.select_related("component"), pk=block_id)
-    variable_fields = []
-    if block.component_id and block.component:
-        for var_name in block.component.detected_variables:
-            variable_fields.append({
-                "name": var_name,
-                "field_type": infer_field_type(var_name),
-                "value": block.variables.get(var_name, ""),
-                "label": block.component.variable_labels.get(var_name, var_name.replace("_", " ").title()),
-            })
-    elif block.tag in _CONTENT_TAGS:
-        variable_fields.append({
-            "name": "content",
-            "field_type": "textarea",
-            "value": block.variables.get("content", ""),
-            "label": "Inhalt",
-        })
-    return render(request, "email_builder/_variable_panel.html", {
-        "block": block,
-        "variable_fields": variable_fields,
-    })
+    block = get_object_or_404(EmailBlock, pk=block_id)
+    return _render_variable_panel(request, block)
 
 
 @staff_member_required
@@ -256,6 +290,72 @@ def htmx_variable_save(request, block_id):
         if key.startswith("attr_"):
             block.attributes[key[5:]] = value
     block.save(update_fields=["variables", "attributes"])
+    return HttpResponse(status=204)
+
+
+@staff_member_required
+def htmx_product_search(request, block_id):
+    block = get_object_or_404(EmailBlock.objects.select_related("campaign"), pk=block_id)
+    query = request.GET.get("q", "").strip()
+    products = []
+    if len(query) >= 2:
+        from products.models import Product
+
+        products = Product.objects.filter(
+            Q(erp_nr__icontains=query)
+            | Q(sku__icontains=query)
+            | Q(name__icontains=query)
+        ).order_by("erp_nr", "name")[:15]
+    return render(request, "email_builder/_product_search_results.html", {
+        "block": block,
+        "products": products,
+        "query": query,
+    })
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+def htmx_block_product_add(request, block_id):
+    block = get_object_or_404(EmailBlock.objects.select_related("campaign"), pk=block_id)
+    product_id = request.POST.get("product_id")
+    if product_id:
+        campaign_product, _created = EmailBuilderCampaignProduct.objects.get_or_create(
+            campaign=block.campaign,
+            product_id=product_id,
+            defaults={"order": block.campaign.campaign_products.count()},
+        )
+        block.campaign_product = campaign_product
+        block.save(update_fields=["campaign_product"])
+    return _render_variable_panel(request, block)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+def htmx_block_product_assign(request, block_id):
+    block = get_object_or_404(EmailBlock.objects.select_related("campaign"), pk=block_id)
+    campaign_product_id = request.POST.get("campaign_product_id")
+    block.campaign_product = None
+    if campaign_product_id:
+        block.campaign_product = get_object_or_404(
+            EmailBuilderCampaignProduct,
+            pk=campaign_product_id,
+            campaign=block.campaign,
+        )
+    block.save(update_fields=["campaign_product"])
+    return _render_variable_panel(request, block)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+def htmx_block_product_update(request, block_id):
+    block = get_object_or_404(EmailBlock.objects.select_related("campaign_product"), pk=block_id)
+    campaign_product = block.campaign_product
+    if campaign_product is None:
+        return HttpResponse(status=204)
+    campaign_product.special_price_override = request.POST.get("special_price_override") or None
+    campaign_product.discount_pct = request.POST.get("discount_pct") or None
+    campaign_product.full_clean()
+    campaign_product.save(update_fields=["special_price_override", "discount_pct"])
     return HttpResponse(status=204)
 
 

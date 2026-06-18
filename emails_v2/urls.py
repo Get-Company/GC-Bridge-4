@@ -16,5 +16,9 @@ urlpatterns = [
     path("htmx/block/<int:block_id>/delete/", views.htmx_block_delete, name="htmx_block_delete"),
     path("htmx/block/<int:block_id>/vars/", views.htmx_variable_panel, name="htmx_variable_panel"),
     path("htmx/block/<int:block_id>/vars/save/", views.htmx_variable_save, name="htmx_variable_save"),
+    path("htmx/block/<int:block_id>/product/search/", views.htmx_product_search, name="htmx_product_search"),
+    path("htmx/block/<int:block_id>/product/add/", views.htmx_block_product_add, name="htmx_block_product_add"),
+    path("htmx/block/<int:block_id>/product/assign/", views.htmx_block_product_assign, name="htmx_block_product_assign"),
+    path("htmx/block/<int:block_id>/product/update/", views.htmx_block_product_update, name="htmx_block_product_update"),
     path("htmx/campaign/<int:campaign_id>/preview/", views.htmx_preview, name="htmx_preview"),
 ]

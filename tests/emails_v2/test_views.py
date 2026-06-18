@@ -48,3 +48,22 @@ def test_htmx_block_create(staff_client):
     assert response.status_code == 200
     from emails_v2.models import EmailBlock
     assert EmailBlock.objects.filter(campaign=c, tag="mj-section").exists()
+
+
+@pytest.mark.django_db
+def test_htmx_block_create_appends_content_to_existing_section_column(staff_client):
+    from emails_v2.models import EmailBlock
+
+    c = EmailBuilderCampaign.objects.create(internal_title="Section Content")
+    section = EmailBlock.objects.create(campaign=c, tag="mj-section", order=0)
+    column = EmailBlock.objects.create(campaign=c, tag="mj-column", parent=section, order=0)
+
+    response = staff_client.post(
+        "/email-builder/htmx/block/create/",
+        {"campaign_id": c.pk, "tag": "mj-text", "parent_id": section.pk},
+    )
+
+    assert response.status_code == 200
+    assert EmailBlock.objects.filter(campaign=c, tag="mj-column", parent=section).count() == 1
+    text = EmailBlock.objects.get(campaign=c, tag="mj-text")
+    assert text.parent == column

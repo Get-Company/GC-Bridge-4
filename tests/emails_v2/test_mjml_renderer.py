@@ -1,5 +1,5 @@
 import pytest
-from emails_v2.models import EmailBuilderCampaign, EmailBlock
+from emails_v2.models import EmailBuilderCampaign, EmailBlock, EmailBuilderCampaignProduct
 from emails_v2.mjml import build_mjml_from_blocks
 
 
@@ -71,3 +71,30 @@ def test_ordering_respected():
     EmailBlock.objects.create(campaign=campaign, tag="mj-section", order=0, attributes={"css-class": "first"})
     result = build_mjml_from_blocks(campaign)
     assert result.index('css-class="first"') < result.index('css-class="second"')
+
+
+@pytest.mark.django_db
+def test_product_context_rendered_for_selected_block():
+    from products.models import Product
+
+    campaign = EmailBuilderCampaign.objects.create(internal_title="Products")
+    product = Product.objects.create(erp_nr="710001", name="Testprodukt")
+    campaign_product = EmailBuilderCampaignProduct.objects.create(
+        campaign=campaign,
+        product=product,
+        order=0,
+    )
+    section = EmailBlock.objects.create(campaign=campaign, tag="mj-section", order=0)
+    col = EmailBlock.objects.create(campaign=campaign, tag="mj-column", parent=section, order=0)
+    EmailBlock.objects.create(
+        campaign=campaign,
+        tag="mj-text",
+        parent=col,
+        campaign_product=campaign_product,
+        variables={"content": "{{ product.name }} / {{ products[0].erp_nr }}"},
+        order=0,
+    )
+
+    result = build_mjml_from_blocks(campaign)
+
+    assert "Testprodukt / 710001" in result
