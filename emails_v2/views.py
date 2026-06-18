@@ -37,12 +37,13 @@ def campaign_create(request):
 @staff_member_required
 def campaign_editor(request, campaign_id):
     campaign = get_object_or_404(EmailBuilderCampaign, pk=campaign_id)
+    cm = _child_map(campaign)
     return render(request, "email_builder/editor.html", {
         "campaign": campaign,
         "mjml_tags": MJML_TAGS,
         "custom_components": MjmlComponent.objects.order_by("name"),
-        "top_blocks": sorted((_child_map(campaign)).get(None, []), key=lambda b: (b.order, b.id)),
-        "child_map": _child_map(campaign),
+        "top_blocks": sorted(cm.get(None, []), key=lambda b: (b.order, b.id)),
+        "child_map": cm,
     })
 
 
