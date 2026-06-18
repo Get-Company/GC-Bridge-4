@@ -1,8 +1,9 @@
 from django.test import SimpleTestCase
 from unfold.widgets import UnfoldAdminColorInputWidget
 
-from qrcodes.admin import QrCodeAdminForm
+from qrcodes.admin import QrCodeAdmin, QrCodeAdminForm
 from qrcodes.forms import QrCodeForm
+from qrcodes.models import QrCode
 
 
 class QrCodeFormWidgetTest(SimpleTestCase):
@@ -17,3 +18,10 @@ class QrCodeFormWidgetTest(SimpleTestCase):
 
         self.assertEqual(form.fields["foreground_color"].widget.input_type, "color")
         self.assertEqual(form.fields["background_color"].widget.input_type, "color")
+
+    def test_admin_download_links_render_without_format_error(self):
+        qr_code = QrCode(pk=1, title="Test", target_url="https://example.com")
+        html = QrCodeAdmin(QrCode, None).download_links(qr_code)
+
+        self.assertIn("/qr-codes/1/download/png/medium/", html)
+        self.assertIn(">PDF</a>", html)

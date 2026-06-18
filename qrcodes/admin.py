@@ -1,7 +1,7 @@
 from django import forms
 from django.contrib import admin
 from django.urls import reverse
-from django.utils.html import format_html
+from django.utils.html import format_html_join
 from unfold.widgets import UnfoldAdminColorInputWidget
 
 from core.admin import BaseAdmin
@@ -75,8 +75,11 @@ class QrCodeAdmin(BaseAdmin):
     def download_links(self, obj: QrCode | None = None):
         if not obj or not obj.pk:
             return "-"
-        links = []
-        for file_format in ("png", "jpg", "svg", "pdf"):
-            url = reverse("qrcodes:download", args=(obj.pk, file_format, "medium"))
-            links.append(f'<a href="{url}">{file_format.upper()}</a>')
-        return format_html(" | ".join(links))
+        return format_html_join(
+            " | ",
+            '<a href="{}">{}</a>',
+            (
+                (reverse("qrcodes:download", args=(obj.pk, file_format, "medium")), file_format.upper())
+                for file_format in ("png", "jpg", "svg", "pdf")
+            ),
+        )
