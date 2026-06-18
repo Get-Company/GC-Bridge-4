@@ -575,6 +575,12 @@ UNFOLD = {
                         "link": reverse_lazy("admin:documents_document_changelist"),
                         "permission": sidebar_model_view_permission("documents", "Document"),
                     },
+                    {
+                        "title": _("QR-Codes"),
+                        "icon": "qr_code_2",
+                        "link": reverse_lazy("admin:qrcodes_qrcode_changelist"),
+                        "permission": sidebar_model_view_permission("qrcodes", "QrCode"),
+                    },
                 ],
             },
             {
