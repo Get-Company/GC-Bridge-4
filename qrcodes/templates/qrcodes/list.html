@@ -1,0 +1,44 @@
+{% extends "qrcodes/base.html" %}
+
+{% block title %}QR-Codes verwalten{% endblock %}
+
+{% block content %}
+<section class="page-head">
+    <div>
+        <h1>QR-Codes</h1>
+        <p>Links als QR-Code mit Bild oder Text in der Mitte verwalten.</p>
+    </div>
+    <a class="button primary" href="{% url 'qrcodes:create' %}">QR-Code erstellen</a>
+</section>
+
+<section class="table-wrap">
+    <table>
+        <thead>
+        <tr>
+            <th>Titel</th>
+            <th>Ziel</th>
+            <th>Mitte</th>
+            <th>Status</th>
+            <th></th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for qr_code in qr_codes %}
+            <tr>
+                <td><strong>{{ qr_code.title }}</strong></td>
+                <td><a href="{{ qr_code.target_url }}" target="_blank" rel="noopener">{{ qr_code.target_url }}</a></td>
+                <td>{{ qr_code.get_center_mode_display }}</td>
+                <td>{% if qr_code.is_active %}Aktiv{% else %}Inaktiv{% endif %}</td>
+                <td class="actions">
+                    <a class="button" href="{% url 'qrcodes:detail' qr_code.pk %}">Oeffnen</a>
+                </td>
+            </tr>
+        {% empty %}
+            <tr>
+                <td colspan="5" class="empty">Noch keine QR-Codes angelegt.</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</section>
+{% endblock %}

@@ -1,0 +1,287 @@
+:root {
+    --bg: #f7f7f5;
+    --panel: #ffffff;
+    --text: #1f2937;
+    --muted: #6b7280;
+    --line: #d7d7d2;
+    --accent: #1f7a6d;
+    --accent-strong: #165c52;
+    --danger: #b42318;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", Arial, sans-serif;
+}
+
+a {
+    color: var(--accent-strong);
+}
+
+.topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 64px;
+    padding: 0 28px;
+    border-bottom: 1px solid var(--line);
+    background: var(--panel);
+}
+
+.brand {
+    color: var(--text);
+    font-size: 1.1rem;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.nav {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.shell {
+    width: min(1180px, calc(100% - 32px));
+    margin: 32px auto;
+}
+
+.page-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 24px;
+    margin-bottom: 24px;
+}
+
+.page-head.compact {
+    margin-bottom: 16px;
+}
+
+h1, h2, p {
+    margin-top: 0;
+}
+
+h1 {
+    margin-bottom: 8px;
+    font-size: 2rem;
+    line-height: 1.15;
+}
+
+h2 {
+    margin-bottom: 12px;
+    font-size: 1rem;
+}
+
+h2 span,
+.page-head p,
+.description,
+.help {
+    color: var(--muted);
+}
+
+.button,
+button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 38px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    padding: 8px 14px;
+    background: var(--panel);
+    color: var(--text);
+    font: inherit;
+    font-weight: 650;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.button.primary,
+button.primary {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: #fff;
+}
+
+.button.danger,
+button.danger {
+    border-color: var(--danger);
+    color: var(--danger);
+}
+
+.table-wrap,
+.preview-panel,
+.meta-panel,
+.confirm-panel {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--panel);
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+th,
+td {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--line);
+    text-align: left;
+    vertical-align: middle;
+}
+
+th {
+    color: var(--muted);
+    font-size: 0.82rem;
+    text-transform: uppercase;
+}
+
+tr:last-child td {
+    border-bottom: 0;
+}
+
+.actions {
+    text-align: right;
+}
+
+.empty {
+    color: var(--muted);
+    text-align: center;
+}
+
+.detail-grid {
+    display: grid;
+    grid-template-columns: minmax(280px, 440px) 1fr;
+    gap: 24px;
+    align-items: start;
+}
+
+.preview-panel {
+    display: grid;
+    place-items: center;
+    padding: 28px;
+}
+
+.preview-panel img {
+    width: min(100%, 380px);
+    height: auto;
+}
+
+.meta-panel,
+.confirm-panel {
+    padding: 24px;
+}
+
+.downloads {
+    display: grid;
+    gap: 16px;
+    margin-top: 24px;
+}
+
+.download-group {
+    padding-top: 16px;
+    border-top: 1px solid var(--line);
+}
+
+.download-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.danger-row {
+    margin-top: 28px;
+}
+
+.form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+}
+
+.field {
+    display: grid;
+    gap: 8px;
+}
+
+.field label {
+    font-weight: 650;
+}
+
+.field input,
+.field textarea,
+.field select {
+    width: 100%;
+    min-height: 42px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    padding: 9px 11px;
+    background: var(--panel);
+    color: var(--text);
+    font: inherit;
+}
+
+.field textarea {
+    min-height: 92px;
+}
+
+.field:has(textarea),
+.form-actions {
+    grid-column: 1 / -1;
+}
+
+.has-error input,
+.has-error textarea,
+.has-error select {
+    border-color: var(--danger);
+}
+
+.error {
+    color: var(--danger);
+}
+
+.messages {
+    margin-bottom: 18px;
+}
+
+.message {
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    padding: 10px 12px;
+    background: var(--panel);
+}
+
+.form-actions,
+.confirm-panel form {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+@media (max-width: 800px) {
+    .topbar,
+    .page-head {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .nav,
+    .download-buttons {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .detail-grid,
+    .form-grid {
+        grid-template-columns: 1fr;
+    }
+}

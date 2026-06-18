@@ -158,6 +158,7 @@ INSTALLED_APPS = [
     'emails_v2.apps.EmailsV2Config',
     'organization.apps.OrganizationConfig',
     'telefon.apps.TelefonConfig',
+    'qrcodes.apps.QrcodesConfig',
 ]
 
 MIDDLEWARE = [

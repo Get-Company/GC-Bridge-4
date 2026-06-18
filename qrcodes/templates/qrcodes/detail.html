@@ -1,0 +1,40 @@
+{% extends "qrcodes/base.html" %}
+
+{% block title %}{{ qr_code.title }}{% endblock %}
+
+{% block content %}
+<section class="detail-grid">
+    <div class="preview-panel">
+        <img src="{% url 'qrcodes:preview' qr_code.pk %}" alt="QR-Code Vorschau fuer {{ qr_code.title }}">
+    </div>
+    <div class="meta-panel">
+        <div class="page-head compact">
+            <div>
+                <h1>{{ qr_code.title }}</h1>
+                <p><a href="{{ qr_code.target_url }}" target="_blank" rel="noopener">{{ qr_code.target_url }}</a></p>
+            </div>
+            <a class="button" href="{% url 'qrcodes:edit' qr_code.pk %}">Bearbeiten</a>
+        </div>
+        {% if qr_code.description %}
+            <p class="description">{{ qr_code.description }}</p>
+        {% endif %}
+        <div class="downloads">
+            {% for size_key, pixels in sizes.items %}
+                <section class="download-group">
+                    <h2>{{ size_key|title }}{% if size_key != "pdf" %} <span>{{ pixels }} px</span>{% endif %}</h2>
+                    <div class="download-buttons">
+                        {% for file_format in formats %}
+                            <a class="button" href="{% url 'qrcodes:download' qr_code.pk file_format size_key %}">
+                                {{ file_format|upper }}
+                            </a>
+                        {% endfor %}
+                    </div>
+                </section>
+            {% endfor %}
+        </div>
+        <div class="danger-row">
+            <a class="button danger" href="{% url 'qrcodes:delete' qr_code.pk %}">Loeschen</a>
+        </div>
+    </div>
+</section>
+{% endblock %}

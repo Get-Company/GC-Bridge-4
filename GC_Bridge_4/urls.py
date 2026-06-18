@@ -32,4 +32,5 @@ urlpatterns = [
     ),
     path('admin/', admin.site.urls),
     path('email-builder/', include('emails_v2.urls', namespace='email_builder')),
+    path('qr-codes/', include('qrcodes.urls', namespace='qrcodes')),
 ]

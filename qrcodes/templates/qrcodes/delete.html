@@ -1,0 +1,15 @@
+{% extends "qrcodes/base.html" %}
+
+{% block title %}QR-Code loeschen{% endblock %}
+
+{% block content %}
+<section class="confirm-panel">
+    <h1>QR-Code loeschen</h1>
+    <p>Soll "{{ qr_code.title }}" wirklich geloescht werden?</p>
+    <form method="post">
+        {% csrf_token %}
+        <button class="button danger" type="submit">Loeschen</button>
+        <a class="button" href="{% url 'qrcodes:detail' qr_code.pk %}">Abbrechen</a>
+    </form>
+</section>
+{% endblock %}

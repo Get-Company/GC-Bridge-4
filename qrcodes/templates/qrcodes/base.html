@@ -1,0 +1,30 @@
+<!doctype html>
+{% load static %}
+<html lang="de">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}QR-Codes{% endblock %}</title>
+    <link rel="stylesheet" href="{% static 'qrcodes/css/qrcodes.css' %}">
+</head>
+<body>
+<header class="topbar">
+    <a class="brand" href="{% url 'qrcodes:list' %}">QR-Codes</a>
+    <nav class="nav">
+        <a href="{% url 'qrcodes:list' %}">Uebersicht</a>
+        <a class="button primary" href="{% url 'qrcodes:create' %}">Neu</a>
+        <a href="{% url 'admin:index' %}">Admin</a>
+    </nav>
+</header>
+<main class="shell">
+    {% if messages %}
+        <div class="messages">
+            {% for message in messages %}
+                <p class="message {{ message.tags }}">{{ message }}</p>
+            {% endfor %}
+        </div>
+    {% endif %}
+    {% block content %}{% endblock %}
+</main>
+</body>
+</html>

@@ -1,0 +1,32 @@
+{% extends "qrcodes/base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<section class="page-head">
+    <div>
+        <h1>{{ title }}</h1>
+        <p>Der QR-Code verweist auf genau eine Ziel-URL.</p>
+    </div>
+</section>
+
+<form class="form-grid" method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+    {% for field in form %}
+        <div class="field{% if field.errors %} has-error{% endif %}">
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% if field.help_text %}<p class="help">{{ field.help_text }}</p>{% endif %}
+            {% for error in field.errors %}<p class="error">{{ error }}</p>{% endfor %}
+        </div>
+    {% endfor %}
+    <div class="form-actions">
+        <button class="button primary" type="submit">Speichern</button>
+        {% if qr_code %}
+            <a class="button" href="{% url 'qrcodes:detail' qr_code.pk %}">Abbrechen</a>
+        {% else %}
+            <a class="button" href="{% url 'qrcodes:list' %}">Abbrechen</a>
+        {% endif %}
+    </div>
+</form>
+{% endblock %}
