@@ -13,6 +13,8 @@
         const tag = $event.dataTransfer.getData('tag');
         const cid = $event.dataTransfer.getData('component_id');
         if (!tag && !cid) return;
+        if (!cid && !['mj-section','mj-wrapper','mj-hero'].includes(tag)) return;
+        $event.stopPropagation();
         htmx.ajax('POST', '{% url "email_builder:htmx_block_create" %}', {
           target: '#canvas', swap: 'outerHTML',
           values: { campaign_id: '{{ campaign.id }}', tag: tag || 'mj-section', component_id: cid, parent_id: '', csrfmiddlewaretoken: '{{ csrf_token }}' }
@@ -47,6 +49,7 @@
                $el.classList.remove('ring-2','ring-blue-300');
                const tag = $event.dataTransfer.getData('tag');
                if (tag !== 'mj-section') return;
+               $event.stopPropagation();
                htmx.ajax('POST', '{% url "email_builder:htmx_block_create" %}', {
                  target: '#canvas', swap: 'outerHTML',
                  values: { campaign_id: '{{ campaign.id }}', tag: 'mj-section', parent_id: '{{ block.id }}', component_id: '', csrfmiddlewaretoken: '{{ csrf_token }}' }
@@ -74,6 +77,7 @@
                  @drop.prevent="
                    const tag = $event.dataTransfer.getData('tag');
                    if (tag !== 'mj-column' && tag !== 'mj-group') return;
+                   $event.stopPropagation();
                    htmx.ajax('POST', '{% url "email_builder:htmx_block_create" %}', {
                      target: '#canvas', swap: 'outerHTML',
                      values: { campaign_id: '{{ campaign.id }}', tag: tag, parent_id: '{{ section.id }}', component_id: '', csrfmiddlewaretoken: '{{ csrf_token }}' }
@@ -94,6 +98,7 @@
                      const isLayout = ['mj-section','mj-column','mj-wrapper','mj-group'].includes(tag);
                      if (!cid && isLayout) return;
                      if (!tag && !cid) return;
+                     $event.stopPropagation();
                      htmx.ajax('POST', '{% url "email_builder:htmx_block_create" %}', {
                        target: '#canvas', swap: 'outerHTML',
                        values: { campaign_id: '{{ campaign.id }}', tag: tag || 'mj-text', component_id: cid, parent_id: '{{ col.id }}', csrfmiddlewaretoken: '{{ csrf_token }}' }
@@ -178,6 +183,7 @@
              @drop.prevent="
                const tag = $event.dataTransfer.getData('tag');
                if (tag !== 'mj-column' && tag !== 'mj-group') return;
+               $event.stopPropagation();
                htmx.ajax('POST', '{% url "email_builder:htmx_block_create" %}', {
                  target: '#canvas', swap: 'outerHTML',
                  values: { campaign_id: '{{ campaign.id }}', tag: tag, parent_id: '{{ block.id }}', component_id: '', csrfmiddlewaretoken: '{{ csrf_token }}' }
@@ -199,6 +205,7 @@
                  const isLayout = ['mj-section','mj-column','mj-wrapper','mj-group'].includes(tag);
                  if (!cid && isLayout) return;
                  if (!tag && !cid) return;
+                 $event.stopPropagation();
                  htmx.ajax('POST', '{% url "email_builder:htmx_block_create" %}', {
                    target: '#canvas', swap: 'outerHTML',
                    values: { campaign_id: '{{ campaign.id }}', tag: tag || 'mj-text', component_id: cid, parent_id: '{{ col.id }}', csrfmiddlewaretoken: '{{ csrf_token }}' }
