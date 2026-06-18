@@ -25,7 +25,11 @@ def _attrs_str(attributes: dict, context: dict) -> str:
 
 def _block_context(block: EmailBlock, context: dict, product_map: dict[int, ProductEmailProxy]) -> dict:
     block_context = {**context, **(block.variables or {})}
-    if block.campaign_product_id and block.campaign_product_id in product_map:
+    if (
+        block.tag == "mj-section"
+        and block.campaign_product_id
+        and block.campaign_product_id in product_map
+    ):
         block_context["product"] = product_map[block.campaign_product_id]
     return block_context
 

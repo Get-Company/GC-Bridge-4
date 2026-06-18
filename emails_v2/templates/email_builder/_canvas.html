@@ -67,6 +67,11 @@
             <div class="flex items-center px-3 py-1.5 border-b bg-gray-50 rounded-t-lg gap-2">
               <span class="drag-handle cursor-move text-gray-300 hover:text-gray-500 select-none">⠿</span>
               <span class="text-xs font-mono text-indigo-400">{{ section.tag }}</span>
+              {% if section.campaign_product %}
+              <span class="text-xs text-emerald-600 truncate">
+                {{ section.campaign_product.product.erp_nr }} - {{ section.campaign_product.product.name|default:"" }}
+              </span>
+              {% endif %}
               <div class="ml-auto">
                 <button class="text-red-300 hover:text-red-500 text-xs px-1"
                   hx-post="{% url 'email_builder:htmx_block_delete' section.id %}"
@@ -188,6 +193,11 @@
         <div class="flex items-center px-3 py-2 border-b bg-gray-50 rounded-t-xl gap-2">
           <span class="drag-handle cursor-move text-gray-300 hover:text-gray-500 select-none text-lg leading-none">⠿</span>
           <span class="text-xs font-mono text-indigo-400">{{ block.tag }}</span>
+          {% if block.tag == 'mj-section' and block.campaign_product %}
+          <span class="text-xs text-emerald-600 truncate">
+            {{ block.campaign_product.product.erp_nr }} - {{ block.campaign_product.product.name|default:"" }}
+          </span>
+          {% endif %}
           {% if block.component %}<span class="text-xs text-purple-500 font-medium">{{ block.component.name }}</span>{% endif %}
           <div class="ml-auto">
             <button class="text-red-300 hover:text-red-500 text-sm px-1 transition-colors"

@@ -296,6 +296,8 @@ def htmx_variable_save(request, block_id):
 @staff_member_required
 def htmx_product_search(request, block_id):
     block = get_object_or_404(EmailBlock.objects.select_related("campaign"), pk=block_id)
+    if block.tag != "mj-section":
+        return HttpResponse(status=204)
     query = request.GET.get("q", "").strip()
     products = []
     if len(query) >= 2:
@@ -317,6 +319,8 @@ def htmx_product_search(request, block_id):
 @require_http_methods(["POST"])
 def htmx_block_product_add(request, block_id):
     block = get_object_or_404(EmailBlock.objects.select_related("campaign"), pk=block_id)
+    if block.tag != "mj-section":
+        return HttpResponse(status=400)
     product_id = request.POST.get("product_id")
     if product_id:
         campaign_product, _created = EmailBuilderCampaignProduct.objects.get_or_create(
@@ -333,6 +337,8 @@ def htmx_block_product_add(request, block_id):
 @require_http_methods(["POST"])
 def htmx_block_product_assign(request, block_id):
     block = get_object_or_404(EmailBlock.objects.select_related("campaign"), pk=block_id)
+    if block.tag != "mj-section":
+        return HttpResponse(status=400)
     campaign_product_id = request.POST.get("campaign_product_id")
     block.campaign_product = None
     if campaign_product_id:
@@ -349,6 +355,8 @@ def htmx_block_product_assign(request, block_id):
 @require_http_methods(["POST"])
 def htmx_block_product_update(request, block_id):
     block = get_object_or_404(EmailBlock.objects.select_related("campaign_product"), pk=block_id)
+    if block.tag != "mj-section":
+        return HttpResponse(status=400)
     campaign_product = block.campaign_product
     if campaign_product is None:
         return HttpResponse(status=204)

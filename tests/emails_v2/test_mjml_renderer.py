@@ -74,7 +74,38 @@ def test_ordering_respected():
 
 
 @pytest.mark.django_db
-def test_product_context_rendered_for_selected_block():
+def test_section_product_context_inherited_by_child_blocks():
+    from products.models import Product
+
+    campaign = EmailBuilderCampaign.objects.create(internal_title="Products")
+    product = Product.objects.create(erp_nr="710001", name="Testprodukt")
+    campaign_product = EmailBuilderCampaignProduct.objects.create(
+        campaign=campaign,
+        product=product,
+        order=0,
+    )
+    section = EmailBlock.objects.create(
+        campaign=campaign,
+        tag="mj-section",
+        order=0,
+        campaign_product=campaign_product,
+    )
+    col = EmailBlock.objects.create(campaign=campaign, tag="mj-column", parent=section, order=0)
+    EmailBlock.objects.create(
+        campaign=campaign,
+        tag="mj-text",
+        parent=col,
+        variables={"content": "{{ product.name }} / {{ products[0].erp_nr }}"},
+        order=0,
+    )
+
+    result = build_mjml_from_blocks(campaign)
+
+    assert "Testprodukt / 710001" in result
+
+
+@pytest.mark.django_db
+def test_product_context_on_non_section_block_is_ignored():
     from products.models import Product
 
     campaign = EmailBuilderCampaign.objects.create(internal_title="Products")
@@ -91,10 +122,11 @@ def test_product_context_rendered_for_selected_block():
         tag="mj-text",
         parent=col,
         campaign_product=campaign_product,
-        variables={"content": "{{ product.name }} / {{ products[0].erp_nr }}"},
+        variables={"content": "{{ product.name|default('NO_PRODUCT') }}"},
         order=0,
     )
 
     result = build_mjml_from_blocks(campaign)
 
-    assert "Testprodukt / 710001" in result
+    assert "NO_PRODUCT" in result
+    assert "Testprodukt" not in result
