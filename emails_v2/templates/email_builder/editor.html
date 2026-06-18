@@ -159,6 +159,7 @@
     function initColumnResizers() {
       document.querySelectorAll('.email-columns-row').forEach(row => {
         row.querySelectorAll('.column-resize-handle').forEach(handle => handle.remove());
+        row.querySelectorAll('.column-width-presets').forEach(presets => presets.remove());
         const columns = Array.from(row.children).filter(el => el.classList.contains('email-column'));
         columns.slice(0, -1).forEach((leftColumn, index) => {
           const rightColumn = columns[index + 1];
@@ -168,6 +169,56 @@
           handle.addEventListener('mousedown', evt => startColumnResize(evt, row, leftColumn, rightColumn));
           rightColumn.before(handle);
         });
+        if (columns.length === 2) {
+          addColumnWidthPresets(row, columns[0], columns[1]);
+        }
+      });
+    }
+
+    function addColumnWidthPresets(row, leftColumn, rightColumn) {
+      const presets = document.createElement('div');
+      presets.className = 'column-width-presets self-center flex flex-col gap-1 flex-shrink-0 text-[10px] text-gray-400';
+      [
+        ['1/2', 50, 50],
+        ['1/3', 33.33, 66.67],
+        ['2/3', 66.67, 33.33],
+        ['1/4', 25, 75],
+        ['3/4', 75, 25],
+      ].forEach(([label, leftPct, rightPct]) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'px-1.5 py-0.5 rounded border border-gray-200 bg-white hover:border-indigo-300 hover:text-indigo-600';
+        button.textContent = label;
+        button.title = `Spalten auf ${leftPct}% / ${rightPct}% setzen`;
+        button.addEventListener('click', evt => {
+          evt.preventDefault();
+          evt.stopPropagation();
+          leftColumn.style.flex = `0 0 ${leftPct}%`;
+          rightColumn.style.flex = `0 0 ${rightPct}%`;
+          saveColumnWidths(leftColumn, rightColumn, leftPct, rightPct);
+        });
+        presets.appendChild(button);
+      });
+
+      const addColumnButton = Array.from(row.children).find(el => el.tagName === 'BUTTON' && !el.dataset.blockId);
+      if (addColumnButton) {
+        addColumnButton.before(presets);
+      } else {
+        row.appendChild(presets);
+      }
+    }
+
+    function saveColumnWidths(leftColumn, rightColumn, leftPct, rightPct) {
+      htmx.ajax('POST', '{% url "email_builder:htmx_columns_resize" %}', {
+        target: '#canvas',
+        swap: 'outerHTML',
+        values: {
+          left_id: leftColumn.dataset.blockId,
+          right_id: rightColumn.dataset.blockId,
+          left_width: `${leftPct.toFixed(2)}%`,
+          right_width: `${rightPct.toFixed(2)}%`,
+          csrfmiddlewaretoken: document.cookie.match(/csrftoken=([^;]+)/)?.[1] ?? ''
+        }
       });
     }
 
@@ -203,17 +254,7 @@
         document.removeEventListener('mouseup', onUp);
         document.body.classList.remove('select-none');
         const widths = applyWidths(upEvt.clientX);
-        htmx.ajax('POST', '{% url "email_builder:htmx_columns_resize" %}', {
-          target: '#canvas',
-          swap: 'outerHTML',
-          values: {
-            left_id: leftColumn.dataset.blockId,
-            right_id: rightColumn.dataset.blockId,
-            left_width: `${widths.leftPct.toFixed(2)}%`,
-            right_width: `${widths.rightPct.toFixed(2)}%`,
-            csrfmiddlewaretoken: document.cookie.match(/csrftoken=([^;]+)/)?.[1] ?? ''
-          }
-        });
+        saveColumnWidths(leftColumn, rightColumn, widths.leftPct, widths.rightPct);
       }
 
       document.body.classList.add('select-none');
