@@ -48,6 +48,21 @@ def test_attributes_rendered():
 
 
 @pytest.mark.django_db
+def test_empty_attributes_are_not_rendered():
+    campaign = EmailBuilderCampaign.objects.create(internal_title="Attrs")
+    EmailBlock.objects.create(
+        campaign=campaign,
+        tag="mj-image",
+        order=0,
+        attributes={"src": "", "alt": "", "width": "100px"},
+    )
+    result = build_mjml_from_blocks(campaign)
+    assert 'src=""' not in result
+    assert 'alt=""' not in result
+    assert 'width="100px"' in result
+
+
+@pytest.mark.django_db
 def test_custom_component_rendered_via_jinja(db):
     from emails.models import MjmlComponent
     comp = MjmlComponent.objects.create(

@@ -93,3 +93,18 @@ def test_htmx_columns_resize_updates_width_attributes(staff_client):
     right.refresh_from_db()
     assert left.attributes["width"] == "35.5%"
     assert right.attributes["width"] == "64.5%"
+
+
+@pytest.mark.django_db
+def test_variable_panel_uses_block_scoped_field_ids(staff_client):
+    from emails_v2.models import EmailBlock
+
+    c = EmailBuilderCampaign.objects.create(internal_title="Vars")
+    block = EmailBlock.objects.create(campaign=c, tag="mj-text", order=0)
+
+    response = staff_client.get(f"/email-builder/htmx/block/{block.pk}/vars/")
+
+    assert response.status_code == 200
+    html = response.content.decode()
+    assert f'id="block-{block.pk}-var-1-content"' in html
+    assert f'for="block-{block.pk}-var-1-content"' in html

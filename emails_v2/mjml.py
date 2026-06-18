@@ -1,4 +1,5 @@
 from __future__ import annotations
+from html import escape
 import jinja2
 from urllib.parse import quote_plus
 
@@ -20,7 +21,13 @@ def _render_value(value: object, context: dict) -> str:
 def _attrs_str(attributes: dict, context: dict) -> str:
     if not attributes:
         return ""
-    return " " + " ".join(f'{k}="{_render_value(v, context)}"' for k, v in attributes.items())
+    rendered_attrs = []
+    for key, value in attributes.items():
+        rendered_value = _render_value(value, context)
+        if rendered_value == "":
+            continue
+        rendered_attrs.append(f'{key}="{escape(rendered_value, quote=True)}"')
+    return " " + " ".join(rendered_attrs) if rendered_attrs else ""
 
 
 def _block_context(block: EmailBlock, context: dict, product_map: dict[int, ProductEmailProxy]) -> dict:

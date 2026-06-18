@@ -96,6 +96,7 @@
         cssOpen: false,
         savedMsg: false,
         selectBlock(id) {
+          flushAutosaveForms();
           htmx.ajax('GET', `/email-builder/htmx/block/${id}/vars/`, { target: '#variable-panel' });
         },
         showSaved() {
@@ -104,6 +105,12 @@
         }
       }
     }
+
+    document.body.addEventListener('htmx:beforeRequest', (evt) => {
+      if (evt.detail.elt?.matches?.('[hx-post$="/preview/"]')) {
+        flushAutosaveForms();
+      }
+    });
 
     document.addEventListener('htmx:afterSwap', (e) => {
       if (e.detail.target.id === 'preview-pane') {
@@ -130,6 +137,16 @@
       initSortables();
       initColumnResizers();
     });
+
+    function flushAutosaveForms() {
+      document.querySelectorAll('[data-autosave-form]').forEach(form => {
+        const values = Object.fromEntries(new FormData(form).entries());
+        htmx.ajax('POST', form.getAttribute('hx-post'), {
+          swap: 'none',
+          values
+        });
+      });
+    }
 
     function initSortables() {
       document.querySelectorAll('[data-sortable]').forEach(el => {
