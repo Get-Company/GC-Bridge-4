@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import base64
 import html
+import math
+from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
 
@@ -22,6 +23,17 @@ class QrExport:
     content: bytes
     content_type: str
     filename: str
+
+
+@dataclass(frozen=True)
+class QrCenterGeometry:
+    module_count: int
+    target_modules: int
+    cutout_modules: frozenset[tuple[int, int]]
+
+    @property
+    def target_side_ratio(self) -> float:
+        return self.target_modules / self.module_count
 
 
 class QrCodeRenderService(BaseService):
@@ -92,7 +104,7 @@ class QrCodeRenderService(BaseService):
                 if enabled:
                     paths.append(f"M{x * module_size},{y * module_size}h{module_size}v{module_size}h-{module_size}z")
 
-        center_markup = self._build_svg_center_markup(qr_code, side)
+        center_markup = self._build_svg_center_markup(qr_code, side, module_size, module_count)
         path_data = "".join(paths)
         svg = (
             '<?xml version="1.0" encoding="UTF-8"?>'
@@ -144,19 +156,11 @@ class QrCodeRenderService(BaseService):
         if qr_code.center_mode == QrCode.CenterMode.TEXT and not qr_code.center_text.strip():
             return
 
-        target_side = int(image.width * (qr_code.center_scale_percent / 100))
-        padding = max(18, int(target_side * 0.16))
-        card_side = target_side + (padding * 2)
-        card_x = (image.width - card_side) // 2
-        card_y = (image.height - card_side) // 2
+        module_count = len(self._build_qr(qr_code).get_matrix())
+        geometry = self._build_center_geometry(module_count, qr_code.center_scale_percent)
+        self._clear_raster_modules(image, qr_code.background_color, geometry)
+        target_side = int(image.width * geometry.target_side_ratio)
 
-        draw = ImageDraw.Draw(image)
-        radius = max(18, int(card_side * 0.12))
-        draw.rounded_rectangle(
-            (card_x, card_y, card_x + card_side, card_y + card_side),
-            radius=radius,
-            fill=qr_code.background_color,
-        )
 
         if qr_code.center_mode == QrCode.CenterMode.IMAGE:
             center = self._load_center_image(qr_code, target_side)
@@ -181,7 +185,7 @@ class QrCodeRenderService(BaseService):
         y = (image.height - text_height) / 2 - text_box[1]
         draw.text((x, y), text, font=font, fill=fill)
 
-    def _build_svg_center_markup(self, qr_code: QrCode, side: int) -> str:
+    def _build_svg_center_markup(self, qr_code: QrCode, side: int, module_size: int, module_count: int) -> str:
         if qr_code.center_mode == QrCode.CenterMode.NONE:
             return ""
         if qr_code.center_mode == QrCode.CenterMode.IMAGE and not qr_code.center_image:
@@ -189,18 +193,15 @@ class QrCodeRenderService(BaseService):
         if qr_code.center_mode == QrCode.CenterMode.TEXT and not qr_code.center_text.strip():
             return ""
 
-        target_side = side * (qr_code.center_scale_percent / 100)
-        padding = max(18, target_side * 0.16)
-        card_side = target_side + (padding * 2)
-        card_x = (side - card_side) / 2
-        card_y = (side - card_side) / 2
-        radius = max(18, card_side * 0.12)
+        geometry = self._build_center_geometry(module_count, qr_code.center_scale_percent)
+        target_side = side * geometry.target_side_ratio
         background = html.escape(qr_code.background_color, quote=True)
         foreground = html.escape(qr_code.foreground_color, quote=True)
-        markup = [
-            f'<rect x="{card_x:.2f}" y="{card_y:.2f}" width="{card_side:.2f}" height="{card_side:.2f}" '
-            f'rx="{radius:.2f}" fill="{background}"/>'
-        ]
+        module_markup = (
+            f'<rect x="{x * module_size}" y="{y * module_size}" width="{module_size}" height="{module_size}" fill="{background}"/>'
+            for x, y in sorted(geometry.cutout_modules, key=lambda item: (item[1], item[0]))
+        )
+        markup = ["".join(module_markup)]
 
         if qr_code.center_mode == QrCode.CenterMode.IMAGE:
             mime_type = self._image_mime_type(qr_code.center_image.name)
@@ -221,6 +222,49 @@ class QrCodeRenderService(BaseService):
             f'font-family="Arial, sans-serif" font-weight="700" font-size="{font_size:.2f}" fill="{foreground}">{text}</text>'
         )
         return "".join(markup)
+
+    def _build_center_geometry(self, module_count: int, scale_percent: int) -> QrCenterGeometry:
+        target_modules = max(3, math.ceil(module_count * (scale_percent / 100)))
+        if target_modules % 2 == 0:
+            target_modules += 1
+
+        padding_modules = max(2, math.ceil(target_modules * 0.22))
+        cutout_side = min(module_count - 8, target_modules + (padding_modules * 2))
+        if cutout_side % 2 == 0:
+            cutout_side += 1
+
+        start = (module_count - cutout_side) // 2
+        end = start + cutout_side
+        radius = max(2.0, cutout_side * 0.24)
+        inner_left = start + radius
+        inner_right = end - radius
+        inner_top = start + radius
+        inner_bottom = end - radius
+
+        modules: set[tuple[int, int]] = set()
+        for y in range(start, end):
+            for x in range(start, end):
+                center_x = x + 0.5
+                center_y = y + 0.5
+                nearest_x = min(max(center_x, inner_left), inner_right)
+                nearest_y = min(max(center_y, inner_top), inner_bottom)
+                if (center_x - nearest_x) ** 2 + (center_y - nearest_y) ** 2 <= radius**2:
+                    modules.add((x, y))
+
+        return QrCenterGeometry(
+            module_count=module_count,
+            target_modules=target_modules,
+            cutout_modules=frozenset(modules),
+        )
+
+    def _clear_raster_modules(self, image: Image.Image, fill: str, geometry: QrCenterGeometry) -> None:
+        draw = ImageDraw.Draw(image)
+        for x, y in geometry.cutout_modules:
+            left = round((x / geometry.module_count) * image.width)
+            top = round((y / geometry.module_count) * image.height)
+            right = round(((x + 1) / geometry.module_count) * image.width)
+            bottom = round(((y + 1) / geometry.module_count) * image.height)
+            draw.rectangle((left, top, right - 1, bottom - 1), fill=fill)
 
     def _fit_font(self, draw: ImageDraw.ImageDraw, text: str, max_side: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
         font_path = self._font_path()

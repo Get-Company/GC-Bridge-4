@@ -4,6 +4,7 @@ from unfold.widgets import UnfoldAdminColorInputWidget
 from qrcodes.admin import QrCodeAdmin, QrCodeAdminForm
 from qrcodes.forms import QrCodeForm
 from qrcodes.models import QrCode
+from qrcodes.services import QrCodeRenderService
 
 
 class QrCodeFormWidgetTest(SimpleTestCase):
@@ -25,3 +26,15 @@ class QrCodeFormWidgetTest(SimpleTestCase):
 
         self.assertIn("/qr-codes/1/download/png/medium/", html)
         self.assertIn(">PDF</a>", html)
+
+    def test_svg_center_background_uses_qr_module_grid(self):
+        qr_code = QrCode(
+            title="Test",
+            target_url="https://example.com",
+            center_mode=QrCode.CenterMode.TEXT,
+            center_text="GC",
+        )
+        svg = QrCodeRenderService().render_svg(qr_code).decode("utf-8")
+
+        self.assertNotIn('rx="', svg)
+        self.assertGreater(svg.count('fill="#ffffff"'), 20)
