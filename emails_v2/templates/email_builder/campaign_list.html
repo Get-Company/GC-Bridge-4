@@ -7,6 +7,9 @@
 </head>
 <body class="bg-gray-50 min-h-screen p-8">
   <div class="max-w-3xl mx-auto">
+    <div class="mb-4">
+      <a href="{% url 'admin:index' %}" class="text-sm text-gray-400 hover:text-gray-600">← Zurück zum Admin</a>
+    </div>
     <div class="flex items-center justify-between mb-6">
       <h1 class="text-2xl font-bold text-gray-800">Email Kampagnen</h1>
       <a href="{% url 'email_builder:create' %}"
