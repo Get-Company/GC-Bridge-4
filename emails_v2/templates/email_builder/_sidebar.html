@@ -1,0 +1,58 @@
+{% load email_builder_tags %}
+<aside class="w-56 bg-white border-r overflow-y-auto flex-shrink-0 flex flex-col" x-data="{ tab: 'standard' }">
+
+  <div class="flex border-b flex-shrink-0">
+    <button @click="tab='standard'"
+      :class="tab==='standard' ? 'border-b-2 border-indigo-600 text-indigo-600 font-medium' : 'text-gray-500 hover:text-gray-700'"
+      class="flex-1 py-2.5 text-xs transition-colors">
+      Standard
+    </button>
+    <button @click="tab='custom'"
+      :class="tab==='custom' ? 'border-b-2 border-indigo-600 text-indigo-600 font-medium' : 'text-gray-500 hover:text-gray-700'"
+      class="flex-1 py-2.5 text-xs transition-colors">
+      Eigene
+    </button>
+  </div>
+
+  <div x-show="tab==='standard'" class="p-2 overflow-y-auto">
+    {% regroup mjml_tags by category as tag_groups %}
+    {% for group in tag_groups %}
+    <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide mt-3 mb-1 px-1">{{ group.grouper }}</p>
+    {% for tag in group.list %}
+    <div
+      draggable="true"
+      data-tag="{{ tag.name }}"
+      class="flex items-center gap-2 px-2 py-1.5 rounded-md cursor-grab active:cursor-grabbing hover:bg-indigo-50 hover:text-indigo-700 text-sm text-gray-700 select-none transition-colors"
+      title="{{ tag.description }}"
+      @dragstart="
+        $event.dataTransfer.setData('tag', '{{ tag.name }}');
+        $event.dataTransfer.setData('component_id', '');
+        $event.dataTransfer.effectAllowed = 'copy';
+      ">
+      <span class="text-gray-300 font-mono text-xs">⬛</span>
+      <span class="font-mono text-xs">{{ tag.name }}</span>
+    </div>
+    {% endfor %}
+    {% endfor %}
+  </div>
+
+  <div x-show="tab==='custom'" class="p-2 overflow-y-auto">
+    {% for comp in custom_components %}
+    <div
+      draggable="true"
+      data-component-id="{{ comp.id }}"
+      class="flex items-center gap-2 px-2 py-1.5 rounded-md cursor-grab active:cursor-grabbing hover:bg-purple-50 hover:text-purple-700 text-sm text-gray-700 select-none transition-colors"
+      title="{{ comp.description }}"
+      @dragstart="
+        $event.dataTransfer.setData('component_id', '{{ comp.id }}');
+        $event.dataTransfer.setData('tag', 'mj-section');
+        $event.dataTransfer.effectAllowed = 'copy';
+      ">
+      <span class="text-purple-300 text-xs">📦</span>
+      <span class="text-xs truncate">{{ comp.name }}</span>
+    </div>
+    {% empty %}
+    <p class="text-xs text-gray-400 p-3 text-center">Keine eigenen Komponenten.<br>Im Admin unter Emails → MJML Komponenten erstellen.</p>
+    {% endfor %}
+  </div>
+</aside>

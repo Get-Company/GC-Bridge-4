@@ -1,1 +1,107 @@
-<!DOCTYPE html><html><body><h1>Editor</h1></body></html>
+{% load email_builder_tags %}
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>{{ campaign.internal_title }} — Email Builder</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+  <script defer src="https://unpkg.com/alpinejs@3.13.5/dist/cdn.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+</head>
+<body class="bg-gray-100 h-screen flex flex-col overflow-hidden"
+      x-data="emailEditor()"
+      @select-block.window="selectBlock($event.detail.id)">
+
+  <!-- Topbar -->
+  <header class="bg-white border-b px-4 py-2 flex items-center gap-4 shadow-sm z-10 flex-shrink-0">
+    <a href="{% url 'email_builder:list' %}" class="text-sm text-gray-500 hover:text-gray-800">← Kampagnen</a>
+    <h1 class="font-semibold text-gray-800 truncate">{{ campaign.internal_title }}</h1>
+    <span class="px-2 py-0.5 rounded-full text-xs font-medium
+      {% if campaign.status == 'draft' %}bg-yellow-100 text-yellow-700
+      {% elif campaign.status == 'ready' %}bg-green-100 text-green-700
+      {% else %}bg-gray-100 text-gray-500{% endif %}">
+      {{ campaign.get_status_display }}
+    </span>
+    <div class="ml-auto flex gap-2">
+      <button
+        hx-post="{% url 'email_builder:htmx_preview' campaign.id %}"
+        hx-target="#preview-pane"
+        class="px-4 py-1.5 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700">
+        Preview
+      </button>
+    </div>
+  </header>
+
+  <!-- 3-panel layout -->
+  <div class="flex flex-1 overflow-hidden">
+    {% include "email_builder/_sidebar.html" %}
+
+    <main class="flex-1 overflow-y-auto bg-gray-50" id="canvas-wrapper">
+      {% include "email_builder/_canvas.html" %}
+    </main>
+
+    <aside class="w-72 bg-white border-l overflow-y-auto flex-shrink-0" id="variable-panel">
+      <div class="p-4 text-sm text-gray-400">Element auswählen...</div>
+    </aside>
+  </div>
+
+  <!-- Preview overlay -->
+  <div id="preview-pane"
+       class="hidden fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-8"
+       @click.self="$el.classList.add('hidden')">
+  </div>
+
+  <script>
+    function emailEditor() {
+      return {
+        selectBlock(id) {
+          htmx.ajax('GET', `/email-builder/htmx/block/${id}/vars/`, { target: '#variable-panel' });
+        }
+      }
+    }
+
+    document.addEventListener('htmx:afterSwap', (e) => {
+      if (e.detail.target.id === 'preview-pane') {
+        const pane = e.detail.target;
+        const html = pane.innerHTML;
+        pane.innerHTML = `
+          <div class="bg-white rounded-xl w-full max-w-4xl max-h-full overflow-hidden flex flex-col shadow-2xl" @click.stop>
+            <div class="flex items-center justify-between px-4 py-2 border-b bg-gray-50">
+              <span class="font-medium text-sm text-gray-700">Email Preview</span>
+              <button onclick="document.getElementById('preview-pane').classList.add('hidden')"
+                class="text-gray-400 hover:text-gray-600 text-sm">✕ Schließen</button>
+            </div>
+            <iframe class="flex-1 w-full" style="height:600px"
+              srcdoc="${html.replace(/\\/g, '\\\\').replace(/"/g, '&quot;')}"></iframe>
+          </div>`;
+        pane.classList.remove('hidden');
+      }
+      initSortables();
+    });
+
+    document.addEventListener('DOMContentLoaded', initSortables);
+
+    function initSortables() {
+      document.querySelectorAll('[data-sortable]').forEach(el => {
+        if (el._sortable) return;
+        el._sortable = Sortable.create(el, {
+          group: el.dataset.sortable,
+          handle: '.drag-handle',
+          animation: 150,
+          onEnd(evt) {
+            const blockId = evt.item.dataset.blockId;
+            if (!blockId) return;
+            htmx.ajax('POST', `/email-builder/htmx/block/${blockId}/reorder/`, {
+              values: {
+                order: evt.newIndex,
+                csrfmiddlewaretoken: document.cookie.match(/csrftoken=([^;]+)/)?.[1] ?? ''
+              }
+            });
+          }
+        });
+      });
+    }
+  </script>
+</body>
+</html>

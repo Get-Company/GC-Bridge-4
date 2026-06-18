@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>Neue Kampagne</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen flex items-center justify-center">
+  <div class="bg-white rounded-xl border p-8 w-full max-w-md shadow-sm">
+    <h1 class="text-xl font-bold text-gray-800 mb-6">Neue Email-Kampagne</h1>
+    <form method="post">
+      {% csrf_token %}
+      <label class="block text-sm text-gray-600 mb-1">Interner Titel</label>
+      <input type="text" name="internal_title" autofocus required
+        class="w-full border rounded-lg px-3 py-2 text-sm mb-4 focus:outline-none focus:border-indigo-500"
+        placeholder="z.B. Sommer-Aktion 2026">
+      <div class="flex gap-3">
+        <button type="submit"
+          class="flex-1 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700">
+          Erstellen
+        </button>
+        <a href="{% url 'email_builder:list' %}"
+          class="flex-1 py-2 text-center border rounded-lg text-sm text-gray-600 hover:bg-gray-50">
+          Abbrechen
+        </a>
+      </div>
+    </form>
+  </div>
+</body>
+</html>
