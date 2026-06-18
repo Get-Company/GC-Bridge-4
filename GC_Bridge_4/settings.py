@@ -475,6 +475,12 @@ UNFOLD = {
                         "link": reverse_lazy("admin:emails_mjmlcomponent_changelist"),
                         "permission": sidebar_model_view_permission("emails", "MjmlComponent"),
                     },
+                    {
+                        "title": _("Email Builder"),
+                        "icon": "draw",
+                        "link": reverse_lazy("email_builder:list"),
+                        "permission": lambda request: request.user.is_staff,
+                    },
                 ],
             },
             {
