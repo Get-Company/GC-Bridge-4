@@ -12,6 +12,7 @@ class EmailBuilderCampaign(BaseModel):
     status = models.CharField(
         max_length=20, choices=Status.choices, default=Status.DRAFT, db_index=True
     )
+    global_css = models.TextField(blank=True, default="", verbose_name="Globale CSS-Regeln")
 
     class Meta:
         ordering = ("-created_at",)

@@ -39,7 +39,8 @@ def build_mjml_from_blocks(campaign: EmailBuilderCampaign) -> str:
     top_blocks = sorted(child_map.get(None, []), key=lambda b: (b.order, b.id))
     body_inner = "".join(_render_block(b, child_map) for b in top_blocks)
 
-    return f"<mjml><mj-head></mj-head><mj-body>{body_inner}</mj-body></mjml>"
+    css_block = f"<mj-style>{campaign.global_css}</mj-style>" if campaign.global_css.strip() else ""
+    return f"<mjml><mj-head>{css_block}</mj-head><mj-body>{body_inner}</mj-body></mjml>"
 
 
 def render_campaign_preview(campaign: EmailBuilderCampaign) -> str:

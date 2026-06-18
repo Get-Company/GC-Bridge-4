@@ -8,6 +8,8 @@
   <script src="https://unpkg.com/htmx.org@1.9.12"></script>
   <script defer src="https://unpkg.com/alpinejs@3.13.5/dist/cdn.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <style>[x-cloak]{display:none!important}</style>
 </head>
 <body class="bg-gray-100 h-screen flex flex-col overflow-hidden"
       x-data="emailEditor()"
@@ -24,6 +26,10 @@
       {{ campaign.get_status_display }}
     </span>
     <div class="ml-auto flex gap-2">
+      <button @click="cssOpen=true"
+        class="px-4 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">
+        CSS-Regeln
+      </button>
       <button
         hx-post="{% url 'email_builder:htmx_preview' campaign.id %}"
         hx-target="#preview-pane"
@@ -46,6 +52,33 @@
     </aside>
   </div>
 
+  <!-- CSS overlay -->
+  <div x-show="cssOpen" x-cloak
+       class="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-8"
+       @click.self="cssOpen=false">
+    <div class="bg-white rounded-xl w-full max-w-2xl shadow-2xl flex flex-col" @click.stop>
+      <div class="flex items-center justify-between px-4 py-3 border-b">
+        <span class="font-medium text-sm text-gray-700">Globale CSS-Regeln</span>
+        <button @click="cssOpen=false" class="text-gray-400 hover:text-gray-600 text-sm">✕</button>
+      </div>
+      <div class="p-4">
+        <p class="text-xs text-gray-400 mb-2">Gilt für alle Elemente dieser Kampagne via <code class="bg-gray-100 px-1 rounded">mj-style</code>.</p>
+        <form hx-post="{% url 'email_builder:htmx_campaign_css_save' campaign.id %}"
+              hx-on::after-request="cssOpen=false; showSaved()">
+          <textarea name="global_css" rows="14"
+            class="w-full font-mono text-xs border rounded-lg p-3 resize-none focus:ring-2 focus:ring-indigo-300 outline-none"
+            placeholder=".my-class { color: #333; }">{{ campaign.global_css }}</textarea>
+          <div class="flex justify-end gap-2 mt-3">
+            <button type="button" @click="cssOpen=false"
+              class="px-4 py-2 text-sm text-gray-600 rounded hover:bg-gray-100">Abbrechen</button>
+            <button type="submit"
+              class="px-4 py-2 text-sm bg-indigo-600 text-white rounded hover:bg-indigo-700">Speichern</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
   <!-- Preview overlay -->
   <div id="preview-pane"
        class="hidden fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-8"
@@ -53,10 +86,21 @@
   </div>
 
   <script>
+    // Global CSRF for all htmx requests
+    document.body.addEventListener('htmx:configRequest', (evt) => {
+      evt.detail.headers['X-CSRFToken'] = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+    });
+
     function emailEditor() {
       return {
+        cssOpen: false,
+        savedMsg: false,
         selectBlock(id) {
           htmx.ajax('GET', `/email-builder/htmx/block/${id}/vars/`, { target: '#variable-panel' });
+        },
+        showSaved() {
+          this.savedMsg = true;
+          setTimeout(() => { this.savedMsg = false; }, 2000);
         }
       }
     }

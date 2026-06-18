@@ -26,6 +26,47 @@ def campaign_list(request):
 
 
 @staff_member_required
+@require_http_methods(["POST"])
+def campaign_delete(request, campaign_id):
+    campaign = get_object_or_404(EmailBuilderCampaign, pk=campaign_id)
+    campaign.delete()
+    return redirect("email_builder:list")
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+def campaign_duplicate(request, campaign_id):
+    source = get_object_or_404(EmailBuilderCampaign, pk=campaign_id)
+    new_campaign = EmailBuilderCampaign.objects.create(
+        internal_title=f"{source.internal_title} (Kopie)",
+        global_css=source.global_css,
+    )
+    blocks = list(source.blocks.all())
+    id_map: dict[int, int] = {}
+    for block in sorted(blocks, key=lambda b: (b.parent_id or 0, b.order, b.id)):
+        new_block = EmailBlock.objects.create(
+            campaign=new_campaign,
+            parent_id=id_map.get(block.parent_id) if block.parent_id else None,
+            tag=block.tag,
+            component_id=block.component_id,
+            attributes=dict(block.attributes),
+            variables=dict(block.variables),
+            order=block.order,
+        )
+        id_map[block.id] = new_block.id
+    return redirect("email_builder:editor", campaign_id=new_campaign.pk)
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+def htmx_campaign_css_save(request, campaign_id):
+    campaign = get_object_or_404(EmailBuilderCampaign, pk=campaign_id)
+    campaign.global_css = request.POST.get("global_css", "")
+    campaign.save(update_fields=["global_css"])
+    return HttpResponse(status=204)
+
+
+@staff_member_required
 def campaign_create(request):
     if request.method == "POST":
         title = request.POST.get("internal_title", "Neue Kampagne")

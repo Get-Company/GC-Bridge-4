@@ -23,10 +23,28 @@
         <p class="font-medium text-gray-800">{{ campaign.internal_title }}</p>
         <p class="text-xs text-gray-400 mt-0.5">{{ campaign.get_status_display }} · {{ campaign.created_at|date:"d.m.Y" }}</p>
       </div>
-      <a href="{% url 'email_builder:editor' campaign.pk %}"
-         class="px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded text-sm hover:bg-indigo-100">
-        Bearbeiten →
-      </a>
+      <div class="flex items-center gap-2">
+        <a href="{% url 'email_builder:editor' campaign.pk %}"
+           class="px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded text-sm hover:bg-indigo-100">
+          Bearbeiten →
+        </a>
+        <form method="post" action="{% url 'email_builder:campaign_duplicate' campaign.pk %}" style="display:inline">
+          {% csrf_token %}
+          <button type="submit"
+             class="px-3 py-1.5 bg-gray-50 text-gray-600 rounded text-sm hover:bg-gray-100">
+            Kopieren
+          </button>
+        </form>
+        <form method="post" action="{% url 'email_builder:campaign_delete' campaign.pk %}"
+              style="display:inline"
+              onsubmit="return confirm('Kampagne »{{ campaign.internal_title }}« wirklich löschen?')">
+          {% csrf_token %}
+          <button type="submit"
+             class="px-3 py-1.5 bg-red-50 text-red-600 rounded text-sm hover:bg-red-100">
+            Löschen
+          </button>
+        </form>
+      </div>
     </div>
     {% empty %}
     <p class="text-gray-400 text-center py-12">Noch keine Kampagnen. Erstelle die erste!</p>
