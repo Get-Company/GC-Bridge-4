@@ -40,6 +40,12 @@ def _next_order(campaign: EmailBuilderCampaign, parent_id: int | None) -> int:
     return EmailBlock.objects.filter(campaign=campaign, parent_id=parent_id).count()
 
 
+def _percent_width(value: str) -> str:
+    number = float(str(value).strip().rstrip("%").replace(",", "."))
+    number = max(5.0, min(95.0, number))
+    return f"{number:.2f}".rstrip("0").rstrip(".") + "%"
+
+
 def _create_block(
     campaign: EmailBuilderCampaign,
     *,
@@ -265,6 +271,32 @@ def htmx_block_delete(request, block_id):
     cm = _child_map(campaign)
     return render(request, "email_builder/_canvas.html", {
         "campaign": campaign,
+        "top_blocks": sorted(cm.get(None, []), key=lambda b: (b.order, b.id)),
+        "child_map": cm,
+    })
+
+
+@staff_member_required
+@require_http_methods(["POST"])
+def htmx_columns_resize(request):
+    left = get_object_or_404(EmailBlock, pk=request.POST.get("left_id"))
+    right = get_object_or_404(EmailBlock, pk=request.POST.get("right_id"))
+    if left.campaign_id != right.campaign_id or left.parent_id != right.parent_id:
+        return HttpResponse(status=400)
+    if left.tag not in _SECTION_CHILD_TAGS or right.tag not in _SECTION_CHILD_TAGS:
+        return HttpResponse(status=400)
+
+    try:
+        left.attributes["width"] = _percent_width(request.POST.get("left_width", ""))
+        right.attributes["width"] = _percent_width(request.POST.get("right_width", ""))
+    except (TypeError, ValueError):
+        return HttpResponse(status=400)
+
+    left.save(update_fields=["attributes"])
+    right.save(update_fields=["attributes"])
+    cm = _child_map(left.campaign)
+    return render(request, "email_builder/_canvas.html", {
+        "campaign": left.campaign,
         "top_blocks": sorted(cm.get(None, []), key=lambda b: (b.order, b.id)),
         "child_map": cm,
     })

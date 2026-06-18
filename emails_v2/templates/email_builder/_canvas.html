@@ -79,7 +79,7 @@
                   hx-confirm="Section löschen?">✕</button>
               </div>
             </div>
-            <div class="flex p-2 gap-2 min-h-16 items-stretch"
+            <div class="email-columns-row flex p-2 gap-2 min-h-16 items-stretch"
                  data-sortable="columns-{{ section.id }}"
                  @dragover.prevent
                  @drop.prevent="
@@ -96,9 +96,10 @@
                  ">
               {% for col in col_blocks %}
               {% with content_blocks=child_map|get_item:col.id %}
-              <div class="flex-1 min-w-0 border rounded-lg p-2 bg-gray-50 hover:border-indigo-200 transition-colors"
+              <div class="email-column flex-1 min-w-0 border rounded-lg p-2 bg-gray-50 hover:border-indigo-200 transition-colors"
                    data-block-id="{{ col.id }}"
                    data-sortable="content-{{ col.id }}"
+                   style="{% if col.attributes.width %}flex: 0 0 {{ col.attributes.width }};{% endif %}"
                    @click.stop="$dispatch('select-block', { id: {{ col.id }} })"
                    @dragover.prevent="$el.classList.add('bg-indigo-50')"
                    @dragleave="$el.classList.remove('bg-indigo-50')"
@@ -207,7 +208,7 @@
           </div>
         </div>
 
-        <div class="flex p-2 gap-2 min-h-20 items-stretch"
+        <div class="email-columns-row flex p-2 gap-2 min-h-20 items-stretch"
              data-sortable="columns-{{ block.id }}"
              @dragover.prevent
              @drop.prevent="
@@ -225,9 +226,10 @@
 
           {% for col in col_blocks %}
           {% with content_blocks=child_map|get_item:col.id %}
-          <div class="flex-1 min-w-0 border rounded-lg p-2 bg-gray-50 hover:border-indigo-200 transition-colors"
+          <div class="email-column flex-1 min-w-0 border rounded-lg p-2 bg-gray-50 hover:border-indigo-200 transition-colors"
                data-block-id="{{ col.id }}"
                data-sortable="content-{{ col.id }}"
+               style="{% if col.attributes.width %}flex: 0 0 {{ col.attributes.width }};{% endif %}"
                @click.stop="$dispatch('select-block', { id: {{ col.id }} })"
                @dragover.prevent="$el.classList.add('bg-indigo-50')"
                @dragleave="$el.classList.remove('bg-indigo-50')"

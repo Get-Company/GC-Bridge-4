@@ -67,3 +67,29 @@ def test_htmx_block_create_appends_content_to_existing_section_column(staff_clie
     assert EmailBlock.objects.filter(campaign=c, tag="mj-column", parent=section).count() == 1
     text = EmailBlock.objects.get(campaign=c, tag="mj-text")
     assert text.parent == column
+
+
+@pytest.mark.django_db
+def test_htmx_columns_resize_updates_width_attributes(staff_client):
+    from emails_v2.models import EmailBlock
+
+    c = EmailBuilderCampaign.objects.create(internal_title="Resize")
+    section = EmailBlock.objects.create(campaign=c, tag="mj-section", order=0)
+    left = EmailBlock.objects.create(campaign=c, tag="mj-column", parent=section, order=0)
+    right = EmailBlock.objects.create(campaign=c, tag="mj-column", parent=section, order=1)
+
+    response = staff_client.post(
+        "/email-builder/htmx/columns/resize/",
+        {
+            "left_id": left.pk,
+            "right_id": right.pk,
+            "left_width": "35.5%",
+            "right_width": "64.5%",
+        },
+    )
+
+    assert response.status_code == 200
+    left.refresh_from_db()
+    right.refresh_from_db()
+    assert left.attributes["width"] == "35.5%"
+    assert right.attributes["width"] == "64.5%"
