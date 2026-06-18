@@ -44,17 +44,20 @@
 
         <div class="p-2 space-y-2 min-h-12"
              @dragover.prevent="$el.classList.add('ring-2','ring-blue-300')"
-             @dragleave="$el.classList.remove('ring-2','ring-blue-300')"
-             @drop.prevent="
-               $el.classList.remove('ring-2','ring-blue-300');
-               const tag = $event.dataTransfer.getData('tag');
-               if (tag !== 'mj-section') return;
-               $event.stopPropagation();
-               htmx.ajax('POST', '{% url "email_builder:htmx_block_create" %}', {
-                 target: '#canvas', swap: 'outerHTML',
-                 values: { campaign_id: '{{ campaign.id }}', tag: 'mj-section', parent_id: '{{ block.id }}', component_id: '', csrfmiddlewaretoken: '{{ csrf_token }}' }
-               });
-             ">
+	             @dragleave="$el.classList.remove('ring-2','ring-blue-300')"
+	             @drop.prevent="
+	               $el.classList.remove('ring-2','ring-blue-300');
+	               const tag = $event.dataTransfer.getData('tag');
+	               const cid = $event.dataTransfer.getData('component_id');
+	               const isLayout = ['mj-section','mj-column','mj-wrapper','mj-group'].includes(tag);
+	               if (!cid && tag !== 'mj-section' && isLayout) return;
+	               if (!tag && !cid) return;
+	               $event.stopPropagation();
+	               htmx.ajax('POST', '{% url "email_builder:htmx_block_create" %}', {
+	                 target: '#canvas', swap: 'outerHTML',
+	                 values: { campaign_id: '{{ campaign.id }}', tag: tag || 'mj-text', parent_id: '{{ block.id }}', component_id: cid, csrfmiddlewaretoken: '{{ csrf_token }}' }
+	               });
+	             ">
 
           {% for section in block_children %}
           {% with col_blocks=child_map|get_item:section.id %}
@@ -76,11 +79,14 @@
                  @dragover.prevent
                  @drop.prevent="
                    const tag = $event.dataTransfer.getData('tag');
-                   if (tag !== 'mj-column' && tag !== 'mj-group') return;
+                   const cid = $event.dataTransfer.getData('component_id');
+                   const isLayout = ['mj-section','mj-column','mj-wrapper','mj-group'].includes(tag);
+                   if (!cid && tag !== 'mj-column' && tag !== 'mj-group' && isLayout) return;
+                   if (!tag && !cid) return;
                    $event.stopPropagation();
                    htmx.ajax('POST', '{% url "email_builder:htmx_block_create" %}', {
                      target: '#canvas', swap: 'outerHTML',
-                     values: { campaign_id: '{{ campaign.id }}', tag: tag, parent_id: '{{ section.id }}', component_id: '', csrfmiddlewaretoken: '{{ csrf_token }}' }
+                     values: { campaign_id: '{{ campaign.id }}', tag: tag || 'mj-text', parent_id: '{{ section.id }}', component_id: cid, csrfmiddlewaretoken: '{{ csrf_token }}' }
                    });
                  ">
               {% for col in col_blocks %}
@@ -149,12 +155,26 @@
           {% endwith %}
           {% endfor %}
 
-          {% if not block_children %}
           <div class="border-2 border-dashed border-blue-200 rounded-lg p-4 text-center text-xs text-blue-300"
-               @dragover.prevent>
-            mj-section hierher ziehen
+               @dragover.prevent
+               @drop.prevent="
+                 const tag = $event.dataTransfer.getData('tag');
+                 if (tag !== 'mj-section') return;
+                 $event.stopPropagation();
+                 htmx.ajax('POST', '{% url "email_builder:htmx_block_create" %}', {
+                   target: '#canvas', swap: 'outerHTML',
+                   values: { campaign_id: '{{ campaign.id }}', tag: 'mj-section', parent_id: '{{ block.id }}', component_id: '', csrfmiddlewaretoken: '{{ csrf_token }}' }
+                 });
+               ">
+            {% if block_children %}Weitere mj-section hierher ziehen{% else %}mj-section hierher ziehen{% endif %}
           </div>
-          {% endif %}
+          <button class="w-full text-xs text-blue-500 hover:text-blue-700 px-2 py-1 rounded hover:bg-blue-100 transition-colors"
+            hx-post="{% url 'email_builder:htmx_block_create' %}"
+            hx-vals='{"campaign_id": "{{ campaign.id }}", "tag": "mj-section", "parent_id": "{{ block.id }}"}'
+            hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+            hx-target="#canvas" hx-swap="outerHTML">
+            + Section
+          </button>
         </div>
       </div>
 
@@ -182,11 +202,14 @@
              @dragover.prevent
              @drop.prevent="
                const tag = $event.dataTransfer.getData('tag');
-               if (tag !== 'mj-column' && tag !== 'mj-group') return;
+               const cid = $event.dataTransfer.getData('component_id');
+               const isLayout = ['mj-section','mj-column','mj-wrapper','mj-group'].includes(tag);
+               if (!cid && tag !== 'mj-column' && tag !== 'mj-group' && isLayout) return;
+               if (!tag && !cid) return;
                $event.stopPropagation();
                htmx.ajax('POST', '{% url "email_builder:htmx_block_create" %}', {
                  target: '#canvas', swap: 'outerHTML',
-                 values: { campaign_id: '{{ campaign.id }}', tag: tag, parent_id: '{{ block.id }}', component_id: '', csrfmiddlewaretoken: '{{ csrf_token }}' }
+                 values: { campaign_id: '{{ campaign.id }}', tag: tag || 'mj-text', parent_id: '{{ block.id }}', component_id: cid, csrfmiddlewaretoken: '{{ csrf_token }}' }
                });
              ">
 

@@ -5,7 +5,7 @@ from django.shortcuts import get_object_or_404, render, redirect
 from django.views.decorators.http import require_http_methods
 
 from emails.models import MjmlComponent
-from emails_v2.catalog import MJML_TAGS
+from emails_v2.catalog import MJML_TAGS, MJML_TAG_MAP
 from emails_v2.models import EmailBuilderCampaign, EmailBlock
 from emails_v2.mjml import render_campaign_preview
 from emails_v2.variable_parser import infer_field_type
@@ -17,6 +17,78 @@ def _child_map(campaign: EmailBuilderCampaign) -> dict:
     for b in blocks:
         result.setdefault(b.parent_id, []).append(b)
     return result
+
+
+_SECTION_CHILD_TAGS = {"mj-column", "mj-group"}
+_LAYOUT_TAGS = {"mj-section", "mj-column", "mj-wrapper", "mj-group", "mj-hero"}
+
+
+def _default_attributes_for_tag(tag: str) -> dict:
+    attrs = dict(MJML_TAG_MAP.get(tag).default_attributes) if tag in MJML_TAG_MAP else {}
+    if tag == "mj-image":
+        attrs.setdefault("src", "")
+        attrs.setdefault("alt", "")
+        attrs.setdefault("href", "")
+    elif tag == "mj-button":
+        attrs.setdefault("href", "")
+    return attrs
+
+
+def _next_order(campaign: EmailBuilderCampaign, parent_id: int | None) -> int:
+    return EmailBlock.objects.filter(campaign=campaign, parent_id=parent_id).count()
+
+
+def _create_block(
+    campaign: EmailBuilderCampaign,
+    *,
+    tag: str,
+    parent_id: int | None,
+    component_id: str | None,
+) -> EmailBlock:
+    parent = (
+        EmailBlock.objects.filter(campaign=campaign, pk=parent_id).first()
+        if parent_id
+        else None
+    )
+
+    if parent and parent.tag == "mj-wrapper" and tag != "mj-section":
+        section = EmailBlock.objects.create(
+            campaign=campaign,
+            tag="mj-section",
+            parent=parent,
+            order=_next_order(campaign, parent.id),
+            attributes=_default_attributes_for_tag("mj-section"),
+        )
+        column = EmailBlock.objects.create(
+            campaign=campaign,
+            tag="mj-column",
+            parent=section,
+            order=0,
+            attributes=_default_attributes_for_tag("mj-column"),
+        )
+        parent_id = column.id
+    elif (
+        parent
+        and parent.tag == "mj-section"
+        and (component_id or tag not in _SECTION_CHILD_TAGS | _LAYOUT_TAGS)
+    ):
+        column = EmailBlock.objects.create(
+            campaign=campaign,
+            tag="mj-column",
+            parent=parent,
+            order=_next_order(campaign, parent.id),
+            attributes=_default_attributes_for_tag("mj-column"),
+        )
+        parent_id = column.id
+
+    return EmailBlock.objects.create(
+        campaign=campaign,
+        tag=tag,
+        parent_id=parent_id,
+        component_id=component_id,
+        order=_next_order(campaign, parent_id),
+        attributes=_default_attributes_for_tag(tag),
+    )
 
 
 @staff_member_required
@@ -92,14 +164,15 @@ def campaign_editor(request, campaign_id):
 @require_http_methods(["POST"])
 def htmx_block_create(request):
     campaign = get_object_or_404(EmailBuilderCampaign, pk=request.POST.get("campaign_id"))
-    parent_id = request.POST.get("parent_id") or None
+    parent_id = int(request.POST["parent_id"]) if request.POST.get("parent_id") else None
     component_id = request.POST.get("component_id") or None
     tag = request.POST.get("tag", "mj-section")
 
-    last_order = EmailBlock.objects.filter(campaign=campaign, parent_id=parent_id).count()
-    EmailBlock.objects.create(
-        campaign=campaign, tag=tag, parent_id=parent_id,
-        component_id=component_id, order=last_order,
+    _create_block(
+        campaign,
+        tag=tag,
+        parent_id=parent_id,
+        component_id=component_id,
     )
     cm = _child_map(campaign)
     return render(request, "email_builder/_canvas.html", {
