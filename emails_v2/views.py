@@ -73,8 +73,18 @@ def htmx_block_create(request):
 def htmx_block_reorder(request, block_id):
     block = get_object_or_404(EmailBlock, pk=block_id)
     block.order = int(request.POST.get("order", 0))
-    block.save(update_fields=["order"])
-    return HttpResponse(status=204)
+    new_parent_id = request.POST.get("parent_id") or None
+    update_fields = ["order"]
+    if new_parent_id != str(block.parent_id or ""):
+        block.parent_id = int(new_parent_id) if new_parent_id else None
+        update_fields.append("parent")
+    block.save(update_fields=update_fields)
+    cm = _child_map(block.campaign)
+    return render(request, "email_builder/_canvas.html", {
+        "campaign": block.campaign,
+        "top_blocks": sorted(cm.get(None, []), key=lambda b: (b.order, b.id)),
+        "child_map": cm,
+    })
 
 
 @staff_member_required
@@ -91,6 +101,8 @@ def htmx_block_delete(request, block_id):
     })
 
 
+_CONTENT_TAGS = {"mj-text", "mj-button", "mj-raw"}
+
 @staff_member_required
 def htmx_variable_panel(request, block_id):
     block = get_object_or_404(EmailBlock.objects.select_related("component"), pk=block_id)
@@ -103,6 +115,13 @@ def htmx_variable_panel(request, block_id):
                 "value": block.variables.get(var_name, ""),
                 "label": block.component.variable_labels.get(var_name, var_name.replace("_", " ").title()),
             })
+    elif block.tag in _CONTENT_TAGS:
+        variable_fields.append({
+            "name": "content",
+            "field_type": "textarea",
+            "value": block.variables.get("content", ""),
+            "label": "Inhalt",
+        })
     return render(request, "email_builder/_variable_panel.html", {
         "block": block,
         "variable_fields": variable_fields,
@@ -117,6 +136,8 @@ def htmx_variable_save(request, block_id):
         for var_name in block.component.detected_variables:
             if var_name in request.POST:
                 block.variables[var_name] = request.POST[var_name]
+    elif block.tag in _CONTENT_TAGS and "content" in request.POST:
+        block.variables["content"] = request.POST["content"]
     for key, value in request.POST.items():
         if key.startswith("attr_"):
             block.attributes[key[5:]] = value
