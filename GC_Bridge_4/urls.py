@@ -16,7 +16,7 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.views.static import serve as static_serve
-from django.urls import path
+from django.urls import path, include
 from django.views.generic import RedirectView, TemplateView
 
 from GC_Bridge_4.settings import BASE_DIR
@@ -31,4 +31,5 @@ urlpatterns = [
         name="docs-html",
     ),
     path('admin/', admin.site.urls),
+    path('email-builder/', include('emails_v2.urls', namespace='email_builder')),
 ]

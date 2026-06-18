@@ -155,6 +155,7 @@ INSTALLED_APPS = [
     'hr.apps.HrConfig',
     'issues.apps.IssuesConfig',
     'emails.apps.EmailsConfig',
+    'emails_v2.apps.EmailsV2Config',
     'organization.apps.OrganizationConfig',
     'telefon.apps.TelefonConfig',
 ]

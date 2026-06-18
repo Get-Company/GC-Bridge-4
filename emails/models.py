@@ -22,6 +22,12 @@ class MjmlComponent(BaseModel):
     )
     is_default = models.BooleanField(default=False, verbose_name=_("Standard"))
     order = models.PositiveIntegerField(default=0, verbose_name=_("Reihenfolge"))
+    detected_variables = models.JSONField(
+        default=list, blank=True, verbose_name=_("Erkannte Variablen")
+    )
+    variable_labels = models.JSONField(
+        default=dict, blank=True, verbose_name=_("Variablen-Labels")
+    )
 
     class Meta:
         verbose_name = _("MJML Komponente")
