@@ -1,4 +1,5 @@
 import json
+import importlib
 from pathlib import Path
 from datetime import datetime, timedelta, timezone as datetime_timezone
 from decimal import Decimal
@@ -218,6 +219,32 @@ class ProductCeleryTaskTest(SimpleTestCase):
             exclude_inactive=True,
             write_base_price_back=True,
         )
+
+
+class PriceMigrationTest(SimpleTestCase):
+    def test_delete_prices_without_sales_channel_uses_direct_sql(self):
+        migration = importlib.import_module("products.migrations.0030_delete_prices_without_sales_channel")
+        price_model = Mock()
+        price_model._meta.db_table = "products_price"
+        apps = Mock()
+        apps.get_model.return_value = price_model
+
+        cursor = Mock()
+        cursor.rowcount = 3
+        cursor_context = Mock()
+        cursor_context.__enter__ = Mock(return_value=cursor)
+        cursor_context.__exit__ = Mock(return_value=None)
+        schema_editor = Mock()
+        schema_editor.quote_name.side_effect = lambda value: f'"{value}"'
+        schema_editor.connection.cursor.return_value = cursor_context
+
+        migration.delete_prices_without_sales_channel(apps, schema_editor)
+
+        apps.get_model.assert_called_once_with("products", "Price")
+        cursor.execute.assert_called_once_with(
+            'DELETE FROM "products_price" WHERE "sales_channel_id" IS NULL'
+        )
+        self.assertFalse(price_model.objects.filter.called)
 
     @patch("products.tasks.call_command")
     def test_product_sync_tasks_clean_erp_numbers_and_pass_options(self, mock_call_command):
