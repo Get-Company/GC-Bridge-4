@@ -43,6 +43,18 @@ class TestEmailCampaignComponentInline(SimpleTestCase):
         assert "h1-small" in html
         assert "Standardunterzeile" in html
 
+    def test_default_variables_info_renders_empty_state(self):
+        from django.contrib.admin.sites import AdminSite
+        from emails.admin import EmailCampaignComponentInline
+        from emails.models import EmailCampaign
+
+        inline = EmailCampaignComponentInline(EmailCampaign, AdminSite())
+        obj = SimpleNamespace(library_component=SimpleNamespace(default_variables={}))
+
+        html = str(inline.component_default_variables(obj))
+
+        assert "Diese Komponente setzt keine Standard-Variablen." in html
+
 
 @pytest.mark.django_db
 class TestEmailCampaignAdminDefaultComponents:

@@ -150,8 +150,8 @@ class EmailCampaignComponentInline(BaseStackedInline):
             return format_html(
                 "<div style='padding:10px 12px;border:1px solid #d1d5db;"
                 "background:#f9fafb;border-radius:6px;color:#6b7280'>"
-                "Diese Komponente setzt keine Standard-Variablen."
-                "</div>"
+                "{}</div>",
+                _("Diese Komponente setzt keine Standard-Variablen."),
             )
 
         json_text = json.dumps(default_variables, ensure_ascii=False, indent=2)
