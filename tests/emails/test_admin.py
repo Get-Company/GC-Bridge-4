@@ -56,6 +56,61 @@ class TestEmailCampaignComponentInline(SimpleTestCase):
         assert "Diese Komponente setzt keine Standard-Variablen." in html
 
 
+class TestEmailVariableJSONForms(SimpleTestCase):
+    html_json_with_escaped_quotes = (
+        '{"description": "<p>hol den Sommer ins Büro</p>'
+        '<p>Mit unseren <a href=\\"https://www.classei-shop.com/Fertig-Sets\\" '
+        'style=\\"text-decoration: none\\"><strong style=\\"color: #ff9933;\\">'
+        'Fertig-Sets</strong></a></p>"}'
+    )
+    html_json_with_single_quotes = (
+        '{"description": "<p>hol den Sommer ins Büro</p>'
+        "<p>Mit unseren <a href='https://www.classei-shop.com/Fertig-Sets' "
+        "style='text-decoration: none'><strong style='color: #ff9933;'>"
+        'Fertig-Sets</strong></a></p>"}'
+    )
+
+    def test_component_default_variables_accept_html_with_escaped_quotes(self):
+        from emails.admin import MjmlComponentAdminForm
+
+        field = MjmlComponentAdminForm.base_fields["default_variables"]
+
+        cleaned = field.clean(self.html_json_with_escaped_quotes)
+
+        assert cleaned["description"].startswith("<p>hol den Sommer ins Büro</p>")
+        assert 'href="https://www.classei-shop.com/Fertig-Sets"' in cleaned["description"]
+
+    def test_campaign_variables_accept_html_with_single_quotes(self):
+        from emails.admin import EmailCampaignComponentInlineForm
+
+        field = EmailCampaignComponentInlineForm.base_fields["variables"]
+
+        cleaned = field.clean(self.html_json_with_single_quotes)
+
+        assert cleaned["description"].startswith("<p>hol den Sommer ins Büro</p>")
+        assert "href='https://www.classei-shop.com/Fertig-Sets'" in cleaned["description"]
+
+    def test_json_widget_formats_saved_values_with_unicode(self):
+        from emails.admin import PrettyJSONWidget
+
+        value = {
+            "description": "<p>hol den Sommer ins Büro</p>",
+        }
+
+        rendered = PrettyJSONWidget().format_value(value)
+
+        assert "Büro" in rendered
+        assert "\\u00fc" not in rendered
+
+    def test_json_variables_must_be_an_object(self):
+        from emails.admin import MjmlComponentAdminForm
+
+        field = MjmlComponentAdminForm.base_fields["default_variables"]
+
+        with self.assertRaisesMessage(Exception, "gültiges JSON"):
+            field.clean('{"description": "<p>ungeschlossene JSON-Struktur"')
+
+
 @pytest.mark.django_db
 class TestEmailCampaignAdminDefaultComponents:
     def test_default_components_created_on_new_campaign(self):

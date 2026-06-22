@@ -24,6 +24,7 @@ from emails.models import (
 from emails.tasks import apply_campaign_prices_async
 
 _MONOSPACE_STYLE = "font-family: monospace; width: 100%; min-height: 300px;"
+_JSON_STYLE = "font-family: monospace; width: 100%; min-height: 180px;"
 _PRODUCT_FIELD_EXCLUDES = {
     "id",
     "created_at",
@@ -41,8 +42,72 @@ _PRODUCT_EMAIL_FIELDS = (
 )
 
 
+class PrettyJSONWidget(forms.Textarea):
+    def format_value(self, value):
+        if value in (None, ""):
+            return ""
+        if isinstance(value, str):
+            return value
+        return json.dumps(value, ensure_ascii=False, indent=2)
+
+
+def _json_variables_field(*, label: str, help_text: str = "") -> forms.JSONField:
+    return forms.JSONField(
+        label=label,
+        required=False,
+        help_text=help_text,
+        widget=PrettyJSONWidget(attrs={"style": _JSON_STYLE}),
+    )
+
+
+def _clean_json_object(value, *, field_name: str):
+    if value in (None, ""):
+        return {}
+    if not isinstance(value, dict):
+        raise forms.ValidationError(
+            _("%(field_name)s muss ein JSON-Objekt sein, z.B. {\"titel\": \"Hallo\"}."),
+            params={"field_name": field_name},
+        )
+    return value
+
+
+class MjmlComponentAdminForm(forms.ModelForm):
+    default_variables = _json_variables_field(
+        label=_("Standard-Variablen"),
+        help_text=_("JSON-Objekt mit Standardwerten fuer Platzhalter."),
+    )
+
+    class Meta:
+        model = MjmlComponent
+        fields = "__all__"
+
+    def clean_default_variables(self):
+        return _clean_json_object(
+            self.cleaned_data.get("default_variables"),
+            field_name=_("Standard-Variablen"),
+        )
+
+
+class EmailCampaignComponentInlineForm(forms.ModelForm):
+    variables = _json_variables_field(
+        label=_("Variablen"),
+        help_text=_("Nur abweichende Keys setzen. Nicht gesetzte Keys kommen aus der Komponente."),
+    )
+
+    class Meta:
+        model = EmailCampaignComponent
+        fields = "__all__"
+
+    def clean_variables(self):
+        return _clean_json_object(
+            self.cleaned_data.get("variables"),
+            field_name=_("Variablen"),
+        )
+
+
 @admin.register(MjmlComponent)
 class MjmlComponentAdmin(BaseAdmin):
+    form = MjmlComponentAdminForm
     list_display = ("name", "placement", "is_default", "order")
     list_filter = ("placement", "is_default")
     list_editable = ("is_default", "order")
@@ -112,6 +177,7 @@ class MjmlComponentAdmin(BaseAdmin):
 
 class EmailCampaignComponentInline(BaseStackedInline):
     model = EmailCampaignComponent
+    form = EmailCampaignComponentInlineForm
     tab = False
     sortable = True
     sortable_field_name = "order"
