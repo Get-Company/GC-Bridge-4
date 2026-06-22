@@ -149,6 +149,14 @@ CELERY_ADMIN_TASKS: tuple[TaskDefinition, ...] = (
             TaskField("dry_run", "Nur Testlauf", "bool", True),
         ),
     ),
+    TaskDefinition(
+        name="emails.apply_campaign_prices_async",
+        label="E-Mail-Kampagne Sonderpreise anwenden",
+        description="Sonderpreise einer E-Mail-Kampagne in Microtech und Shopware setzen.",
+        fields=(
+            TaskField("campaign_pk", "Kampagne ID", "int", ""),
+        ),
+    ),
 )
 
 
@@ -201,15 +209,39 @@ def _registered_task_rows() -> list[dict[str, Any]]:
     return rows
 
 
+_BEAT_SCHEDULE_LABELS: dict[str, str] = {
+    "mappei-daily-price-scrape": "Mappei Preise scrapen",
+    "products-scheduled-product-sync": "Produkt-Sync komplett",
+    "orders-shopware-open-orders-sync": "Offene Bestellungen importieren",
+    "products-shopware-force-product-image-uploads": "Shopware Bilder neu hochladen",
+    "hr-holiday-sync": "Ferien & Feiertage synchronisieren",
+}
+
+_BEAT_SCHEDULE_ENV_FLAGS: dict[str, str] = {
+    "products-scheduled-product-sync": "CELERY_SCHEDULED_PRODUCT_SYNC_ENABLED",
+    "orders-shopware-open-orders-sync": "CELERY_SHOPWARE_OPEN_ORDERS_SYNC_ENABLED",
+    "products-shopware-force-product-image-uploads": "CELERY_FORCE_IMAGE_UPLOAD_ENABLED",
+    "hr-holiday-sync": "CELERY_HR_HOLIDAY_SYNC_ENABLED",
+}
+
+
 def _beat_schedule_rows() -> list[dict[str, str]]:
+    configured = getattr(settings, "CELERY_BEAT_SCHEDULE", {})
+    all_names = set(configured.keys()) | set(_BEAT_SCHEDULE_LABELS.keys())
     rows = []
-    for name, entry in sorted(getattr(settings, "CELERY_BEAT_SCHEDULE", {}).items()):
+    for name in sorted(all_names):
+        entry = configured.get(name, {})
+        env_flag = _BEAT_SCHEDULE_ENV_FLAGS.get(name, "")
+        enabled = name in configured
         rows.append(
             {
                 "name": str(name),
+                "label": _BEAT_SCHEDULE_LABELS.get(name, str(name)),
                 "task": str(entry.get("task", "")),
-                "schedule": str(entry.get("schedule", "")),
-                "kwargs": str(entry.get("kwargs", {})),
+                "schedule": str(entry.get("schedule", "")) if entry else "",
+                "kwargs": str(entry.get("kwargs", {})) if entry else "",
+                "enabled": enabled,
+                "env_flag": env_flag,
             }
         )
     return rows

@@ -248,6 +248,66 @@
       {% endif %}
     </div>
 
+    <div class="flex flex-col gap-6">
+
+      <section class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+        <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+          <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300">Letzte Fehler</h2>
+          <a href="/admin/logs/" class="text-xs text-blue-600 dark:text-blue-400 hover:underline">errors.log öffnen</a>
+        </div>
+        <div id="recent-errors" class="divide-y divide-gray-100 dark:divide-gray-700 max-h-72 overflow-y-auto">
+          {% if recent_errors %}
+            {% for err in recent_errors %}
+            <div class="px-4 py-2">
+              <div class="flex items-start gap-3">
+                <span class="flex-shrink-0 text-xs font-mono text-gray-400 mt-0.5">{{ err.timestamp|slice:":19" }}</span>
+                <div class="min-w-0">
+                  <div class="text-xs text-gray-400 font-mono truncate">{{ err.source }}</div>
+                  <div class="text-sm text-red-700 dark:text-red-400 break-words">{{ err.message }}</div>
+                </div>
+              </div>
+            </div>
+            {% endfor %}
+          {% else %}
+            <p class="px-4 py-3 text-sm text-gray-400 dark:text-gray-500 italic">Keine Fehler in errors.log</p>
+          {% endif %}
+        </div>
+      </section>
+
+      <section class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+        <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+          <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300">Microtech GraphQL Jobs</h2>
+          <a href="/admin/microtech-queue/" class="text-xs text-blue-600 dark:text-blue-400 hover:underline">Queue öffnen →</a>
+        </div>
+        <div id="graphql-job-stats" class="p-4">
+          {% if graphql_job_stats and not graphql_job_stats.error %}
+            <div class="flex flex-wrap gap-2 mb-3">
+              <span class="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300">Wartend: {{ graphql_job_stats.counts.QUEUED|default:"0" }}</span>
+              <span class="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300">Laufend: {{ graphql_job_stats.counts.RUNNING|default:"0" }}</span>
+              <span class="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300">Erfolgreich: {{ graphql_job_stats.counts.DONE|default:"0" }}</span>
+              <span class="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300">Fehler: {{ graphql_job_stats.counts.FAILED|default:"0" }}</span>
+            </div>
+            {% if graphql_job_stats.active_jobs %}
+              <div class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Aktive Jobs</div>
+              {% for job in graphql_job_stats.active_jobs %}
+              <div class="flex items-center justify-between gap-2 py-1.5 border-b border-gray-100 dark:border-gray-700 last:border-0">
+                <span class="text-sm truncate">{{ job.label }}</span>
+                <span class="text-xs px-2 py-0.5 rounded flex-shrink-0 {% if job.status == 'RUNNING' %}bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300{% else %}bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300{% endif %}">{{ job.status_label }}</span>
+              </div>
+              {% endfor %}
+            {% else %}
+              <p class="text-sm text-gray-400 dark:text-gray-500 italic">Keine aktiven Jobs</p>
+            {% endif %}
+          {% elif graphql_job_stats.error %}
+            <p class="text-sm text-red-600 dark:text-red-400">Verbindungsfehler: {{ graphql_job_stats.error }}</p>
+          {% else %}
+            <p class="text-sm text-gray-400 dark:text-gray-500 italic">MICROTECH_GRAPHQL_URL nicht konfiguriert</p>
+          {% endif %}
+        </div>
+      </section>
+
+    </div>
+
     <section class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden flex flex-col bg-white dark:bg-gray-900" style="min-height: 620px;">
       <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
         <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300 mb-3">Log-Viewer</h2>
@@ -568,6 +628,55 @@
     if (autoScroll) logEl.scrollTop = logEl.scrollHeight;
   }
 
+  function renderRecentErrors(errors) {
+    const container = document.getElementById("recent-errors");
+    if (!container) return;
+    if (!errors || !errors.length) {
+      container.innerHTML = '<p class="px-4 py-3 text-sm text-gray-400 dark:text-gray-500 italic">Keine Fehler in errors.log</p>';
+      return;
+    }
+    container.innerHTML = errors.map((err) => `
+      <div class="px-4 py-2">
+        <div class="flex items-start gap-3">
+          <span class="flex-shrink-0 text-xs font-mono text-gray-400 mt-0.5">${escHtml((err.timestamp || "").substring(0, 19))}</span>
+          <div class="min-w-0">
+            <div class="text-xs text-gray-400 font-mono truncate">${escHtml(err.source || "")}</div>
+            <div class="text-sm text-red-700 dark:text-red-400 break-words">${escHtml(err.message || "")}</div>
+          </div>
+        </div>
+      </div>`).join("");
+  }
+
+  function renderGraphQLJobStats(stats) {
+    const container = document.getElementById("graphql-job-stats");
+    if (!container || !stats) return;
+    if (stats.error) {
+      container.innerHTML = `<p class="text-sm text-red-600 dark:text-red-400">Verbindungsfehler: ${escHtml(stats.error)}</p>`;
+      return;
+    }
+    const counts = stats.counts || {};
+    const activeJobs = stats.active_jobs || [];
+    const countBadges = [
+      `<span class="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300">Wartend: ${counts.QUEUED || 0}</span>`,
+      `<span class="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300">Laufend: ${counts.RUNNING || 0}</span>`,
+      `<span class="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300">Erfolgreich: ${counts.DONE || 0}</span>`,
+      `<span class="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300">Fehler: ${counts.FAILED || 0}</span>`,
+    ].join("");
+    let jobsHtml = activeJobs.length
+      ? `<div class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Aktive Jobs</div>` +
+        activeJobs.map((j) => {
+          const cls = j.status === "RUNNING"
+            ? "bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300"
+            : "bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300";
+          return `<div class="flex items-center justify-between gap-2 py-1.5 border-b border-gray-100 dark:border-gray-700 last:border-0">
+            <span class="text-sm truncate">${escHtml(j.label)}</span>
+            <span class="text-xs px-2 py-0.5 rounded flex-shrink-0 ${cls}">${escHtml(j.status_label)}</span>
+          </div>`;
+        }).join("")
+      : `<p class="text-sm text-gray-400 dark:text-gray-500 italic">Keine aktiven Jobs</p>`;
+    container.innerHTML = `<div class="flex flex-wrap gap-2 mb-3">${countBadges}</div>${jobsHtml}`;
+  }
+
   async function fetchStatus() {
     const dot = document.getElementById("refresh-dot");
     try {
@@ -581,6 +690,8 @@
       renderActiveProcesses(data.active_processes);
       renderMicrotechSlot(data.microtech_slot);
       renderGraphQLHealth(data.graphql_health);
+      renderGraphQLJobStats(data.graphql_job_stats);
+      renderRecentErrors(data.recent_errors);
       renderInfra(data);
       renderLog(data.log_lines);
       const el = document.getElementById("last-updated");

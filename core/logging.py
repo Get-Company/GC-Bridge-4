@@ -19,6 +19,7 @@ DEFAULT_LOG_RETENTION = {
 PACKAGE_RETENTION = {
     "core": "weekly",
     "customer": "weekly",
+    "mappei": "weekly",
     "orders": "weekly",
     "products": "weekly",
     "shopware": "weekly",

@@ -37,6 +37,7 @@ from django_celery_beat.models import (
 from core.admin_status import admin_status_bar_api
 from core.celery_admin import celery_tasks_admin_view
 from core.log_reader import get_allowed_log_files, tail_log_file
+from core.microtech_queue_view import microtech_queue_api, microtech_queue_view
 from core.services import CommandRuntimeService
 from core.system_status_view import system_status_api, system_status_run, system_status_view
 from hr.views import hr_calendar_api, hr_calendar_view
@@ -232,6 +233,8 @@ def _admin_get_urls():
         path("customer-merge/api/sync/", admin.site.admin_view(customer_sync_direction_api), name="customer_merge_sync"),
         path("hr/calendar/", admin.site.admin_view(hr_calendar_view), name="hr_calendar"),
         path("hr/calendar/api/", admin.site.admin_view(hr_calendar_api), name="hr_calendar_api"),
+        path("microtech-queue/", admin.site.admin_view(microtech_queue_view), name="core_microtech_queue"),
+        path("microtech-queue/api/", admin.site.admin_view(microtech_queue_api), name="core_microtech_queue_api"),
     ]
     return custom_urls + _default_admin_get_urls()
 

@@ -3,14 +3,17 @@ from __future__ import annotations
 import json
 import os
 import platform
+import re
 import socket
 import subprocess
 import sys
 import time
+import urllib.error
+import urllib.request
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 
 from django.conf import settings
 from django.contrib import admin
@@ -726,6 +729,55 @@ def _get_runner_services_status() -> list[dict] | None:
     return services
 
 
+def _get_graphql_job_stats() -> dict[str, Any] | None:
+    graphql_url = (getattr(settings, "MICROTECH_GRAPHQL_URL", "") or "").strip()
+    if not graphql_url:
+        return None
+    parts = urlsplit(graphql_url)
+    base = urlunsplit((parts.scheme, parts.netloc, "", "", ""))
+    url = base.rstrip("/") + "/api/jobs/stats/"
+    timeout = min(float(getattr(settings, "MICROTECH_GRAPHQL_REQUEST_TIMEOUT", 5.0)), 3.0)
+    try:
+        req = urllib.request.Request(url, headers={"Accept": "application/json"})
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except Exception as exc:
+        return {"error": str(exc), "counts": {}, "active_jobs": [], "recent_jobs": []}
+
+
+_ERROR_LOG_PATTERN = re.compile(
+    r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+)\s+\|\s+ERROR\s+\|\s+([^|]+)\|\s*(.+)$"
+)
+_MAX_RECENT_ERRORS = 20
+
+
+def _get_recent_errors() -> list[dict[str, str]]:
+    from core.log_reader import get_allowed_log_files
+
+    errors: list[dict[str, str]] = []
+    for path in get_allowed_log_files():
+        if "errors" not in path.name and "errors" not in str(path.parent):
+            continue
+        try:
+            lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            continue
+        for line in reversed(lines):
+            m = _ERROR_LOG_PATTERN.match(line.strip())
+            if m:
+                errors.append({
+                    "timestamp": m.group(1),
+                    "source": m.group(2).strip(),
+                    "message": m.group(3).strip(),
+                })
+                if len(errors) >= _MAX_RECENT_ERRORS:
+                    break
+        if errors:
+            break
+
+    return errors
+
+
 def _spawn_job(command_name: str) -> dict:
     """Spawn a management command as a detached background process."""
     valid_commands = {job["command"] for job in TRIGGERABLE_JOBS}
@@ -796,7 +848,9 @@ def system_status_view(request):
         "active_processes": _get_active_processes(),
         "queue_status": queue_status,
         "graphql_health": _get_graphql_health(),
+        "graphql_job_stats": _get_graphql_job_stats(),
         "microtech_slot": _get_microtech_slot_status(),
+        "recent_errors": _get_recent_errors(),
         "triggerable_jobs": TRIGGERABLE_JOBS,
         "scheduled_tasks": _get_scheduled_tasks_status(),
         "systemd_units": _get_systemd_units(),
@@ -838,7 +892,9 @@ def system_status_api(request):
             "active_processes": _get_active_processes(),
             "queue_status": queue_status,
             "graphql_health": _get_graphql_health(),
+            "graphql_job_stats": _get_graphql_job_stats(),
             "microtech_slot": _get_microtech_slot_status(),
+            "recent_errors": _get_recent_errors(),
             "log_lines": log_lines,
             "log_filename": file_name,
             "log_entries": log_entries,
