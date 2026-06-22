@@ -51,8 +51,55 @@ class PrettyJSONWidget(forms.Textarea):
         return json.dumps(value, ensure_ascii=False, indent=2)
 
 
-def _json_variables_field(*, label: str, help_text: str = "") -> forms.JSONField:
-    return forms.JSONField(
+class LenientJSONField(forms.JSONField):
+    def to_python(self, value):
+        try:
+            return super().to_python(value)
+        except forms.ValidationError:
+            if not isinstance(value, str):
+                raise
+            return super().to_python(_normalize_json_string_control_chars(value))
+
+
+def _normalize_json_string_control_chars(value: str) -> str:
+    chars: list[str] = []
+    in_string = False
+    escaped = False
+    last_was_space = False
+
+    for char in value:
+        if escaped:
+            chars.append(char)
+            escaped = False
+            last_was_space = False
+            continue
+
+        if char == "\\":
+            chars.append(char)
+            escaped = True
+            last_was_space = False
+            continue
+
+        if char == '"':
+            chars.append(char)
+            in_string = not in_string
+            last_was_space = False
+            continue
+
+        if in_string and char in "\r\n\t":
+            if not last_was_space:
+                chars.append(" ")
+                last_was_space = True
+            continue
+
+        chars.append(char)
+        last_was_space = char == " "
+
+    return "".join(chars)
+
+
+def _json_variables_field(*, label: str, help_text: str = "") -> LenientJSONField:
+    return LenientJSONField(
         label=label,
         required=False,
         help_text=help_text,

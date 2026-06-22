@@ -102,6 +102,20 @@ class TestEmailVariableJSONForms(SimpleTestCase):
         assert "Büro" in rendered
         assert "\\u00fc" not in rendered
 
+    def test_json_field_normalizes_line_breaks_inside_strings(self):
+        from emails.admin import EmailCampaignComponentInlineForm
+
+        field = EmailCampaignComponentInlineForm.base_fields["variables"]
+        value = (
+            '{"description":"<mj-text><p>hol den Sommer ins Büro - peppen Sie '
+            '<strong>JETZT</strong> Ihren Arbeitsplatz und Home-Office auf.\n'
+            'Classei-Ordnung in trendigen Boxen ist ein Blickfang.</p></mj-text>"}'
+        )
+
+        cleaned = field.clean(value)
+
+        assert "Home-Office auf. Classei-Ordnung" in cleaned["description"]
+
     def test_json_variables_must_be_an_object(self):
         from emails.admin import MjmlComponentAdminForm
 
