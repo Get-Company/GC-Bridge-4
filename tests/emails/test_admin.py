@@ -1,5 +1,6 @@
 import pytest
 from django.test import SimpleTestCase
+from types import SimpleNamespace
 
 
 class TestMjmlComponentAdminRegistered(SimpleTestCase):
@@ -7,6 +8,40 @@ class TestMjmlComponentAdminRegistered(SimpleTestCase):
         from django.contrib import admin
         from emails.models import MjmlComponent
         assert admin.site.is_registered(MjmlComponent)
+
+
+class TestEmailCampaignComponentInline(SimpleTestCase):
+    def test_default_variables_info_field_is_shown_before_campaign_variables(self):
+        from emails.admin import EmailCampaignComponentInline
+
+        assert "component_default_variables" in EmailCampaignComponentInline.fields
+        assert (
+            EmailCampaignComponentInline.fields.index("component_default_variables")
+            < EmailCampaignComponentInline.fields.index("variables")
+        )
+
+    def test_default_variables_info_renders_component_defaults(self):
+        from django.contrib.admin.sites import AdminSite
+        from emails.admin import EmailCampaignComponentInline
+        from emails.models import EmailCampaign
+
+        inline = EmailCampaignComponentInline(EmailCampaign, AdminSite())
+        obj = SimpleNamespace(
+            library_component=SimpleNamespace(
+                default_variables={
+                    "h1-title": "Standardtitel",
+                    "h1-small": "Standardunterzeile",
+                }
+            )
+        )
+
+        html = str(inline.component_default_variables(obj))
+
+        assert "Diese Werte kommen aus der Komponente" in html
+        assert "h1-title" in html
+        assert "Standardtitel" in html
+        assert "h1-small" in html
+        assert "Standardunterzeile" in html
 
 
 @pytest.mark.django_db

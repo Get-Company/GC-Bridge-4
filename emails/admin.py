@@ -1,6 +1,7 @@
 # emails/admin.py
 from __future__ import annotations
 
+import json
 import logging
 
 from django import forms
@@ -114,10 +115,21 @@ class EmailCampaignComponentInline(BaseStackedInline):
     tab = False
     sortable = True
     sortable_field_name = "order"
-    fields = ("order", "enabled", "library_component", "campaign_product", "variables")
+    fields = (
+        "order",
+        "enabled",
+        "library_component",
+        "campaign_product",
+        "component_default_variables",
+        "variables",
+    )
+    readonly_fields = BaseStackedInline.readonly_fields + ("component_default_variables",)
     autocomplete_fields = ("library_component",)
     collapsible = True
     extra = 0
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related("library_component")
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "campaign_product":
@@ -129,6 +141,31 @@ class EmailCampaignComponentInline(BaseStackedInline):
             else:
                 kwargs["queryset"] = EmailCampaignProduct.objects.none()
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    @admin.display(description=_("Standard-Variablen der Komponente"))
+    def component_default_variables(self, obj: EmailCampaignComponent):
+        library_component = getattr(obj, "library_component", None)
+        default_variables = getattr(library_component, "default_variables", None) or {}
+        if not default_variables:
+            return format_html(
+                "<div style='padding:10px 12px;border:1px solid #d1d5db;"
+                "background:#f9fafb;border-radius:6px;color:#6b7280'>"
+                "Diese Komponente setzt keine Standard-Variablen."
+                "</div>"
+            )
+
+        json_text = json.dumps(default_variables, ensure_ascii=False, indent=2)
+        return format_html(
+            "<div style='padding:10px 12px;border:1px solid #bfdbfe;"
+            "background:#eff6ff;border-radius:6px'>"
+            "<p style='margin:0 0 8px;color:#1f2937'>"
+            "Diese Werte kommen aus der Komponente. Im Feld Variablen darunter "
+            "muessen nur abweichende Keys gesetzt werden."
+            "</p>"
+            "<pre style='margin:0;white-space:pre-wrap;font-family:monospace'>{}</pre>"
+            "</div>",
+            json_text,
+        )
 
 
 class EmailCampaignProductInline(BaseTabularInline):
