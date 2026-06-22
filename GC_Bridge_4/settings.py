@@ -308,64 +308,17 @@ CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
+# --- Bestellsync: Mo-Fr 07:45 - 17:00, alle 5 Minuten ---
 CELERY_BEAT_SCHEDULE = {
-    "mappei-daily-price-scrape": {
-        "task": "mappei.scrape_daily_prices",
-        "schedule": crontab(hour=20, minute=0),
-    },
+    "orders-sync-opening":  {"task": "orders.shopware_sync_open_orders", "schedule": crontab(minute="45,50,55", hour="7",                          day_of_week="1-5")},
+    "orders-sync-day":      {"task": "orders.shopware_sync_open_orders", "schedule": crontab(minute="*/5",      hour="8,9,10,11,12,13,14,15,16",   day_of_week="1-5")},
+    "orders-sync-closing":  {"task": "orders.shopware_sync_open_orders", "schedule": crontab(minute="0",        hour="17",                         day_of_week="1-5")},
+    # --- Produkt-Sync komplett: täglich 06:00 und 18:00 ---
+    "products-sync-morning":  {"task": "products.scheduled_product_sync", "schedule": crontab(hour="6",  minute="0")},
+    "products-sync-evening":  {"task": "products.scheduled_product_sync", "schedule": crontab(hour="18", minute="0")},
+    # --- Mappei Preis-Scraper: täglich 07:00 ---
+    "mappei-price-scrape": {"task": "mappei.scrape_daily_prices", "schedule": crontab(hour="7", minute="0")},
 }
-if env_bool("CELERY_SCHEDULED_PRODUCT_SYNC_ENABLED", True):
-    CELERY_BEAT_SCHEDULE["products-scheduled-product-sync"] = {
-        "task": "products.scheduled_product_sync",
-        "schedule": crontab(
-            hour=os.getenv("CELERY_SCHEDULED_PRODUCT_SYNC_HOUR", "*").strip() or "*",
-            minute=os.getenv("CELERY_SCHEDULED_PRODUCT_SYNC_MINUTE", "0").strip() or "0",
-        ),
-        "kwargs": {
-            "limit": env_int("CELERY_SCHEDULED_PRODUCT_SYNC_LIMIT", 0) or None,
-            "exclude_inactive": env_bool("CELERY_SCHEDULED_PRODUCT_SYNC_EXCLUDE_INACTIVE", False),
-            "write_base_price_back": env_bool("CELERY_SCHEDULED_PRODUCT_SYNC_WRITE_BASE_PRICE_BACK", False),
-        },
-    }
-if env_bool("CELERY_SHOPWARE_OPEN_ORDERS_SYNC_ENABLED", False):
-    CELERY_BEAT_SCHEDULE["orders-shopware-open-orders-sync"] = {
-        "task": "orders.shopware_sync_open_orders",
-        "schedule": crontab(
-            hour=os.getenv("CELERY_SHOPWARE_OPEN_ORDERS_SYNC_HOUR", "*").strip() or "*",
-            minute=os.getenv("CELERY_SHOPWARE_OPEN_ORDERS_SYNC_MINUTE", "15").strip() or "15",
-        ),
-        "kwargs": {
-            "limit_orders": env_int("CELERY_SHOPWARE_OPEN_ORDERS_SYNC_LIMIT", 0) or None,
-        },
-    }
-
-if env_bool("CELERY_FORCE_IMAGE_UPLOAD_ENABLED", False):
-    CELERY_BEAT_SCHEDULE["products-shopware-force-product-image-uploads"] = {
-        "task": "products.shopware_force_product_image_uploads",
-        "schedule": crontab(
-            hour=os.getenv("CELERY_FORCE_IMAGE_UPLOAD_HOUR", "2").strip() or "2",
-            minute=os.getenv("CELERY_FORCE_IMAGE_UPLOAD_MINUTE", "0").strip() or "0",
-        ),
-        "kwargs": {
-            "sync_all": True,
-            "limit": env_int("CELERY_FORCE_IMAGE_UPLOAD_LIMIT", 0) or None,
-        },
-    }
-
-if env_bool("CELERY_HR_HOLIDAY_SYNC_ENABLED", False):
-    CELERY_BEAT_SCHEDULE["hr-holiday-sync"] = {
-        "task": "hr.sync_holidays",
-        "schedule": crontab(
-            hour=os.getenv("CELERY_HR_HOLIDAY_SYNC_HOUR", "3").strip() or "3",
-            minute=os.getenv("CELERY_HR_HOLIDAY_SYNC_MINUTE", "0").strip() or "0",
-            day_of_month=os.getenv("CELERY_HR_HOLIDAY_SYNC_DAY_OF_MONTH", "1").strip() or "1",
-        ),
-        "kwargs": {
-            "country_iso_code": os.getenv("CELERY_HR_HOLIDAY_SYNC_COUNTRY", "").strip(),
-            "language_iso_code": os.getenv("CELERY_HR_HOLIDAY_SYNC_LANGUAGE", "").strip(),
-            "subdivision_code": os.getenv("CELERY_HR_HOLIDAY_SYNC_SUBDIVISION", "").strip(),
-        },
-    }
 
 
 UNFOLD = {

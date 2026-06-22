@@ -210,19 +210,15 @@ def _registered_task_rows() -> list[dict[str, Any]]:
 
 
 _BEAT_SCHEDULE_LABELS: dict[str, str] = {
-    "mappei-daily-price-scrape": "Mappei Preise scrapen",
-    "products-scheduled-product-sync": "Produkt-Sync komplett",
-    "orders-shopware-open-orders-sync": "Offene Bestellungen importieren",
-    "products-shopware-force-product-image-uploads": "Shopware Bilder neu hochladen",
-    "hr-holiday-sync": "Ferien & Feiertage synchronisieren",
+    "orders-sync-opening":   "Bestellsync (Öffnung 7:45-7:55)",
+    "orders-sync-day":       "Bestellsync (Tagbetrieb 8:00-16:55)",
+    "orders-sync-closing":   "Bestellsync (Ende 17:00)",
+    "products-sync-morning": "Produkt-Sync komplett (06:00)",
+    "products-sync-evening": "Produkt-Sync komplett (18:00)",
+    "mappei-price-scrape":   "Mappei Preis-Scraper (07:00)",
 }
 
-_BEAT_SCHEDULE_ENV_FLAGS: dict[str, str] = {
-    "products-scheduled-product-sync": "CELERY_SCHEDULED_PRODUCT_SYNC_ENABLED",
-    "orders-shopware-open-orders-sync": "CELERY_SHOPWARE_OPEN_ORDERS_SYNC_ENABLED",
-    "products-shopware-force-product-image-uploads": "CELERY_FORCE_IMAGE_UPLOAD_ENABLED",
-    "hr-holiday-sync": "CELERY_HR_HOLIDAY_SYNC_ENABLED",
-}
+_BEAT_SCHEDULE_ENV_FLAGS: dict[str, str] = {}
 
 
 def _beat_schedule_rows() -> list[dict[str, str]]:

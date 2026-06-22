@@ -235,7 +235,7 @@ def configure_logging() -> None:
                 str(log_path),
                 level="DEBUG",
                 enqueue=False,
-                backtrace=True,
+                backtrace=False,
                 diagnose=False,
                 rotation="00:00",
                 retention=get_retention(category),
