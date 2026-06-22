@@ -64,7 +64,7 @@ class MjmlComponentAdmin(BaseAdmin):
         (
             _("MJML-Markup"),
             {
-                "fields": ("mjml_markup",),
+                "fields": ("mjml_markup", "default_variables"),
             },
         ),
         (

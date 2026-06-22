@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -38,6 +39,10 @@ _jinja_env = jinja2.Environment(autoescape=False, undefined=jinja2.Undefined)
 _jinja_env.filters["format_price"] = _format_price
 _jinja_env.filters["format_date"] = _format_date
 _jinja_env.filters["urlencode"] = lambda value: quote_plus(str(value or ""))
+
+_HYPHENATED_PLACEHOLDER_RE = re.compile(
+    r"(\{\{\s*)([A-Za-z_][A-Za-z0-9_]*(?:-[A-Za-z0-9_]+)+)(?=\s*(?:\||\}\}))"
+)
 
 
 class ProductEmailProxy:
@@ -137,14 +142,29 @@ def _campaign_components(campaign: "EmailCampaign") -> list["EmailCampaignCompon
     )
 
 
+def _normalize_hyphenated_placeholders(markup: str) -> str:
+    return _HYPHENATED_PLACEHOLDER_RE.sub(
+        lambda match: f'{match.group(1)}__component_variables["{match.group(2)}"]',
+        markup,
+    )
+
+
 def _render_component_mjml(component: "EmailCampaignComponent", context: dict) -> str:
     markup = component.library_component.mjml_markup if component.library_component_id else ""
     if not markup:
         return ""
 
+    library_component = getattr(component, "library_component", None)
+    default_variables = getattr(library_component, "default_variables", None) or {}
+    component_variables = {
+        **default_variables,
+        **(getattr(component, "variables", None) or {}),
+    }
     component_context = {
         **context,
-        **(getattr(component, "variables", None) or {}),
+        **component_variables,
+        "__component_variables": component_variables,
+        "variables": component_variables,
         "component": component,
     }
 
@@ -159,7 +179,9 @@ def _render_component_mjml(component: "EmailCampaignComponent", context: dict) -
         )
 
     try:
-        return _jinja_env.from_string(markup).render(component_context)
+        return _jinja_env.from_string(_normalize_hyphenated_placeholders(markup)).render(
+            component_context
+        )
     except Exception:
         return ""
 

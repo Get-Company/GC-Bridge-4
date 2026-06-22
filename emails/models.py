@@ -28,6 +28,12 @@ class MjmlComponent(BaseModel):
     variable_labels = models.JSONField(
         default=dict, blank=True, verbose_name=_("Variablen-Labels")
     )
+    default_variables = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name=_("Standard-Variablen"),
+        help_text=_("Key-Value-Paare fuer Platzhalter. Werden in Kampagnen ueberschrieben."),
+    )
 
     class Meta:
         verbose_name = _("MJML Komponente")
@@ -159,5 +165,4 @@ class EmailCampaignProduct(BaseModel):
 
     def __str__(self) -> str:
         return f"{self.campaign} | {self.product}"
-
 

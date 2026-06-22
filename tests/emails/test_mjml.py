@@ -214,6 +214,104 @@ class TestCampaignComponentRendering:
         mjml = render_campaign_mjml(campaign)
         assert mjml == "header_nav\ncontent_text"
 
+    def test_render_campaign_supports_hyphenated_component_variables(self, monkeypatch):
+        def fake_render_to_string(template_name, context):
+            if template_name == "emails/newsletter_base.mjml":
+                return context["body_mjml"]
+            return ""
+
+        monkeypatch.setattr("emails.mjml.render_to_string", fake_render_to_string)
+        monkeypatch.setattr("emails.mjml._campaign_sales_channel_ids", lambda campaign: ())
+
+        lib = SimpleNamespace(
+            placement="body",
+            name="Headline",
+            mjml_markup=(
+                "<mj-section><mj-column><mj-text>"
+                "<h1>{{ h1-title }}</h1><small>{{ h1-small }}</small>"
+                "</mj-text></mj-column></mj-section>"
+            ),
+        )
+        component = SimpleNamespace(
+            library_component=lib,
+            library_component_id=True,
+            variables={
+                "h1-title": "Hol den Sommer ins Büro",
+                "h1-small": "...alles aus langweilig",
+            },
+            order=10,
+            enabled=True,
+        )
+        campaign = SimpleNamespace(
+            campaign_products=FakeQuerySet(),
+            components=FakeQuerySet([component]),
+        )
+
+        mjml = render_campaign_mjml(campaign)
+        assert "Hol den Sommer ins Büro" in mjml
+        assert "...alles aus langweilig" in mjml
+
+    def test_render_campaign_uses_library_component_default_variables(self, monkeypatch):
+        def fake_render_to_string(template_name, context):
+            if template_name == "emails/newsletter_base.mjml":
+                return context["body_mjml"]
+            return ""
+
+        monkeypatch.setattr("emails.mjml.render_to_string", fake_render_to_string)
+        monkeypatch.setattr("emails.mjml._campaign_sales_channel_ids", lambda campaign: ())
+
+        lib = SimpleNamespace(
+            placement="body",
+            name="Headline",
+            mjml_markup="<mj-section><mj-column><mj-text>{{ title }}</mj-text></mj-column></mj-section>",
+            default_variables={"title": "Standardtitel"},
+        )
+        component = SimpleNamespace(
+            library_component=lib,
+            library_component_id=True,
+            variables={},
+            order=10,
+            enabled=True,
+        )
+        campaign = SimpleNamespace(
+            campaign_products=FakeQuerySet(),
+            components=FakeQuerySet([component]),
+        )
+
+        mjml = render_campaign_mjml(campaign)
+        assert "Standardtitel" in mjml
+
+    def test_render_campaign_component_variables_override_defaults(self, monkeypatch):
+        def fake_render_to_string(template_name, context):
+            if template_name == "emails/newsletter_base.mjml":
+                return context["body_mjml"]
+            return ""
+
+        monkeypatch.setattr("emails.mjml.render_to_string", fake_render_to_string)
+        monkeypatch.setattr("emails.mjml._campaign_sales_channel_ids", lambda campaign: ())
+
+        lib = SimpleNamespace(
+            placement="body",
+            name="Headline",
+            mjml_markup="<mj-section><mj-column><mj-text>{{ title }}</mj-text></mj-column></mj-section>",
+            default_variables={"title": "Standardtitel"},
+        )
+        component = SimpleNamespace(
+            library_component=lib,
+            library_component_id=True,
+            variables={"title": "Kampagnentitel"},
+            order=10,
+            enabled=True,
+        )
+        campaign = SimpleNamespace(
+            campaign_products=FakeQuerySet(),
+            components=FakeQuerySet([component]),
+        )
+
+        mjml = render_campaign_mjml(campaign)
+        assert "Kampagnentitel" in mjml
+        assert "Standardtitel" not in mjml
+
 
 @pytest.mark.django_db
 class TestMjmlComponent:
@@ -226,6 +324,11 @@ class TestMjmlComponent:
         from emails.models import MjmlComponent
         component = MjmlComponent(name="Test")
         assert component.placement == "body"
+
+    def test_default_variables_defaults_to_dict(self):
+        from emails.models import MjmlComponent
+        component = MjmlComponent(name="Test")
+        assert component.default_variables == {}
 
 
 @pytest.mark.django_db
