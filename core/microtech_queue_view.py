@@ -34,15 +34,10 @@ def _fetch_job_stats(base_url: str) -> dict | None:
 
 
 def microtech_queue_view(request):
-    base_url = _wrapper_base_url()
-    stats = _fetch_job_stats(base_url)
-
     context = {
         **admin.site.each_context(request),
         "title": "Microtech Queue",
-        "wrapper_url": base_url,
-        "stats": stats,
-        "error": stats.get("error") if isinstance(stats, dict) else None,
+        "wrapper_url": _wrapper_base_url(),
     }
     return TemplateResponse(request, "admin/microtech_queue.html", context)
 
