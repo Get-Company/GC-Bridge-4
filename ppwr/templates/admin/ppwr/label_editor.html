@@ -397,11 +397,11 @@ const SCALE = (() => {
 const canvas = document.getElementById('ppwr-canvas');
 const canvasW = {{ label.canvas_width_mm }};
 const canvasH = {{ label.canvas_height_mm }};
-const previewData = {{ preview_data_json }};
+const previewData = {{ preview_data_json|safe }};
 const SAVE_URL = "{{ save_url }}";
 const CSRF = "{{ request.META.CSRF_COOKIE }}" || getCookie('csrftoken');
 
-let layout = {{ layout_data_json }};
+let layout = {{ layout_data_json|safe }};
 let selectedId = null;
 let blockCounter = layout.length;
 
