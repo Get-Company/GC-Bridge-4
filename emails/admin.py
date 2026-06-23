@@ -7,7 +7,7 @@ import re
 
 from django import forms
 from django.contrib import admin
-from django.db.models import Case, IntegerField, When
+from django.db.models import Case, IntegerField, Q, When
 from django.http import HttpResponse, JsonResponse
 from django.urls import path
 from django.utils.html import format_html, format_html_join
@@ -15,12 +15,11 @@ from django.utils.translation import gettext_lazy as _
 
 logger = logging.getLogger(__name__)
 
-from core.admin import BaseAdmin, BaseStackedInline, BaseTabularInline
+from core.admin import BaseAdmin, BaseStackedInline
 from emails.mjml import compile_mjml_to_html, render_campaign_mjml
 from emails.models import (
     EmailCampaign,
     EmailCampaignComponent,
-    EmailCampaignProduct,
     MjmlComponent,
 )
 from emails.tasks import apply_campaign_prices_async
@@ -217,6 +216,18 @@ class EmailCampaignComponentInlineForm(forms.ModelForm):
         model = EmailCampaignComponent
         fields = "__all__"
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        legacy_campaign_product = getattr(self.instance, "campaign_product", None)
+        if legacy_campaign_product is None:
+            return
+        if not getattr(self.instance, "product_id", None):
+            self.initial["product"] = legacy_campaign_product.product_id
+        if self.instance.special_price_override is None:
+            self.initial["special_price_override"] = legacy_campaign_product.special_price_override
+        if self.instance.discount_pct is None:
+            self.initial["discount_pct"] = legacy_campaign_product.discount_pct
+
     def clean_variables(self):
         return _clean_json_object(
             self.cleaned_data.get("variables"),
@@ -339,18 +350,29 @@ class EmailCampaignComponentInline(BaseStackedInline):
         "parent",
         "enabled",
         "library_component",
-        "campaign_product",
+        "product",
+        "special_price_override",
+        "discount_pct",
+        "current_price_display",
+        "prices_synced_at",
         "component_default_variables",
         "variables",
     )
-    readonly_fields = BaseStackedInline.readonly_fields + ("tree_position", "component_default_variables")
-    autocomplete_fields = ("library_component",)
+    readonly_fields = BaseStackedInline.readonly_fields + (
+        "tree_position",
+        "current_price_display",
+        "prices_synced_at",
+        "component_default_variables",
+    )
+    autocomplete_fields = ("library_component", "product")
     collapsible = True
     extra = 0
 
     def get_queryset(self, request):
         queryset = super().get_queryset(request).select_related(
             "library_component",
+            "product",
+            "campaign_product__product",
             "parent",
             "parent__parent",
             "parent__parent__parent",
@@ -376,13 +398,6 @@ class EmailCampaignComponentInline(BaseStackedInline):
                 )
             else:
                 kwargs["queryset"] = EmailCampaignComponent.objects.none()
-        if db_field.name == "campaign_product":
-            if campaign_id:
-                kwargs["queryset"] = EmailCampaignProduct.objects.filter(campaign_id=campaign_id).select_related(
-                    "product"
-                ).order_by("order", "id")
-            else:
-                kwargs["queryset"] = EmailCampaignProduct.objects.none()
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     @admin.display(description=_("Baum"))
@@ -400,6 +415,28 @@ class EmailCampaignComponentInline(BaseStackedInline):
             prefix,
             component_name,
         )
+
+    @admin.display(description=_("Aktueller Preis"))
+    def current_price_display(self, obj: EmailCampaignComponent):
+        product = getattr(obj, "product", None)
+        if product is None and getattr(obj, "campaign_product", None):
+            product = obj.campaign_product.product
+        if product is None:
+            return "—"
+        try:
+            from shopware.models import ShopwareSettings
+            default_channel = ShopwareSettings.objects.filter(is_default=True, is_active=True).first()
+            price_entry = None
+            if default_channel:
+                price_entry = product.prices.filter(sales_channel=default_channel).first()
+            if price_entry is None:
+                price_entry = product.prices.order_by("pk").first()
+            if price_entry is None:
+                return "—"
+            price = price_entry.price
+            return f"{price:,.2f} €".replace(",", "X").replace(".", ",").replace("X", ".")
+        except Exception:
+            return "—"
 
     @admin.display(description=_("Komponenten-Info"))
     def component_default_variables(self, obj: EmailCampaignComponent):
@@ -454,43 +491,13 @@ class EmailCampaignComponentInline(BaseStackedInline):
         )
 
 
-class EmailCampaignProductInline(BaseTabularInline):
-    model = EmailCampaignProduct
-    tab = False
-    ordering_field = "order"
-    hide_ordering_field = True
-    fields = ("order", "product", "special_price_override", "discount_pct", "current_price_display", "prices_synced_at")
-    readonly_fields = BaseTabularInline.readonly_fields + ("current_price_display", "prices_synced_at")
-    autocomplete_fields = ("product",)
-    extra = 0
-
-    @admin.display(description=_("Aktueller Preis"))
-    def current_price_display(self, obj: EmailCampaignProduct):
-        if obj.product_id is None:
-            return "—"
-        try:
-            from shopware.models import ShopwareSettings
-            default_channel = ShopwareSettings.objects.filter(is_default=True, is_active=True).first()
-            price_entry = None
-            if default_channel:
-                price_entry = obj.product.prices.filter(sales_channel=default_channel).first()
-            if price_entry is None:
-                price_entry = obj.product.prices.order_by("pk").first()
-            if price_entry is None:
-                return "—"
-            price = price_entry.price
-            return f"{price:,.2f} €".replace(",", "X").replace(".", ",").replace("X", ".")
-        except Exception:
-            return "—"
-
-
 @admin.register(EmailCampaign)
 class EmailCampaignAdmin(BaseAdmin):
     list_display = ("internal_title", "component_count", "product_count", "status", "created_at")
     list_filter = ("status", "created_at")
     search_fields = ("internal_title",)
     list_editable = ("status",)
-    inlines = (EmailCampaignComponentInline, EmailCampaignProductInline)
+    inlines = (EmailCampaignComponentInline,)
 
     fieldsets = (
         (
@@ -510,7 +517,9 @@ class EmailCampaignAdmin(BaseAdmin):
 
     @admin.display(description=_("Produkte"))
     def product_count(self, obj: EmailCampaign) -> int:
-        return obj.campaign_products.count()
+        return obj.components.filter(
+            Q(product__isnull=False) | Q(campaign_product__isnull=False)
+        ).distinct().count()
 
     @admin.display(description=_("Komponenten"))
     def component_count(self, obj: EmailCampaign) -> int:

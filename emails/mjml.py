@@ -137,7 +137,7 @@ def _campaign_sales_channel_ids(campaign: "EmailCampaign") -> tuple[int, ...]:
 def _campaign_components(campaign: "EmailCampaign") -> list["EmailCampaignComponent"]:
     return list(
         campaign.components.filter(enabled=True)
-        .select_related("library_component", "campaign_product__product", "parent")
+        .select_related("library_component", "product", "campaign_product__product", "parent")
         .order_by("order", "id")
     )
 
@@ -220,13 +220,21 @@ def _render_component_mjml(
         "component": component,
     }
 
-    if getattr(component, "campaign_product_id", None) and getattr(component, "campaign_product", None):
+    product = getattr(component, "product", None)
+    special_price_override = getattr(component, "special_price_override", None)
+    discount_pct = getattr(component, "discount_pct", None)
+    if product is None and getattr(component, "campaign_product_id", None) and getattr(component, "campaign_product", None):
         cp = component.campaign_product
+        product = cp.product
+        special_price_override = cp.special_price_override
+        discount_pct = cp.discount_pct
+
+    if product is not None:
         sales_channel_ids = context.get("_sales_channel_ids", ())
         component_context["product"] = ProductEmailProxy(
-            cp.product,
-            special_price_override=cp.special_price_override,
-            discount_pct=cp.discount_pct,
+            product,
+            special_price_override=special_price_override,
+            discount_pct=discount_pct,
             sales_channel_ids=sales_channel_ids,
         )
 
@@ -250,18 +258,27 @@ def render_campaign_mjml(campaign: "EmailCampaign") -> str:
     """Renders a campaign to a MJML string using Jinja2 component templates."""
     sales_channel_ids = _campaign_sales_channel_ids(campaign)
 
-    products = [
-        ProductEmailProxy(
-            cp.product,
-            special_price_override=cp.special_price_override,
-            discount_pct=cp.discount_pct,
-            sales_channel_ids=sales_channel_ids,
-        )
-        for cp in campaign.campaign_products.select_related("product").order_by("order", "id")
-    ]
+    components = _campaign_components(campaign)
+    products = []
+    for component in components:
+        product = getattr(component, "product", None)
+        special_price_override = getattr(component, "special_price_override", None)
+        discount_pct = getattr(component, "discount_pct", None)
+        if product is None and getattr(component, "campaign_product_id", None) and getattr(component, "campaign_product", None):
+            product = component.campaign_product.product
+            special_price_override = component.campaign_product.special_price_override
+            discount_pct = component.campaign_product.discount_pct
+        if product is not None:
+            products.append(
+                ProductEmailProxy(
+                    product,
+                    special_price_override=special_price_override,
+                    discount_pct=discount_pct,
+                    sales_channel_ids=sales_channel_ids,
+                )
+            )
 
     base_context = {"products": products, "_sales_channel_ids": sales_channel_ids}
-    components = _campaign_components(campaign)
     child_map = _component_children_map(components)
 
     head_mjml = "\n".join(

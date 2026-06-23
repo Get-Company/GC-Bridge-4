@@ -407,6 +407,51 @@ class TestEmailCampaignProductFields:
 
 
 class TestHeadBodySplit:
+    def test_component_product_is_rendered_directly(self, monkeypatch):
+        from emails.mjml import render_campaign_mjml
+
+        def fake_render_to_string(template_name, context):
+            if template_name == "emails/newsletter_base.mjml":
+                return context.get("body_mjml", "")
+            return ""
+
+        monkeypatch.setattr("emails.mjml.render_to_string", fake_render_to_string)
+        monkeypatch.setattr("emails.mjml._campaign_sales_channel_ids", lambda campaign: ())
+        product = SimpleNamespace(
+            name="Direktes Produkt",
+            erp_nr="710001",
+            prices=FakePriceQuerySet([
+                FakePrice(Decimal("12.50"), sales_channel_id=1, is_default=True),
+            ]),
+            get_images=lambda: [],
+        )
+        component = SimpleNamespace(
+            id=1,
+            pk=1,
+            parent_id=None,
+            library_component=SimpleNamespace(
+                placement="body",
+                name="Produkt",
+                mjml_markup="<mj-text>{{ product.name }} / {{ product.price|format_price }}</mj-text>",
+                default_variables={},
+            ),
+            library_component_id=True,
+            product=product,
+            special_price_override=None,
+            discount_pct=None,
+            campaign_product_id=None,
+            variables={},
+            order=10,
+            enabled=True,
+        )
+        campaign = SimpleNamespace(
+            components=FakeQuerySet([component]),
+        )
+
+        mjml = render_campaign_mjml(campaign)
+
+        assert "Direktes Produkt / 12.50" in mjml
+
     def test_nested_components_render_into_parent_children_slot(self, monkeypatch):
         from emails.mjml import render_campaign_mjml
 

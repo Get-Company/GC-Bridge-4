@@ -34,6 +34,13 @@ class TestMjmlComponentAdminRegistered(SimpleTestCase):
         assert "Produkt-Kontext" in html
 
 
+class TestEmailCampaignAdmin(SimpleTestCase):
+    def test_campaign_admin_uses_only_component_inline(self):
+        from emails.admin import EmailCampaignAdmin, EmailCampaignComponentInline
+
+        assert EmailCampaignAdmin.inlines == (EmailCampaignComponentInline,)
+
+
 class TestEmailCampaignComponentInline(SimpleTestCase):
     def test_component_inline_uses_unfold_sortable_ordering_field(self):
         from emails.admin import EmailCampaignComponentInline
@@ -42,6 +49,33 @@ class TestEmailCampaignComponentInline(SimpleTestCase):
         assert EmailCampaignComponentInline.hide_ordering_field is True
         assert "order" in EmailCampaignComponentInline.fields
         assert "tree_position" in EmailCampaignComponentInline.fields
+        assert "product" in EmailCampaignComponentInline.fields
+        assert "special_price_override" in EmailCampaignComponentInline.fields
+        assert "discount_pct" in EmailCampaignComponentInline.fields
+        assert "campaign_product" not in EmailCampaignComponentInline.fields
+
+    def test_component_inline_autocompletes_products_directly(self):
+        from emails.admin import EmailCampaignComponentInline
+
+        assert "product" in EmailCampaignComponentInline.autocomplete_fields
+
+    def test_component_form_initializes_product_from_legacy_campaign_product(self):
+        from decimal import Decimal
+        from emails.admin import EmailCampaignComponentInlineForm
+        from emails.models import EmailCampaignComponent, EmailCampaignProduct
+
+        legacy_campaign_product = EmailCampaignProduct(
+            product_id=12,
+            special_price_override=Decimal("8.50"),
+            discount_pct=None,
+        )
+        component = EmailCampaignComponent(campaign_product=legacy_campaign_product)
+        form = EmailCampaignComponentInlineForm(
+            instance=component
+        )
+
+        assert form.initial["product"] == 12
+        assert form.initial["special_price_override"] == Decimal("8.50")
 
     def test_tree_sorted_component_ids_put_children_after_parent(self):
         from emails.admin import _tree_sorted_component_ids
@@ -125,15 +159,6 @@ class TestEmailCampaignComponentInline(SimpleTestCase):
         assert "Diese Komponente setzt keine Standard-Variablen." in html
         assert "keinen" in html
         assert "{{ children }}" in html
-
-
-class TestEmailCampaignProductInline(SimpleTestCase):
-    def test_product_inline_uses_unfold_sortable_ordering_field(self):
-        from emails.admin import EmailCampaignProductInline
-
-        assert EmailCampaignProductInline.ordering_field == "order"
-        assert EmailCampaignProductInline.hide_ordering_field is True
-        assert "order" in EmailCampaignProductInline.fields
 
 
 class TestEmailVariableJSONForms(SimpleTestCase):

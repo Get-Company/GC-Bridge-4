@@ -104,6 +104,36 @@ class EmailCampaignComponent(BaseModel):
         verbose_name=_("Produkt"),
         help_text=_("Optionales Produkt fuer Produkt-Komponenten."),
     )
+    product = models.ForeignKey(
+        "products.Product",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="email_campaign_components",
+        verbose_name=_("Produkt"),
+        help_text=_("Optionales Produkt fuer diese Kampagnen-Komponente."),
+    )
+    special_price_override = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name=_("Sonderpreis"),
+        help_text=_("Ueberschreibt den Sonderpreis des Produkts fuer diese Komponente."),
+    )
+    discount_pct = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name=_("Rabatt (%)"),
+        help_text=_("Alternativ zum absoluten Sonderpreis. Wird auf den Standardkanalpreis angewendet."),
+    )
+    prices_synced_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name=_("Preise synchronisiert am"),
+    )
     variables = models.JSONField(
         default=dict,
         blank=True,
@@ -127,22 +157,34 @@ class EmailCampaignComponent(BaseModel):
 
     def clean(self):
         super().clean()
+        errors = {}
+        if self.special_price_override and self.discount_pct:
+            errors["discount_pct"] = _("Nur Sonderpreis ODER Rabatt (%) angeben, nicht beides.")
+        if (self.special_price_override or self.discount_pct) and not self.product_id and not self.campaign_product_id:
+            errors["product"] = _("Fuer Sonderpreis oder Rabatt muss ein Produkt ausgewaehlt sein.")
+
         if not self.parent_id:
+            if errors:
+                raise ValidationError(errors)
             return
 
         if self.pk and self.parent_id == self.pk:
-            raise ValidationError({"parent": _("Eine Komponente kann nicht ihr eigener Parent sein.")})
+            errors["parent"] = _("Eine Komponente kann nicht ihr eigener Parent sein.")
 
         if self.parent and self.parent.campaign_id != self.campaign_id:
-            raise ValidationError({"parent": _("Parent und Child muessen zur selben Kampagne gehoeren.")})
+            errors["parent"] = _("Parent und Child muessen zur selben Kampagne gehoeren.")
 
         seen_ids = {self.pk} if self.pk else set()
         parent = self.parent
         while parent is not None:
             if parent.pk in seen_ids:
-                raise ValidationError({"parent": _("Diese Parent-Auswahl erzeugt eine Schleife.")})
+                errors["parent"] = _("Diese Parent-Auswahl erzeugt eine Schleife.")
+                break
             seen_ids.add(parent.pk)
             parent = parent.parent
+
+        if errors:
+            raise ValidationError(errors)
 
 
 class EmailCampaignProduct(BaseModel):

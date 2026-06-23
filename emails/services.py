@@ -31,7 +31,7 @@ def _end_of_next_month(now) -> object:
 
 
 def apply_campaign_special_prices(campaign) -> list[str]:
-    """Writes special_price back to ProductPrice entries for all campaign products.
+    """Writes special_price back to ProductPrice entries for campaign component products.
 
     Uses the default sales channel as base price source. Propagates to all
     other active channels using their price_factor (rounded up to 5ct).
@@ -50,23 +50,32 @@ def apply_campaign_special_prices(campaign) -> list[str]:
     special_end = _end_of_next_month(now)
     affected_erp_nrs: list[str] = []
 
-    for cp in campaign.campaign_products.select_related("product").all():
-        if not cp.special_price_override and not cp.discount_pct:
+    components = campaign.components.select_related("product", "campaign_product__product").all()
+    for component in components:
+        product = getattr(component, "product", None)
+        special_price_override = getattr(component, "special_price_override", None)
+        discount_pct = getattr(component, "discount_pct", None)
+        legacy_campaign_product = getattr(component, "campaign_product", None)
+        if product is None and legacy_campaign_product is not None:
+            product = legacy_campaign_product.product
+            special_price_override = legacy_campaign_product.special_price_override
+            discount_pct = legacy_campaign_product.discount_pct
+
+        if product is None or (not special_price_override and not discount_pct):
             continue
 
-        product = cp.product
         default_price = Price.objects.filter(
             product=product, sales_channel=default_channel
         ).first()
         if not default_price:
             continue
 
-        if cp.special_price_override:
-            special_price = Decimal(str(cp.special_price_override))
+        if special_price_override:
+            special_price = Decimal(str(special_price_override))
         else:
             base = Decimal(str(default_price.price))
             special_price = _round_up_5ct(
-                base * (Decimal("100") - Decimal(str(cp.discount_pct))) / Decimal("100")
+                base * (Decimal("100") - Decimal(str(discount_pct))) / Decimal("100")
             )
 
         default_price.special_price = special_price
@@ -90,8 +99,11 @@ def apply_campaign_special_prices(campaign) -> list[str]:
                     history_tracked_fields=["special_price", "special_start_date", "special_end_date"]
                 )
 
-        cp.prices_synced_at = now
-        cp.save(update_fields=["prices_synced_at"])
+        component.prices_synced_at = now
+        component.save(update_fields=["prices_synced_at"])
+        if legacy_campaign_product is not None and getattr(component, "product", None) is None:
+            legacy_campaign_product.prices_synced_at = now
+            legacy_campaign_product.save(update_fields=["prices_synced_at"])
         affected_erp_nrs.append(product.erp_nr)
 
     return affected_erp_nrs

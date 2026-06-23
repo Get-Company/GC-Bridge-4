@@ -42,11 +42,13 @@ class TestApplyCampaignSpecialPrices:
         MockSettings.objects.filter.return_value.first.return_value = default_ch
         MockSettings.objects.filter.return_value.exclude.return_value = []
 
-        cp = MagicMock()
-        cp.special_price_override = None
-        cp.discount_pct = None
+        component = MagicMock()
+        component.product = MagicMock()
+        component.special_price_override = None
+        component.discount_pct = None
+        component.campaign_product = None
         campaign = MagicMock()
-        campaign.campaign_products.select_related.return_value.all.return_value = [cp]
+        campaign.components.select_related.return_value.all.return_value = [component]
 
         result = apply_campaign_special_prices(campaign)
         assert result == []
