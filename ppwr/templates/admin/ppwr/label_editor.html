@@ -333,7 +333,7 @@
     </div>
   </div>
 
-  <!-- Properties -->
+  <!-- Properties + Block list -->
   <div id="ppwr-props">
     <div class="section-title">{% trans "Eigenschaften" %}</div>
     <div id="no-selection-hint">
@@ -377,6 +377,13 @@
         </button>
       </div>
     </div>
+
+    <!-- Block list -->
+    <div style="margin-top:20px;border-top:1px solid rgba(0,0,0,.08);padding-top:14px;" class="dark:border-white/10">
+      <div class="section-title">{% trans "Platzierte Blöcke" %}</div>
+      <div id="block-list-empty" style="font-size:12px;color:rgb(107 114 128);">Noch keine Blöcke gesetzt.</div>
+      <div id="block-list"></div>
+    </div>
   </div>
 
 </div>
@@ -385,48 +392,46 @@
 <div id="ppwr-toast"></div>
 
 <script>
-const SCALE = (() => {
-  const testEl = document.createElement('div');
-  testEl.style.cssText = 'width:1mm;height:0;position:absolute;visibility:hidden';
-  document.body.appendChild(testEl);
-  const px = testEl.getBoundingClientRect().width;
-  document.body.removeChild(testEl);
-  return px; // px per mm
-})();
-
 const canvas = document.getElementById('ppwr-canvas');
 const canvasW = {{ label.canvas_width_mm }};
 const canvasH = {{ label.canvas_height_mm }};
 const previewData = {{ preview_data_json|safe }};
 const SAVE_URL = "{{ save_url }}";
-const CSRF = "{{ request.META.CSRF_COOKIE }}" || getCookie('csrftoken');
 
 let layout = {{ layout_data_json|safe }};
 let selectedId = null;
-let blockCounter = layout.length;
+let blockCounter = Date.now(); // unique IDs
 
 function getCookie(name) {
   const v = document.cookie.match('(^|;) ?' + name + '=([^;]*)(;|$)');
   return v ? v[2] : null;
 }
 
-function mm2px(mm) { return mm * SCALE; }
-function px2mm(px) { return px / SCALE; }
+// px per mm — measured from canvas at drag-start so layout is always ready
+function getScale() {
+  return canvas.getBoundingClientRect().width / canvasW;
+}
+
+// Blocks use CSS mm units directly — no SCALE needed for positioning
+function setBlockGeometry(el, block) {
+  el.style.left   = block.x_mm   + 'mm';
+  el.style.top    = block.y_mm   + 'mm';
+  el.style.width  = block.width_mm  + 'mm';
+  el.style.height = block.height_mm + 'mm';
+}
 
 // ── Render all blocks from layout ─────────────────────────────
 function renderAll() {
   canvas.querySelectorAll('.label-block').forEach(el => el.remove());
   layout.forEach(block => createBlockEl(block));
+  renderBlockList();
 }
 
 function createBlockEl(block) {
   const el = document.createElement('div');
   el.className = 'label-block';
   el.dataset.id = block.id;
-  el.style.left = mm2px(block.x_mm) + 'px';
-  el.style.top  = mm2px(block.y_mm) + 'px';
-  el.style.width  = mm2px(block.width_mm)  + 'px';
-  el.style.height = mm2px(block.height_mm) + 'px';
+  setBlockGeometry(el, block);
 
   const labelEl = document.createElement('div');
   labelEl.className = 'label-block-label';
@@ -436,14 +441,12 @@ function createBlockEl(block) {
   inner.className = 'label-block-inner';
 
   if (block.type === 'qr_code') {
-    const img = document.createElement('div');
-    img.style.cssText = 'width:100%;height:100%;display:flex;align-items:center;justify-content:center;';
-    img.innerHTML = '<span class="material-symbols-outlined" style="font-size:32px;color:#aaa;">qr_code_2</span>';
-    inner.appendChild(img);
+    inner.innerHTML = '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;">'
+      + '<span class="material-symbols-outlined" style="font-size:32px;color:#aaa;">qr_code_2</span></div>';
   } else {
     const textEl = document.createElement('div');
     textEl.className = 'label-block-text';
-    textEl.style.fontSize = (block.font_size || 8) + 'pt';
+    textEl.style.fontSize   = (block.font_size || 8) + 'pt';
     textEl.style.fontWeight = block.bold ? '700' : '400';
     textEl.textContent = previewData[block.type] || '';
     inner.appendChild(textEl);
@@ -468,7 +471,6 @@ function createBlockEl(block) {
     selectBlock(block.id);
     startDrag(e, el, block);
   });
-
   resizeHandle.addEventListener('mousedown', (e) => {
     e.stopPropagation();
     selectBlock(block.id);
@@ -481,21 +483,16 @@ function createBlockEl(block) {
 // ── Drag ──────────────────────────────────────────────────────
 function startDrag(e, el, block) {
   e.preventDefault();
-  const startX = e.clientX;
-  const startY = e.clientY;
-  const origX = block.x_mm;
-  const origY = block.y_mm;
-  const canvasRect = canvas.getBoundingClientRect();
+  const scale = getScale();
+  const startX = e.clientX, startY = e.clientY;
+  const origX = block.x_mm, origY = block.y_mm;
 
   function onMove(e) {
-    const dx = px2mm(e.clientX - startX);
-    const dy = px2mm(e.clientY - startY);
-    block.x_mm = Math.max(0, Math.min(canvasW - block.width_mm, origX + dx));
-    block.y_mm = Math.max(0, Math.min(canvasH - block.height_mm, origY + dy));
+    block.x_mm = Math.max(0, Math.min(canvasW - block.width_mm,  origX + (e.clientX - startX) / scale));
+    block.y_mm = Math.max(0, Math.min(canvasH - block.height_mm, origY + (e.clientY - startY) / scale));
     block.x_mm = Math.round(block.x_mm * 10) / 10;
     block.y_mm = Math.round(block.y_mm * 10) / 10;
-    el.style.left = mm2px(block.x_mm) + 'px';
-    el.style.top  = mm2px(block.y_mm) + 'px';
+    setBlockGeometry(el, block);
     updatePropsPanel(block);
   }
   function onUp() {
@@ -510,20 +507,16 @@ function startDrag(e, el, block) {
 // ── Resize ────────────────────────────────────────────────────
 function startResize(e, el, block) {
   e.preventDefault();
-  const startX = e.clientX;
-  const startY = e.clientY;
-  const origW = block.width_mm;
-  const origH = block.height_mm;
+  const scale = getScale();
+  const startX = e.clientX, startY = e.clientY;
+  const origW = block.width_mm, origH = block.height_mm;
 
   function onMove(e) {
-    const dw = px2mm(e.clientX - startX);
-    const dh = px2mm(e.clientY - startY);
-    block.width_mm  = Math.max(5, Math.min(canvasW - block.x_mm, origW + dw));
-    block.height_mm = Math.max(4, Math.min(canvasH - block.y_mm, origH + dh));
+    block.width_mm  = Math.max(5,  Math.min(canvasW - block.x_mm, origW + (e.clientX - startX) / scale));
+    block.height_mm = Math.max(4,  Math.min(canvasH - block.y_mm, origH + (e.clientY - startY) / scale));
     block.width_mm  = Math.round(block.width_mm  * 10) / 10;
     block.height_mm = Math.round(block.height_mm * 10) / 10;
-    el.style.width  = mm2px(block.width_mm)  + 'px';
-    el.style.height = mm2px(block.height_mm) + 'px';
+    setBlockGeometry(el, block);
     updatePropsPanel(block);
   }
   function onUp() {
@@ -543,6 +536,7 @@ function selectBlock(id) {
   if (el) el.classList.add('selected');
   const block = layout.find(b => b.id === id);
   if (block) showPropsPanel(block);
+  renderBlockList();
 }
 
 function deselectAll(e) {
@@ -551,6 +545,7 @@ function deselectAll(e) {
   canvas.querySelectorAll('.label-block').forEach(el => el.classList.remove('selected'));
   document.getElementById('prop-form').style.display = 'none';
   document.getElementById('no-selection-hint').style.display = '';
+  renderBlockList();
 }
 
 // ── Properties panel ──────────────────────────────────────────
@@ -559,8 +554,7 @@ function showPropsPanel(block) {
   document.getElementById('prop-form').style.display = '';
   document.getElementById('prop-type-label').textContent = block.label || block.type;
   updatePropsPanel(block);
-  const isText = block.type !== 'qr_code';
-  document.getElementById('prop-text-section').style.display = isText ? '' : 'none';
+  document.getElementById('prop-text-section').style.display = block.type !== 'qr_code' ? '' : 'none';
 }
 
 function updatePropsPanel(block) {
@@ -578,43 +572,73 @@ function applyProps() {
   if (!selectedId) return;
   const block = layout.find(b => b.id === selectedId);
   if (!block) return;
-  block.x_mm = parseFloat(document.getElementById('prop-x').value) || 0;
-  block.y_mm = parseFloat(document.getElementById('prop-y').value) || 0;
-  block.width_mm  = parseFloat(document.getElementById('prop-w').value) || 10;
-  block.height_mm = parseFloat(document.getElementById('prop-h').value) || 8;
+  block.x_mm      = parseFloat(document.getElementById('prop-x').value)       || 0;
+  block.y_mm      = parseFloat(document.getElementById('prop-y').value)       || 0;
+  block.width_mm  = parseFloat(document.getElementById('prop-w').value)       || 10;
+  block.height_mm = parseFloat(document.getElementById('prop-h').value)       || 8;
   if (block.type !== 'qr_code') {
     block.font_size = parseInt(document.getElementById('prop-fontsize').value) || 8;
-    block.bold = document.getElementById('prop-bold').checked;
+    block.bold      = document.getElementById('prop-bold').checked;
   }
   const el = canvas.querySelector(`[data-id="${selectedId}"]`);
   if (el) {
-    el.style.left = mm2px(block.x_mm) + 'px';
-    el.style.top  = mm2px(block.y_mm) + 'px';
-    el.style.width  = mm2px(block.width_mm)  + 'px';
-    el.style.height = mm2px(block.height_mm) + 'px';
+    setBlockGeometry(el, block);
     const textEl = el.querySelector('.label-block-text');
     if (textEl) {
-      textEl.style.fontSize  = (block.font_size || 8) + 'pt';
+      textEl.style.fontSize   = (block.font_size || 8) + 'pt';
       textEl.style.fontWeight = block.bold ? '700' : '400';
     }
   }
   scheduleSave();
 }
 
+// ── Block list (right panel) ───────────────────────────────────
+const BLOCK_ICONS = {
+  producer_name: 'business', address: 'location_on', email: 'email',
+  phone: 'phone', unique_packaging_id: 'tag', qr_code: 'qr_code_2',
+};
+
+function renderBlockList() {
+  const listEl  = document.getElementById('block-list');
+  const emptyEl = document.getElementById('block-list-empty');
+  listEl.innerHTML = '';
+  if (!layout.length) { emptyEl.style.display = ''; return; }
+  emptyEl.style.display = 'none';
+  layout.forEach(block => {
+    const row = document.createElement('div');
+    const isSelected = block.id === selectedId;
+    row.style.cssText = [
+      'display:flex;align-items:center;gap:8px;padding:6px 8px;margin-bottom:4px;',
+      'border-radius:7px;cursor:pointer;font-size:12px;font-weight:500;',
+      'border:1.5px solid;transition:all .12s;',
+      isSelected
+        ? 'border-color:#ff9933;background:rgba(255,153,51,.12);color:#ff9933;'
+        : 'border-color:rgba(0,0,0,.08);background:transparent;color:rgb(55 65 81);',
+    ].join('');
+    row.innerHTML = `<span class="material-symbols-outlined" style="font-size:16px;flex-shrink:0">${BLOCK_ICONS[block.type] || 'crop_square'}</span>`
+      + `<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${block.label || block.type}</span>`
+      + `<button onclick="event.stopPropagation();deleteBlock('${block.id}')" `
+      + `style="background:none;border:none;cursor:pointer;padding:0;color:rgb(156 163 175);line-height:1;" title="Löschen">`
+      + `<span class="material-symbols-outlined" style="font-size:15px;">close</span></button>`;
+    row.addEventListener('click', () => selectBlock(block.id));
+    listEl.appendChild(row);
+  });
+}
+
 // ── Add / Delete ──────────────────────────────────────────────
 function addBlock(chip) {
   blockCounter++;
-  const id = 'block-' + blockCounter;
+  const id = 'b' + blockCounter;
   const block = {
     id,
-    type: chip.dataset.type,
-    label: chip.dataset.label,
-    x_mm: 5,
-    y_mm: 5 + (layout.length * 10) % (canvasH - 10),
-    width_mm: parseFloat(chip.dataset.w) || 40,
-    height_mm: parseFloat(chip.dataset.h) || 10,
-    font_size: parseInt(chip.dataset.fontSize) || 8,
-    bold: chip.dataset.bold === 'true',
+    type:       chip.dataset.type,
+    label:      chip.dataset.label,
+    x_mm:       5,
+    y_mm:       Math.min(5 + (layout.length * 12) % (canvasH - 15), canvasH - 15),
+    width_mm:   parseFloat(chip.dataset.w)        || 40,
+    height_mm:  parseFloat(chip.dataset.h)        || 10,
+    font_size:  parseInt(chip.dataset.fontSize)   || 8,
+    bold:       chip.dataset.bold === 'true',
   };
   layout.push(block);
   createBlockEl(block);
@@ -630,6 +654,7 @@ function deleteBlock(id) {
     document.getElementById('prop-form').style.display = 'none';
     document.getElementById('no-selection-hint').style.display = '';
   }
+  renderBlockList();
   scheduleSave();
 }
 
@@ -644,6 +669,7 @@ function clearCanvas() {
   selectedId = null;
   document.getElementById('prop-form').style.display = 'none';
   document.getElementById('no-selection-hint').style.display = '';
+  renderBlockList();
   scheduleSave();
 }
 
@@ -659,10 +685,7 @@ async function saveLayout() {
   try {
     const resp = await fetch(SAVE_URL, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-CSRFToken': getCookie('csrftoken'),
-      },
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
       body: JSON.stringify({ layout }),
     });
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
