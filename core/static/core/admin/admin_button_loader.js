@@ -63,6 +63,23 @@
     );
   }
 
+  function preserveSubmitterValue(form, submitter) {
+    form.querySelectorAll("[data-gc-admin-button-loader-submitter]").forEach(function (element) {
+      element.remove();
+    });
+
+    if (!submitter.name || submitter.form !== form) {
+      return;
+    }
+
+    const input = document.createElement("input");
+    input.type = "hidden";
+    input.name = submitter.name;
+    input.value = submitter.value || "";
+    input.dataset.gcAdminButtonLoaderSubmitter = "true";
+    form.appendChild(input);
+  }
+
   function shouldHandleLink(link, event) {
     if (!link || link.dataset.adminLoader === "off") {
       return false;
@@ -115,6 +132,7 @@
       return;
     }
 
+    preserveSubmitterValue(form, submitter);
     activateButtonLoader(submitter);
   }, true);
 
