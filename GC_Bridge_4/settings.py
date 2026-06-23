@@ -547,6 +547,12 @@ UNFOLD = {
                         "link": reverse_lazy("admin:ppwr_packaginglabel_changelist"),
                         "permission": sidebar_model_view_permission("ppwr", "PackagingLabel"),
                     },
+                    {
+                        "title": _("Konformitätserklärungen"),
+                        "icon": "verified",
+                        "link": reverse_lazy("admin:ppwr_konformitaetserklaerung_changelist"),
+                        "permission": sidebar_model_view_permission("ppwr", "KonformitaetsErklaerung"),
+                    },
                 ],
             },
             {
