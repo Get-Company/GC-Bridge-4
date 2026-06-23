@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 
 from django import forms
 from django.contrib import admin
@@ -41,6 +42,14 @@ _PRODUCT_EMAIL_FIELDS = (
     ("product.images", "sortierte Produktbilder"),
     ("product.first_image", "erstes Produktbild"),
 )
+_CHILDREN_SLOT_RE = re.compile(r"\{\{\s*children\s*\}\}")
+
+
+def _children_slot_location(markup: str) -> tuple[int, str] | None:
+    for line_number, line in enumerate((markup or "").splitlines(), start=1):
+        if _CHILDREN_SLOT_RE.search(line):
+            return line_number, line.strip()
+    return None
 
 
 def _component_identity(component: EmailCampaignComponent) -> int:
@@ -222,7 +231,7 @@ class MjmlComponentAdmin(BaseAdmin):
     list_filter = ("placement", "is_default")
     list_editable = ("is_default", "order")
     search_fields = ("name",)
-    readonly_fields = BaseAdmin.readonly_fields + ("product_template_variables",)
+    readonly_fields = BaseAdmin.readonly_fields + ("component_info",)
 
     def formfield_for_dbfield(self, db_field, request, **kwargs):
         field = super().formfield_for_dbfield(db_field, request, **kwargs)
@@ -244,9 +253,9 @@ class MjmlComponentAdmin(BaseAdmin):
             },
         ),
         (
-            _("Produkt-Variablen"),
+            _("Info"),
             {
-                "fields": ("product_template_variables",),
+                "fields": ("component_info",),
                 "classes": ("collapse",),
             },
         ),
@@ -259,8 +268,8 @@ class MjmlComponentAdmin(BaseAdmin):
         ),
     )
 
-    @admin.display(description=_("Produkt-Variablen"))
-    def product_template_variables(self, obj: MjmlComponent):
+    @admin.display(description=_("Komponenten-Info"))
+    def component_info(self, obj: MjmlComponent):
         from products.models import Product
 
         product_fields = [
@@ -268,10 +277,41 @@ class MjmlComponentAdmin(BaseAdmin):
             for field in Product._meta.fields
             if field.name not in _PRODUCT_FIELD_EXCLUDES
         ]
+        children_slot = _children_slot_location(getattr(obj, "mjml_markup", ""))
+        if children_slot:
+            line_number, line = children_slot
+            children_info = format_html(
+                "<p>Untergeordnete Kampagnen-Komponenten werden exakt an "
+                "<code>{{{{ children }}}}</code> eingefuegt.</p>"
+                "<p><strong>Fundstelle:</strong> Zeile {}</p>"
+                "<pre style='margin:0;white-space:pre-wrap;font-family:monospace'>{}</pre>",
+                line_number,
+                line,
+            )
+        else:
+            children_info = format_html(
+                "<p>Diese Komponente enthaelt keinen <code>{}</code>-Slot.</p>"
+                "<p>Wenn im Kampagnen-Inline Children unter diese Komponente gehaengt werden, "
+                "werden sie erst ausgegeben, sobald das MJML-Markup den Slot enthaelt.</p>",
+                "{{ children }}",
+            )
+
         return format_html(
-            "<p><strong>Direkte Product-Felder</strong></p><ul>{}</ul>"
-            "<p><strong>E-Mail-spezifische Felder</strong></p><ul>{}</ul>"
-            "<p>Preisformatierung: <code>{{{{ product.price|format_price }}}}</code></p>",
+            "<div style='display:grid;gap:16px'>"
+            "<section><h3 style='margin:0 0 8px;font-weight:600'>Verschachtelung</h3>{}</section>"
+            "<section><h3 style='margin:0 0 8px;font-weight:600'>Standard-Variablen</h3>"
+            "<p>Werte aus <code>default_variables</code> stehen direkt per "
+            "<code>{{{{ variablenname }}}}</code> zur Verfuegung und koennen in der Kampagne "
+            "ueberschrieben werden.</p></section>"
+            "<section><h3 style='margin:0 0 8px;font-weight:600'>Produkt-Kontext</h3>"
+            "<p>Wenn eine Kampagnen-Komponente mit einem Produkt verknuepft ist, steht "
+            "<code>product</code> im Template zur Verfuegung.</p>"
+            "<h4 style='margin:12px 0 6px;font-weight:600'>Direkte Product-Felder</h4><ul>{}</ul>"
+            "<h4 style='margin:12px 0 6px;font-weight:600'>E-Mail-spezifische Felder</h4><ul>{}</ul>"
+            "<p>Preisformatierung: <code>{{{{ product.price|format_price }}}}</code></p>"
+            "</section>"
+            "</div>",
+            children_info,
             format_html_join(
                 "",
                 "<li><code>{{{{ {} }}}}</code> <span style='color:#666'>({})</span></li>",
@@ -283,6 +323,8 @@ class MjmlComponentAdmin(BaseAdmin):
                 _PRODUCT_EMAIL_FIELDS,
             ),
         )
+
+    product_template_variables = component_info
 
 
 class EmailCampaignComponentInline(BaseStackedInline):
@@ -359,29 +401,56 @@ class EmailCampaignComponentInline(BaseStackedInline):
             component_name,
         )
 
-    @admin.display(description=_("Standard-Variablen der Komponente"))
+    @admin.display(description=_("Komponenten-Info"))
     def component_default_variables(self, obj: EmailCampaignComponent):
         library_component = getattr(obj, "library_component", None)
         default_variables = getattr(library_component, "default_variables", None) or {}
-        if not default_variables:
-            return format_html(
-                "<div style='padding:10px 12px;border:1px solid #d1d5db;"
-                "background:#f9fafb;border-radius:6px;color:#6b7280'>"
-                "{}</div>",
+        markup = getattr(library_component, "mjml_markup", "") if library_component else ""
+        children_slot = _children_slot_location(markup)
+
+        if children_slot:
+            line_number, line = children_slot
+            children_info = format_html(
+                "<p style='margin:0 0 8px;color:#1f2937'>"
+                "Children dieser Komponente werden an <code>{{{{ children }}}}</code> eingefuegt."
+                "</p>"
+                "<p style='margin:0 0 8px;color:#374151'><strong>Fundstelle:</strong> Zeile {}</p>"
+                "<pre style='margin:0;white-space:pre-wrap;font-family:monospace'>{}</pre>",
+                line_number,
+                line,
+            )
+        else:
+            children_info = format_html(
+                "<p style='margin:0;color:#6b7280'>"
+                "Diese Komponente enthaelt keinen <code>{}</code>-Slot. "
+                "Untergeordnete Komponenten werden deshalb nicht ausgegeben."
+                "</p>",
+                "{{ children }}",
+            )
+
+        if default_variables:
+            variables_info = format_html(
+                "<p style='margin:0 0 8px;color:#1f2937'>"
+                "Diese Werte kommen aus der Komponente. Im Feld Variablen darunter "
+                "muessen nur abweichende Keys gesetzt werden."
+                "</p>"
+                "<pre style='margin:0;white-space:pre-wrap;font-family:monospace'>{}</pre>",
+                json.dumps(default_variables, ensure_ascii=False, indent=2),
+            )
+        else:
+            variables_info = format_html(
+                "<p style='margin:0;color:#6b7280'>{}</p>",
                 _("Diese Komponente setzt keine Standard-Variablen."),
             )
 
-        json_text = json.dumps(default_variables, ensure_ascii=False, indent=2)
         return format_html(
             "<div style='padding:10px 12px;border:1px solid #bfdbfe;"
-            "background:#eff6ff;border-radius:6px'>"
-            "<p style='margin:0 0 8px;color:#1f2937'>"
-            "Diese Werte kommen aus der Komponente. Im Feld Variablen darunter "
-            "muessen nur abweichende Keys gesetzt werden."
-            "</p>"
-            "<pre style='margin:0;white-space:pre-wrap;font-family:monospace'>{}</pre>"
+            "background:#eff6ff;border-radius:6px;display:grid;gap:12px'>"
+            "<section><h4 style='margin:0 0 6px;font-weight:600'>Verschachtelung</h4>{}</section>"
+            "<section><h4 style='margin:0 0 6px;font-weight:600'>Standard-Variablen</h4>{}</section>"
             "</div>",
-            json_text,
+            children_info,
+            variables_info,
         )
 
 

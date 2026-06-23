@@ -9,6 +9,30 @@ class TestMjmlComponentAdminRegistered(SimpleTestCase):
         from emails.models import MjmlComponent
         assert admin.site.is_registered(MjmlComponent)
 
+    def test_mjml_component_admin_uses_general_component_info_field(self):
+        from emails.admin import MjmlComponentAdmin
+
+        assert "component_info" in MjmlComponentAdmin.readonly_fields
+        assert "product_template_variables" not in MjmlComponentAdmin.readonly_fields
+
+    def test_component_info_shows_children_slot_location(self):
+        from django.contrib.admin.sites import AdminSite
+        from emails.admin import MjmlComponentAdmin
+        from emails.models import MjmlComponent
+
+        admin_instance = MjmlComponentAdmin(MjmlComponent, AdminSite())
+        component = MjmlComponent(
+            name="Section",
+            mjml_markup="<mj-section>\n{{ children }}\n</mj-section>",
+        )
+
+        html = str(admin_instance.component_info(component))
+
+        assert "Verschachtelung" in html
+        assert "{{ children }}" in html
+        assert "Zeile 2" in html
+        assert "Produkt-Kontext" in html
+
 
 class TestEmailCampaignComponentInline(SimpleTestCase):
     def test_component_inline_uses_unfold_sortable_ordering_field(self):
@@ -68,6 +92,7 @@ class TestEmailCampaignComponentInline(SimpleTestCase):
         inline = EmailCampaignComponentInline(EmailCampaign, AdminSite())
         obj = SimpleNamespace(
             library_component=SimpleNamespace(
+                mjml_markup="<mj-section>{{ children }}</mj-section>",
                 default_variables={
                     "h1-title": "Standardtitel",
                     "h1-small": "Standardunterzeile",
@@ -82,6 +107,8 @@ class TestEmailCampaignComponentInline(SimpleTestCase):
         assert "Standardtitel" in html
         assert "h1-small" in html
         assert "Standardunterzeile" in html
+        assert "{{ children }}" in html
+        assert "Fundstelle" in html
 
     def test_default_variables_info_renders_empty_state(self):
         from django.contrib.admin.sites import AdminSite
@@ -89,11 +116,15 @@ class TestEmailCampaignComponentInline(SimpleTestCase):
         from emails.models import EmailCampaign
 
         inline = EmailCampaignComponentInline(EmailCampaign, AdminSite())
-        obj = SimpleNamespace(library_component=SimpleNamespace(default_variables={}))
+        obj = SimpleNamespace(
+            library_component=SimpleNamespace(default_variables={}, mjml_markup="<mj-text/>")
+        )
 
         html = str(inline.component_default_variables(obj))
 
         assert "Diese Komponente setzt keine Standard-Variablen." in html
+        assert "keinen" in html
+        assert "{{ children }}" in html
 
 
 class TestEmailCampaignProductInline(SimpleTestCase):
