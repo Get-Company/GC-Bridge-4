@@ -232,6 +232,12 @@ class PackagingLabelAdmin(BaseAdmin):
             "qr_code": label.qr_code.title if label.qr_code else "(Kein QR-Code)",
         }
 
+        qr_preview_url = (
+            reverse("qrcodes:preview", args=(label.qr_code.pk,))
+            if label.qr_code_id
+            else ""
+        )
+
         context = {
             **self.admin_site.each_context(request),
             "title": f"Editor — {label.name}",
@@ -239,6 +245,7 @@ class PackagingLabelAdmin(BaseAdmin):
             "block_definitions": BLOCK_DEFINITIONS,
             "layout_data_json": json.dumps(label.layout_data),
             "preview_data_json": json.dumps(preview_data),
+            "qr_preview_url": qr_preview_url,
             "save_url": reverse("admin:ppwr_packaginglabel_save_layout", args=(label.pk,)),
             "generate_pdf_url": reverse("admin:ppwr_packaginglabel_generate_pdf", args=(label.pk,)),
             "change_url": reverse("admin:ppwr_packaginglabel_change", args=(label.pk,)),

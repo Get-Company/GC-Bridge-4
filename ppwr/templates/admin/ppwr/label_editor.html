@@ -396,6 +396,7 @@ const canvas = document.getElementById('ppwr-canvas');
 const canvasW = {{ label.canvas_width_mm }};
 const canvasH = {{ label.canvas_height_mm }};
 const previewData = {{ preview_data_json|safe }};
+const QR_PREVIEW_URL = "{{ qr_preview_url }}";
 const SAVE_URL = "{{ save_url }}";
 
 let layout = {{ layout_data_json|safe }};
@@ -441,8 +442,17 @@ function createBlockEl(block) {
   inner.className = 'label-block-inner';
 
   if (block.type === 'qr_code') {
-    inner.innerHTML = '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;">'
-      + '<span class="material-symbols-outlined" style="font-size:32px;color:#aaa;">qr_code_2</span></div>';
+    if (QR_PREVIEW_URL) {
+      const img = document.createElement('img');
+      img.src = QR_PREVIEW_URL;
+      img.alt = 'QR-Code';
+      img.style.cssText = 'width:100%;height:100%;object-fit:contain;display:block;pointer-events:none;';
+      inner.appendChild(img);
+    } else {
+      inner.innerHTML = '<div style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;">'
+        + '<span class="material-symbols-outlined" style="font-size:28px;color:#aaa;">qr_code_2</span>'
+        + '<span style="font-size:9px;color:#aaa;">Kein QR-Code verknüpft</span></div>';
+    }
   } else {
     const textEl = document.createElement('div');
     textEl.className = 'label-block-text';
