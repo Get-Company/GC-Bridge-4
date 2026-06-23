@@ -1,17 +1,26 @@
-from django.contrib import admin
+from datetime import timedelta
+from urllib.parse import urlencode
+
+from django.contrib import admin, messages
 from django.contrib.admin.sites import NotRegistered
+from django.contrib.admin.utils import quote
 from django.contrib.auth.admin import GroupAdmin as BaseGroupAdmin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import Group, User
+from django.core.exceptions import PermissionDenied
 from django.db import models
-from datetime import timedelta
+from django.forms.models import model_to_dict
+from django.http import HttpResponseRedirect
 from django.template.response import TemplateResponse
-from django.urls import path
+from django.urls import path, reverse
+from django.utils.translation import gettext_lazy as _
 
 from unfold.admin import ModelAdmin as UnfoldModelAdmin
 from unfold.admin import StackedInline as UnfoldStackedInline
 from unfold.admin import TabularInline as UnfoldTabularInline
 from unfold.contrib.forms.widgets import WysiwygWidget
+from unfold.decorators import action
+from unfold.enums import ActionVariant
 from unfold.forms import AdminPasswordChangeForm, UserChangeForm, UserCreationForm
 from unfold.widgets import UnfoldAdminSelectWidget, UnfoldAdminTextInputWidget
 
@@ -54,6 +63,8 @@ from customer.views import (
 
 
 class BaseAdmin(UnfoldModelAdmin):
+    base_actions_row = ("copy_admin_object_row", "delete_admin_object_row")
+    copy_source_param = "_copy_from"
     readonly_fields = ("created_at", "updated_at")
     ordering = ("-created_at",)
     compressed_fields = True
@@ -65,6 +76,115 @@ class BaseAdmin(UnfoldModelAdmin):
     formfield_overrides = {
         models.TextField: {"widget": WysiwygWidget},
     }
+
+    def _get_base_actions_row(self):
+        action_names = list(self._extract_action_names(getattr(self, "actions_row", ())))
+
+        for action_name in self.base_actions_row:
+            if action_name not in action_names:
+                action_names.append(action_name)
+
+        return [self.get_unfold_action(action_name) for action_name in action_names]
+
+    def _admin_url_name(self, action: str) -> str:
+        return (
+            f"{self.admin_site.name}:"
+            f"{self.opts.app_label}_{self.opts.model_name}_{action}"
+        )
+
+    def _redirect_to_changelist(self) -> HttpResponseRedirect:
+        return HttpResponseRedirect(reverse(self._admin_url_name("changelist")))
+
+    def get_changeform_initial_data(self, request):
+        initial = super().get_changeform_initial_data(request)
+        object_id = request.GET.get(self.copy_source_param)
+
+        if not object_id:
+            return initial
+
+        initial.pop(self.copy_source_param, None)
+        obj = self.get_object(request, object_id)
+
+        if obj is None:
+            self.message_user(
+                request,
+                _("Das zu kopierende Objekt wurde nicht gefunden."),
+                level=messages.ERROR,
+            )
+            return initial
+
+        if (
+            not self.has_add_permission(request)
+            or not self.has_view_or_change_permission(request, obj)
+        ):
+            raise PermissionDenied
+
+        copy_initial = model_to_dict(obj)
+        copy_initial.pop(self.opts.pk.name, None)
+        copy_initial.pop(self.opts.pk.attname, None)
+
+        return {**copy_initial, **initial}
+
+    def has_copy_admin_object_row_permission(self, request):
+        return (
+            self.has_add_permission(request)
+            and self.has_view_or_change_permission(request)
+        )
+
+    def has_delete_admin_object_row_permission(self, request):
+        return self.has_delete_permission(request)
+
+    @action(
+        description=_("Kopieren"),
+        icon="content_copy",
+        permissions=("copy_admin_object_row",),
+        url_path="copy",
+        variant=ActionVariant.DEFAULT,
+    )
+    def copy_admin_object_row(self, request, object_id: str):
+        obj = self.get_object(request, object_id)
+
+        if obj is None:
+            self.message_user(
+                request,
+                _("Das zu kopierende Objekt wurde nicht gefunden."),
+                level=messages.ERROR,
+            )
+            return self._redirect_to_changelist()
+
+        if (
+            not self.has_add_permission(request)
+            or not self.has_view_or_change_permission(request, obj)
+        ):
+            raise PermissionDenied
+
+        url = reverse(self._admin_url_name("add"))
+        query = urlencode({self.copy_source_param: str(obj.pk)})
+        return HttpResponseRedirect(f"{url}?{query}")
+
+    @action(
+        description=_("Löschen"),
+        icon="delete",
+        permissions=("delete_admin_object_row",),
+        url_path="delete-row",
+        variant=ActionVariant.DANGER,
+    )
+    def delete_admin_object_row(self, request, object_id: str):
+        obj = self.get_object(request, object_id)
+
+        if obj is None:
+            self.message_user(
+                request,
+                _("Das zu löschende Objekt wurde nicht gefunden."),
+                level=messages.ERROR,
+            )
+            return self._redirect_to_changelist()
+
+        if not self.has_delete_permission(request, obj):
+            raise PermissionDenied
+
+        url = reverse(self._admin_url_name("delete"), args=(quote(str(obj.pk)),))
+        return HttpResponseRedirect(url)
 
 
 class BaseTabularInline(UnfoldTabularInline):
@@ -86,15 +206,16 @@ admin.site.unregister(Group)
 
 
 @admin.register(User)
-class UserAdmin(BaseUserAdmin, UnfoldModelAdmin):
+class UserAdmin(BaseUserAdmin, BaseAdmin):
     form = UserChangeForm
     add_form = UserCreationForm
     change_password_form = AdminPasswordChangeForm
+    readonly_fields = ()
 
 
 @admin.register(Group)
-class GroupAdmin(BaseGroupAdmin, UnfoldModelAdmin):
-    pass
+class GroupAdmin(BaseGroupAdmin, BaseAdmin):
+    readonly_fields = ()
 
 
 class CeleryBeatPeriodicTaskInline(BeatPeriodicTaskInline, BaseTabularInline):
