@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
@@ -85,6 +86,15 @@ class EmailCampaignComponent(BaseModel):
         related_name="campaign_usages",
         verbose_name=_("Bibliotheks-Komponente"),
     )
+    parent = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="children",
+        verbose_name=_("Übergeordnete Komponente"),
+        help_text=_("Optional fuer verschachtelte MJML-Strukturen."),
+    )
     campaign_product = models.ForeignKey(
         "EmailCampaignProduct",
         on_delete=models.SET_NULL,
@@ -114,6 +124,25 @@ class EmailCampaignComponent(BaseModel):
 
     def get_inline_title(self) -> str:
         return str(self)
+
+    def clean(self):
+        super().clean()
+        if not self.parent_id:
+            return
+
+        if self.pk and self.parent_id == self.pk:
+            raise ValidationError({"parent": _("Eine Komponente kann nicht ihr eigener Parent sein.")})
+
+        if self.parent and self.parent.campaign_id != self.campaign_id:
+            raise ValidationError({"parent": _("Parent und Child muessen zur selben Kampagne gehoeren.")})
+
+        seen_ids = {self.pk} if self.pk else set()
+        parent = self.parent
+        while parent is not None:
+            if parent.pk in seen_ids:
+                raise ValidationError({"parent": _("Diese Parent-Auswahl erzeugt eine Schleife.")})
+            seen_ids.add(parent.pk)
+            parent = parent.parent
 
 
 class EmailCampaignProduct(BaseModel):

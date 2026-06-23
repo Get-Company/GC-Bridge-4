@@ -137,7 +137,7 @@ def _campaign_sales_channel_ids(campaign: "EmailCampaign") -> tuple[int, ...]:
 def _campaign_components(campaign: "EmailCampaign") -> list["EmailCampaignComponent"]:
     return list(
         campaign.components.filter(enabled=True)
-        .select_related("library_component", "campaign_product__product")
+        .select_related("library_component", "campaign_product__product", "parent")
         .order_by("order", "id")
     )
 
@@ -149,7 +149,59 @@ def _normalize_hyphenated_placeholders(markup: str) -> str:
     )
 
 
-def _render_component_mjml(component: "EmailCampaignComponent", context: dict) -> str:
+def _component_identity(component: "EmailCampaignComponent") -> int:
+    return getattr(component, "pk", None) or getattr(component, "id", None) or id(component)
+
+
+def _component_parent_id(component: "EmailCampaignComponent") -> int | None:
+    parent_id = getattr(component, "parent_id", None)
+    if parent_id is not None:
+        return parent_id
+    parent = getattr(component, "parent", None)
+    return _component_identity(parent) if parent is not None else None
+
+
+def _component_children_map(
+    components: list["EmailCampaignComponent"],
+) -> dict[int | None, list["EmailCampaignComponent"]]:
+    child_map: dict[int | None, list["EmailCampaignComponent"]] = {}
+    component_ids = {_component_identity(component) for component in components}
+
+    for component in components:
+        parent_id = _component_parent_id(component)
+        if parent_id not in component_ids:
+            parent_id = None
+        child_map.setdefault(parent_id, []).append(component)
+
+    return child_map
+
+
+def _render_component_children(
+    component: "EmailCampaignComponent",
+    context: dict,
+    child_map: dict[int | None, list["EmailCampaignComponent"]],
+    seen: set[int],
+) -> str:
+    return "\n".join(
+        rendered
+        for child in child_map.get(_component_identity(component), [])
+        for rendered in [_render_component_mjml(child, context, child_map, seen)]
+        if rendered.strip()
+    )
+
+
+def _render_component_mjml(
+    component: "EmailCampaignComponent",
+    context: dict,
+    child_map: dict[int | None, list["EmailCampaignComponent"]] | None = None,
+    seen: set[int] | None = None,
+) -> str:
+    component_id = _component_identity(component)
+    seen = set(seen or ())
+    if component_id in seen:
+        return ""
+    seen.add(component_id)
+
     markup = component.library_component.mjml_markup if component.library_component_id else ""
     if not markup:
         return ""
@@ -178,6 +230,14 @@ def _render_component_mjml(component: "EmailCampaignComponent", context: dict) -
             sales_channel_ids=sales_channel_ids,
         )
 
+    child_map = child_map or {}
+    component_context["children"] = _render_component_children(
+        component,
+        component_context,
+        child_map,
+        seen,
+    )
+
     try:
         return _jinja_env.from_string(_normalize_hyphenated_placeholders(markup)).render(
             component_context
@@ -202,19 +262,20 @@ def render_campaign_mjml(campaign: "EmailCampaign") -> str:
 
     base_context = {"products": products, "_sales_channel_ids": sales_channel_ids}
     components = _campaign_components(campaign)
+    child_map = _component_children_map(components)
 
     head_mjml = "\n".join(
         rendered
-        for comp in components
+        for comp in child_map.get(None, [])
         if getattr(getattr(comp, "library_component", None), "placement", "body") == "head"
-        for rendered in [_render_component_mjml(comp, base_context)]
+        for rendered in [_render_component_mjml(comp, base_context, child_map)]
         if rendered.strip()
     )
     body_mjml = "\n".join(
         rendered
-        for comp in components
+        for comp in child_map.get(None, [])
         if getattr(getattr(comp, "library_component", None), "placement", "body") == "body"
-        for rendered in [_render_component_mjml(comp, base_context)]
+        for rendered in [_render_component_mjml(comp, base_context, child_map)]
         if rendered.strip()
     )
 

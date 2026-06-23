@@ -6,6 +6,7 @@ import logging
 
 from django import forms
 from django.contrib import admin
+from django.db.models import Case, IntegerField, When
 from django.http import HttpResponse, JsonResponse
 from django.urls import path
 from django.utils.html import format_html, format_html_join
@@ -40,6 +41,68 @@ _PRODUCT_EMAIL_FIELDS = (
     ("product.images", "sortierte Produktbilder"),
     ("product.first_image", "erstes Produktbild"),
 )
+
+
+def _component_identity(component: EmailCampaignComponent) -> int:
+    return getattr(component, "pk", None) or getattr(component, "id", None) or id(component)
+
+
+def _component_parent_id(component: EmailCampaignComponent) -> int | None:
+    parent_id = getattr(component, "parent_id", None)
+    if parent_id is not None:
+        return parent_id
+    parent = getattr(component, "parent", None)
+    return _component_identity(parent) if parent is not None else None
+
+
+def _tree_sorted_component_ids(components: list[EmailCampaignComponent]) -> list[int]:
+    component_ids = {_component_identity(component) for component in components}
+    children_by_parent: dict[int | None, list[EmailCampaignComponent]] = {}
+
+    for component in components:
+        parent_id = _component_parent_id(component)
+        if parent_id not in component_ids:
+            parent_id = None
+        children_by_parent.setdefault(parent_id, []).append(component)
+
+    for siblings in children_by_parent.values():
+        siblings.sort(key=lambda component: (getattr(component, "order", 0), _component_identity(component)))
+
+    sorted_ids: list[int] = []
+    seen_ids: set[int] = set()
+
+    def visit(component: EmailCampaignComponent) -> None:
+        component_id = _component_identity(component)
+        if component_id in seen_ids:
+            return
+        seen_ids.add(component_id)
+        sorted_ids.append(component_id)
+        for child in children_by_parent.get(component_id, []):
+            visit(child)
+
+    for root in children_by_parent.get(None, []):
+        visit(root)
+
+    for component in sorted(components, key=lambda item: (getattr(item, "order", 0), _component_identity(item))):
+        visit(component)
+
+    return sorted_ids
+
+
+def _component_tree_depth(component: EmailCampaignComponent) -> int:
+    depth = 0
+    seen_ids = {_component_identity(component)}
+    parent = getattr(component, "parent", None)
+
+    while parent is not None:
+        parent_id = _component_identity(parent)
+        if parent_id in seen_ids:
+            break
+        seen_ids.add(parent_id)
+        depth += 1
+        parent = getattr(parent, "parent", None)
+
+    return depth
 
 
 class PrettyJSONWidget(forms.Textarea):
@@ -229,24 +292,49 @@ class EmailCampaignComponentInline(BaseStackedInline):
     ordering_field = "order"
     hide_ordering_field = True
     fields = (
+        "tree_position",
         "order",
+        "parent",
         "enabled",
         "library_component",
         "campaign_product",
         "component_default_variables",
         "variables",
     )
-    readonly_fields = BaseStackedInline.readonly_fields + ("component_default_variables",)
+    readonly_fields = BaseStackedInline.readonly_fields + ("tree_position", "component_default_variables")
     autocomplete_fields = ("library_component",)
     collapsible = True
     extra = 0
 
     def get_queryset(self, request):
-        return super().get_queryset(request).select_related("library_component")
+        queryset = super().get_queryset(request).select_related(
+            "library_component",
+            "parent",
+            "parent__parent",
+            "parent__parent__parent",
+        )
+        components = list(queryset)
+        sorted_ids = _tree_sorted_component_ids(components)
+        if not sorted_ids:
+            return queryset
+        preserved_order = Case(
+            *[When(pk=component_id, then=position) for position, component_id in enumerate(sorted_ids)],
+            output_field=IntegerField(),
+        )
+        return queryset.order_by(preserved_order)
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        campaign_id = request.resolver_match.kwargs.get("object_id") if request.resolver_match else None
+        if db_field.name == "parent":
+            if campaign_id:
+                kwargs["queryset"] = (
+                    EmailCampaignComponent.objects.filter(campaign_id=campaign_id)
+                    .select_related("library_component")
+                    .order_by("order", "id")
+                )
+            else:
+                kwargs["queryset"] = EmailCampaignComponent.objects.none()
         if db_field.name == "campaign_product":
-            campaign_id = request.resolver_match.kwargs.get("object_id") if request.resolver_match else None
             if campaign_id:
                 kwargs["queryset"] = EmailCampaignProduct.objects.filter(campaign_id=campaign_id).select_related(
                     "product"
@@ -254,6 +342,22 @@ class EmailCampaignComponentInline(BaseStackedInline):
             else:
                 kwargs["queryset"] = EmailCampaignProduct.objects.none()
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    @admin.display(description=_("Baum"))
+    def tree_position(self, obj: EmailCampaignComponent):
+        if not getattr(obj, "pk", None):
+            return format_html("<span style='color:#6b7280'>{}</span>", _("Neue Komponente"))
+
+        depth = _component_tree_depth(obj)
+        prefix = "-" * depth
+        component_name = getattr(getattr(obj, "library_component", None), "name", str(obj))
+        return format_html(
+            "<div style='margin-left:{}px;font-family:monospace'>"
+            "<span style='color:#6b7280'>{}</span> {}</div>",
+            depth * 24,
+            prefix,
+            component_name,
+        )
 
     @admin.display(description=_("Standard-Variablen der Komponente"))
     def component_default_variables(self, obj: EmailCampaignComponent):

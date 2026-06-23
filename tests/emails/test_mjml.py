@@ -407,6 +407,72 @@ class TestEmailCampaignProductFields:
 
 
 class TestHeadBodySplit:
+    def test_nested_components_render_into_parent_children_slot(self, monkeypatch):
+        from emails.mjml import render_campaign_mjml
+
+        def fake_render_to_string(template_name, context):
+            if template_name == "emails/newsletter_base.mjml":
+                return context.get("body_mjml", "")
+            return ""
+
+        monkeypatch.setattr("emails.mjml.render_to_string", fake_render_to_string)
+        monkeypatch.setattr("emails.mjml._campaign_sales_channel_ids", lambda campaign: ())
+
+        def make_comp(component_id, name, markup, order, parent_id=None, variables=None):
+            return SimpleNamespace(
+                id=component_id,
+                pk=component_id,
+                parent_id=parent_id,
+                library_component=SimpleNamespace(
+                    placement="body",
+                    name=name,
+                    mjml_markup=markup,
+                    default_variables={},
+                ),
+                library_component_id=True,
+                campaign_product_id=None,
+                variables=variables or {},
+                order=order,
+                enabled=True,
+            )
+
+        section = make_comp(1, "Section", "<mj-section>{{ children }}</mj-section>", 10)
+        column = make_comp(2, "Column", "<mj-column>{{ children }}</mj-column>", 10, parent_id=1)
+        text_top = make_comp(
+            3,
+            "Text",
+            "<mj-text>{{ content }}</mj-text>",
+            10,
+            parent_id=2,
+            variables={"content": "Erster Text"},
+        )
+        image = make_comp(
+            4,
+            "Image",
+            '<mj-image src="{{ src }}" />',
+            20,
+            parent_id=2,
+            variables={"src": "https://example.com/bild.jpg"},
+        )
+        text_bottom = make_comp(
+            5,
+            "Text",
+            "<mj-text>{{ content }}</mj-text>",
+            30,
+            parent_id=2,
+            variables={"content": "Zweiter Text"},
+        )
+        campaign = SimpleNamespace(
+            campaign_products=FakeQuerySet(),
+            components=FakeQuerySet([text_bottom, image, text_top, column, section]),
+        )
+
+        mjml = render_campaign_mjml(campaign)
+
+        assert mjml.startswith("<mj-section><mj-column>")
+        assert mjml.endswith("</mj-column></mj-section>")
+        assert mjml.index("Erster Text") < mjml.index("bild.jpg") < mjml.index("Zweiter Text")
+
     def test_head_components_land_in_head_mjml(self, monkeypatch):
         from types import SimpleNamespace
         from emails.mjml import render_campaign_mjml

@@ -17,6 +17,39 @@ class TestEmailCampaignComponentInline(SimpleTestCase):
         assert EmailCampaignComponentInline.ordering_field == "order"
         assert EmailCampaignComponentInline.hide_ordering_field is True
         assert "order" in EmailCampaignComponentInline.fields
+        assert "tree_position" in EmailCampaignComponentInline.fields
+
+    def test_tree_sorted_component_ids_put_children_after_parent(self):
+        from emails.admin import _tree_sorted_component_ids
+
+        root = SimpleNamespace(id=1, pk=1, parent_id=None, order=20)
+        child = SimpleNamespace(id=2, pk=2, parent_id=1, order=10)
+        grandchild = SimpleNamespace(id=3, pk=3, parent_id=2, order=10)
+        other_root = SimpleNamespace(id=4, pk=4, parent_id=None, order=10)
+
+        sorted_ids = _tree_sorted_component_ids([grandchild, child, root, other_root])
+
+        assert sorted_ids == [4, 1, 2, 3]
+
+    def test_tree_position_renders_depth_dashes(self):
+        from django.contrib.admin.sites import AdminSite
+        from emails.admin import EmailCampaignComponentInline
+        from emails.models import EmailCampaign
+
+        inline = EmailCampaignComponentInline(EmailCampaign, AdminSite())
+        root = SimpleNamespace(id=1, pk=1, parent=None, library_component=SimpleNamespace(name="Section"))
+        child = SimpleNamespace(id=2, pk=2, parent=root, library_component=SimpleNamespace(name="Column"))
+        grandchild = SimpleNamespace(
+            id=3,
+            pk=3,
+            parent=child,
+            library_component=SimpleNamespace(name="Text"),
+        )
+
+        html = str(inline.tree_position(grandchild))
+
+        assert "--" in html
+        assert "Text" in html
 
     def test_default_variables_info_field_is_shown_before_campaign_variables(self):
         from emails.admin import EmailCampaignComponentInline
