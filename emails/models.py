@@ -100,7 +100,7 @@ class EmailCampaignComponent(BaseModel):
         verbose_name=_("Variablen"),
         help_text=_('Key-Value-Paare fuer Platzhalter im MJML-Template, z.B. {"titel": "Hallo"}'),
     )
-    order = models.PositiveIntegerField(default=0, verbose_name=_("Reihenfolge"))
+    order = models.PositiveIntegerField(default=0, db_index=True, verbose_name=_("Reihenfolge"))
     enabled = models.BooleanField(default=True, verbose_name=_("Aktiviert"))
 
     class Meta:
@@ -150,7 +150,7 @@ class EmailCampaignProduct(BaseModel):
         blank=True,
         verbose_name=_("Preise synchronisiert am"),
     )
-    order = models.PositiveIntegerField(default=0, verbose_name=_("Reihenfolge"))
+    order = models.PositiveIntegerField(default=0, db_index=True, verbose_name=_("Reihenfolge"))
 
     class Meta:
         verbose_name = _("Kampagnen-Produkt")
@@ -165,4 +165,3 @@ class EmailCampaignProduct(BaseModel):
 
     def __str__(self) -> str:
         return f"{self.campaign} | {self.product}"
-

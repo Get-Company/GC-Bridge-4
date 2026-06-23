@@ -11,6 +11,13 @@ class TestMjmlComponentAdminRegistered(SimpleTestCase):
 
 
 class TestEmailCampaignComponentInline(SimpleTestCase):
+    def test_component_inline_uses_unfold_sortable_ordering_field(self):
+        from emails.admin import EmailCampaignComponentInline
+
+        assert EmailCampaignComponentInline.ordering_field == "order"
+        assert EmailCampaignComponentInline.hide_ordering_field is True
+        assert "order" in EmailCampaignComponentInline.fields
+
     def test_default_variables_info_field_is_shown_before_campaign_variables(self):
         from emails.admin import EmailCampaignComponentInline
 
@@ -54,6 +61,15 @@ class TestEmailCampaignComponentInline(SimpleTestCase):
         html = str(inline.component_default_variables(obj))
 
         assert "Diese Komponente setzt keine Standard-Variablen." in html
+
+
+class TestEmailCampaignProductInline(SimpleTestCase):
+    def test_product_inline_uses_unfold_sortable_ordering_field(self):
+        from emails.admin import EmailCampaignProductInline
+
+        assert EmailCampaignProductInline.ordering_field == "order"
+        assert EmailCampaignProductInline.hide_ordering_field is True
+        assert "order" in EmailCampaignProductInline.fields
 
 
 class TestEmailVariableJSONForms(SimpleTestCase):

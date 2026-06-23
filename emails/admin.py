@@ -226,8 +226,8 @@ class EmailCampaignComponentInline(BaseStackedInline):
     model = EmailCampaignComponent
     form = EmailCampaignComponentInlineForm
     tab = False
-    sortable = True
-    sortable_field_name = "order"
+    ordering_field = "order"
+    hide_ordering_field = True
     fields = (
         "order",
         "enabled",
@@ -284,8 +284,8 @@ class EmailCampaignComponentInline(BaseStackedInline):
 class EmailCampaignProductInline(BaseTabularInline):
     model = EmailCampaignProduct
     tab = False
-    sortable = True
-    sortable_field_name = "order"
+    ordering_field = "order"
+    hide_ordering_field = True
     fields = ("order", "product", "special_price_override", "discount_pct", "current_price_display", "prices_synced_at")
     readonly_fields = BaseTabularInline.readonly_fields + ("current_price_display", "prices_synced_at")
     autocomplete_fields = ("product",)
