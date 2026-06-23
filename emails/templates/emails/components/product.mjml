@@ -57,11 +57,23 @@
         </mj-column>
 
         <mj-column>
-            {% if product.first_image %}
+            {% if product.images|length > 1 %}
+            <mj-carousel>
+                {% for img in product.images %}
+                {% if img.url %}
+                <mj-carousel-image
+                    target="https://www.classei-shop.com/search?sSearch={{ product.erp_nr|urlencode }}"
+                    src="{{ img.url }}"
+                    alt="{{ img.alt_text or product_name }}"
+                />
+                {% endif %}
+                {% endfor %}
+            </mj-carousel>
+            {% elif product.first_image and product.first_image.url %}
             <mj-image
                 href="https://www.classei-shop.com/search?sSearch={{ product.erp_nr|urlencode }}"
-                src="https://assets.classei.de/img/{{ product.first_image.name }}.{{ product.first_image.type }}"
-                alt="{{ product_name }}"
+                src="{{ product.first_image.url }}"
+                alt="{{ product.first_image.alt_text or product_name }}"
             />
             {% endif %}
         </mj-column>

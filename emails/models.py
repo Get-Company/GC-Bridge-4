@@ -113,27 +113,6 @@ class EmailCampaignComponent(BaseModel):
         verbose_name=_("Produkt"),
         help_text=_("Optionales Produkt fuer diese Kampagnen-Komponente."),
     )
-    special_price_override = models.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        null=True,
-        blank=True,
-        verbose_name=_("Sonderpreis"),
-        help_text=_("Ueberschreibt den Sonderpreis des Produkts fuer diese Komponente."),
-    )
-    discount_pct = models.DecimalField(
-        max_digits=5,
-        decimal_places=2,
-        null=True,
-        blank=True,
-        verbose_name=_("Rabatt (%)"),
-        help_text=_("Alternativ zum absoluten Sonderpreis. Wird auf den Standardkanalpreis angewendet."),
-    )
-    prices_synced_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        verbose_name=_("Preise synchronisiert am"),
-    )
     variables = models.JSONField(
         default=dict,
         blank=True,
@@ -158,10 +137,6 @@ class EmailCampaignComponent(BaseModel):
     def clean(self):
         super().clean()
         errors = {}
-        if self.special_price_override and self.discount_pct:
-            errors["discount_pct"] = _("Nur Sonderpreis ODER Rabatt (%) angeben, nicht beides.")
-        if (self.special_price_override or self.discount_pct) and not self.product_id and not self.campaign_product_id:
-            errors["product"] = _("Fuer Sonderpreis oder Rabatt muss ein Produkt ausgewaehlt sein.")
 
         if not self.parent_id:
             if errors:

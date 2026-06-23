@@ -22,7 +22,6 @@ from emails.models import (
     EmailCampaignComponent,
     MjmlComponent,
 )
-from emails.tasks import apply_campaign_prices_async
 
 _MONOSPACE_STYLE = "font-family: monospace; width: 100%; min-height: 300px;"
 _JSON_STYLE = "font-family: monospace; width: 100%; min-height: 180px;"
@@ -34,7 +33,7 @@ _PRODUCT_FIELD_EXCLUDES = {
 }
 _PRODUCT_EMAIL_FIELDS = (
     ("product.price", "Listenpreis aus dem passenden Verkaufskanal"),
-    ("product.email_special_price", "Kampagnen-Aktionspreis"),
+    ("product.email_special_price", "aktiver Sonderpreis aus dem Produkt"),
     ("product.current_price", "Aktionspreis, sonst Listenpreis"),
     ("product.discount_pct", "Rabatt in Prozent"),
     ("product.shipping_cost_is_free", "kostenloser Versand true/false"),
@@ -223,10 +222,6 @@ class EmailCampaignComponentInlineForm(forms.ModelForm):
             return
         if not getattr(self.instance, "product_id", None):
             self.initial["product"] = legacy_campaign_product.product_id
-        if self.instance.special_price_override is None:
-            self.initial["special_price_override"] = legacy_campaign_product.special_price_override
-        if self.instance.discount_pct is None:
-            self.initial["discount_pct"] = legacy_campaign_product.discount_pct
 
     def clean_variables(self):
         return _clean_json_object(
@@ -351,17 +346,13 @@ class EmailCampaignComponentInline(BaseStackedInline):
         "enabled",
         "library_component",
         "product",
-        "special_price_override",
-        "discount_pct",
         "current_price_display",
-        "prices_synced_at",
         "component_default_variables",
         "variables",
     )
     readonly_fields = BaseStackedInline.readonly_fields + (
         "tree_position",
         "current_price_display",
-        "prices_synced_at",
         "component_default_variables",
     )
     autocomplete_fields = ("library_component", "product")
@@ -433,7 +424,7 @@ class EmailCampaignComponentInline(BaseStackedInline):
                 price_entry = product.prices.order_by("pk").first()
             if price_entry is None:
                 return "—"
-            price = price_entry.price
+            price = price_entry.get_current_price(as_float=False)
             return f"{price:,.2f} €".replace(",", "X").replace(".", ",").replace("X", ".")
         except Exception:
             return "—"
@@ -529,10 +520,6 @@ class EmailCampaignAdmin(BaseAdmin):
         super().save_model(request, obj, form, change)
         if not change:
             self._ensure_default_components(obj)
-
-    def save_related(self, request, form, formsets, change):
-        super().save_related(request, form, formsets, change)
-        apply_campaign_prices_async.delay(form.instance.pk)
 
     def _ensure_default_components(self, campaign: EmailCampaign) -> None:
         if campaign.components.exists():

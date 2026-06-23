@@ -30,13 +30,20 @@ class FakePriceQuerySet:
 
 
 class FakePrice:
-    def __init__(self, price, sales_channel_id=1, is_default=True):
+    def __init__(self, price, sales_channel_id=1, is_default=True, special_price=None):
         self.price = price
+        self.special_price = special_price
         self.sales_channel_id = sales_channel_id
         self.sales_channel = SimpleNamespace(is_default=is_default)
 
-    def get_current_price(self, *, as_float=False):
+    def get_standard_price(self, *, as_float=False):
         return self.price
+
+    def get_special_price(self, *, as_float=False):
+        return self.special_price
+
+    def get_current_price(self, *, as_float=False):
+        return self.special_price or self.price
 
 
 class FakeQuerySet:
@@ -77,9 +84,34 @@ class TestProductEmailProxy:
         assert proxy.email_special_price == Decimal("9.90")
 
     def test_no_override_returns_none_for_email_special_price(self):
-        product = MagicMock()
+        product = SimpleNamespace()
         proxy = ProductEmailProxy(product, special_price_override=None)
         assert proxy.email_special_price is None
+
+    def test_uses_product_special_price(self):
+        product = SimpleNamespace(
+            prices=FakePriceQuerySet([
+                FakePrice(Decimal("10.00"), sales_channel_id=1, is_default=True, special_price=Decimal("8.50")),
+            ])
+        )
+        proxy = ProductEmailProxy(product, special_price_override=None)
+        assert proxy.price == Decimal("10.00")
+        assert proxy.email_special_price == Decimal("8.50")
+        assert proxy.current_price == Decimal("8.50")
+        assert proxy.discount_pct == 15
+
+    def test_legacy_price_methods_delegate_to_product_prices(self):
+        product = SimpleNamespace(
+            prices=FakePriceQuerySet([
+                FakePrice(Decimal("10.00"), sales_channel_id=1, is_default=True, special_price=Decimal("8.50")),
+            ])
+        )
+        proxy = ProductEmailProxy(product, special_price_override=None)
+
+        assert proxy.get_list_price() == Decimal("10.00")
+        assert proxy.get_special_price() == Decimal("8.50")
+        assert proxy.get_current_price() == Decimal("8.50")
+        assert proxy.get_shipping_cost() is None
 
     def test_discount_pct_calculated_correctly(self):
         product = SimpleNamespace(
@@ -437,8 +469,6 @@ class TestHeadBodySplit:
             ),
             library_component_id=True,
             product=product,
-            special_price_override=None,
-            discount_pct=None,
             campaign_product_id=None,
             variables={},
             order=10,

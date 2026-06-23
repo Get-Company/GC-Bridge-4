@@ -26,30 +26,19 @@ class TestApplyChannelFactor:
 
 
 class TestApplyCampaignSpecialPrices:
-    @patch("emails.services.ShopwareSettings")
-    def test_returns_empty_when_no_default_channel(self, MockSettings):
+    def test_returns_empty_without_writing_product_prices(self):
         from emails.services import apply_campaign_special_prices
-        MockSettings.objects.filter.return_value.first.return_value = None
         campaign = MagicMock()
-        result = apply_campaign_special_prices(campaign)
-        assert result == []
-
-    @patch("emails.services.ShopwareSettings")
-    @patch("emails.services.Price")
-    def test_skips_products_without_price_fields(self, MockPrice, MockSettings):
-        from emails.services import apply_campaign_special_prices
-        default_ch = SimpleNamespace(pk=1, price_factor=Decimal("1.0"), is_active=True)
-        MockSettings.objects.filter.return_value.first.return_value = default_ch
-        MockSettings.objects.filter.return_value.exclude.return_value = []
-
-        component = MagicMock()
-        component.product = MagicMock()
-        component.special_price_override = None
-        component.discount_pct = None
-        component.campaign_product = None
-        campaign = MagicMock()
-        campaign.components.select_related.return_value.all.return_value = [component]
 
         result = apply_campaign_special_prices(campaign)
+
         assert result == []
-        MockPrice.objects.filter.assert_not_called()
+
+    def test_does_not_touch_campaign_relations(self):
+        from emails.services import apply_campaign_special_prices
+        campaign = MagicMock()
+
+        result = apply_campaign_special_prices(campaign)
+
+        assert result == []
+        campaign.components.select_related.assert_not_called()

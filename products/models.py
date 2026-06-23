@@ -113,10 +113,14 @@ class Image(BaseModel):
         from django.conf import settings
 
         base_url = getattr(settings, "MICROTECH_IMAGE_BASE_URL", "") or getattr(settings, "CDN_PREFIX", "")
-        filename = self.filename
-        if base_url and filename:
-            return f"{base_url.rstrip('/')}/{filename.lstrip('/')}"
-        return self.path
+        path = str(self.path or "").replace("\\", "/").strip()
+        if path in {"", "."}:
+            return ""
+        if path.startswith(("http://", "https://")):
+            return path
+        if base_url and path:
+            return f"{base_url.rstrip('/')}/{path.lstrip('/')}"
+        return path
 
     def __str__(self) -> str:
         return self.alt_text or self.path

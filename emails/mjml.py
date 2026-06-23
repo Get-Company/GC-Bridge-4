@@ -35,6 +35,12 @@ def _round_up_5ct(value: Decimal) -> Decimal:
     return (Decimal(value) / step).to_integral_value(rounding=ROUND_UP) * step
 
 
+def _decimal_as_float(value, *, as_float: bool = False):
+    if value is None:
+        return None
+    return float(value) if as_float else value
+
+
 _jinja_env = jinja2.Environment(autoescape=False, undefined=jinja2.Undefined)
 _jinja_env.filters["format_price"] = _format_price
 _jinja_env.filters["format_date"] = _format_date
@@ -67,6 +73,11 @@ class ProductEmailProxy:
     def email_special_price(self) -> Decimal | None:
         if self._override is not None:
             return self._override
+        entry = self._get_price_entry()
+        if entry is not None and hasattr(entry, "get_special_price"):
+            special_price = entry.get_special_price(as_float=False)
+            if special_price is not None:
+                return special_price
         if self._discount_pct is None:
             return None
         list_price = self.price
@@ -79,11 +90,21 @@ class ProductEmailProxy:
     @property
     def price(self) -> Decimal | None:
         entry = self._get_price_entry()
-        return entry.price if entry else None
+        if not entry:
+            return None
+        if hasattr(entry, "get_standard_price"):
+            return entry.get_standard_price(as_float=False)
+        return entry.price
 
     @property
     def current_price(self) -> Decimal | None:
-        return self.email_special_price or self.price
+        special_price = self.email_special_price
+        if special_price is not None:
+            return special_price
+        entry = self._get_price_entry()
+        if entry is not None and hasattr(entry, "get_current_price"):
+            return entry.get_current_price(as_float=False)
+        return self.price
 
     @property
     def discount_pct(self) -> int:
@@ -99,6 +120,18 @@ class ProductEmailProxy:
     def shipping_cost_is_free(self) -> bool:
         price = self.current_price
         return bool(price is not None and price >= Decimal("99.00"))
+
+    def get_current_price(self, *, as_float: bool = False):
+        return _decimal_as_float(self.current_price, as_float=as_float)
+
+    def get_list_price(self, *, as_float: bool = False):
+        return _decimal_as_float(self.price, as_float=as_float)
+
+    def get_special_price(self, *, as_float: bool = False):
+        return _decimal_as_float(self.email_special_price, as_float=as_float)
+
+    def get_shipping_cost(self):
+        return 0 if self.shipping_cost_is_free else None
 
     @property
     def images(self):
@@ -221,20 +254,14 @@ def _render_component_mjml(
     }
 
     product = getattr(component, "product", None)
-    special_price_override = getattr(component, "special_price_override", None)
-    discount_pct = getattr(component, "discount_pct", None)
     if product is None and getattr(component, "campaign_product_id", None) and getattr(component, "campaign_product", None):
         cp = component.campaign_product
         product = cp.product
-        special_price_override = cp.special_price_override
-        discount_pct = cp.discount_pct
 
     if product is not None:
         sales_channel_ids = context.get("_sales_channel_ids", ())
         component_context["product"] = ProductEmailProxy(
             product,
-            special_price_override=special_price_override,
-            discount_pct=discount_pct,
             sales_channel_ids=sales_channel_ids,
         )
 
@@ -262,18 +289,12 @@ def render_campaign_mjml(campaign: "EmailCampaign") -> str:
     products = []
     for component in components:
         product = getattr(component, "product", None)
-        special_price_override = getattr(component, "special_price_override", None)
-        discount_pct = getattr(component, "discount_pct", None)
         if product is None and getattr(component, "campaign_product_id", None) and getattr(component, "campaign_product", None):
             product = component.campaign_product.product
-            special_price_override = component.campaign_product.special_price_override
-            discount_pct = component.campaign_product.discount_pct
         if product is not None:
             products.append(
                 ProductEmailProxy(
                     product,
-                    special_price_override=special_price_override,
-                    discount_pct=discount_pct,
                     sales_channel_ids=sales_channel_ids,
                 )
             )

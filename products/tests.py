@@ -1896,6 +1896,27 @@ class ScheduledProductSyncCommandTest(TestCase):
 
 
 @override_settings(MICROTECH_IMAGE_BASE_URL="https://cdn.example.com/img/")
+class ImageUrlTest(SimpleTestCase):
+    def test_image_url_keeps_relative_path_after_cdn_prefix(self):
+        image = Image(path="produkte/ordner/first.jpg")
+
+        self.assertEqual(
+            image.url,
+            "https://cdn.example.com/img/produkte/ordner/first.jpg",
+        )
+
+    def test_image_url_keeps_absolute_urls(self):
+        image = Image(path="https://other.example.com/img/first.jpg")
+
+        self.assertEqual(image.url, "https://other.example.com/img/first.jpg")
+
+    def test_image_url_ignores_dot_path(self):
+        image = Image(path=".")
+
+        self.assertEqual(image.url, "")
+
+
+@override_settings(MICROTECH_IMAGE_BASE_URL="https://cdn.example.com/img/")
 class ProductImageAdminAndSyncTest(TestCase):
     def test_product_admin_orders_by_status_then_erp_number(self):
         self.assertEqual(ProductAdmin.ordering, ("-is_active", "erp_nr"))
