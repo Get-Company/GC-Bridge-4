@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>EU-Konformitätserklärung {{ erklaerung.declaration_number }}</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 20mm 20mm 25mm 20mm;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 10pt;
+      color: #111;
+      line-height: 1.5;
+    }
+    h1 {
+      font-size: 12pt;
+      font-weight: bold;
+      text-align: center;
+      margin-bottom: 4pt;
+      margin-top: 0;
+    }
+    h2 {
+      font-size: 11pt;
+      font-weight: bold;
+      text-align: center;
+      margin-bottom: 20pt;
+    }
+    .item {
+      margin-bottom: 12pt;
+    }
+    .item-header {
+      font-weight: normal;
+    }
+    .item-number {
+      font-weight: bold;
+    }
+    .item-value {
+      margin-top: 3pt;
+      margin-left: 16pt;
+      white-space: pre-wrap;
+      border-bottom: 1px solid #999;
+      min-height: 16pt;
+      padding-bottom: 2pt;
+    }
+    .static-text {
+      font-style: italic;
+      color: #333;
+    }
+    .signature-block {
+      margin-top: 24pt;
+      border-top: 1px solid #333;
+      padding-top: 12pt;
+    }
+    .signature-intro {
+      margin-bottom: 10pt;
+      font-weight: bold;
+    }
+    .signature-row {
+      margin-bottom: 12pt;
+    }
+    .signature-label {
+      font-size: 9pt;
+      color: #555;
+      margin-bottom: 2pt;
+    }
+    .signature-value {
+      border-bottom: 1px solid #999;
+      min-height: 16pt;
+      padding-bottom: 2pt;
+    }
+    .footnote {
+      margin-top: 20pt;
+      font-size: 8pt;
+      color: #666;
+      border-top: 1px solid #ddd;
+      padding-top: 6pt;
+    }
+  </style>
+</head>
+<body>
+  <h1>ANHANG VIII</h1>
+  <h2>EU-Konformitätserklärung Nr. (¹) {{ erklaerung.declaration_number }}</h2>
+
+  <div class="item">
+    <div class="item-header">
+      <span class="item-number">1.</span>
+      Nr. … (eindeutige Kennung der Verpackung):
+    </div>
+    <div class="item-value">{{ erklaerung.packaging_label.unique_packaging_id }}</div>
+  </div>
+
+  <div class="item">
+    <div class="item-header">
+      <span class="item-number">2.</span>
+      Name und Anschrift des Erzeugers und gegebenenfalls des Bevollmächtigten des Erzeugers:
+    </div>
+    <div class="item-value">{{ erklaerung.erzeuger_name_anschrift }}</div>
+  </div>
+
+  <div class="item">
+    <div class="item-header">
+      <span class="item-number">3.</span>
+      <span class="static-text">Die alleinige Verantwortung für die Ausstellung dieser Konformitätserklärung trägt der Erzeuger.</span>
+    </div>
+  </div>
+
+  <div class="item">
+    <div class="item-header">
+      <span class="item-number">4.</span>
+      Gegenstand der Erklärung (Kennung der Verpackung zwecks Rückverfolgbarkeit): Beschreibung der Verpackung:
+    </div>
+    <div class="item-value">{{ erklaerung.gegenstand_beschreibung }}</div>
+  </div>
+
+  <div class="item">
+    <div class="item-header">
+      <span class="item-number">5.</span>
+      Der unter Nummer 4 genannte Gegenstand der Erklärung erfüllt die einschlägigen Rechtsvorschriften der Union in Bezug auf die Harmonisierung: … (Verweis auf die anderen angewandten Rechtsakte der Union).
+    </div>
+    <div class="item-value">{{ erklaerung.harmonisierung }}</div>
+  </div>
+
+  <div class="item">
+    <div class="item-header">
+      <span class="item-number">6.</span>
+      Angabe der einschlägigen harmonisierten Normen oder gemeinsamen Spezifikationen, die zugrunde gelegt wurden, oder Angabe anderer technischer Spezifikationen, für die die Konformität erklärt wird:
+    </div>
+    <div class="item-value">{{ erklaerung.normen_spezifikationen }}</div>
+  </div>
+
+  <div class="item">
+    <div class="item-header">
+      <span class="item-number">7.</span>
+      Die notifizierte Stelle … (Name, Anschrift, Kennnummer) … hat, falls anwendbar, … (Beschreibung ihrer Maßnahme) durchgeführt und die folgende(n) Bescheinigung(en) ausgestellt: … (Einzelheiten, einschließlich des Datums der Bescheinigung(en), und gegebenenfalls Angaben zur Dauer und zu den Gültigkeitsbedingungen).
+    </div>
+    <div class="item-value">{% if erklaerung.notifizierte_stelle %}{{ erklaerung.notifizierte_stelle }}{% else %}Entfällt.{% endif %}</div>
+  </div>
+
+  <div class="item">
+    <div class="item-header">
+      <span class="item-number">8.</span>
+      Zusätzliche Angaben:
+    </div>
+    <div class="item-value">{{ erklaerung.zusaetzliche_angaben }}</div>
+  </div>
+
+  <div class="signature-block">
+    <div class="signature-intro">Unterzeichnet für und im Namen von:</div>
+    <div class="signature-row">
+      <div class="signature-label">(Ort und Datum der Ausstellung)</div>
+      <div class="signature-value">{{ erklaerung.ausstellungsort }}, {{ erklaerung.ausstellungsdatum|date:"d.m.Y" }}</div>
+    </div>
+    <div class="signature-row">
+      <div class="signature-label">(Name, Funktion) (Unterschrift)</div>
+      <div class="signature-value">{{ erklaerung.unterzeichner_name }}, {{ erklaerung.unterzeichner_funktion }}</div>
+    </div>
+  </div>
+
+  <div class="footnote">
+    (¹) Kennnummer der Erklärung
+  </div>
+</body>
+</html>
