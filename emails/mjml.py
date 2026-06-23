@@ -117,6 +117,13 @@ class ProductEmailProxy:
         return round((list_price - special_price) / list_price * 100)
 
     @property
+    def special_end_date(self):
+        entry = self._get_price_entry()
+        if entry is None:
+            return None
+        return getattr(entry, "special_end_date", None)
+
+    @property
     def shipping_cost_is_free(self) -> bool:
         price = self.current_price
         return bool(price is not None and price >= Decimal("99.00"))
@@ -165,6 +172,32 @@ def _campaign_sales_channel_ids(campaign: "EmailCampaign") -> tuple[int, ...]:
     if default:
         return (default.pk,)
     return ()
+
+
+def campaign_offer_context(products: Iterable[ProductEmailProxy]) -> dict:
+    special_end_dates = []
+    special_price = False
+    for product in products:
+        if product.email_special_price is None:
+            continue
+        special_price = True
+        special_end_date = product.special_end_date
+        if special_end_date is not None:
+            special_end_dates.append(special_end_date)
+    offer_valid_until = max(special_end_dates) if special_end_dates else None
+    offer_valid_until_date = _format_date(offer_valid_until)
+    offer_valid_until_text = (
+        f"Angebot gültig bis {offer_valid_until_date}"
+        if special_price and offer_valid_until_date
+        else ""
+    )
+    return {
+        "special_price": special_price,
+        "special_end_date": offer_valid_until,
+        "offer_valid_until": offer_valid_until,
+        "offer_valid_until_date": offer_valid_until_date,
+        "offer_valid_until_text": offer_valid_until_text,
+    }
 
 
 def _campaign_components(campaign: "EmailCampaign") -> list["EmailCampaignComponent"]:
@@ -299,7 +332,11 @@ def render_campaign_mjml(campaign: "EmailCampaign") -> str:
                 )
             )
 
-    base_context = {"products": products, "_sales_channel_ids": sales_channel_ids}
+    base_context = {
+        "products": products,
+        "_sales_channel_ids": sales_channel_ids,
+        **campaign_offer_context(products),
+    }
     child_map = _component_children_map(components)
 
     head_mjml = "\n".join(

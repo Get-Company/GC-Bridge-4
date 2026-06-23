@@ -1,9 +1,15 @@
 import pytest
 from decimal import Decimal
+from datetime import datetime
 from unittest.mock import MagicMock
 from types import SimpleNamespace
 
-from emails.mjml import ProductEmailProxy, compile_mjml_to_html, render_campaign_mjml
+from emails.mjml import (
+    ProductEmailProxy,
+    campaign_offer_context,
+    compile_mjml_to_html,
+    render_campaign_mjml,
+)
 
 
 class FakePriceQuerySet:
@@ -30,9 +36,17 @@ class FakePriceQuerySet:
 
 
 class FakePrice:
-    def __init__(self, price, sales_channel_id=1, is_default=True, special_price=None):
+    def __init__(
+        self,
+        price,
+        sales_channel_id=1,
+        is_default=True,
+        special_price=None,
+        special_end_date=None,
+    ):
         self.price = price
         self.special_price = special_price
+        self.special_end_date = special_end_date
         self.sales_channel_id = sales_channel_id
         self.sales_channel = SimpleNamespace(is_default=is_default)
 
@@ -178,6 +192,38 @@ class TestProductEmailProxy:
         proxy = ProductEmailProxy(product, special_price_override=Decimal("99.00"))
         assert proxy.price == Decimal("123.45")
         assert proxy.current_price == Decimal("99.00")
+
+    def test_special_end_date_uses_selected_price_entry(self):
+        special_end_date = datetime(2026, 7, 31)
+        product = SimpleNamespace(
+            prices=FakePriceQuerySet([
+                FakePrice(
+                    Decimal("123.45"),
+                    sales_channel_id=1,
+                    is_default=True,
+                    special_end_date=special_end_date,
+                ),
+            ])
+        )
+        proxy = ProductEmailProxy(product, special_price_override=None)
+        assert proxy.special_end_date == special_end_date
+
+    def test_campaign_offer_context_ignores_end_date_without_special_price(self):
+        product = SimpleNamespace(
+            prices=FakePriceQuerySet([
+                FakePrice(
+                    Decimal("123.45"),
+                    sales_channel_id=1,
+                    is_default=True,
+                    special_price=None,
+                    special_end_date=datetime(2026, 7, 31),
+                ),
+            ])
+        )
+        context = campaign_offer_context([ProductEmailProxy(product)])
+        assert context["special_price"] is False
+        assert context["special_end_date"] is None
+        assert context["offer_valid_until_text"] == ""
 
 
 class TestCompileMjmlToHtml:
@@ -343,6 +389,72 @@ class TestCampaignComponentRendering:
         mjml = render_campaign_mjml(campaign)
         assert "Kampagnentitel" in mjml
         assert "Standardtitel" not in mjml
+
+    def test_render_campaign_exposes_latest_offer_valid_until_text(self, monkeypatch):
+        def fake_render_to_string(template_name, context):
+            if template_name == "emails/newsletter_base.mjml":
+                return context["body_mjml"]
+            return ""
+
+        monkeypatch.setattr("emails.mjml.render_to_string", fake_render_to_string)
+        monkeypatch.setattr("emails.mjml._campaign_sales_channel_ids", lambda campaign: ())
+
+        product_a = SimpleNamespace(
+            name="Produkt A",
+            prices=FakePriceQuerySet([
+                FakePrice(
+                    Decimal("10.00"),
+                    special_price=Decimal("8.00"),
+                    special_end_date=datetime(2026, 7, 15),
+                ),
+            ]),
+        )
+        product_b = SimpleNamespace(
+            name="Produkt B",
+            prices=FakePriceQuerySet([
+                FakePrice(
+                    Decimal("20.00"),
+                    special_price=Decimal("16.00"),
+                    special_end_date=datetime(2026, 7, 31),
+                ),
+            ]),
+        )
+
+        def make_comp(component_id, product):
+            return SimpleNamespace(
+                id=component_id,
+                pk=component_id,
+                parent_id=None,
+                library_component=SimpleNamespace(
+                    placement="body",
+                    name=f"Produkt {component_id}",
+                    mjml_markup=(
+                        "<mj-text>{% if special_price and offer_valid_until_text %}"
+                        "{{ offer_valid_until_text }} / {{ special_end_date|format_date }}"
+                        "{% endif %}</mj-text>"
+                    ),
+                    default_variables={},
+                ),
+                library_component_id=True,
+                product=product,
+                campaign_product_id=None,
+                variables={},
+                order=component_id * 10,
+                enabled=True,
+            )
+
+        campaign = SimpleNamespace(
+            components=FakeQuerySet([
+                make_comp(1, product_a),
+                make_comp(2, product_b),
+            ]),
+        )
+
+        mjml = render_campaign_mjml(campaign)
+
+        assert "Angebot gültig bis 31.07.2026" in mjml
+        assert "31.07.2026" in mjml
+        assert "15.07.2026" not in mjml
 
 
 @pytest.mark.django_db

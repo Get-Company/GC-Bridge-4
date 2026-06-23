@@ -3,12 +3,18 @@ from html import escape
 import jinja2
 from urllib.parse import quote_plus
 
-from emails.mjml import ProductEmailProxy, compile_mjml_to_html  # reuse existing CLI wrapper
+from emails.mjml import (  # reuse existing CLI wrapper
+    ProductEmailProxy,
+    _format_date,
+    campaign_offer_context,
+    compile_mjml_to_html,
+)
 from emails_v2.models import EmailBuilderCampaign, EmailBlock
 
 _jinja_env = jinja2.Environment(autoescape=False, undefined=jinja2.Undefined)
 _jinja_env.filters["urlencode"] = lambda value: quote_plus(str(value or ""))
 _jinja_env.filters["format_price"] = lambda value, decimals=2: "" if value is None else f"{value:.{decimals}f}"
+_jinja_env.filters["format_date"] = _format_date
 
 
 def _render_value(value: object, context: dict) -> str:
@@ -76,7 +82,11 @@ def build_mjml_from_blocks(campaign: EmailBuilderCampaign) -> str:
         )
         for campaign_product in campaign_products
     }
-    context = {"products": list(product_map.values())}
+    products = list(product_map.values())
+    context = {
+        "products": products,
+        **campaign_offer_context(products),
+    }
 
     blocks = list(campaign.blocks.select_related("component", "campaign_product__product").all())
 

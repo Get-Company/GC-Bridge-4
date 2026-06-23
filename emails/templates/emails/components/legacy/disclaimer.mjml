@@ -5,10 +5,12 @@
                 * <a style="text-decoration: none; color: #ff9933"
                    href="https://www.classei-shop.com/Versandinformationen?sPartner=email"
                    target="_blank">Naehere Infos zu Versandkosten hier</a>
-                {% if special_end_date %}
-                    Angebot gueltig bis {{ special_end_date|format_date }}
-                {% endif %}
             </p>
+            {% if special_price and offer_valid_until_text %}
+            <p>
+                {{ offer_valid_until_text }}
+            </p>
+            {% endif %}
             <p>
                 Classei-Organisation - Egon Heimann GmbH | Staudacher Str. 7e | 83250 Marquartstein | Deutschland<br>
                 Fon: +49 (0)8641 97 59 0 | Fax +49 (0)8641 97 59 20 | E-Mail:
