@@ -1,0 +1,688 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block extrahead %}
+{{ block.super }}
+<style>
+  /* ── Layout ───────────────────────────────────────────────── */
+  #ppwr-editor {
+    display: grid;
+    grid-template-columns: 220px 1fr 220px;
+    grid-template-rows: auto 1fr;
+    gap: 0;
+    height: calc(100vh - 140px);
+    min-height: 500px;
+  }
+  #ppwr-topbar {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    border-bottom: 1px solid rgba(0,0,0,.1);
+    background: white;
+  }
+  .dark #ppwr-topbar { background: rgb(17 24 39); border-color: rgba(255,255,255,.1); }
+
+  #ppwr-palette {
+    padding: 12px;
+    border-right: 1px solid rgba(0,0,0,.1);
+    overflow-y: auto;
+    background: rgb(249 250 251);
+  }
+  .dark #ppwr-palette { background: rgb(17 24 39); border-color: rgba(255,255,255,.08); }
+
+  #ppwr-canvas-wrap {
+    overflow: auto;
+    background:
+      radial-gradient(circle, rgba(0,0,0,.07) 1px, transparent 1px);
+    background-size: 10px 10px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-start;
+    padding: 24px;
+  }
+  .dark #ppwr-canvas-wrap {
+    background:
+      radial-gradient(circle, rgba(255,255,255,.06) 1px, transparent 1px);
+    background-size: 10px 10px;
+  }
+
+  #ppwr-canvas {
+    position: relative;
+    background: white;
+    box-shadow: 0 4px 24px rgba(0,0,0,.18);
+    flex-shrink: 0;
+  }
+
+  #ppwr-props {
+    padding: 12px;
+    border-left: 1px solid rgba(0,0,0,.1);
+    overflow-y: auto;
+    background: rgb(249 250 251);
+  }
+  .dark #ppwr-props { background: rgb(17 24 39); border-color: rgba(255,255,255,.08); }
+
+  /* ── Ruler lines every 10 mm ─────────────────────────────── */
+  #ppwr-canvas::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,0,0,.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,0,0,.05) 1px, transparent 1px);
+    background-size: calc(var(--scale) * 10mm) calc(var(--scale) * 10mm);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── Palette chips ────────────────────────────────────────── */
+  .palette-chip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    margin-bottom: 6px;
+    border-radius: 8px;
+    border: 1.5px solid rgba(255,153,51,.4);
+    background: rgba(255,153,51,.06);
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    color: rgb(55 65 81);
+    transition: all .15s;
+    user-select: none;
+  }
+  .dark .palette-chip { color: rgb(209 213 219); background: rgba(255,153,51,.08); border-color: rgba(255,153,51,.3); }
+  .palette-chip:hover { background: rgba(255,153,51,.15); border-color: rgba(255,153,51,.7); }
+  .palette-chip .material-symbols-outlined { font-size: 18px; color: #ff9933; }
+
+  /* ── Label blocks on canvas ───────────────────────────────── */
+  .label-block {
+    position: absolute;
+    border: 1.5px dashed rgba(255,153,51,.5);
+    border-radius: 3px;
+    background: rgba(255,255,255,.9);
+    cursor: move;
+    box-sizing: border-box;
+    overflow: hidden;
+    z-index: 10;
+    touch-action: none;
+    transition: border-color .1s, box-shadow .1s;
+  }
+  .label-block:hover { border-color: #ff9933; }
+  .label-block.selected {
+    border: 2px solid #ff9933;
+    box-shadow: 0 0 0 3px rgba(255,153,51,.25);
+    z-index: 20;
+  }
+  .label-block-inner {
+    width: 100%;
+    height: 100%;
+    padding: 3px 5px;
+    display: flex;
+    align-items: flex-start;
+    pointer-events: none;
+    overflow: hidden;
+  }
+  .label-block-text {
+    font-family: Helvetica, Arial, sans-serif;
+    white-space: pre-wrap;
+    line-height: 1.3;
+    color: #111;
+    overflow: hidden;
+  }
+  .label-block-qr {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+  }
+  .label-block-label {
+    position: absolute;
+    top: -17px;
+    left: 0;
+    font-size: 10px;
+    color: #ff9933;
+    font-weight: 600;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+  .block-delete-btn {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: rgba(239,68,68,.85);
+    border: none;
+    cursor: pointer;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 30;
+    color: white;
+    font-size: 11px;
+    line-height: 1;
+    pointer-events: all;
+  }
+  .label-block.selected .block-delete-btn { display: flex; }
+
+  /* ── Resize handle ────────────────────────────────────────── */
+  .resize-handle {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 12px;
+    height: 12px;
+    cursor: se-resize;
+    pointer-events: all;
+    z-index: 25;
+  }
+  .resize-handle::after {
+    content: '';
+    position: absolute;
+    bottom: 2px;
+    right: 2px;
+    width: 7px;
+    height: 7px;
+    border-bottom: 2px solid #ff9933;
+    border-right: 2px solid #ff9933;
+    border-radius: 1px;
+  }
+
+  /* ── Properties panel ─────────────────────────────────────── */
+  .prop-row { margin-bottom: 12px; }
+  .prop-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: rgb(107 114 128);
+    margin-bottom: 4px;
+  }
+  .prop-input {
+    width: 100%;
+    padding: 5px 8px;
+    border: 1px solid rgba(0,0,0,.15);
+    border-radius: 6px;
+    font-size: 13px;
+    background: white;
+    color: rgb(17 24 39);
+    box-sizing: border-box;
+  }
+  .dark .prop-input { background: rgb(31 41 55); border-color: rgba(255,255,255,.15); color: rgb(229 231 235); }
+  .prop-input:focus { outline: none; border-color: #ff9933; box-shadow: 0 0 0 2px rgba(255,153,51,.2); }
+  .prop-row-inline { display: flex; gap: 8px; }
+  .prop-row-inline .prop-input { width: auto; flex: 1; }
+  .prop-checkbox { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; }
+  .prop-checkbox input { accent-color: #ff9933; width: 16px; height: 16px; }
+
+  /* ── Buttons ──────────────────────────────────────────────── */
+  .ppwr-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 14px;
+    border-radius: 7px;
+    border: none;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity .15s;
+  }
+  .ppwr-btn:hover { opacity: .88; }
+  .ppwr-btn-primary { background: #ff9933; color: white; }
+  .ppwr-btn-secondary { background: rgb(243 244 246); color: rgb(55 65 81); border: 1px solid rgba(0,0,0,.12); }
+  .dark .ppwr-btn-secondary { background: rgb(31 41 55); color: rgb(209 213 219); border-color: rgba(255,255,255,.1); }
+  .ppwr-btn-danger { background: rgb(239 68 68); color: white; }
+  .ppwr-btn .material-symbols-outlined { font-size: 18px; }
+
+  /* ── Status toast ─────────────────────────────────────────── */
+  #ppwr-toast {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    padding: 10px 18px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    background: #111;
+    color: white;
+    box-shadow: 0 4px 16px rgba(0,0,0,.25);
+    z-index: 9999;
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity .25s, transform .25s;
+    pointer-events: none;
+  }
+  #ppwr-toast.show { opacity: 1; transform: translateY(0); }
+  #ppwr-toast.success { background: rgb(22 163 74); }
+  #ppwr-toast.error { background: rgb(220 38 38); }
+
+  /* ── No selection hint ────────────────────────────────────── */
+  #no-selection-hint { color: rgb(107 114 128); font-size: 12px; line-height: 1.6; }
+  .section-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: rgb(107 114 128);
+    margin-bottom: 10px;
+    margin-top: 4px;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="ppwr-editor">
+
+  <!-- Top bar -->
+  <div id="ppwr-topbar">
+    <a href="{{ change_url }}" class="ppwr-btn ppwr-btn-secondary">
+      <span class="material-symbols-outlined">arrow_back</span>
+      Zurück
+    </a>
+    <span style="font-weight:700;font-size:15px;color:rgb(17 24 39)" class="dark:text-white flex-1">
+      {{ label.name }}
+      <span style="font-weight:400;font-size:12px;color:rgb(107 114 128);margin-left:8px;">
+        {{ label.canvas_width_mm }} × {{ label.canvas_height_mm }} mm
+      </span>
+    </span>
+    <button class="ppwr-btn ppwr-btn-secondary" onclick="clearCanvas()" title="Alle Blöcke löschen">
+      <span class="material-symbols-outlined">delete_sweep</span>
+      Leeren
+    </button>
+    <button class="ppwr-btn ppwr-btn-secondary" id="save-btn" onclick="saveLayout()">
+      <span class="material-symbols-outlined">save</span>
+      Speichern
+    </button>
+    <a href="{{ generate_pdf_url }}" class="ppwr-btn ppwr-btn-primary" id="pdf-btn">
+      <span class="material-symbols-outlined">picture_as_pdf</span>
+      PDF herunterladen
+    </a>
+  </div>
+
+  <!-- Palette -->
+  <div id="ppwr-palette">
+    <div class="section-title">{% trans "Blöcke" %}</div>
+    {% for block_def in block_definitions %}
+    <div class="palette-chip"
+         data-type="{{ block_def.type }}"
+         data-label="{{ block_def.label }}"
+         data-w="{{ block_def.default_width_mm }}"
+         data-h="{{ block_def.default_height_mm }}"
+         data-font-size="{{ block_def.default_font_size }}"
+         data-bold="{{ block_def.default_bold|lower }}"
+         onclick="addBlock(this)">
+      <span class="material-symbols-outlined">{{ block_def.icon }}</span>
+      {{ block_def.label }}
+    </div>
+    {% endfor %}
+    <div style="margin-top:16px;font-size:11px;color:rgb(107 114 128);line-height:1.6;">
+      Klick auf einen Block, um ihn zum Etikett hinzuzufügen. Dann verschieben und anpassen.
+    </div>
+  </div>
+
+  <!-- Canvas -->
+  <div id="ppwr-canvas-wrap">
+    <div id="ppwr-canvas"
+         style="width:{{ label.canvas_width_mm }}mm; height:{{ label.canvas_height_mm }}mm;"
+         onclick="deselectAll(event)">
+    </div>
+  </div>
+
+  <!-- Properties -->
+  <div id="ppwr-props">
+    <div class="section-title">{% trans "Eigenschaften" %}</div>
+    <div id="no-selection-hint">
+      Klicke einen Block auf der Fläche an, um ihn zu bearbeiten.
+    </div>
+    <div id="prop-form" style="display:none;">
+      <div class="prop-row">
+        <div class="prop-label">Typ</div>
+        <div id="prop-type-label" style="font-size:13px;font-weight:600;color:#ff9933;"></div>
+      </div>
+      <div class="prop-row">
+        <div class="prop-label">Position X / Y (mm)</div>
+        <div class="prop-row-inline">
+          <input type="number" class="prop-input" id="prop-x" min="0" step="0.5" onchange="applyProps()">
+          <input type="number" class="prop-input" id="prop-y" min="0" step="0.5" onchange="applyProps()">
+        </div>
+      </div>
+      <div class="prop-row">
+        <div class="prop-label">Breite / Höhe (mm)</div>
+        <div class="prop-row-inline">
+          <input type="number" class="prop-input" id="prop-w" min="2" step="0.5" onchange="applyProps()">
+          <input type="number" class="prop-input" id="prop-h" min="2" step="0.5" onchange="applyProps()">
+        </div>
+      </div>
+      <div id="prop-text-section">
+        <div class="prop-row">
+          <div class="prop-label">Schriftgröße (pt)</div>
+          <input type="number" class="prop-input" id="prop-fontsize" min="4" max="72" step="1" onchange="applyProps()">
+        </div>
+        <div class="prop-row">
+          <label class="prop-checkbox">
+            <input type="checkbox" id="prop-bold" onchange="applyProps()">
+            <span>Fett</span>
+          </label>
+        </div>
+      </div>
+      <div class="prop-row" style="margin-top:16px;">
+        <button class="ppwr-btn ppwr-btn-danger" style="width:100%;" onclick="deleteSelected()">
+          <span class="material-symbols-outlined">delete</span>
+          Block löschen
+        </button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Toast -->
+<div id="ppwr-toast"></div>
+
+<script>
+const SCALE = (() => {
+  const testEl = document.createElement('div');
+  testEl.style.cssText = 'width:1mm;height:0;position:absolute;visibility:hidden';
+  document.body.appendChild(testEl);
+  const px = testEl.getBoundingClientRect().width;
+  document.body.removeChild(testEl);
+  return px; // px per mm
+})();
+
+const canvas = document.getElementById('ppwr-canvas');
+const canvasW = {{ label.canvas_width_mm }};
+const canvasH = {{ label.canvas_height_mm }};
+const previewData = {{ preview_data_json }};
+const SAVE_URL = "{{ save_url }}";
+const CSRF = "{{ request.META.CSRF_COOKIE }}" || getCookie('csrftoken');
+
+let layout = {{ layout_data_json }};
+let selectedId = null;
+let blockCounter = layout.length;
+
+function getCookie(name) {
+  const v = document.cookie.match('(^|;) ?' + name + '=([^;]*)(;|$)');
+  return v ? v[2] : null;
+}
+
+function mm2px(mm) { return mm * SCALE; }
+function px2mm(px) { return px / SCALE; }
+
+// ── Render all blocks from layout ─────────────────────────────
+function renderAll() {
+  canvas.querySelectorAll('.label-block').forEach(el => el.remove());
+  layout.forEach(block => createBlockEl(block));
+}
+
+function createBlockEl(block) {
+  const el = document.createElement('div');
+  el.className = 'label-block';
+  el.dataset.id = block.id;
+  el.style.left = mm2px(block.x_mm) + 'px';
+  el.style.top  = mm2px(block.y_mm) + 'px';
+  el.style.width  = mm2px(block.width_mm)  + 'px';
+  el.style.height = mm2px(block.height_mm) + 'px';
+
+  const labelEl = document.createElement('div');
+  labelEl.className = 'label-block-label';
+  labelEl.textContent = block.label || block.type;
+
+  const inner = document.createElement('div');
+  inner.className = 'label-block-inner';
+
+  if (block.type === 'qr_code') {
+    const img = document.createElement('div');
+    img.style.cssText = 'width:100%;height:100%;display:flex;align-items:center;justify-content:center;';
+    img.innerHTML = '<span class="material-symbols-outlined" style="font-size:32px;color:#aaa;">qr_code_2</span>';
+    inner.appendChild(img);
+  } else {
+    const textEl = document.createElement('div');
+    textEl.className = 'label-block-text';
+    textEl.style.fontSize = (block.font_size || 8) + 'pt';
+    textEl.style.fontWeight = block.bold ? '700' : '400';
+    textEl.textContent = previewData[block.type] || '';
+    inner.appendChild(textEl);
+  }
+
+  const delBtn = document.createElement('button');
+  delBtn.className = 'block-delete-btn';
+  delBtn.innerHTML = '×';
+  delBtn.onclick = (e) => { e.stopPropagation(); deleteBlock(block.id); };
+
+  const resizeHandle = document.createElement('div');
+  resizeHandle.className = 'resize-handle';
+
+  el.appendChild(labelEl);
+  el.appendChild(inner);
+  el.appendChild(delBtn);
+  el.appendChild(resizeHandle);
+
+  el.addEventListener('mousedown', (e) => {
+    if (e.target === resizeHandle || e.target === delBtn) return;
+    e.stopPropagation();
+    selectBlock(block.id);
+    startDrag(e, el, block);
+  });
+
+  resizeHandle.addEventListener('mousedown', (e) => {
+    e.stopPropagation();
+    selectBlock(block.id);
+    startResize(e, el, block);
+  });
+
+  canvas.appendChild(el);
+}
+
+// ── Drag ──────────────────────────────────────────────────────
+function startDrag(e, el, block) {
+  e.preventDefault();
+  const startX = e.clientX;
+  const startY = e.clientY;
+  const origX = block.x_mm;
+  const origY = block.y_mm;
+  const canvasRect = canvas.getBoundingClientRect();
+
+  function onMove(e) {
+    const dx = px2mm(e.clientX - startX);
+    const dy = px2mm(e.clientY - startY);
+    block.x_mm = Math.max(0, Math.min(canvasW - block.width_mm, origX + dx));
+    block.y_mm = Math.max(0, Math.min(canvasH - block.height_mm, origY + dy));
+    block.x_mm = Math.round(block.x_mm * 10) / 10;
+    block.y_mm = Math.round(block.y_mm * 10) / 10;
+    el.style.left = mm2px(block.x_mm) + 'px';
+    el.style.top  = mm2px(block.y_mm) + 'px';
+    updatePropsPanel(block);
+  }
+  function onUp() {
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    scheduleSave();
+  }
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+}
+
+// ── Resize ────────────────────────────────────────────────────
+function startResize(e, el, block) {
+  e.preventDefault();
+  const startX = e.clientX;
+  const startY = e.clientY;
+  const origW = block.width_mm;
+  const origH = block.height_mm;
+
+  function onMove(e) {
+    const dw = px2mm(e.clientX - startX);
+    const dh = px2mm(e.clientY - startY);
+    block.width_mm  = Math.max(5, Math.min(canvasW - block.x_mm, origW + dw));
+    block.height_mm = Math.max(4, Math.min(canvasH - block.y_mm, origH + dh));
+    block.width_mm  = Math.round(block.width_mm  * 10) / 10;
+    block.height_mm = Math.round(block.height_mm * 10) / 10;
+    el.style.width  = mm2px(block.width_mm)  + 'px';
+    el.style.height = mm2px(block.height_mm) + 'px';
+    updatePropsPanel(block);
+  }
+  function onUp() {
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    scheduleSave();
+  }
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+}
+
+// ── Selection ─────────────────────────────────────────────────
+function selectBlock(id) {
+  selectedId = id;
+  canvas.querySelectorAll('.label-block').forEach(el => el.classList.remove('selected'));
+  const el = canvas.querySelector(`[data-id="${id}"]`);
+  if (el) el.classList.add('selected');
+  const block = layout.find(b => b.id === id);
+  if (block) showPropsPanel(block);
+}
+
+function deselectAll(e) {
+  if (e.target !== canvas) return;
+  selectedId = null;
+  canvas.querySelectorAll('.label-block').forEach(el => el.classList.remove('selected'));
+  document.getElementById('prop-form').style.display = 'none';
+  document.getElementById('no-selection-hint').style.display = '';
+}
+
+// ── Properties panel ──────────────────────────────────────────
+function showPropsPanel(block) {
+  document.getElementById('no-selection-hint').style.display = 'none';
+  document.getElementById('prop-form').style.display = '';
+  document.getElementById('prop-type-label').textContent = block.label || block.type;
+  updatePropsPanel(block);
+  const isText = block.type !== 'qr_code';
+  document.getElementById('prop-text-section').style.display = isText ? '' : 'none';
+}
+
+function updatePropsPanel(block) {
+  document.getElementById('prop-x').value = block.x_mm;
+  document.getElementById('prop-y').value = block.y_mm;
+  document.getElementById('prop-w').value = block.width_mm;
+  document.getElementById('prop-h').value = block.height_mm;
+  if (block.type !== 'qr_code') {
+    document.getElementById('prop-fontsize').value = block.font_size || 8;
+    document.getElementById('prop-bold').checked = !!block.bold;
+  }
+}
+
+function applyProps() {
+  if (!selectedId) return;
+  const block = layout.find(b => b.id === selectedId);
+  if (!block) return;
+  block.x_mm = parseFloat(document.getElementById('prop-x').value) || 0;
+  block.y_mm = parseFloat(document.getElementById('prop-y').value) || 0;
+  block.width_mm  = parseFloat(document.getElementById('prop-w').value) || 10;
+  block.height_mm = parseFloat(document.getElementById('prop-h').value) || 8;
+  if (block.type !== 'qr_code') {
+    block.font_size = parseInt(document.getElementById('prop-fontsize').value) || 8;
+    block.bold = document.getElementById('prop-bold').checked;
+  }
+  const el = canvas.querySelector(`[data-id="${selectedId}"]`);
+  if (el) {
+    el.style.left = mm2px(block.x_mm) + 'px';
+    el.style.top  = mm2px(block.y_mm) + 'px';
+    el.style.width  = mm2px(block.width_mm)  + 'px';
+    el.style.height = mm2px(block.height_mm) + 'px';
+    const textEl = el.querySelector('.label-block-text');
+    if (textEl) {
+      textEl.style.fontSize  = (block.font_size || 8) + 'pt';
+      textEl.style.fontWeight = block.bold ? '700' : '400';
+    }
+  }
+  scheduleSave();
+}
+
+// ── Add / Delete ──────────────────────────────────────────────
+function addBlock(chip) {
+  blockCounter++;
+  const id = 'block-' + blockCounter;
+  const block = {
+    id,
+    type: chip.dataset.type,
+    label: chip.dataset.label,
+    x_mm: 5,
+    y_mm: 5 + (layout.length * 10) % (canvasH - 10),
+    width_mm: parseFloat(chip.dataset.w) || 40,
+    height_mm: parseFloat(chip.dataset.h) || 10,
+    font_size: parseInt(chip.dataset.fontSize) || 8,
+    bold: chip.dataset.bold === 'true',
+  };
+  layout.push(block);
+  createBlockEl(block);
+  selectBlock(id);
+  scheduleSave();
+}
+
+function deleteBlock(id) {
+  layout = layout.filter(b => b.id !== id);
+  canvas.querySelector(`[data-id="${id}"]`)?.remove();
+  if (selectedId === id) {
+    selectedId = null;
+    document.getElementById('prop-form').style.display = 'none';
+    document.getElementById('no-selection-hint').style.display = '';
+  }
+  scheduleSave();
+}
+
+function deleteSelected() {
+  if (selectedId) deleteBlock(selectedId);
+}
+
+function clearCanvas() {
+  if (!confirm('Alle Blöcke löschen?')) return;
+  layout = [];
+  canvas.querySelectorAll('.label-block').forEach(el => el.remove());
+  selectedId = null;
+  document.getElementById('prop-form').style.display = 'none';
+  document.getElementById('no-selection-hint').style.display = '';
+  scheduleSave();
+}
+
+// ── Save ──────────────────────────────────────────────────────
+let saveTimer = null;
+function scheduleSave() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveLayout, 1200);
+}
+
+async function saveLayout() {
+  clearTimeout(saveTimer);
+  try {
+    const resp = await fetch(SAVE_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': getCookie('csrftoken'),
+      },
+      body: JSON.stringify({ layout }),
+    });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    showToast('Gespeichert', 'success');
+  } catch (err) {
+    showToast('Fehler beim Speichern: ' + err.message, 'error');
+  }
+}
+
+// ── Toast ─────────────────────────────────────────────────────
+let toastTimer = null;
+function showToast(msg, type = '') {
+  const el = document.getElementById('ppwr-toast');
+  el.textContent = msg;
+  el.className = 'show ' + type;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.className = ''; }, 2500);
+}
+
+// ── Init ──────────────────────────────────────────────────────
+renderAll();
+</script>
+{% endblock %}

@@ -159,6 +159,7 @@ INSTALLED_APPS = [
     'organization.apps.OrganizationConfig',
     'telefon.apps.TelefonConfig',
     'qrcodes.apps.QrcodesConfig',
+    'ppwr.apps.PpwrConfig',
 ]
 
 MIDDLEWARE = [
@@ -539,6 +540,12 @@ UNFOLD = {
                         "icon": "qr_code_2",
                         "link": reverse_lazy("admin:qrcodes_qrcode_changelist"),
                         "permission": sidebar_model_view_permission("qrcodes", "QrCode"),
+                    },
+                    {
+                        "title": _("PPWR-Etiketten"),
+                        "icon": "label",
+                        "link": reverse_lazy("admin:ppwr_packaginglabel_changelist"),
+                        "permission": sidebar_model_view_permission("ppwr", "PackagingLabel"),
                     },
                 ],
             },
