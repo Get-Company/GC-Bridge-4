@@ -7,7 +7,7 @@ import re
 
 from django import forms
 from django.contrib import admin
-from django.db.models import Case, IntegerField, Q, When
+from django.db.models import Case, IntegerField, Max, Q, When
 from django.http import HttpResponse, JsonResponse
 from django.urls import path
 from django.utils.html import format_html, format_html_join
@@ -339,16 +339,34 @@ class EmailCampaignComponentInline(BaseStackedInline):
     tab = False
     ordering_field = "order"
     hide_ordering_field = True
-    fields = (
-        "tree_position",
-        "order",
-        "parent",
-        "enabled",
-        "library_component",
-        "product",
-        "current_price_display",
-        "component_default_variables",
-        "variables",
+    fieldsets = (
+        (
+            None,
+            {
+                "fields": ("tree_position", "order", "library_component", "variables"),
+            },
+        ),
+        (
+            _("Einstellungen"),
+            {
+                "fields": ("parent", "enabled"),
+                "classes": ("collapse",),
+            },
+        ),
+        (
+            _("Produkt"),
+            {
+                "fields": ("product", "current_price_display"),
+                "classes": ("collapse",),
+            },
+        ),
+        (
+            _("Komponenten-Info"),
+            {
+                "fields": ("component_default_variables",),
+                "classes": ("collapse",),
+            },
+        ),
     )
     readonly_fields = BaseStackedInline.readonly_fields + (
         "tree_position",
@@ -515,6 +533,26 @@ class EmailCampaignAdmin(BaseAdmin):
     @admin.display(description=_("Komponenten"))
     def component_count(self, obj: EmailCampaign) -> int:
         return obj.components.count()
+
+    def save_formset(self, request, form, formset, change):
+        instances = formset.save(commit=False)
+        campaign = form.instance
+        new_instances = [i for i in instances if not i.pk and isinstance(i, EmailCampaignComponent)]
+        if new_instances:
+            existing_max = (
+                EmailCampaignComponent.objects.filter(campaign=campaign)
+                .aggregate(max_order=Max("order"))["max_order"]
+                or 0
+            )
+            next_order = existing_max + 10
+            for instance in new_instances:
+                instance.order = next_order
+                next_order += 10
+        for instance in instances:
+            instance.save()
+        formset.save_m2m()
+        for obj in formset.deleted_objects:
+            obj.delete()
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
