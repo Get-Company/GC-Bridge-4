@@ -228,7 +228,7 @@ class QrCodeRenderService(BaseService):
         if target_modules % 2 == 0:
             target_modules += 1
 
-        padding_modules = max(2, math.ceil(target_modules * 0.22))
+        padding_modules = max(1, math.ceil(target_modules * 0.06))
         cutout_side = min(module_count - 8, target_modules + (padding_modules * 2))
         if cutout_side % 2 == 0:
             cutout_side += 1

@@ -54,10 +54,10 @@ class QrCode(BaseModel):
         verbose_name=_("Hintergrundfarbe"),
     )
     center_scale_percent = models.PositiveSmallIntegerField(
-        default=24,
-        validators=[MinValueValidator(12), MaxValueValidator(32)],
+        default=16,
+        validators=[MinValueValidator(8), MaxValueValidator(22)],
         verbose_name=_("Groesse der Mitte in Prozent"),
-        help_text=_("Empfohlen: 18 bis 26 Prozent. Groessere Werte koennen die Lesbarkeit reduzieren."),
+        help_text=_("Empfohlen: 12 bis 18 Prozent. Maximal 22 Prozent – groessere Werte machen den QR-Code unlesbar."),
     )
     is_active = models.BooleanField(default=True, db_index=True, verbose_name=_("Aktiv"))
 
