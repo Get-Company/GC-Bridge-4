@@ -5,28 +5,3 @@
 <a id="site-name" href="{% url 'admin:index' %}">GC-Bridge</a>
 {% endblock %}
 
-{% block nav-global %}
-<nav id="gc-quicknav" style="background:#2c3e50;padding:6px 16px;display:flex;gap:20px;font-size:13px;border-bottom:1px solid #1a252f;">
-  <a href="/admin/system/"
-     style="color:#bdc3c7;text-decoration:none;padding:2px 6px;border-radius:3px;"
-     {% if request.path == '/admin/system/' %}class="gc-nav-active"{% endif %}>
-    System
-  </a>
-  <a href="/admin/celery-tasks/"
-     style="color:#bdc3c7;text-decoration:none;padding:2px 6px;border-radius:3px;"
-     {% if request.path == '/admin/celery-tasks/' %}class="gc-nav-active"{% endif %}>
-    Tasks &amp; Schedule
-  </a>
-  <a href="/admin/microtech-queue/"
-     style="color:#bdc3c7;text-decoration:none;padding:2px 6px;border-radius:3px;"
-     {% if request.path == '/admin/microtech-queue/' %}class="gc-nav-active"{% endif %}>
-    Microtech Queue
-  </a>
-</nav>
-<style>
-  #gc-quicknav a:hover, #gc-quicknav a.gc-nav-active {
-    background: #417690;
-    color: #fff;
-  }
-</style>
-{% endblock %}

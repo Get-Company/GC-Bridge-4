@@ -48,7 +48,7 @@ from core.celery_admin import celery_tasks_admin_view
 from core.log_reader import get_allowed_log_files, tail_log_file
 from core.microtech_queue_view import microtech_queue_api, microtech_queue_view
 from core.services import CommandRuntimeService
-from core.system_status_view import system_status_api, system_status_run, system_status_view
+from core.system_status_view import system_status_api, system_status_view
 from hr.views import hr_calendar_api, hr_calendar_view
 from customer.views import (
     customer_merge_view,
@@ -343,8 +343,7 @@ def _admin_get_urls():
         path("logs/", admin.site.admin_view(admin_log_reader_view), name="core_log_reader"),
         path("system/", admin.site.admin_view(system_status_view), name="core_system_status"),
         path("system/api/", admin.site.admin_view(system_status_api), name="core_system_status_api"),
-        path("system/run/", admin.site.admin_view(system_status_run), name="core_system_status_run"),
-        path("customer-merge/", admin.site.admin_view(customer_merge_view), name="customer_merge"),
+path("customer-merge/", admin.site.admin_view(customer_merge_view), name="customer_merge"),
         path("customer-merge/api/resolve/", admin.site.admin_view(customer_merge_resolve_api), name="customer_merge_resolve"),
         path("customer-merge/api/search-cell/", admin.site.admin_view(customer_merge_search_cell_api), name="customer_merge_search_cell"),
         path("customer-merge/api/search/", admin.site.admin_view(customer_merge_search_api), name="customer_merge_search"),

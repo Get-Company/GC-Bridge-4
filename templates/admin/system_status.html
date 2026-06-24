@@ -3,346 +3,207 @@
 
 {% block content %}
 <div class="flex flex-col gap-6">
+
   <div class="flex flex-wrap items-center justify-between gap-3">
     <div>
       <h1 class="text-xl font-semibold">System-Status</h1>
-      <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Live-Uebersicht fuer Syncs, Tasks, Warteschlangen und Logs.</p>
+      <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Live-Überblick über Dienste, Worker und geplante Tasks.</p>
     </div>
-    <div class="flex flex-wrap items-center gap-4 text-sm">
-      <a href="/admin/microtech-queue/" id="microtech-slot" class="flex items-center gap-1.5 text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors" title="Microtech Queue oeffnen">
-        <span id="microtech-slot-dot" class="inline-block w-2 h-2 rounded-full {% if microtech_slot.available %}bg-green-500{% elif microtech_slot.available is None %}bg-gray-400{% else %}bg-red-500 animate-pulse{% endif %}"></span>
-        Microtech:
-        <span id="microtech-slot-label" class="font-medium {% if microtech_slot.available %}text-green-600 dark:text-green-400{% elif microtech_slot.available is None %}text-gray-400{% else %}text-red-600 dark:text-red-400{% endif %}">
-          {% if microtech_slot.available %}frei{% elif microtech_slot.available is None %}?{% else %}belegt ({{ microtech_slot.running }} aktiv, {{ microtech_slot.queued }} wartend){% endif %}
-        </span>
-      </a>
-      <span id="refresh-status" class="flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
+    <div class="flex items-center gap-3 text-xs text-gray-400 dark:text-gray-500">
+      <span id="last-updated"></span>
+      <span class="flex items-center gap-1.5">
         <span id="refresh-dot" class="inline-block w-2 h-2 rounded-full bg-green-500"></span>
         Auto-Refresh (5 s)
       </span>
-      <span id="last-updated" class="text-gray-400 dark:text-gray-500 text-xs"></span>
     </div>
   </div>
 
-  <div id="dashboard-cards" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-    {% for card in dashboard_cards %}
-    <section class="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-white dark:bg-gray-900">
-      <div class="flex items-start justify-between gap-3">
-        <div class="min-w-0">
-          <div class="flex items-center gap-2">
-            <span class="material-symbols-outlined text-gray-400" style="font-size:20px">{{ card.icon }}</span>
-            <h2 class="font-semibold text-sm truncate">{{ card.label }}</h2>
-          </div>
-          <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">{{ card.description }}</p>
+  {# ── Service-Karten ── #}
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+
+    {# GraphQL #}
+    <section id="card-graphql" class="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-white dark:bg-gray-900">
+      <div class="flex items-center justify-between gap-2 mb-3">
+        <div class="flex items-center gap-2">
+          <span class="material-symbols-outlined text-gray-400" style="font-size:20px">hub</span>
+          <h2 class="font-semibold text-sm">Microtech GraphQL</h2>
         </div>
-        <span class="text-xs px-2 py-1 rounded font-medium {% if card.status == 'running' %}bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300{% elif card.status == 'waiting' %}bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300{% elif card.status == 'recent' %}bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300{% else %}bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400{% endif %}">
-          {{ card.status_label }}
+        <span id="graphql-badge" class="text-xs px-2 py-0.5 rounded font-medium
+          {% if graphql_health.ok %}bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300
+          {% elif graphql_health.ok is None %}bg-gray-100 dark:bg-gray-800 text-gray-500
+          {% else %}bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300{% endif %}">
+          {% if graphql_health.ok %}OK{% elif graphql_health.ok is None %}n/a{% else %}Fehler{% endif %}
         </span>
       </div>
-      <div class="grid grid-cols-3 gap-2 mt-4 text-xs">
-        <div>
-          <div class="text-gray-400">aktiv</div>
-          <div class="font-semibold text-gray-800 dark:text-gray-200">{{ card.running_count }}</div>
+      <div id="graphql-details" class="space-y-1.5 text-xs">
+        {% if graphql_health.url %}
+        <div class="flex items-center gap-2 text-gray-500 dark:text-gray-400">
+          <span class="material-symbols-outlined" style="font-size:14px">link</span>
+          <span class="font-mono truncate" title="{{ graphql_health.url }}">{{ graphql_health.url }}</span>
         </div>
-        <div>
-          <div class="text-gray-400">wartend</div>
-          <div class="font-semibold text-gray-800 dark:text-gray-200">{{ card.waiting_count }}</div>
+        {% endif %}
+        {% if graphql_health.latency_ms is not None %}
+        <div class="flex items-center gap-2 text-gray-500 dark:text-gray-400">
+          <span class="material-symbols-outlined" style="font-size:14px">timer</span>
+          <span>{{ graphql_health.latency_ms }} ms</span>
         </div>
-        <div>
-          <div class="text-gray-400">Logs</div>
-          <div class="font-semibold text-gray-800 dark:text-gray-200">{{ card.log_count }}</div>
-        </div>
-      </div>
-      <div class="mt-3 text-xs text-gray-500 dark:text-gray-400 min-h-[36px]">
-        {% if card.stage %}
-          <span class="font-medium text-gray-700 dark:text-gray-300">{{ card.stage }}</span>{% if card.duration %} · {{ card.duration }}{% endif %}
-        {% elif card.latest_log %}
-          Letztes Log: {{ card.latest_log.name }} · {{ card.latest_log.activity }}
-        {% else %}
-          Keine aktuelle Aktivitaet.
+        {% endif %}
+        {% if graphql_health.error %}
+        <div class="text-red-600 dark:text-red-400 break-words">{{ graphql_health.error }}</div>
         {% endif %}
       </div>
     </section>
-    {% endfor %}
+
+    {# Shopware #}
+    <section id="card-shopware" class="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-white dark:bg-gray-900">
+      <div class="flex items-center justify-between gap-2 mb-3">
+        <div class="flex items-center gap-2">
+          <span class="material-symbols-outlined text-gray-400" style="font-size:20px">storefront</span>
+          <h2 class="font-semibold text-sm">Shopware</h2>
+        </div>
+        <span id="shopware-badge" class="text-xs px-2 py-0.5 rounded font-medium
+          {% if shopware_health.ok %}bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300
+          {% elif shopware_health.ok is None %}bg-gray-100 dark:bg-gray-800 text-gray-500
+          {% else %}bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300{% endif %}">
+          {% if shopware_health.ok %}OK{% elif shopware_health.ok is None %}n/a{% else %}Fehler{% endif %}
+        </span>
+      </div>
+      <div id="shopware-details" class="space-y-1.5 text-xs">
+        {% if shopware_health.url %}
+        <div class="flex items-center gap-2 text-gray-500 dark:text-gray-400">
+          <span class="material-symbols-outlined" style="font-size:14px">link</span>
+          <span class="font-mono truncate" title="{{ shopware_health.url }}">{{ shopware_health.url }}</span>
+        </div>
+        {% endif %}
+        {% if shopware_health.latency_ms is not None %}
+        <div class="flex items-center gap-2 text-gray-500 dark:text-gray-400">
+          <span class="material-symbols-outlined" style="font-size:14px">timer</span>
+          <span>{{ shopware_health.latency_ms }} ms</span>
+        </div>
+        {% endif %}
+        {% if shopware_health.ok == False %}
+        <div class="text-red-600 dark:text-red-400 break-words">{{ shopware_health.detail }}</div>
+        {% endif %}
+      </div>
+    </section>
+
+    {# Celery / Broker #}
+    <section id="card-celery" class="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-white dark:bg-gray-900">
+      <div class="flex items-center justify-between gap-2 mb-3">
+        <div class="flex items-center gap-2">
+          <span class="material-symbols-outlined text-gray-400" style="font-size:20px">cable</span>
+          <h2 class="font-semibold text-sm">Celery / Broker</h2>
+        </div>
+        <span id="celery-badge" class="text-xs px-2 py-0.5 rounded font-medium
+          {% if workers_data.available %}bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300
+          {% else %}bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300{% endif %}">
+          {% if workers_data.available %}erreichbar{% else %}Fehler{% endif %}
+        </span>
+      </div>
+      <div id="celery-details" class="space-y-1.5 text-xs">
+        {% if workers_data.broker_url %}
+        <div class="flex items-center gap-2 text-gray-500 dark:text-gray-400">
+          <span class="material-symbols-outlined" style="font-size:14px">link</span>
+          <span class="font-mono truncate" title="{{ workers_data.broker_url }}">{{ workers_data.broker_url }}</span>
+        </div>
+        {% endif %}
+        <div class="flex items-center gap-2 text-gray-500 dark:text-gray-400">
+          <span class="material-symbols-outlined" style="font-size:14px">memory</span>
+          <span>{{ workers_data.workers|length }} Worker online</span>
+        </div>
+        <div class="flex items-center gap-2 text-gray-500 dark:text-gray-400">
+          <span class="material-symbols-outlined" style="font-size:14px">play_circle</span>
+          <span id="celery-active-count">… aktive Task(s)</span>
+        </div>
+        {% if workers_data.error %}
+        <div class="text-red-600 dark:text-red-400 break-words">{{ workers_data.error }}</div>
+        {% endif %}
+      </div>
+    </section>
+
   </div>
 
-  <div class="grid grid-cols-1 2xl:grid-cols-[minmax(0,1.1fr)_minmax(520px,0.9fr)] gap-6 items-start">
-    <div class="flex flex-col gap-6">
-      <section class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-        <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between gap-3">
-          <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300">Laufende Jobs</h2>
-          <span class="text-xs text-gray-400">Runtime-Heartbeat</span>
-        </div>
-        <div id="running-jobs" class="p-4 min-h-[70px]">
-          {% if runtime_entries %}
-            {% for entry in runtime_entries %}
-            <div class="p-3 rounded border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20 mb-2 last:mb-0">
-              <div class="flex items-center justify-between gap-2">
-                <span class="font-medium text-sm truncate">{{ entry.command_name }}</span>
-                <span class="text-xs px-2 py-0.5 rounded bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300">{{ entry.metadata.stage|default:"aktiv" }}</span>
+  {# ── Celery Worker ── #}
+  <section class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+    <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+      <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300">Celery Worker</h2>
+      <span id="workers-summary" class="text-xs text-gray-400">{{ workers_data.workers|length }} online</span>
+    </div>
+    <div id="workers-list" class="divide-y divide-gray-100 dark:divide-gray-700">
+      {% if not workers_data.available %}
+        <p class="px-4 py-4 text-sm text-gray-400 italic">Broker nicht erreichbar{% if workers_data.error %}: {{ workers_data.error }}{% endif %}</p>
+      {% elif not workers_data.workers %}
+        <p class="px-4 py-4 text-sm text-gray-400 italic">Keine Worker online</p>
+      {% else %}
+        {% for worker in workers_data.workers %}
+        <div class="px-4 py-3">
+          <div class="flex items-center gap-3 mb-2">
+            <span class="w-2 h-2 rounded-full flex-shrink-0 {% if worker.online %}bg-green-500{% else %}bg-gray-400{% endif %}"></span>
+            <span class="font-medium text-sm font-mono">{{ worker.name }}</span>
+            <span class="text-xs px-2 py-0.5 rounded {% if worker.online %}bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300{% else %}bg-gray-100 dark:bg-gray-800 text-gray-500{% endif %}">
+              {% if worker.online %}online{% else %}offline{% endif %}
+            </span>
+          </div>
+          {% if worker.active_tasks %}
+            <div class="ml-5 space-y-1">
+              {% for task in worker.active_tasks %}
+              <div class="flex items-center gap-2 text-xs">
+                <span class="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse flex-shrink-0"></span>
+                <span class="font-medium text-gray-800 dark:text-gray-200">{{ task.label }}</span>
+                {% if task.args %}
+                <span class="text-gray-400 font-mono truncate max-w-xs" title="{{ task.args }}">{{ task.args }}</span>
+                {% endif %}
+                {% if task.id %}
+                <span class="text-gray-300 dark:text-gray-600 font-mono">{{ task.id|slice:":8" }}…</span>
+                {% endif %}
               </div>
-              <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">PID {{ entry.pid }} · {{ entry.hostname }} · {{ entry.duration }}</div>
-              {% if entry.metadata.log_file %}
-              <button type="button" class="mt-2 text-xs text-blue-600 dark:text-blue-400 hover:underline" onclick="selectLogByPath('{{ entry.metadata.log_file|escapejs }}')">Log oeffnen</button>
-              {% endif %}
+              {% endfor %}
             </div>
-            {% endfor %}
           {% else %}
-            <p class="text-sm text-gray-400 dark:text-gray-500 italic">Keine laufenden Jobs</p>
+            <p class="ml-5 text-xs text-gray-400 italic">Kein aktiver Task</p>
           {% endif %}
         </div>
-      </section>
+        {% endfor %}
+      {% endif %}
+    </div>
+  </section>
 
-      <section class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-        <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between gap-3">
-          <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300">Celery Warteschlange</h2>
-          <span id="queue-summary" class="text-xs text-gray-400">
-            {% if queue_status.available %}{{ queue_status.active_count }} aktiv · {{ queue_status.waiting_count }} reserviert · {{ queue_status.scheduled_count }} geplant{% else %}nicht erreichbar{% endif %}
+  {# ── Geplante Tasks ── #}
+  <section class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+    <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+      <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300">Geplante Tasks</h2>
+    </div>
+    {% if periodic_tasks %}
+    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 p-4">
+      {% for task in periodic_tasks %}
+      <div class="border border-gray-200 dark:border-gray-700 rounded-lg p-3 bg-white dark:bg-gray-900 flex flex-col gap-2">
+        <div class="flex items-start justify-between gap-2">
+          <div class="min-w-0">
+            <div class="font-medium text-sm truncate" title="{{ task.label }}">{{ task.label }}</div>
+            <div class="text-xs text-gray-400 font-mono truncate mt-0.5" title="{{ task.task }}">{{ task.task }}</div>
+          </div>
+          <span class="text-xs px-2 py-0.5 rounded font-medium flex-shrink-0
+            {% if task.enabled %}bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300
+            {% else %}bg-gray-100 dark:bg-gray-800 text-gray-400{% endif %}">
+            {% if task.enabled %}aktiv{% else %}deaktiviert{% endif %}
           </span>
         </div>
-        <div id="queue-overview" class="divide-y divide-gray-100 dark:divide-gray-700">
-          {% if not queue_status.available %}
-            <p class="px-4 py-3 text-sm text-gray-400 dark:text-gray-500 italic">Celery Inspect nicht erreichbar{% if queue_status.error %}: {{ queue_status.error }}{% endif %}</p>
-          {% elif queue_status.active or queue_status.waiting or queue_status.scheduled %}
-            {% for task in queue_status.active %}
-            <div class="px-4 py-3">
-              <div class="flex items-center justify-between gap-2">
-                <span class="text-sm font-medium truncate">{{ task.label }}</span>
-                <span class="text-xs px-2 py-0.5 rounded bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300">aktiv</span>
-              </div>
-              <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">{{ task.worker }}{% if task.id %} · {{ task.id }}{% endif %}</div>
-            </div>
-            {% endfor %}
-            {% for task in queue_status.waiting %}
-            <div class="px-4 py-3">
-              <div class="flex items-center justify-between gap-2">
-                <span class="text-sm font-medium truncate">{{ task.label }}</span>
-                <span class="text-xs px-2 py-0.5 rounded bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300">wartet</span>
-              </div>
-              <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">{{ task.worker }}{% if task.id %} · {{ task.id }}{% endif %}</div>
-            </div>
-            {% endfor %}
-            {% for task in queue_status.scheduled %}
-            <div class="px-4 py-3">
-              <div class="flex items-center justify-between gap-2">
-                <span class="text-sm font-medium truncate">{{ task.label }}</span>
-                <span class="text-xs px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300">geplant</span>
-              </div>
-              <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">{{ task.worker }}{% if task.eta %} · ETA {{ task.eta }}{% endif %}</div>
-            </div>
-            {% endfor %}
-          {% else %}
-            <p class="px-4 py-3 text-sm text-gray-400 dark:text-gray-500 italic">Keine aktiven oder wartenden Celery Tasks</p>
-          {% endif %}
+        <div class="flex items-center gap-1.5 text-xs font-semibold text-blue-700 dark:text-blue-300">
+          <span class="material-symbols-outlined" style="font-size:14px">schedule</span>
+          {{ task.schedule }}
         </div>
-      </section>
-
-      <section class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-        <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
-          <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300">Log-Zuordnung</h2>
-        </div>
-        <div id="log-overview" class="divide-y divide-gray-100 dark:divide-gray-700">
-          {% for log in log_entries %}
-          <button type="button" class="w-full text-left px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors" onclick="changeLogFile('{{ log.index }}')">
-            <div class="flex items-start justify-between gap-3">
-              <div class="min-w-0">
-                <div class="flex items-center gap-2">
-                  <span class="text-xs px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400">{{ log.area_label }}</span>
-                  <span class="text-sm font-medium truncate">{{ log.name }}</span>
-                </div>
-                <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">{{ log.purpose }}</div>
-                <div class="text-xs text-gray-400 mt-1 font-mono truncate">{{ log.path }}</div>
-              </div>
-              <div class="text-right flex-shrink-0">
-                <div class="text-xs font-medium {% if log.activity_class == 'active' %}text-green-600 dark:text-green-400{% elif log.activity_class == 'recent' %}text-blue-600 dark:text-blue-400{% elif log.activity_class == 'old' %}text-gray-500 dark:text-gray-400{% else %}text-red-500{% endif %}">{{ log.activity }}</div>
-                <div class="text-xs text-gray-400 mt-1">{{ log.size }}</div>
-              </div>
-            </div>
-          </button>
-          {% empty %}
-          <p class="px-4 py-3 text-sm text-gray-400 dark:text-gray-500 italic">Keine Log-Dateien gefunden</p>
-          {% endfor %}
-        </div>
-      </section>
-
-      <section class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-        <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
-          <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300">Jobs starten</h2>
-        </div>
-        <div class="p-4 grid grid-cols-1 lg:grid-cols-2 gap-3">
-          {% for job in triggerable_jobs %}
-          <div class="flex items-center justify-between gap-3 p-3 rounded border border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-            <div class="min-w-0">
-              <div class="font-medium text-sm">{{ job.label }}</div>
-              <div class="text-xs text-gray-400 dark:text-gray-500">{{ job.description }}</div>
-            </div>
-            <button type="button" class="job-trigger-btn flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded border border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors" data-command="{{ job.command }}" onclick="triggerJob(this)">
-              <span class="material-symbols-outlined" style="font-size:14px">{{ job.icon }}</span>
-              Starten
-            </button>
-          </div>
-          {% endfor %}
-          <div id="job-toast" class="hidden lg:col-span-2 p-3 rounded text-sm font-medium"></div>
-        </div>
-      </section>
-
-      <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <section class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-          <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
-            <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300">Aktive Prozesse</h2>
-          </div>
-          <div id="active-processes" class="divide-y divide-gray-100 dark:divide-gray-700">
-            {% if active_processes %}
-              {% for proc in active_processes %}
-              <div class="flex items-start gap-3 px-4 py-3">
-                <span class="mt-1.5 w-2 h-2 rounded-full flex-shrink-0 bg-green-500{% if proc.is_self %} ring-2 ring-green-300 dark:ring-green-700{% endif %}"></span>
-                <div class="min-w-0 flex-1">
-                  <div class="font-mono text-sm truncate">{{ proc.command }}</div>
-                  <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">PID {{ proc.pid }}{% if proc.user %} · {{ proc.user }}{% endif %}{% if proc.mem_mb %} · {{ proc.mem_mb }} MB{% endif %}{% if proc.started %} · Start: {{ proc.started }}{% endif %}</div>
-                </div>
-              </div>
-              {% endfor %}
-            {% else %}
-              <p class="px-4 py-3 text-sm text-gray-400 dark:text-gray-500 italic">Keine GC-Bridge-Prozesse gefunden</p>
-            {% endif %}
-          </div>
-        </section>
-
-        <section class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-          <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-            <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300">Microtech GraphQL API</h2>
-            <button type="button" onclick="checkGraphQLHealth(this)" class="inline-flex items-center gap-1 px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-600 dark:text-gray-300 disabled:opacity-50" title="Verbindung jetzt pruefen">
-              <span class="material-symbols-outlined" style="font-size:14px">refresh</span>
-              Pruefen
-            </button>
-          </div>
-          <div id="graphql-health" class="px-4 py-3"></div>
-        </section>
-      </div>
-
-      {% if systemd_units is not None %}
-      <section class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-        <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
-          <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300">Systemd-Dienste</h2>
-        </div>
-        <div id="systemd-units" class="divide-y divide-gray-100 dark:divide-gray-700"></div>
-      </section>
-      {% endif %}
-
-      {% if scheduled_tasks is not None %}
-      <section class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-        <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
-          <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300">Geplante Aufgaben (Windows)</h2>
-        </div>
-        <div id="scheduled-tasks" class="divide-y divide-gray-100 dark:divide-gray-700"></div>
-      </section>
-      {% endif %}
-
-      {% if runner_services is not None %}
-      <section class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-        <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
-          <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300">GitHub Runner Dienste</h2>
-        </div>
-        <div id="runner-services" class="divide-y divide-gray-100 dark:divide-gray-700"></div>
-      </section>
-      {% endif %}
-    </div>
-
-    <div class="flex flex-col gap-6">
-
-      <section class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-        <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-          <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300">Letzte Fehler</h2>
-          <a href="/admin/logs/" class="text-xs text-blue-600 dark:text-blue-400 hover:underline">errors.log öffnen</a>
-        </div>
-        <div id="recent-errors" class="divide-y divide-gray-100 dark:divide-gray-700 max-h-72 overflow-y-auto">
-          {% if recent_errors %}
-            {% for err in recent_errors %}
-            <div class="px-4 py-2">
-              <div class="flex items-start gap-3">
-                <span class="flex-shrink-0 text-xs font-mono text-gray-400 mt-0.5">{{ err.timestamp|slice:":19" }}</span>
-                <div class="min-w-0">
-                  <div class="text-xs text-gray-400 font-mono truncate">{{ err.source }}</div>
-                  <div class="text-sm text-red-700 dark:text-red-400 break-words">{{ err.message }}</div>
-                </div>
-              </div>
-            </div>
-            {% endfor %}
-          {% else %}
-            <p class="px-4 py-3 text-sm text-gray-400 dark:text-gray-500 italic">Keine Fehler in errors.log</p>
-          {% endif %}
-        </div>
-      </section>
-
-      <section class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-        <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-          <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300">Microtech GraphQL Jobs</h2>
-          <a href="/admin/microtech-queue/" class="text-xs text-blue-600 dark:text-blue-400 hover:underline">Queue öffnen →</a>
-        </div>
-        <div id="graphql-job-stats" class="p-4">
-          {% if graphql_job_stats and not graphql_job_stats.error %}
-            <div class="flex flex-wrap gap-2 mb-3">
-              <span class="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300">Wartend: {{ graphql_job_stats.counts.QUEUED|default:"0" }}</span>
-              <span class="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300">Laufend: {{ graphql_job_stats.counts.RUNNING|default:"0" }}</span>
-              <span class="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300">Erfolgreich: {{ graphql_job_stats.counts.DONE|default:"0" }}</span>
-              <span class="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300">Fehler: {{ graphql_job_stats.counts.FAILED|default:"0" }}</span>
-            </div>
-            {% if graphql_job_stats.active_jobs %}
-              <div class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Aktive Jobs</div>
-              {% for job in graphql_job_stats.active_jobs %}
-              <div class="flex items-center justify-between gap-2 py-1.5 border-b border-gray-100 dark:border-gray-700 last:border-0">
-                <span class="text-sm truncate">{{ job.label }}</span>
-                <span class="text-xs px-2 py-0.5 rounded flex-shrink-0 {% if job.status == 'RUNNING' %}bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300{% else %}bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300{% endif %}">{{ job.status_label }}</span>
-              </div>
-              {% endfor %}
-            {% else %}
-              <p class="text-sm text-gray-400 dark:text-gray-500 italic">Keine aktiven Jobs</p>
-            {% endif %}
-          {% elif graphql_job_stats.error %}
-            <p class="text-sm text-red-600 dark:text-red-400">Verbindungsfehler: {{ graphql_job_stats.error }}</p>
-          {% else %}
-            <p class="text-sm text-gray-400 dark:text-gray-500 italic">MICROTECH_GRAPHQL_URL nicht konfiguriert</p>
-          {% endif %}
-        </div>
-      </section>
-
-    </div>
-
-    <section class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden flex flex-col bg-white dark:bg-gray-900" style="min-height: 620px;">
-      <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
-        <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300 mb-3">Log-Viewer</h2>
-        <div class="flex flex-wrap gap-2 items-end">
-          <div class="flex flex-col gap-1">
-            <label class="text-xs text-gray-500 dark:text-gray-400">Datei</label>
-            <select id="log-file-select" class="text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 max-w-xs" onchange="changeLogFile(this.value)">
-              {% for option in file_options %}
-              <option value="{{ option.index }}"{% if option.index == selected_file_index %} selected{% endif %}>{{ option.name }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="flex flex-col gap-1">
-            <label class="text-xs text-gray-500 dark:text-gray-400">Zeilen</label>
-            <select id="log-lines-select" class="text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200" onchange="changeLineCount(this.value)">
-              <option value="50"{% if line_count == 50 %} selected{% endif %}>50 Zeilen</option>
-              <option value="100"{% if line_count == 100 %} selected{% endif %}>100 Zeilen</option>
-              <option value="200"{% if line_count == 200 %} selected{% endif %}>200 Zeilen</option>
-              <option value="500"{% if line_count == 500 %} selected{% endif %}>500 Zeilen</option>
-            </select>
-          </div>
-          <button type="button" onclick="scrollToBottom()" class="inline-flex items-center gap-1 px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-600 dark:text-gray-300" title="Zum Ende springen">
-            <span class="material-symbols-outlined" style="font-size:14px">arrow_downward</span>
-            Ende
-          </button>
-          <div id="autoscroll-indicator" class="flex items-center gap-1.5 text-xs text-gray-400 pb-1 ml-auto">
-            <span id="autoscroll-dot" class="w-1.5 h-1.5 rounded-full bg-green-400"></span>
-            Auto-Scroll
-          </div>
+        <div class="text-xs text-gray-500 dark:text-gray-400 space-y-0.5">
+          <div>Zuletzt: <span class="font-medium text-gray-700 dark:text-gray-300">{{ task.last_run_at }}</span></div>
+          <div>Gesamt: <span class="font-medium text-gray-700 dark:text-gray-300">{{ task.total_run_count }}×</span></div>
         </div>
       </div>
-      <pre id="log-content" class="flex-1 overflow-auto p-4 text-xs font-mono leading-relaxed text-gray-800 dark:text-gray-200 bg-white dark:bg-gray-900" style="max-height: 75vh; white-space: pre-wrap; word-break: break-word;">{% if not file_options %}Keine Log-Dateien konfiguriert.{% elif not file_exists %}Datei nicht gefunden: {{ selected_path }}{% else %}{% for line in log_lines %}{{ line }}
-{% empty %}(leer){% endfor %}{% endif %}</pre>
-    </section>
-  </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="px-4 py-4 text-sm text-gray-400 italic">Keine geplanten Tasks gefunden</p>
+    {% endif %}
+  </section>
+
 </div>
 
 <script>
@@ -350,350 +211,121 @@
   "use strict";
 
   const REFRESH_MS = 5000;
-  const fileOptions = [
-    {% for option in file_options %}
-    { index: {{ option.index }}, path: "{{ option.path|escapejs }}", name: "{{ option.name|escapejs }}" }{% if not forloop.last %},{% endif %}
-    {% endfor %}
-  ];
-  let fileIndex = {{ selected_file_index }};
-  let lineCount = {{ line_count }};
-  let autoScroll = true;
   let timer = null;
 
-  const logEl = document.getElementById("log-content");
-  const autoscrollDot = document.getElementById("autoscroll-dot");
-
-  function escHtml(s) {
+  function esc(s) {
     return String(s == null ? "" : s)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
 
-  function badgeClass(status) {
-    if (status === "running") return "bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300";
-    if (status === "waiting") return "bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300";
-    if (status === "recent") return "bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300";
-    return "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400";
+  function badgeCls(ok) {
+    if (ok === true) return "bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300";
+    if (ok === false) return "bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300";
+    return "bg-gray-100 dark:bg-gray-800 text-gray-500";
   }
 
-  function logActivityClass(activityClass) {
-    if (activityClass === "active") return "text-green-600 dark:text-green-400";
-    if (activityClass === "recent") return "text-blue-600 dark:text-blue-400";
-    if (activityClass === "old") return "text-gray-500 dark:text-gray-400";
-    return "text-red-500";
+  function renderServiceCard(badgeId, detailsId, health) {
+    const badge = document.getElementById(badgeId);
+    const details = document.getElementById(detailsId);
+    if (!badge || !details || !health) return;
+
+    badge.className = `text-xs px-2 py-0.5 rounded font-medium ${badgeCls(health.ok)}`;
+    badge.textContent = health.ok === true ? "OK" : health.ok === false ? "Fehler" : "n/a";
+
+    const rows = [];
+    if (health.url) {
+      rows.push(`<div class="flex items-center gap-2 text-gray-500 dark:text-gray-400"><span class="material-symbols-outlined" style="font-size:14px">link</span><span class="font-mono truncate" title="${esc(health.url)}">${esc(health.url)}</span></div>`);
+    }
+    if (health.latency_ms != null) {
+      rows.push(`<div class="flex items-center gap-2 text-gray-500 dark:text-gray-400"><span class="material-symbols-outlined" style="font-size:14px">timer</span><span>${esc(health.latency_ms)} ms</span></div>`);
+    }
+    const errorMsg = health.error || (health.ok === false ? health.detail : null);
+    if (errorMsg) {
+      rows.push(`<div class="text-red-600 dark:text-red-400 break-words">${esc(errorMsg)}</div>`);
+    }
+    details.innerHTML = rows.join("") || '<span class="text-gray-400 italic text-xs">Keine Details</span>';
   }
 
-  if (logEl) {
-    logEl.addEventListener("scroll", () => {
-      const dist = logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight;
-      autoScroll = dist < 40;
-      if (autoscrollDot) autoscrollDot.style.backgroundColor = autoScroll ? "#4ade80" : "#94a3b8";
-    });
-    logEl.scrollTop = logEl.scrollHeight;
+  function renderCeleryCard(workersData) {
+    const badge = document.getElementById("celery-badge");
+    const details = document.getElementById("celery-details");
+    if (!badge || !details || !workersData) return;
+
+    badge.className = `text-xs px-2 py-0.5 rounded font-medium ${workersData.available ? badgeCls(true) : badgeCls(false)}`;
+    badge.textContent = workersData.available ? "erreichbar" : "Fehler";
+
+    let totalActive = 0;
+    (workersData.workers || []).forEach(w => { totalActive += (w.active_tasks || []).length; });
+
+    const rows = [];
+    if (workersData.broker_url) {
+      rows.push(`<div class="flex items-center gap-2 text-gray-500 dark:text-gray-400"><span class="material-symbols-outlined" style="font-size:14px">link</span><span class="font-mono truncate" title="${esc(workersData.broker_url)}">${esc(workersData.broker_url)}</span></div>`);
+    }
+    rows.push(`<div class="flex items-center gap-2 text-gray-500 dark:text-gray-400"><span class="material-symbols-outlined" style="font-size:14px">memory</span><span>${(workersData.workers || []).length} Worker online</span></div>`);
+    rows.push(`<div class="flex items-center gap-2 text-gray-500 dark:text-gray-400"><span class="material-symbols-outlined" style="font-size:14px">play_circle</span><span>${totalActive} aktive Task(s)</span></div>`);
+    if (workersData.error) {
+      rows.push(`<div class="text-red-600 dark:text-red-400 break-words">${esc(workersData.error)}</div>`);
+    }
+    details.innerHTML = rows.join("");
   }
 
-  window.scrollToBottom = function () {
-    if (!logEl) return;
-    logEl.scrollTop = logEl.scrollHeight;
-    autoScroll = true;
-    if (autoscrollDot) autoscrollDot.style.backgroundColor = "#4ade80";
-  };
+  function renderWorkers(workersData) {
+    const list = document.getElementById("workers-list");
+    const summary = document.getElementById("workers-summary");
+    if (!list || !workersData) return;
 
-  window.changeLogFile = function (val) {
-    fileIndex = parseInt(val, 10) || 0;
-    const select = document.getElementById("log-file-select");
-    if (select) select.value = String(fileIndex);
-    fetchStatus();
-  };
+    const workers = workersData.workers || [];
+    if (summary) summary.textContent = `${workers.length} online`;
 
-  window.selectLogByPath = function (path) {
-    const option = fileOptions.find((item) => item.path === path);
-    if (option) window.changeLogFile(option.index);
-  };
-
-  window.changeLineCount = function (val) {
-    lineCount = parseInt(val, 10) || 100;
-    fetchStatus();
-  };
-
-  function renderDashboardCards(cards) {
-    const container = document.getElementById("dashboard-cards");
-    if (!container || !cards) return;
-    container.innerHTML = cards.map((card) => {
-      const detail = card.stage
-        ? `<span class="font-medium text-gray-700 dark:text-gray-300">${escHtml(card.stage)}</span>${card.duration ? ` · ${escHtml(card.duration)}` : ""}`
-        : (card.latest_log ? `Letztes Log: ${escHtml(card.latest_log.name)} · ${escHtml(card.latest_log.activity)}` : "Keine aktuelle Aktivitaet.");
-      return `
-        <section class="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-white dark:bg-gray-900">
-          <div class="flex items-start justify-between gap-3">
-            <div class="min-w-0">
-              <div class="flex items-center gap-2">
-                <span class="material-symbols-outlined text-gray-400" style="font-size:20px">${escHtml(card.icon)}</span>
-                <h2 class="font-semibold text-sm truncate">${escHtml(card.label)}</h2>
-              </div>
-              <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">${escHtml(card.description)}</p>
-            </div>
-            <span class="text-xs px-2 py-1 rounded font-medium ${badgeClass(card.status)}">${escHtml(card.status_label)}</span>
-          </div>
-          <div class="grid grid-cols-3 gap-2 mt-4 text-xs">
-            <div><div class="text-gray-400">aktiv</div><div class="font-semibold text-gray-800 dark:text-gray-200">${card.running_count || 0}</div></div>
-            <div><div class="text-gray-400">wartend</div><div class="font-semibold text-gray-800 dark:text-gray-200">${card.waiting_count || 0}</div></div>
-            <div><div class="text-gray-400">Logs</div><div class="font-semibold text-gray-800 dark:text-gray-200">${card.log_count || 0}</div></div>
-          </div>
-          <div class="mt-3 text-xs text-gray-500 dark:text-gray-400 min-h-[36px]">${detail}</div>
-        </section>`;
-    }).join("");
-  }
-
-  function renderJobs(entries) {
-    const container = document.getElementById("running-jobs");
-    if (!container) return;
-    if (!entries || !entries.length) {
-      container.innerHTML = '<p class="text-sm text-gray-400 dark:text-gray-500 italic">Keine laufenden Jobs</p>';
+    if (!workersData.available) {
+      list.innerHTML = `<p class="px-4 py-4 text-sm text-gray-400 italic">Broker nicht erreichbar${workersData.error ? `: ${esc(workersData.error)}` : ""}</p>`;
       return;
     }
-    container.innerHTML = entries.map((entry) => {
-      const meta = entry.metadata || {};
-      const logButton = meta.log_file ? `<button type="button" class="mt-2 text-xs text-blue-600 dark:text-blue-400 hover:underline" onclick="selectLogByPath(${JSON.stringify(meta.log_file)})">Log oeffnen</button>` : "";
-      return `
-        <div class="p-3 rounded border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20 mb-2 last:mb-0">
-          <div class="flex items-center justify-between gap-2">
-            <span class="font-medium text-sm truncate">${escHtml(entry.command_name)}</span>
-            <span class="text-xs px-2 py-0.5 rounded bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300">${escHtml(meta.stage || "aktiv")}</span>
-          </div>
-          <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">PID ${entry.pid || "-"} · ${escHtml(entry.hostname)} · ${escHtml(entry.duration)}</div>
-          ${logButton}
-        </div>`;
-    }).join("");
-  }
+    if (!workers.length) {
+      list.innerHTML = '<p class="px-4 py-4 text-sm text-gray-400 italic">Keine Worker online</p>';
+      return;
+    }
 
-  function renderQueue(queue) {
-    const container = document.getElementById("queue-overview");
-    const summary = document.getElementById("queue-summary");
-    if (!container || !queue) return;
-    if (summary) {
-      summary.textContent = queue.available
-        ? `${queue.active_count || 0} aktiv · ${queue.waiting_count || 0} reserviert · ${queue.scheduled_count || 0} geplant`
-        : "nicht erreichbar";
-    }
-    if (!queue.available) {
-      container.innerHTML = `<p class="px-4 py-3 text-sm text-gray-400 dark:text-gray-500 italic">Celery Inspect nicht erreichbar${queue.error ? `: ${escHtml(queue.error)}` : ""}</p>`;
-      return;
-    }
-    const rows = [
-      ...(queue.active || []).map((task) => ({...task, labelState: "aktiv", cls: "bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300"})),
-      ...(queue.waiting || []).map((task) => ({...task, labelState: "wartet", cls: "bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300"})),
-      ...(queue.scheduled || []).map((task) => ({...task, labelState: "geplant", cls: "bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300"})),
-    ];
-    if (!rows.length) {
-      container.innerHTML = '<p class="px-4 py-3 text-sm text-gray-400 dark:text-gray-500 italic">Keine aktiven oder wartenden Celery Tasks</p>';
-      return;
-    }
-    container.innerHTML = rows.map((task) => `
-      <div class="px-4 py-3">
-        <div class="flex items-center justify-between gap-2">
-          <span class="text-sm font-medium truncate">${escHtml(task.label)}</span>
-          <span class="text-xs px-2 py-0.5 rounded ${task.cls}">${task.labelState}</span>
+    list.innerHTML = workers.map(worker => {
+      const dotCls = worker.online ? "bg-green-500" : "bg-gray-400";
+      const stateCls = worker.online
+        ? "bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300"
+        : "bg-gray-100 dark:bg-gray-800 text-gray-500";
+      const stateLabel = worker.online ? "online" : "offline";
+
+      const tasks = (worker.active_tasks || []).map(task => `
+        <div class="flex items-center gap-2 text-xs">
+          <span class="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse flex-shrink-0"></span>
+          <span class="font-medium text-gray-800 dark:text-gray-200">${esc(task.label)}</span>
+          ${task.args ? `<span class="text-gray-400 font-mono truncate max-w-xs" title="${esc(task.args)}">${esc(task.args)}</span>` : ""}
+          ${task.id ? `<span class="text-gray-300 dark:text-gray-600 font-mono">${esc(task.id.substring(0, 8))}…</span>` : ""}
+        </div>`).join("");
+
+      return `<div class="px-4 py-3">
+        <div class="flex items-center gap-3 mb-2">
+          <span class="w-2 h-2 rounded-full flex-shrink-0 ${dotCls}"></span>
+          <span class="font-medium text-sm font-mono">${esc(worker.name)}</span>
+          <span class="text-xs px-2 py-0.5 rounded ${stateCls}">${stateLabel}</span>
         </div>
-        <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">${escHtml(task.worker)}${task.id ? ` · ${escHtml(task.id)}` : ""}${task.eta ? ` · ETA ${escHtml(task.eta)}` : ""}</div>
-      </div>`).join("");
-  }
-
-  function renderLogOverview(logEntries) {
-    const container = document.getElementById("log-overview");
-    if (!container) return;
-    if (!logEntries || !logEntries.length) {
-      container.innerHTML = '<p class="px-4 py-3 text-sm text-gray-400 dark:text-gray-500 italic">Keine Log-Dateien gefunden</p>';
-      return;
-    }
-    container.innerHTML = logEntries.map((log) => `
-      <button type="button" class="w-full text-left px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors" onclick="changeLogFile('${log.index}')">
-        <div class="flex items-start justify-between gap-3">
-          <div class="min-w-0">
-            <div class="flex items-center gap-2">
-              <span class="text-xs px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400">${escHtml(log.area_label)}</span>
-              <span class="text-sm font-medium truncate">${escHtml(log.name)}</span>
-            </div>
-            <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">${escHtml(log.purpose)}</div>
-            <div class="text-xs text-gray-400 mt-1 font-mono truncate">${escHtml(log.path)}</div>
-          </div>
-          <div class="text-right flex-shrink-0">
-            <div class="text-xs font-medium ${logActivityClass(log.activity_class)}">${escHtml(log.activity)}</div>
-            <div class="text-xs text-gray-400 mt-1">${escHtml(log.size)}</div>
-          </div>
-        </div>
-      </button>`).join("");
-  }
-
-  function renderActiveProcesses(processes) {
-    const container = document.getElementById("active-processes");
-    if (!container) return;
-    if (!processes || !processes.length) {
-      container.innerHTML = '<p class="px-4 py-3 text-sm text-gray-400 dark:text-gray-500 italic">Keine GC-Bridge-Prozesse gefunden</p>';
-      return;
-    }
-    container.innerHTML = processes.map((p) => `
-      <div class="flex items-start gap-3 px-4 py-3">
-        <span class="mt-1.5 w-2 h-2 rounded-full flex-shrink-0 bg-green-500${p.is_self ? " ring-2 ring-green-300 dark:ring-green-700" : ""}"></span>
-        <div class="min-w-0 flex-1">
-          <div class="font-mono text-sm truncate">${escHtml(p.command)}</div>
-          <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">PID ${p.pid || "-"}${p.user ? ` · ${escHtml(p.user)}` : ""}${p.mem_mb ? ` · ${p.mem_mb} MB` : ""}${p.started ? ` · Start: ${escHtml(p.started)}` : ""}</div>
-        </div>
-      </div>`).join("");
-  }
-
-  function renderMicrotechSlot(slot) {
-    const dot = document.getElementById("microtech-slot-dot");
-    const label = document.getElementById("microtech-slot-label");
-    if (!dot || !label || !slot) return;
-    if (slot.available === true) {
-      dot.className = "inline-block w-2 h-2 rounded-full bg-green-500";
-      label.textContent = (slot.queued || 0) > 0 ? `frei (${slot.queued} wartend)` : "frei";
-      label.className = "font-medium text-green-600 dark:text-green-400";
-    } else if (slot.available === false) {
-      dot.className = "inline-block w-2 h-2 rounded-full bg-red-500 animate-pulse";
-      label.textContent = `belegt (${slot.running || 0} aktiv, ${slot.queued || 0} wartend)`;
-      label.className = "font-medium text-red-600 dark:text-red-400";
-    } else {
-      dot.className = "inline-block w-2 h-2 rounded-full bg-gray-400";
-      label.textContent = "?";
-      label.className = "font-medium text-gray-400";
-    }
-  }
-
-  function renderGraphQLHealth(h) {
-    const container = document.getElementById("graphql-health");
-    if (!container || !h) return;
-    const dotCls = h.status === "not_configured" ? "bg-gray-400" : (h.ok ? "bg-green-500" : "bg-red-500 animate-pulse");
-    const statusText = h.status === "not_configured" ? "Nicht konfiguriert" : (h.ok ? "OK" : "Fehler");
-    const statusCls = h.status === "not_configured" ? "text-gray-500 dark:text-gray-400" : (h.ok ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400");
-    container.innerHTML = `
-      <div class="flex items-start gap-3">
-        <span class="mt-1 w-2 h-2 rounded-full flex-shrink-0 ${dotCls}"></span>
-        <div class="min-w-0 flex-1">
-          <div class="flex items-center gap-2">
-            <span class="text-sm font-medium ${statusCls}">${statusText}</span>
-            ${h.latency_ms != null ? `<span class="text-xs text-gray-400 dark:text-gray-500">${h.latency_ms} ms</span>` : ""}
-          </div>
-          ${h.url ? `<div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5 font-mono truncate" title="${escHtml(h.url)}">${escHtml(h.url)}</div>` : ""}
-          ${h.error ? `<div class="text-xs text-red-600 dark:text-red-400 mt-1 break-words">${escHtml(h.error)}</div>` : ""}
-        </div>
+        ${tasks
+          ? `<div class="ml-5 space-y-1">${tasks}</div>`
+          : '<p class="ml-5 text-xs text-gray-400 italic">Kein aktiver Task</p>'}
       </div>`;
-  }
-
-  function renderServiceList(containerId, rows, emptyText, rowRenderer) {
-    const container = document.getElementById(containerId);
-    if (!container || rows === null || rows === undefined) return;
-    if (!rows.length) {
-      container.innerHTML = `<p class="px-4 py-3 text-sm text-gray-400 italic">${emptyText}</p>`;
-      return;
-    }
-    container.innerHTML = rows.map(rowRenderer).join("");
-  }
-
-  function renderInfra(data) {
-    renderServiceList("systemd-units", data.systemd_units, "Keine GC-Bridge systemd-Units gefunden", (u) => `
-      <div class="flex items-start gap-3 px-4 py-3">
-        <span class="mt-1 w-2 h-2 rounded-full flex-shrink-0 ${u.ok ? "bg-green-500" : "bg-red-400"}"></span>
-        <div class="min-w-0 flex-1">
-          <div class="font-medium text-sm">${escHtml(u.name)}</div>
-          <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">${escHtml(u.active)}/${escHtml(u.sub)}${u.description ? ` · ${escHtml(u.description)}` : ""}</div>
-        </div>
-      </div>`);
-    renderServiceList("scheduled-tasks", data.scheduled_tasks, "Keine Tasks abgefragt", (t) => `
-      <div class="flex items-start gap-3 px-4 py-3">
-        <span class="mt-1 w-2 h-2 rounded-full flex-shrink-0 ${t.ok ? "bg-green-500" : "bg-red-400"}"></span>
-        <div class="min-w-0 flex-1">
-          <div class="font-medium text-sm">${escHtml(t.name)}</div>
-          <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Status: ${escHtml(t.status)}${t.last_run ? ` · Zuletzt: ${escHtml(t.last_run)}` : ""}${t.next_run ? ` · Naechste: ${escHtml(t.next_run)}` : ""}</div>
-        </div>
-      </div>`);
-    renderServiceList("runner-services", data.runner_services, "Keine Runner-Dienste abgefragt", (s) => `
-      <div class="flex items-start gap-3 px-4 py-3">
-        <span class="mt-1 w-2 h-2 rounded-full flex-shrink-0 ${s.ok ? "bg-green-500" : "bg-red-400"}"></span>
-        <div class="min-w-0 flex-1">
-          <div class="font-medium text-sm">${escHtml(s.name)}</div>
-          <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Status: ${escHtml(s.state || "-")}</div>
-        </div>
-      </div>`);
-  }
-
-  function renderLog(lines) {
-    if (!logEl) return;
-    const text = lines && lines.length ? lines.join("\n") : "(leer)";
-    if (logEl.textContent === text) return;
-    logEl.textContent = text;
-    if (autoScroll) logEl.scrollTop = logEl.scrollHeight;
-  }
-
-  function renderRecentErrors(errors) {
-    const container = document.getElementById("recent-errors");
-    if (!container) return;
-    if (!errors || !errors.length) {
-      container.innerHTML = '<p class="px-4 py-3 text-sm text-gray-400 dark:text-gray-500 italic">Keine Fehler in errors.log</p>';
-      return;
-    }
-    container.innerHTML = errors.map((err) => `
-      <div class="px-4 py-2">
-        <div class="flex items-start gap-3">
-          <span class="flex-shrink-0 text-xs font-mono text-gray-400 mt-0.5">${escHtml((err.timestamp || "").substring(0, 19))}</span>
-          <div class="min-w-0">
-            <div class="text-xs text-gray-400 font-mono truncate">${escHtml(err.source || "")}</div>
-            <div class="text-sm text-red-700 dark:text-red-400 break-words">${escHtml(err.message || "")}</div>
-          </div>
-        </div>
-      </div>`).join("");
-  }
-
-  function renderGraphQLJobStats(stats) {
-    const container = document.getElementById("graphql-job-stats");
-    if (!container || !stats) return;
-    if (stats.error) {
-      container.innerHTML = `<p class="text-sm text-red-600 dark:text-red-400">Verbindungsfehler: ${escHtml(stats.error)}</p>`;
-      return;
-    }
-    const counts = stats.counts || {};
-    const activeJobs = stats.active_jobs || [];
-    const countBadges = [
-      `<span class="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300">Wartend: ${counts.QUEUED || 0}</span>`,
-      `<span class="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300">Laufend: ${counts.RUNNING || 0}</span>`,
-      `<span class="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300">Erfolgreich: ${counts.DONE || 0}</span>`,
-      `<span class="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300">Fehler: ${counts.FAILED || 0}</span>`,
-    ].join("");
-    let jobsHtml = activeJobs.length
-      ? `<div class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Aktive Jobs</div>` +
-        activeJobs.map((j) => {
-          const cls = j.status === "RUNNING"
-            ? "bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300"
-            : "bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300";
-          return `<div class="flex items-center justify-between gap-2 py-1.5 border-b border-gray-100 dark:border-gray-700 last:border-0">
-            <span class="text-sm truncate">${escHtml(j.label)}</span>
-            <span class="text-xs px-2 py-0.5 rounded flex-shrink-0 ${cls}">${escHtml(j.status_label)}</span>
-          </div>`;
-        }).join("")
-      : `<p class="text-sm text-gray-400 dark:text-gray-500 italic">Keine aktiven Jobs</p>`;
-    container.innerHTML = `<div class="flex flex-wrap gap-2 mb-3">${countBadges}</div>${jobsHtml}`;
+    }).join("");
   }
 
   async function fetchStatus() {
     const dot = document.getElementById("refresh-dot");
     try {
-      const resp = await fetch(`/admin/system/api/?file=${fileIndex}&lines=${lineCount}`, { headers: { "X-Requested-With": "XMLHttpRequest" } });
+      const resp = await fetch("/admin/system/api/", { headers: {"X-Requested-With": "XMLHttpRequest"} });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const data = await resp.json();
-      renderDashboardCards(data.dashboard_cards);
-      renderJobs(data.runtime_entries);
-      renderQueue(data.queue_status);
-      renderLogOverview(data.log_entries);
-      renderActiveProcesses(data.active_processes);
-      renderMicrotechSlot(data.microtech_slot);
-      renderGraphQLHealth(data.graphql_health);
-      renderGraphQLJobStats(data.graphql_job_stats);
-      renderRecentErrors(data.recent_errors);
-      renderInfra(data);
-      renderLog(data.log_lines);
+
+      renderServiceCard("graphql-badge", "graphql-details", data.graphql_health);
+      renderServiceCard("shopware-badge", "shopware-details", data.shopware_health);
+      renderCeleryCard(data.workers_data);
+      renderWorkers(data.workers_data);
+
       const el = document.getElementById("last-updated");
       if (el) el.textContent = "Stand: " + new Date().toLocaleTimeString("de-DE");
       if (dot) dot.style.backgroundColor = "#4ade80";
@@ -703,69 +335,10 @@
     }
   }
 
-  function getCsrfToken() {
-    const match = document.cookie.match(/csrftoken=([^;]+)/);
-    return match ? decodeURIComponent(match[1]) : "";
-  }
-
-  window.triggerJob = async function (btn) {
-    const command = btn.dataset.command;
-    if (!command) return;
-    btn.disabled = true;
-    const originalHtml = btn.innerHTML;
-    btn.innerHTML = '<span class="material-symbols-outlined" style="font-size:14px">hourglass_empty</span> Starte';
-    const toast = document.getElementById("job-toast");
-    try {
-      const resp = await fetch("/admin/system/run/", {
-        method: "POST",
-        headers: {"Content-Type": "application/json", "X-CSRFToken": getCsrfToken()},
-        body: JSON.stringify({command}),
-      });
-      const result = await resp.json();
-      if (toast) {
-        toast.className = result.success
-          ? "lg:col-span-2 p-3 rounded text-sm font-medium bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-800 dark:text-green-300"
-          : "lg:col-span-2 p-3 rounded text-sm font-medium bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-300";
-        toast.textContent = result.success ? `Job gestartet (PID ${result.pid})` : `Fehler: ${result.error}`;
-        toast.classList.remove("hidden");
-        setTimeout(() => toast.classList.add("hidden"), 6000);
-      }
-    } catch (_err) {
-      if (toast) {
-        toast.className = "lg:col-span-2 p-3 rounded text-sm font-medium bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-300";
-        toast.textContent = "Verbindungsfehler";
-        toast.classList.remove("hidden");
-        setTimeout(() => toast.classList.add("hidden"), 6000);
-      }
-    } finally {
-      setTimeout(() => {
-        btn.disabled = false;
-        btn.innerHTML = originalHtml;
-      }, 2000);
-      setTimeout(fetchStatus, 1500);
-    }
-  };
-
-  window.checkGraphQLHealth = async function (btn) {
-    const originalHtml = btn ? btn.innerHTML : "";
-    if (btn) {
-      btn.disabled = true;
-      btn.innerHTML = '<span class="material-symbols-outlined" style="font-size:14px">hourglass_empty</span> Pruefe';
-    }
-    await fetchStatus();
-    if (btn) {
-      btn.disabled = false;
-      btn.innerHTML = originalHtml;
-    }
-  };
-
   fetchStatus();
   timer = setInterval(fetchStatus, REFRESH_MS);
   document.addEventListener("visibilitychange", () => {
-    if (document.hidden) {
-      clearInterval(timer);
-      return;
-    }
+    if (document.hidden) { clearInterval(timer); return; }
     fetchStatus();
     timer = setInterval(fetchStatus, REFRESH_MS);
   });

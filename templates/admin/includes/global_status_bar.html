@@ -11,20 +11,29 @@
     <span
       class="global-admin-status-item inline-flex items-center gap-1.5 rounded border border-gray-200 bg-gray-50 px-2 py-0.5 text-gray-500 dark:border-gray-700 dark:bg-base-800 dark:text-gray-400"
       data-service="graphql"
-      title="GraphQL wird geprueft"
+      title="GraphQL wird geprüft"
     >
       <span class="global-admin-status-dot h-2 w-2 rounded-full bg-gray-400"></span>
       <span class="global-admin-status-label">GraphQL</span>
-      <span class="global-admin-status-text">pruefe...</span>
+      <span class="global-admin-status-text">prüfe...</span>
     </span>
     <span
       class="global-admin-status-item inline-flex items-center gap-1.5 rounded border border-gray-200 bg-gray-50 px-2 py-0.5 text-gray-500 dark:border-gray-700 dark:bg-base-800 dark:text-gray-400"
       data-service="shopware"
-      title="Shopware wird geprueft"
+      title="Shopware wird geprüft"
     >
       <span class="global-admin-status-dot h-2 w-2 rounded-full bg-gray-400"></span>
       <span class="global-admin-status-label">Shopware</span>
-      <span class="global-admin-status-text">pruefe...</span>
+      <span class="global-admin-status-text">prüfe...</span>
+    </span>
+    <span
+      class="global-admin-status-item inline-flex items-center gap-1.5 rounded border border-gray-200 bg-gray-50 px-2 py-0.5 text-gray-500 dark:border-gray-700 dark:bg-base-800 dark:text-gray-400"
+      data-service="celery"
+      title="Celery wird geprüft"
+    >
+      <span class="global-admin-status-dot h-2 w-2 rounded-full bg-gray-400"></span>
+      <span class="global-admin-status-label">Celery</span>
+      <span class="global-admin-status-text">prüfe...</span>
     </span>
   </div>
 </div>
@@ -37,9 +46,10 @@
   if (!root) return;
 
   const statusUrl = root.dataset.statusUrl || "/admin/status-bar/api/";
-  const intervalMs = 30000;
+  const SERVICE_INTERVAL_MS = 30000;
+  const CELERY_INTERVAL_MS = 10000;
 
-  function applyStatus(serviceKey, data) {
+  function applyServiceStatus(serviceKey, data) {
     const item = root.querySelector(`[data-service="${serviceKey}"]`);
     if (!item || !data) return;
 
@@ -50,11 +60,10 @@
     item.classList.remove(
       "border-green-200", "bg-green-50", "text-green-700",
       "border-red-200", "bg-red-50", "text-red-700",
-      "border-gray-200", "bg-gray-50", "text-gray-500"
+      "border-gray-200", "bg-gray-50", "text-gray-500",
+      "dark:border-gray-700", "dark:bg-base-800", "dark:text-gray-400"
     );
-    if (dot) {
-      dot.classList.remove("bg-green-500", "bg-red-500", "bg-gray-400", "animate-pulse");
-    }
+    if (dot) dot.classList.remove("bg-green-500", "bg-red-500", "bg-gray-400", "animate-pulse");
 
     if (data.ok === true) {
       item.classList.add("border-green-200", "bg-green-50", "text-green-700");
@@ -73,6 +82,46 @@
     item.title = `${data.label || serviceKey}: ${detail || data.status || ""}`;
   }
 
+  function applyCeleryStatus(data) {
+    const item = root.querySelector('[data-service="celery"]');
+    if (!item || !data) return;
+
+    const dot = item.querySelector(".global-admin-status-dot");
+    const text = item.querySelector(".global-admin-status-text");
+
+    item.classList.remove(
+      "border-green-200", "bg-green-50", "text-green-700",
+      "border-blue-200", "bg-blue-50", "text-blue-700",
+      "border-red-200", "bg-red-50", "text-red-700",
+      "border-gray-200", "bg-gray-50", "text-gray-500",
+      "dark:border-gray-700", "dark:bg-base-800", "dark:text-gray-400"
+    );
+    if (dot) dot.classList.remove("bg-green-500", "bg-blue-500", "bg-red-500", "bg-gray-400", "animate-pulse");
+
+    const status = data.status || "";
+    const detail = data.detail || "";
+
+    if (status === "active") {
+      item.classList.add("border-blue-200", "bg-blue-50", "text-blue-700");
+      if (dot) dot.classList.add("bg-blue-500", "animate-pulse");
+      if (text) text.textContent = detail || "aktiv";
+    } else if (status === "idle") {
+      item.classList.add("border-green-200", "bg-green-50", "text-green-700");
+      if (dot) dot.classList.add("bg-green-500");
+      if (text) text.textContent = "ruhig";
+    } else if (status === "error") {
+      item.classList.add("border-red-200", "bg-red-50", "text-red-700");
+      if (dot) dot.classList.add("bg-red-500", "animate-pulse");
+      if (text) text.textContent = "Fehler";
+    } else {
+      item.classList.add("border-gray-200", "bg-gray-50", "text-gray-500");
+      if (dot) dot.classList.add("bg-gray-400");
+      if (text) text.textContent = "n/a";
+    }
+
+    item.title = `Celery: ${detail || status}`;
+  }
+
   async function refreshStatus() {
     try {
       const response = await fetch(statusUrl, {
@@ -81,15 +130,22 @@
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const payload = await response.json();
       const services = payload.services || {};
-      applyStatus("graphql", services.graphql);
-      applyStatus("shopware", services.shopware);
+      applyServiceStatus("graphql", services.graphql);
+      applyServiceStatus("shopware", services.shopware);
+      applyCeleryStatus(services.celery);
     } catch (error) {
-      applyStatus("graphql", {label: "GraphQL", ok: false, detail: String(error)});
-      applyStatus("shopware", {label: "Shopware", ok: false, detail: String(error)});
+      const errData = {label: "Fehler", ok: false, detail: String(error), status: "error"};
+      applyServiceStatus("graphql", errData);
+      applyServiceStatus("shopware", errData);
+      applyCeleryStatus(errData);
     }
   }
 
   refreshStatus();
-  setInterval(refreshStatus, intervalMs);
+
+  // Service checks every 30s, but celery needs faster polling
+  // We run the full refresh every 10s (celery is cached server-side for 10s anyway,
+  // graphql/shopware are cached for 15s so the extra calls are free)
+  setInterval(refreshStatus, CELERY_INTERVAL_MS);
 })();
 </script>
