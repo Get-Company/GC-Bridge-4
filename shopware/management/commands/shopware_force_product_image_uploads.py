@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import traceback
 from collections.abc import Iterable
 
-from django.core.management.base import BaseCommand, CommandError
+from django.core.management.base import CommandError
 from django.db.models import Prefetch
 from loguru import logger
 
-from issues.services import create_task_issue
+from core.management.base import MonitoredBaseCommand
 from products.models import Product, ProductImage
 from shopware.services.product import ProductService
 from shopware.services.product_media import ProductMediaSyncService
@@ -69,7 +68,7 @@ def _append_media_payload(
     return media_sync_hash
 
 
-class Command(BaseCommand):
+class Command(MonitoredBaseCommand):
     help = (
         "Loescht Shopware-Produktbilder und Produkt-Media-Zuordnungen in 10er-Batches, "
         "laedt die Bilder neu hoch und setzt die Zuordnung erneut."
@@ -341,9 +340,4 @@ class Command(BaseCommand):
             step,
             products,
             exc,
-        )
-        create_task_issue(
-            title=f"[Task-Fehler] shopware_force_product_image_uploads › {step}",
-            error_text=f"Batch {batch_no} | Produkte: {products}\n{traceback.format_exc()}",
-            description=f"Automatisch erstellt. Batch {batch_no}, Schritt '{step}'.",
         )
