@@ -403,8 +403,8 @@ class MicrotechGraphQLClientService(BaseService):
     ) -> dict[str, Any]:
         timeout = self.config.poll_timeout if timeout is None else timeout
         interval = self._coerce_interval(retry_after)
+        max_interval = max(self.config.poll_interval * 5, interval)
         deadline = time.monotonic() + timeout
-        time.sleep(interval)
 
         while True:
             job = query_job(job_id)
@@ -416,6 +416,7 @@ class MicrotechGraphQLClientService(BaseService):
             if time.monotonic() >= deadline:
                 raise GraphQLMicrotechTimeout(f"Microtech GraphQL job {job_id} did not finish within {timeout}s.")
             time.sleep(interval)
+            interval = min(interval * 1.5, max_interval)
 
     def _mutation_with_job(self, query: str, field: str, variables: dict[str, Any]) -> dict[str, Any]:
         data = self.execute(query, variables)

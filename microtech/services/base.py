@@ -184,7 +184,7 @@ class MicrotechDatasetService(BaseService):
             self._records = []
             self._loaded = True
             return
-        result = self.client.poll_dataset_records(self._build_request(index_field=self._range.get("indexField")), timeout=180)
+        result = self.client.poll_dataset_records(self._build_request(index_field=self._range.get("indexField")))
         self._load_result(result)
 
     def _fetch_next_page(self) -> None:
@@ -193,7 +193,6 @@ class MicrotechDatasetService(BaseService):
         previous_len = len(self._records)
         result = self.client.poll_dataset_records(
             self._build_request(index_field=self._range.get("indexField"), after=self._next_cursor),
-            timeout=180,
         )
         new_records = self._normalize_records(result.get("records") or [])
         self._records.extend(new_records)
