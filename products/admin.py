@@ -87,6 +87,7 @@ from .models import (
     Product,
     ProductImage,
     ProductProperty,
+    ProductSyncJob,
     PropertyGroup,
     PropertyValue,
     Storage,
@@ -899,6 +900,57 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
             request,
             f"Sonderpreis fuer {updated} Preis(e) in {sales_channel.name} aufgehoben.",
         )
+
+
+@admin.register(ProductSyncJob)
+class ProductSyncJobAdmin(BaseAdmin):
+    list_display = (
+        "id",
+        "product",
+        "target",
+        "status",
+        "attempt",
+        "changed_fields_summary",
+        "started_at",
+        "finished_at",
+        "created_at",
+    )
+    list_filter = ("target", "status", ("created_at", RangeDateTimeFilter))
+    search_fields = ("product__erp_nr", "product__name", "celery_task_id", "last_error")
+    autocomplete_fields = ("product",)
+    readonly_fields = BaseAdmin.readonly_fields + (
+        "product",
+        "target",
+        "status",
+        "priority",
+        "changed_fields",
+        "trigger",
+        "celery_task_id",
+        "attempt",
+        "max_attempts",
+        "started_at",
+        "finished_at",
+        "last_error",
+    )
+    fieldsets = (
+        (None, {"fields": ("product", "target", "status", "priority", "trigger")}),
+        ("Ausfuehrung", {"fields": ("attempt", "max_attempts", "started_at", "finished_at", "celery_task_id")}),
+        ("Aenderungen und Fehler", {"fields": ("changed_fields", "last_error")}),
+        ("Zeitstempel", {"fields": BaseAdmin.readonly_fields}),
+    )
+
+    @admin.display(description="Geaenderte Felder")
+    def changed_fields_summary(self, obj: ProductSyncJob) -> str:
+        fields = obj.changed_fields or []
+        if not fields:
+            return ""
+        return ", ".join(str(field) for field in fields[:4]) + (" ..." if len(fields) > 4 else "")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return self.has_view_permission(request, obj)
 
 
 @admin.register(Price)

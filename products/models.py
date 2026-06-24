@@ -3,6 +3,7 @@ from decimal import Decimal, ROUND_UP
 
 from django.conf import settings
 from django.db import models
+from django.db.models import Q
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
@@ -309,6 +310,61 @@ class Product(BaseModel):
     def first_image(self) -> Image | None:
         images = self.get_images()
         return images[0] if images else None
+
+
+class ProductSyncJob(BaseModel):
+    class Target(models.TextChoices):
+        SHOPWARE = "shopware", _("Shopware")
+
+    class Status(models.TextChoices):
+        QUEUED = "queued", _("Wartend")
+        RUNNING = "running", _("Laufend")
+        SUCCEEDED = "succeeded", _("Erfolgreich")
+        FAILED = "failed", _("Fehlgeschlagen")
+        CANCELLED = "cancelled", _("Abgebrochen")
+
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE,
+        related_name="sync_jobs",
+        verbose_name=_("Produkt"),
+    )
+    target = models.CharField(max_length=16, choices=Target.choices, db_index=True, verbose_name=_("Zielsystem"))
+    status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.QUEUED,
+        db_index=True,
+        verbose_name=_("Status"),
+    )
+    priority = models.PositiveSmallIntegerField(default=100, db_index=True, verbose_name=_("Prioritaet"))
+    changed_fields = models.JSONField(blank=True, default=list, verbose_name=_("Geaenderte Felder"))
+    trigger = models.CharField(max_length=64, blank=True, default="product_save", verbose_name=_("Ausloeser"))
+    celery_task_id = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Celery Task-ID"))
+    attempt = models.PositiveIntegerField(default=0, verbose_name=_("Versuche"))
+    max_attempts = models.PositiveIntegerField(default=3, verbose_name=_("Max. Versuche"))
+    started_at = models.DateTimeField(blank=True, null=True, verbose_name=_("Gestartet"))
+    finished_at = models.DateTimeField(blank=True, null=True, verbose_name=_("Beendet"))
+    last_error = models.TextField(blank=True, default="", verbose_name=_("Letzter Fehler"))
+
+    class Meta:
+        verbose_name = _("Produkt Sync-Job")
+        verbose_name_plural = _("Produkt Sync-Jobs")
+        ordering = ("status", "priority", "created_at", "id")
+        indexes = [
+            models.Index(fields=("status", "target", "priority", "created_at"), name="products_syncjob_queue_idx"),
+            models.Index(fields=("product", "target", "status"), name="products_syncjob_product_idx"),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=("product", "target"),
+                condition=Q(status="queued"),
+                name="uniq_queued_product_sync",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.product.erp_nr} -> {self.get_target_display()} [{self.get_status_display()}]"
 
 
 class ProductImage(BaseModel):

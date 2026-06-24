@@ -12,6 +12,7 @@ from microtech.services.lager import MicrotechLagerService
 from core.admin_utils import log_admin_change
 from microtech.services import microtech_connection
 from products.models import Image, Price, Product, ProductImage, Storage, Tax
+from products.services import disable_product_auto_sync
 from shopware.models import ShopwareSettings
 
 TAX_19_RATE = Decimal("19.00")
@@ -182,7 +183,7 @@ class Command(MonitoredBaseCommand):
         if not erp_nrs and not sync_all:
             raise CommandError("Bitte ERP-Nummern angeben oder --all verwenden.")
 
-        with microtech_connection() as erp:
+        with microtech_connection() as erp, disable_product_auto_sync():
             result = self.run_direct(
                 erp=erp,
                 erp_nrs=erp_nrs,

@@ -63,16 +63,29 @@ def shopware_sync_products(
     batch_size: int = 50,
     only_with_images: bool = False,
     log_images: bool = False,
+    skip_images: bool = False,
 ) -> None:
+    command_options = {
+        "all": sync_all,
+        "limit": limit,
+        "batch_size": batch_size,
+        "only_with_images": only_with_images,
+        "log_images": log_images,
+    }
+    if skip_images:
+        command_options["skip_images"] = True
     call_command(
         "shopware_sync_products",
         *_clean_erp_nrs(erp_nrs),
-        all=sync_all,
-        limit=limit,
-        batch_size=batch_size,
-        only_with_images=only_with_images,
-        log_images=log_images,
+        **command_options,
     )
+
+
+@shared_task(name="products.process_product_sync_job")
+def process_product_sync_job(job_id: int) -> None:
+    from products.services import ProductAutoSyncService
+
+    ProductAutoSyncService().process_job(job_id=job_id)
 
 
 @shared_task(name="products.shopware_force_product_image_uploads")

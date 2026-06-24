@@ -17,6 +17,7 @@ TASK_LABELS: dict[str, str] = {
     "products.microtech_sync_products": "Microtech Import",
     "products.microtech_update_product": "Microtech Produkt aktualisieren",
     "products.microtech_update_prices": "Microtech Preise aktualisieren",
+    "products.process_product_sync_job": "Produkt Auto-Sync Job",
     "products.shopware_sync_products": "Shopware Export",
     "products.shopware_force_product_image_uploads": "Shopware Bilder neu hochladen",
     "orders.shopware_sync_open_orders": "Offene Bestellungen importieren",

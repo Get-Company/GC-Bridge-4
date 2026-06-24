@@ -44,10 +44,12 @@ from products.models import (
     Product,
     ProductImage,
     ProductProperty,
+    ProductSyncJob,
     PropertyGroup,
     PropertyValue,
 )
 from products.services import PriceIncreaseService
+from products.services import ProductAutoSyncService, disable_product_auto_sync
 from products import tasks as product_tasks
 from shopware.models import ShopwareSettings
 
@@ -115,6 +117,113 @@ class ProductAdminActionConfigurationTest(SimpleTestCase):
         self.assertEqual(result, "redirect")
         mock_delay.assert_called_once_with(["A-1000"])
         admin_instance.message_user.assert_called_once()
+
+
+class ProductAutoSyncSignalTest(TestCase):
+    @patch("products.tasks.process_product_sync_job.delay")
+    def test_changed_product_queues_shopware_job_after_commit(self, mock_delay):
+        mock_delay.return_value.id = "celery-task"
+        product = Product.objects.create(erp_nr="A-9100", name="Alt")
+
+        with self.captureOnCommitCallbacks(execute=True):
+            product.name = "Neu"
+            product.save(update_fields=["name"])
+
+        jobs = list(ProductSyncJob.objects.order_by("target"))
+        self.assertEqual(len(jobs), 1)
+        self.assertEqual(jobs[0].target, ProductSyncJob.Target.SHOPWARE)
+        self.assertEqual({tuple(job.changed_fields) for job in jobs}, {("name",)})
+        self.assertEqual(mock_delay.call_count, 1)
+
+    @patch("products.tasks.process_product_sync_job.delay")
+    def test_unchanged_product_save_does_not_queue_jobs(self, mock_delay):
+        product = Product.objects.create(erp_nr="A-9101", name="Alt")
+
+        with self.captureOnCommitCallbacks(execute=True):
+            product.save()
+
+        self.assertFalse(ProductSyncJob.objects.exists())
+        mock_delay.assert_not_called()
+
+    @patch("products.tasks.process_product_sync_job.delay")
+    def test_open_jobs_are_deduplicated_and_changed_fields_are_merged(self, mock_delay):
+        mock_delay.return_value.id = "celery-task"
+        product = Product.objects.create(erp_nr="A-9102", name="Alt", unit="Stk")
+
+        with self.captureOnCommitCallbacks(execute=True):
+            product.name = "Neu"
+            product.save(update_fields=["name"])
+        with self.captureOnCommitCallbacks(execute=True):
+            product.unit = "Pack"
+            product.save(update_fields=["unit"])
+
+        jobs = list(ProductSyncJob.objects.order_by("target"))
+        self.assertEqual(len(jobs), 1)
+        self.assertEqual({tuple(job.changed_fields) for job in jobs}, {("name", "unit")})
+        self.assertEqual(mock_delay.call_count, 1)
+
+    @patch("products.tasks.process_product_sync_job.delay")
+    def test_auto_sync_can_be_suppressed_for_imports(self, mock_delay):
+        product = Product.objects.create(erp_nr="A-9103", name="Alt")
+
+        with disable_product_auto_sync(), self.captureOnCommitCallbacks(execute=True):
+            product.name = "Import"
+            product.save(update_fields=["name"])
+
+        self.assertFalse(ProductSyncJob.objects.exists())
+        mock_delay.assert_not_called()
+
+    @patch("products.tasks.process_product_sync_job.delay")
+    def test_changed_price_queues_product_sync_jobs(self, mock_delay):
+        mock_delay.return_value.id = "celery-task"
+        product = Product.objects.create(erp_nr="A-9104", name="Artikel")
+        price = Price.objects.create(product=product, price=Decimal("10.00"))
+
+        with self.captureOnCommitCallbacks(execute=True):
+            price.price = Decimal("11.00")
+            price.save(update_fields=["price"])
+
+        jobs = list(ProductSyncJob.objects.order_by("target"))
+        self.assertEqual(len(jobs), 1)
+        self.assertEqual({tuple(job.changed_fields) for job in jobs}, {("price.price",)})
+
+    @patch("products.tasks.process_product_sync_job.delay")
+    def test_changed_storage_queues_product_sync_jobs(self, mock_delay):
+        mock_delay.return_value.id = "celery-task"
+        product = Product.objects.create(erp_nr="A-9105", name="Artikel")
+        storage = Storage.objects.create(product=product, stock=1)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            storage.stock = 2
+            storage.save(update_fields=["stock"])
+
+        jobs = list(ProductSyncJob.objects.order_by("target"))
+        self.assertEqual(len(jobs), 1)
+        self.assertEqual({tuple(job.changed_fields) for job in jobs}, {("storage.stock",)})
+
+
+class ProductAutoSyncServiceTest(TestCase):
+    @patch("products.services.product_auto_sync.call_command")
+    def test_process_shopware_job_skips_images(self, mock_call_command):
+        product = Product.objects.create(erp_nr="A-9201", name="Artikel")
+        job = ProductSyncJob.objects.create(product=product, target=ProductSyncJob.Target.SHOPWARE)
+
+        ProductAutoSyncService().process_job(job_id=job.pk)
+
+        mock_call_command.assert_called_once_with("shopware_sync_products", "A-9201", skip_images=True)
+
+    @patch("products.services.product_auto_sync.call_command", side_effect=CommandError("boom"))
+    def test_process_job_marks_failures(self, mock_call_command):
+        product = Product.objects.create(erp_nr="A-9202", name="Artikel")
+        job = ProductSyncJob.objects.create(product=product, target=ProductSyncJob.Target.SHOPWARE)
+
+        with self.assertRaises(CommandError):
+            ProductAutoSyncService().process_job(job_id=job.pk)
+
+        job.refresh_from_db()
+        self.assertEqual(job.status, ProductSyncJob.Status.FAILED)
+        self.assertEqual(job.last_error, "boom")
+        self.assertEqual(job.attempt, 1)
 
 
 class PriceIncreasePdfHtmlCleanupTest(SimpleTestCase):

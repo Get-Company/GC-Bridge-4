@@ -381,6 +381,11 @@ class Command(MonitoredBaseCommand):
             action="store_true",
             help="Schreibt aussagekraeftige Batch- und Produktlogs fuer den Bild-Sync.",
         )
+        parser.add_argument(
+            "--skip-images",
+            action="store_true",
+            help="Produktdaten und Preise synchronisieren, ohne Bilder/Medien zu verarbeiten.",
+        )
 
     def handle(self, *args, **options):
         erp_nrs = [nr.strip() for nr in options.get("erp_nrs") or [] if nr.strip()]
@@ -389,6 +394,7 @@ class Command(MonitoredBaseCommand):
         batch_size = options.get("batch_size") or 50
         only_with_images = options.get("only_with_images", False)
         log_images = options.get("log_images", False)
+        skip_images = options.get("skip_images", False)
 
         runtime = CommandRuntimeService().start(
             command_name="shopware_sync_products",
@@ -399,6 +405,7 @@ class Command(MonitoredBaseCommand):
                 "batch_size": batch_size,
                 "only_with_images": only_with_images,
                 "log_images": log_images,
+                "skip_images": skip_images,
             },
         )
         try:
@@ -469,10 +476,13 @@ class Command(MonitoredBaseCommand):
                     )
 
                     if effective_sku:
-                        image_names = _image_names_for_product(product)
-                        media_sync_hash = media_sync_service.build_media_sync_hash(product=product)
-                        media_changed = media_sync_service.has_media_changed(product=product, media_sync_hash=media_sync_hash)
-                        if log_images:
+                        image_names = []
+                        media_changed = False
+                        if not skip_images:
+                            image_names = _image_names_for_product(product)
+                            media_sync_hash = media_sync_service.build_media_sync_hash(product=product)
+                            media_changed = media_sync_service.has_media_changed(product=product, media_sync_hash=media_sync_hash)
+                        if log_images and not skip_images:
                             logger.info(
                                 "Shopware image sync product erp_nr={} sku={} image_count={} changed={} images={}",
                                 product.erp_nr,
@@ -481,7 +491,7 @@ class Command(MonitoredBaseCommand):
                                 media_changed,
                                 image_names,
                             )
-                        if media_changed:
+                        if media_changed and not skip_images:
                             cleanup_media_product_ids.append(effective_sku)
                             media_sync_hashes.append((product, media_sync_hash))
                             _append_media_payload(
@@ -549,12 +559,13 @@ class Command(MonitoredBaseCommand):
                             json.dumps(media_product_payloads, ensure_ascii=True),
                         )
                     if payloads:
-                        media_sync_service.sync_media_assets(
-                            product_service=service,
-                            media_entities=list(media_entities.values()),
-                            media_uploads=list(media_uploads.values()),
-                            log_uploads=log_images,
-                        )
+                        if media_entities or media_uploads:
+                            media_sync_service.sync_media_assets(
+                                product_service=service,
+                                media_entities=list(media_entities.values()),
+                                media_uploads=list(media_uploads.values()),
+                                log_uploads=log_images,
+                            )
                         if log_images:
                             logger.info(
                                 "Shopware image sync batch {} product upsert start: payload_products={} products_with_media={}",
@@ -626,13 +637,16 @@ class Command(MonitoredBaseCommand):
                                         content_type_id=content_type_id,
                                     )
                                 )
-                                image_names = _image_names_for_product(product)
-                                media_sync_hash = media_sync_service.build_media_sync_hash(product=product)
-                                media_changed = media_sync_service.has_media_changed(
-                                    product=product,
-                                    media_sync_hash=media_sync_hash,
-                                )
-                                if log_images:
+                                image_names = []
+                                media_changed = False
+                                if not skip_images:
+                                    image_names = _image_names_for_product(product)
+                                    media_sync_hash = media_sync_service.build_media_sync_hash(product=product)
+                                    media_changed = media_sync_service.has_media_changed(
+                                        product=product,
+                                        media_sync_hash=media_sync_hash,
+                                    )
+                                if log_images and not skip_images:
                                     logger.info(
                                         "Shopware image sync fallback product erp_nr={} sku={} image_count={} changed={} images={}",
                                         product.erp_nr,
@@ -641,7 +655,7 @@ class Command(MonitoredBaseCommand):
                                         media_changed,
                                         image_names,
                                     )
-                                if media_changed:
+                                if media_changed and not skip_images:
                                     resolved_fallback_media_ids.append(resolved_sku)
                                     fallback_media_sync_hashes.append((product, media_sync_hash))
                                     fallback_payload = {"id": resolved_sku, "productNumber": product.erp_nr}
