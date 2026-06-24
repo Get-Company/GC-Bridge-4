@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from django.core.management.base import BaseCommand
+from core.management.base import MonitoredBaseCommand
 
 from emails.models import MjmlComponent
 
@@ -40,7 +40,7 @@ _PRETTY_NAMES = {
 }
 
 
-class Command(BaseCommand):
+class Command(MonitoredBaseCommand):
     help = "Import MJML components from old-emails/template/ into the MjmlComponent library"
 
     def add_arguments(self, parser):

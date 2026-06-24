@@ -4,7 +4,8 @@ import re
 import sqlite3
 from pathlib import Path
 
-from django.core.management.base import BaseCommand, CommandError
+from django.core.management.base import CommandError
+from core.management.base import MonitoredBaseCommand
 
 
 IGNORED_STATEMENT_PREFIXES = (
@@ -17,7 +18,7 @@ IGNORED_STATEMENT_PREFIXES = (
 )
 
 
-class Command(BaseCommand):
+class Command(MonitoredBaseCommand):
     help = "Converts a legacy MySQL SQL dump into a SQLite database for local inspection."
 
     def add_arguments(self, parser):

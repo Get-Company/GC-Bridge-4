@@ -3,7 +3,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from django.core.management.base import BaseCommand, CommandError
+from django.core.management.base import CommandError
+from core.management.base import MonitoredBaseCommand
 from loguru import logger
 
 from shopware.models import ShopwareSettings
@@ -24,7 +25,7 @@ def _extract_customer_id(order_data: dict[str, Any]) -> str | None:
     return None
 
 
-class Command(BaseCommand):
+class Command(MonitoredBaseCommand):
     help = (
         "Loads all open Shopware6 orders, extracts customer IDs from orderCustomer, "
         "and fetches customer details."

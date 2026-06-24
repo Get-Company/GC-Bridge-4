@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from django.core.management.base import BaseCommand, CommandError
+from django.core.management.base import CommandError
+from core.management.base import MonitoredBaseCommand
 
 from microtech.services.dataset_field_catalog_import import (
     CORE_DATASET_SELECTORS,
@@ -10,7 +11,7 @@ from microtech.services.dataset_field_catalog_import import (
 )
 
 
-class Command(BaseCommand):
+class Command(MonitoredBaseCommand):
     help = "Importiert Microtech-Dataset-Felder aus FELD_25.LST in den Feldkatalog."
 
     def add_arguments(self, parser):

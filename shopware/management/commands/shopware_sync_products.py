@@ -7,7 +7,8 @@ import sys
 
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
-from django.core.management.base import BaseCommand, CommandError
+from django.core.management.base import CommandError
+from core.management.base import MonitoredBaseCommand
 from django.db.models import Prefetch
 from loguru import logger
 from core.admin_utils import log_admin_change
@@ -344,7 +345,7 @@ def _image_names_for_product(product: Product) -> list[str]:
     return result
 
 
-class Command(BaseCommand):
+class Command(MonitoredBaseCommand):
     help = "Sync products from Django to Shopware6 (updates only)."
 
     def add_arguments(self, parser):

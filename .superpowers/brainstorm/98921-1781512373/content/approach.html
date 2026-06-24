@@ -1,0 +1,137 @@
+<h2>Email-App: Welcher Ansatz passt am besten?</h2>
+<p class="subtitle">Drei mögliche UI-Konzepte für den Email-Builder</p>
+
+<div class="cards">
+
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="background:#1a1a2e;padding:12px;border-radius:6px;font-family:monospace;font-size:11px;color:#eee">
+        <div style="background:#2d2d44;padding:8px;border-radius:4px;margin-bottom:6px">
+          <span style="color:#ff9933;font-weight:bold">📧 Neue E-Mail erstellen</span>
+        </div>
+        <div style="display:grid;grid-template-columns:200px 1fr;gap:8px;min-height:120px">
+          <div style="background:#252540;padding:8px;border-radius:4px;font-size:10px">
+            <div style="color:#aaa;margin-bottom:4px">KOMPONENTEN</div>
+            <div style="background:#3a3a60;padding:4px;border-radius:3px;margin-bottom:3px">✓ Titel</div>
+            <div style="background:#3a3a60;padding:4px;border-radius:3px;margin-bottom:3px">✓ Einleitung</div>
+            <div style="background:#3a3a60;padding:4px;border-radius:3px;margin-bottom:3px">✓ Produkte</div>
+            <div style="background:#2a2a4a;padding:4px;border-radius:3px;margin-bottom:3px;color:#888">+ Schrank-Block</div>
+            <div style="background:#2a2a4a;padding:4px;border-radius:3px;color:#888">+ Kontaktformular</div>
+          </div>
+          <div style="background:#252540;padding:8px;border-radius:4px;font-size:10px">
+            <div style="background:#1e3a2f;padding:6px;border-radius:3px;margin-bottom:4px;border-left:3px solid #00aa44">
+              <div style="color:#00aa44">Titel</div>
+              <div style="color:#888;font-size:9px">h1: "Archivieren leicht gemacht"</div>
+            </div>
+            <div style="background:#1e3a2f;padding:6px;border-radius:3px;margin-bottom:4px;border-left:3px solid #00aa44">
+              <div style="color:#00aa44">Einleitung</div>
+              <textarea style="width:100%;background:#0a1a0f;border:none;color:#ccc;font-size:9px;resize:none;height:24px">Wie jedes Jahr gilt am Ende...</textarea>
+            </div>
+            <div style="background:#1e3a2f;padding:6px;border-radius:3px;border-left:3px solid #ff9933">
+              <div style="color:#ff9933">3 Produkte</div>
+              <div style="color:#888;font-size:9px">710001, 710002, 710003</div>
+            </div>
+          </div>
+        </div>
+        <div style="margin-top:6px;display:flex;gap:6px">
+          <div style="background:#ff9933;color:#000;padding:4px 10px;border-radius:3px;font-size:10px">Vorschau</div>
+          <div style="background:#333;color:#eee;padding:4px 10px;border-radius:3px;font-size:10px">MJML Export</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — Builder-Sidebar</h3>
+      <p>Links Komponenten-Checkliste, rechts Einstellungen der aktiven Komponente. Alles auf einer Seite, kein Seitenwechsel nötig.</p>
+      <div class="pros-cons" style="font-size:12px">
+        <div class="pros"><h4>Vorteile</h4><ul><li>Übersichtlich</li><li>Schneller Workflow</li><li>Kein Scrollen zwischen Bereichen</li></ul></div>
+        <div class="cons"><h4>Nachteile</h4><ul><li>Mehr Aufwand in der Entwicklung</li><li>Enger bei vielen Feldern</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="background:#1a1a2e;padding:12px;border-radius:6px;font-family:monospace;font-size:11px;color:#eee">
+        <div style="background:#2d2d44;padding:8px;border-radius:4px;margin-bottom:6px;display:flex;align-items:center;gap:8px">
+          <span style="color:#aaa">Schritt 1 von 4</span>
+          <div style="flex:1;background:#333;height:4px;border-radius:2px"><div style="background:#ff9933;width:25%;height:100%;border-radius:2px"></div></div>
+        </div>
+        <div style="background:#252540;padding:10px;border-radius:4px;font-size:10px">
+          <div style="color:#ff9933;font-weight:bold;margin-bottom:8px">Schritt 1: Basis-Einstellungen</div>
+          <div style="margin-bottom:6px">
+            <div style="color:#aaa;margin-bottom:2px">E-Mail Titel</div>
+            <div style="background:#1a1a30;padding:4px;border-radius:3px;color:#ccc">Archivieren leicht gemacht</div>
+          </div>
+          <div style="margin-bottom:6px">
+            <div style="color:#aaa;margin-bottom:2px">Untertitel</div>
+            <div style="background:#1a1a30;padding:4px;border-radius:3px;color:#888">...und ganz schnell Platz schaffen</div>
+          </div>
+          <div style="margin-bottom:8px">
+            <div style="color:#aaa;margin-bottom:2px">Einleitungstext</div>
+            <div style="background:#1a1a30;padding:4px;border-radius:3px;color:#888;height:30px">Wie jedes Jahr gilt am Ende...</div>
+          </div>
+          <div style="display:flex;justify-content:flex-end">
+            <div style="background:#ff9933;color:#000;padding:4px 12px;border-radius:3px">Weiter →</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — Schritt-für-Schritt Wizard</h3>
+      <p>Geführter Prozess: Basis-Texte → Produkte → Optionale Blöcke → Vorschau & Export. Klar strukturiert, wenig Ablenkung.</p>
+      <div class="pros-cons" style="font-size:12px">
+        <div class="pros"><h4>Vorteile</h4><ul><li>Kein Vergessen von Feldern</li><li>Klarer Workflow</li><li>Leicht erlernbar</li></ul></div>
+        <div class="cons"><h4>Nachteile</h4><ul><li>Mehrere Klicks bis zum Ziel</li><li>Hin-und-her navigieren umständlich</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="background:#1a1a2e;padding:12px;border-radius:6px;font-family:monospace;font-size:11px;color:#eee">
+        <div style="background:#2d2d44;padding:8px;border-radius:4px;margin-bottom:6px">
+          <span style="color:#ff9933;font-weight:bold">📧 E-Mail: Archivierungs-Aktion 2025</span>
+        </div>
+        <div style="background:#252540;padding:8px;border-radius:4px;font-size:10px">
+          <div style="color:#aaa;font-size:9px;margin-bottom:4px">AUFBAU (ziehen zum Umordnen)</div>
+          <div style="background:#1e3a2f;padding:5px;border-radius:3px;margin-bottom:3px;display:flex;align-items:center;gap:6px;border:1px solid #2a5a3f">
+            <span style="color:#555;cursor:grab">⠿</span>
+            <span style="color:#00aa44">📋 Titel</span>
+            <span style="margin-left:auto;color:#666;font-size:9px">✏ bearbeiten</span>
+          </div>
+          <div style="background:#1e3a2f;padding:5px;border-radius:3px;margin-bottom:3px;display:flex;align-items:center;gap:6px;border:1px solid #2a5a3f">
+            <span style="color:#555;cursor:grab">⠿</span>
+            <span style="color:#00aa44">📝 Einleitung</span>
+            <span style="margin-left:auto;color:#666;font-size:9px">✏ bearbeiten</span>
+          </div>
+          <div style="background:#1a2e3a;padding:5px;border-radius:3px;margin-bottom:3px;display:flex;align-items:center;gap:6px;border:1px solid #2a4a5a">
+            <span style="color:#555;cursor:grab">⠿</span>
+            <span style="color:#ff9933">📦 Schrank-Block</span>
+            <span style="margin-left:auto;color:#666;font-size:9px">✏ | 🗑</span>
+          </div>
+          <div style="background:#1e3a2f;padding:5px;border-radius:3px;margin-bottom:3px;display:flex;align-items:center;gap:6px;border:1px solid #2a5a3f">
+            <span style="color:#555;cursor:grab">⠿</span>
+            <span style="color:#00aa44">🛒 Produkte (3)</span>
+            <span style="margin-left:auto;color:#666;font-size:9px">✏ bearbeiten</span>
+          </div>
+          <div style="background:#2a2a2a;padding:5px;border-radius:3px;border:1px dashed #444;text-align:center;color:#666">
+            + Block hinzufügen
+          </div>
+        </div>
+        <div style="margin-top:6px;display:flex;gap:6px">
+          <div style="background:#ff9933;color:#000;padding:4px 10px;border-radius:3px;font-size:10px">Vorschau</div>
+          <div style="background:#333;color:#eee;padding:4px 10px;border-radius:3px;font-size:10px">HTML Export</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C — Block-Editor</h3>
+      <p>Email besteht aus sortierbaren Blöcken. Jeder Block kann bearbeitet, verschoben oder entfernt werden. Optional: Blöcke per Klick hinzufügen.</p>
+      <div class="pros-cons" style="font-size:12px">
+        <div class="pros"><h4>Vorteile</h4><ul><li>Flexibelste Lösung</li><li>Intuitiv ("Notion-Style")</li><li>Komponenten-Anforderungen klar</li></ul></div>
+        <div class="cons"><h4>Nachteile</h4><ul><li>Meiste Entwicklungszeit</li><li>Drag & Drop ggf. komplex</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+</div>

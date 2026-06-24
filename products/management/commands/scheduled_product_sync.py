@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 
 from django.core.management import call_command
-from django.core.management.base import BaseCommand
+from core.management.base import MonitoredBaseCommand
 from django.utils import timezone
 from loguru import logger
 
@@ -13,7 +13,7 @@ from core.services import CommandRuntimeService
 from microtech.services import MicrotechExpiredSpecialSyncService, microtech_connection
 
 
-class Command(BaseCommand):
+class Command(MonitoredBaseCommand):
     help = (
         "Scheduler command: sync products from Microtech to Django, clear expired specials, "
         "update Microtech specials, and sync everything to Shopware."

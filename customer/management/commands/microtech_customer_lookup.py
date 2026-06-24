@@ -2,14 +2,15 @@ from __future__ import annotations
 
 import json
 
-from django.core.management.base import BaseCommand, CommandError
+from django.core.management.base import CommandError
+from core.management.base import MonitoredBaseCommand
 from loguru import logger
 
 from customer.services import CustomerSyncService
 from microtech.services import microtech_connection
 
 
-class Command(BaseCommand):
+class Command(MonitoredBaseCommand):
     help = "Looks up a Microtech customer (AdrNr) and syncs it into Django."
 
     def add_arguments(self, parser):

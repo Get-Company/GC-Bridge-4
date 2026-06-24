@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation, ROUND_UP
 
-from django.core.management.base import BaseCommand, CommandError
+from django.core.management.base import CommandError
+from core.management.base import MonitoredBaseCommand
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 
@@ -84,7 +85,7 @@ def _log_admin_error(
     )
 
 
-class Command(BaseCommand):
+class Command(MonitoredBaseCommand):
     help = "Sync products from Microtech (Artikel) into Django."
 
     @staticmethod

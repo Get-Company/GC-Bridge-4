@@ -2,14 +2,15 @@ from __future__ import annotations
 
 import json
 
-from django.core.management.base import BaseCommand, CommandError
+from django.core.management.base import CommandError
+from core.management.base import MonitoredBaseCommand
 from loguru import logger
 
 from microtech.services import microtech_connection
 from microtech.services.artikel import MicrotechArtikelService
 
 
-class Command(BaseCommand):
+class Command(MonitoredBaseCommand):
     help = "Looks up an article directly from Microtech ERP."
 
     def add_arguments(self, parser):

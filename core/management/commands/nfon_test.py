@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 
-from django.core.management.base import BaseCommand
+from core.management.base import MonitoredBaseCommand
 
 from core.services.nfon_client import NfonClient
 
@@ -15,7 +15,7 @@ CHECK_ENDPOINTS = [
 ]
 
 
-class Command(BaseCommand):
+class Command(MonitoredBaseCommand):
     help = "Testet die NFON Service Portal API mit HMAC-SHA1-Auth."
 
     def add_arguments(self, parser):

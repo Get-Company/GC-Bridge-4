@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from datetime import timedelta
 
-from django.core.management.base import BaseCommand
+from core.management.base import MonitoredBaseCommand
 
 from core.services import CommandRuntimeService
 
@@ -12,7 +12,7 @@ def _format_duration(seconds: int) -> str:
     return str(timedelta(seconds=max(0, int(seconds))))
 
 
-class Command(BaseCommand):
+class Command(MonitoredBaseCommand):
     help = "Zeigt laufende Sync-/Scheduler-Commands und optional stale Eintraege."
 
     def add_arguments(self, parser):

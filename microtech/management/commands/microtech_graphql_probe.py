@@ -3,7 +3,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from django.core.management.base import BaseCommand, CommandError
+from django.core.management.base import CommandError
+from core.management.base import MonitoredBaseCommand
 
 from microtech.services import MicrotechGraphQLClientService
 
@@ -55,7 +56,7 @@ ENTITY_DEFAULTS = {
 }
 
 
-class Command(BaseCommand):
+class Command(MonitoredBaseCommand):
     help = "Probe the external Microtech GraphQL wrapper without touching the local database."
 
     def add_arguments(self, parser):

@@ -3392,10 +3392,84 @@ class StorageAdmin(BaseAdmin):
     ]
 
 
+class ImageProductInline(BaseTabularInline):
+    model = ProductImage
+    fields = ("product_link", "product_name", "order")
+    readonly_fields = BaseTabularInline.readonly_fields + ("product_link", "product_name", "order")
+    extra = 0
+    can_delete = False
+    verbose_name = "Produktzuordnung"
+    verbose_name_plural = "Produktzuordnungen"
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+    def get_queryset(self, request):
+        queryset = super().get_queryset(request)
+        return queryset.select_related("product").order_by("product__erp_nr", "order", "id")
+
+    @admin.display(description="Produkt")
+    def product_link(self, obj: ProductImage):
+        product = getattr(obj, "product", None)
+        if not product or not product.pk:
+            return "-"
+        return format_html(
+            '<a href="{}" class="text-primary-600 dark:text-primary-500">{} </a>',
+            reverse("admin:products_product_change", args=(product.pk,)),
+            product.erp_nr,
+        )
+
+    @admin.display(description="Name")
+    def product_name(self, obj: ProductImage):
+        product = getattr(obj, "product", None)
+        return getattr(product, "name", "") or "-"
+
+
+class LegacyImageProductInline(BaseTabularInline):
+    model = Product.images.through
+    fields = ("legacy_product_link", "legacy_product_name")
+    readonly_fields = ("legacy_product_link", "legacy_product_name")
+    extra = 0
+    can_delete = False
+    verbose_name = "Legacy-Produktzuordnung"
+    verbose_name_plural = "Legacy-Produktzuordnungen"
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+    def get_queryset(self, request):
+        queryset = super().get_queryset(request)
+        return queryset.select_related("product").order_by("product__erp_nr", "id")
+
+    @admin.display(description="Produkt")
+    def legacy_product_link(self, obj):
+        product = getattr(obj, "product", None)
+        if not product or not product.pk:
+            return "-"
+        return format_html(
+            '<a href="{}" class="text-primary-600 dark:text-primary-500">{} </a>',
+            reverse("admin:products_product_change", args=(product.pk,)),
+            product.erp_nr,
+        )
+
+    @admin.display(description="Name")
+    def legacy_product_name(self, obj):
+        product = getattr(obj, "product", None)
+        return getattr(product, "name", "") or "-"
+
+
 @admin.register(Image)
 class ImageAdmin(BaseAdmin):
-    list_display = ("image_preview", "path", "alt_text", "created_at")
+    list_display = ("image_preview", "filename_display", "path", "alt_text", "product_count", "created_at")
     search_fields = ("path", "alt_text")
+    inlines = (ImageProductInline, LegacyImageProductInline)
+
+    def get_queryset(self, request):
+        queryset = super().get_queryset(request)
+        return queryset.annotate(
+            explicit_product_count=Count("product_images", distinct=True),
+            legacy_product_count=Count("product", distinct=True),
+        )
 
     @admin.display(description="Bild")
     def image_preview(self, obj: Image):
@@ -3405,6 +3479,19 @@ class ImageAdmin(BaseAdmin):
             '<img src="{}" loading="lazy" style="width:60px;height:60px;object-fit:cover;border-radius:4px;" />',
             obj.url,
         )
+
+    @admin.display(description="Dateiname", ordering="path")
+    def filename_display(self, obj: Image):
+        return obj.filename or "-"
+
+    @admin.display(description="Produkte")
+    def product_count(self, obj: Image):
+        explicit_count = getattr(obj, "explicit_product_count", 0)
+        legacy_count = getattr(obj, "legacy_product_count", 0)
+        total_count = explicit_count + legacy_count
+        if not legacy_count:
+            return explicit_count
+        return f"{total_count} ({explicit_count} + {legacy_count} legacy)"
 
 
 @admin.register(PropertyGroup)

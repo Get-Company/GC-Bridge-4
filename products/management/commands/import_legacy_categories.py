@@ -4,7 +4,8 @@ import sqlite3
 from pathlib import Path
 
 from django.core.management import call_command
-from django.core.management.base import BaseCommand, CommandError
+from django.core.management.base import CommandError
+from core.management.base import MonitoredBaseCommand
 from django.db import transaction
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -13,7 +14,7 @@ from django.utils.text import slugify
 from products.models import Category, Product
 
 
-class Command(BaseCommand):
+class Command(MonitoredBaseCommand):
     help = "Importiert Legacy-Kategorien aus database.sql oder einer daraus erzeugten SQLite-Datei."
 
     def add_arguments(self, parser):

@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import sys
 
-from django.core.management.base import BaseCommand
+from core.management.base import MonitoredBaseCommand
 from loguru import logger
 
 from core.logging import add_managed_file_sink
 from core.services import CommandRuntimeService
 
 
-class Command(BaseCommand):
+class Command(MonitoredBaseCommand):
     help = "Scrapt Mappei-Produktseiten und speichert Preise (nur bei Änderung)."
 
     def add_arguments(self, parser):

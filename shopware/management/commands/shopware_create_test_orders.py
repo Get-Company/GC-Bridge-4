@@ -9,7 +9,8 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from django.core.management.base import BaseCommand, CommandError
+from django.core.management.base import CommandError
+from core.management.base import MonitoredBaseCommand
 from loguru import logger
 
 from core.logging import add_managed_file_sink
@@ -112,7 +113,7 @@ class GroupCustomer:
         return str(self.customer.get("customerNumber") or "")
 
 
-class Command(BaseCommand):
+class Command(MonitoredBaseCommand):
     help = (
         "Create test orders in Shopware for each sales channel. "
         "Uses one customer per available customer group (if possible) and writes a detailed log file."

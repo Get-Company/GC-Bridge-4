@@ -3,14 +3,15 @@ from __future__ import annotations
 import json
 import sys
 
-from django.core.management.base import BaseCommand, CommandError
+from django.core.management.base import CommandError
+from core.management.base import MonitoredBaseCommand
 from loguru import logger
 
 from core.services import CommandRuntimeService
 from orders.services import OrderSyncService
 
 
-class Command(BaseCommand):
+class Command(MonitoredBaseCommand):
     help = (
         "Loads open Shopware orders and upserts Order, OrderDetail, Customer, "
         "billing and shipping addresses into Django."

@@ -4,7 +4,7 @@ import logging
 from decimal import Decimal
 from typing import Any
 
-from django.core.management.base import BaseCommand
+from core.management.base import MonitoredBaseCommand
 from microtech.services import MicrotechProductPayloadService, microtech_connection
 from products.models import Price, Product
 from shopware.models import ShopwareSettings
@@ -12,7 +12,7 @@ from shopware.models import ShopwareSettings
 logger = logging.getLogger(__name__)
 
 
-class Command(BaseCommand):
+class Command(MonitoredBaseCommand):
     help = "Update product(s) in Microtech via GraphQL API using Django data."
 
     def add_arguments(self, parser):

@@ -1,9 +1,9 @@
 from pathlib import Path
 
-from django.core.management.base import BaseCommand
+from core.management.base import MonitoredBaseCommand
 
 
-class Command(BaseCommand):
+class Command(MonitoredBaseCommand):
     help = "Initialisiert zentrale Dokumente aus vorhandenen Templates (--force ueberschreibt vorhandene)"
 
     def add_arguments(self, parser):

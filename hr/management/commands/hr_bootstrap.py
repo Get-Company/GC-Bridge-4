@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from django.core.management.base import BaseCommand, CommandError
+from django.core.management.base import CommandError
+from core.management.base import MonitoredBaseCommand
 
 from hr.services.setup_service import HrSetupService
 
 
-class Command(BaseCommand):
+class Command(MonitoredBaseCommand):
     help = "Erzeugt idempotent die HR-Grundkonfiguration und optional Demo-Daten."
 
     def add_arguments(self, parser):

@@ -6,7 +6,8 @@ from pathlib import Path
 
 from django.contrib.contenttypes.models import ContentType
 from django.core.management import call_command
-from django.core.management.base import BaseCommand, CommandError
+from django.core.management.base import CommandError
+from core.management.base import MonitoredBaseCommand
 from django.db import transaction
 from django.utils.text import slugify
 
@@ -15,7 +16,7 @@ from ai.services import AIRewriteApplyService
 from products.models import Product
 
 
-class Command(BaseCommand):
+class Command(MonitoredBaseCommand):
     help = "Importiert AI Rewrite Provider, Prompts und Jobs aus einer Legacy-SQLite-DB oder direkt aus database.sql."
 
     def add_arguments(self, parser):

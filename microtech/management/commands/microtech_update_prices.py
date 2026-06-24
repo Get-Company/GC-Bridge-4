@@ -3,7 +3,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from django.core.management.base import BaseCommand, CommandError
+from django.core.management.base import CommandError
+from core.management.base import MonitoredBaseCommand
 from microtech.services import MicrotechProductPayloadService, microtech_connection
 from products.models import Price, Product
 from shopware.models import ShopwareSettings
@@ -11,7 +12,7 @@ from shopware.models import ShopwareSettings
 logger = logging.getLogger(__name__)
 
 
-class Command(BaseCommand):
+class Command(MonitoredBaseCommand):
     help = "Update ONLY product prices in Microtech via GraphQL API using Django data."
 
     def add_arguments(self, parser):

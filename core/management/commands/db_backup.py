@@ -6,10 +6,11 @@ from datetime import datetime
 from pathlib import Path
 
 from django.conf import settings
-from django.core.management.base import BaseCommand, CommandError
+from django.core.management.base import CommandError
+from core.management.base import MonitoredBaseCommand
 
 
-class Command(BaseCommand):
+class Command(MonitoredBaseCommand):
     help = (
         "PostgreSQL-Datenbank sichern oder wiederherstellen.\n\n"
         "  backup  — erstellt einen pg_dump im Custom-Format (.dump)\n"

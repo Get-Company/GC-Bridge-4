@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from django.core.management.base import BaseCommand
+from core.management.base import MonitoredBaseCommand
 
 from hr.services.setup_service import HrSetupService
 
 
-class Command(BaseCommand):
+class Command(MonitoredBaseCommand):
     help = "Legt die HR-Gruppen mit den benoetigten Django-Model-Permissions idempotent an."
 
     def handle(self, *args, **options):

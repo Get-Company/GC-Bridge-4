@@ -3,13 +3,13 @@ from __future__ import annotations
 from datetime import date
 from decimal import Decimal
 
-from django.core.management.base import BaseCommand
+from core.management.base import MonitoredBaseCommand
 
 from hr.models import EmployeeProfile, VacationEntitlement
 from hr.services.leave_service import LeaveService
 
 
-class Command(BaseCommand):
+class Command(MonitoredBaseCommand):
     help = "Jahreswechsel: legt VacationEntitlement fuer das Zieljahr an und uebertraegt Resturlaub."
 
     def add_arguments(self, parser):
