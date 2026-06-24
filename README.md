@@ -253,7 +253,7 @@ Beschreibung: Überträgt ausgewählte oder alle Produkte aus Django in den Shop
 #: 7
 Task-Name (Code): products.shopware_force_product_image_uploads
 Empfohlener Titel: Produktbilder neu zu Shopware hochladen
-Beschreibung: Erzwingt den erneuten Upload aller Produktbilder zu Shopware, auch wenn sie bereits vorhanden sind.                                        
+Beschreibung: Löscht Shopware-Bilder und Produkt-Zuordnungen in 10er-Batches, lädt die Bilder neu hoch und setzt die Zuordnung erneut.
 ────────────────────────────────────────
 #: 8
 Task-Name (Code): orders.microtech_order_upsert

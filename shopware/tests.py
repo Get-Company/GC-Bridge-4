@@ -373,70 +373,79 @@ class ShopwareSyncProductsCommandBatchTest(TestCase):
 
 
 class ForceProductImageUploadsCommandTest(TestCase):
-    @patch("shopware.management.commands.shopware_force_product_image_uploads.call_command")
-    def test_handle_resets_hashes_and_runs_shopware_sync_for_all(self, mock_call_command):
-        Product.objects.create(erp_nr="A-5001", shopware_image_sync_hash="hash-1")
-        Product.objects.create(erp_nr="A-5002", shopware_image_sync_hash="hash-2")
+    @patch("shopware.management.commands.shopware_force_product_image_uploads.ProductService")
+    def test_handle_processes_all_products_when_no_erp_numbers_are_given(self, product_service_factory):
+        service = MagicMock()
+        service.get_sku_map.return_value = {}
+        service.purge_product_media_and_media_by_product_ids.return_value = {"product_media": 2, "media": 2}
+        product_service_factory.return_value = service
+
+        first = Product.objects.create(erp_nr="A-5001", sku="sku-5001", shopware_image_sync_hash="hash-1")
+        second = Product.objects.create(erp_nr="A-5002", sku="sku-5002", shopware_image_sync_hash="hash-2")
+        first_image = Image.objects.create(path="first-force.jpg")
+        second_image = Image.objects.create(path="second-force.jpg")
+        ProductImage.objects.create(product=first, image=first_image, order=1)
+        ProductImage.objects.create(product=second, image=second_image, order=1)
 
         cmd = ForceProductImageUploadsCommand()
-        cmd.handle(all=True, limit=25, batch_size=10, erp_nrs=[], only_with_images=False, log_images=False)
+        cmd.handle(all=False, limit=None, batch_size=10, erp_nrs=[], only_with_images=False, log_images=False)
 
-        self.assertEqual(Product.objects.exclude(shopware_image_sync_hash="").count(), 0)
-        mock_call_command.assert_called_once_with(
-            "shopware_sync_products",
-            all=True,
-            limit=25,
-            batch_size=10,
-            only_with_images=False,
-            log_images=False,
+        service.purge_product_media_and_media_by_product_ids.assert_called_once()
+        self.assertEqual(
+            service.purge_product_media_and_media_by_product_ids.call_args.kwargs["product_ids"],
+            ["sku-5001", "sku-5002"],
         )
+        self.assertEqual(service.upload_media_from_url.call_count, 2)
+        self.assertEqual(service.bulk_upsert.call_count, 1)
 
-    @patch("shopware.management.commands.shopware_force_product_image_uploads.call_command")
-    def test_handle_resets_selected_hashes_and_runs_shopware_sync_for_selection(self, mock_call_command):
-        target = Product.objects.create(erp_nr="A-5003", shopware_image_sync_hash="hash-3")
+        first.refresh_from_db()
+        second.refresh_from_db()
+        self.assertNotEqual(first.shopware_image_sync_hash, "hash-1")
+        self.assertNotEqual(second.shopware_image_sync_hash, "hash-2")
+
+    @patch("shopware.management.commands.shopware_force_product_image_uploads.ProductService")
+    def test_handle_processes_only_selected_erp_numbers(self, product_service_factory):
+        service = MagicMock()
+        service.get_sku_map.return_value = {}
+        service.purge_product_media_and_media_by_product_ids.return_value = {"product_media": 1, "media": 1}
+        product_service_factory.return_value = service
+
+        target = Product.objects.create(erp_nr="A-5003", sku="sku-5003", shopware_image_sync_hash="hash-3")
         untouched = Product.objects.create(erp_nr="A-5004", shopware_image_sync_hash="hash-4")
+        image = Image.objects.create(path="selected-force.jpg")
+        ProductImage.objects.create(product=target, image=image, order=1)
 
         cmd = ForceProductImageUploadsCommand()
-        cmd.handle(all=False, limit=None, batch_size=50, erp_nrs=["A-5003"], only_with_images=False, log_images=False)
+        cmd.handle(all=False, limit=None, batch_size=10, erp_nrs=["A-5003"], only_with_images=False, log_images=False)
 
         target.refresh_from_db()
         untouched.refresh_from_db()
-        self.assertEqual(target.shopware_image_sync_hash, "")
+        self.assertNotEqual(target.shopware_image_sync_hash, "hash-3")
         self.assertEqual(untouched.shopware_image_sync_hash, "hash-4")
-        mock_call_command.assert_called_once_with(
-            "shopware_sync_products",
-            "A-5003",
-            limit=None,
-            batch_size=50,
-            only_with_images=False,
-            log_images=False,
+        service.purge_product_media_and_media_by_product_ids.assert_called_once()
+        self.assertEqual(
+            service.purge_product_media_and_media_by_product_ids.call_args.kwargs["product_ids"],
+            ["sku-5003"],
         )
 
-    @patch("shopware.management.commands.shopware_force_product_image_uploads.call_command")
-    def test_handle_only_with_images_filters_reset_queryset_and_passes_flags(self, mock_call_command):
-        with_image = Product.objects.create(erp_nr="A-5005", shopware_image_sync_hash="hash-5")
-        without_image = Product.objects.create(erp_nr="A-5006", shopware_image_sync_hash="hash-6")
-        image = Image.objects.create(path="batch-cover.jpg")
-        ProductImage.objects.create(product=with_image, image=image, order=1)
+    @patch("shopware.management.commands.shopware_force_product_image_uploads.ProductService")
+    def test_handle_collects_batch_errors_and_skips_assignment_after_upload_failure(self, product_service_factory):
+        service = MagicMock()
+        service.get_sku_map.return_value = {}
+        service.purge_product_media_and_media_by_product_ids.return_value = {"product_media": 1, "media": 1}
+        service.upload_media_from_url.side_effect = RuntimeError("upload failed")
+        product_service_factory.return_value = service
+
+        product = Product.objects.create(erp_nr="A-5005", sku="sku-5005", shopware_image_sync_hash="hash-5")
+        image = Image.objects.create(path="broken-force.jpg")
+        ProductImage.objects.create(product=product, image=image, order=1)
 
         cmd = ForceProductImageUploadsCommand()
-        cmd.handle(all=True, limit=10, batch_size=10, erp_nrs=[], only_with_images=True, log_images=True)
-
-        with_image.refresh_from_db()
-        without_image.refresh_from_db()
-        self.assertEqual(with_image.shopware_image_sync_hash, "")
-        self.assertEqual(without_image.shopware_image_sync_hash, "hash-6")
-        mock_call_command.assert_called_once_with(
-            "shopware_sync_products",
-            all=True,
-            limit=10,
-            batch_size=10,
-            only_with_images=True,
-            log_images=True,
-        )
-
-    def test_handle_requires_selection_or_all(self):
-        cmd = ForceProductImageUploadsCommand()
-
         with self.assertRaises(CommandError):
-            cmd.handle(all=False, limit=None, batch_size=50, erp_nrs=[], only_with_images=False, log_images=False)
+            cmd.handle(all=False, limit=None, batch_size=10, erp_nrs=[], only_with_images=False, log_images=False)
+
+        service.purge_product_media_and_media_by_product_ids.assert_called_once()
+        service.upload_media_from_url.assert_called_once()
+        service.bulk_upsert.assert_not_called()
+        product.refresh_from_db()
+        self.assertEqual(product.shopware_image_sync_hash, "hash-5")

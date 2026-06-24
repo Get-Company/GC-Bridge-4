@@ -81,7 +81,7 @@ def shopware_force_product_image_uploads(
     *,
     sync_all: bool = False,
     limit: int | None = None,
-    batch_size: int = 50,
+    batch_size: int = 10,
     only_with_images: bool = False,
     log_images: bool = False,
 ) -> None:

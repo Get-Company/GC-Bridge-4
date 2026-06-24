@@ -136,10 +136,42 @@ class ProductService(Shopware6Service):
         if not product_ids:
             return 0
 
+        product_media_ids, _media_ids = self.find_product_media_and_media_ids_by_product_ids(product_ids=product_ids)
+
+        for product_media_id in sorted(set(product_media_ids)):
+            self.request_delete(f"{self.product_media_base_path}/{product_media_id}")
+
+        return len(set(product_media_ids))
+
+    def purge_product_media_and_media_by_product_ids(
+        self,
+        *,
+        product_ids: list[str],
+        additional_media_ids: list[str] | None = None,
+    ) -> dict[str, int]:
+        product_media_ids, media_ids = self.find_product_media_and_media_ids_by_product_ids(product_ids=product_ids)
+
+        for product_media_id in sorted(set(product_media_ids)):
+            self.request_delete(f"{self.product_media_base_path}/{product_media_id}")
+
+        media_ids.extend(str(value).strip() for value in (additional_media_ids or []) if str(value).strip())
+        deleted_media = self.delete_media_by_ids(media_ids)
+
+        return {
+            "product_media": len(set(product_media_ids)),
+            "media": deleted_media,
+        }
+
+    def find_product_media_and_media_ids_by_product_ids(self, *, product_ids: list[str]) -> tuple[list[str], list[str]]:
+        product_ids = [str(value).strip() for value in (product_ids or []) if str(value).strip()]
+        if not product_ids:
+            return [], []
+
         product_values = "|".join(sorted(set(product_ids)))
         page = 1
         limit = 500
         product_media_ids: list[str] = []
+        media_ids: list[str] = []
 
         while True:
             payload = {
@@ -162,15 +194,15 @@ class ProductService(Shopware6Service):
                 row_id = self._entity_id(row)
                 if row_id:
                     product_media_ids.append(row_id)
+                media_id = self._entity_field(row, "mediaId") or self._relationship_id(row, "media")
+                if media_id:
+                    media_ids.append(media_id)
 
             if len(rows) < limit:
                 break
             page += 1
 
-        for product_media_id in sorted(set(product_media_ids)):
-            self.request_delete(f"{self.product_media_base_path}/{product_media_id}")
-
-        return len(set(product_media_ids))
+        return product_media_ids, media_ids
 
     def find_media_ids_by_filename(
         self,
@@ -283,6 +315,33 @@ class ProductService(Shopware6Service):
         attributes = row.get("attributes") or {}
         if isinstance(attributes, dict) and attributes.get("id"):
             return str(attributes["id"]).strip()
+        return ""
+
+    @staticmethod
+    def _entity_field(row: dict[str, Any], field_name: str) -> str:
+        if not isinstance(row, dict):
+            return ""
+        value = row.get(field_name)
+        if value:
+            return str(value).strip()
+        attributes = row.get("attributes") or {}
+        if isinstance(attributes, dict) and attributes.get(field_name):
+            return str(attributes[field_name]).strip()
+        return ""
+
+    @staticmethod
+    def _relationship_id(row: dict[str, Any], relationship_name: str) -> str:
+        if not isinstance(row, dict):
+            return ""
+        relationships = row.get("relationships") or {}
+        if not isinstance(relationships, dict):
+            return ""
+        relationship = relationships.get(relationship_name) or {}
+        if not isinstance(relationship, dict):
+            return ""
+        data = relationship.get("data") or {}
+        if isinstance(data, dict) and data.get("id"):
+            return str(data["id"]).strip()
         return ""
 
     @classmethod

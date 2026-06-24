@@ -67,13 +67,11 @@ CELERY_ADMIN_TASKS: tuple[TaskDefinition, ...] = (
     TaskDefinition(
         name="products.shopware_force_product_image_uploads",
         label="Shopware Bilder neu hochladen",
-        description="Bild-Sync-Hashes zuruecksetzen und Produktbilder erneut nach Shopware uebertragen.",
+        description="Shopware-Bilder und Zuordnungen in 10er-Batches loeschen, neu hochladen und zuordnen.",
         fields=(
             TaskField("erp_nrs", "ERP-Nummern", "csv", "", "Kommagetrennt, leer wenn Alle aktiv ist."),
-            TaskField("sync_all", "Alle Produkte", "bool", True),
             TaskField("limit", "Limit", "int", ""),
-            TaskField("batch_size", "Batch-Groesse", "int", 50),
-            TaskField("only_with_images", "Nur mit Bildern", "bool", True),
+            TaskField("batch_size", "Batch-Groesse", "int", 10),
             TaskField("log_images", "Bild-Logs schreiben", "bool", False),
         ),
     ),
