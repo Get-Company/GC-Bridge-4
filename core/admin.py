@@ -45,7 +45,7 @@ from django_celery_beat.models import (
 
 from core.admin_status import admin_status_bar_api
 from core.celery_admin import celery_tasks_admin_view
-from core.log_reader import get_allowed_log_files, tail_log_file
+from core.log_reader import get_allowed_log_files, log_file_info, search_log_file, tail_log_file
 from core.microtech_queue_view import microtech_queue_api, microtech_queue_view
 from core.services import CommandRuntimeService
 from core.system_status_view import system_status_api, system_status_view
@@ -288,49 +288,101 @@ admin.site.register(PeriodicTask, CeleryBeatPeriodicTaskAdmin)
 admin.site.register(SolarSchedule, CeleryBeatSolarScheduleAdmin)
 
 
-def admin_log_reader_view(request):
-    runtime_entries = CommandRuntimeService().list_runs(include_stale=False, cleanup_stale=True)
-    for entry in runtime_entries:
-        entry["duration"] = str(timedelta(seconds=max(0, int(entry.get("age_seconds") or 0))))
-
+def _resolve_log_file(request) -> tuple[list, int, object | None]:
+    from pathlib import Path as _Path
     file_options = get_allowed_log_files()
-    selected_file_index = request.GET.get("file", "0")
-    lines = request.GET.get("lines", "50")
-
     try:
-        selected_index = int(selected_file_index)
+        selected_index = int(request.GET.get("file", "0") or "0")
     except (TypeError, ValueError):
         selected_index = 0
+    selected_index = max(0, min(selected_index, len(file_options) - 1 if file_options else 0))
+    selected_path = file_options[selected_index] if file_options else None
+    return file_options, selected_index, selected_path
+
+
+def admin_log_reader_view(request):
+    file_options, selected_index, selected_path = _resolve_log_file(request)
 
     try:
-        requested_lines = int(lines)
+        requested_lines = int(request.GET.get("lines", "200") or "200")
     except (TypeError, ValueError):
-        requested_lines = 50
-    requested_lines = max(10, min(requested_lines, 500))
+        requested_lines = 200
+    requested_lines = max(10, min(requested_lines, 5000))
 
-    if file_options:
-        selected_index = max(0, min(selected_index, len(file_options) - 1))
-        selected_path = file_options[selected_index]
-        log_lines = tail_log_file(selected_path, requested_lines)
-    else:
-        selected_path = None
-        log_lines = []
+    query = request.GET.get("q", "").strip()
+    use_regex = request.GET.get("regex", "") == "1"
+    try:
+        context_lines = int(request.GET.get("context", "3") or "3")
+    except (TypeError, ValueError):
+        context_lines = 3
+    context_lines = max(0, min(context_lines, 20))
+
+    log_lines: list[str] = []
+    search_result: dict | None = None
+    file_info: dict = {}
+
+    if selected_path:
+        file_info = log_file_info(selected_path)
+        if query:
+            search_result = search_log_file(
+                selected_path, query,
+                context_lines=context_lines,
+                use_regex=use_regex,
+            )
+        else:
+            log_lines = tail_log_file(selected_path, requested_lines)
 
     context = {
         **admin.site.each_context(request),
         "title": "Log Reader",
         "file_options": [
-            {"index": index, "path": str(path)}
-            for index, path in enumerate(file_options)
+            {"index": i, "path": str(p), "name": p.name}
+            for i, p in enumerate(file_options)
         ],
         "selected_file_index": selected_index,
         "selected_path": str(selected_path) if selected_path else "",
+        "selected_name": selected_path.name if selected_path else "",
+        "file_info": file_info,
         "line_count": requested_lines,
         "log_lines": log_lines,
         "file_exists": bool(selected_path and selected_path.exists()),
-        "runtime_entries": runtime_entries,
+        "query": query,
+        "use_regex": use_regex,
+        "context_lines": context_lines,
+        "search_result": search_result,
     }
     return TemplateResponse(request, "admin/log_reader.html", context)
+
+
+def admin_log_search_api(request):
+    from django.http import JsonResponse as _JsonResponse
+    file_options, selected_index, selected_path = _resolve_log_file(request)
+    query = request.GET.get("q", "").strip()
+    use_regex = request.GET.get("regex", "") == "1"
+    try:
+        context_lines = int(request.GET.get("context", "3") or "3")
+    except (TypeError, ValueError):
+        context_lines = 3
+
+    if not selected_path or not query:
+        return _JsonResponse({"error": "Datei oder Suchbegriff fehlt", "matches": [], "total": 0, "shown": 0})
+
+    result = search_log_file(selected_path, query, context_lines=context_lines, use_regex=use_regex)
+    return _JsonResponse(result)
+
+
+def admin_log_download_view(request):
+    from django.http import FileResponse, Http404
+    file_options, selected_index, selected_path = _resolve_log_file(request)
+    if not selected_path or not selected_path.exists():
+        raise Http404("Log-Datei nicht gefunden")
+    response = FileResponse(
+        selected_path.open("rb"),
+        as_attachment=True,
+        filename=selected_path.name,
+        content_type="text/plain; charset=utf-8",
+    )
+    return response
 
 
 _default_admin_get_urls = admin.site.get_urls
@@ -341,6 +393,8 @@ def _admin_get_urls():
         path("status-bar/api/", admin.site.admin_view(admin_status_bar_api), name="core_status_bar_api"),
         path("celery-tasks/", admin.site.admin_view(celery_tasks_admin_view), name="core_celery_tasks"),
         path("logs/", admin.site.admin_view(admin_log_reader_view), name="core_log_reader"),
+        path("logs/search/", admin.site.admin_view(admin_log_search_api), name="core_log_search"),
+        path("logs/download/", admin.site.admin_view(admin_log_download_view), name="core_log_download"),
         path("system/", admin.site.admin_view(system_status_view), name="core_system_status"),
         path("system/api/", admin.site.admin_view(system_status_api), name="core_system_status_api"),
 path("customer-merge/", admin.site.admin_view(customer_merge_view), name="customer_merge"),

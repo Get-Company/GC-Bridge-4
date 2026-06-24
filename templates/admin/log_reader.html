@@ -1,48 +1,200 @@
 {% extends "admin/base_site.html" %}
-{% load i18n %}
+{% load i18n log_tags %}
 
 {% block content %}
-    <div id="content-main">
-        <h1>Log Reader</h1>
+<div class="flex flex-col gap-4">
 
-        <h2>Laufende Jobs</h2>
-        {% if runtime_entries %}
-            <pre style="white-space: pre-wrap; border: 1px solid #d1d5db; padding: 12px; margin-bottom: 16px;">{% for entry in runtime_entries %}[{{ entry.status }}] {{ entry.command_name }} | pid={{ entry.pid }} | host={{ entry.hostname }} | laufzeit={{ entry.duration }}{% if entry.metadata.stage %} | stage={{ entry.metadata.stage }}{% endif %}
-{% endfor %}</pre>
-        {% else %}
-            <p>Keine laufenden Sync-/Scheduler-Jobs.</p>
-        {% endif %}
-
-        <form method="get" class="mb-4">
-            <div style="display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap;">
-                <div>
-                    <label for="id_file">Datei</label><br>
-                    <select id="id_file" name="file">
-                        {% for option in file_options %}
-                            <option value="{{ option.index }}"{% if option.index == selected_file_index %} selected{% endif %}>{{ option.path }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div>
-                    <label for="id_lines">Zeilen</label><br>
-                    <input id="id_lines" name="lines" type="number" min="10" max="500" value="{{ line_count }}">
-                </div>
-                <div>
-                    <button type="submit">Aktualisieren</button>
-                </div>
-            </div>
-        </form>
-
-        {% if not file_options %}
-            <p>Keine Log-Dateien konfiguriert.</p>
-        {% elif not file_exists %}
-            <p>Datei nicht gefunden: <code>{{ selected_path }}</code></p>
-        {% else %}
-            <p><strong>Datei:</strong> <code>{{ selected_path }}</code></p>
-            <p><strong>Auszug:</strong> letzte {{ line_count }} Zeilen</p>
-            <pre style="white-space: pre-wrap; max-height: 70vh; overflow: auto; border: 1px solid #d1d5db; padding: 12px;">{% for line in log_lines %}{{ line }}
-{% empty %}(leer)
-{% endfor %}</pre>
-        {% endif %}
+  {# ── Header ── #}
+  <div class="flex flex-wrap items-start justify-between gap-3">
+    <div>
+      <h1 class="text-xl font-semibold">Log Reader</h1>
+      <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+        {% if selected_name %}{{ selected_name }}{% if file_info.size_label %} · {{ file_info.size_label }}{% endif %}{% else %}Keine Datei ausgewählt{% endif %}
+      </p>
     </div>
+    {% if selected_path and file_exists %}
+    <a href="/admin/logs/download/?file={{ selected_file_index }}"
+       class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+      <span class="material-symbols-outlined" style="font-size:14px">download</span>
+      Datei herunterladen
+    </a>
+    {% endif %}
+  </div>
+
+  {# ── Toolbar ── #}
+  <div class="border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-900 p-3">
+    <form id="log-form" method="get" class="flex flex-wrap gap-3 items-end">
+
+      <div class="flex flex-col gap-1 min-w-[220px]">
+        <label class="text-xs text-gray-500 dark:text-gray-400">Datei</label>
+        <select name="file" id="file-select"
+          class="text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200"
+          onchange="this.form.submit()">
+          {% for option in file_options %}
+          <option value="{{ option.index }}"{% if option.index == selected_file_index %} selected{% endif %}>{{ option.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="flex flex-col gap-1 flex-1 min-w-[200px]">
+        <label class="text-xs text-gray-500 dark:text-gray-400">
+          Suche
+          <span class="ml-1 text-gray-400">(Enter oder Button)</span>
+        </label>
+        <div class="flex gap-2">
+          <input type="text" name="q" id="search-input" value="{{ query|default:'' }}"
+            placeholder="z.B. 204109 oder ERROR"
+            class="flex-1 text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 font-mono"
+            autocomplete="off" spellcheck="false">
+          <button type="submit" id="search-btn"
+            class="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded bg-blue-600 text-white hover:bg-blue-700 transition-colors">
+            <span class="material-symbols-outlined" style="font-size:15px">search</span>
+            Suchen
+          </button>
+        </div>
+      </div>
+
+      <div class="flex gap-3 items-end flex-wrap">
+        <div class="flex flex-col gap-1">
+          <label class="text-xs text-gray-500 dark:text-gray-400">Kontext-Zeilen</label>
+          <select name="context" class="text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200">
+            <option value="0"{% if context_lines == 0 %} selected{% endif %}>0</option>
+            <option value="1"{% if context_lines == 1 %} selected{% endif %}>1</option>
+            <option value="2"{% if context_lines == 2 %} selected{% endif %}>2</option>
+            <option value="3"{% if context_lines == 3 %} selected{% endif %}>3</option>
+            <option value="5"{% if context_lines == 5 %} selected{% endif %}>5</option>
+            <option value="10"{% if context_lines == 10 %} selected{% endif %}>10</option>
+          </select>
+        </div>
+
+        <div class="flex flex-col gap-1">
+          <label class="text-xs text-gray-500 dark:text-gray-400">Tail-Zeilen</label>
+          <select name="lines" class="text-sm border border-gray-300 dark:border-gray-600 rounded px-2 py-1.5 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200">
+            <option value="100"{% if line_count == 100 %} selected{% endif %}>100 Zeilen</option>
+            <option value="200"{% if line_count == 200 %} selected{% endif %}>200 Zeilen</option>
+            <option value="500"{% if line_count == 500 %} selected{% endif %}>500 Zeilen</option>
+            <option value="1000"{% if line_count == 1000 %} selected{% endif %}>1000 Zeilen</option>
+            <option value="2000"{% if line_count == 2000 %} selected{% endif %}>2000 Zeilen</option>
+            <option value="5000"{% if line_count == 5000 %} selected{% endif %}>5000 Zeilen</option>
+          </select>
+        </div>
+
+        <label class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300 pb-1.5 cursor-pointer select-none">
+          <input type="checkbox" name="regex" value="1"{% if use_regex %} checked{% endif %}
+            class="rounded border-gray-300 dark:border-gray-600 text-blue-600">
+          Regex
+        </label>
+
+        {% if query %}
+        <a href="?file={{ selected_file_index }}&lines={{ line_count }}"
+           class="inline-flex items-center gap-1 px-2 py-1.5 text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 border border-gray-200 dark:border-gray-600 rounded transition-colors pb-1.5">
+          <span class="material-symbols-outlined" style="font-size:13px">close</span>
+          Suche löschen
+        </a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+
+  {% if not file_options %}
+  <div class="px-4 py-8 text-center text-gray-400 italic">Keine Log-Dateien konfiguriert.</div>
+
+  {% elif not file_exists %}
+  <div class="px-4 py-8 text-center text-red-500">Datei nicht gefunden: <code>{{ selected_path }}</code></div>
+
+  {% elif search_result %}
+    {# ── Suchergebnis-Ansicht ── #}
+    <div class="flex items-center justify-between gap-3 px-1">
+      <div class="text-sm">
+        {% if search_result.error %}
+          <span class="text-red-600 dark:text-red-400">{{ search_result.error }}</span>
+        {% elif search_result.total == 0 %}
+          <span class="text-gray-400">Keine Treffer für <code class="bg-gray-100 dark:bg-gray-800 px-1 rounded">{{ search_result.query }}</code></span>
+        {% else %}
+          <span class="font-medium text-gray-800 dark:text-gray-200">{{ search_result.shown }} von {{ search_result.total }} Treffern</span>
+          für <code class="bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300 px-1.5 py-0.5 rounded">{{ search_result.query }}</code>
+          {% if search_result.truncated %}
+          <span class="text-amber-600 dark:text-amber-400 ml-2">— auf {{ search_result.shown }} begrenzt</span>
+          {% endif %}
+          <span class="text-gray-400 ml-3">{{ search_result.file_lines }} Zeilen gesamt · {{ search_result.file_size }}</span>
+        {% endif %}
+      </div>
+    </div>
+
+    {% if search_result.matches %}
+    <div class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+      {% for block in search_result.matches %}
+        {% if not forloop.first %}
+        <div class="border-t-2 border-dashed border-gray-200 dark:border-gray-700"></div>
+        {% endif %}
+        {% for line in block %}
+        <div class="flex gap-0 font-mono text-xs {% if line.is_match %}bg-yellow-50 dark:bg-yellow-900/20 border-l-2 border-yellow-400{% else %}hover:bg-gray-50 dark:hover:bg-gray-800/30{% endif %}">
+          <span class="flex-shrink-0 w-12 text-right pr-3 py-1 text-gray-300 dark:text-gray-600 border-r border-gray-100 dark:border-gray-800 select-none">{{ line.lineno }}</span>
+          <span class="px-3 py-1 break-all whitespace-pre-wrap min-w-0 flex-1 {% if line.is_match %}text-gray-900 dark:text-gray-100{% else %}text-gray-500 dark:text-gray-400{% endif %}">{{ line.highlighted|log_highlight }}</span>
+        </div>
+        {% endfor %}
+      {% endfor %}
+    </div>
+    {% endif %}
+
+  {% else %}
+    {# ── Tail-Ansicht ── #}
+    <div class="flex items-center justify-between gap-3 px-1">
+      <span class="text-sm text-gray-500 dark:text-gray-400">
+        Letzte {{ line_count }} Zeilen
+        {% if file_info.size_label %} · {{ file_info.size_label }}{% endif %}
+      </span>
+      <div class="flex items-center gap-2 text-xs text-gray-400">
+        <span id="autoscroll-dot" class="w-1.5 h-1.5 rounded-full bg-green-400"></span>
+        Auto-Scroll
+      </div>
+    </div>
+    <div class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+      <pre id="log-content" class="overflow-auto p-3 text-xs font-mono leading-relaxed text-gray-800 dark:text-gray-200 bg-white dark:bg-gray-900 whitespace-pre-wrap break-words" style="max-height: 78vh;">{% for line in log_lines %}{{ line }}
+{% empty %}(leer){% endfor %}</pre>
+    </div>
+  {% endif %}
+
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  // Auto-scroll for tail view
+  const logEl = document.getElementById("log-content");
+  const autoscrollDot = document.getElementById("autoscroll-dot");
+  let autoScroll = true;
+
+  if (logEl) {
+    logEl.scrollTop = logEl.scrollHeight;
+    logEl.addEventListener("scroll", () => {
+      const dist = logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight;
+      autoScroll = dist < 40;
+      if (autoscrollDot) autoscrollDot.style.backgroundColor = autoScroll ? "#4ade80" : "#94a3b8";
+    });
+  }
+
+  // Submit form on Enter in search input (default form submit)
+  const searchInput = document.getElementById("search-input");
+  if (searchInput) {
+    searchInput.focus();
+  }
+
+  // Keyboard shortcut: Escape clears search
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && searchInput && searchInput.value) {
+      e.preventDefault();
+      const fileIndex = document.getElementById("file-select")?.value || "0";
+      window.location.href = `?file=${fileIndex}`;
+    }
+    // Ctrl+F / Cmd+F focuses search
+    if ((e.ctrlKey || e.metaKey) && e.key === "f") {
+      e.preventDefault();
+      searchInput?.focus();
+      searchInput?.select();
+    }
+  });
+})();
+</script>
 {% endblock %}
