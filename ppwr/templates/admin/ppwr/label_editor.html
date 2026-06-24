@@ -63,18 +63,48 @@
   }
   .dark #ppwr-props { background: rgb(17 24 39); border-color: rgba(255,255,255,.08); }
 
-  /* ── Ruler lines every 10 mm ─────────────────────────────── */
+  /* ── Grid lines (configurable) ───────────────────────────── */
   #ppwr-canvas::before {
     content: '';
     position: absolute;
     inset: 0;
     background-image:
-      linear-gradient(rgba(0,0,0,.05) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(0,0,0,.05) 1px, transparent 1px);
-    background-size: calc(var(--scale) * 10mm) calc(var(--scale) * 10mm);
+      linear-gradient(rgba(0,0,0,.07) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,0,0,.07) 1px, transparent 1px);
+    background-size: var(--grid-x, 10mm) var(--grid-y, 10mm);
     pointer-events: none;
     z-index: 0;
+    opacity: 0;
+    transition: opacity .2s;
   }
+  #ppwr-canvas.grid-visible::before { opacity: 1; }
+  .dark #ppwr-canvas.grid-visible::before {
+    background-image:
+      linear-gradient(rgba(255,255,255,.08) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,.08) 1px, transparent 1px);
+  }
+
+  /* ── Grid toolbar section ─────────────────────────────────── */
+  .grid-sep { width: 1px; height: 24px; background: rgba(0,0,0,.1); flex-shrink: 0; }
+  .dark .grid-sep { background: rgba(255,255,255,.1); }
+  .grid-label { font-size: 11px; font-weight: 600; color: rgb(107 114 128); white-space: nowrap; }
+  .grid-input {
+    width: 52px; padding: 4px 6px; border: 1px solid rgba(0,0,0,.15);
+    border-radius: 6px; font-size: 12px; text-align: center;
+    background: white; color: rgb(17 24 39);
+  }
+  .dark .grid-input { background: rgb(31 41 55); border-color: rgba(255,255,255,.15); color: rgb(229 231 235); }
+  .grid-input:focus { outline: none; border-color: #ff9933; }
+  .grid-toggle {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 5px 10px; border-radius: 7px; border: 1.5px solid rgba(0,0,0,.12);
+    background: transparent; font-size: 12px; font-weight: 600; cursor: pointer;
+    color: rgb(107 114 128); transition: all .15s;
+  }
+  .grid-toggle:hover { border-color: #ff9933; color: #ff9933; }
+  .grid-toggle.active { border-color: #ff9933; background: rgba(255,153,51,.1); color: #ff9933; }
+  .dark .grid-toggle { border-color: rgba(255,255,255,.1); }
+  .grid-toggle .material-symbols-outlined { font-size: 16px; }
 
   /* ── Palette chips ────────────────────────────────────────── */
   .palette-chip {
@@ -298,6 +328,17 @@
       <span class="material-symbols-outlined">save</span>
       Speichern
     </button>
+    <div class="grid-sep"></div>
+    <button class="grid-toggle" id="grid-toggle-btn" onclick="toggleGrid()" title="Raster ein-/ausblenden">
+      <span class="material-symbols-outlined">grid_4x4</span>
+      Raster
+    </button>
+    <label class="grid-label">X</label>
+    <input type="number" class="grid-input" id="grid-x-input" min="0.5" max="50" step="0.5" value="5" title="Rasterabstand X (mm)" onchange="updateGrid()">
+    <label class="grid-label">mm &nbsp; Y</label>
+    <input type="number" class="grid-input" id="grid-y-input" min="0.5" max="50" step="0.5" value="5" title="Rasterabstand Y (mm)" onchange="updateGrid()">
+    <label class="grid-label">mm</label>
+    <div class="grid-sep"></div>
     <a href="{{ generate_pdf_url }}" class="ppwr-btn ppwr-btn-primary" id="pdf-btn">
       <span class="material-symbols-outlined">picture_as_pdf</span>
       PDF herunterladen
@@ -403,6 +444,39 @@ let layout = {{ layout_data_json|safe }};
 let selectedId = null;
 let blockCounter = Date.now(); // unique IDs
 
+// ── Grid ──────────────────────────────────────────────────────
+const LS_GRID = 'ppwr_grid';
+const gridState = JSON.parse(localStorage.getItem(LS_GRID) || '{"enabled":false,"x":5,"y":5}');
+
+function snapToGrid(value, step) {
+  if (!gridState.enabled || step <= 0) return value;
+  return Math.round(value / step) * step;
+}
+
+function updateGrid() {
+  gridState.x = Math.max(0.5, parseFloat(document.getElementById('grid-x-input').value) || 5);
+  gridState.y = Math.max(0.5, parseFloat(document.getElementById('grid-y-input').value) || 5);
+  canvas.style.setProperty('--grid-x', gridState.x + 'mm');
+  canvas.style.setProperty('--grid-y', gridState.y + 'mm');
+  localStorage.setItem(LS_GRID, JSON.stringify(gridState));
+}
+
+function toggleGrid() {
+  gridState.enabled = !gridState.enabled;
+  canvas.classList.toggle('grid-visible', gridState.enabled);
+  document.getElementById('grid-toggle-btn').classList.toggle('active', gridState.enabled);
+  localStorage.setItem(LS_GRID, JSON.stringify(gridState));
+}
+
+function initGrid() {
+  document.getElementById('grid-x-input').value = gridState.x;
+  document.getElementById('grid-y-input').value = gridState.y;
+  canvas.style.setProperty('--grid-x', gridState.x + 'mm');
+  canvas.style.setProperty('--grid-y', gridState.y + 'mm');
+  canvas.classList.toggle('grid-visible', gridState.enabled);
+  document.getElementById('grid-toggle-btn').classList.toggle('active', gridState.enabled);
+}
+
 function getCookie(name) {
   const v = document.cookie.match('(^|;) ?' + name + '=([^;]*)(;|$)');
   return v ? v[2] : null;
@@ -498,8 +572,10 @@ function startDrag(e, el, block) {
   const origX = block.x_mm, origY = block.y_mm;
 
   function onMove(e) {
-    block.x_mm = Math.max(0, Math.min(canvasW - block.width_mm,  origX + (e.clientX - startX) / scale));
-    block.y_mm = Math.max(0, Math.min(canvasH - block.height_mm, origY + (e.clientY - startY) / scale));
+    const rawX = Math.max(0, Math.min(canvasW - block.width_mm,  origX + (e.clientX - startX) / scale));
+    const rawY = Math.max(0, Math.min(canvasH - block.height_mm, origY + (e.clientY - startY) / scale));
+    block.x_mm = snapToGrid(rawX, gridState.x);
+    block.y_mm = snapToGrid(rawY, gridState.y);
     block.x_mm = Math.round(block.x_mm * 10) / 10;
     block.y_mm = Math.round(block.y_mm * 10) / 10;
     setBlockGeometry(el, block);
@@ -522,8 +598,10 @@ function startResize(e, el, block) {
   const origW = block.width_mm, origH = block.height_mm;
 
   function onMove(e) {
-    block.width_mm  = Math.max(5,  Math.min(canvasW - block.x_mm, origW + (e.clientX - startX) / scale));
-    block.height_mm = Math.max(4,  Math.min(canvasH - block.y_mm, origH + (e.clientY - startY) / scale));
+    const rawW = Math.max(5,  Math.min(canvasW - block.x_mm, origW + (e.clientX - startX) / scale));
+    const rawH = Math.max(4,  Math.min(canvasH - block.y_mm, origH + (e.clientY - startY) / scale));
+    block.width_mm  = snapToGrid(rawW, gridState.x);
+    block.height_mm = snapToGrid(rawH, gridState.y);
     block.width_mm  = Math.round(block.width_mm  * 10) / 10;
     block.height_mm = Math.round(block.height_mm * 10) / 10;
     setBlockGeometry(el, block);
@@ -716,6 +794,7 @@ function showToast(msg, type = '') {
 }
 
 // ── Init ──────────────────────────────────────────────────────
+initGrid();
 renderAll();
 </script>
 {% endblock %}

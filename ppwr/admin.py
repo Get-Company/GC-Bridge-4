@@ -253,6 +253,18 @@ class PackagingLabelAdmin(BaseAdmin):
         }
         return TemplateResponse(request, "admin/ppwr/label_editor.html", context)
 
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        if not change:
+            source_id = request.GET.get(self.copy_source_param)
+            if source_id:
+                try:
+                    source = PackagingLabel.objects.get(pk=source_id)
+                    obj.layout_data = source.layout_data
+                    obj.save(update_fields=["layout_data"])
+                except PackagingLabel.DoesNotExist:
+                    pass
+
     def save_layout_view(self, request, object_id: str):
         if request.method != "POST":
             return JsonResponse({"error": "POST required"}, status=405)
