@@ -5,6 +5,7 @@ import os
 from typing import TYPE_CHECKING
 
 from django.conf import settings
+from lib_shopware6_api_base.conf_shopware6_api_base_classes import ShopwareAPIError
 from loguru import logger
 
 from core.services import BaseService
@@ -91,6 +92,16 @@ class ProductMediaSyncService(BaseService):
                     file_name=upload["file_name"],
                     source_url=upload["source_url"],
                 )
+            except ShopwareAPIError as exc:
+                if "CONTENT__MEDIA_CANNOT_OPEN_SOURCE_STREAM_TO_READ" in str(exc):
+                    logger.warning(
+                        "Shopware image upload skipped (source not found): media_id={} file_name={} source_url={}",
+                        upload["media_id"],
+                        upload["file_name"],
+                        upload["source_url"],
+                    )
+                else:
+                    raise
             except Exception:
                 if log_uploads:
                     logger.exception(
