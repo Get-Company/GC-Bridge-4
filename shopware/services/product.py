@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from lib_shopware6_api_base.conf_shopware6_api_base_classes import ShopwareAPIError
+from loguru import logger
+
 from .product_media import ProductMediaSyncService
 from shopware.services.shopware6 import Shopware6Service
 
@@ -235,8 +238,14 @@ class ProductService(Shopware6Service):
     def delete_media_by_ids(self, media_ids: list[str]) -> int:
         deleted = 0
         for media_id in sorted({str(value).strip() for value in media_ids if str(value).strip()}):
-            self.request_delete(f"{self.media_base_path}/{media_id}")
-            deleted += 1
+            try:
+                self.request_delete(f"{self.media_base_path}/{media_id}")
+                deleted += 1
+            except ShopwareAPIError as exc:
+                if "404" in str(exc):
+                    logger.warning("Media {} already gone (404), skipping delete.", media_id)
+                else:
+                    raise
         return deleted
 
     def delete_conflicting_media_by_filename(
