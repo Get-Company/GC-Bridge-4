@@ -4,7 +4,6 @@ from io import BytesIO
 from pathlib import Path
 
 from django.conf import settings
-from django.template.loader import render_to_string
 from django.utils import timezone
 from django.utils.text import slugify
 from reportlab.lib.units import mm
@@ -12,7 +11,7 @@ from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas as rl_canvas
 
 from core.services import BaseService
-from ppwr.models import KonformitaetsErklaerung, PackagingLabel
+from ppwr.models import PackagingLabel
 
 BLOCK_LABELS = {
     "producer_name": "Hersteller",
@@ -137,42 +136,3 @@ class PackagingLabelPdfService(BaseService):
         side = int(min(w, h) / mm * self.PX_PER_MM * 10)
         raster = QrCodeRenderService().render_raster(label.qr_code, "png", max(512, side))
         pdf.drawImage(ImageReader(BytesIO(raster)), x, y, width=w, height=h, mask="auto")
-
-
-class KonformitaetsErklaerungPdfService(BaseService):
-    model = None
-
-    def get_output_dir(self) -> Path:
-        default = Path(settings.MEDIA_ROOT) / "ppwr"
-        root = getattr(settings, "DOCUMENT_PDF_ROOT", None)
-        return (Path(root) / "ppwr") if root else default
-
-    def get_pdf_path(self, erklaerung: KonformitaetsErklaerung) -> Path | None:
-        if not erklaerung.pdf_filename:
-            return None
-        return self.get_output_dir() / erklaerung.pdf_filename
-
-    def build_pdf_filename(self, erklaerung: KonformitaetsErklaerung) -> str:
-        base = slugify(erklaerung.declaration_number) or f"erklaerung-{erklaerung.pk}"
-        return f"konformitaet-{base}.pdf"
-
-    def generate_pdf(self, erklaerung: KonformitaetsErklaerung) -> Path:
-        from weasyprint import HTML
-
-        output_dir = self.get_output_dir()
-        output_dir.mkdir(parents=True, exist_ok=True)
-
-        html_string = render_to_string(
-            "ppwr/konformitaetserklaerung.html",
-            {"erklaerung": erklaerung},
-        )
-        filename = self.build_pdf_filename(erklaerung)
-        output_path = output_dir / filename
-
-        HTML(string=html_string, base_url="/").write_pdf(str(output_path))
-
-        erklaerung.pdf_filename = filename
-        erklaerung.pdf_generated_at = timezone.now()
-        erklaerung.save(update_fields=["pdf_filename", "pdf_generated_at", "updated_at"])
-
-        return output_path

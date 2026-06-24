@@ -7,13 +7,11 @@ from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
-from django.views.decorators.http import require_POST
 from unfold.decorators import action
 from unfold.enums import ActionVariant
 
 from core.admin import BaseAdmin
-from ppwr.models import KonformitaetsErklaerung, PackagingLabel
-from ppwr.services import KonformitaetsErklaerungPdfService
+from ppwr.models import PackagingLabel
 from ppwr.services import PackagingLabelPdfService
 
 BLOCK_DEFINITIONS = [
@@ -294,167 +292,6 @@ class PackagingLabelAdmin(BaseAdmin):
     def download_pdf_view(self, request, object_id: str):
         label = get_object_or_404(PackagingLabel, pk=object_id)
         pdf_path = PackagingLabelPdfService().get_pdf_path(label)
-        if not pdf_path or not pdf_path.exists():
-            raise Http404("PDF nicht gefunden.")
-        return FileResponse(pdf_path.open("rb"), as_attachment=True, filename=pdf_path.name)
-
-
-@admin.register(KonformitaetsErklaerung)
-class KonformitaetsErklaerungAdmin(BaseAdmin):
-    list_display = (
-        "declaration_number",
-        "packaging_label",
-        "ausstellungsdatum",
-        "unterzeichner_name",
-        "pdf_status",
-        "oeffentliche_url_link",
-        "updated_at",
-    )
-    search_fields = ("declaration_number", "packaging_label__name", "unterzeichner_name")
-    autocomplete_fields = ("packaging_label",)
-    readonly_fields = BaseAdmin.readonly_fields + (
-        "pdf_filename",
-        "pdf_generated_at",
-        "pdf_download_link",
-        "oeffentliche_url_display",
-    )
-    actions_detail = ("generate_pdf_action",)
-
-    fieldsets = (
-        (
-            "Erklärung",
-            {
-                "fields": (
-                    "packaging_label",
-                    "declaration_number",
-                    "erzeuger_name_anschrift",
-                    "gegenstand_beschreibung",
-                    "harmonisierung",
-                    "normen_spezifikationen",
-                    "notifizierte_stelle",
-                    "zusaetzliche_angaben",
-                ),
-                "classes": ("tab",),
-            },
-        ),
-        (
-            "Unterzeichnung",
-            {
-                "fields": (
-                    "ausstellungsort",
-                    "ausstellungsdatum",
-                    "unterzeichner_name",
-                    "unterzeichner_funktion",
-                ),
-                "classes": ("tab",),
-            },
-        ),
-        (
-            "PDF & URL",
-            {
-                "fields": (
-                    "pdf_generated_at",
-                    "pdf_filename",
-                    "pdf_download_link",
-                    "oeffentliche_url_display",
-                ),
-                "classes": ("tab",),
-            },
-        ),
-        (
-            "System",
-            {
-                "fields": ("created_at", "updated_at"),
-                "classes": ("tab",),
-            },
-        ),
-    )
-
-    def get_urls(self):
-        return [
-            path(
-                "<path:object_id>/generate-pdf/",
-                self.admin_site.admin_view(self.generate_pdf_view),
-                name="ppwr_konformitaetserklaerung_generate_pdf",
-            ),
-            path(
-                "<path:object_id>/download-pdf/",
-                self.admin_site.admin_view(self.download_pdf_view),
-                name="ppwr_konformitaetserklaerung_download_pdf",
-            ),
-        ] + super().get_urls()
-
-    @admin.display(description=_("PDF"))
-    def pdf_status(self, obj: KonformitaetsErklaerung) -> str:
-        if obj.pdf_generated_at:
-            return f"✓ {obj.pdf_generated_at.strftime('%d.%m.%Y')}"
-        return "–"
-
-    @admin.display(description=_("PDF herunterladen"))
-    def pdf_download_link(self, obj: KonformitaetsErklaerung | None = None) -> str:
-        if not obj or not obj.pk or not obj.pdf_filename:
-            return "Noch kein PDF generiert."
-        pdf_path = KonformitaetsErklaerungPdfService().get_pdf_path(obj)
-        if not pdf_path or not pdf_path.exists():
-            return format_html("{} (Datei fehlt)", obj.pdf_filename)
-        return format_html(
-            '<a href="{}" class="text-primary-600 dark:text-primary-500">PDF herunterladen</a>',
-            reverse("admin:ppwr_konformitaetserklaerung_download_pdf", args=(obj.pk,)),
-        )
-
-    @admin.display(description=_("Öffentliche URL"))
-    def oeffentliche_url_display(self, obj: KonformitaetsErklaerung | None = None) -> str:
-        if not obj or not obj.pk:
-            return "Nach dem Speichern verfügbar."
-        try:
-            url = reverse("ppwr:erklaerung-html", kwargs={"slug": obj.packaging_label.slug})
-        except Exception:
-            return "URL nicht verfügbar."
-        return format_html(
-            '<a href="{url}" target="_blank" class="text-primary-600 dark:text-primary-500">{url}</a>'
-            '<br><small class="text-gray-400 dark:text-gray-500">Diesen Pfad als Ziel-URL im QR-Code setzen.</small>',
-            url=url,
-        )
-
-    @admin.display(description=_("URL"))
-    def oeffentliche_url_link(self, obj: KonformitaetsErklaerung) -> str:
-        try:
-            url = reverse("ppwr:erklaerung-html", kwargs={"slug": obj.packaging_label.slug})
-        except Exception:
-            return "–"
-        return format_html(
-            '<a href="{}" target="_blank" class="text-primary-600 dark:text-primary-500 text-xs">↗ öffnen</a>',
-            url,
-        )
-
-    @action(description=_("PDF generieren"), icon="picture_as_pdf", variant=ActionVariant.INFO)
-    def generate_pdf_action(self, request, object_id: str):
-        from django.http import HttpResponseRedirect
-
-        erklaerung = self.get_object(request, object_id)
-        if not erklaerung:
-            self.message_user(request, "Erklärung nicht gefunden.", level=messages.ERROR)
-            return HttpResponseRedirect(reverse("admin:ppwr_konformitaetserklaerung_changelist"))
-        KonformitaetsErklaerungPdfService().generate_pdf(erklaerung)
-        self.message_user(request, "PDF erfolgreich generiert.")
-        return HttpResponseRedirect(reverse("admin:ppwr_konformitaetserklaerung_change", args=(object_id,)))
-
-    def generate_pdf_view(self, request, object_id: str):
-        erklaerung = get_object_or_404(KonformitaetsErklaerung, pk=object_id)
-        try:
-            pdf_path = KonformitaetsErklaerungPdfService().generate_pdf(erklaerung)
-        except Exception as exc:
-            return JsonResponse({"error": str(exc)}, status=500)
-        return FileResponse(
-            pdf_path.open("rb"),
-            as_attachment=True,
-            filename=pdf_path.name,
-            content_type="application/pdf",
-        )
-
-    def download_pdf_view(self, request, object_id: str):
-        erklaerung = get_object_or_404(KonformitaetsErklaerung, pk=object_id)
-        pdf_path = KonformitaetsErklaerungPdfService().get_pdf_path(erklaerung)
         if not pdf_path or not pdf_path.exists():
             raise Http404("PDF nicht gefunden.")
         return FileResponse(pdf_path.open("rb"), as_attachment=True, filename=pdf_path.name)
