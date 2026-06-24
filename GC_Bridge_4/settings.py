@@ -14,7 +14,6 @@ import os
 from functools import partial
 from pathlib import Path
 
-from celery.schedules import crontab
 from django.conf.locale import LANG_INFO
 from django.urls import reverse_lazy
 from django.utils.translation import gettext_lazy as _
@@ -309,17 +308,7 @@ CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
-# --- Bestellsync: Mo-Fr 07:45 - 17:00, alle 5 Minuten ---
-CELERY_BEAT_SCHEDULE = {
-    "orders-sync-opening":  {"task": "orders.shopware_sync_open_orders", "schedule": crontab(minute="45,50,55", hour="7",                          day_of_week="1-5")},
-    "orders-sync-day":      {"task": "orders.shopware_sync_open_orders", "schedule": crontab(minute="*/5",      hour="8,9,10,11,12,13,14,15,16",   day_of_week="1-5")},
-    "orders-sync-closing":  {"task": "orders.shopware_sync_open_orders", "schedule": crontab(minute="0",        hour="17",                         day_of_week="1-5")},
-    # --- Produkt-Sync komplett: täglich 06:00 und 18:00 ---
-    "products-sync-morning":  {"task": "products.scheduled_product_sync", "schedule": crontab(hour="6",  minute="0")},
-    "products-sync-evening":  {"task": "products.scheduled_product_sync", "schedule": crontab(hour="18", minute="0")},
-    # --- Mappei Preis-Scraper: täglich 07:00 ---
-    "mappei-price-scrape": {"task": "mappei.scrape_daily_prices", "schedule": crontab(hour="7", minute="0")},
-}
+CELERY_BEAT_SCHEDULE = {}
 
 
 UNFOLD = {

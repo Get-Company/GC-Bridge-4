@@ -207,26 +207,17 @@ def _registered_task_rows() -> list[dict[str, Any]]:
     return rows
 
 
-_BEAT_SCHEDULE_LABELS: dict[str, str] = {
-    "orders-sync-opening":   "Bestellsync (Öffnung 7:45-7:55)",
-    "orders-sync-day":       "Bestellsync (Tagbetrieb 8:00-16:55)",
-    "orders-sync-closing":   "Bestellsync (Ende 17:00)",
-    "products-sync-morning": "Produkt-Sync komplett (06:00)",
-    "products-sync-evening": "Produkt-Sync komplett (18:00)",
-    "mappei-price-scrape":   "Mappei Preis-Scraper (07:00)",
-}
+_BEAT_SCHEDULE_LABELS: dict[str, str] = {}
 
 _BEAT_SCHEDULE_ENV_FLAGS: dict[str, str] = {}
 
 
 def _beat_schedule_rows() -> list[dict[str, str]]:
     configured = getattr(settings, "CELERY_BEAT_SCHEDULE", {})
-    all_names = set(configured.keys()) | set(_BEAT_SCHEDULE_LABELS.keys())
     rows = []
-    for name in sorted(all_names):
+    for name in sorted(configured.keys()):
         entry = configured.get(name, {})
         env_flag = _BEAT_SCHEDULE_ENV_FLAGS.get(name, "")
-        enabled = name in configured
         rows.append(
             {
                 "name": str(name),
@@ -234,7 +225,7 @@ def _beat_schedule_rows() -> list[dict[str, str]]:
                 "task": str(entry.get("task", "")),
                 "schedule": str(entry.get("schedule", "")) if entry else "",
                 "kwargs": str(entry.get("kwargs", {})) if entry else "",
-                "enabled": enabled,
+                "enabled": True,
                 "env_flag": env_flag,
             }
         )

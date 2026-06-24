@@ -187,15 +187,7 @@ The admin sidebar contains `System > Celery Tasks` for superusers. It can enqueu
 `System > Celery Scheduler` uses `django-celery-beat` and stores schedules in the database.
 After migrations are applied, create `CrontabSchedule` or `IntervalSchedule` entries and attach them to `PeriodicTask` records.
 The registered Celery task dropdown includes the tasks above.
-
-Default static beat settings are still present as fallback/seed-style schedules:
-
-```bash
-CELERY_SCHEDULED_PRODUCT_SYNC_ENABLED=true
-CELERY_SCHEDULED_PRODUCT_SYNC_HOUR=*
-CELERY_SCHEDULED_PRODUCT_SYNC_MINUTE=0
-CELERY_SHOPWARE_OPEN_ORDERS_SYNC_ENABLED=false
-```
+No periodic tasks are created automatically from static settings; schedules must be managed explicitly in the database.
 
 ## Adminer
 
@@ -216,26 +208,26 @@ Connection values:
 #: 1
 Task-Name (Code): mappei.scrape_daily_prices
 Empfohlener Titel: Mappei Tagespreise scrapen
-Zeitplan: täglich 20:00 Uhr
-Beschreibung: Ruft aktuelle Preise von der Mappei-Website ab und speichert sie als Snapshot in der Datenbank. Immer aktiv.
+Zeitplan: manuell in der PeriodicTask-Verwaltung anlegen
+Beschreibung: Ruft aktuelle Preise von der Mappei-Website ab und speichert sie als Snapshot in der Datenbank.
 ────────────────────────────────────────
 #: 2
 Task-Name (Code): products.scheduled_product_sync
 Empfohlener Titel: Produkt-Vollsync (Microtech → Shopware)
-Zeitplan: konfigurierbar via Env (Standard: jede Stunde, :00)
-Beschreibung: Führt alle 4 Sync-Stufen durch: Microtech Import → Django → Shopware Export. Aktivierbar via CELERY_SCHEDULED_PRODUCT_SYNC_ENABLED.
+Zeitplan: manuell in der PeriodicTask-Verwaltung anlegen
+Beschreibung: Führt alle 4 Sync-Stufen durch: Microtech Import → Django → Shopware Export.
 ────────────────────────────────────────
 #: 3
 Task-Name (Code): orders.shopware_sync_open_orders
 Empfohlener Titel: Offene Bestellungen aus Shopware importieren
-Zeitplan: konfigurierbar via Env (Standard: jede Stunde, :15)
-Beschreibung: Holt neue offene Bestellungen aus Shopware und legt sie in Django an. Aktivierbar via CELERY_SHOPWARE_OPEN_ORDERS_SYNC_ENABLED.
+Zeitplan: manuell in der PeriodicTask-Verwaltung anlegen
+Beschreibung: Holt neue offene Bestellungen aus Shopware und legt sie in Django an.
 ────────────────────────────────────────
 #: 4
 Task-Name (Code): hr.sync_holidays
 Empfohlener Titel: Feiertage synchronisieren (OpenHolidays API)
-Zeitplan: konfigurierbar via Env (Standard: 1. des Monats, 03:00)
-Beschreibung: Lädt öffentliche und Schulferien für alle aktiven Urlaubskalender aus der OpenHolidays-API und aktualisiert die Datenbank. Aktivierbar via CELERY_HR_HOLIDAY_SYNC_ENABLED.
+Zeitplan: manuell in der PeriodicTask-Verwaltung anlegen
+Beschreibung: Lädt öffentliche und Schulferien für alle aktiven Urlaubskalender aus der OpenHolidays-API und aktualisiert die Datenbank.
   
 ---
 Manuelle / event-getriggerte Tasks (kein Beat-Schedule)
@@ -276,7 +268,7 @@ Empfohlener Titel: Jahreswechsel Urlaubskonto verarbeiten
 Beschreibung: Führt den Jahresabschluss der Urlaubskonten durch: Resturlaub wird nach Konfiguration übertragen oder verfällt. Unterstützt Dry-Run-Modus.
   
 ---
-Tipp: Tasks 2–4 sind per Env-Variable deaktivierbar — falls du in der PeriodicTask-Verwaltung nur bestimmte Tasks siehst, sind die anderen wahrscheinlich nicht aktiviert (kein Eintrag in der DB).
+Tipp: Periodische Tasks werden nicht automatisch erzeugt. Wenn ein Task regelmäßig laufen soll, lege den Zeitplan bewusst in der PeriodicTask-Verwaltung an.
 
 Beispiel-Befehle:
 
