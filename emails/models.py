@@ -63,6 +63,12 @@ class EmailCampaign(BaseModel):
         db_index=True,
         verbose_name=_("Status"),
     )
+    send_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_index=True,
+        verbose_name=_("Sendedatum"),
+    )
 
     class Meta:
         verbose_name = _("E-Mail Kampagne")

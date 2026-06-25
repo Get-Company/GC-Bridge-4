@@ -561,8 +561,8 @@ class EmailCampaignComponentInline(BaseStackedInline):
 
 @admin.register(EmailCampaign)
 class EmailCampaignAdmin(BaseAdmin):
-    list_display = ("internal_title", "component_count", "product_count", "status", "created_at")
-    list_filter = ("status", "created_at")
+    list_display = ("internal_title", "send_at", "component_count", "product_count", "status", "created_at")
+    list_filter = ("status", "send_at", "created_at")
     search_fields = ("internal_title",)
     list_editable = ("status",)
     inlines = (EmailCampaignComponentInline,)
@@ -571,7 +571,7 @@ class EmailCampaignAdmin(BaseAdmin):
         (
             _("Kampagne"),
             {
-                "fields": ("internal_title", "status"),
+                "fields": ("internal_title", "status", "send_at"),
             },
         ),
         (
