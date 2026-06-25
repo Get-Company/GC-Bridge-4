@@ -4,9 +4,11 @@ from __future__ import annotations
 import json
 import logging
 import re
+from copy import deepcopy
 
 from django import forms
 from django.contrib import admin
+from django.core.exceptions import PermissionDenied
 from django.db.models import Case, IntegerField, Max, Q, When
 from django.http import HttpResponse, JsonResponse
 from django.urls import path
@@ -20,6 +22,7 @@ from emails.mjml import compile_mjml_to_html, render_campaign_mjml
 from emails.models import (
     EmailCampaign,
     EmailCampaignComponent,
+    EmailCampaignProduct,
     EmailCampaignQueueEntry,
     MjmlComponent,
 )
@@ -175,6 +178,73 @@ def _component_tree_depth(component: EmailCampaignComponent) -> int:
         parent = getattr(parent, "parent", None)
 
     return depth
+
+
+def _copy_campaign_products(
+    source_campaign: EmailCampaign,
+    target_campaign: EmailCampaign,
+) -> dict[int, EmailCampaignProduct]:
+    copied_products: dict[int, EmailCampaignProduct] = {}
+
+    for source_product in source_campaign.campaign_products.order_by("order", "id"):
+        copied_product = EmailCampaignProduct.objects.create(
+            campaign=target_campaign,
+            product_id=source_product.product_id,
+            special_price_override=source_product.special_price_override,
+            discount_pct=source_product.discount_pct,
+            prices_synced_at=None,
+            order=source_product.order,
+        )
+        copied_products[source_product.pk] = copied_product
+
+    return copied_products
+
+
+def _copy_campaign_components(
+    source_campaign: EmailCampaign,
+    target_campaign: EmailCampaign,
+) -> None:
+    if target_campaign.components.exists():
+        return
+
+    campaign_products_by_source_id = _copy_campaign_products(source_campaign, target_campaign)
+    source_components = list(
+        source_campaign.components.select_related(
+            "library_component",
+            "campaign_product",
+            "product",
+            "parent",
+        ).order_by("order", "id")
+    )
+    copied_components: dict[int, EmailCampaignComponent] = {}
+
+    for source_component in source_components:
+        copied_component = EmailCampaignComponent.objects.create(
+            campaign=target_campaign,
+            library_component_id=source_component.library_component_id,
+            parent=None,
+            campaign_product=campaign_products_by_source_id.get(source_component.campaign_product_id),
+            product_id=source_component.product_id,
+            title=source_component.title,
+            variables=deepcopy(source_component.variables),
+            order=source_component.order,
+            enabled=source_component.enabled,
+        )
+        copied_components[source_component.pk] = copied_component
+
+    parent_updates = []
+    for source_component in source_components:
+        if not source_component.parent_id:
+            continue
+        copied_component = copied_components[source_component.pk]
+        copied_parent = copied_components.get(source_component.parent_id)
+        if copied_parent is None:
+            continue
+        copied_component.parent = copied_parent
+        parent_updates.append(copied_component)
+
+    if parent_updates:
+        EmailCampaignComponent.objects.bulk_update(parent_updates, ["parent"])
 
 
 class PrettyJSONWidget(forms.Textarea):
@@ -647,8 +717,20 @@ class EmailCampaignAdmin(BaseAdmin):
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
-        if not change:
-            self._ensure_default_components(obj)
+        if change:
+            return
+
+        source_id = request.GET.get(self.copy_source_param)
+        if source_id:
+            source_campaign = self.get_object(request, source_id)
+            if source_campaign is None:
+                return
+            if not self.has_view_or_change_permission(request, source_campaign):
+                raise PermissionDenied
+            _copy_campaign_components(source_campaign, obj)
+            return
+
+        self._ensure_default_components(obj)
 
     def _ensure_default_components(self, campaign: EmailCampaign) -> None:
         if campaign.components.exists():

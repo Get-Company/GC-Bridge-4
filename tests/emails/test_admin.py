@@ -1,3 +1,4 @@
+from decimal import Decimal
 import pytest
 from django.test import SimpleTestCase
 from types import SimpleNamespace
@@ -367,3 +368,63 @@ class TestEmailCampaignAdminDefaultComponents:
         admin_instance._ensure_default_components(campaign)
 
         assert EmailCampaignComponent.objects.filter(campaign=campaign).count() == 1
+
+    def test_copy_campaign_components_preserves_products_and_tree(self):
+        from emails.admin import _copy_campaign_components
+        from emails.models import (
+            EmailCampaign,
+            EmailCampaignComponent,
+            EmailCampaignProduct,
+            MjmlComponent,
+        )
+        from products.models import Product
+
+        product = Product.objects.create(erp_nr="COPY-1", sku="COPY-1", name="Copy Product")
+        library_section = MjmlComponent.objects.create(name="Section", order=10)
+        library_text = MjmlComponent.objects.create(name="Text", order=20)
+        source_campaign = EmailCampaign.objects.create(internal_title="Quelle", status="draft")
+        target_campaign = EmailCampaign.objects.create(internal_title="Kopie", status="draft")
+        source_campaign_product = EmailCampaignProduct.objects.create(
+            campaign=source_campaign,
+            product=product,
+            special_price_override=Decimal("12.34"),
+            order=30,
+        )
+        root = EmailCampaignComponent.objects.create(
+            campaign=source_campaign,
+            library_component=library_section,
+            title="Root",
+            variables={"headline": {"text": "Hallo"}},
+            order=10,
+            enabled=True,
+        )
+        EmailCampaignComponent.objects.create(
+            campaign=source_campaign,
+            library_component=library_text,
+            parent=root,
+            campaign_product=source_campaign_product,
+            product=product,
+            title="Child",
+            variables={"body": "Text"},
+            order=20,
+            enabled=False,
+        )
+
+        _copy_campaign_components(source_campaign, target_campaign)
+
+        copied_product = EmailCampaignProduct.objects.get(campaign=target_campaign)
+        copied_components = list(
+            EmailCampaignComponent.objects.filter(campaign=target_campaign).order_by("order")
+        )
+
+        assert copied_product.product == product
+        assert copied_product.special_price_override == source_campaign_product.special_price_override
+        assert copied_product.prices_synced_at is None
+        assert len(copied_components) == 2
+        assert copied_components[0].title == "Root"
+        assert copied_components[0].variables == {"headline": {"text": "Hallo"}}
+        assert copied_components[1].title == "Child"
+        assert copied_components[1].parent == copied_components[0]
+        assert copied_components[1].campaign_product == copied_product
+        assert copied_components[1].product == product
+        assert copied_components[1].enabled is False
