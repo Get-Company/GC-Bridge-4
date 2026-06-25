@@ -113,6 +113,7 @@ class EmailCampaignComponent(BaseModel):
         verbose_name=_("Produkt"),
         help_text=_("Optionales Produkt fuer diese Kampagnen-Komponente."),
     )
+    title = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Titel"))
     variables = models.JSONField(
         default=dict,
         blank=True,
@@ -129,7 +130,8 @@ class EmailCampaignComponent(BaseModel):
 
     def __str__(self) -> str:
         placement = self.library_component.get_placement_display()
-        return f"{self.order} – {self.library_component.name} ({placement})"
+        title = self.title or self.library_component.name
+        return f"{self.order} – {title} ({placement})"
 
     def get_inline_title(self) -> str:
         return str(self)

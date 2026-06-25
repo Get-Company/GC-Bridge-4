@@ -390,6 +390,46 @@ class TestCampaignComponentRendering:
         assert "Kampagnentitel" in mjml
         assert "Standardtitel" not in mjml
 
+    def test_render_campaign_exposes_recipient_and_customer_context(self, monkeypatch):
+        def fake_render_to_string(template_name, context):
+            if template_name == "emails/newsletter_base.mjml":
+                return context["body_mjml"]
+            return ""
+
+        monkeypatch.setattr("emails.mjml.render_to_string", fake_render_to_string)
+        monkeypatch.setattr("emails.mjml._campaign_sales_channel_ids", lambda campaign: ())
+
+        lib = SimpleNamespace(
+            placement="body",
+            name="Recipient",
+            mjml_markup=(
+                "<mj-text>{{ recipient.salutation_display_name }} {{ recipient.last_name }} "
+                "{{ customer.erp_nr }} {{ is_customer }}</mj-text>"
+            ),
+            default_variables={},
+        )
+        component = SimpleNamespace(
+            library_component=lib,
+            library_component_id=True,
+            variables={},
+            order=10,
+            enabled=True,
+        )
+        recipient = SimpleNamespace(
+            salutation_display_name="Herr",
+            last_name="Muster",
+            is_customer=True,
+            customer=SimpleNamespace(erp_nr="10042"),
+        )
+        campaign = SimpleNamespace(
+            campaign_products=FakeQuerySet(),
+            components=FakeQuerySet([component]),
+        )
+
+        mjml = render_campaign_mjml(campaign, recipient=recipient)
+
+        assert "Herr Muster 10042 True" in mjml
+
     def test_render_campaign_exposes_latest_offer_valid_until_text(self, monkeypatch):
         def fake_render_to_string(template_name, context):
             if template_name == "emails/newsletter_base.mjml":
@@ -487,6 +527,18 @@ class TestEmailCampaignComponentStr:
             order=10,
         )
         assert str(comp) == "10 – Logo (Body (Inhaltsbereich))"
+
+    def test_str_uses_component_title_when_present(self):
+        from emails.models import EmailCampaign, EmailCampaignComponent, MjmlComponent
+        lib = MjmlComponent.objects.create(name="Logo", placement="body", order=10)
+        campaign = EmailCampaign.objects.create(internal_title="T", status="draft")
+        comp = EmailCampaignComponent(
+            campaign=campaign,
+            library_component=lib,
+            title="Hero",
+            order=10,
+        )
+        assert str(comp) == "10 – Hero (Body (Inhaltsbereich))"
 
 
 @pytest.mark.django_db

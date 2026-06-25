@@ -41,6 +41,19 @@ class CustomerService(Shopware6Service):
         ))
         return self.request_post(self.search_path, payload=criteria)
 
+    def get_by_email(
+        self,
+        *,
+        email: str,
+        sales_channel_id: str = "",
+        limit: int = 1,
+    ) -> dict[str, Any]:
+        criteria = self._base_customer_criteria(limit=limit)
+        criteria.filter.append(EqualsFilter(field="email", value=email))
+        if sales_channel_id:
+            criteria.filter.append(EqualsFilter(field="salesChannelId", value=sales_channel_id))
+        return self.request_post(self.search_path, payload=criteria)
+
     def update_customer(self, customer_id: str, payload: dict[str, Any]) -> Any:
         customer_id = str(customer_id).strip()
         if not customer_id:

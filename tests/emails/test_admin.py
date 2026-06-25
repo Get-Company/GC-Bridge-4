@@ -32,6 +32,10 @@ class TestMjmlComponentAdminRegistered(SimpleTestCase):
         assert "{{ children }}" in html
         assert "Zeile 2" in html
         assert "Produkt-Kontext" in html
+        assert "Empfaenger-" in html
+        assert "Kunden-Kontext" in html
+        assert "recipient.email" in html
+        assert "customer.erp_nr" in html
 
 
 class TestEmailCampaignAdmin(SimpleTestCase):
@@ -39,6 +43,18 @@ class TestEmailCampaignAdmin(SimpleTestCase):
         from emails.admin import EmailCampaignAdmin, EmailCampaignComponentInline
 
         assert EmailCampaignAdmin.inlines == (EmailCampaignComponentInline,)
+
+    def test_campaign_admin_shows_recipient_customer_context_info(self):
+        from django.contrib.admin.sites import AdminSite
+        from emails.admin import EmailCampaignAdmin
+        from emails.models import EmailCampaign
+
+        admin_instance = EmailCampaignAdmin(EmailCampaign, AdminSite())
+        html = str(admin_instance.campaign_context_info(EmailCampaign(internal_title="Test")))
+
+        assert "recipient.email" in html
+        assert "recipient.salutation_display_name" in html
+        assert "customer.erp_nr" in html
 
 
 class TestEmailCampaignComponentInline(SimpleTestCase):
@@ -91,19 +107,23 @@ class TestEmailCampaignComponentInline(SimpleTestCase):
         from emails.models import EmailCampaign
 
         inline = EmailCampaignComponentInline(EmailCampaign, AdminSite())
-        root = SimpleNamespace(id=1, pk=1, parent=None, library_component=SimpleNamespace(name="Section"))
-        child = SimpleNamespace(id=2, pk=2, parent=root, library_component=SimpleNamespace(name="Column"))
+        root = SimpleNamespace(id=1, pk=1, parent=None, order=10, title="", library_component=SimpleNamespace(name="Section"))
+        child = SimpleNamespace(id=2, pk=2, parent=root, order=20, title="", library_component=SimpleNamespace(name="Column"))
         grandchild = SimpleNamespace(
             id=3,
             pk=3,
             parent=child,
+            order=30,
+            title="Eigener Titel",
             library_component=SimpleNamespace(name="Text"),
         )
 
         html = str(inline.tree_position(grandchild))
 
         assert "--" in html
-        assert "Text" in html
+        assert "30" in html
+        assert "drag_indicator" in html
+        assert "Eigener Titel" in html
 
     def test_default_variables_info_field_is_shown_before_campaign_variables(self):
         from emails.admin import EmailCampaignComponentInline

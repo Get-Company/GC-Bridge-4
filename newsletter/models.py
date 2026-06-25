@@ -7,20 +7,53 @@ from core.models import BaseModel
 
 
 class NewsletterRecipient(BaseModel):
+    class Status(models.TextChoices):
+        NOT_SET = "notSet", _("Nicht bestaetigt")
+        OPT_IN = "optIn", _("Bestaetigt")
+        OPT_OUT = "optOut", _("Abgemeldet")
+        DIRECT = "direct", _("Direkt aktiv")
+
     shopware_id = models.CharField(
         max_length=36,
         unique=True,
         db_index=True,
         verbose_name=_("Shopware ID"),
     )
+    customer_shopware_id = models.CharField(
+        max_length=36,
+        blank=True,
+        default="",
+        db_index=True,
+        verbose_name=_("Shopware Kunden-ID"),
+    )
+    customer = models.ForeignKey(
+        "customer.Customer",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="newsletter_recipients",
+        verbose_name=_("Django Kunde"),
+    )
+    is_customer = models.BooleanField(default=False, db_index=True, verbose_name=_("Ist Kunde"))
     email = models.EmailField(max_length=255, db_index=True, verbose_name=_("E-Mail"))
     title = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Titel"))
+    salutation_id = models.CharField(max_length=36, blank=True, default="", verbose_name=_("Anrede ID"))
+    salutation_key = models.CharField(max_length=64, blank=True, default="", verbose_name=_("Anrede Schluessel"))
+    salutation_display_name = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Anrede"))
+    salutation_letter_name = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Briefanrede"))
     first_name = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Vorname"))
     last_name = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Nachname"))
     zip_code = models.CharField(max_length=64, blank=True, default="", verbose_name=_("PLZ"))
     city = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Ort"))
     street = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Strasse"))
-    status = models.CharField(max_length=64, blank=True, default="", db_index=True, verbose_name=_("Status"))
+    status = models.CharField(
+        max_length=64,
+        choices=Status.choices,
+        blank=True,
+        default="",
+        db_index=True,
+        verbose_name=_("Status"),
+    )
     hash = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Hash"))
     sales_channel_id = models.CharField(
         max_length=36,
@@ -54,6 +87,10 @@ class NewsletterRecipient(BaseModel):
     @property
     def full_name(self) -> str:
         return " ".join(part for part in (self.title, self.first_name, self.last_name) if part).strip()
+
+    @property
+    def is_active_status(self) -> bool:
+        return self.status in {self.Status.DIRECT, self.Status.OPT_IN}
 
     def __str__(self) -> str:
         return f"{self.email} | {self.status or '-'}"

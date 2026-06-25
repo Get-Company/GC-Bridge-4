@@ -40,6 +40,29 @@ _PRODUCT_EMAIL_FIELDS = (
     ("product.images", "sortierte Produktbilder"),
     ("product.first_image", "erstes Produktbild"),
 )
+_RECIPIENT_EMAIL_FIELDS = (
+    ("recipient.email", "Newsletter-E-Mail-Adresse"),
+    ("recipient.salutation_display_name", "Anrede, z. B. Herr/Frau"),
+    ("recipient.salutation_letter_name", "Briefanrede aus Shopware"),
+    ("recipient.first_name", "Vorname"),
+    ("recipient.last_name", "Nachname"),
+    ("recipient.full_name", "Titel, Vorname und Nachname"),
+    ("recipient.street", "Strasse aus Newsletter-Anmeldung"),
+    ("recipient.zip_code", "PLZ aus Newsletter-Anmeldung"),
+    ("recipient.city", "Ort aus Newsletter-Anmeldung"),
+    ("recipient.status", "Shopware Newsletter-Status"),
+    ("recipient.is_customer", "true/false, ob ein Django-Kunde verknuepft wurde"),
+    ("recipient.custom_fields", "Shopware Custom Fields"),
+)
+_CUSTOMER_EMAIL_FIELDS = (
+    ("customer.erp_nr", "ERP-Kundennummer"),
+    ("customer.name", "Kundenname"),
+    ("customer.email", "Kunden-E-Mail"),
+    ("customer.api_id", "Shopware Kunden-ID"),
+    ("customer.vat_id", "USt-IdNr"),
+    ("customer.is_gross", "Bruttopreise true/false"),
+    ("is_customer", "true/false Alias fuer recipient.is_customer"),
+)
 _CHILDREN_SLOT_RE = re.compile(r"\{\{\s*children\s*\}\}")
 
 
@@ -48,6 +71,31 @@ def _children_slot_location(markup: str) -> tuple[int, str] | None:
         if _CHILDREN_SLOT_RE.search(line):
             return line_number, line.strip()
     return None
+
+
+def _recipient_customer_context_info_html():
+    return format_html(
+        "<section><h3 style='margin:0 0 8px;font-weight:600'>Empfaenger- & Kunden-Kontext</h3>"
+        "<p>Beim personalisierten Rendern stehen <code>recipient</code>, "
+        "<code>newsletter_recipient</code>, <code>customer</code> und <code>is_customer</code> "
+        "im Template zur Verfuegung. Ohne konkreten Empfaenger bleiben diese Felder leer.</p>"
+        "<h4 style='margin:12px 0 6px;font-weight:600'>Newsletter-Empfaenger</h4><ul>{}</ul>"
+        "<h4 style='margin:12px 0 6px;font-weight:600'>Kunde</h4><ul>{}</ul>"
+        "<p>Beispiel: <code>{{{{ recipient.salutation_display_name }}}} "
+        "{{{{ recipient.last_name }}}}</code> oder "
+        "<code>{{{{ customer.erp_nr }}}}</code>.</p>"
+        "</section>",
+        format_html_join(
+            "",
+            "<li><code>{{{{ {} }}}}</code> <span style='color:#666'>({})</span></li>",
+            _RECIPIENT_EMAIL_FIELDS,
+        ),
+        format_html_join(
+            "",
+            "<li><code>{{{{ {} }}}}</code> <span style='color:#666'>({})</span></li>",
+            _CUSTOMER_EMAIL_FIELDS,
+        ),
+    )
 
 
 def _component_identity(component: EmailCampaignComponent) -> int:
@@ -316,6 +364,7 @@ class MjmlComponentAdmin(BaseAdmin):
             "<h4 style='margin:12px 0 6px;font-weight:600'>E-Mail-spezifische Felder</h4><ul>{}</ul>"
             "<p>Preisformatierung: <code>{{{{ product.price|format_price }}}}</code></p>"
             "</section>"
+            "{}"
             "</div>",
             children_info,
             format_html_join(
@@ -328,6 +377,7 @@ class MjmlComponentAdmin(BaseAdmin):
                 "<li><code>{{{{ {} }}}}</code> <span style='color:#666'>({})</span></li>",
                 _PRODUCT_EMAIL_FIELDS,
             ),
+            _recipient_customer_context_info_html(),
         )
 
     product_template_variables = component_info
@@ -343,7 +393,7 @@ class EmailCampaignComponentInline(BaseStackedInline):
         (
             None,
             {
-                "fields": ("tree_position", "order", "library_component", "variables"),
+                "fields": ("tree_position", "order", "title", "library_component", "variables"),
             },
         ),
         (
@@ -412,17 +462,26 @@ class EmailCampaignComponentInline(BaseStackedInline):
     @admin.display(description=_("Baum"))
     def tree_position(self, obj: EmailCampaignComponent):
         if not getattr(obj, "pk", None):
-            return format_html("<span style='color:#6b7280'>{}</span>", _("Neue Komponente"))
+            return format_html(
+                "<h3 style='margin:0;font-size:14px;font-weight:600;color:#6b7280'>{}</h3>",
+                _("Neue Komponente"),
+            )
 
         depth = _component_tree_depth(obj)
         prefix = "-" * depth
-        component_name = getattr(getattr(obj, "library_component", None), "name", str(obj))
+        component_title = obj.title or getattr(getattr(obj, "library_component", None), "name", str(obj))
         return format_html(
-            "<div style='margin-left:{}px;font-family:monospace'>"
-            "<span style='color:#6b7280'>{}</span> {}</div>",
+            "<h3 style='margin:0 0 4px {}px;display:flex;align-items:center;gap:8px;"
+            "font-size:14px;line-height:20px;font-weight:600;color:#111827'>"
+            "<span class='material-symbols-outlined' style='font-size:18px;color:#9ca3af'>drag_indicator</span>"
+            "<span style='font-family:monospace;color:#6b7280'>{}</span>"
+            "<span style='font-family:monospace;color:#9ca3af'>{}</span>"
+            "<span>{}</span>"
+            "</h3>",
             depth * 24,
+            obj.order,
             prefix,
-            component_name,
+            component_title,
         )
 
     @admin.display(description=_("Aktueller Preis"))
@@ -516,6 +575,13 @@ class EmailCampaignAdmin(BaseAdmin):
             },
         ),
         (
+            _("Info"),
+            {
+                "fields": ("campaign_context_info",),
+                "classes": ("collapse",),
+            },
+        ),
+        (
             _("System"),
             {
                 "fields": BaseAdmin.readonly_fields,
@@ -523,6 +589,7 @@ class EmailCampaignAdmin(BaseAdmin):
             },
         ),
     )
+    readonly_fields = BaseAdmin.readonly_fields + ("campaign_context_info",)
 
     @admin.display(description=_("Produkte"))
     def product_count(self, obj: EmailCampaign) -> int:
@@ -533,6 +600,13 @@ class EmailCampaignAdmin(BaseAdmin):
     @admin.display(description=_("Komponenten"))
     def component_count(self, obj: EmailCampaign) -> int:
         return obj.components.count()
+
+    @admin.display(description=_("Kampagnen-Info"))
+    def campaign_context_info(self, obj: EmailCampaign):
+        return format_html(
+            "<div style='display:grid;gap:16px'>{}</div>",
+            _recipient_customer_context_info_html(),
+        )
 
     def save_formset(self, request, form, formset, change):
         instances = formset.save(commit=False)
@@ -571,6 +645,7 @@ class EmailCampaignAdmin(BaseAdmin):
                 EmailCampaignComponent(
                     campaign=campaign,
                     library_component=lib_component,
+                    title=lib_component.name,
                     variables={},
                     order=index * 10,
                     enabled=True,

@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import tempfile
 from decimal import Decimal, ROUND_UP
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, Iterable
 from urllib.parse import quote_plus
 
@@ -14,6 +15,7 @@ from django.template.loader import render_to_string
 
 if TYPE_CHECKING:
     from emails.models import EmailCampaign, EmailCampaignComponent
+    from newsletter.models import NewsletterRecipient
 
 
 def _format_price(value, decimals: int = 2) -> str:
@@ -200,6 +202,52 @@ def campaign_offer_context(products: Iterable[ProductEmailProxy]) -> dict:
     }
 
 
+def _empty_recipient_context() -> SimpleNamespace:
+    customer = SimpleNamespace(
+        erp_nr="",
+        erp_id=None,
+        name="",
+        email="",
+        api_id="",
+        vat_id="",
+        is_gross=True,
+    )
+    return SimpleNamespace(
+        shopware_id="",
+        customer_shopware_id="",
+        customer=customer,
+        is_customer=False,
+        email="",
+        title="",
+        salutation_id="",
+        salutation_key="",
+        salutation_display_name="",
+        salutation_letter_name="",
+        first_name="",
+        last_name="",
+        full_name="",
+        zip_code="",
+        city="",
+        street="",
+        status="",
+        confirmed_at=None,
+        custom_fields={},
+    )
+
+
+def recipient_context(recipient: "NewsletterRecipient | None" = None) -> dict:
+    """Builds the recipient/customer variables exposed to MJML templates."""
+    empty_recipient = _empty_recipient_context()
+    recipient = recipient or empty_recipient
+    customer = getattr(recipient, "customer", None) or empty_recipient.customer
+    return {
+        "recipient": recipient,
+        "newsletter_recipient": recipient,
+        "customer": customer,
+        "is_customer": bool(getattr(recipient, "is_customer", False)),
+    }
+
+
 def _campaign_components(campaign: "EmailCampaign") -> list["EmailCampaignComponent"]:
     return list(
         campaign.components.filter(enabled=True)
@@ -314,7 +362,11 @@ def _render_component_mjml(
         return ""
 
 
-def render_campaign_mjml(campaign: "EmailCampaign") -> str:
+def render_campaign_mjml(
+    campaign: "EmailCampaign",
+    *,
+    recipient: "NewsletterRecipient | None" = None,
+) -> str:
     """Renders a campaign to a MJML string using Jinja2 component templates."""
     sales_channel_ids = _campaign_sales_channel_ids(campaign)
 
@@ -335,6 +387,7 @@ def render_campaign_mjml(campaign: "EmailCampaign") -> str:
     base_context = {
         "products": products,
         "_sales_channel_ids": sales_channel_ids,
+        **recipient_context(recipient),
         **campaign_offer_context(products),
     }
     child_map = _component_children_map(components)
