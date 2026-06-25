@@ -100,7 +100,8 @@ class NewsletterRecipientAdmin(BaseAdmin):
     def customer_badge(self, obj: NewsletterRecipient):
         if not obj.customer_id:
             return format_html(
-                '<span style="color:#dc2626;font-weight:600;white-space:nowrap;">Nein</span>'
+                '<span style="color:#dc2626;font-weight:600;white-space:nowrap;">{}</span>',
+                "Nein",
             )
 
         url = reverse("admin:customer_customer_change", args=(obj.customer_id,))
