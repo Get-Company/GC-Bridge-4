@@ -1,6 +1,7 @@
 from datetime import timedelta
 from urllib.parse import urlencode
 
+from celery import current_app
 from django.contrib import admin, messages
 from django.contrib.admin.sites import NotRegistered
 from django.contrib.admin.utils import quote
@@ -254,6 +255,7 @@ class UnfoldTaskSelectWidget(UnfoldAdminSelectWidget, BeatTaskSelectWidget):
 
 class _PeriodicTaskForm(BeatPeriodicTaskForm):
     def __init__(self, *args, **kwargs):
+        current_app.autodiscover_tasks(force=True)
         super().__init__(*args, **kwargs)
         self.fields["task"].widget = UnfoldAdminTextInputWidget()
         self.fields["regtask"].widget = UnfoldTaskSelectWidget()

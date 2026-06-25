@@ -155,6 +155,24 @@ CELERY_ADMIN_TASKS: tuple[TaskDefinition, ...] = (
             TaskField("campaign_pk", "Kampagne ID", "int", ""),
         ),
     ),
+    TaskDefinition(
+        name="newsletter.shopware_sync_recipients",
+        label="Newsletter-Empfaenger importieren",
+        description="Newsletter-Empfaenger aus Shopware per api/search/newsletter-recipient nach Django synchronisieren.",
+        fields=(
+            TaskField("limit", "Limit", "int", "", "Leer lassen fuer alle Empfaenger."),
+            TaskField("page_size", "Batch-Groesse", "int", 100),
+            TaskField("status", "Status", "text", "", "Optionaler Shopware-Statusfilter."),
+            TaskField("email", "E-Mail Suche", "text", "", "Optionaler E-Mail-Suchfilter."),
+            TaskField(
+                "mark_missing",
+                "Fehlende markieren",
+                "bool",
+                False,
+                "Nur bei Vollsync ohne Filter: nicht mehr gefundene Empfaenger lokal markieren.",
+            ),
+        ),
+    ),
 )
 
 
