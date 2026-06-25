@@ -4,6 +4,7 @@ import calendar
 from decimal import Decimal, ROUND_UP
 
 from django.db import transaction
+from django.utils import timezone
 
 from core.services import BaseService
 from emails.mjml import compile_mjml_to_html, render_campaign_mjml
@@ -57,12 +58,24 @@ class EmailCampaignQueueService(BaseService):
         mjml = render_campaign_mjml(campaign, recipient=recipient)
         html = compile_mjml_to_html(mjml)
 
-        return self.model.objects.create(
-            campaign=campaign,
-            recipient=recipient,
-            customer=recipient.customer,
-            email=recipient.email,
-            subject=campaign.internal_title,
-            rendered_mjml=mjml,
-            rendered_html=html,
+        entry = (
+            self.model.objects.select_for_update()
+            .filter(campaign=campaign, recipient=recipient)
+            .order_by("-queued_at", "-pk")
+            .first()
         )
+        if entry is None:
+            entry = self.model(campaign=campaign, recipient=recipient)
+
+        entry.recipient = recipient
+        entry.customer = recipient.customer
+        entry.email = recipient.email
+        entry.subject = campaign.internal_title
+        entry.status = self.model.Status.QUEUED
+        entry.rendered_mjml = mjml
+        entry.rendered_html = html
+        entry.error_message = ""
+        entry.sent_at = None
+        entry.queued_at = timezone.now()
+        entry.save()
+        return entry

@@ -246,6 +246,33 @@ class TestEmailVariableJSONForms(SimpleTestCase):
             field.clean('{"description": "<p>ungeschlossene JSON-Struktur"')
 
 
+class TestEmailCampaignQueueEntryAdmin(SimpleTestCase):
+    def test_queue_admin_shows_rendered_html_preview_only(self):
+        from emails.admin import EmailCampaignQueueEntryAdmin
+
+        rendered_fields = EmailCampaignQueueEntryAdmin.fieldsets[2][1]["fields"]
+
+        assert rendered_fields == ("rendered_html_preview",)
+        assert "rendered_html_preview" in EmailCampaignQueueEntryAdmin.readonly_fields
+        assert "rendered_html" not in EmailCampaignQueueEntryAdmin.readonly_fields
+        assert "rendered_mjml" not in EmailCampaignQueueEntryAdmin.readonly_fields
+
+    def test_rendered_html_preview_uses_iframe_srcdoc(self):
+        from django.contrib.admin.sites import AdminSite
+
+        from emails.admin import EmailCampaignQueueEntryAdmin
+        from emails.models import EmailCampaignQueueEntry
+
+        admin_instance = EmailCampaignQueueEntryAdmin(EmailCampaignQueueEntry, AdminSite())
+        obj = SimpleNamespace(rendered_html="<html><body><h1>Hallo</h1></body></html>")
+
+        html = str(admin_instance.rendered_html_preview(obj))
+
+        assert "<iframe" in html
+        assert "srcdoc=" in html
+        assert "&lt;h1&gt;Hallo&lt;/h1&gt;" in html
+
+
 @pytest.mark.django_db
 class TestEmailCampaignAdminDefaultComponents:
     def test_default_components_created_on_new_campaign(self):

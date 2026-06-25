@@ -42,3 +42,106 @@ class TestApplyCampaignSpecialPrices:
 
         assert result == []
         campaign.components.select_related.assert_not_called()
+
+
+class TestEmailCampaignQueueService:
+    @pytest.mark.django_db
+    @patch("emails.services.compile_mjml_to_html", return_value="<html>neu</html>")
+    @patch("emails.services.render_campaign_mjml", return_value="<mjml>neu</mjml>")
+    def test_overwrites_existing_entry_for_same_campaign_and_recipient(
+        self,
+        render_campaign_mjml,
+        compile_mjml_to_html,
+    ):
+        from django.utils import timezone
+
+        from emails.models import EmailCampaign, EmailCampaignQueueEntry
+        from emails.services import EmailCampaignQueueService
+        from newsletter.models import NewsletterRecipient
+
+        campaign = EmailCampaign.objects.create(internal_title="Sommeraktion")
+        recipient = NewsletterRecipient.objects.create(
+            shopware_id="recipient",
+            email="neu@example.com",
+            status=NewsletterRecipient.Status.OPT_IN,
+            selected_email_campaign=campaign,
+        )
+        existing_entry = EmailCampaignQueueEntry.objects.create(
+            campaign=campaign,
+            recipient=recipient,
+            email="alt@example.com",
+            subject="Alter Betreff",
+            status=EmailCampaignQueueEntry.Status.FAILED,
+            rendered_mjml="<mjml>alt</mjml>",
+            rendered_html="<html>alt</html>",
+            error_message="Fehler",
+            sent_at=timezone.now(),
+        )
+
+        queued_entry = EmailCampaignQueueService().queue_recipient_campaign(recipient)
+
+        assert queued_entry.pk == existing_entry.pk
+        assert EmailCampaignQueueEntry.objects.filter(campaign=campaign, recipient=recipient).count() == 1
+        assert queued_entry.recipient == recipient
+        assert queued_entry.email == "neu@example.com"
+        assert queued_entry.subject == "Sommeraktion"
+        assert queued_entry.status == EmailCampaignQueueEntry.Status.QUEUED
+        assert queued_entry.rendered_mjml == "<mjml>neu</mjml>"
+        assert queued_entry.rendered_html == "<html>neu</html>"
+        assert queued_entry.error_message == ""
+        assert queued_entry.sent_at is None
+        render_campaign_mjml.assert_called_once_with(campaign, recipient=recipient)
+        compile_mjml_to_html.assert_called_once_with("<mjml>neu</mjml>")
+
+    @pytest.mark.django_db
+    @patch("emails.services.compile_mjml_to_html", return_value="<html>neu</html>")
+    @patch("emails.services.render_campaign_mjml", return_value="<mjml>neu</mjml>")
+    def test_same_customer_with_different_recipient_gets_separate_queue_entry(
+        self,
+        render_campaign_mjml,
+        compile_mjml_to_html,
+    ):
+        from customer.models import Customer
+        from emails.models import EmailCampaign, EmailCampaignQueueEntry
+        from emails.services import EmailCampaignQueueService
+        from newsletter.models import NewsletterRecipient
+
+        campaign = EmailCampaign.objects.create(internal_title="Newsletter")
+        customer = Customer.objects.create(erp_nr="10001", name="Classei")
+        old_recipient = NewsletterRecipient.objects.create(
+            shopware_id="recipient-old",
+            customer=customer,
+            is_customer=True,
+            email="alt@example.com",
+            status=NewsletterRecipient.Status.OPT_IN,
+            selected_email_campaign=campaign,
+        )
+        recipient = NewsletterRecipient.objects.create(
+            shopware_id="recipient-new",
+            customer=customer,
+            is_customer=True,
+            email="neu@example.com",
+            status=NewsletterRecipient.Status.OPT_IN,
+            selected_email_campaign=campaign,
+        )
+        existing_entry = EmailCampaignQueueEntry.objects.create(
+            campaign=campaign,
+            recipient=old_recipient,
+            customer=customer,
+            email="alt@example.com",
+            subject="Alt",
+            status=EmailCampaignQueueEntry.Status.CANCELLED,
+            rendered_mjml="<mjml>alt</mjml>",
+            rendered_html="<html>alt</html>",
+        )
+
+        queued_entry = EmailCampaignQueueService().queue_recipient_campaign(recipient)
+
+        assert queued_entry.pk != existing_entry.pk
+        assert EmailCampaignQueueEntry.objects.filter(campaign=campaign, customer=customer).count() == 2
+        assert queued_entry.recipient == recipient
+        assert queued_entry.customer == customer
+        assert queued_entry.email == "neu@example.com"
+        assert queued_entry.status == EmailCampaignQueueEntry.Status.QUEUED
+        render_campaign_mjml.assert_called_once_with(campaign, recipient=recipient)
+        compile_mjml_to_html.assert_called_once_with("<mjml>neu</mjml>")

@@ -710,8 +710,7 @@ class EmailCampaignQueueEntryAdmin(BaseAdmin):
         "customer",
         "email",
         "subject",
-        "rendered_mjml",
-        "rendered_html",
+        "rendered_html_preview",
         "queued_at",
     )
     fieldsets = (
@@ -728,10 +727,9 @@ class EmailCampaignQueueEntryAdmin(BaseAdmin):
             },
         ),
         (
-            _("Gerenderte Inhalte"),
+            _("E-Mail Vorschau"),
             {
-                "fields": ("rendered_html", "rendered_mjml"),
-                "classes": ("collapse",),
+                "fields": ("rendered_html_preview",),
             },
         ),
         (
@@ -742,3 +740,14 @@ class EmailCampaignQueueEntryAdmin(BaseAdmin):
             },
         ),
     )
+
+    @admin.display(description=_("Gerenderte HTML E-Mail"))
+    def rendered_html_preview(self, obj: EmailCampaignQueueEntry):
+        if not obj.rendered_html:
+            return "—"
+        return format_html(
+            '<iframe sandbox="" srcdoc="{}" '
+            'style="width:100%;min-height:720px;border:1px solid #d1d5db;'
+            'border-radius:6px;background:#fff;"></iframe>',
+            obj.rendered_html,
+        )
