@@ -63,7 +63,7 @@ class NewsletterRecipientAdmin(BaseAdmin):
         "raw_data",
     )
     actions_list = ("sync_from_shopware_list",)
-    actions_detail = ("queue_selected_campaign_detail",)
+    actions_submit_line = ("queue_selected_campaign_submit",)
     actions = ("queue_selected_campaign", "sync_from_shopware")
     autocomplete_fields = ("selected_email_campaign",)
 
@@ -191,13 +191,18 @@ class NewsletterRecipientAdmin(BaseAdmin):
         icon="outbox",
         variant=ActionVariant.PRIMARY,
     )
-    def queue_selected_campaign_detail(self, request, object_id: str):
-        recipient = self.get_object(request, object_id)
+    def queue_selected_campaign_submit(self, request, obj: NewsletterRecipient):
+        recipient = obj
         if not recipient:
             self.message_user(request, "Newsletter-Empfaenger nicht gefunden.", level=messages.ERROR)
-            return self._redirect_to_changelist()
+            return
         self._queue_recipients(request, [recipient])
-        return self._redirect_to_change_page(object_id)
+
+    def response_change(self, request, obj):
+        action_name = self.get_unfold_action("queue_selected_campaign_submit").action_name
+        if action_name in request.POST:
+            return self._redirect_to_change_page(str(obj.pk))
+        return super().response_change(request, obj)
 
     @action(
         description="Ausgewaehlte Kampagne in Warteschlange legen",
