@@ -2386,3 +2386,10 @@ class MicrotechUpdateProductAllFlagTest(SimpleTestCase):
 
         mock_product_cls.objects.values_list.assert_called_once_with("erp_nr", flat=True)
         self.assertEqual(mock_erp.update_product.call_count, 2)
+
+
+class ProductSyncJobTargetTest(SimpleTestCase):
+    def test_microtech_target_choice_exists(self):
+        self.assertEqual(ProductSyncJob.Target.MICROTECH, "microtech")
+        choices = dict(ProductSyncJob.Target.choices)
+        self.assertIn("microtech", choices)

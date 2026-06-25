@@ -315,6 +315,7 @@ class Product(BaseModel):
 class ProductSyncJob(BaseModel):
     class Target(models.TextChoices):
         SHOPWARE = "shopware", _("Shopware")
+        MICROTECH = "microtech", _("Microtech")
 
     class Status(models.TextChoices):
         QUEUED = "queued", _("Wartend")
