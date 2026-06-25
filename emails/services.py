@@ -3,6 +3,12 @@ from __future__ import annotations
 import calendar
 from decimal import Decimal, ROUND_UP
 
+from django.db import transaction
+
+from core.services import BaseService
+from emails.mjml import compile_mjml_to_html, render_campaign_mjml
+from emails.models import EmailCampaignQueueEntry
+
 
 def _round_up_5ct(value: Decimal) -> Decimal:
     step = Decimal("0.05")
@@ -32,3 +38,31 @@ def apply_campaign_special_prices(campaign) -> list[str]:
     during rendering through ProductEmailProxy.
     """
     return []
+
+
+class EmailCampaignQueueService(BaseService):
+    model = EmailCampaignQueueEntry
+
+    @transaction.atomic
+    def queue_recipient_campaign(self, recipient) -> EmailCampaignQueueEntry:
+        campaign = recipient.selected_email_campaign
+
+        if campaign is None:
+            raise ValueError("Keine E-Mail Kampagne am Empfaenger ausgewaehlt.")
+        if not recipient.email:
+            raise ValueError("Empfaenger hat keine E-Mail Adresse.")
+        if not recipient.is_active_status:
+            raise ValueError(f"Empfaenger ist nicht aktiv (Status: {recipient.status or '-'}).")
+
+        mjml = render_campaign_mjml(campaign, recipient=recipient)
+        html = compile_mjml_to_html(mjml)
+
+        return self.model.objects.create(
+            campaign=campaign,
+            recipient=recipient,
+            customer=recipient.customer,
+            email=recipient.email,
+            subject=campaign.internal_title,
+            rendered_mjml=mjml,
+            rendered_html=html,
+        )

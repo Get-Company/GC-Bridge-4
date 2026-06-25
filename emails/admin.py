@@ -20,6 +20,7 @@ from emails.mjml import compile_mjml_to_html, render_campaign_mjml
 from emails.models import (
     EmailCampaign,
     EmailCampaignComponent,
+    EmailCampaignQueueEntry,
     MjmlComponent,
 )
 
@@ -685,3 +686,59 @@ class EmailCampaignAdmin(BaseAdmin):
             return response
 
         return JsonResponse({"html": html, "mjml": mjml})
+
+
+@admin.register(EmailCampaignQueueEntry)
+class EmailCampaignQueueEntryAdmin(BaseAdmin):
+    list_display = ("email", "campaign", "recipient", "customer", "status", "queued_at", "sent_at")
+    list_filter = ("status", "campaign", "queued_at", "sent_at")
+    search_fields = (
+        "email",
+        "subject",
+        "campaign__internal_title",
+        "recipient__email",
+        "recipient__first_name",
+        "recipient__last_name",
+        "customer__erp_nr",
+        "customer__name",
+        "customer__email",
+    )
+    autocomplete_fields = ("campaign", "recipient", "customer")
+    readonly_fields = BaseAdmin.readonly_fields + (
+        "campaign",
+        "recipient",
+        "customer",
+        "email",
+        "subject",
+        "rendered_mjml",
+        "rendered_html",
+        "queued_at",
+    )
+    fieldsets = (
+        (
+            _("Warteschlange"),
+            {
+                "fields": ("campaign", "recipient", "customer", "email", "subject", "status"),
+            },
+        ),
+        (
+            _("Versand"),
+            {
+                "fields": ("queued_at", "sent_at", "error_message"),
+            },
+        ),
+        (
+            _("Gerenderte Inhalte"),
+            {
+                "fields": ("rendered_html", "rendered_mjml"),
+                "classes": ("collapse",),
+            },
+        ),
+        (
+            _("System"),
+            {
+                "fields": BaseAdmin.readonly_fields,
+                "classes": ("collapse",),
+            },
+        ),
+    )

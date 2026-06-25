@@ -415,6 +415,12 @@ UNFOLD = {
                         "permission": sidebar_model_view_permission("emails", "EmailCampaign"),
                     },
                     {
+                        "title": _("Warteschlange"),
+                        "icon": "outbox",
+                        "link": reverse_lazy("admin:emails_emailcampaignqueueentry_changelist"),
+                        "permission": sidebar_model_view_permission("emails", "EmailCampaignQueueEntry"),
+                    },
+                    {
                         "title": _("Komponenten"),
                         "icon": "widgets",
                         "link": reverse_lazy("admin:emails_mjmlcomponent_changelist"),

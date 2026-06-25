@@ -79,6 +79,61 @@ class EmailCampaign(BaseModel):
         return self.internal_title
 
 
+class EmailCampaignQueueEntry(BaseModel):
+    class Status(models.TextChoices):
+        QUEUED = "queued", _("Wartet")
+        SENDING = "sending", _("Wird gesendet")
+        SENT = "sent", _("Gesendet")
+        FAILED = "failed", _("Fehler")
+        CANCELLED = "cancelled", _("Abgebrochen")
+
+    campaign = models.ForeignKey(
+        EmailCampaign,
+        on_delete=models.PROTECT,
+        related_name="queue_entries",
+        verbose_name=_("Kampagne"),
+    )
+    recipient = models.ForeignKey(
+        "newsletter.NewsletterRecipient",
+        on_delete=models.PROTECT,
+        related_name="email_queue_entries",
+        verbose_name=_("Newsletter Empfaenger"),
+    )
+    customer = models.ForeignKey(
+        "customer.Customer",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="email_queue_entries",
+        verbose_name=_("Kunde"),
+    )
+    email = models.EmailField(max_length=255, db_index=True, verbose_name=_("E-Mail"))
+    subject = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Betreff"))
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.QUEUED,
+        db_index=True,
+        verbose_name=_("Status"),
+    )
+    rendered_mjml = models.TextField(blank=True, default="", verbose_name=_("Gerendertes MJML"))
+    rendered_html = models.TextField(blank=True, default="", verbose_name=_("Gerendertes HTML"))
+    error_message = models.TextField(blank=True, default="", verbose_name=_("Fehlermeldung"))
+    queued_at = models.DateTimeField(auto_now_add=True, db_index=True, verbose_name=_("Eingereiht am"))
+    sent_at = models.DateTimeField(null=True, blank=True, verbose_name=_("Gesendet am"))
+
+    class Meta:
+        verbose_name = _("E-Mail Warteschlangen-Eintrag")
+        verbose_name_plural = _("E-Mail Warteschlange")
+        ordering = ("-queued_at",)
+        indexes = [
+            models.Index(fields=("status", "queued_at"), name="email_queue_status_queued_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.email} | {self.campaign} | {self.status}"
+
+
 class EmailCampaignComponent(BaseModel):
     campaign = models.ForeignKey(
         EmailCampaign,

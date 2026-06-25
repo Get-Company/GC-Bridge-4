@@ -34,6 +34,15 @@ class NewsletterRecipient(BaseModel):
         related_name="newsletter_recipients",
         verbose_name=_("Django Kunde"),
     )
+    selected_email_campaign = models.ForeignKey(
+        "emails.EmailCampaign",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="selected_newsletter_recipients",
+        verbose_name=_("Ausgewaehlte E-Mail Kampagne"),
+        help_text=_("Diese Kampagne wird fuer die Queue-Action dieses Empfaengers gerendert."),
+    )
     is_customer = models.BooleanField(default=False, db_index=True, verbose_name=_("Ist Kunde"))
     email = models.EmailField(max_length=255, db_index=True, verbose_name=_("E-Mail"))
     title = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Titel"))

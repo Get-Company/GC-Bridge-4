@@ -1,4 +1,5 @@
 from django.contrib import admin, messages
+from django.http import HttpResponseRedirect
 from django.urls import reverse
 from django.utils.html import format_html
 
@@ -11,6 +12,7 @@ from unfold.decorators import action
 from unfold.enums import ActionVariant
 
 from core.admin import BaseAdmin
+from emails.services import EmailCampaignQueueService
 from newsletter.models import NewsletterRecipient
 from newsletter.services import NewsletterRecipientSyncService
 
@@ -23,6 +25,7 @@ class NewsletterRecipientAdmin(BaseAdmin):
         "full_name",
         "status_badge",
         "customer_badge",
+        "selected_email_campaign",
         "city",
         "sales_channel_id",
         "last_synced_at",
@@ -39,6 +42,7 @@ class NewsletterRecipientAdmin(BaseAdmin):
         "customer__erp_nr",
         "customer__name",
         "customer__email",
+        "selected_email_campaign__internal_title",
         "sales_channel_id",
     )
     list_filter = [
@@ -59,7 +63,9 @@ class NewsletterRecipientAdmin(BaseAdmin):
         "raw_data",
     )
     actions_list = ("sync_from_shopware_list",)
-    actions = ("sync_from_shopware",)
+    actions_detail = ("queue_selected_campaign_detail",)
+    actions = ("queue_selected_campaign", "sync_from_shopware")
+    autocomplete_fields = ("selected_email_campaign",)
 
     status_badge_map = {
         NewsletterRecipient.Status.DIRECT: ("#16a34a", "Aktiv", "direkt aktiv, keine Bestaetigung offen"),
@@ -69,7 +75,10 @@ class NewsletterRecipientAdmin(BaseAdmin):
     }
 
     def get_queryset(self, request):
-        return super().get_queryset(request).select_related("customer")
+        return super().get_queryset(request).select_related("customer", "selected_email_campaign")
+
+    def _redirect_to_change_page(self, object_id: str):
+        return HttpResponseRedirect(reverse("admin:newsletter_newsletterrecipient_change", args=(object_id,)))
 
     @admin.display(description="Status", ordering="status")
     def status_badge(self, obj: NewsletterRecipient):
@@ -150,3 +159,50 @@ class NewsletterRecipientAdmin(BaseAdmin):
     )
     def sync_from_shopware(self, request, queryset):
         self._run_sync_from_shopware(request)
+
+    def _queue_recipients(self, request, recipients) -> None:
+        service = EmailCampaignQueueService()
+        queued_count = 0
+        error_count = 0
+
+        for recipient in recipients:
+            try:
+                service.queue_recipient_campaign(recipient)
+                queued_count += 1
+            except Exception as exc:
+                error_count += 1
+                self.message_user(
+                    request,
+                    f"{recipient.email}: Kampagne konnte nicht eingereiht werden: {exc}",
+                    level=messages.ERROR,
+                )
+
+        if queued_count:
+            self.message_user(
+                request,
+                f"{queued_count} E-Mail(s) fertig gerendert und in die Warteschlange gelegt.",
+                level=messages.SUCCESS,
+            )
+        if error_count:
+            self.message_user(request, f"{error_count} Empfaenger mit Fehlern.", level=messages.ERROR)
+
+    @action(
+        description="Ausgewaehlte Kampagne in Warteschlange legen",
+        icon="outbox",
+        variant=ActionVariant.PRIMARY,
+    )
+    def queue_selected_campaign_detail(self, request, object_id: str):
+        recipient = self.get_object(request, object_id)
+        if not recipient:
+            self.message_user(request, "Newsletter-Empfaenger nicht gefunden.", level=messages.ERROR)
+            return self._redirect_to_changelist()
+        self._queue_recipients(request, [recipient])
+        return self._redirect_to_change_page(object_id)
+
+    @action(
+        description="Ausgewaehlte Kampagne in Warteschlange legen",
+        icon="outbox",
+        variant=ActionVariant.PRIMARY,
+    )
+    def queue_selected_campaign(self, request, queryset):
+        self._queue_recipients(request, queryset.select_related("customer", "selected_email_campaign"))
