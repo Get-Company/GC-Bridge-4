@@ -1,6 +1,7 @@
 import pytest
 from django.test import SimpleTestCase
 from types import SimpleNamespace
+from unittest.mock import patch
 
 
 class TestMjmlComponentAdminRegistered(SimpleTestCase):
@@ -55,6 +56,64 @@ class TestEmailCampaignAdmin(SimpleTestCase):
         assert "recipient.email" in html
         assert "recipient.salutation_display_name" in html
         assert "customer.erp_nr" in html
+
+    @patch("newsletter.models.NewsletterRecipient")
+    def test_latest_active_preview_recipient_uses_latest_active_recipient(self, recipient_model):
+        from emails.admin import _latest_active_preview_recipient
+
+        expected_recipient = SimpleNamespace(email="preview@example.com")
+        manager = recipient_model.objects
+        manager.filter.return_value.select_related.return_value.order_by.return_value.first.return_value = (
+            expected_recipient
+        )
+
+        recipient = _latest_active_preview_recipient()
+
+        assert recipient == expected_recipient
+        manager.filter.assert_called_once_with(
+            status__in=(
+                recipient_model.Status.DIRECT,
+                recipient_model.Status.OPT_IN,
+            )
+        )
+        manager.filter.return_value.select_related.assert_called_once_with("customer")
+        manager.filter.return_value.select_related.return_value.order_by.assert_called_once_with(
+            "-last_synced_at",
+            "-remote_updated_at",
+            "-updated_at",
+            "-created_at",
+            "-pk",
+        )
+
+    @patch("emails.admin.compile_mjml_to_html", return_value="<html>Preview</html>")
+    @patch("emails.admin.render_campaign_mjml", return_value="<mjml>Preview</mjml>")
+    @patch("emails.admin._latest_active_preview_recipient")
+    @patch("emails.admin.EmailCampaign")
+    def test_export_html_view_renders_preview_with_latest_active_recipient(
+        self,
+        campaign_model,
+        latest_active_preview_recipient,
+        render_campaign_mjml,
+        compile_mjml_to_html,
+    ):
+        from django.contrib.admin.sites import AdminSite
+        from django.test import RequestFactory
+
+        from emails.admin import EmailCampaignAdmin
+        from emails.models import EmailCampaign
+
+        campaign = SimpleNamespace(pk=1, internal_title="Kampagne")
+        preview_recipient = SimpleNamespace(email="preview@example.com")
+        campaign_model.objects.get.return_value = campaign
+        latest_active_preview_recipient.return_value = preview_recipient
+
+        admin_instance = EmailCampaignAdmin(EmailCampaign, AdminSite())
+        request = RequestFactory().get("/admin/emails/emailcampaign/1/export-html/")
+        response = admin_instance.export_html_view(request, campaign_id=1)
+
+        assert response.status_code == 200
+        render_campaign_mjml.assert_called_once_with(campaign, recipient=preview_recipient)
+        compile_mjml_to_html.assert_called_once_with("<mjml>Preview</mjml>")
 
 
 class TestEmailCampaignComponentInline(SimpleTestCase):

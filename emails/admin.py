@@ -99,6 +99,22 @@ def _recipient_customer_context_info_html():
     )
 
 
+def _latest_active_preview_recipient():
+    from newsletter.models import NewsletterRecipient
+
+    return (
+        NewsletterRecipient.objects.filter(
+            status__in=(
+                NewsletterRecipient.Status.DIRECT,
+                NewsletterRecipient.Status.OPT_IN,
+            )
+        )
+        .select_related("customer")
+        .order_by("-last_synced_at", "-remote_updated_at", "-updated_at", "-created_at", "-pk")
+        .first()
+    )
+
+
 def _component_identity(component: EmailCampaignComponent) -> int:
     return getattr(component, "pk", None) or getattr(component, "id", None) or id(component)
 
@@ -672,7 +688,8 @@ class EmailCampaignAdmin(BaseAdmin):
             return JsonResponse({"error": "Kampagne nicht gefunden."}, status=404)
 
         try:
-            mjml = render_campaign_mjml(campaign)
+            preview_recipient = _latest_active_preview_recipient()
+            mjml = render_campaign_mjml(campaign, recipient=preview_recipient)
             html = compile_mjml_to_html(mjml)
         except Exception:
             logger.exception("MJML export failed for campaign %s", campaign_id)
