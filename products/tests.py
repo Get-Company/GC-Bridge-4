@@ -6,7 +6,7 @@ from decimal import Decimal
 import sqlite3
 from tempfile import TemporaryDirectory
 from tempfile import NamedTemporaryFile
-from unittest.mock import Mock, call, patch
+from unittest.mock import MagicMock, Mock, call, patch
 
 from django.core.management import call_command
 from django.contrib import messages
@@ -2366,3 +2366,23 @@ class LegacyProductPropertyImportCommandTest(TestCase):
                     dump_path_value="",
                     rebuild_sqlite=False,
                 )
+
+
+class MicrotechUpdateProductAllFlagTest(SimpleTestCase):
+    @patch("microtech.management.commands.microtech_update_product.microtech_connection")
+    @patch("microtech.management.commands.microtech_update_product.Product")
+    def test_all_flag_fetches_all_erp_nrs(self, mock_product_cls, mock_conn):
+        mock_product_cls.objects.values_list.return_value = ["1001", "1002"]
+        mock_erp = MagicMock()
+        mock_erp.update_product.return_value = {"status": "ok"}
+        mock_conn.return_value.__enter__ = lambda s: mock_erp
+        mock_conn.return_value.__exit__ = MagicMock(return_value=False)
+
+        with patch(
+            "microtech.management.commands.microtech_update_product.Command._build_input_data",
+            return_value={"name": "Test"},
+        ):
+            call_command("microtech_update_product", all=True)
+
+        mock_product_cls.objects.values_list.assert_called_once_with("erp_nr", flat=True)
+        self.assertEqual(mock_erp.update_product.call_count, 2)

@@ -4,6 +4,8 @@ import logging
 from decimal import Decimal
 from typing import Any
 
+from django.core.management.base import CommandError
+
 from core.management.base import MonitoredBaseCommand
 from microtech.services import MicrotechProductPayloadService, microtech_connection
 from products.models import Price, Product
@@ -18,15 +20,32 @@ class Command(MonitoredBaseCommand):
     def add_arguments(self, parser):
         parser.add_argument(
             "erp_nrs",
-            nargs="+",
+            nargs="*",
             help="ERP-Nummern (ArtNr) der zu aktualisierenden Produkte.",
+        )
+        parser.add_argument(
+            "--all",
+            action="store_true",
+            help="Alle in Django existierenden Produkte updaten.",
         )
 
     def handle(self, *args, **options):
-        erp_nrs = options["erp_nrs"]
+        erp_nrs = options.get("erp_nrs") or []
+        update_all = options.get("all", False)
+
+        if update_all:
+            erp_nrs = list(Product.objects.values_list("erp_nr", flat=True))
+
+        if not erp_nrs:
+            raise CommandError(
+                "Bitte ERP-Nummern angeben oder --all verwenden."
+            )
+
+        seen = set()
+        unique_erp_nrs = [nr for nr in erp_nrs if not (nr in seen or seen.add(nr))]
 
         with microtech_connection() as erp:
-            for erp_nr in erp_nrs:
+            for erp_nr in unique_erp_nrs:
                 try:
                     product = Product.objects.get(erp_nr=erp_nr)
                     self.stdout.write(f"Updating product {erp_nr} in Microtech...")
