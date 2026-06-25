@@ -172,6 +172,12 @@ class Command(MonitoredBaseCommand):
             action="store_true",
             help="Bestehendes Product.is_active in Django nicht mit Microtech-Werten überschreiben.",
         )
+        parser.add_argument(
+            "--skip-images",
+            action="store_true",
+            dest="skip_images",
+            help="Bilder beim Import nicht synchronisieren.",
+        )
 
     def handle(self, *args, **options):
         erp_nrs = [nr.strip() for nr in options.get("erp_nrs") or [] if nr.strip()]
@@ -179,6 +185,7 @@ class Command(MonitoredBaseCommand):
         include_inactive = options.get("include_inactive", False)
         limit = options.get("limit")
         preserve_is_active = options.get("preserve_is_active", False)
+        skip_images = options.get("skip_images", False)
 
         if not erp_nrs and not sync_all:
             raise CommandError("Bitte ERP-Nummern angeben oder --all verwenden.")
@@ -191,6 +198,7 @@ class Command(MonitoredBaseCommand):
                 include_inactive=include_inactive,
                 limit=limit,
                 preserve_is_active=preserve_is_active,
+                skip_images=skip_images,
             )
         self.stdout.write(
             self.style.SUCCESS(
@@ -208,6 +216,7 @@ class Command(MonitoredBaseCommand):
         include_inactive: bool,
         limit: int | None,
         preserve_is_active: bool,
+        skip_images: bool = False,
     ) -> dict:
         admin_user_id = _get_admin_user_id()
         content_type_id = None
@@ -239,6 +248,7 @@ class Command(MonitoredBaseCommand):
                         admin_user_id=admin_user_id,
                         content_type_id=content_type_id,
                         preserve_is_active=preserve_is_active,
+                        skip_images=skip_images,
                     )
                     success_count += 1
                 except Exception as exc:
@@ -279,6 +289,7 @@ class Command(MonitoredBaseCommand):
                     admin_user_id=admin_user_id,
                     content_type_id=content_type_id,
                     preserve_is_active=preserve_is_active,
+                    skip_images=skip_images,
                 )
                 success_count += 1
             except Exception as exc:
@@ -350,6 +361,7 @@ class Command(MonitoredBaseCommand):
         admin_user_id=None,
         content_type_id=None,
         preserve_is_active: bool = False,
+        skip_images: bool = False,
     ) -> None:
         erp_key = artikel_service.get_erp_nr()
         if not erp_key:
@@ -437,28 +449,29 @@ class Command(MonitoredBaseCommand):
                         factor=factor,
                     )
 
-        image_names = _unique_preserve_order(artikel_service.get_image_list())
-        if image_names:
-            existing = {img.path: img for img in Image.objects.filter(path__in=image_names)}
-            missing = [Image(path=name) for name in image_names if name not in existing]
-            if missing:
-                Image.objects.bulk_create(missing, ignore_conflicts=True)
+        if not skip_images:
+            image_names = _unique_preserve_order(artikel_service.get_image_list())
+            if image_names:
                 existing = {img.path: img for img in Image.objects.filter(path__in=image_names)}
-            ordered_images = [existing[name] for name in image_names if name in existing]
-            product.images.set(ordered_images)
-            ProductImage.objects.filter(product=product).exclude(image__path__in=image_names).delete()
-            existing_relations = {
-                relation.image_id: relation
-                for relation in ProductImage.objects.filter(product=product, image__path__in=image_names)
-            }
-            for order, image in enumerate(ordered_images, start=1):
-                relation = existing_relations.get(image.id)
-                if relation is None:
-                    ProductImage.objects.create(product=product, image=image, order=order)
-                    continue
-                if relation.order != order:
-                    relation.order = order
-                    relation.save(update_fields=["order"])
-        else:
-            ProductImage.objects.filter(product=product).delete()
-            product.images.clear()
+                missing = [Image(path=name) for name in image_names if name not in existing]
+                if missing:
+                    Image.objects.bulk_create(missing, ignore_conflicts=True)
+                    existing = {img.path: img for img in Image.objects.filter(path__in=image_names)}
+                ordered_images = [existing[name] for name in image_names if name in existing]
+                product.images.set(ordered_images)
+                ProductImage.objects.filter(product=product).exclude(image__path__in=image_names).delete()
+                existing_relations = {
+                    relation.image_id: relation
+                    for relation in ProductImage.objects.filter(product=product, image__path__in=image_names)
+                }
+                for order, image in enumerate(ordered_images, start=1):
+                    relation = existing_relations.get(image.id)
+                    if relation is None:
+                        ProductImage.objects.create(product=product, image=image, order=order)
+                        continue
+                    if relation.order != order:
+                        relation.order = order
+                        relation.save(update_fields=["order"])
+            else:
+                ProductImage.objects.filter(product=product).delete()
+                product.images.clear()

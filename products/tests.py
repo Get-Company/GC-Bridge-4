@@ -51,6 +51,7 @@ from products.models import (
 from products.services import PriceIncreaseService
 from products.services import ProductAutoSyncService, disable_product_auto_sync
 from products import tasks as product_tasks
+from products.tasks import sync_from_microtech, sync_to_shopware, sync_to_microtech
 from shopware.models import ShopwareSettings
 
 
@@ -2393,3 +2394,122 @@ class ProductSyncJobTargetTest(SimpleTestCase):
         self.assertEqual(ProductSyncJob.Target.MICROTECH, "microtech")
         choices = dict(ProductSyncJob.Target.choices)
         self.assertIn("microtech", choices)
+
+
+class SyncFromMicrotechTaskTest(SimpleTestCase):
+    @patch("products.tasks.call_command")
+    @patch("products.tasks.TaskIssueCollector")
+    def test_all_products_full_payload(self, mock_collector_cls, mock_call_command):
+        ctx = MagicMock()
+        ctx.__enter__ = MagicMock(return_value=ctx)
+        ctx.__exit__ = MagicMock(return_value=False)
+        mock_collector_cls.return_value = ctx
+
+        sync_from_microtech()
+
+        mock_call_command.assert_called_once_with(
+            "microtech_sync_products",
+            all=True,
+            include_inactive=True,
+            preserve_is_active=True,
+            skip_images=False,
+        )
+
+    @patch("products.tasks.call_command")
+    @patch("products.tasks.TaskIssueCollector")
+    def test_specific_erp_nrs(self, mock_collector_cls, mock_call_command):
+        ctx = MagicMock()
+        ctx.__enter__ = MagicMock(return_value=ctx)
+        ctx.__exit__ = MagicMock(return_value=False)
+        mock_collector_cls.return_value = ctx
+
+        sync_from_microtech(["1001", "1002"])
+
+        mock_call_command.assert_called_once_with(
+            "microtech_sync_products",
+            "1001", "1002",
+            include_inactive=True,
+            preserve_is_active=True,
+            skip_images=False,
+        )
+
+    @patch("products.tasks.call_command")
+    @patch("products.tasks.TaskIssueCollector")
+    def test_texts_and_prices_only_passes_skip_images(self, mock_collector_cls, mock_call_command):
+        ctx = MagicMock()
+        ctx.__enter__ = MagicMock(return_value=ctx)
+        ctx.__exit__ = MagicMock(return_value=False)
+        mock_collector_cls.return_value = ctx
+
+        sync_from_microtech(texts_and_prices_only=True)
+
+        mock_call_command.assert_called_once_with(
+            "microtech_sync_products",
+            all=True,
+            include_inactive=True,
+            preserve_is_active=True,
+            skip_images=True,
+        )
+
+
+class SyncToShopwareTaskTest(SimpleTestCase):
+    @patch("products.tasks.call_command")
+    @patch("products.tasks.TaskIssueCollector")
+    def test_all_products_full_payload(self, mock_collector_cls, mock_call_command):
+        ctx = MagicMock()
+        ctx.__enter__ = MagicMock(return_value=ctx)
+        ctx.__exit__ = MagicMock(return_value=False)
+        mock_collector_cls.return_value = ctx
+
+        sync_to_shopware()
+
+        mock_call_command.assert_called_once_with(
+            "shopware_sync_products",
+            all=True,
+            skip_images=False,
+        )
+
+    @patch("products.tasks.call_command")
+    @patch("products.tasks.TaskIssueCollector")
+    def test_texts_and_prices_only(self, mock_collector_cls, mock_call_command):
+        ctx = MagicMock()
+        ctx.__enter__ = MagicMock(return_value=ctx)
+        ctx.__exit__ = MagicMock(return_value=False)
+        mock_collector_cls.return_value = ctx
+
+        sync_to_shopware(texts_and_prices_only=True)
+
+        mock_call_command.assert_called_once_with(
+            "shopware_sync_products",
+            all=True,
+            skip_images=True,
+        )
+
+
+class SyncToMicrotechTaskTest(SimpleTestCase):
+    @patch("products.tasks.call_command")
+    @patch("products.tasks.TaskIssueCollector")
+    def test_all_products(self, mock_collector_cls, mock_call_command):
+        ctx = MagicMock()
+        ctx.__enter__ = MagicMock(return_value=ctx)
+        ctx.__exit__ = MagicMock(return_value=False)
+        mock_collector_cls.return_value = ctx
+
+        sync_to_microtech()
+
+        self.assertEqual(mock_call_command.call_count, 2)
+        mock_call_command.assert_any_call("microtech_update_product", all=True)
+        mock_call_command.assert_any_call("microtech_update_prices", all=True)
+
+    @patch("products.tasks.call_command")
+    @patch("products.tasks.TaskIssueCollector")
+    def test_specific_erp_nrs(self, mock_collector_cls, mock_call_command):
+        ctx = MagicMock()
+        ctx.__enter__ = MagicMock(return_value=ctx)
+        ctx.__exit__ = MagicMock(return_value=False)
+        mock_collector_cls.return_value = ctx
+
+        sync_to_microtech(["1001", "1002"])
+
+        mock_call_command.assert_any_call("microtech_update_product", "1001", "1002")
+        mock_call_command.assert_any_call("microtech_update_prices", "1001", "1002")

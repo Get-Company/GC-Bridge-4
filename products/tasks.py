@@ -5,6 +5,84 @@ from collections.abc import Sequence
 from celery import shared_task
 from django.core.management import call_command
 
+from issues.services import TaskIssueCollector
+
+
+def _erp_list(erp_nrs: Sequence[str] | None) -> list[str]:
+    return [str(nr).strip() for nr in (erp_nrs or []) if str(nr).strip()]
+
+
+@shared_task(name="products.sync_from_microtech")
+def sync_from_microtech(
+    erp_nrs: Sequence[str] | None = None,
+    *,
+    texts_and_prices_only: bool = False,
+) -> None:
+    cleaned = _erp_list(erp_nrs)
+    with TaskIssueCollector("products.sync_from_microtech"):
+        if cleaned:
+            call_command(
+                "microtech_sync_products",
+                *cleaned,
+                include_inactive=True,
+                preserve_is_active=True,
+                skip_images=texts_and_prices_only,
+            )
+        else:
+            call_command(
+                "microtech_sync_products",
+                all=True,
+                include_inactive=True,
+                preserve_is_active=True,
+                skip_images=texts_and_prices_only,
+            )
+
+
+@shared_task(name="products.sync_to_shopware")
+def sync_to_shopware(
+    erp_nrs: Sequence[str] | None = None,
+    *,
+    texts_and_prices_only: bool = False,
+) -> None:
+    cleaned = _erp_list(erp_nrs)
+    with TaskIssueCollector("products.sync_to_shopware"):
+        if cleaned:
+            call_command(
+                "shopware_sync_products",
+                *cleaned,
+                skip_images=texts_and_prices_only,
+            )
+        else:
+            call_command(
+                "shopware_sync_products",
+                all=True,
+                skip_images=texts_and_prices_only,
+            )
+
+
+@shared_task(name="products.sync_to_microtech")
+def sync_to_microtech(erp_nrs: Sequence[str] | None = None) -> None:
+    cleaned = _erp_list(erp_nrs)
+    with TaskIssueCollector("products.sync_to_microtech"):
+        if cleaned:
+            call_command("microtech_update_product", *cleaned)
+            call_command("microtech_update_prices", *cleaned)
+        else:
+            call_command("microtech_update_product", all=True)
+            call_command("microtech_update_prices", all=True)
+
+
+@shared_task(name="products.process_product_sync_job")
+def process_product_sync_job(job_id: int) -> None:
+    from products.services import ProductAutoSyncService
+
+    ProductAutoSyncService().process_job(job_id=job_id)
+
+
+# ---------------------------------------------------------------------------
+# Legacy tasks kept for backwards-compatibility with existing Celery beat
+# schedules and any callers that may still reference these task names.
+# ---------------------------------------------------------------------------
 
 def _clean_erp_nrs(erp_nrs: Sequence[str] | None) -> list[str]:
     return [str(erp_nr).strip() for erp_nr in (erp_nrs or []) if str(erp_nr).strip()]
@@ -79,13 +157,6 @@ def shopware_sync_products(
         *_clean_erp_nrs(erp_nrs),
         **command_options,
     )
-
-
-@shared_task(name="products.process_product_sync_job")
-def process_product_sync_job(job_id: int) -> None:
-    from products.services import ProductAutoSyncService
-
-    ProductAutoSyncService().process_job(job_id=job_id)
 
 
 @shared_task(name="products.shopware_force_product_image_uploads")
