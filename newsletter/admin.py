@@ -45,14 +45,10 @@ class NewsletterRecipientAdmin(BaseAdmin):
         "remote_updated_at",
         "raw_data",
     )
+    actions_list = ("sync_from_shopware_list",)
     actions = ("sync_from_shopware",)
 
-    @action(
-        description="Newsletter-Empfaenger von Shopware synchronisieren",
-        icon="sync",
-        variant=ActionVariant.PRIMARY,
-    )
-    def sync_from_shopware(self, request, queryset):
+    def _run_sync_from_shopware(self, request) -> None:
         try:
             summary = NewsletterRecipientSyncService().sync_from_shopware()
         except Exception as exc:
@@ -73,3 +69,20 @@ class NewsletterRecipientAdmin(BaseAdmin):
                 f"{summary['failed']} Fehler."
             ),
         )
+
+    @action(
+        description="Newsletter-Empfaenger von Shopware synchronisieren",
+        icon="sync",
+        variant=ActionVariant.PRIMARY,
+    )
+    def sync_from_shopware_list(self, request):
+        self._run_sync_from_shopware(request)
+        return self._redirect_to_changelist()
+
+    @action(
+        description="Newsletter-Empfaenger von Shopware synchronisieren",
+        icon="sync",
+        variant=ActionVariant.PRIMARY,
+    )
+    def sync_from_shopware(self, request, queryset):
+        self._run_sync_from_shopware(request)
