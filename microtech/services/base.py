@@ -201,6 +201,10 @@ class MicrotechDatasetService(BaseService):
         self._next_cursor = result.get("nextCursor")
         self._cursor = previous_len
 
+    def load_result(self, result: dict[str, Any]) -> None:
+        """Load a completed dataset job result directly, bypassing GraphQL polling."""
+        self._load_result(result)
+
     def _load_result(self, result: dict[str, Any]) -> None:
         self._records = self._normalize_records(result.get("records") or [])
         self._cursor = 0

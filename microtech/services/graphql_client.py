@@ -131,6 +131,23 @@ class MicrotechGraphQLClientService(BaseService):
             timeout=timeout,
         )
 
+    def submit_dataset_job(self, input_data: dict[str, Any]) -> tuple[str, float]:
+        """Submit dataset job without blocking. Returns (job_id, retry_after_seconds)."""
+        accepted = self.request_dataset_records(input_data)
+        return str(accepted["jobId"]), float(accepted.get("retryAfterSeconds") or self.config.poll_interval)
+
+    def check_dataset_job_once(self, job_id: str) -> dict[str, Any] | None:
+        """Single non-blocking poll. Returns job result if DONE, None if still pending, raises on failure."""
+        job = self.dataset_job(job_id)
+        status = str(job.get("status") or "").upper()
+        if status in self.TERMINAL_SUCCESS:
+            return job
+        if status in self.TERMINAL_FAILED:
+            raise GraphQLMicrotechError(
+                str(job.get("errorMessage") or job.get("message") or "Microtech GraphQL job failed.")
+            )
+        return None
+
     def microtech_version(self) -> dict[str, Any]:
         data = self.execute(
             """
