@@ -85,7 +85,7 @@ def quick_product_sync() -> None:
     from core.logging import add_managed_file_sink
 
     sink_id, log_path = add_managed_file_sink(
-        "quick_product_sync", category="weekly"
+        log_name="quick_product_sync", category="weekly"
     )
     try:
         logger.info("Quick product sync started (skip_images=True)")
@@ -154,12 +154,14 @@ def scheduled_product_sync(
     limit: int | None = None,
     exclude_inactive: bool = False,
     write_base_price_back: bool = False,
+    force_images: bool = True,
 ) -> None:
     call_command(
         "scheduled_product_sync",
         limit=limit,
         exclude_inactive=exclude_inactive,
         write_base_price_back=write_base_price_back,
+        skip_force_images=not force_images,
     )
 
 
