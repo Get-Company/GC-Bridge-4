@@ -30,6 +30,32 @@ class TaskDefinition:
 
 CELERY_ADMIN_TASKS: tuple[TaskDefinition, ...] = (
     TaskDefinition(
+        name="products.sync_from_microtech",
+        label="Microtech → Django importieren",
+        description="Produkte aus Microtech per GraphQL nach Django importieren (neue vereinfachte Task).",
+        fields=(
+            TaskField("erp_nrs", "ERP-Nummern", "csv", "", "Kommagetrennt, leer fuer alle Produkte."),
+            TaskField("texts_and_prices_only", "Nur Texte & Preise (keine Bilder)", "bool", False),
+        ),
+    ),
+    TaskDefinition(
+        name="products.sync_to_shopware",
+        label="Django → Shopware exportieren",
+        description="Django-Produkte nach Shopware synchronisieren (neue vereinfachte Task).",
+        fields=(
+            TaskField("erp_nrs", "ERP-Nummern", "csv", "", "Kommagetrennt, leer fuer alle Produkte."),
+            TaskField("texts_and_prices_only", "Nur Texte & Preise (keine Bilder)", "bool", False),
+        ),
+    ),
+    TaskDefinition(
+        name="products.sync_to_microtech",
+        label="Django → Microtech schreiben",
+        description="Django-Produkte (Felder + Preise) nach Microtech zurueckschreiben (neue vereinfachte Task).",
+        fields=(
+            TaskField("erp_nrs", "ERP-Nummern", "csv", "", "Kommagetrennt, leer fuer alle Produkte."),
+        ),
+    ),
+    TaskDefinition(
         name="products.scheduled_product_sync",
         label="Produkt-Sync komplett",
         description="Microtech -> Django, Sonderpreise bereinigen und Django -> Shopware.",
@@ -153,6 +179,18 @@ CELERY_ADMIN_TASKS: tuple[TaskDefinition, ...] = (
         description="Sonderpreise einer E-Mail-Kampagne in Microtech und Shopware setzen.",
         fields=(
             TaskField("campaign_pk", "Kampagne ID", "int", ""),
+        ),
+    ),
+    TaskDefinition(
+        name="emails.queue_due_campaigns_before_send",
+        label="E-Mail-Kampagnen vor Sendedatum rendern",
+        description=(
+            "READY-Kampagnen im Zielzeitfenster suchen und pro aktivem Newsletter-Empfaenger "
+            "gerendert in die Warteschlange legen."
+        ),
+        fields=(
+            TaskField("lead_time_hours", "Vorlauf Stunden", "int", 24, "24 = ein Tag vor Sendedatum."),
+            TaskField("window_minutes", "Fenster Minuten", "int", 60, "Bei stuendlichem Beat-Lauf 60 verwenden."),
         ),
     ),
     TaskDefinition(

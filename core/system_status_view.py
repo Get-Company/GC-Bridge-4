@@ -13,6 +13,9 @@ from django.template.response import TemplateResponse
 
 
 TASK_LABELS: dict[str, str] = {
+    "products.sync_from_microtech": "Microtech → Django importieren",
+    "products.sync_to_shopware": "Django → Shopware exportieren",
+    "products.sync_to_microtech": "Django → Microtech schreiben",
     "products.scheduled_product_sync": "Produkt-Sync komplett",
     "products.microtech_sync_products": "Microtech Import",
     "products.microtech_update_product": "Microtech Produkt aktualisieren",
@@ -27,6 +30,7 @@ TASK_LABELS: dict[str, str] = {
     "mappei.scrape_daily_prices": "Mappei Preise scrapen",
     "hr.sync_holidays": "Ferien & Feiertage synchronisieren",
     "hr.year_transition": "HR Jahreswechsel",
+    "emails.queue_due_campaigns_before_send": "E-Mail-Kampagnen vor Sendedatum rendern",
 }
 
 _WORKERS_CACHE: dict[str, Any] = {"checked_at": 0.0, "value": None}

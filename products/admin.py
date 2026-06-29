@@ -73,9 +73,9 @@ from mappei.models import MappeiPriceSnapshot, MappeiProductMapping
 from shopware.models import ShopwareSettings
 from .services import PriceIncreaseService
 from .tasks import (
-    microtech_sync_products as microtech_sync_products_task,
+    sync_from_microtech as sync_from_microtech_task,
+    sync_to_microtech as sync_to_microtech_task,
     microtech_update_prices as microtech_update_prices_task,
-    microtech_update_product as microtech_update_product_task,
 )
 from .models import (
     Category,
@@ -676,7 +676,7 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
         if not erp_nrs:
             self.message_user(request, "Keine Produkte ausgewählt.", level=messages.WARNING)
             return
-        microtech_sync_products_task.delay(erp_nrs)
+        sync_from_microtech_task.delay(erp_nrs)
         self.message_user(request, f"{len(erp_nrs)} Produkt(e) zur Microtech-Synchronisierung in die Warteschlange eingereiht.")
 
     @action(
@@ -689,7 +689,7 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
         if not product:
             self.message_user(request, "Produkt nicht gefunden.", level=messages.ERROR)
             return self._redirect_to_change_page(object_id)
-        microtech_sync_products_task.delay([product.erp_nr])
+        sync_from_microtech_task.delay([product.erp_nr])
         self.message_user(request, f"Produkt {product.erp_nr} zur Microtech-Synchronisierung in die Warteschlange eingereiht.")
         return self._redirect_to_change_page(object_id)
 
@@ -766,7 +766,7 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
         if not erp_nrs:
             self.message_user(request, "Keine Produkte ausgewählt.", level=messages.WARNING)
             return
-        microtech_update_product_task.delay(erp_nrs)
+        sync_to_microtech_task.delay(erp_nrs)
         self.message_user(
             request,
             f"{len(erp_nrs)} Produkt(e) zur Microtech-Synchronisierung (Update) in die Warteschlange eingereiht.",
@@ -782,7 +782,7 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
         if not product:
             self.message_user(request, "Produkt nicht gefunden.", level=messages.ERROR)
             return self._redirect_to_change_page(object_id)
-        microtech_update_product_task.delay([product.erp_nr])
+        sync_to_microtech_task.delay([product.erp_nr])
         self.message_user(
             request,
             f"Produkt {product.erp_nr} zur Microtech-Synchronisierung (Update) in die Warteschlange eingereiht.",
