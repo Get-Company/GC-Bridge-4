@@ -80,6 +80,7 @@ CELERY_ADMIN_TASKS: tuple[TaskDefinition, ...] = (
             TaskField("limit", "Limit", "int", "", "Leer lassen fuer alle Produkte."),
             TaskField("exclude_inactive", "Inaktive ausschliessen", "bool", False),
             TaskField("write_base_price_back", "Basispreis nach Microtech schreiben", "bool", False),
+            TaskField("force_images", "Shopware-Bilder vollstaendig neu hochladen", "bool", True),
         ),
     ),
     TaskDefinition(

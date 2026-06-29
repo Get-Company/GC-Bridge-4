@@ -22,6 +22,7 @@ def sync_from_microtech(
     erp_nrs: Sequence[str] | None = None,
     *,
     texts_and_prices_only: bool = False,
+    include_inactive: bool = True,
     _job_id: str | None = None,
     _next_cursor: list | None = None,
     _state: dict | None = None,
@@ -52,6 +53,7 @@ def sync_from_microtech(
     retry_kwargs = {
         "erp_nrs": erp_nrs,
         "texts_and_prices_only": texts_and_prices_only,
+        "include_inactive": include_inactive,
         "_next_cursor": _next_cursor,
         "_state": state,
     }
@@ -65,6 +67,8 @@ def sync_from_microtech(
             "indexField": MicrotechArtikelService.index_field,
             "range": {"fromValues": ["000000"], "toValues": ["99999999ZZ"]},
         }
+        if not include_inactive:
+            input_data["filter"] = "WBSHpKZ = 1"
         if _next_cursor:
             input_data["after"] = _next_cursor
 
@@ -229,19 +233,63 @@ def _clean_erp_nrs(erp_nrs: Sequence[str] | None) -> list[str]:
     return [str(erp_nr).strip() for erp_nr in (erp_nrs or []) if str(erp_nr).strip()]
 
 
+@shared_task(name="products._scheduled_product_sync_finalize")
+def _scheduled_product_sync_finalize(
+    *,
+    limit: int | None = None,
+    write_base_price_back: bool = False,
+    force_images: bool = True,
+) -> dict:
+    """Schritte 2–5 des vollständigen Produkt-Syncs nach dem Microtech-Import."""
+    from loguru import logger
+    from microtech.services import MicrotechExpiredSpecialSyncService, microtech_connection
+    from django.utils import timezone
+
+    logger.info("scheduled_product_sync finalize: Sonderpreise bereinigen")
+    expired_count, affected_ids = MicrotechExpiredSpecialSyncService().clear_expired_specials(now=timezone.now())
+    mt_updated = 0
+    if affected_ids:
+        with microtech_connection() as erp:
+            mt_updated, _ = MicrotechExpiredSpecialSyncService().sync_expired_specials_to_microtech(
+                erp=erp,
+                affected_product_ids=affected_ids,
+                write_base_price_back=write_base_price_back,
+            )
+        logger.info("Sonderpreise: {} abgelaufen, {} in Microtech aktualisiert", expired_count, mt_updated)
+
+    logger.info("scheduled_product_sync finalize: Django → Shopware")
+    with TaskIssueCollector("products.scheduled_product_sync"):
+        call_command("shopware_sync_products", all=True, limit=limit)
+        if force_images:
+            logger.info("scheduled_product_sync finalize: Shopware Bilder force-upload")
+            call_command("shopware_force_product_image_uploads", all=True, limit=limit)
+
+    return {"expired": expired_count, "microtech_updated": mt_updated, "force_images": force_images}
+
+
 @shared_task(name="products.scheduled_product_sync")
 def scheduled_product_sync(
     *,
     limit: int | None = None,
     exclude_inactive: bool = False,
     write_base_price_back: bool = False,
+    force_images: bool = True,
 ) -> None:
-    call_command(
-        "scheduled_product_sync",
-        limit=limit,
-        exclude_inactive=exclude_inactive,
-        write_base_price_back=write_base_price_back,
+    from celery import chain as celery_chain
+    from loguru import logger
+
+    logger.info(
+        "scheduled_product_sync: Chain starten (exclude_inactive={}, write_base_price_back={}, force_images={})",
+        exclude_inactive, write_base_price_back, force_images,
     )
+    celery_chain(
+        sync_from_microtech.si(include_inactive=not exclude_inactive),
+        _scheduled_product_sync_finalize.si(
+            limit=limit,
+            write_base_price_back=write_base_price_back,
+            force_images=force_images,
+        ),
+    ).delay()
 
 
 @shared_task(name="products.microtech_sync_products")
