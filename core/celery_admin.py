@@ -56,6 +56,15 @@ CELERY_ADMIN_TASKS: tuple[TaskDefinition, ...] = (
         ),
     ),
     TaskDefinition(
+        name="products.quick_product_sync",
+        label="Schnell-Sync (Texte, Preise, Lager)",
+        description=(
+            "Microtech → Django → Shopware ohne Bilder. "
+            "Fuer Beat-Schedules 07:00 und 13:00. "
+            "Bilder und Sonderpreis-Bereinigung laufen separat."
+        ),
+    ),
+    TaskDefinition(
         name="products.expire_special_prices",
         label="Abgelaufene Sonderpreise bereinigen",
         description=(

@@ -72,6 +72,41 @@ def sync_to_microtech(erp_nrs: Sequence[str] | None = None) -> None:
             call_command("microtech_update_prices", all=True)
 
 
+@shared_task(name="products.quick_product_sync")
+def quick_product_sync() -> None:
+    """Texte, Preise und Lagerbestand synchronisieren — ohne Bilder.
+
+    Reihenfolge: Microtech → Django, dann Django → Shopware.
+    Gedacht für stündliche oder halbtagliche Beat-Schedules (07:00, 13:00).
+    Bilder werden übersprungen (skip_images=True). Sonderpreis-Bereinigung
+    läuft separat über expire_special_prices (stündlich).
+    """
+    from loguru import logger
+    from core.logging import add_managed_file_sink
+
+    sink_id, log_path = add_managed_file_sink(
+        "quick_product_sync", category="weekly"
+    )
+    try:
+        logger.info("Quick product sync started (skip_images=True)")
+        with TaskIssueCollector("products.quick_product_sync"):
+            call_command(
+                "microtech_sync_products",
+                all=True,
+                include_inactive=True,
+                preserve_is_active=True,
+                skip_images=True,
+            )
+            logger.info("Quick product sync: Microtech → Django done, starting Django → Shopware")
+            call_command("shopware_sync_products", all=True, skip_images=True)
+        logger.info("Quick product sync finished. log_file={}", log_path)
+    except Exception:
+        logger.exception("Quick product sync failed. log_file={}", log_path)
+        raise
+    finally:
+        logger.remove(sink_id)
+
+
 @shared_task(name="products.expire_special_prices")
 def expire_special_prices() -> dict:
     from microtech.services import MicrotechExpiredSpecialSyncService, microtech_connection
