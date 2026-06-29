@@ -155,9 +155,10 @@ services:
       RUN_DJANGO_CHECK: "false"
       RUN_COLLECTSTATIC: "false"
       RUN_MIGRATIONS: "false"
+    ports:
+      - "${FLOWER_PORT:-5555}:5555"
     command: >
       celery -A GC_Bridge_4 flower
-      --url-prefix=flower
       --basic-auth=${FLOWER_USER:-admin}:${FLOWER_PASSWORD:-changeme}
       --broker=redis://redis:6379/0
       --broker_api=redis://redis:6379/0
