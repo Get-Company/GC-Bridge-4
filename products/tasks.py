@@ -154,14 +154,12 @@ def scheduled_product_sync(
     limit: int | None = None,
     exclude_inactive: bool = False,
     write_base_price_back: bool = False,
-    force_images: bool = True,
 ) -> None:
     call_command(
         "scheduled_product_sync",
         limit=limit,
         exclude_inactive=exclude_inactive,
         write_base_price_back=write_base_price_back,
-        skip_force_images=not force_images,
     )
 
 
