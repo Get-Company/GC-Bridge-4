@@ -72,6 +72,31 @@ def sync_to_microtech(erp_nrs: Sequence[str] | None = None) -> None:
             call_command("microtech_update_prices", all=True)
 
 
+@shared_task(name="products.expire_special_prices")
+def expire_special_prices() -> dict:
+    from microtech.services import MicrotechExpiredSpecialSyncService, microtech_connection
+    from django.utils import timezone
+
+    with TaskIssueCollector("products.expire_special_prices"):
+        expired_count, affected_ids = MicrotechExpiredSpecialSyncService().clear_expired_specials(now=timezone.now())
+        if not affected_ids:
+            return {"expired": 0, "microtech_updated": 0, "shopware_queued": 0}
+
+        with microtech_connection() as erp:
+            mt_updated, _ = MicrotechExpiredSpecialSyncService().sync_expired_specials_to_microtech(
+                erp=erp,
+                affected_product_ids=affected_ids,
+            )
+
+        from products.models import Product
+        erp_nrs = list(
+            Product.objects.filter(pk__in=affected_ids).values_list("erp_nr", flat=True)
+        )
+        sync_to_shopware.delay(erp_nrs, texts_and_prices_only=True)
+
+    return {"expired": expired_count, "microtech_updated": mt_updated, "shopware_queued": len(erp_nrs)}
+
+
 @shared_task(name="products.process_product_sync_job")
 def process_product_sync_job(job_id: int) -> None:
     from products.services import ProductAutoSyncService

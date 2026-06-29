@@ -56,6 +56,14 @@ CELERY_ADMIN_TASKS: tuple[TaskDefinition, ...] = (
         ),
     ),
     TaskDefinition(
+        name="products.expire_special_prices",
+        label="Abgelaufene Sonderpreise bereinigen",
+        description=(
+            "Prueft alle Preiszeilen auf abgelaufene Sonderpreise, loescht sie in Django, "
+            "schreibt den Normalpreis zurueck nach Microtech und triggert Shopware-Sync fuer betroffene Produkte."
+        ),
+    ),
+    TaskDefinition(
         name="products.scheduled_product_sync",
         label="Produkt-Sync komplett",
         description="Microtech -> Django, Sonderpreise bereinigen und Django -> Shopware.",

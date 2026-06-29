@@ -16,6 +16,7 @@ TASK_LABELS: dict[str, str] = {
     "products.sync_from_microtech": "Microtech → Django importieren",
     "products.sync_to_shopware": "Django → Shopware exportieren",
     "products.sync_to_microtech": "Django → Microtech schreiben",
+    "products.expire_special_prices": "Abgelaufene Sonderpreise bereinigen",
     "products.scheduled_product_sync": "Produkt-Sync komplett",
     "products.microtech_sync_products": "Microtech Import",
     "products.microtech_update_product": "Microtech Produkt aktualisieren",
