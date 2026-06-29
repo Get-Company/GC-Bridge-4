@@ -96,7 +96,7 @@ services:
       RUN_DJANGO_CHECK: "false"
       RUN_COLLECTSTATIC: "false"
       RUN_MIGRATIONS: "false"
-    command: celery -A GC_Bridge_4 worker --loglevel=INFO --concurrency=${CELERY_WORKER_CONCURRENCY:-2}
+    command: celery -A GC_Bridge_4 worker --loglevel=INFO --concurrency=${CELERY_WORKER_CONCURRENCY:-2} -E
     volumes:
       - media:/app/media
       - applogs:/app/tmp/logs
