@@ -151,6 +151,7 @@ services:
     environment:
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/1
+      POSTGRES_HOST: ""
       RUN_DJANGO_CHECK: "false"
       RUN_COLLECTSTATIC: "false"
       RUN_MIGRATIONS: "false"
