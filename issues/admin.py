@@ -170,6 +170,7 @@ class IssueAdmin(StaffIssueAccessMixin, BaseAdmin):
                 "first_name",
                 "username",
             )
+            kwargs["initial"] = 3
         elif db_field.name == "category":
             kwargs["queryset"] = IssueCategory.objects.filter(is_active=True).order_by("name")
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
