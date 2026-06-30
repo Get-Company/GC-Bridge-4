@@ -784,6 +784,12 @@ UNFOLD = {
                         "icon": "schedule",
                         "link": reverse_lazy("admin:telefon_zeitsteuerung_list"),
                     },
+                    {
+                        "title": _("Backend-Aktivität"),
+                        "icon": "manage_history",
+                        "link": reverse_lazy("admin:admin_logentry_changelist"),
+                        "permission": lambda request: request.user.is_superuser,
+                    },
                 ],
             },
             {

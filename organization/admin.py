@@ -1,7 +1,9 @@
 from django.contrib import admin
+from django.contrib.admin.models import ADDITION, CHANGE, DELETION, LogEntry
 from django.http import HttpResponseRedirect
 from django.urls import reverse
 from django.utils.html import format_html
+from django.utils.translation import gettext_lazy as _
 
 from unfold.contrib.filters.admin import BooleanRadioFilter
 
@@ -140,6 +142,68 @@ class OrganizationContactAdmin(BaseAdmin):
     ]
     autocomplete_fields = ("company", "employee_profile", "role")
     ordering = ("sort_order", "role__name", "employee_profile__user__last_name")
+
+
+_ACTION_ICONS = {
+    ADDITION: ("add_circle", "success"),
+    CHANGE: ("edit", "warning"),
+    DELETION: ("delete", "error"),
+}
+_ACTION_LABELS = {
+    ADDITION: _("Erstellt"),
+    CHANGE: _("Geändert"),
+    DELETION: _("Gelöscht"),
+}
+
+
+@admin.register(LogEntry)
+class AdminActivityAdmin(BaseAdmin):
+    """Superuser-only history viewer for all admin backend activity."""
+
+    list_display = (
+        "action_time",
+        "user",
+        "content_type",
+        "object_repr",
+        "action_badge",
+        "change_message",
+    )
+    list_filter = ("action_flag", "content_type", "user")
+    search_fields = ("user__username", "user__first_name", "user__last_name", "object_repr", "change_message")
+    date_hierarchy = "action_time"
+    ordering = ("-action_time",)
+    readonly_fields = ("action_time", "user", "content_type", "object_id", "object_repr", "action_flag", "change_message")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def has_view_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def has_module_perms(self, request):
+        return request.user.is_superuser
+
+    @admin.display(description=_("Aktion"))
+    def action_badge(self, obj):
+        icon, color = _ACTION_ICONS.get(obj.action_flag, ("help", "default"))
+        label = _ACTION_LABELS.get(obj.action_flag, "?")
+        return format_html(
+            '<span style="display:inline-flex;align-items:center;gap:4px;">'
+            '<span class="material-symbols-outlined" style="font-size:16px;">{}</span>{}'
+            "</span>",
+            icon,
+            label,
+        )
+
+    class Meta:
+        verbose_name = _("Backend-Aktivität")
+        verbose_name_plural = _("Backend-Aktivitäten")
 
 
 @admin.register(LegalDocument)
