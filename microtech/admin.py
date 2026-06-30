@@ -1,4 +1,4 @@
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.db import models
 from django.http import HttpResponseRedirect, JsonResponse
 from django.utils.html import format_html
@@ -13,6 +13,7 @@ from microtech.forms import (
 from microtech.models import (
     MicrotechDatasetCatalog,
     MicrotechDatasetField,
+    MicrotechGraphQLJob,
     MicrotechOrderRule,
     MicrotechOrderRuleAction,
     MicrotechOrderRuleCondition,
@@ -22,6 +23,7 @@ from microtech.models import (
     MicrotechSettings,
     MicrotechSwissCustomsFieldMapping,
 )
+from microtech.services import MicrotechJobSentinelService
 from microtech.rule_builder import (
     get_allowed_operator_codes,
     get_dataset_defs,
@@ -51,6 +53,167 @@ class SingletonAdmin(BaseAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+
+@admin.register(MicrotechGraphQLJob)
+class MicrotechGraphQLJobAdmin(BaseAdmin):
+    list_display = (
+        "id",
+        "kind",
+        "status_badge",
+        "operation",
+        "external_job_id",
+        "running_since",
+        "next_step_short",
+        "next_poll_at",
+        "updated_at",
+    )
+    search_fields = ("external_job_id", "operation", "continuation", "next_step", "error_message")
+    list_filter = ("status", "kind", "operation", "abort_strategy", "delete_after_completion")
+    actions = ("cancel_selected_jobs", "delete_selected_jobs_remote")
+    readonly_fields = BaseAdmin.readonly_fields + (
+        "kind",
+        "operation",
+        "status",
+        "external_job_id",
+        "continuation",
+        "next_step",
+        "request_payload",
+        "context",
+        "result_payload",
+        "error_message",
+        "abort_strategy",
+        "delete_after_completion",
+        "submitted_at",
+        "started_at",
+        "completed_at",
+        "webhook_received_at",
+        "last_polled_at",
+        "next_poll_at",
+        "remote_deleted_at",
+        "attempt",
+        "max_attempts",
+    )
+    fieldsets = (
+        (
+            "Status",
+            {
+                "fields": (
+                    "kind",
+                    "operation",
+                    "status",
+                    "external_job_id",
+                    "next_step",
+                    "continuation",
+                    "abort_strategy",
+                    "delete_after_completion",
+                ),
+            },
+        ),
+        (
+            "Zeitpunkte",
+            {
+                "fields": (
+                    "submitted_at",
+                    "started_at",
+                    "completed_at",
+                    "webhook_received_at",
+                    "last_polled_at",
+                    "next_poll_at",
+                    "remote_deleted_at",
+                    "attempt",
+                    "max_attempts",
+                ),
+            },
+        ),
+        (
+            "Payloads",
+            {
+                "fields": ("request_payload", "context", "result_payload", "error_message"),
+            },
+        ),
+        (
+            "System",
+            {
+                "fields": ("created_at", "updated_at"),
+            },
+        ),
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    @admin.display(description="Status")
+    def status_badge(self, obj):
+        return obj.get_status_display()
+
+    @admin.display(description="Laeuft seit")
+    def running_since(self, obj):
+        started = obj.started_at or obj.submitted_at or obj.created_at
+        if not started:
+            return "-"
+        end = obj.completed_at or obj.updated_at if obj.is_terminal else None
+        if end is None:
+            from django.utils import timezone
+
+            end = timezone.now()
+        seconds = max(0, int((end - started).total_seconds()))
+        minutes, remainder = divmod(seconds, 60)
+        hours, minutes = divmod(minutes, 60)
+        if hours:
+            return f"{hours}h {minutes}m"
+        if minutes:
+            return f"{minutes}m {remainder}s"
+        return f"{remainder}s"
+
+    @admin.display(description="Naechster Schritt")
+    def next_step_short(self, obj):
+        value = (obj.next_step or "").strip()
+        if len(value) > 90:
+            return f"{value[:87]}..."
+        return value or "-"
+
+    @admin.action(description="Ausgewaehlte Jobs abbrechen")
+    def cancel_selected_jobs(self, request, queryset):
+        service = MicrotechJobSentinelService()
+        cancelled = 0
+        failed = 0
+        for job in queryset:
+            try:
+                service.cancel_job(job_id=job.pk)
+                cancelled += 1
+            except Exception as exc:
+                failed += 1
+                self.message_user(request, f"Job {job.pk} konnte nicht abgebrochen werden: {exc}", level=messages.ERROR)
+        if cancelled:
+            self.message_user(request, f"{cancelled} Microtech Job(s) abgebrochen.")
+        if failed:
+            self.message_user(request, f"{failed} Microtech Job(s) mit Fehlern.", level=messages.ERROR)
+
+    @admin.action(description="Ausgewaehlte Jobs remote und lokal loeschen")
+    def delete_selected_jobs_remote(self, request, queryset):
+        service = MicrotechJobSentinelService()
+        deleted = 0
+        failed = 0
+        for job in queryset:
+            try:
+                service.delete_job(job_id=job.pk, delete_remote=True)
+                deleted += 1
+            except Exception as exc:
+                failed += 1
+                self.message_user(request, f"Job {job.pk} konnte nicht geloescht werden: {exc}", level=messages.ERROR)
+        if deleted:
+            self.message_user(request, f"{deleted} Microtech Job(s) geloescht.")
+        if failed:
+            self.message_user(request, f"{failed} Microtech Job(s) mit Fehlern.", level=messages.ERROR)
+
+    def delete_model(self, request, obj):
+        MicrotechJobSentinelService().delete_job(job_id=obj.pk, delete_remote=True)
+
+    def delete_queryset(self, request, queryset):
+        service = MicrotechJobSentinelService()
+        for job in queryset:
+            service.delete_job(job_id=job.pk, delete_remote=True)
 
 
 @admin.register(MicrotechSettings)

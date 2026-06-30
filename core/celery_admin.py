@@ -73,6 +73,14 @@ CELERY_ADMIN_TASKS: tuple[TaskDefinition, ...] = (
         ),
     ),
     TaskDefinition(
+        name="microtech.poll_graphql_jobs",
+        label="Microtech GraphQL Jobs pruefen",
+        description="Fallback-Poller fuer Microtech GraphQL Jobs, falls ein Webhook nicht angekommen ist.",
+        fields=(
+            TaskField("limit", "Limit", "int", 50),
+        ),
+    ),
+    TaskDefinition(
         name="products.scheduled_product_sync",
         label="Produkt-Sync komplett",
         description="Microtech -> Django, Sonderpreise bereinigen und Django -> Shopware.",

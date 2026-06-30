@@ -599,3 +599,167 @@ Das Polling gehoert in einen zentralen Client-Service, nicht in Admin-Actions od
 - Ein `Lager`-`findKey` mit zusammengesetztem Key `["ARTNR", 1]` funktioniert.
 - Ein unbekanntes Feld erzeugt `FAILED`, nicht stillschweigend `null`.
 - `records` ist immer eine Liste, auch bei Einzelrecords.
+
+## Zentrale Job-Verwaltung: `cancelJob`, `deleteJob` und Webhook
+
+GC-Bridge speichert externe GraphQL-Jobs zentral in `MicrotechGraphQLJob`. Der Wrapper muss deshalb alle Jobs nach `jobId` verwalten koennen, unabhaengig davon, ob der Job aus `requestDatasetRecords`, `updateProduct`, `createCustomer`, `updateVorgang` oder einer anderen Microtech-Operation stammt.
+
+### Gemeinsames Job-Modell im Wrapper
+
+Jeder angenommene Job muss intern mindestens diese Daten haben:
+
+- `jobId`: stabile eindeutige ID, die GC-Bridge speichert.
+- `status`: `QUEUED`, `RUNNING`, `DONE`, `FAILED` oder `CANCELLED`.
+- `createdAt`, `startedAt`, `finishedAt`: Zeitpunkte fuer Diagnose.
+- `operation`: Name der urspruenglichen Operation, z. B. `requestDatasetRecords`.
+- `result`: fertiges Result-Payload fuer den passenden `*Job`-Query.
+- `message`: kurze Statusmeldung.
+- `errorMessage`: technische Fehlermeldung bei `FAILED`.
+- `cancelRequested`: Flag fuer kooperativen Abbruch.
+
+Alle vorhandenen Job-Queries (`datasetJob`, `productJob`, `customerJob`, `vorgangJob`, `microtechJob`) muessen fuer bekannte `jobId`s weiter funktionieren, bis der Job geloescht wurde.
+
+### `cancelJob`
+
+Mutation:
+
+```graphql
+mutation CancelJob($jobId: ID!) {
+  cancelJob(jobId: $jobId) {
+    accepted
+    jobId
+    status
+    message
+  }
+}
+```
+
+Semantik:
+
+- `cancelJob` ist idempotent. Mehrere Aufrufe mit derselben `jobId` duerfen keinen Fehler ausloesen.
+- Wenn der Job `QUEUED` ist, darf er direkt auf `CANCELLED` gesetzt werden und muss nicht mehr ausgefuehrt werden.
+- Wenn der Job `RUNNING` ist, muss der Wrapper `cancelRequested = true` setzen. Der laufende Worker prueft dieses Flag an sicheren Abbruchpunkten.
+- Sichere Abbruchpunkte sind mindestens:
+  - vor dem Oeffnen einer COM-Verbindung
+  - vor jeder neuen Dataset-Page
+  - vor jedem neuen Datensatz in langen Loops
+  - vor jeder schreibenden Microtech-Operation
+  - direkt nach einem COM-Fehler, bevor Retry/Weiterlauf erfolgt
+- Wenn ein COM-Aufruf gerade blockiert, darf er nicht hart aus einem anderen Thread beendet werden. Dann bleibt der Job bis zum naechsten sicheren Punkt `RUNNING` und wechselt danach zu `CANCELLED`.
+- Wenn der Job bereits `DONE`, `FAILED` oder `CANCELLED` ist, gibt `cancelJob` `accepted: true` mit dem aktuellen Status zurueck.
+- Wenn die `jobId` unbekannt ist, gibt `accepted: false`, `status: "FAILED"` und eine klare `message` zurueck.
+
+Antwortbeispiele:
+
+```json
+{
+  "accepted": true,
+  "jobId": "job-123",
+  "status": "CANCELLED",
+  "message": "Job was cancelled before execution."
+}
+```
+
+```json
+{
+  "accepted": true,
+  "jobId": "job-123",
+  "status": "RUNNING",
+  "message": "Cancellation requested. Job will stop at the next safe checkpoint."
+}
+```
+
+### `deleteJob`
+
+Mutation:
+
+```graphql
+mutation DeleteJob($jobId: ID!) {
+  deleteJob(jobId: $jobId) {
+    accepted
+    jobId
+    status
+    message
+  }
+}
+```
+
+Semantik:
+
+- `deleteJob` entfernt den Job aus dem Wrapper-Jobstore und loescht das gespeicherte Result-Payload.
+- `deleteJob` ist idempotent. Ein bereits geloeschter Job darf als `accepted: true` beantwortet werden.
+- `deleteJob` darf laufende Jobs nicht stillschweigend hart entfernen. Wenn der Job `QUEUED` oder `RUNNING` ist, muss der Wrapper zuerst dieselbe Logik wie `cancelJob` ausfuehren.
+- Wenn ein laufender Job nicht sofort sicher abgebrochen werden kann, gibt `deleteJob` `accepted: true`, `status: "RUNNING"` und eine Meldung zurueck. Der Wrapper loescht den Job automatisch, sobald der Worker `CANCELLED` erreicht.
+- Fuer terminale Jobs (`DONE`, `FAILED`, `CANCELLED`) loescht `deleteJob` sofort.
+- Nach erfolgreichem Delete duerfen `datasetJob`/`productJob`/`customerJob`/`vorgangJob` fuer diese `jobId` entweder `null` oder einen klaren `FAILED`-Fehler `Unknown jobId` liefern.
+
+Antwortbeispiele:
+
+```json
+{
+  "accepted": true,
+  "jobId": "job-123",
+  "status": "DELETED",
+  "message": "Job and result payload deleted."
+}
+```
+
+```json
+{
+  "accepted": true,
+  "jobId": "job-123",
+  "status": "RUNNING",
+  "message": "Deletion requested. Running job will be cancelled and deleted afterwards."
+}
+```
+
+### Webhook an GC-Bridge
+
+Nach jedem terminalen Status ruft der Wrapper GC-Bridge auf:
+
+```text
+POST /microtech/graphql-jobs/webhook/
+Content-Type: application/json
+X-Microtech-Signature: sha256=<hex-hmac>
+```
+
+Minimal-Payload:
+
+```json
+{
+  "jobId": "job-123",
+  "status": "DONE",
+  "message": "Job finished."
+}
+```
+
+Fehler-Payload:
+
+```json
+{
+  "jobId": "job-123",
+  "status": "FAILED",
+  "message": "Dataset read failed",
+  "errorMessage": "Unknown field 'Foo' for dataset 'Artikel'"
+}
+```
+
+Regeln:
+
+- Der Webhook muss fuer `DONE`, `FAILED` und `CANCELLED` gesendet werden.
+- Der Webhook darf mehrfach gesendet werden; GC-Bridge verarbeitet ihn idempotent.
+- Der Wrapper soll bei HTTP-Fehlern mit Backoff retryen, z. B. 1m, 5m, 15m, 1h.
+- Der Webhook muss nicht das komplette Result-Payload enthalten. GC-Bridge kann anhand der gespeicherten `jobId` weiterhin den passenden `*Job`-Query abfragen.
+
+Signatur:
+
+- Wenn `MICROTECH_GRAPHQL_WEBHOOK_SECRET` gesetzt ist, erwartet GC-Bridge `X-Microtech-Signature`.
+- Signaturwert: HMAC-SHA256 ueber den rohen Request-Body mit dem Shared Secret.
+- Headerformat: `sha256=<hex-digest>`.
+
+### Cleanup-Verhalten in GC-Bridge
+
+- Erfolgreiche Jobs werden nach der Continuation automatisch remote per `deleteJob` geloescht und danach lokal entfernt.
+- Jobs ohne Continuation werden direkt nach erfolgreichem Webhook/Poll remote geloescht.
+- Abgebrochene Jobs werden remote abgebrochen und danach remote geloescht.
+- Jobs, deren Remote-Loeschung fehlschlaegt, bleiben lokal mit Status `DELETE_FAILED`, damit sie im Admin sichtbar bleiben und erneut geloescht werden koennen.

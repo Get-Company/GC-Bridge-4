@@ -31,5 +31,6 @@ urlpatterns = [
         name="docs-html",
     ),
     path('admin/', admin.site.urls),
+    path('microtech/', include('microtech.urls', namespace='microtech')),
     path('qr-codes/', include('qrcodes.urls', namespace='qrcodes')),
 ]

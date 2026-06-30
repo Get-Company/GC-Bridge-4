@@ -148,6 +148,38 @@ class MicrotechGraphQLClientService(BaseService):
             )
         return None
 
+    def cancel_job(self, job_id: str) -> dict[str, Any]:
+        data = self.execute(
+            """
+            mutation CancelJob($jobId: ID!) {
+              cancelJob(jobId: $jobId) {
+                accepted
+                jobId
+                status
+                message
+              }
+            }
+            """,
+            {"jobId": job_id},
+        )
+        return self._accepted(data, "cancelJob")
+
+    def delete_job(self, job_id: str) -> dict[str, Any]:
+        data = self.execute(
+            """
+            mutation DeleteJob($jobId: ID!) {
+              deleteJob(jobId: $jobId) {
+                accepted
+                jobId
+                status
+                message
+              }
+            }
+            """,
+            {"jobId": job_id},
+        )
+        return self._accepted(data, "deleteJob")
+
     def microtech_version(self) -> dict[str, Any]:
         data = self.execute(
             """

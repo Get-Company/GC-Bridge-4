@@ -14,6 +14,7 @@ from .dataset_field_catalog_import import (
     DatasetFieldImportReport,
     MicrotechDatasetFieldCatalogImportService,
 )
+from .job_sentinel import MicrotechJobSentinelService, register_continuation
 
 __all__ = [
     "MicrotechConnectionConfig",
@@ -34,4 +35,6 @@ __all__ = [
     "CORE_DATASET_SELECTORS",
     "DatasetFieldImportReport",
     "MicrotechDatasetFieldCatalogImportService",
+    "MicrotechJobSentinelService",
+    "register_continuation",
 ]

@@ -32,6 +32,105 @@ class MicrotechSettings(BaseModel):
         return obj
 
 
+class MicrotechGraphQLJob(BaseModel):
+    class Kind(models.TextChoices):
+        DATASET_RECORDS = "dataset_records", _("Dataset lesen")
+        PRODUCT_READ = "product_read", _("Produkt lesen")
+        PRODUCT_UPDATE = "product_update", _("Produkt aktualisieren")
+        CUSTOMER_READ = "customer_read", _("Kunde lesen")
+        CUSTOMER_UPSERT = "customer_upsert", _("Kunde schreiben")
+        ORDER_READ = "order_read", _("Vorgang lesen")
+        ORDER_UPSERT = "order_upsert", _("Vorgang schreiben")
+        MAINTENANCE = "maintenance", _("Wartung")
+        CUSTOM = "custom", _("Benutzerdefiniert")
+
+    class Status(models.TextChoices):
+        QUEUED = "queued", _("Wartend")
+        SUBMITTED = "submitted", _("An GraphQL uebergeben")
+        RUNNING = "running", _("Laeuft")
+        WAITING_WEBHOOK = "waiting_webhook", _("Wartet auf Webhook")
+        SUCCEEDED = "succeeded", _("Erfolgreich")
+        FAILED = "failed", _("Fehlgeschlagen")
+        CANCEL_REQUESTED = "cancel_requested", _("Abbruch angefordert")
+        CANCELLED = "cancelled", _("Abgebrochen")
+        DELETE_FAILED = "delete_failed", _("Remote-Loeschung fehlgeschlagen")
+
+    class AbortStrategy(models.TextChoices):
+        CANCEL_THEN_DELETE = "cancel_then_delete", _("Remote abbrechen, dann loeschen")
+        DELETE_REMOTE = "delete_remote", _("Remote loeschen")
+        LOCAL_ONLY = "local_only", _("Nur lokal abbrechen")
+
+    kind = models.CharField(max_length=48, choices=Kind.choices, db_index=True, verbose_name=_("Job-Art"))
+    operation = models.CharField(max_length=96, db_index=True, verbose_name=_("GraphQL Operation"))
+    status = models.CharField(
+        max_length=32,
+        choices=Status.choices,
+        default=Status.QUEUED,
+        db_index=True,
+        verbose_name=_("Status"),
+    )
+    external_job_id = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        unique=True,
+        verbose_name=_("GraphQL Job-ID"),
+    )
+    continuation = models.CharField(max_length=96, blank=True, default="", verbose_name=_("Continuation"))
+    next_step = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Naechster Schritt"))
+    request_payload = models.JSONField(blank=True, default=dict, verbose_name=_("Request Payload"))
+    context = models.JSONField(blank=True, default=dict, verbose_name=_("Kontext"))
+    result_payload = models.JSONField(blank=True, default=dict, verbose_name=_("Ergebnis Payload"))
+    error_message = models.TextField(blank=True, default="", verbose_name=_("Fehler"))
+    abort_strategy = models.CharField(
+        max_length=32,
+        choices=AbortStrategy.choices,
+        default=AbortStrategy.CANCEL_THEN_DELETE,
+        verbose_name=_("Abbruchstrategie"),
+    )
+    delete_after_completion = models.BooleanField(default=True, verbose_name=_("Nach Abschluss loeschen"))
+    submitted_at = models.DateTimeField(blank=True, null=True, db_index=True, verbose_name=_("Uebergeben am"))
+    started_at = models.DateTimeField(blank=True, null=True, verbose_name=_("Gestartet am"))
+    completed_at = models.DateTimeField(blank=True, null=True, verbose_name=_("Beendet am"))
+    webhook_received_at = models.DateTimeField(blank=True, null=True, verbose_name=_("Webhook erhalten am"))
+    last_polled_at = models.DateTimeField(blank=True, null=True, verbose_name=_("Zuletzt abgefragt am"))
+    next_poll_at = models.DateTimeField(blank=True, null=True, db_index=True, verbose_name=_("Naechster Poll"))
+    remote_deleted_at = models.DateTimeField(blank=True, null=True, verbose_name=_("Remote geloescht am"))
+    attempt = models.PositiveIntegerField(default=0, verbose_name=_("Versuche"))
+    max_attempts = models.PositiveIntegerField(default=3, verbose_name=_("Max. Versuche"))
+
+    class Meta:
+        verbose_name = _("Microtech GraphQL Job")
+        verbose_name_plural = _("Microtech GraphQL Jobs")
+        ordering = ("status", "submitted_at", "created_at")
+        indexes = [
+            models.Index(fields=("status", "next_poll_at"), name="microtech_gql_job_poll_idx"),
+            models.Index(fields=("kind", "status"), name="microtech_gql_job_kind_idx"),
+        ]
+
+    def __str__(self) -> str:
+        external = self.external_job_id or "noch nicht uebergeben"
+        return f"{self.get_kind_display()} [{self.get_status_display()}] {external}"
+
+    @property
+    def is_terminal(self) -> bool:
+        return self.status in {
+            self.Status.SUCCEEDED,
+            self.Status.FAILED,
+            self.Status.CANCELLED,
+            self.Status.DELETE_FAILED,
+        }
+
+    @property
+    def can_cancel(self) -> bool:
+        return self.status in {
+            self.Status.QUEUED,
+            self.Status.SUBMITTED,
+            self.Status.RUNNING,
+            self.Status.WAITING_WEBHOOK,
+        }
+
+
 class MicrotechSwissCustomsFieldMapping(BaseModel):
     class Section(models.TextChoices):
         SHIPMENT = "shipment", _("Sendung")

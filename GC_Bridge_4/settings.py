@@ -65,6 +65,7 @@ MICROTECH_GRAPHQL_URL = env_url("MICROTECH_GRAPHQL_URL", build_microtech_graphql
 MICROTECH_GRAPHQL_REQUEST_TIMEOUT = float(os.getenv("MICROTECH_GRAPHQL_REQUEST_TIMEOUT", "30"))
 MICROTECH_GRAPHQL_POLL_TIMEOUT = float(os.getenv("MICROTECH_GRAPHQL_POLL_TIMEOUT", "180"))
 MICROTECH_GRAPHQL_POLL_INTERVAL = float(os.getenv("MICROTECH_GRAPHQL_POLL_INTERVAL", "2"))
+MICROTECH_GRAPHQL_WEBHOOK_SECRET = os.getenv("MICROTECH_GRAPHQL_WEBHOOK_SECRET", "").strip()
 SHOPWARE_PRODUCT_MEDIA_FOLDER_ID = os.getenv("SHOPWARE_PRODUCT_MEDIA_FOLDER_ID", "").strip()
 
 
@@ -631,6 +632,12 @@ UNFOLD = {
                         "icon": "settings",
                         "link": reverse_lazy("admin:microtech_microtechorderrule_changelist"),
                         "permission": sidebar_model_view_permission("microtech", "MicrotechOrderRule"),
+                    },
+                    {
+                        "title": _("GraphQL Jobs"),
+                        "icon": "task_alt",
+                        "link": reverse_lazy("admin:microtech_microtechgraphqljob_changelist"),
+                        "permission": sidebar_model_view_permission("microtech", "MicrotechGraphQLJob"),
                     },
                     {
                         "title": _("Verbindung"),
