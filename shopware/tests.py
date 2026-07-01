@@ -259,8 +259,34 @@ class ProductMediaSyncHashRegressionTest(TestCase):
         )
 
         self.assertEqual([relation["position"] for relation in media_relations], [1, 2])
+        self.assertEqual(
+            [relation["productId"] for relation in media_relations],
+            ["shopware-product-6003", "shopware-product-6003"],
+        )
         self.assertEqual([upload["file_name"] for upload in media_uploads], ["first.jpg", "later.jpg"])
         self.assertEqual(len(media_entities), 2)
+
+    def test_media_payload_contains_all_product_media_relations(self):
+        product = Product.objects.create(erp_nr="A-6004", sku="shopware-product-6004", name="Mehrere Bilder")
+        images = [
+            Image.objects.create(path="front.jpg"),
+            Image.objects.create(path="detail.jpg"),
+            Image.objects.create(path="packaging.jpg"),
+        ]
+        for order, image in enumerate(images, start=1):
+            ProductImage.objects.create(product=product, image=image, order=order)
+
+        media_relations, _media_entities, _media_uploads = ProductMediaSyncService().get_product_media_payload(
+            product=product,
+            product_id="shopware-product-6004",
+        )
+
+        self.assertEqual(len(media_relations), 3)
+        self.assertEqual(
+            [relation["productId"] for relation in media_relations],
+            ["shopware-product-6004"] * 3,
+        )
+        self.assertEqual([relation["position"] for relation in media_relations], [1, 2, 3])
 
 
 class ShopwareSyncProductsCommandBatchTest(TestCase):
@@ -381,7 +407,12 @@ class ForceProductImageUploadsCommandTest(TestCase):
         product_service_factory.return_value = service
 
         first = Product.objects.create(erp_nr="A-5001", sku="sku-5001", shopware_image_sync_hash="hash-1")
-        second = Product.objects.create(erp_nr="A-5002", sku="sku-5002", shopware_image_sync_hash="hash-2")
+        second = Product.objects.create(
+            erp_nr="A-5002",
+            sku="sku-5002",
+            shopware_image_sync_hash="hash-2",
+            is_active=False,
+        )
         first_image = Image.objects.create(path="first-force.jpg")
         second_image = Image.objects.create(path="second-force.jpg")
         ProductImage.objects.create(product=first, image=first_image, order=1)

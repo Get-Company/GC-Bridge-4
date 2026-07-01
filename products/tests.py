@@ -122,7 +122,7 @@ class ProductAdminActionConfigurationTest(SimpleTestCase):
 
 class ProductAutoSyncSignalTest(TestCase):
     @patch("products.tasks.process_product_sync_job.delay")
-    def test_changed_product_queues_shopware_job_after_commit(self, mock_delay):
+    def test_changed_product_queues_sync_jobs_after_commit(self, mock_delay):
         mock_delay.return_value.id = "celery-task"
         product = Product.objects.create(erp_nr="A-9100", name="Alt")
 
@@ -131,10 +131,13 @@ class ProductAutoSyncSignalTest(TestCase):
             product.save(update_fields=["name"])
 
         jobs = list(ProductSyncJob.objects.order_by("target"))
-        self.assertEqual(len(jobs), 1)
-        self.assertEqual(jobs[0].target, ProductSyncJob.Target.SHOPWARE)
+        self.assertEqual(len(jobs), 2)
+        self.assertEqual(
+            {job.target for job in jobs},
+            {ProductSyncJob.Target.MICROTECH, ProductSyncJob.Target.SHOPWARE},
+        )
         self.assertEqual({tuple(job.changed_fields) for job in jobs}, {("name",)})
-        self.assertEqual(mock_delay.call_count, 1)
+        self.assertEqual(mock_delay.call_count, 2)
 
     @patch("products.tasks.process_product_sync_job.delay")
     def test_unchanged_product_save_does_not_queue_jobs(self, mock_delay):
@@ -159,9 +162,13 @@ class ProductAutoSyncSignalTest(TestCase):
             product.save(update_fields=["unit"])
 
         jobs = list(ProductSyncJob.objects.order_by("target"))
-        self.assertEqual(len(jobs), 1)
+        self.assertEqual(len(jobs), 2)
+        self.assertEqual(
+            {job.target for job in jobs},
+            {ProductSyncJob.Target.MICROTECH, ProductSyncJob.Target.SHOPWARE},
+        )
         self.assertEqual({tuple(job.changed_fields) for job in jobs}, {("name", "unit")})
-        self.assertEqual(mock_delay.call_count, 1)
+        self.assertEqual(mock_delay.call_count, 2)
 
     @patch("products.tasks.process_product_sync_job.delay")
     def test_auto_sync_can_be_suppressed_for_imports(self, mock_delay):
@@ -185,7 +192,11 @@ class ProductAutoSyncSignalTest(TestCase):
             price.save(update_fields=["price"])
 
         jobs = list(ProductSyncJob.objects.order_by("target"))
-        self.assertEqual(len(jobs), 1)
+        self.assertEqual(len(jobs), 2)
+        self.assertEqual(
+            {job.target for job in jobs},
+            {ProductSyncJob.Target.MICROTECH, ProductSyncJob.Target.SHOPWARE},
+        )
         self.assertEqual({tuple(job.changed_fields) for job in jobs}, {("price.price",)})
 
     @patch("products.tasks.process_product_sync_job.delay")
@@ -199,7 +210,11 @@ class ProductAutoSyncSignalTest(TestCase):
             storage.save(update_fields=["stock"])
 
         jobs = list(ProductSyncJob.objects.order_by("target"))
-        self.assertEqual(len(jobs), 1)
+        self.assertEqual(len(jobs), 2)
+        self.assertEqual(
+            {job.target for job in jobs},
+            {ProductSyncJob.Target.MICROTECH, ProductSyncJob.Target.SHOPWARE},
+        )
         self.assertEqual({tuple(job.changed_fields) for job in jobs}, {("storage.stock",)})
 
 
@@ -212,6 +227,20 @@ class ProductAutoSyncServiceTest(TestCase):
         ProductAutoSyncService().process_job(job_id=job.pk)
 
         mock_call_command.assert_called_once_with("shopware_sync_products", "A-9201", skip_images=True)
+
+    @patch("products.services.product_auto_sync.call_command")
+    def test_process_microtech_job_updates_texts_and_prices(self, mock_call_command):
+        product = Product.objects.create(erp_nr="A-9203", name="Artikel")
+        job = ProductSyncJob.objects.create(product=product, target=ProductSyncJob.Target.MICROTECH)
+
+        ProductAutoSyncService().process_job(job_id=job.pk)
+
+        mock_call_command.assert_has_calls(
+            [
+                call("microtech_update_product", "A-9203"),
+                call("microtech_update_prices", "A-9203"),
+            ]
+        )
 
     @patch("products.services.product_auto_sync.call_command", side_effect=CommandError("boom"))
     def test_process_job_marks_failures(self, mock_call_command):
@@ -315,20 +344,48 @@ class PriceIncreaseDocumentRenderingTest(SimpleTestCase):
 
 
 class ProductCeleryTaskTest(SimpleTestCase):
-    @patch("products.tasks.call_command")
-    def test_scheduled_product_sync_task_delegates_to_management_command(self, mock_call_command):
+    @patch("celery.chain")
+    def test_scheduled_product_sync_task_starts_sync_chain(self, mock_celery_chain):
         product_tasks.scheduled_product_sync.run(
             limit=25,
             exclude_inactive=True,
             write_base_price_back=True,
         )
 
-        mock_call_command.assert_called_once_with(
-            "scheduled_product_sync",
+        mock_celery_chain.assert_called_once()
+        sync_signature, finalize_signature = mock_celery_chain.call_args.args
+        self.assertEqual(sync_signature.task, "products.sync_from_microtech")
+        self.assertEqual(sync_signature.kwargs, {"include_inactive": False})
+        self.assertEqual(finalize_signature.task, "products._scheduled_product_sync_finalize")
+        self.assertEqual(
+            finalize_signature.kwargs,
+            {
+                "limit": 25,
+                "write_base_price_back": True,
+                "force_images": True,
+            },
+        )
+        mock_celery_chain.return_value.delay.assert_called_once_with()
+
+    @patch("celery.chain")
+    def test_scheduled_product_sync_task_can_disable_forced_images(self, mock_celery_chain):
+        product_tasks.scheduled_product_sync.run(
             limit=25,
             exclude_inactive=True,
             write_base_price_back=True,
+            force_images=False,
         )
+
+        _sync_signature, finalize_signature = mock_celery_chain.call_args.args
+        self.assertEqual(
+            finalize_signature.kwargs,
+            {
+                "limit": 25,
+                "write_base_price_back": True,
+                "force_images": False,
+            },
+        )
+        mock_celery_chain.return_value.delay.assert_called_once_with()
 
 
 class PriceMigrationTest(SimpleTestCase):
@@ -1936,7 +1993,7 @@ class ScheduledProductSyncCommandTest(TestCase):
             cmd.handle(limit=50, exclude_inactive=False)
 
         mock_sync_microtech.assert_called_once_with(set(), write_base_price_back=False)
-        self.assertEqual(mock_call_command.call_count, 2)
+        self.assertEqual(mock_call_command.call_count, 3)
         mock_call_command.assert_has_calls(
             [
                 call(
@@ -1948,6 +2005,12 @@ class ScheduledProductSyncCommandTest(TestCase):
                 ),
                 call(
                     "shopware_sync_products",
+                    all=True,
+                    limit=50,
+                    skip_images=True,
+                ),
+                call(
+                    "shopware_force_product_image_uploads",
                     all=True,
                     limit=50,
                 ),
@@ -1964,7 +2027,35 @@ class ScheduledProductSyncCommandTest(TestCase):
             cmd.handle(limit=10, exclude_inactive=True, write_base_price_back=True)
 
         mock_sync_microtech.assert_called_once_with(set(), write_base_price_back=True)
+        self.assertEqual(mock_call_command.call_count, 3)
+
+    @patch("products.management.commands.scheduled_product_sync.call_command")
+    def test_handle_can_skip_forced_shopware_images(self, mock_call_command):
+        cmd = ScheduledProductSyncCommand()
+        with (
+            patch.object(cmd, "_clear_expired_specials", return_value=(0, set())),
+            patch.object(cmd, "_sync_expired_specials_to_microtech", return_value=(0, 0)),
+        ):
+            cmd.handle(limit=20, exclude_inactive=False, skip_force_images=True)
+
         self.assertEqual(mock_call_command.call_count, 2)
+        mock_call_command.assert_has_calls(
+            [
+                call(
+                    "microtech_sync_products",
+                    all=True,
+                    include_inactive=True,
+                    preserve_is_active=True,
+                    limit=20,
+                ),
+                call(
+                    "shopware_sync_products",
+                    all=True,
+                    limit=20,
+                    skip_images=False,
+                ),
+            ]
+        )
 
     @patch("products.management.commands.scheduled_product_sync.logger")
     @patch("products.management.commands.scheduled_product_sync.call_command")
@@ -1979,10 +2070,14 @@ class ScheduledProductSyncCommandTest(TestCase):
             cmd.handle(limit=5, exclude_inactive=False, write_base_price_back=False, log_file="")
 
         mock_logger.info.assert_any_call(
-            "Scheduled product sync started. limit={} include_inactive={} write_base_price_back={} log_file={}",
+            (
+                "Scheduled product sync started. limit={} include_inactive={} "
+                "write_base_price_back={} force_images={} log_file={}"
+            ),
             5,
             True,
             False,
+            True,
             log_path,
         )
         mock_logger.info.assert_any_call("Scheduled product sync finished successfully. log_file={}", log_path)

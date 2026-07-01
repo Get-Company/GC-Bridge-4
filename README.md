@@ -181,6 +181,7 @@ The admin sidebar contains `System > Celery Tasks` for superusers. It can enqueu
 - `orders.microtech_order_upsert`
 - `customer.microtech_customer_upsert`
 - `customer.microtech_customer_lookup`
+- `emails.queue_due_campaigns_before_send`
 - `hr.sync_holidays`
 - `hr.year_transition`
 

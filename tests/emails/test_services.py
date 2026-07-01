@@ -1,3 +1,4 @@
+from datetime import timedelta
 from decimal import Decimal
 import pytest
 from unittest.mock import MagicMock, patch
@@ -145,3 +146,62 @@ class TestEmailCampaignQueueService:
         assert queued_entry.status == EmailCampaignQueueEntry.Status.QUEUED
         render_campaign_mjml.assert_called_once_with(campaign, recipient=recipient)
         compile_mjml_to_html.assert_called_once_with("<mjml>neu</mjml>")
+
+    @pytest.mark.django_db
+    @patch("emails.services.compile_mjml_to_html", return_value="<html>queued</html>")
+    @patch("emails.services.render_campaign_mjml", return_value="<mjml>queued</mjml>")
+    def test_queue_due_campaigns_before_send_queues_ready_campaign_recipients(
+        self,
+        render_campaign_mjml,
+        compile_mjml_to_html,
+    ):
+        from django.utils import timezone
+
+        from emails.models import EmailCampaign, EmailCampaignQueueEntry
+        from emails.services import EmailCampaignQueueService
+        from newsletter.models import NewsletterRecipient
+
+        now = timezone.now()
+        due_campaign = EmailCampaign.objects.create(
+            internal_title="Faellige Kampagne",
+            status=EmailCampaign.Status.READY,
+            send_at=now + timedelta(days=1, minutes=30),
+        )
+        EmailCampaign.objects.create(
+            internal_title="Entwurf",
+            status=EmailCampaign.Status.DRAFT,
+            send_at=now + timedelta(days=1, minutes=30),
+        )
+        EmailCampaign.objects.create(
+            internal_title="Spaeter",
+            status=EmailCampaign.Status.READY,
+            send_at=now + timedelta(days=1, hours=2),
+        )
+        active_recipient = NewsletterRecipient.objects.create(
+            shopware_id="active-due",
+            email="active@example.com",
+            status=NewsletterRecipient.Status.OPT_IN,
+            selected_email_campaign=due_campaign,
+        )
+        NewsletterRecipient.objects.create(
+            shopware_id="inactive-due",
+            email="inactive@example.com",
+            status=NewsletterRecipient.Status.OPT_OUT,
+            selected_email_campaign=due_campaign,
+        )
+
+        summary = EmailCampaignQueueService().queue_due_campaigns_before_send(now=now)
+
+        assert summary == {
+            "campaigns": 1,
+            "recipients": 1,
+            "queued": 1,
+            "failed": 0,
+        }
+        entry = EmailCampaignQueueEntry.objects.get()
+        assert entry.campaign == due_campaign
+        assert entry.recipient == active_recipient
+        assert entry.rendered_mjml == "<mjml>queued</mjml>"
+        assert entry.rendered_html == "<html>queued</html>"
+        render_campaign_mjml.assert_called_once_with(due_campaign, recipient=active_recipient)
+        compile_mjml_to_html.assert_called_once_with("<mjml>queued</mjml>")

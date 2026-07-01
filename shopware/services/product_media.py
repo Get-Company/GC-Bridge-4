@@ -61,6 +61,7 @@ class ProductMediaSyncService(BaseService):
             media_relations.append(
                 {
                     "id": self.build_product_media_id(product_id=product_id, media_id=media_id),
+                    "productId": product_id,
                     "mediaId": media_id,
                     "position": product_image.order,
                 }

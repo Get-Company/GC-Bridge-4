@@ -30,7 +30,10 @@ def disable_product_auto_sync():
 class ProductAutoSyncService(BaseService):
     model = ProductSyncJob
 
-    targets = (ProductSyncJob.Target.SHOPWARE,)
+    targets = (
+        ProductSyncJob.Target.SHOPWARE,
+        ProductSyncJob.Target.MICROTECH,
+    )
 
     def enqueue_product_sync(
         self,
@@ -77,9 +80,13 @@ class ProductAutoSyncService(BaseService):
             target = job.target
 
         try:
-            if target != ProductSyncJob.Target.SHOPWARE:
+            if target == ProductSyncJob.Target.SHOPWARE:
+                call_command("shopware_sync_products", product_erp_nr, skip_images=True)
+            elif target == ProductSyncJob.Target.MICROTECH:
+                call_command("microtech_update_product", product_erp_nr)
+                call_command("microtech_update_prices", product_erp_nr)
+            else:
                 raise ValueError(f"Unsupported product sync target: {target}")
-            call_command("shopware_sync_products", product_erp_nr, skip_images=True)
         except Exception as exc:
             with transaction.atomic():
                 job = ProductSyncJob.objects.select_for_update().get(pk=job_id)

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import timedelta
+
 from celery import shared_task
 
 
@@ -18,3 +20,16 @@ def apply_campaign_prices_async(campaign_pk: int) -> None:
     if erp_nrs:
         microtech_update_prices.delay(erp_nrs)
         shopware_sync_products.delay(erp_nrs)
+
+
+@shared_task(name="emails.queue_due_campaigns_before_send")
+def queue_due_campaigns_before_send(
+    lead_time_hours: int = 24,
+    window_minutes: int = 60,
+) -> dict[str, int]:
+    from emails.services import EmailCampaignQueueService
+
+    return EmailCampaignQueueService().queue_due_campaigns_before_send(
+        lead_time=timedelta(hours=lead_time_hours),
+        window=timedelta(minutes=window_minutes),
+    )

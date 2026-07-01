@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import calendar
+import logging
+from datetime import timedelta
 from decimal import Decimal, ROUND_UP
 
 from django.db import transaction
@@ -8,7 +10,9 @@ from django.utils import timezone
 
 from core.services import BaseService
 from emails.mjml import compile_mjml_to_html, render_campaign_mjml
-from emails.models import EmailCampaignQueueEntry
+from emails.models import EmailCampaign, EmailCampaignQueueEntry
+
+logger = logging.getLogger(__name__)
 
 
 def _round_up_5ct(value: Decimal) -> Decimal:
@@ -43,6 +47,77 @@ def apply_campaign_special_prices(campaign) -> list[str]:
 
 class EmailCampaignQueueService(BaseService):
     model = EmailCampaignQueueEntry
+
+    def queue_due_campaigns_before_send(
+        self,
+        *,
+        now=None,
+        lead_time: timedelta = timedelta(days=1),
+        window: timedelta = timedelta(hours=1),
+    ) -> dict[str, int]:
+        now = now or timezone.now()
+        starts_at = now + lead_time
+        ends_at = starts_at + window
+        campaigns = (
+            EmailCampaign.objects.filter(
+                status=EmailCampaign.Status.READY,
+                send_at__gte=starts_at,
+                send_at__lt=ends_at,
+            )
+            .order_by("send_at", "pk")
+        )
+
+        summary = {
+            "campaigns": 0,
+            "recipients": 0,
+            "queued": 0,
+            "failed": 0,
+        }
+
+        for campaign in campaigns:
+            summary["campaigns"] += 1
+            summary_for_campaign = self.queue_campaign_recipients(campaign)
+            summary["recipients"] += summary_for_campaign["recipients"]
+            summary["queued"] += summary_for_campaign["queued"]
+            summary["failed"] += summary_for_campaign["failed"]
+
+        return summary
+
+    def queue_campaign_recipients(self, campaign: EmailCampaign) -> dict[str, int]:
+        from newsletter.models import NewsletterRecipient
+
+        recipients = (
+            NewsletterRecipient.objects.filter(
+                selected_email_campaign=campaign,
+                status__in=(
+                    NewsletterRecipient.Status.DIRECT,
+                    NewsletterRecipient.Status.OPT_IN,
+                ),
+            )
+            .exclude(email="")
+            .select_related("customer", "selected_email_campaign")
+            .order_by("pk")
+        )
+        summary = {
+            "recipients": 0,
+            "queued": 0,
+            "failed": 0,
+        }
+
+        for recipient in recipients.iterator():
+            summary["recipients"] += 1
+            try:
+                self.queue_recipient_campaign(recipient)
+                summary["queued"] += 1
+            except Exception:
+                summary["failed"] += 1
+                logger.exception(
+                    "Failed to queue email campaign %s for recipient %s",
+                    campaign.pk,
+                    recipient.pk,
+                )
+
+        return summary
 
     @transaction.atomic
     def queue_recipient_campaign(self, recipient) -> EmailCampaignQueueEntry:

@@ -117,7 +117,7 @@ class Command(MonitoredBaseCommand):
         if batch_size <= 0:
             raise CommandError("Batch-Groesse muss groesser als 0 sein.")
 
-        queryset = Product.objects.filter(erp_nr__in=erp_nrs) if erp_nrs else Product.objects.filter(is_active=True)
+        queryset = Product.objects.filter(erp_nr__in=erp_nrs) if erp_nrs else Product.objects.all()
         if only_with_images:
             queryset = queryset.filter(product_images__isnull=False).distinct()
         queryset = _prefetch_products(queryset.order_by("erp_nr", "id"))
