@@ -6,6 +6,7 @@ from celery import shared_task
 @shared_task(name="microtech.process_graphql_job_result")
 def process_graphql_job_result(job_id: int) -> None:
     from microtech.services import MicrotechJobSentinelService
+    import products.tasks  # noqa: F401 - registers product sync continuations
 
     MicrotechJobSentinelService().process_continuation(job_id=job_id)
 

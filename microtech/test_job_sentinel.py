@@ -9,7 +9,7 @@ from django.utils import timezone
 
 from microtech.models import MicrotechGraphQLJob
 from microtech.services.graphql_client import GraphQLMicrotechError
-from microtech.services.job_sentinel import MicrotechJobSentinelService
+from microtech.services.job_sentinel import CONTINUATIONS, MicrotechJobSentinelService, register_continuation
 
 
 def _make_job(**overrides) -> MicrotechGraphQLJob:
@@ -149,3 +149,47 @@ class TestJobSentinelPoller(TestCase):
         mock_delay.reset_mock()
         self.assertEqual(service.poll_due_jobs(), 0)
         mock_delay.assert_not_called()
+
+
+class TestJobSentinelContinuations(TestCase):
+    @patch.dict(CONTINUATIONS, {}, clear=True)
+    def test_process_continuation_marks_job_failed_when_handler_raises(self):
+        def failing_handler(_job):
+            raise RuntimeError("Continuation kaputt")
+
+        register_continuation("test.fail", failing_handler)
+        job = _make_job(
+            status=MicrotechGraphQLJob.Status.SUCCEEDED,
+            continuation="test.fail",
+            next_step="Continuation eingereiht.",
+            delete_after_completion=False,
+        )
+
+        with self.assertRaises(RuntimeError):
+            MicrotechJobSentinelService().process_continuation(job_id=job.pk)
+
+        job.refresh_from_db()
+        self.assertEqual(job.status, MicrotechGraphQLJob.Status.FAILED)
+        self.assertEqual(job.next_step, "Continuation fehlgeschlagen.")
+        self.assertIn("Continuation kaputt", job.error_message)
+        self.assertIsNone(job.next_poll_at)
+
+    @patch("microtech.tasks.process_graphql_job_result.delay")
+    @patch("microtech.tasks.poll_graphql_job.delay")
+    def test_poll_due_jobs_dispatches_pending_continuations(self, mock_poll_delay, mock_continuation_delay):
+        past = timezone.now() - timedelta(minutes=1)
+        job = _make_job(
+            status=MicrotechGraphQLJob.Status.SUCCEEDED,
+            continuation="products.scheduled_product_sync_page",
+            next_step="Continuation ausfuehren.",
+            next_poll_at=past,
+        )
+
+        count = MicrotechJobSentinelService().poll_due_jobs()
+
+        self.assertEqual(count, 1)
+        mock_poll_delay.assert_not_called()
+        mock_continuation_delay.assert_called_once_with(job.pk)
+        job.refresh_from_db()
+        self.assertEqual(job.next_step, "Continuation eingereiht.")
+        self.assertGreater(job.next_poll_at, timezone.now())

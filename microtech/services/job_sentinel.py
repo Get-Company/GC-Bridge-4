@@ -49,6 +49,18 @@ class MicrotechJobSentinelService(BaseService):
     # Zeitfenster, fuer das ein dispatchter Job als "in Bearbeitung" gilt,
     # damit der naechste Beat-Tick ihn nicht erneut einreiht.
     CLAIM_BACKOFF_SECONDS = 120
+    CONTINUATION_STEPS_PENDING = (
+        "Continuation ausfuehren.",
+        "Continuation ausfuehren",
+        "Continuation ausführen.",
+        "Continuation ausführen",
+        "Continuation eingereiht.",
+        "Continuation eingereiht",
+        "Continuation laeuft.",
+        "Continuation laeuft",
+        "Continuation läuft.",
+        "Continuation läuft",
+    )
 
     def submit_dataset_records(
         self,
@@ -253,21 +265,48 @@ class MicrotechJobSentinelService(BaseService):
                     return
 
         if handler is not None:
-            handler(job)
+            MicrotechGraphQLJob.objects.filter(pk=job_id).update(
+                next_step="Continuation laeuft.",
+                next_poll_at=timezone.now() + timedelta(seconds=self.CLAIM_BACKOFF_SECONDS),
+                updated_at=timezone.now(),
+            )
+            try:
+                handler(job)
+            except Exception as exc:
+                MicrotechGraphQLJob.objects.filter(pk=job_id).update(
+                    status=MicrotechGraphQLJob.Status.FAILED,
+                    error_message=str(exc),
+                    next_step="Continuation fehlgeschlagen.",
+                    next_poll_at=None,
+                    completed_at=timezone.now(),
+                    updated_at=timezone.now(),
+                )
+                raise
             should_cleanup = job.delete_after_completion
 
         if should_cleanup:
             self.delete_job(job_id=job_id, delete_remote=True)
+        elif handler is not None:
+            MicrotechGraphQLJob.objects.filter(pk=job_id).update(
+                next_step="Continuation abgeschlossen.",
+                next_poll_at=None,
+                updated_at=timezone.now(),
+            )
 
     def poll_due_jobs(self, *, limit: int = 50) -> int:
         job_ids = self._claim_due_jobs(limit=limit)
-        if not job_ids:
-            return 0
         from microtech.tasks import poll_graphql_job
 
         for job_id in job_ids:
             poll_graphql_job.delay(job_id)
-        return len(job_ids)
+        remaining = max(0, limit - len(job_ids))
+        continuation_ids = self._claim_pending_continuations(limit=remaining)
+        if continuation_ids:
+            from microtech.tasks import process_graphql_job_result
+
+            for job_id in continuation_ids:
+                process_graphql_job_result.delay(job_id)
+        return len(job_ids) + len(continuation_ids)
 
     def _claim_due_jobs(self, *, limit: int) -> list[int]:
         """Reserviere faellige Jobs atomar und schiebe ihren naechsten Poll nach vorne.
@@ -287,6 +326,28 @@ class MicrotechJobSentinelService(BaseService):
             )
             if job_ids:
                 MicrotechGraphQLJob.objects.filter(pk__in=job_ids).update(
+                    next_poll_at=now + timedelta(seconds=self.CLAIM_BACKOFF_SECONDS),
+                    updated_at=now,
+                )
+        return job_ids
+
+    def _claim_pending_continuations(self, *, limit: int) -> list[int]:
+        if limit <= 0:
+            return []
+        now = timezone.now()
+        with transaction.atomic():
+            job_ids = list(
+                MicrotechGraphQLJob.objects.select_for_update(**self._skip_locked_kwargs())
+                .filter(status=MicrotechGraphQLJob.Status.SUCCEEDED)
+                .exclude(continuation="")
+                .filter(next_step__in=self.CONTINUATION_STEPS_PENDING)
+                .filter(Q(next_poll_at__lte=now) | Q(next_poll_at__isnull=True))
+                .order_by("next_poll_at", "completed_at", "created_at")
+                .values_list("pk", flat=True)[:limit]
+            )
+            if job_ids:
+                MicrotechGraphQLJob.objects.filter(pk__in=job_ids).update(
+                    next_step="Continuation eingereiht.",
                     next_poll_at=now + timedelta(seconds=self.CLAIM_BACKOFF_SECONDS),
                     updated_at=now,
                 )
@@ -393,11 +454,31 @@ class MicrotechJobSentinelService(BaseService):
                 self.delete_job(job_id=job_id, delete_remote=True)
                 return
             if job.continuation:
-                from microtech.tasks import process_graphql_job_result
-
-                process_graphql_job_result.delay(job_id)
+                self._dispatch_continuation(job_id)
         elif job.status == MicrotechGraphQLJob.Status.CANCELLED and job.delete_after_completion:
             self.delete_job(job_id=job_id, delete_remote=True)
+
+    def _dispatch_continuation(self, job_id: int) -> None:
+        now = timezone.now()
+        MicrotechGraphQLJob.objects.filter(pk=job_id).update(
+            next_step="Continuation eingereiht.",
+            next_poll_at=now + timedelta(seconds=self.CLAIM_BACKOFF_SECONDS),
+            updated_at=now,
+        )
+        try:
+            from microtech.tasks import process_graphql_job_result
+
+            process_graphql_job_result.delay(job_id)
+        except Exception as exc:
+            MicrotechGraphQLJob.objects.filter(pk=job_id).update(
+                status=MicrotechGraphQLJob.Status.FAILED,
+                error_message=str(exc),
+                next_step="Continuation konnte nicht eingereiht werden.",
+                next_poll_at=None,
+                completed_at=timezone.now(),
+                updated_at=timezone.now(),
+            )
+            raise
 
     def _apply_remote_status(self, job: MicrotechGraphQLJob, payload: dict[str, Any]) -> None:
         remote_status = str(self._payload_value(payload, "status") or "").upper()

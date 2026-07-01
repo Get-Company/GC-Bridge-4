@@ -311,7 +311,7 @@ CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 CELERY_BEAT_SCHEDULE = {}
-CELERY_IMPORTS = ("newsletter.tasks",)
+CELERY_IMPORTS = ("newsletter.tasks", "microtech.tasks", "products.tasks")
 
 
 UNFOLD = {
