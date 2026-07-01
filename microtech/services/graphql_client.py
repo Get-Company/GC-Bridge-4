@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any
@@ -222,6 +223,48 @@ class MicrotechGraphQLClientService(BaseService):
             {"erpNumber": erp_number},
         )
         return self.poll_job(str(accepted["jobId"]), query_job=self.product_job, retry_after=accepted.get("retryAfterSeconds"))
+
+    def submit_request_products(
+        self,
+        *,
+        erp_numbers: Sequence[str] | None = None,
+        include_images: bool = True,
+    ) -> tuple[str, float]:
+        """Submit fixed product list read without blocking. Returns (job_id, retry_after_seconds)."""
+        cleaned = [str(erp_nr).strip() for erp_nr in (erp_numbers or []) if str(erp_nr).strip()]
+        accepted = self._mutation_with_job(
+            """
+            mutation RequestProducts($erpNumbers: [String!], $includeImages: Boolean!) {
+              requestProducts(erpNumbers: $erpNumbers, includeImages: $includeImages) {
+                accepted jobId status message retryAfterSeconds
+              }
+            }
+            """,
+            "requestProducts",
+            {"erpNumbers": cleaned or None, "includeImages": bool(include_images)},
+        )
+        return str(accepted["jobId"]), float(accepted.get("retryAfterSeconds") or self.config.poll_interval)
+
+    def product_list_job(self, job_id: str) -> dict[str, Any]:
+        data = self.execute(
+            """
+            query ProductListJob($jobId: ID!) {
+              productListJob(jobId: $jobId) {
+                jobId status message errorMessage
+                returnedCount
+                products {
+                  erpNumber name description descriptionShort isActive factor unit
+                  minPurchase purchaseUnit sortOrder taxKey taxRate
+                  customsTariffNumber weightGrossKg weightNetKg price
+                  rebateQuantity rebatePrice specialPrice specialStartDate specialEndDate
+                  warehouseNumber stock storageLocation deleted images source
+                }
+              }
+            }
+            """,
+            {"jobId": job_id},
+        )
+        return data.get("productListJob") or {}
 
     def update_product(self, erp_number: str, input_data: dict[str, Any]) -> dict[str, Any]:
         accepted = self._mutation_with_job(

@@ -3,7 +3,7 @@ from __future__ import annotations
 import hmac
 import json
 import random
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import timedelta
 from typing import Any
 
@@ -128,6 +128,61 @@ class MicrotechJobSentinelService(BaseService):
         client = MicrotechGraphQLClientService()
         try:
             external_job_id, retry_after = client.submit_update_product(erp_number, input_data)
+        except Exception as exc:
+            job.status = MicrotechGraphQLJob.Status.FAILED
+            job.error_message = str(exc)
+            job.completed_at = timezone.now()
+            job.save(update_fields=("status", "error_message", "completed_at", "updated_at"))
+            raise
+
+        now = timezone.now()
+        job.external_job_id = external_job_id
+        job.status = MicrotechGraphQLJob.Status.WAITING_WEBHOOK
+        job.submitted_at = now
+        job.started_at = now
+        job.next_poll_at = now + timedelta(seconds=max(int(retry_after), 30))
+        job.save(
+            update_fields=(
+                "external_job_id",
+                "status",
+                "submitted_at",
+                "started_at",
+                "next_poll_at",
+                "updated_at",
+            )
+        )
+        return job
+
+    def submit_product_batch_read(
+        self,
+        *,
+        erp_numbers: Sequence[str] | None = None,
+        include_images: bool = True,
+        continuation: str = "",
+        context: dict[str, Any] | None = None,
+        next_step: str = "",
+        delete_after_completion: bool = True,
+    ) -> MicrotechGraphQLJob:
+        cleaned = [str(erp_number).strip() for erp_number in (erp_numbers or []) if str(erp_number).strip()]
+        request_payload: dict[str, Any] = {"includeImages": bool(include_images)}
+        if cleaned:
+            request_payload["erpNumbers"] = cleaned
+        job = MicrotechGraphQLJob.objects.create(
+            kind=MicrotechGraphQLJob.Kind.PRODUCT_READ,
+            operation="requestProducts",
+            status=MicrotechGraphQLJob.Status.QUEUED,
+            request_payload=request_payload,
+            context=context or {},
+            continuation=str(continuation or "").strip(),
+            next_step=next_step or "Warte auf Microtech GraphQL Produkt-Batch.",
+            delete_after_completion=delete_after_completion,
+        )
+        client = MicrotechGraphQLClientService()
+        try:
+            external_job_id, retry_after = client.submit_request_products(
+                erp_numbers=cleaned or None,
+                include_images=bool(include_images),
+            )
         except Exception as exc:
             job.status = MicrotechGraphQLJob.Status.FAILED
             job.error_message = str(exc)
@@ -374,7 +429,9 @@ class MicrotechJobSentinelService(BaseService):
     def _fetch_remote_job(cls, *, client: MicrotechGraphQLClientService, job: MicrotechGraphQLJob) -> dict[str, Any]:
         if job.kind == MicrotechGraphQLJob.Kind.DATASET_RECORDS:
             return client.dataset_job(str(job.external_job_id))
-        if job.kind in {MicrotechGraphQLJob.Kind.PRODUCT_READ, MicrotechGraphQLJob.Kind.PRODUCT_UPDATE}:
+        if job.kind == MicrotechGraphQLJob.Kind.PRODUCT_READ:
+            return client.product_list_job(str(job.external_job_id))
+        if job.kind == MicrotechGraphQLJob.Kind.PRODUCT_UPDATE:
             return client.product_job(str(job.external_job_id))
         if job.kind in {MicrotechGraphQLJob.Kind.CUSTOMER_READ, MicrotechGraphQLJob.Kind.CUSTOMER_UPSERT}:
             return client.customer_job(str(job.external_job_id))

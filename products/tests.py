@@ -371,7 +371,7 @@ class ProductCeleryTaskTest(SimpleTestCase):
     @patch("microtech.services.MicrotechJobSentinelService")
     def test_scheduled_product_sync_task_starts_sentinel_import(self, mock_sentinel_cls):
         job = Mock(pk=7, external_job_id="remote-7")
-        mock_sentinel_cls.return_value.submit_dataset_records.return_value = job
+        mock_sentinel_cls.return_value.submit_product_batch_read.return_value = job
 
         result = product_tasks.scheduled_product_sync.run(include_images=True)
 
@@ -379,30 +379,31 @@ class ProductCeleryTaskTest(SimpleTestCase):
             result,
             {"job_id": 7, "external_job_id": "remote-7", "include_images": True, "mode": "all", "count": None},
         )
-        mock_sentinel_cls.return_value.submit_dataset_records.assert_called_once()
-        kwargs = mock_sentinel_cls.return_value.submit_dataset_records.call_args.kwargs
+        mock_sentinel_cls.return_value.submit_product_batch_read.assert_called_once()
+        kwargs = mock_sentinel_cls.return_value.submit_product_batch_read.call_args.kwargs
+        self.assertIsNone(kwargs["erp_numbers"])
+        self.assertTrue(kwargs["include_images"])
         self.assertEqual(kwargs["continuation"], product_tasks.PRODUCT_SYNC_CONTINUATION)
         self.assertEqual(kwargs["context"]["source"], "products.scheduled_product_sync")
         self.assertEqual(kwargs["context"]["mode"], "all")
         self.assertTrue(kwargs["context"]["include_images"])
         self.assertTrue(kwargs["context"]["include_inactive"])
-        self.assertIn("Bild", kwargs["input_data"]["fields"])
 
     @patch("microtech.services.MicrotechJobSentinelService")
     def test_scheduled_product_sync_task_can_disable_images(self, mock_sentinel_cls):
         job = Mock(pk=8, external_job_id="remote-8")
-        mock_sentinel_cls.return_value.submit_dataset_records.return_value = job
+        mock_sentinel_cls.return_value.submit_product_batch_read.return_value = job
 
         product_tasks.scheduled_product_sync.run(include_images=False)
 
-        kwargs = mock_sentinel_cls.return_value.submit_dataset_records.call_args.kwargs
+        kwargs = mock_sentinel_cls.return_value.submit_product_batch_read.call_args.kwargs
         self.assertFalse(kwargs["context"]["include_images"])
-        self.assertNotIn("Bild", kwargs["input_data"]["fields"])
+        self.assertFalse(kwargs["include_images"])
 
     @patch("microtech.services.MicrotechJobSentinelService")
     def test_scheduled_product_sync_task_accepts_selected_products(self, mock_sentinel_cls):
         job = Mock(pk=9, external_job_id="remote-9")
-        mock_sentinel_cls.return_value.submit_dataset_records.return_value = job
+        mock_sentinel_cls.return_value.submit_product_batch_read.return_value = job
 
         result = product_tasks.scheduled_product_sync.run(erp_nrs=["A-1000", "A-1001"], include_images=True)
 
@@ -410,12 +411,11 @@ class ProductCeleryTaskTest(SimpleTestCase):
             result,
             {"job_id": 9, "external_job_id": "remote-9", "include_images": True, "mode": "selected", "count": 2},
         )
-        kwargs = mock_sentinel_cls.return_value.submit_dataset_records.call_args.kwargs
+        kwargs = mock_sentinel_cls.return_value.submit_product_batch_read.call_args.kwargs
+        self.assertEqual(kwargs["erp_numbers"], ["A-1000", "A-1001"])
+        self.assertTrue(kwargs["include_images"])
         self.assertEqual(kwargs["context"]["mode"], "selected")
         self.assertEqual(kwargs["context"]["erp_nrs"], ["A-1000", "A-1001"])
-        self.assertEqual(kwargs["context"]["selected_index"], 0)
-        self.assertEqual(kwargs["input_data"]["findKey"], ["A-1000"])
-        self.assertNotIn("range", kwargs["input_data"])
 
 
 class PriceMigrationTest(SimpleTestCase):

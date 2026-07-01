@@ -53,6 +53,9 @@ class MicrotechArtikelService(MicrotechDatasetService):
         self._load_product_record(product)
         return bool(self._records)
 
+    def load_product_record(self, product: dict[str, Any] | None) -> None:
+        self._load_product_record(product)
+
     def set_range_all(self) -> bool:
         return self.set_range(from_range="00000000", to_range="99999999", field=self.index_field)
 

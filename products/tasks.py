@@ -24,39 +24,6 @@ def _coerce_optional_int(value) -> int | None:
     return coerced if coerced > 0 else None
 
 
-def _build_product_dataset_input(
-    *,
-    include_inactive: bool = True,
-    include_images: bool = True,
-    find_key: list | None = None,
-    after: list | None = None,
-) -> dict:
-    from microtech.services.artikel import MicrotechArtikelService
-
-    fields = list(MicrotechArtikelService.default_fields)
-    if not include_images:
-        image_fields = set(MicrotechArtikelService.PRODUCT_IMAGE_FIELDS)
-        fields = [field for field in fields if field not in image_fields]
-
-    input_data: dict = {
-        "dataset": MicrotechArtikelService.dataset_name,
-        "fields": fields,
-        "limit": MicrotechArtikelService.page_limit,
-        "indexField": MicrotechArtikelService.index_field,
-    }
-    if find_key is not None:
-        input_data["findKey"] = find_key
-        input_data["limit"] = 1
-        return input_data
-
-    input_data["range"] = {"fromValues": ["000000"], "toValues": ["99999999ZZ"]}
-    if not include_inactive:
-        input_data["filter"] = "WBSHpKZ = 1"
-    if after:
-        input_data["after"] = after
-    return input_data
-
-
 @shared_task(
     bind=True,
     name="products.sync_from_microtech",
@@ -329,14 +296,12 @@ def scheduled_product_sync(
         include_images = True if force_images is None else bool(force_images)
     cleaned_erp_nrs = _erp_list(erp_nrs)
     limit = _coerce_optional_int(limit)
-    include_inactive = not exclude_inactive
     context = {
         "source": "products.scheduled_product_sync",
         "mode": "selected" if cleaned_erp_nrs else "all",
         "erp_nrs": cleaned_erp_nrs,
-        "selected_index": 0,
         "include_images": bool(include_images),
-        "include_inactive": include_inactive,
+        "include_inactive": not exclude_inactive,
         "limit": limit,
         "state": {"success": 0, "errors": 0, "processed": 0},
     }
@@ -345,24 +310,24 @@ def scheduled_product_sync(
             "scheduled_product_sync ignores deprecated write_base_price_back=True; "
             "the unified task only runs Microtech -> Django -> Shopware."
         )
+    if exclude_inactive:
+        logger.warning(
+            "scheduled_product_sync no longer sends a dataset inactive filter; "
+            "product selection is handled by the GraphQL requestProducts endpoint."
+        )
     logger.info(
-        "scheduled_product_sync: Sentinel import starten (mode={}, count={}, include_inactive={}, include_images={}, limit={})",
+        "scheduled_product_sync: Sentinel Produkt-Batch starten (mode={}, count={}, include_images={}, limit={})",
         context["mode"],
         len(cleaned_erp_nrs) if cleaned_erp_nrs else "all",
-        include_inactive,
         include_images,
         limit,
     )
-    input_data = _build_product_dataset_input(
-        include_inactive=include_inactive,
+    job = MicrotechJobSentinelService().submit_product_batch_read(
+        erp_numbers=cleaned_erp_nrs or None,
         include_images=bool(include_images),
-        find_key=[cleaned_erp_nrs[0]] if cleaned_erp_nrs else None,
-    )
-    job = MicrotechJobSentinelService().submit_dataset_records(
-        input_data=input_data,
         continuation=PRODUCT_SYNC_CONTINUATION,
         context=context,
-        next_step="Produktseite aus Microtech importieren.",
+        next_step="Produkt-Batch aus Microtech importieren.",
     )
     return {
         "job_id": job.pk,
@@ -379,7 +344,7 @@ def _scheduled_product_sync_continuation(job) -> None:
         Command as SyncCommand,
         _get_admin_user_id,
     )
-    from microtech.services import MicrotechGraphQLClientService, MicrotechJobSentinelService
+    from microtech.services import MicrotechGraphQLClientService
     from microtech.services.artikel import MicrotechArtikelService
     from microtech.services.lager import MicrotechLagerService
     from django.contrib.contenttypes.models import ContentType
@@ -389,9 +354,7 @@ def _scheduled_product_sync_continuation(job) -> None:
     context = dict(job.context or {})
     mode = str(context.get("mode") or "all")
     erp_nrs = _erp_list(context.get("erp_nrs"))
-    selected_index = _coerce_optional_int(context.get("selected_index")) or 0
     include_images = bool(context.get("include_images", True))
-    include_inactive = bool(context.get("include_inactive", True))
     limit = _coerce_optional_int(context.get("limit"))
     state = dict(context.get("state") or {})
     state.setdefault("success", 0)
@@ -399,9 +362,9 @@ def _scheduled_product_sync_continuation(job) -> None:
     state.setdefault("processed", 0)
 
     client = MicrotechGraphQLClientService()
-    result = client.dataset_job(str(job.external_job_id))
+    result = client.product_list_job(str(job.external_job_id))
+    products = result.get("products") or []
     artikel_service = MicrotechArtikelService(erp=client)
-    artikel_service.load_result(result)
     lager_service = MicrotechLagerService(erp=client)
     tax_map = SyncCommand._ensure_taxes()
     cmd = SyncCommand()
@@ -409,10 +372,15 @@ def _scheduled_product_sync_continuation(job) -> None:
     content_type_id = ContentType.objects.get_for_model(ProductModel).id if admin_user_id else None
 
     with TaskIssueCollector("products.scheduled_product_sync"), disable_product_auto_sync():
-        while not artikel_service.range_eof():
+        for product_data in products:
             if limit and state["processed"] >= limit:
                 break
             try:
+                artikel_service.load_product_record(product_data)
+                if artikel_service.range_eof():
+                    state["errors"] += 1
+                    state["processed"] += 1
+                    continue
                 cmd._sync_current_record(
                     artikel_service,
                     lager_service,
@@ -427,69 +395,6 @@ def _scheduled_product_sync_continuation(job) -> None:
                 logger.warning("scheduled_product_sync: record error - {}", exc)
                 state["errors"] += 1
             state["processed"] += 1
-            artikel_service.range_next()
-
-    if mode == "selected":
-        next_index = selected_index + 1
-        if next_index < len(erp_nrs):
-            logger.info(
-                "scheduled_product_sync: next selected Microtech product {}/{} (processed={}, success={}, errors={})",
-                next_index + 1,
-                len(erp_nrs),
-                state["processed"],
-                state["success"],
-                state["errors"],
-            )
-            MicrotechJobSentinelService().submit_dataset_records(
-                input_data=_build_product_dataset_input(
-                    include_inactive=include_inactive,
-                    include_images=include_images,
-                    find_key=[erp_nrs[next_index]],
-                ),
-                continuation=PRODUCT_SYNC_CONTINUATION,
-                context={
-                    **context,
-                    "selected_index": next_index,
-                    "state": state,
-                },
-                next_step="Naechsten ausgewaehlten Artikel aus Microtech importieren.",
-            )
-            return
-
-        logger.info(
-            "scheduled_product_sync: selected Microtech import complete (count={}, processed={}, success={}, errors={}, include_images={})",
-            len(erp_nrs),
-            state["processed"],
-            state["success"],
-            state["errors"],
-            include_images,
-        )
-        _finalize_scheduled_product_sync(include_images=include_images, erp_nrs=erp_nrs)
-        return
-
-    limit_reached = bool(limit and state["processed"] >= limit)
-    if result.get("hasMore") and not limit_reached:
-        logger.info(
-            "scheduled_product_sync: next Microtech page (processed={}, success={}, errors={})",
-            state["processed"],
-            state["success"],
-            state["errors"],
-        )
-        next_context = {
-            **context,
-            "state": state,
-        }
-        MicrotechJobSentinelService().submit_dataset_records(
-            input_data=_build_product_dataset_input(
-                include_inactive=include_inactive,
-                include_images=include_images,
-                after=result.get("nextCursor"),
-            ),
-            continuation=PRODUCT_SYNC_CONTINUATION,
-            context=next_context,
-            next_step="Naechste Produktseite aus Microtech importieren.",
-        )
-        return
 
     logger.info(
         "scheduled_product_sync: Microtech import complete (processed={}, success={}, errors={}, include_images={})",
@@ -498,7 +403,11 @@ def _scheduled_product_sync_continuation(job) -> None:
         state["errors"],
         include_images,
     )
-    _finalize_scheduled_product_sync(include_images=include_images, limit=limit)
+    _finalize_scheduled_product_sync(
+        include_images=include_images,
+        limit=None if mode == "selected" else limit,
+        erp_nrs=erp_nrs if mode == "selected" else None,
+    )
 
 
 def _finalize_scheduled_product_sync(
