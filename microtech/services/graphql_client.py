@@ -251,7 +251,6 @@ class MicrotechGraphQLClientService(BaseService):
             query ProductListJob($jobId: ID!) {
               productListJob(jobId: $jobId) {
                 jobId status message errorMessage
-                returnedCount
                 products {
                   erpNumber name description descriptionShort isActive factor unit
                   minPurchase purchaseUnit sortOrder taxKey taxRate
