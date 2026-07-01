@@ -30,49 +30,6 @@ class TaskDefinition:
 
 CELERY_ADMIN_TASKS: tuple[TaskDefinition, ...] = (
     TaskDefinition(
-        name="products.sync_from_microtech",
-        label="Microtech → Django importieren",
-        description="Produkte aus Microtech per GraphQL nach Django importieren (neue vereinfachte Task).",
-        fields=(
-            TaskField("erp_nrs", "ERP-Nummern", "csv", "", "Kommagetrennt, leer fuer alle Produkte."),
-            TaskField("texts_and_prices_only", "Nur Texte & Preise (keine Bilder)", "bool", False),
-        ),
-    ),
-    TaskDefinition(
-        name="products.sync_to_shopware",
-        label="Django → Shopware exportieren",
-        description="Django-Produkte nach Shopware synchronisieren (neue vereinfachte Task).",
-        fields=(
-            TaskField("erp_nrs", "ERP-Nummern", "csv", "", "Kommagetrennt, leer fuer alle Produkte."),
-            TaskField("texts_and_prices_only", "Nur Texte & Preise (keine Bilder)", "bool", False),
-        ),
-    ),
-    TaskDefinition(
-        name="products.sync_to_microtech",
-        label="Django → Microtech schreiben",
-        description="Django-Produkte (Felder + Preise) nach Microtech zurueckschreiben (neue vereinfachte Task).",
-        fields=(
-            TaskField("erp_nrs", "ERP-Nummern", "csv", "", "Kommagetrennt, leer fuer alle Produkte."),
-        ),
-    ),
-    TaskDefinition(
-        name="products.quick_product_sync",
-        label="Schnell-Sync (Texte, Preise, Lager)",
-        description=(
-            "Microtech → Django → Shopware ohne Bilder. "
-            "Fuer Beat-Schedules 07:00 und 13:00. "
-            "Bilder und Sonderpreis-Bereinigung laufen separat."
-        ),
-    ),
-    TaskDefinition(
-        name="products.expire_special_prices",
-        label="Abgelaufene Sonderpreise bereinigen",
-        description=(
-            "Prueft alle Preiszeilen auf abgelaufene Sonderpreise, loescht sie in Django, "
-            "schreibt den Normalpreis zurueck nach Microtech und triggert Shopware-Sync fuer betroffene Produkte."
-        ),
-    ),
-    TaskDefinition(
         name="microtech.poll_graphql_jobs",
         label="Microtech GraphQL Jobs pruefen",
         description="Fallback-Poller fuer Microtech GraphQL Jobs, falls ein Webhook nicht angekommen ist.",
@@ -83,48 +40,12 @@ CELERY_ADMIN_TASKS: tuple[TaskDefinition, ...] = (
     TaskDefinition(
         name="products.scheduled_product_sync",
         label="Produkt-Sync komplett",
-        description="Microtech -> Django, Sonderpreise bereinigen und Django -> Shopware.",
-        fields=(
-            TaskField("limit", "Limit", "int", "", "Leer lassen fuer alle Produkte."),
-            TaskField("exclude_inactive", "Inaktive ausschliessen", "bool", False),
-            TaskField("write_base_price_back", "Basispreis nach Microtech schreiben", "bool", False),
-            TaskField("force_images", "Shopware-Bilder vollstaendig neu hochladen", "bool", True),
+        description=(
+            "Microtech -> Django -> Shopware. Bilder werden optional per sicherem "
+            "Loeschen-und-Neuhochladen neu aufgebaut."
         ),
-    ),
-    TaskDefinition(
-        name="products.microtech_sync_products",
-        label="Microtech Import",
-        description="Produkte aus Microtech per GraphQL nach Django importieren.",
         fields=(
-            TaskField("erp_nrs", "ERP-Nummern", "csv", "", "Kommagetrennt, leer wenn Alle aktiv ist."),
-            TaskField("sync_all", "Alle Produkte", "bool", True),
-            TaskField("include_inactive", "Inaktive einschliessen", "bool", False),
-            TaskField("preserve_is_active", "Django Aktiv-Status behalten", "bool", True),
-            TaskField("limit", "Limit", "int", ""),
-        ),
-    ),
-    TaskDefinition(
-        name="products.shopware_sync_products",
-        label="Shopware Export",
-        description="Django-Produkte nach Shopware synchronisieren.",
-        fields=(
-            TaskField("erp_nrs", "ERP-Nummern", "csv", "", "Kommagetrennt, leer wenn Alle aktiv ist."),
-            TaskField("sync_all", "Alle Produkte", "bool", True),
-            TaskField("limit", "Limit", "int", ""),
-            TaskField("batch_size", "Batch-Groesse", "int", 50),
-            TaskField("only_with_images", "Nur mit Bildern", "bool", False),
-            TaskField("log_images", "Bild-Logs schreiben", "bool", False),
-        ),
-    ),
-    TaskDefinition(
-        name="products.shopware_force_product_image_uploads",
-        label="Shopware Bilder neu hochladen",
-        description="Shopware-Bilder und Zuordnungen in 10er-Batches loeschen, neu hochladen und zuordnen.",
-        fields=(
-            TaskField("erp_nrs", "ERP-Nummern", "csv", "", "Kommagetrennt, leer wenn Alle aktiv ist."),
-            TaskField("limit", "Limit", "int", ""),
-            TaskField("batch_size", "Batch-Groesse", "int", 10),
-            TaskField("log_images", "Bild-Logs schreiben", "bool", False),
+            TaskField("include_images", "Bilder nach Shopware neu aufbauen", "bool", True),
         ),
     ),
     TaskDefinition(

@@ -7,3 +7,4 @@ class ProductsConfig(AppConfig):
 
     def ready(self) -> None:
         import products.signals  # noqa: F401
+        import products.tasks  # noqa: F401

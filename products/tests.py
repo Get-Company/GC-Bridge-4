@@ -68,6 +68,7 @@ class ProductAdminActionConfigurationTest(SimpleTestCase):
         self.assertEqual(navigation, [])
         self.assertFalse(
             {
+                "sync_product_full",
                 "sync_from_microtech",
                 "sync_to_microtech",
                 "sync_prices_to_microtech",
@@ -82,6 +83,7 @@ class ProductAdminActionConfigurationTest(SimpleTestCase):
         self.assertEqual(
             ProductAdmin.actions,
             (
+                "sync_product_full",
                 "sync_from_microtech",
                 "sync_to_microtech",
                 "sync_prices_to_microtech",
@@ -90,6 +92,19 @@ class ProductAdminActionConfigurationTest(SimpleTestCase):
                 "clear_special_price_for_channel",
             ),
         )
+
+    @patch("products.admin.scheduled_product_sync_task.delay")
+    def test_product_full_sync_action_queues_selected_erp_numbers(self, mock_delay):
+        request = RequestFactory().get("/admin/products/product/")
+        queryset = Mock()
+        queryset.values_list.return_value = ["A-1000", "A-1001"]
+        admin_instance = ProductAdmin(Product, AdminSite())
+        admin_instance.message_user = Mock()
+
+        admin_instance.sync_product_full(request, queryset)
+
+        mock_delay.assert_called_once_with(erp_nrs=["A-1000", "A-1001"], include_images=True)
+        admin_instance.message_user.assert_called_once()
 
     @patch("products.admin.microtech_update_prices_task.delay")
     def test_product_price_sync_action_queues_price_update_task(self, mock_delay):
@@ -353,48 +368,54 @@ class PriceIncreaseDocumentRenderingTest(SimpleTestCase):
 
 
 class ProductCeleryTaskTest(SimpleTestCase):
-    @patch("celery.chain")
-    def test_scheduled_product_sync_task_starts_sync_chain(self, mock_celery_chain):
-        product_tasks.scheduled_product_sync.run(
-            limit=25,
-            exclude_inactive=True,
-            write_base_price_back=True,
-        )
+    @patch("microtech.services.MicrotechJobSentinelService")
+    def test_scheduled_product_sync_task_starts_sentinel_import(self, mock_sentinel_cls):
+        job = Mock(pk=7, external_job_id="remote-7")
+        mock_sentinel_cls.return_value.submit_dataset_records.return_value = job
 
-        mock_celery_chain.assert_called_once()
-        sync_signature, finalize_signature = mock_celery_chain.call_args.args
-        self.assertEqual(sync_signature.task, "products.sync_from_microtech")
-        self.assertEqual(sync_signature.kwargs, {"include_inactive": False})
-        self.assertEqual(finalize_signature.task, "products._scheduled_product_sync_finalize")
+        result = product_tasks.scheduled_product_sync.run(include_images=True)
+
         self.assertEqual(
-            finalize_signature.kwargs,
-            {
-                "limit": 25,
-                "write_base_price_back": True,
-                "force_images": True,
-            },
+            result,
+            {"job_id": 7, "external_job_id": "remote-7", "include_images": True, "mode": "all", "count": None},
         )
-        mock_celery_chain.return_value.delay.assert_called_once_with()
+        mock_sentinel_cls.return_value.submit_dataset_records.assert_called_once()
+        kwargs = mock_sentinel_cls.return_value.submit_dataset_records.call_args.kwargs
+        self.assertEqual(kwargs["continuation"], product_tasks.PRODUCT_SYNC_CONTINUATION)
+        self.assertEqual(kwargs["context"]["source"], "products.scheduled_product_sync")
+        self.assertEqual(kwargs["context"]["mode"], "all")
+        self.assertTrue(kwargs["context"]["include_images"])
+        self.assertTrue(kwargs["context"]["include_inactive"])
+        self.assertIn("Bild", kwargs["input_data"]["fields"])
 
-    @patch("celery.chain")
-    def test_scheduled_product_sync_task_can_disable_forced_images(self, mock_celery_chain):
-        product_tasks.scheduled_product_sync.run(
-            limit=25,
-            exclude_inactive=True,
-            write_base_price_back=True,
-            force_images=False,
-        )
+    @patch("microtech.services.MicrotechJobSentinelService")
+    def test_scheduled_product_sync_task_can_disable_images(self, mock_sentinel_cls):
+        job = Mock(pk=8, external_job_id="remote-8")
+        mock_sentinel_cls.return_value.submit_dataset_records.return_value = job
 
-        _sync_signature, finalize_signature = mock_celery_chain.call_args.args
+        product_tasks.scheduled_product_sync.run(include_images=False)
+
+        kwargs = mock_sentinel_cls.return_value.submit_dataset_records.call_args.kwargs
+        self.assertFalse(kwargs["context"]["include_images"])
+        self.assertNotIn("Bild", kwargs["input_data"]["fields"])
+
+    @patch("microtech.services.MicrotechJobSentinelService")
+    def test_scheduled_product_sync_task_accepts_selected_products(self, mock_sentinel_cls):
+        job = Mock(pk=9, external_job_id="remote-9")
+        mock_sentinel_cls.return_value.submit_dataset_records.return_value = job
+
+        result = product_tasks.scheduled_product_sync.run(erp_nrs=["A-1000", "A-1001"], include_images=True)
+
         self.assertEqual(
-            finalize_signature.kwargs,
-            {
-                "limit": 25,
-                "write_base_price_back": True,
-                "force_images": False,
-            },
+            result,
+            {"job_id": 9, "external_job_id": "remote-9", "include_images": True, "mode": "selected", "count": 2},
         )
-        mock_celery_chain.return_value.delay.assert_called_once_with()
+        kwargs = mock_sentinel_cls.return_value.submit_dataset_records.call_args.kwargs
+        self.assertEqual(kwargs["context"]["mode"], "selected")
+        self.assertEqual(kwargs["context"]["erp_nrs"], ["A-1000", "A-1001"])
+        self.assertEqual(kwargs["context"]["selected_index"], 0)
+        self.assertEqual(kwargs["input_data"]["findKey"], ["A-1000"])
+        self.assertNotIn("range", kwargs["input_data"])
 
 
 class PriceMigrationTest(SimpleTestCase):

@@ -73,6 +73,7 @@ from mappei.models import MappeiPriceSnapshot, MappeiProductMapping
 from shopware.models import ShopwareSettings
 from .services import PriceIncreaseService
 from .tasks import (
+    scheduled_product_sync as scheduled_product_sync_task,
     sync_from_microtech as sync_from_microtech_task,
     sync_to_microtech as sync_to_microtech_task,
     microtech_update_prices as microtech_update_prices_task,
@@ -453,6 +454,7 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
     filter_horizontal = ("categories",)
     action_form = ProductSpecialPriceActionForm
     actions = (
+        "sync_product_full",
         "sync_from_microtech",
         "sync_to_microtech",
         "sync_prices_to_microtech",
@@ -465,6 +467,7 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
             "title": "Synchronisation",
             "icon": "sync",
             "items": [
+                "sync_product_full_detail",
                 "sync_from_microtech_detail",
                 "sync_to_microtech_detail",
                 "sync_prices_to_microtech_detail",
@@ -665,6 +668,40 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
             return 0, len(erp_nrs), [str(exc)]
 
         return len(erp_nrs), 0, []
+
+    @action(
+        description="Produkt komplett synchronisieren",
+        icon="sync_alt",
+        variant=ActionVariant.PRIMARY,
+    )
+    def sync_product_full(self, request, queryset):
+        erp_nrs = list(queryset.values_list("erp_nr", flat=True))
+        erp_nrs = [erp_nr for erp_nr in erp_nrs if erp_nr]
+        if not erp_nrs:
+            self.message_user(request, "Keine Produkte ausgewählt.", level=messages.WARNING)
+            return
+        scheduled_product_sync_task.delay(erp_nrs=erp_nrs, include_images=True)
+        self.message_user(
+            request,
+            f"{len(erp_nrs)} Produkt(e) fuer kompletten Microtech-Django-Shopware-Sync eingereiht.",
+        )
+
+    @action(
+        description="Produkt komplett synchronisieren",
+        icon="sync_alt",
+        variant=ActionVariant.PRIMARY,
+    )
+    def sync_product_full_detail(self, request, object_id: str):
+        product = self.get_object(request, object_id)
+        if not product:
+            self.message_user(request, "Produkt nicht gefunden.", level=messages.ERROR)
+            return self._redirect_to_change_page(object_id)
+        scheduled_product_sync_task.delay(erp_nrs=[product.erp_nr], include_images=True)
+        self.message_user(
+            request,
+            f"Produkt {product.erp_nr} fuer kompletten Microtech-Django-Shopware-Sync eingereiht.",
+        )
+        return self._redirect_to_change_page(object_id)
 
     @action(
         description="Von Microtech synchronisieren",
