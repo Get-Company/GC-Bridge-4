@@ -228,19 +228,28 @@ class ProductAutoSyncServiceTest(TestCase):
 
         mock_call_command.assert_called_once_with("shopware_sync_products", "A-9201", skip_images=True)
 
-    @patch("products.services.product_auto_sync.call_command")
-    def test_process_microtech_job_updates_texts_and_prices(self, mock_call_command):
-        product = Product.objects.create(erp_nr="A-9203", name="Artikel")
-        job = ProductSyncJob.objects.create(product=product, target=ProductSyncJob.Target.MICROTECH)
+    @patch("microtech.services.MicrotechJobSentinelService")
+    def test_process_microtech_job_submits_product_update_to_sentinel(self, mock_sentinel_cls):
+        product = Product.objects.create(erp_nr="A-9203", name="Artikel", description="Beschreibung.")
+        job = ProductSyncJob.objects.create(
+            product=product,
+            target=ProductSyncJob.Target.MICROTECH,
+            changed_fields=["description"],
+        )
 
         ProductAutoSyncService().process_job(job_id=job.pk)
 
-        mock_call_command.assert_has_calls(
-            [
-                call("microtech_update_product", "A-9203"),
-                call("microtech_update_prices", "A-9203"),
-            ]
-        )
+        sentinel = mock_sentinel_cls.return_value
+        sentinel.submit_product_update.assert_called_once()
+        kwargs = sentinel.submit_product_update.call_args.kwargs
+        self.assertEqual(kwargs["erp_number"], "A-9203")
+        self.assertEqual(kwargs["input_data"]["description"], "Beschreibung.")
+        self.assertEqual(kwargs["context"]["source"], "product_auto_sync")
+        self.assertEqual(kwargs["context"]["product_sync_job_id"], job.pk)
+        self.assertEqual(kwargs["context"]["changed_fields"], ["description"])
+
+        job.refresh_from_db()
+        self.assertEqual(job.status, ProductSyncJob.Status.SUCCEEDED)
 
     @patch("products.services.product_auto_sync.call_command", side_effect=CommandError("boom"))
     def test_process_job_marks_failures(self, mock_call_command):

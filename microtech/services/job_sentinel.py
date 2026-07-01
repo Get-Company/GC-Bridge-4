@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import hmac
 import json
+import random
 from collections.abc import Callable
 from datetime import timedelta
 from typing import Any
 
 from django.conf import settings
-from django.db import transaction
+from django.db import connection, transaction
 from django.db.models import Q
 from django.utils import timezone
 
@@ -40,6 +41,15 @@ class MicrotechJobSentinelService(BaseService):
         MicrotechGraphQLJob.Status.WAITING_WEBHOOK,
     }
 
+    # Fallback-Poll-Kadenz. retryAfterSeconds vom Wrapper hat Vorrang.
+    DEFAULT_POLL_INTERVAL_SECONDS = 60
+    MIN_POLL_INTERVAL_SECONDS = 10
+    POLL_JITTER_SECONDS = 15
+    POLL_ERROR_BACKOFF_SECONDS = 300
+    # Zeitfenster, fuer das ein dispatchter Job als "in Bearbeitung" gilt,
+    # damit der naechste Beat-Tick ihn nicht erneut einreiht.
+    CLAIM_BACKOFF_SECONDS = 120
+
     def submit_dataset_records(
         self,
         *,
@@ -62,6 +72,62 @@ class MicrotechJobSentinelService(BaseService):
         client = MicrotechGraphQLClientService()
         try:
             external_job_id, retry_after = client.submit_dataset_job(input_data)
+        except Exception as exc:
+            job.status = MicrotechGraphQLJob.Status.FAILED
+            job.error_message = str(exc)
+            job.completed_at = timezone.now()
+            job.save(update_fields=("status", "error_message", "completed_at", "updated_at"))
+            raise
+
+        now = timezone.now()
+        job.external_job_id = external_job_id
+        job.status = MicrotechGraphQLJob.Status.WAITING_WEBHOOK
+        job.submitted_at = now
+        job.started_at = now
+        job.next_poll_at = now + timedelta(seconds=max(int(retry_after), 30))
+        job.save(
+            update_fields=(
+                "external_job_id",
+                "status",
+                "submitted_at",
+                "started_at",
+                "next_poll_at",
+                "updated_at",
+            )
+        )
+        return job
+
+    def submit_product_update(
+        self,
+        *,
+        erp_number: str,
+        input_data: dict[str, Any],
+        continuation: str = "",
+        context: dict[str, Any] | None = None,
+        next_step: str = "",
+        delete_after_completion: bool = True,
+    ) -> MicrotechGraphQLJob:
+        erp_number = str(erp_number or "").strip()
+        if not erp_number:
+            raise ValueError("erp_number is required.")
+
+        request_payload = {
+            "erpNumber": erp_number,
+            "input": input_data,
+        }
+        job = MicrotechGraphQLJob.objects.create(
+            kind=MicrotechGraphQLJob.Kind.PRODUCT_UPDATE,
+            operation="updateProduct",
+            status=MicrotechGraphQLJob.Status.QUEUED,
+            request_payload=request_payload,
+            context=context or {},
+            continuation=str(continuation or "").strip(),
+            next_step=next_step or "Warte auf Microtech GraphQL Produkt-Update.",
+            delete_after_completion=delete_after_completion,
+        )
+        client = MicrotechGraphQLClientService()
+        try:
+            external_job_id, retry_after = client.submit_update_product(erp_number, input_data)
         except Exception as exc:
             job.status = MicrotechGraphQLJob.Status.FAILED
             job.error_message = str(exc)
@@ -139,35 +205,64 @@ class MicrotechJobSentinelService(BaseService):
             self.delete_job(job_id=job_id, delete_remote=True)
 
     def poll_due_jobs(self, *, limit: int = 50) -> int:
-        now = timezone.now()
-        job_ids = list(
-            MicrotechGraphQLJob.objects.filter(
-                status__in=self.LOCAL_ACTIVE,
-            )
-            .filter(Q(next_poll_at__lte=now) | Q(next_poll_at__isnull=True))
-            .order_by("next_poll_at", "created_at")
-            .values_list("pk", flat=True)[:limit]
-        )
-        processed = 0
+        job_ids = self._claim_due_jobs(limit=limit)
+        if not job_ids:
+            return 0
+        from microtech.tasks import poll_graphql_job
+
         for job_id in job_ids:
-            if self.poll_job_once(job_id=job_id):
-                processed += 1
-        return processed
+            poll_graphql_job.delay(job_id)
+        return len(job_ids)
+
+    def _claim_due_jobs(self, *, limit: int) -> list[int]:
+        """Reserviere faellige Jobs atomar und schiebe ihren naechsten Poll nach vorne.
+
+        Der Claim verhindert, dass ueberlappende Beat-Laeufe denselben Job doppelt
+        einreihen, bevor der dispatchte Poll ausgefuehrt wurde. ``skip_locked``
+        laesst parallele Beat-Laeufe sich die Arbeit teilen statt sich zu blockieren.
+        """
+        now = timezone.now()
+        with transaction.atomic():
+            job_ids = list(
+                MicrotechGraphQLJob.objects.select_for_update(**self._skip_locked_kwargs())
+                .filter(status__in=self.LOCAL_ACTIVE)
+                .filter(Q(next_poll_at__lte=now) | Q(next_poll_at__isnull=True))
+                .order_by("next_poll_at", "created_at")
+                .values_list("pk", flat=True)[:limit]
+            )
+            if job_ids:
+                MicrotechGraphQLJob.objects.filter(pk__in=job_ids).update(
+                    next_poll_at=now + timedelta(seconds=self.CLAIM_BACKOFF_SECONDS),
+                    updated_at=now,
+                )
+        return job_ids
+
+    @staticmethod
+    def _skip_locked_kwargs() -> dict[str, bool]:
+        if connection.features.has_select_for_update_skip_locked:
+            return {"skip_locked": True}
+        return {}
 
     def poll_job_once(self, *, job_id: int) -> bool:
         with transaction.atomic():
-            job = MicrotechGraphQLJob.objects.select_for_update().filter(pk=job_id).first()
+            job = (
+                MicrotechGraphQLJob.objects.select_for_update(**self._skip_locked_kwargs())
+                .filter(pk=job_id)
+                .first()
+            )
             if job is None or job.is_terminal or not job.external_job_id:
                 return False
             job.attempt += 1
             job.last_polled_at = timezone.now()
             job.save(update_fields=("attempt", "last_polled_at", "updated_at"))
+            attempt = job.attempt
+            max_attempts = job.max_attempts
 
         client = MicrotechGraphQLClientService()
         try:
             remote = self._fetch_remote_job(client=client, job=job)
         except Exception as exc:
-            self._mark_poll_error(job_id=job_id, error=exc)
+            self._handle_poll_failure(job_id=job_id, attempt=attempt, max_attempts=max_attempts, error=exc)
             return False
 
         with transaction.atomic():
@@ -177,7 +272,10 @@ class MicrotechJobSentinelService(BaseService):
             job.result_payload = remote
             self._apply_remote_status(job, remote)
             if not job.is_terminal:
-                job.next_poll_at = timezone.now() + timedelta(seconds=60)
+                if attempt >= max_attempts:
+                    self._mark_exhausted(job, remote, attempt)
+                else:
+                    job.next_poll_at = self._reschedule_at(remote)
             job.save()
 
         self._after_terminal_update(job_id)
@@ -284,13 +382,42 @@ class MicrotechJobSentinelService(BaseService):
             return client.vorgang_job(str(job.external_job_id))
         return client.microtech_job(str(job.external_job_id))
 
-    @staticmethod
-    def _mark_poll_error(*, job_id: int, error: Exception) -> None:
-        next_poll_at = timezone.now() + timedelta(minutes=5)
+    def _handle_poll_failure(self, *, job_id: int, attempt: int, max_attempts: int, error: Exception) -> None:
+        now = timezone.now()
+        if attempt >= max_attempts:
+            MicrotechGraphQLJob.objects.filter(pk=job_id).update(
+                status=MicrotechGraphQLJob.Status.FAILED,
+                error_message=str(error),
+                next_step="Poll-Fehler, max. Versuche erreicht.",
+                next_poll_at=None,
+                completed_at=now,
+                updated_at=now,
+            )
+            return
+        jitter = random.uniform(0, self.POLL_JITTER_SECONDS)
         MicrotechGraphQLJob.objects.filter(pk=job_id).update(
             error_message=str(error),
-            next_poll_at=next_poll_at,
+            next_poll_at=now + timedelta(seconds=self.POLL_ERROR_BACKOFF_SECONDS + jitter),
+            updated_at=now,
         )
+
+    def _reschedule_at(self, remote: dict[str, Any]):
+        retry_after = self._payload_value(remote, "retryAfterSeconds")
+        try:
+            base = int(retry_after)
+        except (TypeError, ValueError):
+            base = self.DEFAULT_POLL_INTERVAL_SECONDS
+        base = max(base, self.MIN_POLL_INTERVAL_SECONDS)
+        jitter = random.uniform(0, self.POLL_JITTER_SECONDS)
+        return timezone.now() + timedelta(seconds=base + jitter)
+
+    def _mark_exhausted(self, job: MicrotechGraphQLJob, remote: dict[str, Any], attempt: int) -> None:
+        remote_status = str(self._payload_value(remote, "status") or "").upper() or "unbekannt"
+        job.status = MicrotechGraphQLJob.Status.FAILED
+        job.error_message = f"Job nach {attempt} Versuchen nicht abgeschlossen (Status: {remote_status})."
+        job.next_step = "Max. Versuche erreicht."
+        job.completed_at = timezone.now()
+        job.next_poll_at = None
 
     @staticmethod
     def _external_job_id_from_payload(payload: dict[str, Any]) -> str:

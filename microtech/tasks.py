@@ -15,3 +15,10 @@ def poll_graphql_jobs(limit: int = 50) -> int:
     from microtech.services import MicrotechJobSentinelService
 
     return MicrotechJobSentinelService().poll_due_jobs(limit=limit)
+
+
+@shared_task(name="microtech.poll_graphql_job")
+def poll_graphql_job(job_id: int) -> bool:
+    from microtech.services import MicrotechJobSentinelService
+
+    return MicrotechJobSentinelService().poll_job_once(job_id=job_id)

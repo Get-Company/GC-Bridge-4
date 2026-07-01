@@ -77,14 +77,20 @@ class ProductAutoSyncService(BaseService):
             job.last_error = ""
             job.save(update_fields=("status", "attempt", "started_at", "finished_at", "last_error", "updated_at"))
             product_erp_nr = job.product.erp_nr
+            product_id = job.product_id
+            changed_fields = list(job.changed_fields or [])
             target = job.target
 
         try:
             if target == ProductSyncJob.Target.SHOPWARE:
                 call_command("shopware_sync_products", product_erp_nr, skip_images=True)
             elif target == ProductSyncJob.Target.MICROTECH:
-                call_command("microtech_update_product", product_erp_nr)
-                call_command("microtech_update_prices", product_erp_nr)
+                self._submit_microtech_sentinel_jobs(
+                    product_id=product_id,
+                    product_sync_job_id=job_id,
+                    product_erp_nr=product_erp_nr,
+                    changed_fields=changed_fields,
+                )
             else:
                 raise ValueError(f"Unsupported product sync target: {target}")
         except Exception as exc:
@@ -153,3 +159,42 @@ class ProductAutoSyncService(BaseService):
             celery_task_id=getattr(async_result, "id", "") or "",
             last_error="",
         )
+
+    @staticmethod
+    def _submit_microtech_sentinel_jobs(
+        *,
+        product_id: int,
+        product_sync_job_id: int,
+        product_erp_nr: str,
+        changed_fields: list[str],
+    ) -> None:
+        from microtech.management.commands.microtech_update_prices import Command as MicrotechUpdatePricesCommand
+        from microtech.management.commands.microtech_update_product import Command as MicrotechUpdateProductCommand
+        from microtech.services import MicrotechJobSentinelService
+
+        product = Product.objects.select_related("tax").get(pk=product_id)
+        sentinel = MicrotechJobSentinelService()
+        base_context = {
+            "source": "product_auto_sync",
+            "product_sync_job_id": product_sync_job_id,
+            "product_id": product_id,
+            "erp_nr": product_erp_nr,
+            "changed_fields": changed_fields,
+        }
+
+        product_payload = MicrotechUpdateProductCommand()._build_input_data(product)
+        sentinel.submit_product_update(
+            erp_number=product_erp_nr,
+            input_data=product_payload,
+            context={**base_context, "payload": "product"},
+            next_step="Produktdaten per Auto-Sync nach Microtech schreiben.",
+        )
+
+        price_payload = MicrotechUpdatePricesCommand()._get_price_data(product)
+        if price_payload:
+            sentinel.submit_product_update(
+                erp_number=product_erp_nr,
+                input_data=price_payload,
+                context={**base_context, "payload": "prices"},
+                next_step="Preise per Auto-Sync nach Microtech schreiben.",
+            )

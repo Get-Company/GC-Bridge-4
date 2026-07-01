@@ -237,6 +237,21 @@ class MicrotechGraphQLClientService(BaseService):
         )
         return self.poll_job(str(accepted["jobId"]), query_job=self.product_job, retry_after=accepted.get("retryAfterSeconds"))
 
+    def submit_update_product(self, erp_number: str, input_data: dict[str, Any]) -> tuple[str, float]:
+        """Submit product update without blocking. Returns (job_id, retry_after_seconds)."""
+        accepted = self._mutation_with_job(
+            """
+            mutation UpdateProduct($erpNumber: String!, $input: UpdateProductInput!) {
+              updateProduct(erpNumber: $erpNumber, input: $input) {
+                accepted jobId status message retryAfterSeconds
+              }
+            }
+            """,
+            "updateProduct",
+            {"erpNumber": erp_number, "input": input_data},
+        )
+        return str(accepted["jobId"]), float(accepted.get("retryAfterSeconds") or self.config.poll_interval)
+
     def product_job(self, job_id: str) -> dict[str, Any]:
         data = self.execute(
             """
