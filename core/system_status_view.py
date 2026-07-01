@@ -13,19 +13,10 @@ from django.template.response import TemplateResponse
 
 
 TASK_LABELS: dict[str, str] = {
-    "products.sync_from_microtech": "Microtech → Django importieren",
-    "products.sync_to_shopware": "Django → Shopware exportieren",
-    "products.sync_to_microtech": "Django → Microtech schreiben",
-    "products.quick_product_sync": "Schnell-Sync (Texte, Preise, Lager)",
     "products.expire_special_prices": "Abgelaufene Sonderpreise bereinigen",
     "microtech.poll_graphql_jobs": "Microtech GraphQL Jobs pruefen",
     "products.scheduled_product_sync": "Produkt-Sync komplett",
-    "products.microtech_sync_products": "Microtech Import",
-    "products.microtech_update_product": "Microtech Produkt aktualisieren",
-    "products.microtech_update_prices": "Microtech Preise aktualisieren",
     "products.process_product_sync_job": "Produkt Auto-Sync Job",
-    "products.shopware_sync_products": "Shopware Export",
-    "products.shopware_force_product_image_uploads": "Shopware Bilder neu hochladen",
     "orders.shopware_sync_open_orders": "Offene Bestellungen importieren",
     "orders.microtech_order_upsert": "Bestellung nach Microtech",
     "customer.microtech_customer_upsert": "Kunde nach Microtech",

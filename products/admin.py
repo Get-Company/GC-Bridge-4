@@ -16,7 +16,6 @@ from django.contrib import admin, messages
 from django.contrib.admin.models import LogEntry
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
-from django.core.management import call_command
 from django.db import transaction
 from django.db.models import Case, Count, F, IntegerField, Prefetch, Q, Value, When, Window
 from django.db.models.functions import RowNumber
@@ -74,8 +73,6 @@ from shopware.models import ShopwareSettings
 from .services import PriceIncreaseService
 from .tasks import (
     scheduled_product_sync as scheduled_product_sync_task,
-    sync_from_microtech as sync_from_microtech_task,
-    sync_to_microtech as sync_to_microtech_task,
     microtech_update_prices as microtech_update_prices_task,
 )
 from .models import (
@@ -455,10 +452,7 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
     action_form = ProductSpecialPriceActionForm
     actions = (
         "sync_product_full",
-        "sync_from_microtech",
-        "sync_to_microtech",
-        "sync_prices_to_microtech",
-        "sync_to_shopware",
+        "sync_product_without_images",
         "set_special_price_for_channel",
         "clear_special_price_for_channel",
     )
@@ -468,10 +462,7 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
             "icon": "sync",
             "items": [
                 "sync_product_full_detail",
-                "sync_from_microtech_detail",
-                "sync_to_microtech_detail",
-                "sync_prices_to_microtech_detail",
-                "sync_to_shopware_detail",
+                "sync_product_without_images_detail",
             ],
         },
     )
@@ -499,15 +490,6 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
                 name="products_product_request_ai_rewrite",
             ),
         ] + super().get_urls()
-
-    def _log_admin_error(self, request, message: str, *, obj: Product | None = None) -> None:
-        log_admin_change(
-            user_id=request.user.id,
-            content_type_id=ContentType.objects.get_for_model(Product).id,
-            object_id=str(obj.pk) if obj else None,
-            object_repr=str(obj) if obj else "Shopware Sync",
-            message=message,
-        )
 
     def _build_action_form(self, request):
         form = self.action_form(request.POST)
@@ -646,29 +628,6 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
             )
         return HttpResponseRedirect(reverse("admin:ai_airewritejob_change", args=(job.pk,)))
 
-    def _sync_products_bulk(self, products, request=None) -> tuple[int, int, list[str]]:
-        erp_nrs = [erp_nr for erp_nr in products.values_list("erp_nr", flat=True)] if hasattr(products, "values_list") else [
-            product.erp_nr for product in products
-        ]
-        erp_nrs = [erp_nr for erp_nr in erp_nrs if erp_nr]
-        if not erp_nrs:
-            return 0, 0, []
-
-        try:
-            call_command("shopware_sync_products", *erp_nrs)
-        except Exception as exc:
-            if request:
-                for erp_nr in erp_nrs:
-                    product = Product.objects.filter(erp_nr=erp_nr).first()
-                    self._log_admin_error(
-                        request,
-                        f"Shopware sync fehlgeschlagen fuer {erp_nr}: {exc}",
-                        obj=product,
-                    )
-            return 0, len(erp_nrs), [str(exc)]
-
-        return len(erp_nrs), 0, []
-
     @action(
         description="Produkt komplett synchronisieren",
         icon="sync_alt",
@@ -704,161 +663,38 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
         return self._redirect_to_change_page(object_id)
 
     @action(
-        description="Von Microtech synchronisieren",
+        description="Produkt ohne Bilder synchronisieren",
         icon="sync",
-        variant=ActionVariant.PRIMARY,
-    )
-    def sync_from_microtech(self, request, queryset):
-        erp_nrs = list(queryset.values_list("erp_nr", flat=True))
-        if not erp_nrs:
-            self.message_user(request, "Keine Produkte ausgewählt.", level=messages.WARNING)
-            return
-        sync_from_microtech_task.delay(erp_nrs)
-        self.message_user(request, f"{len(erp_nrs)} Produkt(e) zur Microtech-Synchronisierung in die Warteschlange eingereiht.")
-
-    @action(
-        description="Von Microtech synchronisieren",
-        icon="sync",
-        variant=ActionVariant.PRIMARY,
-    )
-    def sync_from_microtech_detail(self, request, object_id: str):
-        product = self.get_object(request, object_id)
-        if not product:
-            self.message_user(request, "Produkt nicht gefunden.", level=messages.ERROR)
-            return self._redirect_to_change_page(object_id)
-        sync_from_microtech_task.delay([product.erp_nr])
-        self.message_user(request, f"Produkt {product.erp_nr} zur Microtech-Synchronisierung in die Warteschlange eingereiht.")
-        return self._redirect_to_change_page(object_id)
-
-    @action(
-        description="Nach Shopware synchronisieren",
-        icon="sync",
-        variant=ActionVariant.PRIMARY,
-    )
-    def sync_to_shopware(self, request, queryset):
-        try:
-            success_count, error_count, error_messages = self._sync_products_bulk(queryset, request=request)
-        except Exception as exc:
-            self._log_admin_error(
-                request,
-                f"Shopware sync fehlgeschlagen: {exc}",
-            )
-            self.message_user(
-                request,
-                f"Sync fehlgeschlagen: {exc} — Details im Produkt-Verlauf (History).",
-                level=messages.ERROR,
-            )
-            return
-        if success_count:
-            self.message_user(request, f"{success_count} Produkt(e) synchronisiert.")
-        if error_count:
-            detail = f": {error_messages[0]}" if error_messages else ""
-            self.message_user(
-                request,
-                f"{error_count} Produkt(e) mit Fehlern{detail} — Details im Produkt-Verlauf (History).",
-                level=messages.ERROR,
-            )
-
-    @action(
-        description="Nach Shopware synchronisieren",
-        icon="sync",
-        variant=ActionVariant.PRIMARY,
-    )
-    def sync_to_shopware_detail(self, request, object_id: str):
-        product = self.get_object(request, object_id)
-        if not product:
-            self.message_user(request, "Produkt nicht gefunden.", level=messages.ERROR)
-            return self._redirect_to_change_page(object_id)
-        try:
-            success_count, error_count, error_messages = self._sync_products_bulk([product], request=request)
-            if success_count:
-                self.message_user(request, f"Produkt {product.erp_nr} synchronisiert.")
-            if error_count:
-                detail = error_messages[0] if error_messages else "Unbekannter Fehler"
-                self.message_user(
-                    request,
-                    f"Sync fehlgeschlagen: {detail} — Details im Produkt-Verlauf (History).",
-                    level=messages.ERROR,
-                )
-        except Exception as exc:
-            self._log_admin_error(
-                request,
-                f"Shopware sync fehlgeschlagen fuer {product.erp_nr}: {exc}",
-                obj=product,
-            )
-            self.message_user(
-                request,
-                f"Sync fehlgeschlagen: {detail} — Details im Produkt-Verlauf (History).",
-                level=messages.ERROR,
-            )
-        return self._redirect_to_change_page(object_id)
-
-    @action(
-        description="Nach Microtech synchronisieren",
-        icon="sync",
-        variant=ActionVariant.PRIMARY,
-    )
-    def sync_to_microtech(self, request, queryset):
-        erp_nrs = list(queryset.values_list("erp_nr", flat=True))
-        if not erp_nrs:
-            self.message_user(request, "Keine Produkte ausgewählt.", level=messages.WARNING)
-            return
-        sync_to_microtech_task.delay(erp_nrs)
-        self.message_user(
-            request,
-            f"{len(erp_nrs)} Produkt(e) zur Microtech-Synchronisierung (Update) in die Warteschlange eingereiht.",
-        )
-
-    @action(
-        description="Nach Microtech synchronisieren",
-        icon="sync",
-        variant=ActionVariant.PRIMARY,
-    )
-    def sync_to_microtech_detail(self, request, object_id: str):
-        product = self.get_object(request, object_id)
-        if not product:
-            self.message_user(request, "Produkt nicht gefunden.", level=messages.ERROR)
-            return self._redirect_to_change_page(object_id)
-        sync_to_microtech_task.delay([product.erp_nr])
-        self.message_user(
-            request,
-            f"Produkt {product.erp_nr} zur Microtech-Synchronisierung (Update) in die Warteschlange eingereiht.",
-        )
-        return self._redirect_to_change_page(object_id)
-
-    @action(
-        description="Preise nach Microtech übertragen",
-        icon="price_check",
         variant=ActionVariant.DEFAULT,
     )
-    def sync_prices_to_microtech(self, request, queryset):
+    def sync_product_without_images(self, request, queryset):
         erp_nrs = list(queryset.values_list("erp_nr", flat=True))
+        erp_nrs = [erp_nr for erp_nr in erp_nrs if erp_nr]
         if not erp_nrs:
             self.message_user(request, "Keine Produkte ausgewählt.", level=messages.WARNING)
             return
-        microtech_update_prices_task.delay(erp_nrs)
+        scheduled_product_sync_task.delay(erp_nrs=erp_nrs, include_images=False)
         self.message_user(
             request,
-            f"{len(erp_nrs)} Produktpreis(e) zur Microtech-Aktualisierung (nur PriceTrees Vk0/Vk1) eingereiht.",
+            f"{len(erp_nrs)} Produkt(e) fuer Microtech-Django-Shopware-Sync ohne Bilder eingereiht.",
         )
 
     @action(
-        description="Preise nach Microtech übertragen",
-        icon="price_check",
+        description="Produkt ohne Bilder synchronisieren",
+        icon="sync",
         variant=ActionVariant.DEFAULT,
     )
-    def sync_prices_to_microtech_detail(self, request, object_id: str):
+    def sync_product_without_images_detail(self, request, object_id: str):
         product = self.get_object(request, object_id)
         if not product:
             self.message_user(request, "Produkt nicht gefunden.", level=messages.ERROR)
             return self._redirect_to_change_page(object_id)
-        microtech_update_prices_task.delay([product.erp_nr])
+        scheduled_product_sync_task.delay(erp_nrs=[product.erp_nr], include_images=False)
         self.message_user(
             request,
-            f"Produktpreis {product.erp_nr} zur Microtech-Aktualisierung (nur PriceTrees Vk0/Vk1) eingereiht.",
+            f"Produkt {product.erp_nr} fuer Microtech-Django-Shopware-Sync ohne Bilder eingereiht.",
         )
         return self._redirect_to_change_page(object_id)
-
 
     @admin.action(description="Sonderpreis fuer Sales-Channel setzen")
     def set_special_price_for_channel(self, request, queryset):

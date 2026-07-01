@@ -106,6 +106,10 @@ class MicrotechArtikelService(MicrotechDatasetService):
     def get_storage_location(self):
         return self.get_field("storageLocation", silent=True)
 
+    def has_inline_stock_fields(self) -> bool:
+        record = self._current_record()
+        return isinstance(record, dict) and ("stock" in record or "storageLocation" in record)
+
     def get_price(self):
         return self.get_field("Vk0.Preis")
 

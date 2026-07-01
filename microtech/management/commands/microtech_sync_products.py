@@ -395,7 +395,12 @@ class Command(MonitoredBaseCommand):
         storage, _ = Storage.objects.get_or_create(product=product)
         stock_value = artikel_service.get_stock() if hasattr(artikel_service, "get_stock") else None
         location_value = artikel_service.get_storage_location() if hasattr(artikel_service, "get_storage_location") else None
-        if stock_value in (None, "") and location_value in (None, ""):
+        has_inline_stock_fields = (
+            artikel_service.has_inline_stock_fields()
+            if hasattr(artikel_service, "has_inline_stock_fields")
+            else False
+        )
+        if stock_value in (None, "") and location_value in (None, "") and not has_inline_stock_fields and lager_service:
             stock, location = lager_service.get_stock_and_location(art_nr=product.erp_nr)
         else:
             stock, location = _to_int(stock_value), location_value

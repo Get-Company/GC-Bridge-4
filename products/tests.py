@@ -69,10 +69,7 @@ class ProductAdminActionConfigurationTest(SimpleTestCase):
         self.assertFalse(
             {
                 "sync_product_full",
-                "sync_from_microtech",
-                "sync_to_microtech",
-                "sync_prices_to_microtech",
-                "sync_to_shopware",
+                "sync_product_without_images",
                 "set_special_price_for_channel",
                 "clear_special_price_for_channel",
             }
@@ -84,10 +81,7 @@ class ProductAdminActionConfigurationTest(SimpleTestCase):
             ProductAdmin.actions,
             (
                 "sync_product_full",
-                "sync_from_microtech",
-                "sync_to_microtech",
-                "sync_prices_to_microtech",
-                "sync_to_shopware",
+                "sync_product_without_images",
                 "set_special_price_for_channel",
                 "clear_special_price_for_channel",
             ),
@@ -106,21 +100,21 @@ class ProductAdminActionConfigurationTest(SimpleTestCase):
         mock_delay.assert_called_once_with(erp_nrs=["A-1000", "A-1001"], include_images=True)
         admin_instance.message_user.assert_called_once()
 
-    @patch("products.admin.microtech_update_prices_task.delay")
-    def test_product_price_sync_action_queues_price_update_task(self, mock_delay):
+    @patch("products.admin.scheduled_product_sync_task.delay")
+    def test_product_without_images_sync_action_queues_selected_erp_numbers(self, mock_delay):
         request = RequestFactory().get("/admin/products/product/")
         queryset = Mock()
         queryset.values_list.return_value = ["A-1000", "A-1001"]
         admin_instance = ProductAdmin(Product, AdminSite())
         admin_instance.message_user = Mock()
 
-        admin_instance.sync_prices_to_microtech(request, queryset)
+        admin_instance.sync_product_without_images(request, queryset)
 
-        mock_delay.assert_called_once_with(["A-1000", "A-1001"])
+        mock_delay.assert_called_once_with(erp_nrs=["A-1000", "A-1001"], include_images=False)
         admin_instance.message_user.assert_called_once()
 
-    @patch("products.admin.microtech_update_prices_task.delay")
-    def test_product_price_sync_detail_action_queues_price_update_task(self, mock_delay):
+    @patch("products.admin.scheduled_product_sync_task.delay")
+    def test_product_without_images_sync_detail_action_queues_selected_erp_number(self, mock_delay):
         request = RequestFactory().get("/admin/products/product/1/change/")
         product = Mock(erp_nr="A-1000")
         admin_instance = ProductAdmin(Product, AdminSite())
@@ -128,10 +122,10 @@ class ProductAdminActionConfigurationTest(SimpleTestCase):
         admin_instance.message_user = Mock()
         admin_instance._redirect_to_change_page = Mock(return_value="redirect")
 
-        result = admin_instance.sync_prices_to_microtech_detail(request, "1")
+        result = admin_instance.sync_product_without_images_detail(request, "1")
 
         self.assertEqual(result, "redirect")
-        mock_delay.assert_called_once_with(["A-1000"])
+        mock_delay.assert_called_once_with(erp_nrs=["A-1000"], include_images=False)
         admin_instance.message_user.assert_called_once()
 
 
@@ -368,8 +362,13 @@ class PriceIncreaseDocumentRenderingTest(SimpleTestCase):
 
 
 class ProductCeleryTaskTest(SimpleTestCase):
+    @patch("products.tasks._active_product_erp_nrs", return_value=["A-1000", "A-1001"])
     @patch("microtech.services.MicrotechJobSentinelService")
-    def test_scheduled_product_sync_task_starts_sentinel_import(self, mock_sentinel_cls):
+    def test_scheduled_product_sync_task_starts_sentinel_import_for_active_django_products(
+        self,
+        mock_sentinel_cls,
+        mock_active_erp_nrs,
+    ):
         job = Mock(pk=7, external_job_id="remote-7")
         mock_sentinel_cls.return_value.submit_product_batch_read.return_value = job
 
@@ -377,20 +376,23 @@ class ProductCeleryTaskTest(SimpleTestCase):
 
         self.assertEqual(
             result,
-            {"job_id": 7, "external_job_id": "remote-7", "include_images": True, "mode": "all", "count": None},
+            {"job_id": 7, "external_job_id": "remote-7", "include_images": True, "mode": "active", "count": 2},
         )
+        mock_active_erp_nrs.assert_called_once_with(limit=None)
         mock_sentinel_cls.return_value.submit_product_batch_read.assert_called_once()
         kwargs = mock_sentinel_cls.return_value.submit_product_batch_read.call_args.kwargs
-        self.assertIsNone(kwargs["erp_numbers"])
+        self.assertEqual(kwargs["erp_numbers"], ["A-1000", "A-1001"])
         self.assertTrue(kwargs["include_images"])
         self.assertEqual(kwargs["continuation"], product_tasks.PRODUCT_SYNC_CONTINUATION)
         self.assertEqual(kwargs["context"]["source"], "products.scheduled_product_sync")
-        self.assertEqual(kwargs["context"]["mode"], "all")
+        self.assertEqual(kwargs["context"]["mode"], "active")
+        self.assertEqual(kwargs["context"]["erp_nrs"], ["A-1000", "A-1001"])
         self.assertTrue(kwargs["context"]["include_images"])
-        self.assertTrue(kwargs["context"]["include_inactive"])
+        self.assertFalse(kwargs["context"]["include_inactive"])
 
+    @patch("products.tasks._active_product_erp_nrs", return_value=["A-1000"])
     @patch("microtech.services.MicrotechJobSentinelService")
-    def test_scheduled_product_sync_task_can_disable_images(self, mock_sentinel_cls):
+    def test_scheduled_product_sync_task_can_disable_images(self, mock_sentinel_cls, _mock_active_erp_nrs):
         job = Mock(pk=8, external_job_id="remote-8")
         mock_sentinel_cls.return_value.submit_product_batch_read.return_value = job
 
@@ -400,8 +402,20 @@ class ProductCeleryTaskTest(SimpleTestCase):
         self.assertFalse(kwargs["context"]["include_images"])
         self.assertFalse(kwargs["include_images"])
 
+    @patch("products.tasks._active_product_erp_nrs", return_value=[])
     @patch("microtech.services.MicrotechJobSentinelService")
-    def test_scheduled_product_sync_task_accepts_selected_products(self, mock_sentinel_cls):
+    def test_scheduled_product_sync_task_skips_when_no_active_products(self, mock_sentinel_cls, _mock_active_erp_nrs):
+        result = product_tasks.scheduled_product_sync.run(include_images=True)
+
+        self.assertEqual(
+            result,
+            {"job_id": None, "external_job_id": None, "include_images": True, "mode": "active", "count": 0},
+        )
+        mock_sentinel_cls.return_value.submit_product_batch_read.assert_not_called()
+
+    @patch("products.tasks._active_product_erp_nrs")
+    @patch("microtech.services.MicrotechJobSentinelService")
+    def test_scheduled_product_sync_task_accepts_selected_products(self, mock_sentinel_cls, mock_active_erp_nrs):
         job = Mock(pk=9, external_job_id="remote-9")
         mock_sentinel_cls.return_value.submit_product_batch_read.return_value = job
 
@@ -416,6 +430,7 @@ class ProductCeleryTaskTest(SimpleTestCase):
         self.assertTrue(kwargs["include_images"])
         self.assertEqual(kwargs["context"]["mode"], "selected")
         self.assertEqual(kwargs["context"]["erp_nrs"], ["A-1000", "A-1001"])
+        mock_active_erp_nrs.assert_not_called()
 
 
 class PriceMigrationTest(SimpleTestCase):
@@ -443,8 +458,8 @@ class PriceMigrationTest(SimpleTestCase):
         )
         self.assertFalse(price_model.objects.filter.called)
 
-    @patch("products.tasks.call_command")
-    def test_product_sync_tasks_clean_erp_numbers_and_pass_options(self, mock_call_command):
+    @patch("products.tasks.scheduled_product_sync.run")
+    def test_legacy_product_sync_tasks_delegate_to_unified_task(self, mock_run):
         product_tasks.microtech_sync_products.run(
             [" 204113 ", "", "A-2"],
             sync_all=False,
@@ -452,7 +467,6 @@ class PriceMigrationTest(SimpleTestCase):
             preserve_is_active=True,
             limit=10,
         )
-        product_tasks.microtech_update_prices.run([" 204114 ", "", "A-3"])
         product_tasks.shopware_sync_products.run(
             [" 204113 "],
             sync_all=False,
@@ -461,52 +475,27 @@ class PriceMigrationTest(SimpleTestCase):
             only_with_images=True,
             log_images=True,
         )
+        product_tasks.shopware_force_product_image_uploads.run(
+            [" 204115 ", "", "A-4"],
+            sync_all=False,
+            limit=7,
+            batch_size=20,
+            only_with_images=True,
+            log_images=True,
+        )
 
-        self.assertEqual(mock_call_command.call_count, 3)
-        mock_call_command.assert_has_calls(
+        self.assertEqual(mock_run.call_count, 3)
+        mock_run.assert_has_calls(
             [
                 call(
-                    "microtech_sync_products",
-                    "204113",
-                    "A-2",
-                    all=False,
-                    include_inactive=True,
-                    preserve_is_active=True,
+                    erp_nrs=["204113", "A-2"],
+                    include_images=False,
+                    exclude_inactive=False,
                     limit=10,
                 ),
-                call("microtech_update_prices", "204114", "A-3"),
-                call(
-                    "shopware_sync_products",
-                    "204113",
-                    all=False,
-                    limit=5,
-                    batch_size=20,
-                    only_with_images=True,
-                    log_images=True,
-                ),
+                call(erp_nrs=["204113"], include_images=True, limit=5),
+                call(erp_nrs=["204115", "A-4"], include_images=True, limit=7),
             ]
-        )
-
-    @patch("products.tasks.call_command")
-    def test_force_product_image_upload_task_delegates_to_management_command(self, mock_call_command):
-        product_tasks.shopware_force_product_image_uploads.run(
-            [" 204113 ", "", "A-2"],
-            sync_all=False,
-            limit=5,
-            batch_size=20,
-            only_with_images=True,
-            log_images=True,
-        )
-
-        mock_call_command.assert_called_once_with(
-            "shopware_force_product_image_uploads",
-            "204113",
-            "A-2",
-            all=False,
-            limit=5,
-            batch_size=20,
-            only_with_images=True,
-            log_images=True,
         )
 
 
@@ -1716,32 +1705,6 @@ class ProductAdminSpecialPriceActionTest(TestCase):
         self.assertIsNone(self.price.special_start_date)
         self.assertIsNone(self.price.special_end_date)
 
-    @patch("products.admin.call_command", side_effect=RuntimeError("kaputt"))
-    def test_sync_to_shopware_bulk_handles_command_error(self, mock_call_command):
-        request = self.factory.post(
-            "/admin/products/product/",
-            data={
-                "action": "sync_to_shopware",
-            },
-        )
-        request.user = self.user
-
-        admin_instance = ProductAdmin(Product, AdminSite())
-        sent_messages = []
-        admin_instance.message_user = lambda _request, message, level=messages.INFO: sent_messages.append(
-            (message, level)
-        )
-
-        with patch.object(admin_instance, "_log_admin_error") as mock_log:
-            admin_instance.sync_to_shopware(request, Product.objects.filter(pk=self.product.pk))
-
-        mock_call_command.assert_called_once_with("shopware_sync_products", self.product.erp_nr)
-        mock_log.assert_called_once()
-        self.assertEqual(len(sent_messages), 1)
-        self.assertIn("1 Produkt(e) mit Fehlern: kaputt", sent_messages[0][0])
-        self.assertEqual(sent_messages[0][1], messages.ERROR)
-
-
 class LegacyCategoryImportCommandTest(TestCase):
     def test_import_legacy_categories_builds_mptt_tree(self):
         with TemporaryDirectory() as temp_dir:
@@ -2265,33 +2228,6 @@ class ProductImageAdminAndSyncTest(TestCase):
         self.assertIn("admin-image.jpg", html)
         self.assertIn('loading="lazy"', html)
 
-    @patch("products.admin.call_command")
-    def test_sync_products_bulk_delegates_to_shopware_command(self, mock_call_command):
-        product = Product.objects.create(erp_nr="A-4001", sku="shopware-product-1", name="Mit Shopware Bild")
-
-        success_count, error_count, error_messages = ProductAdmin(Product, AdminSite())._sync_products_bulk(
-            Product.objects.filter(pk=product.pk)
-        )
-
-        self.assertEqual(success_count, 1)
-        self.assertEqual(error_count, 0)
-        self.assertEqual(error_messages, [])
-        mock_call_command.assert_called_once_with("shopware_sync_products", "A-4001")
-
-    @patch("products.admin.call_command", side_effect=RuntimeError("sync kaputt"))
-    def test_sync_products_bulk_returns_error_when_command_fails(self, mock_call_command):
-        product = Product.objects.create(erp_nr="A-4002", sku="shopware-product-2", name="Fehlerbild")
-
-        success_count, error_count, error_messages = ProductAdmin(Product, AdminSite())._sync_products_bulk(
-            [product]
-        )
-
-        self.assertEqual(success_count, 0)
-        self.assertEqual(error_count, 1)
-        self.assertEqual(error_messages, ["sync kaputt"])
-        mock_call_command.assert_called_once_with("shopware_sync_products", "A-4002")
-
-
 class LegacyProductPropertyImportCommandTest(TestCase):
     def setUp(self):
         self.product = Product.objects.create(erp_nr="581001", name="Quick-Tabs gelb")
@@ -2522,119 +2458,48 @@ class ProductSyncJobTargetTest(SimpleTestCase):
 
 
 class SyncFromMicrotechTaskTest(SimpleTestCase):
-    @patch("products.tasks.call_command")
-    @patch("products.tasks.TaskIssueCollector")
-    def test_all_products_full_payload(self, mock_collector_cls, mock_call_command):
-        ctx = MagicMock()
-        ctx.__enter__ = MagicMock(return_value=ctx)
-        ctx.__exit__ = MagicMock(return_value=False)
-        mock_collector_cls.return_value = ctx
-
+    @patch("products.tasks.scheduled_product_sync.run")
+    def test_all_products_full_payload(self, mock_run):
         sync_from_microtech()
 
-        mock_call_command.assert_called_once_with(
-            "microtech_sync_products",
-            all=True,
-            include_inactive=True,
-            preserve_is_active=True,
-            skip_images=False,
-        )
+        mock_run.assert_called_once_with(erp_nrs=None, include_images=True, exclude_inactive=False)
 
-    @patch("products.tasks.call_command")
-    @patch("products.tasks.TaskIssueCollector")
-    def test_specific_erp_nrs(self, mock_collector_cls, mock_call_command):
-        ctx = MagicMock()
-        ctx.__enter__ = MagicMock(return_value=ctx)
-        ctx.__exit__ = MagicMock(return_value=False)
-        mock_collector_cls.return_value = ctx
-
+    @patch("products.tasks.scheduled_product_sync.run")
+    def test_specific_erp_nrs(self, mock_run):
         sync_from_microtech(["1001", "1002"])
 
-        mock_call_command.assert_called_once_with(
-            "microtech_sync_products",
-            "1001", "1002",
-            include_inactive=True,
-            preserve_is_active=True,
-            skip_images=False,
-        )
+        mock_run.assert_called_once_with(erp_nrs=["1001", "1002"], include_images=True, exclude_inactive=False)
 
-    @patch("products.tasks.call_command")
-    @patch("products.tasks.TaskIssueCollector")
-    def test_texts_and_prices_only_passes_skip_images(self, mock_collector_cls, mock_call_command):
-        ctx = MagicMock()
-        ctx.__enter__ = MagicMock(return_value=ctx)
-        ctx.__exit__ = MagicMock(return_value=False)
-        mock_collector_cls.return_value = ctx
-
+    @patch("products.tasks.scheduled_product_sync.run")
+    def test_texts_and_prices_only_passes_skip_images(self, mock_run):
         sync_from_microtech(texts_and_prices_only=True)
 
-        mock_call_command.assert_called_once_with(
-            "microtech_sync_products",
-            all=True,
-            include_inactive=True,
-            preserve_is_active=True,
-            skip_images=True,
-        )
+        mock_run.assert_called_once_with(erp_nrs=None, include_images=False, exclude_inactive=False)
 
 
 class SyncToShopwareTaskTest(SimpleTestCase):
-    @patch("products.tasks.call_command")
-    @patch("products.tasks.TaskIssueCollector")
-    def test_all_products_full_payload(self, mock_collector_cls, mock_call_command):
-        ctx = MagicMock()
-        ctx.__enter__ = MagicMock(return_value=ctx)
-        ctx.__exit__ = MagicMock(return_value=False)
-        mock_collector_cls.return_value = ctx
-
+    @patch("products.tasks.scheduled_product_sync.run")
+    def test_all_products_full_payload(self, mock_run):
         sync_to_shopware()
 
-        mock_call_command.assert_called_once_with(
-            "shopware_sync_products",
-            all=True,
-            skip_images=False,
-        )
+        mock_run.assert_called_once_with(erp_nrs=None, include_images=True)
 
-    @patch("products.tasks.call_command")
-    @patch("products.tasks.TaskIssueCollector")
-    def test_texts_and_prices_only(self, mock_collector_cls, mock_call_command):
-        ctx = MagicMock()
-        ctx.__enter__ = MagicMock(return_value=ctx)
-        ctx.__exit__ = MagicMock(return_value=False)
-        mock_collector_cls.return_value = ctx
-
+    @patch("products.tasks.scheduled_product_sync.run")
+    def test_texts_and_prices_only(self, mock_run):
         sync_to_shopware(texts_and_prices_only=True)
 
-        mock_call_command.assert_called_once_with(
-            "shopware_sync_products",
-            all=True,
-            skip_images=True,
-        )
+        mock_run.assert_called_once_with(erp_nrs=None, include_images=False)
 
 
 class SyncToMicrotechTaskTest(SimpleTestCase):
-    @patch("products.tasks.call_command")
-    @patch("products.tasks.TaskIssueCollector")
-    def test_all_products(self, mock_collector_cls, mock_call_command):
-        ctx = MagicMock()
-        ctx.__enter__ = MagicMock(return_value=ctx)
-        ctx.__exit__ = MagicMock(return_value=False)
-        mock_collector_cls.return_value = ctx
-
+    @patch("products.tasks.scheduled_product_sync.run")
+    def test_all_products(self, mock_run):
         sync_to_microtech()
 
-        self.assertEqual(mock_call_command.call_count, 2)
-        mock_call_command.assert_any_call("microtech_update_product", all=True)
-        mock_call_command.assert_any_call("microtech_update_prices", all=True)
+        mock_run.assert_called_once_with(erp_nrs=None, include_images=False)
 
-    @patch("products.tasks.call_command")
-    @patch("products.tasks.TaskIssueCollector")
-    def test_specific_erp_nrs(self, mock_collector_cls, mock_call_command):
-        ctx = MagicMock()
-        ctx.__enter__ = MagicMock(return_value=ctx)
-        ctx.__exit__ = MagicMock(return_value=False)
-        mock_collector_cls.return_value = ctx
-
+    @patch("products.tasks.scheduled_product_sync.run")
+    def test_specific_erp_nrs(self, mock_run):
         sync_to_microtech(["1001", "1002"])
 
-        mock_call_command.assert_any_call("microtech_update_product", "1001", "1002")
-        mock_call_command.assert_any_call("microtech_update_prices", "1001", "1002")
+        mock_run.assert_called_once_with(erp_nrs=["1001", "1002"], include_images=False)

@@ -24,133 +24,37 @@ def _coerce_optional_int(value) -> int | None:
     return coerced if coerced > 0 else None
 
 
+def _active_product_erp_nrs(*, limit: int | None = None) -> list[str]:
+    from products.models import Product
+
+    queryset = (
+        Product.objects.filter(is_active=True)
+        .exclude(erp_nr__isnull=True)
+        .exclude(erp_nr="")
+        .order_by("erp_nr")
+        .values_list("erp_nr", flat=True)
+    )
+    if limit:
+        queryset = queryset[:limit]
+    return _erp_list(queryset)
+
+
 @shared_task(
-    bind=True,
     name="products.sync_from_microtech",
-    max_retries=300,
 )
 def sync_from_microtech(
-    self,
     erp_nrs: Sequence[str] | None = None,
     *,
     texts_and_prices_only: bool = False,
     include_inactive: bool = True,
-    _job_id: str | None = None,
-    _next_cursor: list | None = None,
-    _state: dict | None = None,
+    **_deprecated_options,
 ) -> dict | None:
-    """Microtech → Django (async Celery-Retry-Pattern für Bulk-Sync, synchron für einzelne ERPs)."""
-    from loguru import logger
-    from microtech.services.graphql_client import MicrotechGraphQLClientService
-    from microtech.services.artikel import MicrotechArtikelService
-
-    cleaned = _erp_list(erp_nrs)
-
-    # Einzelne ERP-Nummern: synchroner Pfad (individuelle Produktabfragen, schnell)
-    if cleaned:
-        with TaskIssueCollector("products.sync_from_microtech"):
-            call_command(
-                "microtech_sync_products",
-                *cleaned,
-                include_inactive=True,
-                preserve_is_active=True,
-                skip_images=texts_and_prices_only,
-            )
-        return {"mode": "selected", "count": len(cleaned)}
-
-    # Alle Produkte: asynchroner Job-Polling-Pfad
-    client = MicrotechGraphQLClientService()
-    state = _state or {"success": 0, "errors": 0, "processed": 0}
-
-    retry_kwargs = {
-        "erp_nrs": erp_nrs,
-        "texts_and_prices_only": texts_and_prices_only,
-        "include_inactive": include_inactive,
-        "_next_cursor": _next_cursor,
-        "_state": state,
-    }
-
-    if _job_id is None:
-        # Phase 1: Dataset-Job einreichen, sofort zurückkehren
-        input_data: dict = {
-            "dataset": MicrotechArtikelService.dataset_name,
-            "fields": list(MicrotechArtikelService.default_fields),
-            "limit": MicrotechArtikelService.page_limit,
-            "indexField": MicrotechArtikelService.index_field,
-            "range": {"fromValues": ["000000"], "toValues": ["99999999ZZ"]},
-        }
-        if not include_inactive:
-            input_data["filter"] = "WBSHpKZ = 1"
-        if _next_cursor:
-            input_data["after"] = _next_cursor
-
-        job_id, retry_after = client.submit_dataset_job(input_data)
-        countdown = max(int(retry_after), 15)
-        logger.info("sync_from_microtech: job {} submitted, check in {}s", job_id, countdown)
-        raise self.retry(countdown=countdown, kwargs={**retry_kwargs, "_job_id": job_id})
-
-    # Phase 2: Einmalig prüfen ob Job fertig (kein Blockieren)
-    result = client.check_dataset_job_once(_job_id)
-    if result is None:
-        logger.debug("sync_from_microtech: job {} still running, retry in 30s", _job_id)
-        raise self.retry(countdown=30, kwargs={**retry_kwargs, "_job_id": _job_id})
-
-    # Phase 3: Seite verarbeiten
-    logger.info(
-        "sync_from_microtech: job {} done — {} records",
-        _job_id,
-        result.get("returnedCount", "?"),
+    """Deprecated alias for the unified Microtech -> Django -> Shopware product sync."""
+    return scheduled_product_sync.run(
+        erp_nrs=erp_nrs,
+        include_images=not texts_and_prices_only,
+        exclude_inactive=not include_inactive,
     )
-    from microtech.services.lager import MicrotechLagerService
-    from microtech.management.commands.microtech_sync_products import (
-        Command as SyncCommand,
-        _get_admin_user_id,
-    )
-    from django.contrib.contenttypes.models import ContentType
-    from products.models import Product as ProductModel
-    from products.services import disable_product_auto_sync
-
-    artikel_service = MicrotechArtikelService(erp=client)
-    artikel_service.load_result(result)
-    lager_service = MicrotechLagerService(erp=client)
-    tax_map = SyncCommand._ensure_taxes()
-    cmd = SyncCommand()
-    admin_user_id = _get_admin_user_id()
-    content_type_id = ContentType.objects.get_for_model(ProductModel).id if admin_user_id else None
-
-    with TaskIssueCollector("products.sync_from_microtech"), disable_product_auto_sync():
-        while not artikel_service.range_eof():
-            try:
-                cmd._sync_current_record(
-                    artikel_service,
-                    lager_service,
-                    tax_map=tax_map,
-                    admin_user_id=admin_user_id,
-                    content_type_id=content_type_id,
-                    preserve_is_active=True,
-                    skip_images=texts_and_prices_only,
-                )
-                state["success"] += 1
-            except Exception as exc:
-                logger.warning("sync_from_microtech: record error — {}", exc)
-                state["errors"] += 1
-            state["processed"] += 1
-            artikel_service.range_next()
-
-    if result.get("hasMore"):
-        logger.info("sync_from_microtech: more pages, submitting next job")
-        raise self.retry(
-            countdown=5,
-            kwargs={**retry_kwargs, "_job_id": None, "_next_cursor": result.get("nextCursor"), "_state": state},
-        )
-
-    logger.info(
-        "sync_from_microtech: complete — success={}, errors={}, processed={}",
-        state["success"],
-        state["errors"],
-        state["processed"],
-    )
-    return state
 
 
 @shared_task(name="products.sync_to_shopware")
@@ -159,49 +63,23 @@ def sync_to_shopware(
     *,
     texts_and_prices_only: bool = False,
 ) -> None:
-    cleaned = _erp_list(erp_nrs)
-    with TaskIssueCollector("products.sync_to_shopware"):
-        if cleaned:
-            call_command(
-                "shopware_sync_products",
-                *cleaned,
-                skip_images=texts_and_prices_only,
-            )
-        else:
-            call_command(
-                "shopware_sync_products",
-                all=True,
-                skip_images=texts_and_prices_only,
-            )
+    """Deprecated alias for the unified product sync."""
+    return scheduled_product_sync.run(erp_nrs=erp_nrs, include_images=not texts_and_prices_only)
 
 
 @shared_task(name="products.sync_to_microtech")
 def sync_to_microtech(erp_nrs: Sequence[str] | None = None) -> None:
-    cleaned = _erp_list(erp_nrs)
-    with TaskIssueCollector("products.sync_to_microtech"):
-        if cleaned:
-            call_command("microtech_update_product", *cleaned)
-            call_command("microtech_update_prices", *cleaned)
-        else:
-            call_command("microtech_update_product", all=True)
-            call_command("microtech_update_prices", all=True)
+    """Deprecated product-sync alias. Product reads now flow Microtech -> Django -> Shopware."""
+    return scheduled_product_sync.run(erp_nrs=erp_nrs, include_images=False)
 
 
 @shared_task(name="products.quick_product_sync")
 def quick_product_sync() -> None:
-    """Texte, Preise und Lagerbestand synchronisieren — ohne Bilder.
-
-    Startet eine Celery-Chain: sync_from_microtech → sync_to_shopware.
-    Beide Tasks laufen asynchron, quick_product_sync selbst kehrt sofort zurück.
-    """
-    from celery import chain as celery_chain
+    """Start the unified product sync without image rebuilds."""
     from loguru import logger
 
-    logger.info("quick_product_sync: chaining sync_from_microtech → sync_to_shopware (skip_images=True)")
-    celery_chain(
-        sync_from_microtech.si(texts_and_prices_only=True),
-        sync_to_shopware.si(texts_and_prices_only=True),
-    ).delay()
+    logger.info("quick_product_sync: scheduling products.scheduled_product_sync (include_images=False)")
+    scheduled_product_sync.delay(include_images=False)
 
 
 @shared_task(name="products.expire_special_prices")
@@ -224,7 +102,7 @@ def expire_special_prices() -> dict:
         erp_nrs = list(
             Product.objects.filter(pk__in=affected_ids).values_list("erp_nr", flat=True)
         )
-        sync_to_shopware.delay(erp_nrs, texts_and_prices_only=True)
+        scheduled_product_sync.delay(erp_nrs=erp_nrs, include_images=False)
 
     return {"expired": expired_count, "microtech_updated": mt_updated, "shopware_queued": len(erp_nrs)}
 
@@ -294,14 +172,16 @@ def scheduled_product_sync(
 
     if include_images is None:
         include_images = True if force_images is None else bool(force_images)
-    cleaned_erp_nrs = _erp_list(erp_nrs)
+    requested_erp_nrs = _erp_list(erp_nrs)
     limit = _coerce_optional_int(limit)
+    mode = "selected" if requested_erp_nrs else "active"
+    cleaned_erp_nrs = requested_erp_nrs or _active_product_erp_nrs(limit=limit)
     context = {
         "source": "products.scheduled_product_sync",
-        "mode": "selected" if cleaned_erp_nrs else "all",
+        "mode": mode,
         "erp_nrs": cleaned_erp_nrs,
         "include_images": bool(include_images),
-        "include_inactive": not exclude_inactive,
+        "include_inactive": False if mode == "active" else not exclude_inactive,
         "limit": limit,
         "state": {"success": 0, "errors": 0, "processed": 0},
     }
@@ -312,18 +192,27 @@ def scheduled_product_sync(
         )
     if exclude_inactive:
         logger.warning(
-            "scheduled_product_sync no longer sends a dataset inactive filter; "
-            "product selection is handled by the GraphQL requestProducts endpoint."
+            "scheduled_product_sync uses Django active product selection for full sync; "
+            "Microtech dataset inactive filters are not sent."
         )
+    if not cleaned_erp_nrs:
+        logger.warning("scheduled_product_sync: no active Django products with ERP number found.")
+        return {
+            "job_id": None,
+            "external_job_id": None,
+            "include_images": bool(include_images),
+            "mode": context["mode"],
+            "count": 0,
+        }
     logger.info(
         "scheduled_product_sync: Sentinel Produkt-Batch starten (mode={}, count={}, include_images={}, limit={})",
         context["mode"],
-        len(cleaned_erp_nrs) if cleaned_erp_nrs else "all",
+        len(cleaned_erp_nrs),
         include_images,
         limit,
     )
     job = MicrotechJobSentinelService().submit_product_batch_read(
-        erp_numbers=cleaned_erp_nrs or None,
+        erp_numbers=cleaned_erp_nrs,
         include_images=bool(include_images),
         continuation=PRODUCT_SYNC_CONTINUATION,
         context=context,
@@ -334,7 +223,7 @@ def scheduled_product_sync(
         "external_job_id": job.external_job_id,
         "include_images": bool(include_images),
         "mode": context["mode"],
-        "count": len(cleaned_erp_nrs) if cleaned_erp_nrs else None,
+        "count": len(cleaned_erp_nrs),
     }
 
 
@@ -346,7 +235,6 @@ def _scheduled_product_sync_continuation(job) -> None:
     )
     from microtech.services import MicrotechGraphQLClientService
     from microtech.services.artikel import MicrotechArtikelService
-    from microtech.services.lager import MicrotechLagerService
     from django.contrib.contenttypes.models import ContentType
     from products.models import Product as ProductModel
     from products.services import disable_product_auto_sync
@@ -365,7 +253,7 @@ def _scheduled_product_sync_continuation(job) -> None:
     result = client.product_list_job(str(job.external_job_id))
     products = result.get("products") or []
     artikel_service = MicrotechArtikelService(erp=client)
-    lager_service = MicrotechLagerService(erp=client)
+    lager_service = None
     tax_map = SyncCommand._ensure_taxes()
     cmd = SyncCommand()
     admin_user_id = _get_admin_user_id()
@@ -405,8 +293,8 @@ def _scheduled_product_sync_continuation(job) -> None:
     )
     _finalize_scheduled_product_sync(
         include_images=include_images,
-        limit=None if mode == "selected" else limit,
-        erp_nrs=erp_nrs if mode == "selected" else None,
+        limit=None if erp_nrs else limit,
+        erp_nrs=erp_nrs or None,
     )
 
 
@@ -451,12 +339,10 @@ def microtech_sync_products(
     preserve_is_active: bool = False,
     limit: int | None = None,
 ) -> None:
-    call_command(
-        "microtech_sync_products",
-        *_clean_erp_nrs(erp_nrs),
-        all=sync_all,
-        include_inactive=include_inactive,
-        preserve_is_active=preserve_is_active,
+    return scheduled_product_sync.run(
+        erp_nrs=None if sync_all else _clean_erp_nrs(erp_nrs),
+        include_images=False,
+        exclude_inactive=not include_inactive,
         limit=limit,
     )
 
@@ -482,19 +368,10 @@ def shopware_sync_products(
     log_images: bool = False,
     skip_images: bool = False,
 ) -> None:
-    command_options = {
-        "all": sync_all,
-        "limit": limit,
-        "batch_size": batch_size,
-        "only_with_images": only_with_images,
-        "log_images": log_images,
-    }
-    if skip_images:
-        command_options["skip_images"] = True
-    call_command(
-        "shopware_sync_products",
-        *_clean_erp_nrs(erp_nrs),
-        **command_options,
+    return scheduled_product_sync.run(
+        erp_nrs=None if sync_all else _clean_erp_nrs(erp_nrs),
+        include_images=not skip_images,
+        limit=limit,
     )
 
 
@@ -508,14 +385,10 @@ def shopware_force_product_image_uploads(
     only_with_images: bool = False,
     log_images: bool = False,
 ) -> None:
-    call_command(
-        "shopware_force_product_image_uploads",
-        *_clean_erp_nrs(erp_nrs),
-        all=sync_all,
+    return scheduled_product_sync.run(
+        erp_nrs=None if sync_all else _clean_erp_nrs(erp_nrs),
+        include_images=True,
         limit=limit,
-        batch_size=batch_size,
-        only_with_images=only_with_images,
-        log_images=log_images,
     )
 
 
