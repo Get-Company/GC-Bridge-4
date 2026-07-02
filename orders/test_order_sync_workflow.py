@@ -31,6 +31,46 @@ def make_order() -> Order:
     )
 
 
+from orders.services.order_sync_workflow import OrderSyncWorkflowService  # noqa: E402
+
+
+class NextStepResolverTest(TestCase):
+    def _wf(self, *, state=None, completed=None):
+        order = make_order()
+        wf = MicrotechOrderSyncWorkflow.objects.create(
+            order=order,
+            state=state or {},
+            step_log=[{"step": s, "status": "completed"} for s in (completed or [])],
+        )
+        return wf
+
+    def test_first_step_is_probe_customer(self):
+        wf = self._wf()
+        self.assertEqual(OrderSyncWorkflowService().next_step(wf), "probe_customer")
+
+    def test_skips_billing_when_same_as_shipping(self):
+        wf = self._wf(
+            state={"billing_same_as_shipping": True, "is_new_customer": False},
+            completed=["probe_customer", "write_customer", "shipping_address", "shipping_contact"],
+        )
+        self.assertEqual(OrderSyncWorkflowService().next_step(wf), "set_default_addresses")
+
+    def test_writeback_only_for_new_customer(self):
+        wf = self._wf(
+            state={"billing_same_as_shipping": True, "is_new_customer": False, "erp_order_id": ""},
+            completed=["probe_customer", "write_customer", "shipping_address", "shipping_contact", "set_default_addresses"],
+        )
+        # Neukunde False -> writeback übersprungen -> nächster ist write_vorgang (kein erp_order_id -> kein probe_vorgang)
+        self.assertEqual(OrderSyncWorkflowService().next_step(wf), "write_vorgang")
+
+    def test_all_done_returns_none(self):
+        wf = self._wf(
+            state={"billing_same_as_shipping": True, "is_new_customer": False, "erp_order_id": ""},
+            completed=["probe_customer", "write_customer", "shipping_address", "shipping_contact", "set_default_addresses", "write_vorgang"],
+        )
+        self.assertIsNone(OrderSyncWorkflowService().next_step(wf))
+
+
 class WorkflowModelTest(TestCase):
     def test_defaults(self):
         order = make_order()
