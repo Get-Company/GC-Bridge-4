@@ -403,7 +403,7 @@ class ForceProductImageUploadsCommandTest(TestCase):
     def test_handle_processes_all_products_when_no_erp_numbers_are_given(self, product_service_factory):
         service = MagicMock()
         service.get_sku_map.return_value = {}
-        service.purge_product_media_and_media_by_product_ids.return_value = {"product_media": 2, "media": 2}
+        service.purge_product_media_by_product_ids.return_value = 2
         product_service_factory.return_value = service
 
         first = Product.objects.create(erp_nr="A-5001", sku="sku-5001", shopware_image_sync_hash="hash-1")
@@ -421,9 +421,9 @@ class ForceProductImageUploadsCommandTest(TestCase):
         cmd = ForceProductImageUploadsCommand()
         cmd.handle(all=False, limit=None, batch_size=10, erp_nrs=[], only_with_images=False, log_images=False)
 
-        service.purge_product_media_and_media_by_product_ids.assert_called_once()
+        service.purge_product_media_by_product_ids.assert_called_once()
         self.assertEqual(
-            service.purge_product_media_and_media_by_product_ids.call_args.kwargs["product_ids"],
+            service.purge_product_media_by_product_ids.call_args.kwargs["product_ids"],
             ["sku-5001", "sku-5002"],
         )
         self.assertEqual(service.upload_media_from_url.call_count, 2)
@@ -438,7 +438,7 @@ class ForceProductImageUploadsCommandTest(TestCase):
     def test_handle_processes_only_selected_erp_numbers(self, product_service_factory):
         service = MagicMock()
         service.get_sku_map.return_value = {}
-        service.purge_product_media_and_media_by_product_ids.return_value = {"product_media": 1, "media": 1}
+        service.purge_product_media_by_product_ids.return_value = 1
         product_service_factory.return_value = service
 
         target = Product.objects.create(erp_nr="A-5003", sku="sku-5003", shopware_image_sync_hash="hash-3")
@@ -453,9 +453,9 @@ class ForceProductImageUploadsCommandTest(TestCase):
         untouched.refresh_from_db()
         self.assertNotEqual(target.shopware_image_sync_hash, "hash-3")
         self.assertEqual(untouched.shopware_image_sync_hash, "hash-4")
-        service.purge_product_media_and_media_by_product_ids.assert_called_once()
+        service.purge_product_media_by_product_ids.assert_called_once()
         self.assertEqual(
-            service.purge_product_media_and_media_by_product_ids.call_args.kwargs["product_ids"],
+            service.purge_product_media_by_product_ids.call_args.kwargs["product_ids"],
             ["sku-5003"],
         )
 
@@ -463,7 +463,7 @@ class ForceProductImageUploadsCommandTest(TestCase):
     def test_handle_collects_batch_errors_and_skips_assignment_after_upload_failure(self, product_service_factory):
         service = MagicMock()
         service.get_sku_map.return_value = {}
-        service.purge_product_media_and_media_by_product_ids.return_value = {"product_media": 1, "media": 1}
+        service.purge_product_media_by_product_ids.return_value = 1
         service.upload_media_from_url.side_effect = RuntimeError("upload failed")
         product_service_factory.return_value = service
 
@@ -475,7 +475,7 @@ class ForceProductImageUploadsCommandTest(TestCase):
         with self.assertRaises(CommandError):
             cmd.handle(all=False, limit=None, batch_size=10, erp_nrs=[], only_with_images=False, log_images=False)
 
-        service.purge_product_media_and_media_by_product_ids.assert_called_once()
+        service.purge_product_media_by_product_ids.assert_called_once()
         service.upload_media_from_url.assert_called_once()
         service.bulk_upsert.assert_not_called()
         product.refresh_from_db()
