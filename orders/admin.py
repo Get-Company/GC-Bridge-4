@@ -1,5 +1,4 @@
 import json
-from pathlib import Path
 from typing import Any
 
 from django.contrib import admin, messages
@@ -19,12 +18,14 @@ from unfold.enums import ActionVariant
 from unfold.sections import TemplateSection
 
 from core.admin import BaseAdmin, BaseTabularInline
-from core.logging import add_managed_file_sink
-from loguru import logger
 from microtech.services import microtech_connection
-from orders.models import Order, OrderDetail
-from orders.services import OrderSyncService, OrderUpsertMicrotechService, SwissCustomsCsvExportService
-from orders.services.order_upsert_microtech import OrderRuleDebugInfo
+from orders.models import MicrotechOrderSyncWorkflow, Order, OrderDetail
+from orders.services import (
+    OrderSyncService,
+    OrderSyncWorkflowService,
+    OrderUpsertMicrotechService,
+    SwissCustomsCsvExportService,
+)
 from shopware.services import OrderService
 from shopware.services.order import DEFAULT_TRANSITION_ACTIONS
 
@@ -117,6 +118,7 @@ class OrderAdmin(BaseAdmin):
         "total_price",
         "purchase_date",
         "order_state",
+        "microtech_sync_status",
     )
     list_sections = [OrderExpandSection]
     list_sections_classes = "grid-cols-1"
@@ -132,8 +134,9 @@ class OrderAdmin(BaseAdmin):
     actions_list = ("sync_open_orders_from_shopware_list",)
     actions = ("sync_open_orders_from_shopware",)
     actions_row = ("upsert_to_microtech_row", "export_swiss_customs_csv_row")
-    actions_detail = ("upsert_to_microtech_detail", "export_swiss_customs_csv_detail")
+    actions_detail = ("upsert_to_microtech_detail", "resume_microtech_sync_detail", "export_swiss_customs_csv_detail")
     list_fullwidth = True
+    readonly_fields = ("microtech_sync_status",)
 
     def get_queryset(self, request):
         return super().get_queryset(request).select_related(
@@ -149,79 +152,40 @@ class OrderAdmin(BaseAdmin):
     def _redirect_to_change_page(self, object_id: str) -> HttpResponseRedirect:
         return HttpResponseRedirect(reverse("admin:orders_order_change", args=(object_id,)))
 
-    @staticmethod
-    def _add_upsert_file_sink() -> tuple[int, Path]:
-        return add_managed_file_sink(
-            log_name="microtech_order_upsert",
-            category="weekly",
-            rotation="10 MB",
-            diagnose=True,
-        )
-
-    @staticmethod
-    def _format_rule_debug_message(rule_debug: OrderRuleDebugInfo) -> tuple[str, int]:
-        if rule_debug.rule_id is None:
-            rule_label = "keine passende Regel"
-        elif rule_debug.rule_name:
-            rule_label = f"{rule_debug.rule_name} (ID {rule_debug.rule_id})"
-        else:
-            rule_label = f"ID {rule_debug.rule_id}"
-
-        created_erp_nrs = ", ".join(rule_debug.dataset_created_position_erp_nrs) or "-"
-        message = (
-            f"Regel-Debug: {rule_label}. Dataset-Aktionen angewendet "
-            f"{rule_debug.dataset_actions_applied}/{rule_debug.dataset_actions_total}. "
-            f"Zusatzpositionen angelegt {rule_debug.dataset_create_position_applied}/"
-            f"{rule_debug.dataset_create_position_requested} (ERP-Nr: {created_erp_nrs})."
-        )
-        if rule_debug.dataset_actions_note:
-            message = f"{message} Hinweise: {rule_debug.dataset_actions_note}"
-
-        if rule_debug.dataset_actions_total > 0 and rule_debug.dataset_actions_applied < rule_debug.dataset_actions_total:
-            return message, messages.WARNING
-        if rule_debug.dataset_actions_applied > 0:
-            return message, messages.SUCCESS
-        return message, messages.INFO
-
     def _run_microtech_upsert(self, request, object_id: str) -> None:
         order = self.get_object(request, object_id)
         if not order:
             self.message_user(request, "Bestellung nicht gefunden.", level=messages.ERROR)
             return
 
-        sink_id, log_path = self._add_upsert_file_sink()
         try:
-            logger.info(
-                "Manual Microtech order upsert started from admin for order {} (id={}).",
-                order.order_number,
-                order.pk,
-            )
-            with microtech_connection() as erp:
-                result = OrderUpsertMicrotechService().upsert_order(order, erp=erp)
+            workflow = OrderSyncWorkflowService().start_for_order(order)
         except Exception as exc:
             self.message_user(
                 request,
-                f"Microtech-Upsert fehlgeschlagen: {exc} | Log: {log_path}",
+                f"Microtech-Sync konnte nicht gestartet werden: {exc}",
                 level=messages.ERROR,
             )
             return
-        finally:
-            logger.info(
-                "Manual Microtech order upsert finished for order {} (id={}). log_file={}",
-                order.order_number,
-                order.pk,
-                log_path,
-            )
-            logger.remove(sink_id)
 
         self.message_user(
             request,
-            f"Bestellung {order.order_number} erfolgreich in Microtech angelegt.",
+            f"Microtech-Sync für Bestellung {order.order_number} gestartet (Workflow #{workflow.pk}).",
             level=messages.SUCCESS,
         )
-        rule_message, rule_level = self._format_rule_debug_message(result.rule_debug)
-        self.message_user(request, rule_message, level=rule_level)
-        self.message_user(request, f"Detail-Log: {log_path}", level=messages.INFO)
+
+    @admin.display(description="Microtech-Sync")
+    def microtech_sync_status(self, obj):
+        workflow = obj.microtech_sync_workflows.order_by("-created_at").first()
+        if workflow is None:
+            return "-"
+
+        text = workflow.get_status_display()
+        if workflow.current_step:
+            text = f"{text} · {workflow.current_step}"
+        if workflow.error_message:
+            text = f"{text} · {workflow.error_message[:80]}"
+        return text
 
     def _export_swiss_customs_csv(self, request, object_id: str) -> HttpResponse | None:
         order = self.get_object(request, object_id)
@@ -288,6 +252,31 @@ class OrderAdmin(BaseAdmin):
     def upsert_to_microtech_row(self, request, object_id: str):
         self._run_microtech_upsert(request, object_id)
         return self._redirect_to_changelist()
+
+    @action(
+        description="Microtech-Sync fortsetzen",
+        icon="refresh",
+        variant=ActionVariant.PRIMARY,
+    )
+    def resume_microtech_sync_detail(self, request, object_id: str):
+        order = self.get_object(request, object_id)
+        workflow = (
+            MicrotechOrderSyncWorkflow.objects.filter(order=order)
+            .order_by("-created_at")
+            .first()
+            if order
+            else None
+        )
+        if workflow is None or workflow.status != MicrotechOrderSyncWorkflow.Status.FAILED:
+            self.message_user(request, "Kein fehlgeschlagener Sync-Workflow zum Fortsetzen.", level=messages.WARNING)
+        else:
+            OrderSyncWorkflowService().resume(workflow)
+            self.message_user(
+                request,
+                f"Workflow #{workflow.pk} bei Schritt '{workflow.current_step}' fortgesetzt.",
+                level=messages.SUCCESS,
+            )
+        return self._redirect_to_change_page(object_id)
 
     @action(
         description="Zoll-CSV exportieren",
