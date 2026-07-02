@@ -1,5 +1,3 @@
-from unittest.mock import patch
-
 from django.test import TestCase
 
 from microtech.models import MicrotechGraphQLJob
@@ -23,6 +21,9 @@ class SubmitWrapperJobTest(TestCase):
         self.assertEqual(job.status, MicrotechGraphQLJob.Status.WAITING_WEBHOOK)
         self.assertEqual(job.continuation, "microtech_order_sync_advance")
         self.assertEqual(job.context["step"], "write_customer")
+        self.assertIsNotNone(job.submitted_at)
+        self.assertIsNotNone(job.started_at)
+        self.assertIsNotNone(job.next_poll_at)
 
     def test_submit_wrapper_job_marks_failed_on_submit_error(self):
         sentinel = MicrotechJobSentinelService()
@@ -43,3 +44,4 @@ class SubmitWrapperJobTest(TestCase):
         job = MicrotechGraphQLJob.objects.get(context__step="write_customer")
         self.assertEqual(job.status, MicrotechGraphQLJob.Status.FAILED)
         self.assertIn("wrapper down", job.error_message)
+        self.assertIsNotNone(job.completed_at)

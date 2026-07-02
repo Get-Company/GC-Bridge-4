@@ -232,11 +232,11 @@ class MicrotechJobSentinelService(BaseService):
         next_step: str,
         delete_after_completion: bool = True,
     ) -> MicrotechGraphQLJob:
-        """Generischer Sentinel-Submit fuer Continuation-Ketten.
+        """Generischer Sentinel-Submit für Continuation-Ketten.
 
-        Legt eine Job-Row mit Status QUEUED an, ruft das uebergebene ``submit``-
+        Legt eine Job-Row mit Status QUEUED an, ruft das übergebene ``submit``-
         Callable auf (das das externe Job-ID und retryAfterSeconds liefert) und
-        setzt anschliessend ``external_job_id``, ``WAITING_WEBHOOK`` und
+        setzt anschließend ``external_job_id``, ``WAITING_WEBHOOK`` und
         ``next_poll_at``. Bei einer Ausnahme wird der Job auf FAILED gesetzt
         und die Ausnahme weitergeleitet.
         """
