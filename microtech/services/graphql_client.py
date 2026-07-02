@@ -446,6 +446,154 @@ class MicrotechGraphQLClientService(BaseService):
         )
         return self.poll_job(str(accepted["jobId"]), query_job=self.vorgang_job, retry_after=accepted.get("retryAfterSeconds"))
 
+    # ------------------------------------------------------------------
+    # Non-blocking submit methods — return (job_id, retry_after) immediately
+    # without polling. Mirror the blocking twins above 1:1.
+    # ------------------------------------------------------------------
+
+    def _submit_accepted(self, accepted: dict[str, Any]) -> tuple[str, float]:
+        return str(accepted["jobId"]), float(accepted.get("retryAfterSeconds") or self.config.poll_interval)
+
+    def submit_request_customer(self, customer_number: str) -> tuple[str, float]:
+        accepted = self._mutation_with_job(
+            """
+            mutation RequestCustomer($customerNumber: String!) {
+              requestCustomer(customerNumber: $customerNumber) {
+                accepted jobId status message retryAfterSeconds
+              }
+            }
+            """,
+            "requestCustomer",
+            {"customerNumber": customer_number},
+        )
+        return self._submit_accepted(accepted)
+
+    def submit_create_customer(self, customer_number: str, input_data: dict[str, Any]) -> tuple[str, float]:
+        accepted = self._mutation_with_job(
+            """
+            mutation CreateCustomer($customerNumber: String!, $input: CustomerInput!) {
+              createCustomer(customerNumber: $customerNumber, input: $input) {
+                accepted jobId status message retryAfterSeconds
+              }
+            }
+            """,
+            "createCustomer",
+            {"customerNumber": customer_number, "input": input_data},
+        )
+        return self._submit_accepted(accepted)
+
+    def submit_update_customer(self, customer_number: str, input_data: dict[str, Any]) -> tuple[str, float]:
+        accepted = self._mutation_with_job(
+            """
+            mutation UpdateCustomer($customerNumber: String!, $input: CustomerInput!) {
+              updateCustomer(customerNumber: $customerNumber, input: $input) {
+                accepted jobId status message retryAfterSeconds
+              }
+            }
+            """,
+            "updateCustomer",
+            {"customerNumber": customer_number, "input": input_data},
+        )
+        return self._submit_accepted(accepted)
+
+    def submit_create_postal_address(self, address_number: int, input_data: dict[str, Any]) -> tuple[str, float]:
+        accepted = self._mutation_with_job(
+            """
+            mutation CreatePostalAddress($addressNumber: Int!, $input: PostalAddressInput!) {
+              createPostalAddress(addressNumber: $addressNumber, input: $input) {
+                accepted jobId status message retryAfterSeconds
+              }
+            }
+            """,
+            "createPostalAddress",
+            {"addressNumber": address_number, "input": input_data},
+        )
+        return self._submit_accepted(accepted)
+
+    def submit_update_postal_address(self, address_number: int, address_sub_number: int, input_data: dict[str, Any]) -> tuple[str, float]:
+        accepted = self._mutation_with_job(
+            """
+            mutation UpdatePostalAddress($addressNumber: Int!, $addressSubNumber: Int!, $input: PostalAddressInput!) {
+              updatePostalAddress(addressNumber: $addressNumber, addressSubNumber: $addressSubNumber, input: $input) {
+                accepted jobId status message retryAfterSeconds
+              }
+            }
+            """,
+            "updatePostalAddress",
+            {"addressNumber": address_number, "addressSubNumber": address_sub_number, "input": input_data},
+        )
+        return self._submit_accepted(accepted)
+
+    def submit_create_contact_person(self, address_number: int, address_sub_number: int, input_data: dict[str, Any]) -> tuple[str, float]:
+        accepted = self._mutation_with_job(
+            """
+            mutation CreateContactPerson($addressNumber: Int!, $addressSubNumber: Int!, $input: ContactPersonInput!) {
+              createContactPerson(addressNumber: $addressNumber, addressSubNumber: $addressSubNumber, input: $input) {
+                accepted jobId status message retryAfterSeconds
+              }
+            }
+            """,
+            "createContactPerson",
+            {"addressNumber": address_number, "addressSubNumber": address_sub_number, "input": input_data},
+        )
+        return self._submit_accepted(accepted)
+
+    def submit_update_contact_person(self, address_number: int, address_sub_number: int, contact_number: int, input_data: dict[str, Any]) -> tuple[str, float]:
+        accepted = self._mutation_with_job(
+            """
+            mutation UpdateContactPerson($addressNumber: Int!, $addressSubNumber: Int!, $contactNumber: Int!, $input: ContactPersonInput!) {
+              updateContactPerson(addressNumber: $addressNumber, addressSubNumber: $addressSubNumber, contactNumber: $contactNumber, input: $input) {
+                accepted jobId status message retryAfterSeconds
+              }
+            }
+            """,
+            "updateContactPerson",
+            {"addressNumber": address_number, "addressSubNumber": address_sub_number, "contactNumber": contact_number, "input": input_data},
+        )
+        return self._submit_accepted(accepted)
+
+    def submit_request_vorgang(self, beleg_nr: str) -> tuple[str, float]:
+        accepted = self._mutation_with_job(
+            """
+            mutation RequestVorgang($belegNr: String!) {
+              requestVorgang(belegNr: $belegNr) {
+                accepted jobId status message retryAfterSeconds
+              }
+            }
+            """,
+            "requestVorgang",
+            {"belegNr": beleg_nr},
+        )
+        return self._submit_accepted(accepted)
+
+    def submit_create_vorgang(self, input_data: dict[str, Any]) -> tuple[str, float]:
+        accepted = self._mutation_with_job(
+            """
+            mutation CreateVorgang($input: CreateVorgangInput!) {
+              createVorgang(input: $input) {
+                accepted jobId status message retryAfterSeconds
+              }
+            }
+            """,
+            "createVorgang",
+            {"input": input_data},
+        )
+        return self._submit_accepted(accepted)
+
+    def submit_update_vorgang(self, beleg_nr: str, input_data: dict[str, Any]) -> tuple[str, float]:
+        accepted = self._mutation_with_job(
+            """
+            mutation UpdateVorgang($belegNr: String!, $input: UpdateVorgangInput!) {
+              updateVorgang(belegNr: $belegNr, input: $input) {
+                accepted jobId status message retryAfterSeconds
+              }
+            }
+            """,
+            "updateVorgang",
+            {"belegNr": beleg_nr, "input": input_data},
+        )
+        return self._submit_accepted(accepted)
+
     def customer_job(self, job_id: str) -> dict[str, Any]:
         data = self.execute(
             """
