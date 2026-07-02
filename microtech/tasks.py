@@ -6,6 +6,7 @@ from celery import shared_task
 @shared_task(name="microtech.process_graphql_job_result")
 def process_graphql_job_result(job_id: int) -> None:
     from microtech.services import MicrotechJobSentinelService
+    import orders.tasks  # noqa: F401 - registers order sync continuations
     import products.tasks  # noqa: F401 - registers product sync continuations
 
     MicrotechJobSentinelService().process_continuation(job_id=job_id)
@@ -15,7 +16,14 @@ def process_graphql_job_result(job_id: int) -> None:
 def poll_graphql_jobs(limit: int = 50) -> int:
     from microtech.services import MicrotechJobSentinelService
 
-    return MicrotechJobSentinelService().poll_due_jobs(limit=limit)
+    result = MicrotechJobSentinelService().poll_due_jobs(limit=limit)
+    try:
+        import orders.tasks
+
+        orders.tasks.reconcile_order_sync_workflows.run()
+    except Exception:
+        pass
+    return result
 
 
 @shared_task(name="microtech.poll_graphql_job")

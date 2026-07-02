@@ -201,7 +201,6 @@ class Command(MonitoredBaseCommand):
                 batch_no=batch_no,
                 products=batch_erp_nrs,
                 product_ids=product_ids,
-                media_ids=list(media_entities.keys()),
                 errors=errors,
             ):
                 continue
@@ -246,20 +245,15 @@ class Command(MonitoredBaseCommand):
         batch_no: int,
         products: list[str],
         product_ids: list[str],
-        media_ids: list[str],
         errors: list[dict[str, object]],
     ) -> bool:
         try:
-            result = service.purge_product_media_and_media_by_product_ids(
-                product_ids=product_ids,
-                additional_media_ids=media_ids,
-            )
+            deleted = service.purge_product_media_by_product_ids(product_ids=product_ids)
             logger.info(
-                "Shopware force image batch {} delete ok: products={} product_media_deleted={} media_deleted={}",
+                "Shopware force image batch {} delete ok: products={} product_media_deleted={}",
                 batch_no,
                 products,
-                result["product_media"],
-                result["media"],
+                deleted,
             )
             return True
         except Exception as exc:

@@ -220,6 +220,63 @@ class MicrotechJobSentinelService(BaseService):
         )
         return job
 
+    def submit_wrapper_job(
+        self,
+        *,
+        kind: str,
+        operation: str,
+        submit: Callable[[], tuple[str, float]],
+        request_payload: dict[str, Any],
+        context: dict[str, Any],
+        continuation: str,
+        next_step: str,
+        delete_after_completion: bool = True,
+    ) -> MicrotechGraphQLJob:
+        """Generischer Sentinel-Submit für Continuation-Ketten.
+
+        Legt eine Job-Row mit Status QUEUED an, ruft das übergebene ``submit``-
+        Callable auf (das das externe Job-ID und retryAfterSeconds liefert) und
+        setzt anschließend ``external_job_id``, ``WAITING_WEBHOOK`` und
+        ``next_poll_at``. Bei einer Ausnahme wird der Job auf FAILED gesetzt
+        und die Ausnahme weitergeleitet.
+        """
+        job = MicrotechGraphQLJob.objects.create(
+            kind=kind,
+            operation=operation,
+            status=MicrotechGraphQLJob.Status.QUEUED,
+            request_payload=request_payload,
+            context=context or {},
+            continuation=str(continuation or "").strip(),
+            next_step=next_step or "Warte auf Microtech GraphQL Job.",
+            delete_after_completion=delete_after_completion,
+        )
+        try:
+            external_job_id, retry_after = submit()
+        except Exception as exc:
+            job.status = MicrotechGraphQLJob.Status.FAILED
+            job.error_message = str(exc)
+            job.completed_at = timezone.now()
+            job.save(update_fields=("status", "error_message", "completed_at", "updated_at"))
+            raise
+
+        now = timezone.now()
+        job.external_job_id = external_job_id
+        job.status = MicrotechGraphQLJob.Status.WAITING_WEBHOOK
+        job.submitted_at = now
+        job.started_at = now
+        job.next_poll_at = now + timedelta(seconds=max(int(retry_after), 30))
+        job.save(
+            update_fields=(
+                "external_job_id",
+                "status",
+                "submitted_at",
+                "started_at",
+                "next_poll_at",
+                "updated_at",
+            )
+        )
+        return job
+
     def handle_webhook(self, payload: dict[str, Any]) -> MicrotechGraphQLJob:
         external_job_id = self._external_job_id_from_payload(payload)
         if not external_job_id:
