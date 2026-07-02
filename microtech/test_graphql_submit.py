@@ -31,3 +31,13 @@ class SubmitMutationTest(SimpleTestCase):
 
         self.assertEqual(job_id, "job-123")
         self.assertEqual(mock_mutation.call_args.args[1], "createPostalAddress")
+
+    @patch.object(MicrotechGraphQLClientService, "_mutation_with_job")
+    def test_submit_upsert_customer_uses_upsert_field(self, mock_mutation):
+        mock_mutation.return_value = self._accepted()
+        client = MicrotechGraphQLClientService.__new__(MicrotechGraphQLClientService)
+
+        job_id, _ = client.submit_upsert_customer("100012", {"city": "Kassel"})
+
+        self.assertEqual(job_id, "job-123")
+        self.assertEqual(mock_mutation.call_args.args[1], "upsertCustomer")

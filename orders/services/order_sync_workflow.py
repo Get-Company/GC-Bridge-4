@@ -204,12 +204,9 @@ class OrderSyncWorkflowService(BaseService):
             submit = lambda: client.submit_request_customer(state["erp_nr"])
             payload = {"customerNumber": state["erp_nr"]}
         elif step == "write_customer":
-            operation = "createCustomer" if state.get("is_new_customer") else "updateCustomer"
+            operation = "upsertCustomer"
             input_data = customer_service._build_customer_input(customer=order.customer, address=shipping)
-            if state.get("is_new_customer"):
-                submit = lambda: client.submit_create_customer(state["erp_nr"], input_data)
-            else:
-                submit = lambda: client.submit_update_customer(state["erp_nr"], input_data)
+            submit = lambda: client.submit_upsert_customer(state["erp_nr"], input_data)
             payload = {"customerNumber": state["erp_nr"], "input": input_data}
         elif step in ("shipping_address", "billing_address"):
             address = shipping if step == "shipping_address" else billing
@@ -373,6 +370,11 @@ class OrderSyncWorkflowService(BaseService):
             state["is_new_customer"] = True
         workflow.state = state
 
+    @staticmethod
+    def _looks_like_not_found_error(message: str) -> bool:
+        lowered = str(message or "").lower()
+        return any(fragment in lowered for fragment in ("nicht gefunden", "not found", "wurde nicht gefunden"))
+
     def reconcile_failures(self) -> int:
         """Verarbeitet terminale fehlgeschlagene Jobs wartender Workflows."""
         from django.db import transaction
@@ -392,7 +394,7 @@ class OrderSyncWorkflowService(BaseService):
                 continue
 
             step = workflow.current_step
-            if step in ("probe_customer", "probe_vorgang"):
+            if step in ("probe_customer", "probe_vorgang") and self._looks_like_not_found_error(job.error_message):
                 with transaction.atomic():
                     wf = MicrotechOrderSyncWorkflow.objects.select_for_update().get(pk=workflow.pk)
                     self._apply_probe_not_found(wf, step)

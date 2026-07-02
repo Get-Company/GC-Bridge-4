@@ -235,6 +235,14 @@ class ReconcileTest(TestCase):
         self.assertTrue(wf.state["is_new_customer"])
         mock_submit.assert_called_once()
 
+    @patch("orders.services.order_sync_workflow.OrderSyncWorkflowService.submit_step")
+    def test_failed_probe_customer_technical_error_marks_workflow_failed(self, mock_submit):
+        wf = self._waiting_wf("probe_customer", MicrotechGraphQLJob.Status.FAILED, error="COM unavailable")
+        OrderSyncWorkflowService().reconcile_failures()
+        wf.refresh_from_db()
+        self.assertEqual(wf.status, MicrotechOrderSyncWorkflow.Status.FAILED)
+        mock_submit.assert_not_called()
+
 
 class ResumeTest(TestCase):
     @patch("orders.services.order_sync_workflow.OrderSyncWorkflowService.submit_step")

@@ -496,6 +496,20 @@ class MicrotechGraphQLClientService(BaseService):
         )
         return self._submit_accepted(accepted)
 
+    def submit_upsert_customer(self, customer_number: str, input_data: dict[str, Any]) -> tuple[str, float]:
+        accepted = self._mutation_with_job(
+            """
+            mutation UpsertCustomer($customerNumber: String!, $input: CustomerInput!) {
+              upsertCustomer(customerNumber: $customerNumber, input: $input) {
+                accepted jobId status message retryAfterSeconds
+              }
+            }
+            """,
+            "upsertCustomer",
+            {"customerNumber": customer_number, "input": input_data},
+        )
+        return self._submit_accepted(accepted)
+
     def submit_create_postal_address(self, address_number: int, input_data: dict[str, Any]) -> tuple[str, float]:
         accepted = self._mutation_with_job(
             """
