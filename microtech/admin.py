@@ -221,19 +221,6 @@ class MicrotechGraphQLJobAdmin(BaseAdmin):
 class MicrotechSettingsAdmin(SingletonAdmin):
     fieldsets = (
         (
-            "Verbindung",
-            {
-                "fields": ("mandant", "firma"),
-            },
-        ),
-        (
-            "Benutzer",
-            {
-                "fields": ("benutzer", "manual_benutzer"),
-                "description": "Benutzer fuer automatische und manuelle Sync-Vorgaenge.",
-            },
-        ),
-        (
             "Vorgang-Standardwerte",
             {
                 "fields": ("default_vorgangsart_id", "default_zahlungsart_id", "default_versandart_id"),

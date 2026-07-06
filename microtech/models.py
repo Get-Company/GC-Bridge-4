@@ -7,10 +7,8 @@ from microtech.customs_fields import DEFAULT_SWISS_CUSTOMS_FIELD_DEFINITIONS
 
 
 class MicrotechSettings(BaseModel):
-    mandant = models.CharField(max_length=100, verbose_name=_("Mandant"))
-    firma = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Firma"))
-    benutzer = models.CharField(max_length=100, blank=True, default="", verbose_name=_("Benutzer (Autosync)"))
-    manual_benutzer = models.CharField(max_length=100, blank=True, default="", verbose_name=_("Benutzer (Manuell)"))
+    # Verbindungs-/Benutzerdaten liegen beim externen GraphQL-Wrapper;
+    # hier verbleiben nur fachliche Standardwerte für Vorgänge.
     default_zahlungsart_id = models.PositiveIntegerField(default=22, verbose_name=_("Standard Zahlungsart-ID"))
     default_versandart_id = models.PositiveIntegerField(default=10, verbose_name=_("Standard Versandart-ID"))
     default_vorgangsart_id = models.PositiveIntegerField(default=111, verbose_name=_("Standard Vorgangsart-ID"))
@@ -20,7 +18,7 @@ class MicrotechSettings(BaseModel):
         verbose_name_plural = _("Microtech Konfiguration")
 
     def __str__(self) -> str:
-        return f"Microtech - Mandant {self.mandant}"
+        return "Microtech Konfiguration"
 
     def save(self, *args, **kwargs):
         self.pk = 1
