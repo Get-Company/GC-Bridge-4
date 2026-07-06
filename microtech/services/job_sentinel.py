@@ -491,7 +491,14 @@ class MicrotechJobSentinelService(BaseService):
             job.remote_deleted_at = timezone.now()
             job.save(update_fields=("remote_deleted_at", "updated_at"))
 
+        self._delete_local_job_references(job)
         job.delete()
+
+    @staticmethod
+    def _delete_local_job_references(job: MicrotechGraphQLJob) -> None:
+        from orders.models import MicrotechOrderSyncWorkflow
+
+        MicrotechOrderSyncWorkflow.objects.filter(current_job=job).delete()
 
     @staticmethod
     def verify_webhook_signature(*, body: bytes, signature: str) -> bool:

@@ -90,6 +90,7 @@ class WorkflowModelTest(TestCase):
 from unittest.mock import MagicMock, patch  # noqa: E402
 
 from microtech.models import MicrotechGraphQLJob  # noqa: E402
+from microtech.services.job_sentinel import MicrotechJobSentinelService  # noqa: E402
 
 
 class AdvanceHandlerTest(TestCase):
@@ -249,6 +250,28 @@ class ReconcileTest(TestCase):
         with self.assertLogs("orders.services.order_sync_workflow", level="WARNING") as logs:
             OrderSyncWorkflowService().reconcile_failures()
         self.assertTrue(any("COM unavailable" in message for message in logs.output))
+
+
+class JobDeletionCleanupTest(TestCase):
+    def test_deleting_current_job_removes_waiting_order_workflow_reference(self):
+        order = make_order()
+        job = MicrotechGraphQLJob.objects.create(
+            kind=MicrotechGraphQLJob.Kind.ORDER_UPSERT,
+            operation="createVorgang",
+            status=MicrotechGraphQLJob.Status.WAITING_WEBHOOK,
+            external_job_id="ext-order-cleanup",
+        )
+        MicrotechOrderSyncWorkflow.objects.create(
+            order=order,
+            status=MicrotechOrderSyncWorkflow.Status.WAITING,
+            current_step="write_vorgang",
+            current_job=job,
+        )
+
+        MicrotechJobSentinelService().delete_job(job_id=job.pk, delete_remote=False)
+
+        self.assertFalse(MicrotechGraphQLJob.objects.filter(pk=job.pk).exists())
+        self.assertFalse(MicrotechOrderSyncWorkflow.objects.filter(order=order).exists())
 
 
 class ResumeTest(TestCase):
