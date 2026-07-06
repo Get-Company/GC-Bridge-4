@@ -5,6 +5,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
+from django import forms
 from django.contrib import admin
 from django.test import RequestFactory
 from django.test import SimpleTestCase, TestCase, override_settings
@@ -293,6 +294,25 @@ class AdminSidebarPermissionTest(SimpleTestCase):
             is_superuser=True,
         )
         self.assertTrue(item["has_permission"])
+
+
+class CeleryBeatAdminFormTest(SimpleTestCase):
+    def test_periodic_task_json_fields_use_plain_textareas(self):
+        from core.admin import _PeriodicTaskForm
+
+        form = _PeriodicTaskForm()
+
+        for field_name in ("args", "kwargs", "headers"):
+            self.assertIsInstance(form.fields[field_name].widget, forms.Textarea)
+
+    def test_periodic_task_headers_must_be_json(self):
+        from core.admin import _PeriodicTaskForm
+
+        form = _PeriodicTaskForm()
+        form.cleaned_data = {"headers": "<div>{}</div>"}
+
+        with self.assertRaises(forms.ValidationError):
+            form.clean_headers()
 
 
 class DashboardCallbackTest(TestCase):

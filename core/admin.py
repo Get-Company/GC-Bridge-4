@@ -2,6 +2,7 @@ from datetime import timedelta
 from urllib.parse import urlencode
 
 from celery import current_app
+from django import forms
 from django.contrib import admin, messages
 from django.contrib.admin.sites import NotRegistered
 from django.contrib.admin.utils import quote
@@ -259,6 +260,8 @@ class _PeriodicTaskForm(BeatPeriodicTaskForm):
         super().__init__(*args, **kwargs)
         self.fields["task"].widget = UnfoldAdminTextInputWidget()
         self.fields["regtask"].widget = UnfoldTaskSelectWidget()
+        for field_name in ("args", "kwargs", "headers"):
+            self.fields[field_name].widget = forms.Textarea(attrs={"rows": 3})
 
     def clean_args(self):
         if not (self.cleaned_data.get("args") or "").strip():
@@ -269,6 +272,11 @@ class _PeriodicTaskForm(BeatPeriodicTaskForm):
         if not (self.cleaned_data.get("kwargs") or "").strip():
             self.cleaned_data["kwargs"] = "{}"
         return super().clean_kwargs()
+
+    def clean_headers(self):
+        if not (self.cleaned_data.get("headers") or "").strip():
+            self.cleaned_data["headers"] = "{}"
+        return self._clean_json("headers")
 
 
 class CeleryBeatPeriodicTaskAdmin(BeatPeriodicTaskAdmin, CeleryBeatBaseAdmin):
