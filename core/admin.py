@@ -51,6 +51,7 @@ from core.log_reader import get_allowed_log_files, log_file_info, search_log_fil
 from core.microtech_queue_view import microtech_queue_api, microtech_queue_view
 from core.services import CommandRuntimeService
 from core.system_status_view import system_status_api, system_status_view
+from microtech.views.connection import microtech_connection_admin_view
 from hr.views import hr_calendar_api, hr_calendar_view
 from customer.views import (
     customer_merge_view,
@@ -407,7 +408,7 @@ def _admin_get_urls():
         path("logs/download/", admin.site.admin_view(admin_log_download_view), name="core_log_download"),
         path("system/", admin.site.admin_view(system_status_view), name="core_system_status"),
         path("system/api/", admin.site.admin_view(system_status_api), name="core_system_status_api"),
-path("customer-merge/", admin.site.admin_view(customer_merge_view), name="customer_merge"),
+        path("customer-merge/", admin.site.admin_view(customer_merge_view), name="customer_merge"),
         path("customer-merge/api/resolve/", admin.site.admin_view(customer_merge_resolve_api), name="customer_merge_resolve"),
         path("customer-merge/api/search-cell/", admin.site.admin_view(customer_merge_search_cell_api), name="customer_merge_search_cell"),
         path("customer-merge/api/search/", admin.site.admin_view(customer_merge_search_api), name="customer_merge_search"),
@@ -419,6 +420,7 @@ path("customer-merge/", admin.site.admin_view(customer_merge_view), name="custom
         path("hr/calendar/api/", admin.site.admin_view(hr_calendar_api), name="hr_calendar_api"),
         path("microtech-queue/", admin.site.admin_view(microtech_queue_view), name="core_microtech_queue"),
         path("microtech-queue/api/", admin.site.admin_view(microtech_queue_api), name="core_microtech_queue_api"),
+        path("microtech-connection/", admin.site.admin_view(microtech_connection_admin_view), name="core_microtech_connection"),
     ]
     return custom_urls + _default_admin_get_urls()
 

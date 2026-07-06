@@ -642,7 +642,7 @@ UNFOLD = {
                     {
                         "title": _("Verbindung"),
                         "icon": "cable",
-                        "link": reverse_lazy("admin:microtech_microtechsettings_changelist"),
+                        "link": reverse_lazy("admin:core_microtech_connection"),
                         "permission": sidebar_model_view_permission("microtech", "MicrotechSettings"),
                     },
                     {

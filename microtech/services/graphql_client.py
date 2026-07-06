@@ -197,6 +197,43 @@ class MicrotechGraphQLClientService(BaseService):
         )
         return job.get("result") or {}
 
+    def microtech_connection(self, *, timeout: float | None = None) -> dict[str, Any]:
+        data = self.execute(
+            """
+            mutation {
+              microtechConnection { accepted jobId status message retryAfterSeconds }
+            }
+            """
+        )
+        accepted = self._accepted(data, "microtechConnection")
+        job = self.poll_job(
+            job_id=str(accepted["jobId"]),
+            query_job=self.microtech_job,
+            retry_after=accepted.get("retryAfterSeconds"),
+            timeout=timeout,
+        )
+        return job.get("result") or {}
+
+    def switch_microtech_mandant(self, mandant: str, *, timeout: float | None = None) -> dict[str, Any]:
+        accepted = self._mutation_with_job(
+            """
+            mutation SwitchMicrotechMandant($mandant: String!) {
+              switchMicrotechMandant(mandant: $mandant) {
+                accepted jobId status message retryAfterSeconds
+              }
+            }
+            """,
+            "switchMicrotechMandant",
+            {"mandant": str(mandant).strip()},
+        )
+        job = self.poll_job(
+            job_id=str(accepted["jobId"]),
+            query_job=self.microtech_job,
+            retry_after=accepted.get("retryAfterSeconds"),
+            timeout=timeout,
+        )
+        return job.get("result") or {}
+
     def microtech_job(self, job_id: str) -> dict[str, Any]:
         data = self.execute(
             """

@@ -1,0 +1,90 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+<div class="flex flex-col gap-6">
+
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <div>
+      <h1 class="text-xl font-semibold">Microtech Verbindung</h1>
+      {% if graphql_url %}
+      <p class="text-xs text-gray-400 font-mono mt-1">{{ graphql_url }}</p>
+      {% endif %}
+    </div>
+    <a href="{{ request.path }}" class="inline-flex items-center gap-2 px-3 py-2 rounded-md border border-gray-200 dark:border-gray-700 text-sm">
+      <span class="material-symbols-outlined" style="font-size:18px">refresh</span>
+      Aktualisieren
+    </a>
+  </div>
+
+  {% if error %}
+  <div class="p-4 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 text-sm">
+    <strong>Verbindungsfehler:</strong> {{ error }}
+  </div>
+  {% endif %}
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+    <section class="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-white dark:bg-gray-900 lg:col-span-2">
+      <div class="flex items-center justify-between gap-2 mb-4">
+        <div class="flex items-center gap-2">
+          <span class="material-symbols-outlined text-gray-400" style="font-size:20px">cable</span>
+          <h2 class="font-semibold text-sm">Aktuelle Verbindung</h2>
+        </div>
+        <span class="text-xs px-2 py-0.5 rounded font-medium
+          {% if connection.connected %}bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300
+          {% else %}bg-gray-100 dark:bg-gray-800 text-gray-500{% endif %}">
+          {% if connection.connected %}verbunden{% else %}unbekannt{% endif %}
+        </span>
+      </div>
+
+      <dl class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+        <div>
+          <dt class="text-xs uppercase tracking-wide text-gray-400">Mandant</dt>
+          <dd class="mt-1 font-semibold text-gray-900 dark:text-gray-100">{{ connection.mandant|default:"-" }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs uppercase tracking-wide text-gray-400">Version</dt>
+          <dd class="mt-1 font-mono text-gray-900 dark:text-gray-100">{{ connection.version|default:"-" }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs uppercase tracking-wide text-gray-400">Verbindung</dt>
+          <dd class="mt-1 text-gray-900 dark:text-gray-100">{{ connection.connectionName|default:"-" }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs uppercase tracking-wide text-gray-400">Quelle</dt>
+          <dd class="mt-1 font-mono text-gray-900 dark:text-gray-100">{{ connection.source|default:"-" }}</dd>
+        </div>
+      </dl>
+    </section>
+
+    <section class="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-white dark:bg-gray-900">
+      <div class="flex items-center gap-2 mb-4">
+        <span class="material-symbols-outlined text-gray-400" style="font-size:20px">swap_horiz</span>
+        <h2 class="font-semibold text-sm">Mandant wechseln</h2>
+      </div>
+      <form method="post" class="flex flex-col gap-3">
+        {% csrf_token %}
+        <label class="text-sm">
+          <span class="block text-xs uppercase tracking-wide text-gray-400 mb-1">{{ form.mandant.label }}</span>
+          {{ form.mandant }}
+        </label>
+        {% if form.mandant.errors %}
+        <div class="text-sm text-red-600 dark:text-red-400">{{ form.mandant.errors }}</div>
+        {% endif %}
+        <button type="submit" class="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-md bg-primary-600 text-white text-sm font-medium">
+          <span class="material-symbols-outlined" style="font-size:18px">check</span>
+          Wechseln
+        </button>
+      </form>
+    </section>
+  </div>
+
+  <section class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+    <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+      <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300">Rohdaten</h2>
+    </div>
+    <pre class="p-4 text-xs overflow-x-auto font-mono text-gray-700 dark:text-gray-300">{{ connection_raw }}</pre>
+  </section>
+
+</div>
+{% endblock %}

@@ -41,3 +41,30 @@ class SubmitMutationTest(SimpleTestCase):
 
         self.assertEqual(job_id, "job-123")
         self.assertEqual(mock_mutation.call_args.args[1], "upsertCustomer")
+
+    @patch.object(MicrotechGraphQLClientService, "poll_job")
+    @patch.object(MicrotechGraphQLClientService, "execute")
+    def test_microtech_connection_uses_connection_mutation(self, mock_execute, mock_poll):
+        mock_execute.return_value = {"microtechConnection": self._accepted()}
+        mock_poll.return_value = {"result": {"mandant": "58"}}
+        client = MicrotechGraphQLClientService.__new__(MicrotechGraphQLClientService)
+
+        result = client.microtech_connection(timeout=5)
+
+        self.assertEqual(result, {"mandant": "58"})
+        self.assertIn("microtechConnection", mock_execute.call_args.args[0])
+        self.assertEqual(mock_poll.call_args.kwargs["timeout"], 5)
+
+    @patch.object(MicrotechGraphQLClientService, "poll_job")
+    @patch.object(MicrotechGraphQLClientService, "_mutation_with_job")
+    def test_switch_microtech_mandant_uses_switch_field(self, mock_mutation, mock_poll):
+        mock_mutation.return_value = self._accepted()
+        mock_poll.return_value = {"result": {"mandant": "59"}}
+        client = MicrotechGraphQLClientService.__new__(MicrotechGraphQLClientService)
+
+        result = client.switch_microtech_mandant("59", timeout=5)
+
+        self.assertEqual(result, {"mandant": "59"})
+        self.assertEqual(mock_mutation.call_args.args[1], "switchMicrotechMandant")
+        self.assertEqual(mock_mutation.call_args.args[2], {"mandant": "59"})
+        self.assertEqual(mock_poll.call_args.kwargs["timeout"], 5)
