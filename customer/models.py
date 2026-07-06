@@ -92,8 +92,13 @@ class Address(BaseModel):
         constraints = [
             models.UniqueConstraint(
                 fields=("customer", "erp_ans_id"),
-                condition=Q(erp_ans_id__isnull=False),
-                name="unique_customer_anschrift",
+                condition=Q(erp_ans_id__isnull=False, erp_asp_id__isnull=True),
+                name="unique_customer_anschrift_without_contact",
+            ),
+            models.UniqueConstraint(
+                fields=("customer", "erp_ans_id", "erp_asp_id"),
+                condition=Q(erp_ans_id__isnull=False, erp_asp_id__isnull=False),
+                name="unique_customer_anschrift_contact",
             ),
         ]
 

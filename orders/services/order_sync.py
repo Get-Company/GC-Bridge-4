@@ -402,6 +402,9 @@ class OrderSyncService(BaseService):
         address = qs.filter(api_id=api_id).first() if api_id else None
 
         if not address:
+            address = self._find_contact_address(customer=customer, address_data=address_data)
+
+        if not address:
             address = self._find_role_address(
                 customer=customer,
                 is_invoice=is_invoice,
@@ -436,6 +439,33 @@ class OrderSyncService(BaseService):
         address.is_shipping = is_shipping
         address.save()
         return address
+
+    @staticmethod
+    def _find_contact_address(*, customer: Customer, address_data: dict[str, Any]) -> Address | None:
+        street = _to_str(address_data.get("street"))
+        postal_code = _to_str(address_data.get("zipcode"))
+        city = _to_str(address_data.get("city"))
+        first_name = _to_str(address_data.get("firstName"))
+        last_name = _to_str(address_data.get("lastName"))
+        email = _to_str(address_data.get("email"))
+        if not street or not postal_code:
+            return None
+
+        candidates = Address.objects.filter(
+            customer=customer,
+            street=street,
+            postal_code=postal_code,
+            city=city,
+        )
+        if first_name or last_name:
+            match = candidates.filter(first_name=first_name, last_name=last_name).order_by("-updated_at").first()
+            if match:
+                return match
+        if email:
+            match = candidates.filter(email=email).order_by("-updated_at").first()
+            if match:
+                return match
+        return None
 
     @staticmethod
     def _find_role_address(

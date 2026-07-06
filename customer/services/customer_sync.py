@@ -68,42 +68,47 @@ class CustomerSyncService(BaseService):
                     anschrift_service.range_next()
                     continue
 
-                contact_data = self._load_first_contact(
+                contact_rows = self._load_contacts(
                     ansprechpartner_service=ansprechpartner_service,
                     customer_erp_nr=customer_erp_nr,
                     ans_nr=ans_nr,
                 )
+                if not contact_rows:
+                    contact_rows = [self._empty_contact()]
 
-                address_email = _to_str(anschrift_service.get_field("EMail1")) or contact_data["email"]
-                address_defaults = {
-                    "erp_nr": _to_int(customer_erp_nr),
-                    "erp_ans_id": ans_id,
-                    "erp_ans_nr": ans_nr,
-                    "erp_asp_id": contact_data["asp_id"],
-                    "erp_asp_nr": contact_data["asp_nr"],
-                    "name1": _to_str(anschrift_service.get_field("Na1")),
-                    "name2": _to_str(anschrift_service.get_field("Na2")),
-                    "name3": _to_str(anschrift_service.get_field("Na3")),
-                    "department": contact_data["department"],
-                    "street": _to_str(anschrift_service.get_field("Str")),
-                    "postal_code": _to_str(anschrift_service.get_field("PLZ")),
-                    "city": _to_str(anschrift_service.get_field("Ort")),
-                    "country_code": _to_str(anschrift_service.get_field("Land")),
-                    "email": address_email,
-                    "title": contact_data["title"],
-                    "first_name": contact_data["first_name"],
-                    "last_name": contact_data["last_name"],
-                    "phone": contact_data["phone"],
-                    "is_shipping": ans_nr == standard_shipping_nr,
-                    "is_invoice": ans_nr == standard_invoice_nr,
-                }
-                address = self._upsert_local_address(
-                    customer=customer,
-                    ans_id=ans_id,
-                    ans_nr=ans_nr,
-                    defaults=address_defaults,
-                )
-                seen_local_address_ids.append(address.pk)
+                for contact_data in contact_rows:
+                    address_email = _to_str(anschrift_service.get_field("EMail1")) or contact_data["email"]
+                    address_defaults = {
+                        "erp_nr": _to_int(customer_erp_nr),
+                        "erp_ans_id": ans_id,
+                        "erp_ans_nr": ans_nr,
+                        "erp_asp_id": contact_data["asp_id"],
+                        "erp_asp_nr": contact_data["asp_nr"],
+                        "name1": _to_str(anschrift_service.get_field("Na1")),
+                        "name2": _to_str(anschrift_service.get_field("Na2")),
+                        "name3": _to_str(anschrift_service.get_field("Na3")),
+                        "department": contact_data["department"],
+                        "street": _to_str(anschrift_service.get_field("Str")),
+                        "postal_code": _to_str(anschrift_service.get_field("PLZ")),
+                        "city": _to_str(anschrift_service.get_field("Ort")),
+                        "country_code": _to_str(anschrift_service.get_field("Land")),
+                        "email": address_email,
+                        "title": contact_data["title"],
+                        "first_name": contact_data["first_name"],
+                        "last_name": contact_data["last_name"],
+                        "phone": contact_data["phone"],
+                        "is_shipping": ans_nr == standard_shipping_nr,
+                        "is_invoice": ans_nr == standard_invoice_nr,
+                    }
+                    address = self._upsert_local_address(
+                        customer=customer,
+                        ans_id=ans_id,
+                        ans_nr=ans_nr,
+                        asp_id=contact_data["asp_id"],
+                        asp_nr=contact_data["asp_nr"],
+                        defaults=address_defaults,
+                    )
+                    seen_local_address_ids.append(address.pk)
                 anschrift_service.range_next()
 
         if seen_local_address_ids:
@@ -119,12 +124,20 @@ class CustomerSyncService(BaseService):
         customer: Customer,
         ans_id: int | None,
         ans_nr: int,
+        asp_id: int | None,
+        asp_nr: int | None,
         defaults: dict[str, Any],
     ) -> Address:
         qs = Address.objects.filter(customer=customer)
-        address = qs.filter(erp_ans_id=ans_id).first() if ans_id is not None else None
+        address = None
+        if ans_id is not None and asp_id is not None:
+            address = qs.filter(erp_ans_id=ans_id, erp_asp_id=asp_id).first()
+        if not address and ans_id is not None and asp_id is None:
+            address = qs.filter(erp_ans_id=ans_id, erp_asp_id__isnull=True).first()
+        if not address and ans_nr is not None and asp_nr is not None:
+            address = qs.filter(erp_ans_nr=ans_nr, erp_asp_nr=asp_nr).first()
         if not address:
-            address = qs.filter(erp_ans_nr=ans_nr).first()
+            address = qs.filter(erp_ans_nr=ans_nr, erp_asp_nr__isnull=True).first()
         if not address:
             address = Address(customer=customer)
 
@@ -133,36 +146,46 @@ class CustomerSyncService(BaseService):
         address.save()
         return address
 
-    def _load_first_contact(
+    def _load_contacts(
         self,
         *,
         ansprechpartner_service: MicrotechAnsprechpartnerService,
         customer_erp_nr: str,
         ans_nr: int,
-    ) -> dict[str, Any]:
+    ) -> list[dict[str, Any]]:
         has_contacts = ansprechpartner_service.set_range(
             from_range=[customer_erp_nr, ans_nr, 0],
             to_range=[customer_erp_nr, ans_nr, 20],
         )
         if not has_contacts:
-            return {
-                "asp_id": None,
-                "asp_nr": None,
-                "title": "",
-                "first_name": "",
-                "last_name": "",
-                "email": "",
-                "phone": "",
-                "department": "",
-            }
+            return []
 
+        contacts: list[dict[str, Any]] = []
+        while not ansprechpartner_service.range_eof():
+            contacts.append(
+                {
+                    "asp_id": _to_int(ansprechpartner_service.get_field("ID")),
+                    "asp_nr": _to_int(ansprechpartner_service.get_field("AspNr")),
+                    "title": _to_str(ansprechpartner_service.get_field("Anr")),
+                    "first_name": _to_str(ansprechpartner_service.get_field("VNa")),
+                    "last_name": _to_str(ansprechpartner_service.get_field("NNa")),
+                    "email": _to_str(ansprechpartner_service.get_field("EMail1")),
+                    "phone": _to_str(ansprechpartner_service.get_field("Tel1")),
+                    "department": _to_str(ansprechpartner_service.get_field("Abt")),
+                }
+            )
+            ansprechpartner_service.range_next()
+        return contacts
+
+    @staticmethod
+    def _empty_contact() -> dict[str, Any]:
         return {
-            "asp_id": _to_int(ansprechpartner_service.get_field("ID")),
-            "asp_nr": _to_int(ansprechpartner_service.get_field("AspNr")),
-            "title": _to_str(ansprechpartner_service.get_field("Anr")),
-            "first_name": _to_str(ansprechpartner_service.get_field("VNa")),
-            "last_name": _to_str(ansprechpartner_service.get_field("NNa")),
-            "email": _to_str(ansprechpartner_service.get_field("EMail1")),
-            "phone": _to_str(ansprechpartner_service.get_field("Tel1")),
-            "department": _to_str(ansprechpartner_service.get_field("Abt")),
+            "asp_id": None,
+            "asp_nr": None,
+            "title": "",
+            "first_name": "",
+            "last_name": "",
+            "email": "",
+            "phone": "",
+            "department": "",
         }

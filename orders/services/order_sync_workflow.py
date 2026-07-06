@@ -121,7 +121,13 @@ class OrderSyncWorkflowService(BaseService):
 
     # --- Ergebnis-Anwendung -------------------------------------------------
 
-    def _apply_result(self, workflow: MicrotechOrderSyncWorkflow, step: str, result: dict[str, Any]) -> None:
+    def _apply_result(
+        self,
+        workflow: MicrotechOrderSyncWorkflow,
+        step: str,
+        result: dict[str, Any],
+        job: MicrotechGraphQLJob | None = None,
+    ) -> None:
         """Überträgt das Job-Ergebnis in den Workflow-Zustand."""
         from customer.services.customer_upsert_microtech import _to_int, _to_str
 
@@ -138,12 +144,35 @@ class OrderSyncWorkflowService(BaseService):
         elif step in ("shipping_address", "billing_address"):
             shipping, billing = self._resolve_addresses(workflow.order)
             address = shipping if step == "shipping_address" else billing
-            sub = self._address_sub_number_from_result(result, step=step, address=address)
+            sub = self._address_sub_number_from_result(
+                result,
+                step=step,
+                address=address,
+                operation=job.operation if job else "",
+            )
             key = "shipping_ans_nr" if step == "shipping_address" else "billing_ans_nr"
             if sub:
                 state[key] = sub
+                self._persist_address_sub_number(workflow=workflow, address=address, sub_number=sub, result=result)
             if step == "shipping_address" and state.get("billing_same_as_shipping"):
                 state["billing_ans_nr"] = state.get("shipping_ans_nr")
+        elif step in ("shipping_contact", "billing_contact"):
+            shipping, billing = self._resolve_addresses(workflow.order)
+            address = shipping if step == "shipping_contact" else billing
+            sub_key = "shipping_ans_nr" if step == "shipping_contact" else "billing_ans_nr"
+            address_step = "shipping_address" if step == "shipping_contact" else "billing_address"
+            sub = int(state.get(sub_key) or 0) or self._address_sub_number_from_result(
+                result,
+                step=address_step,
+                address=address,
+                operation=job.operation if job else "",
+            )
+            if sub:
+                state[sub_key] = sub
+                self._persist_address_sub_number(workflow=workflow, address=address, sub_number=sub, result=result)
+            contact_number = self._contact_number_from_result(result, address_sub_number=sub or None)
+            if contact_number:
+                self._persist_contact_number(address=address, contact_number=contact_number)
         elif step == "probe_vorgang":
             vorgang = (result or {}).get("vorgang") or {}
             beleg = _to_str(vorgang.get("belegNr"))
@@ -175,7 +204,7 @@ class OrderSyncWorkflowService(BaseService):
             )
             if workflow is None or workflow.current_step != step:
                 return
-            self._apply_result(workflow, step, job.result_payload or {})
+            self._apply_result(workflow, step, job.result_payload or {}, job=job)
             self._log_step(workflow, step, "completed")
             workflow.error_message = ""
             workflow.save(update_fields=("state", "step_log", "error_message", "updated_at"))
@@ -241,6 +270,7 @@ class OrderSyncWorkflowService(BaseService):
         elif step in ("shipping_address", "billing_address"):
             address = shipping if step == "shipping_address" else billing
             is_shipping = step == "shipping_address"
+            sub_number = _to_int(address.erp_ans_nr) or self._copy_matching_anschrift_identity(address)
             input_data = customer_service._build_postal_address_input(
                 address=address,
                 is_shipping=is_shipping,
@@ -248,7 +278,6 @@ class OrderSyncWorkflowService(BaseService):
                 na1_mode="auto",
                 na1_static_value="",
             )
-            sub_number = _to_int(address.erp_ans_nr)
             operation = "updatePostalAddress" if sub_number else "createPostalAddress"
             if sub_number:
                 submit = lambda: client.submit_update_postal_address(address_number, sub_number, input_data)
@@ -260,6 +289,29 @@ class OrderSyncWorkflowService(BaseService):
             address = shipping if step == "shipping_contact" else billing
             sub_key = "shipping_ans_nr" if step == "shipping_contact" else "billing_ans_nr"
             sub_number = int(state.get(sub_key) or 0) or (_to_int(address.erp_ans_nr) or 0)
+            if sub_number <= 0:
+                sub_number = self._copy_matching_anschrift_identity(address) or 0
+            if sub_number <= 0:
+                address_step = "shipping_address" if step == "shipping_contact" else "billing_address"
+                current_job = workflow.current_job
+                if current_job is not None:
+                    sub_number = self._address_sub_number_from_result(
+                        current_job.result_payload or {},
+                        step=address_step,
+                        address=address,
+                        operation=current_job.operation,
+                    ) or 0
+                    if sub_number > 0:
+                        state = dict(state)
+                        state[sub_key] = sub_number
+                        workflow.state = state
+                        self._persist_address_sub_number(
+                            workflow=workflow,
+                            address=address,
+                            sub_number=sub_number,
+                            result=current_job.result_payload or {},
+                        )
+                        workflow.save(update_fields=("state", "updated_at"))
             if sub_number <= 0:
                 raise ValueError(
                     f"{step} ohne bekannte Anschrift-Nummer (weder im Workflow-Zustand noch an der Adresse persistiert)."
@@ -418,9 +470,20 @@ class OrderSyncWorkflowService(BaseService):
         workflow.state = state
 
     @staticmethod
-    def _address_sub_number_from_result(result: dict[str, Any], *, step: str, address: Address) -> int | None:
+    def _address_sub_number_from_result(
+        result: dict[str, Any],
+        *,
+        step: str,
+        address: Address,
+        operation: str = "",
+    ) -> int | None:
         postal = (result or {}).get("postalAddress") or {}
         sub = _to_int(postal.get("addressSubNumber"))
+        if sub:
+            return sub
+
+        contact = (result or {}).get("contactPerson") or {}
+        sub = _to_int(contact.get("addressSubNumber"))
         if sub:
             return sub
 
@@ -432,7 +495,100 @@ class OrderSyncWorkflowService(BaseService):
                 return candidate_sub
         if len(addresses) == 1:
             return _to_int((addresses[0] or {}).get("addressSubNumber")) or _to_int(address.erp_ans_nr)
-        return _to_int(address.erp_ans_nr)
+        return _to_int(address.erp_ans_nr) or (1 if operation == "createPostalAddress" else None)
+
+    @staticmethod
+    def _persist_address_sub_number(
+        *,
+        workflow: MicrotechOrderSyncWorkflow,
+        address: Address,
+        sub_number: int,
+        result: dict[str, Any],
+    ) -> None:
+        postal = (result or {}).get("postalAddress") or {}
+        contact = (result or {}).get("contactPerson") or {}
+        CustomerUpsertMicrotechService()._persist_anschrift_identity(
+            erp_nr=str(
+                _to_int(postal.get("addressNumber"))
+                or _to_int(contact.get("addressNumber"))
+                or (workflow.state or {}).get("address_number")
+                or address.erp_nr
+                or ""
+            ),
+            address=address,
+            ans_id=address.erp_ans_id,
+            ans_nr=sub_number,
+        )
+
+    @staticmethod
+    def _copy_matching_anschrift_identity(address: Address) -> int | None:
+        if not address.street or not address.postal_code:
+            return None
+        sibling = (
+            Address.objects.filter(
+                customer=address.customer,
+                street=address.street,
+                postal_code=address.postal_code,
+                city=address.city,
+                country_code=address.country_code,
+                erp_ans_nr__isnull=False,
+            )
+            .exclude(pk=address.pk)
+            .order_by("-updated_at")
+            .first()
+        )
+        if sibling is None:
+            return None
+
+        CustomerUpsertMicrotechService()._persist_anschrift_identity(
+            erp_nr=str(sibling.erp_nr or address.customer.erp_nr or ""),
+            address=address,
+            ans_id=sibling.erp_ans_id,
+            ans_nr=sibling.erp_ans_nr,
+        )
+        return sibling.erp_ans_nr
+
+    @staticmethod
+    def _contact_number_from_result(result: dict[str, Any], *, address_sub_number: int | None = None) -> int | None:
+        contact = (result or {}).get("contactPerson") or {}
+        contact_number = _to_int(contact.get("contactNumber"))
+        if contact_number:
+            return contact_number
+
+        postal = (result or {}).get("postalAddress") or {}
+        postal_sub = _to_int(postal.get("addressSubNumber"))
+        if address_sub_number is None or not postal_sub or postal_sub == address_sub_number:
+            contact_number = OrderSyncWorkflowService._contact_number_from_contacts(postal.get("contacts") or [])
+            if contact_number:
+                return contact_number
+
+        addresses = ((result or {}).get("customer") or {}).get("addresses") or []
+        for candidate in addresses:
+            if address_sub_number is not None and _to_int((candidate or {}).get("addressSubNumber")) != address_sub_number:
+                continue
+            contact_number = OrderSyncWorkflowService._contact_number_from_contacts((candidate or {}).get("contacts") or [])
+            if contact_number:
+                return contact_number
+        return None
+
+    @staticmethod
+    def _contact_number_from_contacts(contacts: list[dict[str, Any]]) -> int | None:
+        for contact in contacts:
+            if (contact or {}).get("isDefault"):
+                contact_number = _to_int((contact or {}).get("contactNumber"))
+                if contact_number:
+                    return contact_number
+        if len(contacts) == 1:
+            return _to_int((contacts[0] or {}).get("contactNumber"))
+        return None
+
+    @staticmethod
+    def _persist_contact_number(*, address: Address, contact_number: int) -> None:
+        CustomerUpsertMicrotechService()._persist_ansprechpartner_identity(
+            address=address,
+            asp_id=contact_number,
+            asp_nr=contact_number,
+        )
 
     @staticmethod
     def _looks_like_not_found_error(message: str) -> bool:
