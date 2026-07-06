@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from customer.models import Address
@@ -13,6 +14,12 @@ from orders.services.order_rule_resolver import OrderRuleResolverService
 from orders.services.order_upsert_microtech import OrderUpsertMicrotechService
 
 CONTINUATION_NAME = "microtech_order_sync_advance"
+
+logger = logging.getLogger(__name__)
+
+# Fehlermeldungs-Fragmente, die einen Probe-Fehlschlag als fachliches
+# "nicht gefunden" (Branch) statt als technischen Fehler kennzeichnen.
+NOT_FOUND_FRAGMENTS = ("nicht gefunden", "not found", "wurde nicht gefunden")
 
 
 class OrderSyncWorkflowService(BaseService):
@@ -106,6 +113,9 @@ class OrderSyncWorkflowService(BaseService):
                 "erp_order_id": (order.erp_order_id or "").strip(),
             },
         )
+        logger.info(
+            "Order-Sync-Workflow #%s für Bestellung %s (erp_nr=%s) gestartet.", workflow.pk, order.pk, erp_nr
+        )
         self._advance(workflow)
         return workflow
 
@@ -179,14 +189,33 @@ class OrderSyncWorkflowService(BaseService):
                 workflow.current_step = ""
                 workflow.current_job = None
                 workflow.save(update_fields=("status", "current_step", "current_job", "updated_at"))
+                logger.info("Order-Sync-Workflow #%s für Bestellung %s erfolgreich abgeschlossen.", workflow.pk, workflow.order_id)
                 return
             if step == "writeback_adrnr":
-                self._run_local_step(workflow, step)
+                try:
+                    self._run_local_step(workflow, step)
+                except Exception as exc:
+                    self._mark_step_failed(workflow, step, exc)
+                    raise
                 self._log_step(workflow, step, "completed")
                 workflow.save(update_fields=("state", "step_log", "updated_at"))
+                logger.info("Order-Sync-Workflow #%s: lokaler Schritt '%s' abgeschlossen.", workflow.pk, step)
                 continue
-            self.submit_step(workflow, step)
+            try:
+                self.submit_step(workflow, step)
+            except Exception as exc:
+                self._mark_step_failed(workflow, step, exc)
+                raise
             return
+
+    def _mark_step_failed(self, workflow: MicrotechOrderSyncWorkflow, step: str, exc: Exception) -> None:
+        """Setzt den Workflow auf FAILED, damit er nicht aktiv hängen bleibt und resumebar ist."""
+        logger.exception("Order-Sync-Workflow #%s: Schritt '%s' fehlgeschlagen.", workflow.pk, step)
+        workflow.status = MicrotechOrderSyncWorkflow.Status.FAILED
+        workflow.current_step = step
+        workflow.error_message = str(exc)
+        self._log_step(workflow, step, "failed", error=str(exc))
+        workflow.save(update_fields=("status", "current_step", "error_message", "step_log", "updated_at"))
 
     def submit_step(self, workflow: MicrotechOrderSyncWorkflow, step: str) -> MicrotechGraphQLJob:
         """Submittet einen Customer-Remote-Step an den Sentinel."""
@@ -251,9 +280,18 @@ class OrderSyncWorkflowService(BaseService):
                 payload = {"addressNumber": address_number, "addressSubNumber": sub_number, "input": input_data}
         elif step == "set_default_addresses":
             operation = "updateCustomer"
+            shipping_ans_nr = int(state.get("shipping_ans_nr") or 0) or (_to_int(shipping.erp_ans_nr) or 0)
+            billing_ans_nr = (
+                int(state.get("billing_ans_nr") or 0) or (_to_int(billing.erp_ans_nr) or 0) or shipping_ans_nr
+            )
+            if shipping_ans_nr <= 0:
+                raise ValueError(
+                    "set_default_addresses ohne bekannte Anschrift-Nummer (weder im Workflow-Zustand "
+                    "noch an der Adresse persistiert)."
+                )
             input_data = {
-                "defaultShippingAddressNumber": int(state.get("shipping_ans_nr") or 0),
-                "defaultBillingAddressNumber": int(state.get("billing_ans_nr") or state.get("shipping_ans_nr") or 0),
+                "defaultShippingAddressNumber": shipping_ans_nr,
+                "defaultBillingAddressNumber": billing_ans_nr,
             }
             submit = lambda: client.submit_update_customer(state["erp_nr"], input_data)
             payload = {"customerNumber": state["erp_nr"], "input": input_data}
@@ -356,10 +394,14 @@ class OrderSyncWorkflowService(BaseService):
         return job
 
     def _log_step(self, workflow: MicrotechOrderSyncWorkflow, step: str, status: str, error: str = "") -> None:
-        """Hängt einen Eintrag an das Step-Log des Workflows an."""
+        """Hängt einen Eintrag an das Step-Log des Workflows an (completed wird dedupliziert)."""
         from django.utils import timezone
 
         log = list(workflow.step_log or [])
+        if status == "completed" and any(
+            entry.get("step") == step and entry.get("status") == "completed" for entry in log
+        ):
+            return
         log.append({"step": step, "status": status, "at": timezone.now().isoformat(), "error": error})
         workflow.step_log = log
 
@@ -373,7 +415,7 @@ class OrderSyncWorkflowService(BaseService):
     @staticmethod
     def _looks_like_not_found_error(message: str) -> bool:
         lowered = str(message or "").lower()
-        return any(fragment in lowered for fragment in ("nicht gefunden", "not found", "wurde nicht gefunden"))
+        return any(fragment in lowered for fragment in NOT_FOUND_FRAGMENTS)
 
     def reconcile_failures(self) -> int:
         """Verarbeitet terminale fehlgeschlagene Jobs wartender Workflows."""
@@ -400,9 +442,25 @@ class OrderSyncWorkflowService(BaseService):
                     self._apply_probe_not_found(wf, step)
                     self._log_step(wf, step, "completed", error="probe-not-found")
                     wf.save(update_fields=("state", "step_log", "updated_at"))
-                self._advance(MicrotechOrderSyncWorkflow.objects.get(pk=workflow.pk))
+                logger.info(
+                    "Order-Sync-Workflow #%s: Probe '%s' als 'nicht gefunden' verbucht.", workflow.pk, step
+                )
+                try:
+                    self._advance(MicrotechOrderSyncWorkflow.objects.get(pk=workflow.pk))
+                except Exception:
+                    # _advance hat den Workflow bereits FAILED markiert und geloggt;
+                    # die übrigen Workflows sollen trotzdem reconciled werden.
+                    pass
                 changed += 1
                 continue
+
+            if step in ("probe_customer", "probe_vorgang"):
+                logger.warning(
+                    "Order-Sync-Workflow #%s: Probe-Fehler nicht als 'nicht gefunden' erkennbar, "
+                    "Workflow wird FAILED markiert: %s",
+                    workflow.pk,
+                    job.error_message,
+                )
 
             with transaction.atomic():
                 wf = MicrotechOrderSyncWorkflow.objects.select_for_update().get(pk=workflow.pk)
@@ -410,7 +468,12 @@ class OrderSyncWorkflowService(BaseService):
                 wf.error_message = job.error_message or "Microtech-Job fehlgeschlagen."
                 self._log_step(wf, step, "failed", error=wf.error_message)
                 wf.save(update_fields=("status", "error_message", "step_log", "updated_at"))
+            logger.error(
+                "Order-Sync-Workflow #%s: Schritt '%s' fehlgeschlagen: %s", workflow.pk, step, wf.error_message
+            )
             changed += 1
+        if changed:
+            logger.info("Order-Sync-Reconcile: %s Workflow(s) verarbeitet.", changed)
         return changed
 
     def resume(self, workflow: MicrotechOrderSyncWorkflow) -> MicrotechGraphQLJob | None:
@@ -418,13 +481,15 @@ class OrderSyncWorkflowService(BaseService):
         if workflow.status != MicrotechOrderSyncWorkflow.Status.FAILED:
             return None
 
+        workflow.error_message = ""
+        workflow.save(update_fields=("error_message", "updated_at"))
+        logger.info("Order-Sync-Workflow #%s wird fortgesetzt (Schritt '%s').", workflow.pk, workflow.current_step)
+
         step = workflow.current_step
-        if not step:
-            workflow.error_message = ""
-            workflow.save(update_fields=("error_message", "updated_at"))
+        # Bereits erledigte oder lokale Steps nicht erneut submitten,
+        # sondern die Kette regulär über den Resolver weitertreiben.
+        if not step or step in self._completed_steps(workflow) or step == "writeback_adrnr":
             self._advance(workflow)
             return workflow.current_job
 
-        workflow.error_message = ""
-        workflow.save(update_fields=("error_message", "updated_at"))
         return self.submit_step(workflow, step)

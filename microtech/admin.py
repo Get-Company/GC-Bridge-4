@@ -2,6 +2,7 @@ from django.contrib import admin, messages
 from django.db import models
 from django.http import HttpResponseRedirect, JsonResponse
 from django.utils.html import format_html
+from django.utils.safestring import mark_safe
 from django.urls import reverse
 
 from core.admin import BaseAdmin, BaseStackedInline
@@ -322,6 +323,9 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
             "is_active",
             "priority",
             "ui_action",
+            # Verstecktes Feld: die Form erwartet action_type und clean()
+            # schreibt es; ohne das Feld wirft __init__ einen KeyError.
+            "action_type",
             "dataset_field",
             "target_value",
             "action_context_preview",
@@ -462,7 +466,9 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
 
     @admin.display(description="Live-Zusammenfassung")
     def live_rule_summary(self, obj):
-        return format_html(
+        # Statisches Markup ohne Interpolation; format_html ohne Argumente
+        # ist seit Django 5 ein TypeError.
+        return mark_safe(
             """
             <section class="rulebuilder-summary-card" id="rulebuilder-live-summary" aria-live="polite">
               <h3 class="rulebuilder-summary-title">Regel-Zusammenfassung</h3>

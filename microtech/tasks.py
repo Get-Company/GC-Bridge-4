@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import logging
+
 from celery import shared_task
+
+logger = logging.getLogger(__name__)
 
 
 @shared_task(name="microtech.process_graphql_job_result")
@@ -22,7 +26,8 @@ def poll_graphql_jobs(limit: int = 50) -> int:
 
         orders.tasks.reconcile_order_sync_workflows.run()
     except Exception:
-        pass
+        # Reconcile darf den Poll nicht brechen, aber Fehler müssen sichtbar sein.
+        logger.exception("Reconcile der Order-Sync-Workflows fehlgeschlagen.")
     return result
 
 

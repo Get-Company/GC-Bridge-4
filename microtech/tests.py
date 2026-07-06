@@ -171,6 +171,11 @@ class MicrotechSyncProductsCommandTest(TestCase):
         artikel_service.get_customs_tariff_number.return_value = ""
         artikel_service.get_weight_gross.return_value = None
         artikel_service.get_weight_net.return_value = None
+        # MagicMock besteht jeden hasattr-Check; ohne diese Stubs würde der
+        # Inline-Stock-Pfad statt des Lager-Fallbacks genommen.
+        artikel_service.get_stock.return_value = None
+        artikel_service.get_storage_location.return_value = None
+        artikel_service.has_inline_stock_fields.return_value = False
         return artikel_service
 
     @staticmethod

@@ -18,3 +18,18 @@ class ContinuationRegistrationTest(SimpleTestCase):
         import orders.tasks as task_module
 
         self.assertEqual(task_module.reconcile_order_sync_workflows.run(), 3)
+
+
+class PollReconcileLoggingTest(SimpleTestCase):
+    @patch("orders.tasks.reconcile_order_sync_workflows")
+    @patch("microtech.services.MicrotechJobSentinelService.poll_due_jobs")
+    def test_poll_logs_reconcile_errors_instead_of_swallowing(self, mock_poll, mock_task):
+        mock_poll.return_value = 0
+        mock_task.run.side_effect = RuntimeError("Reconcile kaputt")
+        from microtech.tasks import poll_graphql_jobs
+
+        with self.assertLogs("microtech.tasks", level="ERROR") as logs:
+            result = poll_graphql_jobs.run()
+
+        self.assertEqual(result, 0)
+        self.assertTrue(any("Reconcile kaputt" in message for message in logs.output))

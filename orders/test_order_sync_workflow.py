@@ -243,6 +243,13 @@ class ReconcileTest(TestCase):
         self.assertEqual(wf.status, MicrotechOrderSyncWorkflow.Status.FAILED)
         mock_submit.assert_not_called()
 
+    @patch("orders.services.order_sync_workflow.OrderSyncWorkflowService.submit_step")
+    def test_technical_probe_error_logs_warning(self, mock_submit):
+        self._waiting_wf("probe_customer", MicrotechGraphQLJob.Status.FAILED, error="COM unavailable")
+        with self.assertLogs("orders.services.order_sync_workflow", level="WARNING") as logs:
+            OrderSyncWorkflowService().reconcile_failures()
+        self.assertTrue(any("COM unavailable" in message for message in logs.output))
+
 
 class ResumeTest(TestCase):
     @patch("orders.services.order_sync_workflow.OrderSyncWorkflowService.submit_step")
@@ -267,3 +274,117 @@ class ResumeTest(TestCase):
         order = make_order()
         wf = MicrotechOrderSyncWorkflow.objects.create(order=order, status=MicrotechOrderSyncWorkflow.Status.WAITING)
         self.assertIsNone(OrderSyncWorkflowService().resume(wf))
+
+    @patch("orders.services.order_sync_workflow.OrderSyncWorkflowService.submit_step")
+    def test_resume_skips_already_completed_step(self, mock_submit):
+        order = make_order()
+        wf = MicrotechOrderSyncWorkflow.objects.create(
+            order=order,
+            status=MicrotechOrderSyncWorkflow.Status.FAILED,
+            current_step="probe_customer",
+            error_message="submit des Folgeschritts fehlgeschlagen",
+            state={"erp_nr": order.customer.erp_nr, "is_new_customer": False},
+            step_log=[{"step": "probe_customer", "status": "completed"}],
+        )
+
+        OrderSyncWorkflowService().resume(wf)
+
+        # probe_customer ist bereits erledigt -> nicht erneut submitten, sondern den Folgeschritt
+        mock_submit.assert_called_once()
+        self.assertEqual(mock_submit.call_args.args[1], "write_customer")
+
+
+class SubmitFailureTest(TestCase):
+    @patch("orders.services.order_sync_workflow.MicrotechGraphQLClientService")
+    @patch("orders.services.order_sync_workflow.MicrotechJobSentinelService.submit_wrapper_job")
+    def test_start_marks_workflow_failed_when_submit_raises(self, mock_submit, mock_client):
+        mock_submit.side_effect = RuntimeError("wrapper down")
+        order = make_order()
+
+        with self.assertRaises(RuntimeError):
+            OrderSyncWorkflowService().start_for_order(order)
+
+        wf = MicrotechOrderSyncWorkflow.objects.get(order=order)
+        self.assertEqual(wf.status, MicrotechOrderSyncWorkflow.Status.FAILED)
+        self.assertIn("wrapper down", wf.error_message)
+        self.assertEqual(wf.current_step, "probe_customer")
+        self.assertEqual(wf.step_log[-1]["step"], "probe_customer")
+        self.assertEqual(wf.step_log[-1]["status"], "failed")
+
+    @patch("orders.services.order_sync_workflow.MicrotechGraphQLClientService")
+    @patch("orders.services.order_sync_workflow.MicrotechJobSentinelService.submit_wrapper_job")
+    def test_failed_start_can_be_resumed(self, mock_submit, mock_client):
+        mock_submit.side_effect = RuntimeError("wrapper down")
+        order = make_order()
+        with self.assertRaises(RuntimeError):
+            OrderSyncWorkflowService().start_for_order(order)
+        wf = MicrotechOrderSyncWorkflow.objects.get(order=order)
+
+        mock_submit.side_effect = None
+        mock_submit.return_value = MagicMock(pk=2)
+        OrderSyncWorkflowService().resume(wf)
+
+        wf.refresh_from_db()
+        self.assertEqual(wf.status, MicrotechOrderSyncWorkflow.Status.WAITING)
+        self.assertEqual(wf.current_step, "probe_customer")
+
+
+class LogStepDedupeTest(TestCase):
+    def test_log_step_does_not_duplicate_completed_entries(self):
+        order = make_order()
+        wf = MicrotechOrderSyncWorkflow.objects.create(order=order)
+        service = OrderSyncWorkflowService()
+
+        service._log_step(wf, "probe_customer", "completed")
+        service._log_step(wf, "probe_customer", "completed")
+
+        entries = [e for e in wf.step_log if e["step"] == "probe_customer" and e["status"] == "completed"]
+        self.assertEqual(len(entries), 1)
+
+    def test_log_step_allows_repeated_failed_entries(self):
+        order = make_order()
+        wf = MicrotechOrderSyncWorkflow.objects.create(order=order)
+        service = OrderSyncWorkflowService()
+
+        service._log_step(wf, "write_customer", "failed", error="a")
+        service._log_step(wf, "write_customer", "failed", error="b")
+
+        entries = [e for e in wf.step_log if e["step"] == "write_customer" and e["status"] == "failed"]
+        self.assertEqual(len(entries), 2)
+
+
+class SetDefaultAddressesTest(TestCase):
+    @patch("orders.services.order_sync_workflow.MicrotechGraphQLClientService")
+    @patch("orders.services.order_sync_workflow.MicrotechJobSentinelService.submit_wrapper_job")
+    def test_falls_back_to_locally_persisted_ans_nr(self, mock_submit, mock_client):
+        mock_submit.return_value = MagicMock(pk=3)
+        order = make_order()
+        order.shipping_address.erp_ans_nr = "3"
+        order.shipping_address.save(update_fields=("erp_ans_nr",))
+        order.billing_address.erp_ans_nr = "4"
+        order.billing_address.save(update_fields=("erp_ans_nr",))
+        wf = MicrotechOrderSyncWorkflow.objects.create(
+            order=order,
+            status=MicrotechOrderSyncWorkflow.Status.RUNNING,
+            state={"erp_nr": order.customer.erp_nr, "billing_same_as_shipping": False},
+        )
+
+        OrderSyncWorkflowService().submit_step(wf, "set_default_addresses")
+
+        input_data = mock_submit.call_args.kwargs["request_payload"]["input"]
+        self.assertEqual(input_data["defaultShippingAddressNumber"], 3)
+        self.assertEqual(input_data["defaultBillingAddressNumber"], 4)
+
+    @patch("orders.services.order_sync_workflow.MicrotechGraphQLClientService")
+    @patch("orders.services.order_sync_workflow.MicrotechJobSentinelService.submit_wrapper_job")
+    def test_rejects_missing_ans_nr(self, mock_submit, mock_client):
+        order = make_order()
+        wf = MicrotechOrderSyncWorkflow.objects.create(
+            order=order,
+            status=MicrotechOrderSyncWorkflow.Status.RUNNING,
+            state={"erp_nr": order.customer.erp_nr, "billing_same_as_shipping": True},
+        )
+
+        with self.assertRaises(ValueError):
+            OrderSyncWorkflowService().submit_step(wf, "set_default_addresses")
+        mock_submit.assert_not_called()
