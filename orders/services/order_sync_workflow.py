@@ -136,8 +136,9 @@ class OrderSyncWorkflowService(BaseService):
             customer = (result or {}).get("customer") or {}
             state["address_number"] = _to_int(customer.get("erpAddressNumber")) or state.get("address_number")
         elif step in ("shipping_address", "billing_address"):
-            postal = (result or {}).get("postalAddress") or {}
-            sub = _to_int(postal.get("addressSubNumber"))
+            shipping, billing = self._resolve_addresses(workflow.order)
+            address = shipping if step == "shipping_address" else billing
+            sub = self._address_sub_number_from_result(result, step=step, address=address)
             key = "shipping_ans_nr" if step == "shipping_address" else "billing_ans_nr"
             if sub:
                 state[key] = sub
@@ -258,7 +259,11 @@ class OrderSyncWorkflowService(BaseService):
         elif step in ("shipping_contact", "billing_contact"):
             address = shipping if step == "shipping_contact" else billing
             sub_key = "shipping_ans_nr" if step == "shipping_contact" else "billing_ans_nr"
-            sub_number = int(state.get(sub_key) or 0)
+            sub_number = int(state.get(sub_key) or 0) or (_to_int(address.erp_ans_nr) or 0)
+            if sub_number <= 0:
+                raise ValueError(
+                    f"{step} ohne bekannte Anschrift-Nummer (weder im Workflow-Zustand noch an der Adresse persistiert)."
+                )
             input_data = customer_service._build_contact_person_input(address=address)
             contact_number = _to_int(address.erp_asp_nr)
             operation = "updateContactPerson" if contact_number else "createContactPerson"
@@ -411,6 +416,23 @@ class OrderSyncWorkflowService(BaseService):
         if step == "probe_customer":
             state["is_new_customer"] = True
         workflow.state = state
+
+    @staticmethod
+    def _address_sub_number_from_result(result: dict[str, Any], *, step: str, address: Address) -> int | None:
+        postal = (result or {}).get("postalAddress") or {}
+        sub = _to_int(postal.get("addressSubNumber"))
+        if sub:
+            return sub
+
+        addresses = ((result or {}).get("customer") or {}).get("addresses") or []
+        flag = "isDefaultShipping" if step == "shipping_address" else "isDefaultBilling"
+        for candidate in addresses:
+            candidate_sub = _to_int((candidate or {}).get("addressSubNumber"))
+            if candidate_sub and candidate.get(flag):
+                return candidate_sub
+        if len(addresses) == 1:
+            return _to_int((addresses[0] or {}).get("addressSubNumber")) or _to_int(address.erp_ans_nr)
+        return _to_int(address.erp_ans_nr)
 
     @staticmethod
     def _looks_like_not_found_error(message: str) -> bool:

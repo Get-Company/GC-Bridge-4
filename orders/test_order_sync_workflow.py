@@ -132,6 +132,42 @@ class AdvanceHandlerTest(TestCase):
 
         mock_submit.assert_not_called()
 
+    def test_apply_address_result_falls_back_to_persisted_address_sub_number(self):
+        order = make_order()
+        order.shipping_address.erp_ans_nr = 7
+        order.shipping_address.save(update_fields=("erp_ans_nr",))
+        wf = MicrotechOrderSyncWorkflow.objects.create(
+            order=order,
+            status=MicrotechOrderSyncWorkflow.Status.WAITING,
+            current_step="shipping_address",
+            state={"billing_same_as_shipping": True},
+        )
+
+        OrderSyncWorkflowService()._apply_result(wf, "shipping_address", {})
+
+        self.assertEqual(wf.state["shipping_ans_nr"], 7)
+        self.assertEqual(wf.state["billing_ans_nr"], 7)
+
+    def test_apply_address_result_reads_customer_addresses(self):
+        wf = MicrotechOrderSyncWorkflow.objects.create(
+            order=make_order(),
+            status=MicrotechOrderSyncWorkflow.Status.WAITING,
+            current_step="shipping_address",
+            state={"billing_same_as_shipping": False},
+        )
+        result = {
+            "customer": {
+                "addresses": [
+                    {"addressSubNumber": 4, "isDefaultShipping": False},
+                    {"addressSubNumber": 8, "isDefaultShipping": True},
+                ]
+            }
+        }
+
+        OrderSyncWorkflowService()._apply_result(wf, "shipping_address", result)
+
+        self.assertEqual(wf.state["shipping_ans_nr"], 8)
+
 
 class StartAndSubmitTest(TestCase):
     @patch("orders.services.order_sync_workflow.MicrotechGraphQLClientService")
@@ -197,6 +233,27 @@ class OrderStepTest(TestCase):
         called = mock_submit.call_args.kwargs
         self.assertEqual(called["kind"], MicrotechGraphQLJob.Kind.ORDER_UPSERT)
         self.assertEqual(called["operation"], "createVorgang")
+
+
+class ContactStepTest(TestCase):
+    @patch("orders.services.order_sync_workflow.MicrotechGraphQLClientService")
+    @patch("orders.services.order_sync_workflow.MicrotechJobSentinelService.submit_wrapper_job")
+    def test_shipping_contact_falls_back_to_locally_persisted_ans_nr(self, mock_submit, mock_client_cls):
+        mock_submit.return_value = MagicMock(pk=6)
+        order = make_order()
+        order.shipping_address.erp_ans_nr = 7
+        order.shipping_address.save(update_fields=("erp_ans_nr",))
+        wf = MicrotechOrderSyncWorkflow.objects.create(
+            order=order,
+            status=MicrotechOrderSyncWorkflow.Status.RUNNING,
+            state={"erp_nr": order.customer.erp_nr, "address_number": int(order.customer.erp_nr)},
+        )
+
+        OrderSyncWorkflowService().submit_step(wf, "shipping_contact")
+
+        called = mock_submit.call_args.kwargs
+        self.assertEqual(called["operation"], "createContactPerson")
+        self.assertEqual(called["request_payload"]["addressSubNumber"], 7)
 
 
 class ReconcileTest(TestCase):
