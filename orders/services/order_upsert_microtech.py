@@ -470,7 +470,7 @@ class OrderUpsertMicrotechService(BaseService):
     def _format_graphql_decimal(value: Decimal | None) -> str:
         if value is None:
             return ""
-        return format(value.quantize(Decimal("0.01")), "f")
+        return format(value.quantize(Decimal("0.01")), "f").replace(".", ",")
 
     def _ensure_customer_synced(
         self,
@@ -1280,10 +1280,31 @@ class OrderUpsertMicrotechService(BaseService):
     @staticmethod
     def _persist_erp_order_id(*, order: Order, erp_order_id: str) -> None:
         erp_order_id = (erp_order_id or "").strip()
-        if not erp_order_id or order.erp_order_id == erp_order_id:
+        if not erp_order_id:
             return
-        order.erp_order_id = erp_order_id
-        order.save(update_fields=["erp_order_id", "updated_at"])
+        if order.erp_order_id != erp_order_id:
+            order.erp_order_id = erp_order_id
+            order.save(update_fields=["erp_order_id", "updated_at"])
+        OrderUpsertMicrotechService._sync_erp_order_id_to_shopware(order=order, erp_order_id=erp_order_id)
+
+    @staticmethod
+    def _sync_erp_order_id_to_shopware(*, order: Order, erp_order_id: str) -> None:
+        shopware_order_id = str(order.api_id or "").strip()
+        if not shopware_order_id:
+            return
+        try:
+            from shopware.services import OrderService
+
+            OrderService().update_microtech_order_id(
+                order_id=shopware_order_id,
+                erp_order_id=erp_order_id,
+            )
+        except Exception:
+            logger.exception(
+                "Konnte Microtech-BelegNr {} nicht nach Shopware Order {} schreiben.",
+                erp_order_id,
+                shopware_order_id,
+            )
 
     @staticmethod
     def _clear_erp_order_id(*, order: Order) -> None:

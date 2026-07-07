@@ -31,6 +31,11 @@ DEFAULT_TRANSITION_ACTIONS: dict[str, list[str]] = {
     ],
 }
 
+MICROTECH_ORDER_ID_CUSTOM_FIELDS = {
+    "microtech_beleg_nr",
+    "microtech_erp_order_id",
+}
+
 
 class OrderService(Shopware6Service):
     search_path = "/search/order"
@@ -127,6 +132,32 @@ class OrderService(Shopware6Service):
         criteria.associations["stateMachineState"] = Criteria()
         criteria.filter.append(EqualsFilter(field="id", value=order_id))
         return self.request_post(self.search_path, payload=criteria)
+
+    def update_microtech_order_id(self, *, order_id: str, erp_order_id: str) -> Any:
+        order_id = _to_str(order_id)
+        erp_order_id = _to_str(erp_order_id)
+        if not order_id or not erp_order_id:
+            raise ValueError("order_id and erp_order_id are required.")
+
+        custom_fields = self._existing_custom_fields(order_id)
+        for field_name in MICROTECH_ORDER_ID_CUSTOM_FIELDS:
+            custom_fields[field_name] = erp_order_id
+        return self.request_patch(f"/order/{order_id}", payload={"customFields": custom_fields})
+
+    def _existing_custom_fields(self, order_id: str) -> dict[str, Any]:
+        response = self.get_by_id(order_id)
+        rows = (response or {}).get("data", []) or []
+        if not rows:
+            return {}
+
+        row = rows[0] or {}
+        attributes = row.get("attributes") if isinstance(row, dict) else {}
+        raw = {}
+        if isinstance(row, dict):
+            raw = row.get("customFields") or {}
+        if not raw and isinstance(attributes, dict):
+            raw = attributes.get("customFields") or {}
+        return dict(raw) if isinstance(raw, dict) else {}
 
     def set_order_state(self, order_id: str, action_name: str) -> Any:
         order_id = _to_str(order_id)

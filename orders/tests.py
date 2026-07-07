@@ -21,6 +21,13 @@ from orders.services.order_rule_resolver import (
 from orders.services.order_upsert_microtech import OrderRuleDebugInfo, OrderUpsertMicrotechService
 
 
+class OrderGraphQLPayloadTest(SimpleTestCase):
+    def test_graphql_decimal_uses_german_decimal_separator(self):
+        self.assertEqual(OrderUpsertMicrotechService._format_graphql_decimal(Decimal("15.00")), "15,00")
+        self.assertEqual(OrderUpsertMicrotechService._format_graphql_decimal(Decimal("1.235")), "1,24")
+        self.assertEqual(OrderUpsertMicrotechService._format_graphql_decimal(None), "")
+
+
 class OrderRuleResolverDynamicRulesTest(TestCase):
     def _create_order(
         self,

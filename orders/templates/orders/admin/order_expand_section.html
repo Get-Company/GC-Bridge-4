@@ -29,6 +29,27 @@
     {# ── Divider ─────────────────────────────────────────────────────────── #}
     <div class="hidden lg:block w-px bg-gray-200 dark:bg-gray-700 self-stretch"></div>
 
+    {# ── Microtech ──────────────────────────────────────────────────────── #}
+    <div class="flex-shrink-0">
+        <div class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-3">Microtech-Sync</div>
+        <div class="js-microtech-sync-status text-gray-700 dark:text-gray-300"
+             data-status-url="{{ microtech_sync_status_url }}"
+             data-active="true">
+            <div class="flex flex-wrap items-center gap-2">
+                <span class="js-microtech-sync-label">{{ microtech_sync_status_text|default:"-" }}</span>
+                <span class="js-microtech-sync-spinner hidden text-xs text-primary-600 dark:text-primary-400">läuft</span>
+            </div>
+            <div class="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                BelegNr:
+                <span class="js-microtech-sync-beleg">{{ instance.erp_order_id|default:"-" }}</span>
+            </div>
+            <div class="js-microtech-sync-error text-xs text-red-600 dark:text-red-400 mt-1"></div>
+        </div>
+    </div>
+
+    {# ── Divider ─────────────────────────────────────────────────────────── #}
+    <div class="hidden lg:block w-px bg-gray-200 dark:bg-gray-700 self-stretch"></div>
+
     {# ── Addresses ───────────────────────────────────────────────────────── #}
     <div class="flex flex-wrap gap-8 flex-1">
 

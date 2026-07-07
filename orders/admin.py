@@ -92,6 +92,8 @@ class OrderExpandSection(TemplateSection):
                 "payment_state_html": _render_state_dropdown(obj=obj, scope="payment", current_state=obj.payment_state),
                 "shipping_state_html": _render_state_dropdown(obj=obj, scope="delivery", current_state=obj.shipping_state),
                 "transitions_meta_url": reverse("admin:orders_order_transitions_meta"),
+                "microtech_sync_status_url": reverse("admin:orders_order_microtech_sync_status", args=(obj.pk,)),
+                "microtech_sync_status_text": OrderAdmin.microtech_sync_status_for_order(obj),
             },
         )
 
@@ -144,7 +146,7 @@ class OrderAdmin(BaseAdmin):
         )
 
     class Media:
-        js = ("orders/js/order_state_controls.js",)
+        js = ("orders/js/order_state_controls.js", "orders/js/microtech_sync_status.js")
 
     def _redirect_to_changelist(self) -> HttpResponseRedirect:
         return HttpResponseRedirect(reverse("admin:orders_order_changelist"))
@@ -176,6 +178,10 @@ class OrderAdmin(BaseAdmin):
 
     @admin.display(description="Microtech-Sync")
     def microtech_sync_status(self, obj):
+        return self.microtech_sync_status_for_order(obj)
+
+    @staticmethod
+    def microtech_sync_status_for_order(obj):
         workflow = obj.microtech_sync_workflows.order_by("-created_at").first()
         if workflow is None:
             return "-"
@@ -224,6 +230,11 @@ class OrderAdmin(BaseAdmin):
                 self.shopware_transitions_meta_view,
             ),
             (
+                "<path:object_id>/microtech-sync-status/",
+                "orders_order_microtech_sync_status",
+                self.microtech_sync_status_view,
+            ),
+            (
                 "<path:object_id>/shopware-state-options/",
                 "orders_order_state_options",
                 self.shopware_state_options_view,
@@ -234,6 +245,53 @@ class OrderAdmin(BaseAdmin):
                 self.shopware_set_state_view,
             ),
         )
+
+    def microtech_sync_status_view(self, request, object_id: str, **kwargs):
+        order = self.get_object(request, object_id)
+        if not order:
+            return JsonResponse({"ok": False, "error": "Bestellung nicht gefunden."}, status=404)
+        if not self.has_view_permission(request, order):
+            return JsonResponse({"ok": False, "error": "Zugriff verweigert."}, status=403)
+
+        workflow = (
+            order.microtech_sync_workflows.select_related("current_job")
+            .order_by("-created_at")
+            .first()
+        )
+        payload: dict[str, Any] = {
+            "ok": True,
+            "order_id": order.pk,
+            "order_number": order.order_number,
+            "erp_order_id": order.erp_order_id,
+            "has_workflow": workflow is not None,
+            "is_active": False,
+            "status": "",
+            "status_display": "-",
+            "current_step": "",
+            "error_message": "",
+            "current_job_status": "",
+            "current_job_error": "",
+            "updated_at": order.updated_at.isoformat() if order.updated_at else "",
+        }
+        if workflow is not None:
+            job = workflow.current_job
+            payload.update(
+                {
+                    "is_active": workflow.status in {
+                        MicrotechOrderSyncWorkflow.Status.PENDING,
+                        MicrotechOrderSyncWorkflow.Status.RUNNING,
+                        MicrotechOrderSyncWorkflow.Status.WAITING,
+                    },
+                    "status": workflow.status,
+                    "status_display": workflow.get_status_display(),
+                    "current_step": workflow.current_step,
+                    "error_message": workflow.error_message,
+                    "current_job_status": job.get_status_display() if job else "",
+                    "current_job_error": job.error_message if job else "",
+                    "updated_at": workflow.updated_at.isoformat() if workflow.updated_at else "",
+                }
+            )
+        return JsonResponse(payload)
 
     @action(
         description="Bestellung in Microtech anlegen",

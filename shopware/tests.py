@@ -9,6 +9,7 @@ from products.models import Image, Price, Product, ProductImage
 from shopware.management.commands.shopware_sync_products import Command as ShopwareSyncProductsCommand
 from shopware.management.commands.shopware_force_product_image_uploads import Command as ForceProductImageUploadsCommand
 from shopware.models import ShopwareSettings
+from shopware.services.order import OrderService
 from shopware.services.product import ProductService
 from shopware.services.product_media import ProductMediaSyncService
 from shopware.services.shopware6 import Criteria, EqualsFilter, InvalidTokenError, Shopware6Service
@@ -75,6 +76,36 @@ class Shopware6ServiceTokenRetryTest(SimpleTestCase):
                 ],
             },
             additional_query_params=None,
+        )
+
+
+class OrderServiceMicrotechWritebackTest(SimpleTestCase):
+    def test_update_microtech_order_id_merges_existing_custom_fields(self):
+        service = OrderService.__new__(OrderService)
+        service.get_by_id = MagicMock(
+            return_value={
+                "data": [
+                    {
+                        "id": "order-1",
+                        "customFields": {"existing": "keep"},
+                    }
+                ]
+            }
+        )
+        service.request_patch = MagicMock(return_value={"ok": True})
+
+        result = service.update_microtech_order_id(order_id="order-1", erp_order_id="WB26/324")
+
+        self.assertEqual(result, {"ok": True})
+        service.request_patch.assert_called_once_with(
+            "/order/order-1",
+            payload={
+                "customFields": {
+                    "existing": "keep",
+                    "microtech_beleg_nr": "WB26/324",
+                    "microtech_erp_order_id": "WB26/324",
+                }
+            },
         )
 
 
