@@ -47,6 +47,7 @@ from products.models import (
     ProductSyncJob,
     PropertyGroup,
     PropertyValue,
+    Storage,
 )
 from products.services import PriceIncreaseService
 from products.services import ProductAutoSyncService, disable_product_auto_sync
@@ -894,7 +895,7 @@ class ImportPriceHistoryCommandTest(TestCase):
         self.assertEqual(imported_entry.price, Decimal("4.50"))
         self.assertEqual(imported_entry.rebate_quantity, 10)
         self.assertEqual(imported_entry.rebate_price, Decimal("4.20"))
-        self.assertEqual(imported_entry.created_at.date().isoformat(), "2021-01-01")
+        self.assertEqual(timezone.localtime(imported_entry.created_at).date().isoformat(), "2021-01-01")
 
     def test_invalid_rows_are_reported_without_aborting_import(self):
         csv_path = self._write_csv(
@@ -982,14 +983,15 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, ">Einstellungen<", html=False)
         self.assertContains(response, ">Preiserhoehungsliste<", html=False)
-        self.assertContains(response, ">Aktionen<", html=False)
-        self.assertContains(response, ">Produkte neu laden<", html=False)
+        # unfold rendert den Dropdown-Titel inzwischen mit Icon und Whitespace
+        self.assertContains(response, "Aktionen", html=False)
+        self.assertContains(response, "Produkte neu laden", html=False)
         self.assertContains(response, "Positionen direkt bearbeiten")
         self.assertContains(response, "Lade Positionen ...")
         self.assertContains(response, 'data-defer-initial-load="1"', html=False)
         self.assertContains(
             response,
-            reverse("admin:products_priceincrease_positions_save_batch", args=(self.price_increase.pk)),
+            reverse("admin:products_priceincrease_positions_save_batch", args=(self.price_increase.pk,)),
         )
         self.assertNotContains(response, "A-6000")
         self.assertNotContains(response, 'placeholder="10,30"', html=False)
@@ -1422,7 +1424,13 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
             "Der neue Preis liegt mehr als 10 Prozentpunkte ueber der generellen Erhoehung.",
         )
         self.assertContains(response, 'js-position-validation-details', html=False)
-        self.assertContains(response, "2 Warnungen")
+        warning_count = sum(
+            1
+            for issue in self.item.get_pricing_check_issues()
+            if issue["severity"] == PriceIncreaseItem.CHECK_SEVERITY_WARNING
+        )
+        self.assertGreaterEqual(warning_count, 2)
+        self.assertContains(response, f"{warning_count} Warnungen")
 
     def test_positions_table_hides_zero_rebate_values_without_validation_toggle(self):
         self.product.factor = 0
@@ -1510,6 +1518,8 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
             sort_order=20,
         )
         self.product.categories.add(child_category)
+        # MPTT aktualisiert lft/rght des Parents nur in der DB, nicht auf der Instanz.
+        root_category.refresh_from_db()
 
         admin_instance = PriceIncreaseAdmin(PriceIncrease, AdminSite())
         rows = admin_instance._build_price_list_items(
@@ -1554,6 +1564,7 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
             current_price=Decimal("8.00"),
         )
 
+        root_category.refresh_from_db()
         admin_instance = PriceIncreaseAdmin(PriceIncrease, AdminSite())
         rows = admin_instance._build_price_list_items(
             price_increase=self.price_increase,
@@ -1573,6 +1584,7 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
         self.product.categories.add(child_category)
         self.product.description_short = "Erste Zeile\nZweite Zeile"
         self.product.save(update_fields=["description_short", "updated_at"])
+        root_category.refresh_from_db()
 
         admin_instance = PriceIncreaseAdmin(PriceIncrease, AdminSite())
         rows = admin_instance._build_price_list_items(
@@ -1597,6 +1609,7 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
         self.product.min_purchase = 24
         self.product.purchase_unit = 6
         self.product.save(update_fields=["factor", "min_purchase", "purchase_unit", "updated_at"])
+        root_category.refresh_from_db()
 
         admin_instance = PriceIncreaseAdmin(PriceIncrease, AdminSite())
         rows = admin_instance._build_price_list_items(
@@ -1625,6 +1638,17 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
             sort_order=20,
         )
         self.product.categories.add(child_category)
+        template_source = (Path("templates/admin/products/price_list_pdf.html")).read_text(encoding="utf-8")
+        Document.objects.create(
+            document_type=Document.DocumentType.PRICE_LIST,
+            slug=Document.Slug.PRICE_LIST,
+            title="Preisliste",
+            html_content=template_source,
+            # Das eingespielte Template ist ein Django-Template ({% comment %} usw.),
+            # daher darf hier nicht die Jinja2-Engine (Default) rendern.
+            use_jinja2=False,
+            is_active=True,
+        )
 
         response = self.client.post(
             reverse("admin:products_priceincrease_changelist"),

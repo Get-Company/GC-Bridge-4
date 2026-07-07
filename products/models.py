@@ -559,11 +559,15 @@ class Price(BaseModel):
         history_tracked_fields: tuple[str, ...] | list[str],
     ) -> None:
         current_state = {field: getattr(self, field) for field in self.TRACKED_HISTORY_FIELDS}
-        changed_fields = [
-            field
-            for field in history_tracked_fields
-            if previous_state is None or previous_state.get(field) != current_state.get(field)
-        ]
+        if previous_state is None:
+            # Initial-Snapshot: nur tatsächlich belegte Felder als "geändert" führen.
+            changed_fields = [field for field in history_tracked_fields if current_state.get(field) is not None]
+        else:
+            changed_fields = [
+                field
+                for field in history_tracked_fields
+                if previous_state.get(field) != current_state.get(field)
+            ]
 
         if not changed_fields:
             return
