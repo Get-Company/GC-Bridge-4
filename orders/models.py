@@ -38,7 +38,8 @@ class Order(BaseModel):
         max_length=255,
         blank=True,
         default="",
-        verbose_name=_("ERP Vorgangsnummer"),
+        db_index=True,
+        verbose_name=_("Microtech BelegNr"),
     )
     description = models.TextField(blank=True, default="", verbose_name=_("Beschreibung"))
     total_price = models.DecimalField(

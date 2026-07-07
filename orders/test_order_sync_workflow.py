@@ -123,6 +123,38 @@ class AdvanceHandlerTest(TestCase):
         mock_submit.assert_called_once()  # nächster Step (write_customer) submitted
 
     @patch("orders.services.order_sync_workflow.OrderSyncWorkflowService.submit_step")
+    @patch("orders.services.order_upsert_microtech.OrderUpsertMicrotechService._sync_erp_order_id_to_shopware")
+    def test_advance_write_vorgang_persists_wrapped_beleg_nr(self, mock_shopware_sync, mock_submit):
+        order = make_order()
+        wf = MicrotechOrderSyncWorkflow.objects.create(
+            order=order,
+            status=MicrotechOrderSyncWorkflow.Status.WAITING,
+            current_step="write_vorgang",
+            state={"beleg_nr": ""},
+        )
+        job = self._job(
+            wf,
+            "write_vorgang",
+            {"data": {"vorgangJob": {"vorgang": {"belegNr": "WB26/325"}}}},
+        )
+
+        OrderSyncWorkflowService().advance(job)
+
+        order.refresh_from_db()
+        wf.refresh_from_db()
+        self.assertEqual(order.erp_order_id, "WB26/325")
+        self.assertEqual(wf.state["erp_order_id"], "WB26/325")
+        self.assertEqual(wf.state["beleg_nr"], "WB26/325")
+        mock_shopware_sync.assert_called_once()
+
+    def test_beleg_nr_extractor_accepts_operation_wrapped_payload(self):
+        beleg = OrderSyncWorkflowService._beleg_nr_from_vorgang_result(
+            {"data": {"createVorgang": {"vorgang": {"belegNr": "WB26/326"}}}}
+        )
+
+        self.assertEqual(beleg, "WB26/326")
+
+    @patch("orders.services.order_sync_workflow.OrderSyncWorkflowService.submit_step")
     def test_advance_ignores_stale_step(self, mock_submit):
         wf = MicrotechOrderSyncWorkflow.objects.create(
             order=make_order(), status=MicrotechOrderSyncWorkflow.Status.WAITING, current_step="write_customer"

@@ -81,6 +81,31 @@ class OrderSyncWorkflowService(BaseService):
         billing = order.billing_address or shipping
         return shipping, billing
 
+    @staticmethod
+    def _beleg_nr_from_vorgang_result(result: dict[str, Any] | None) -> str:
+        """Liest die Microtech-BelegNr aus Polling- und Webhook-Payloads."""
+        from customer.services.customer_upsert_microtech import _to_str
+
+        def extract(node: Any) -> str:
+            if not isinstance(node, dict):
+                return ""
+            vorgang = node.get("vorgang")
+            if isinstance(vorgang, dict):
+                beleg = _to_str(vorgang.get("belegNr"))
+                if beleg:
+                    return beleg
+            return _to_str(node.get("belegNr"))
+
+        root = result if isinstance(result, dict) else {}
+        data = root.get("data") if isinstance(root.get("data"), dict) else {}
+        for container in (root, data):
+            for key in ("", "vorgangJob", "requestVorgang", "createVorgang", "updateVorgang"):
+                node = container if not key else container.get(key)
+                beleg = extract(node)
+                if beleg:
+                    return beleg
+        return ""
+
     def _build_customer_service(self) -> CustomerUpsertMicrotechService:
         """Erzeugt den bestehenden Customer-Upsert-Service für Payload-Builder-Reuse."""
         return CustomerUpsertMicrotechService()
@@ -129,7 +154,7 @@ class OrderSyncWorkflowService(BaseService):
         job: MicrotechGraphQLJob | None = None,
     ) -> None:
         """Überträgt das Job-Ergebnis in den Workflow-Zustand."""
-        from customer.services.customer_upsert_microtech import _to_int, _to_str
+        from customer.services.customer_upsert_microtech import _to_int
 
         state = dict(workflow.state or {})
         if step == "probe_customer":
@@ -174,15 +199,15 @@ class OrderSyncWorkflowService(BaseService):
             if contact_number:
                 self._persist_contact_number(address=address, contact_number=contact_number)
         elif step == "probe_vorgang":
-            vorgang = (result or {}).get("vorgang") or {}
-            beleg = _to_str(vorgang.get("belegNr"))
+            beleg = self._beleg_nr_from_vorgang_result(result)
             if beleg:
                 state["beleg_nr"] = beleg
+                state["erp_order_id"] = beleg
         elif step == "write_vorgang":
-            vorgang = (result or {}).get("vorgang") or {}
-            beleg = _to_str(vorgang.get("belegNr")) or state.get("beleg_nr", "")
+            beleg = self._beleg_nr_from_vorgang_result(result) or state.get("beleg_nr", "")
             state["beleg_nr"] = beleg
             if beleg:
+                state["erp_order_id"] = beleg
                 OrderUpsertMicrotechService()._persist_erp_order_id(order=workflow.order, erp_order_id=beleg)
         workflow.state = state
 
