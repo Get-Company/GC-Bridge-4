@@ -19,6 +19,7 @@ from orders.services.order_rule_resolver import (
     ResolvedOrderRule,
 )
 from orders.services.order_upsert_microtech import OrderRuleDebugInfo, OrderUpsertMicrotechService
+from orders.services.order_sync import OrderSyncService
 
 
 class OrderGraphQLPayloadTest(SimpleTestCase):
@@ -26,6 +27,46 @@ class OrderGraphQLPayloadTest(SimpleTestCase):
         self.assertEqual(OrderUpsertMicrotechService._format_graphql_decimal(Decimal("15.00")), "15,00")
         self.assertEqual(OrderUpsertMicrotechService._format_graphql_decimal(Decimal("1.235")), "1,24")
         self.assertEqual(OrderUpsertMicrotechService._format_graphql_decimal(None), "")
+
+
+class OrderSyncTaxModeTest(TestCase):
+    def test_eu_customer_with_vat_id_uses_net_prices_for_microtech(self):
+        customer = Customer.objects.create(
+            erp_nr="100001",
+            name="AT Firma",
+            vat_id="ATU12345678",
+            is_gross=True,
+        )
+        shipping = Address.objects.create(customer=customer, country_code="AT", is_shipping=True)
+
+        OrderSyncService._apply_microtech_tax_price_mode(
+            customer=customer,
+            shipping_address=shipping,
+            billing_address=None,
+            display_gross=True,
+        )
+
+        customer.refresh_from_db()
+        self.assertFalse(customer.is_gross)
+
+    def test_eu_customer_without_vat_id_keeps_shopware_gross_mode(self):
+        customer = Customer.objects.create(
+            erp_nr="100002",
+            name="AT Privat",
+            vat_id="",
+            is_gross=True,
+        )
+        shipping = Address.objects.create(customer=customer, country_code="AT", is_shipping=True)
+
+        OrderSyncService._apply_microtech_tax_price_mode(
+            customer=customer,
+            shipping_address=shipping,
+            billing_address=None,
+            display_gross=True,
+        )
+
+        customer.refresh_from_db()
+        self.assertTrue(customer.is_gross)
 
 
 class OrderRuleResolverDynamicRulesTest(TestCase):

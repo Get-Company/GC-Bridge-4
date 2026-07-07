@@ -34,6 +34,8 @@ class OrderSyncWorkflowService(BaseService):
         "shipping_contact",
         "billing_address",
         "billing_contact",
+        "clear_default_shipping_address",
+        "clear_default_billing_address",
         "set_default_addresses",
         "writeback_adrnr",
         "probe_vorgang",
@@ -60,6 +62,14 @@ class OrderSyncWorkflowService(BaseService):
         if step == "probe_vorgang":
             # Vorgang sondieren nur wenn bereits eine ERP-Auftragsnummer vorhanden
             return bool(str(state.get("erp_order_id") or "").strip())
+        if step == "clear_default_shipping_address":
+            old_shipping = _to_int(state.get("existing_default_shipping_ans_nr")) or 0
+            shipping_ans_nr, _billing_ans_nr = self._target_default_ans_nrs(workflow)
+            return old_shipping > 0 and old_shipping != shipping_ans_nr
+        if step == "clear_default_billing_address":
+            old_billing = _to_int(state.get("existing_default_billing_ans_nr")) or 0
+            _shipping_ans_nr, billing_ans_nr = self._target_default_ans_nrs(workflow)
+            return old_billing > 0 and old_billing != billing_ans_nr
         return True
 
     def next_step(self, workflow: MicrotechOrderSyncWorkflow) -> str | None:
@@ -80,6 +90,38 @@ class OrderSyncWorkflowService(BaseService):
             raise ValueError("Order hat keine Lieferadresse zum Synchronisieren.")
         billing = order.billing_address or shipping
         return shipping, billing
+
+    def _target_default_ans_nrs(self, workflow: MicrotechOrderSyncWorkflow) -> tuple[int, int]:
+        """Liefert die Ziel-AnsNr für Standard-Liefer- und Rechnungsanschrift."""
+        shipping, billing = self._resolve_addresses(workflow.order)
+        state = workflow.state or {}
+        shipping_ans_nr = int(state.get("shipping_ans_nr") or 0) or (_to_int(shipping.erp_ans_nr) or 0)
+        billing_ans_nr = (
+            int(state.get("billing_ans_nr") or 0) or (_to_int(billing.erp_ans_nr) or 0) or shipping_ans_nr
+        )
+        return shipping_ans_nr, billing_ans_nr
+
+    @staticmethod
+    def _remember_existing_default_ans_nrs(state: dict[str, Any], customer: dict[str, Any]) -> None:
+        """Merkt sich vorhandene Microtech-Default-Flags für späteres Zurücksetzen."""
+        shipping_ans_nr = _to_int(customer.get("defaultShippingAddressNumber")) or 0
+        billing_ans_nr = _to_int(customer.get("defaultBillingAddressNumber")) or 0
+
+        for address in customer.get("addresses") or []:
+            if not isinstance(address, dict):
+                continue
+            ans_nr = _to_int(address.get("addressSubNumber")) or 0
+            if ans_nr <= 0:
+                continue
+            if address.get("isDefaultShipping"):
+                shipping_ans_nr = ans_nr
+            if address.get("isDefaultBilling"):
+                billing_ans_nr = ans_nr
+
+        if shipping_ans_nr > 0:
+            state["existing_default_shipping_ans_nr"] = shipping_ans_nr
+        if billing_ans_nr > 0:
+            state["existing_default_billing_ans_nr"] = billing_ans_nr
 
     @staticmethod
     def _beleg_nr_from_vorgang_result(result: dict[str, Any] | None) -> str:
@@ -163,6 +205,7 @@ class OrderSyncWorkflowService(BaseService):
             state["is_new_customer"] = not found
             if found:
                 state["address_number"] = _to_int(customer.get("erpAddressNumber")) or state.get("address_number")
+                self._remember_existing_default_ans_nrs(state, customer)
         elif step == "write_customer":
             customer = (result or {}).get("customer") or {}
             state["address_number"] = _to_int(customer.get("erpAddressNumber")) or state.get("address_number")
@@ -360,12 +403,21 @@ class OrderSyncWorkflowService(BaseService):
             else:
                 submit = lambda: client.submit_create_contact_person(address_number, sub_number, input_data)
                 payload = {"addressNumber": address_number, "addressSubNumber": sub_number, "input": input_data}
+        elif step in ("clear_default_shipping_address", "clear_default_billing_address"):
+            operation = "updatePostalAddress"
+            if step == "clear_default_shipping_address":
+                sub_number = _to_int(state.get("existing_default_shipping_ans_nr")) or 0
+                input_data = {"isDefaultShipping": False}
+            else:
+                sub_number = _to_int(state.get("existing_default_billing_ans_nr")) or 0
+                input_data = {"isDefaultBilling": False}
+            if sub_number <= 0:
+                raise ValueError(f"{step} ohne bekannte alte Standard-Anschrift.")
+            submit = lambda: client.submit_update_postal_address(address_number, sub_number, input_data)
+            payload = {"addressNumber": address_number, "addressSubNumber": sub_number, "input": input_data}
         elif step == "set_default_addresses":
             operation = "updateCustomer"
-            shipping_ans_nr = int(state.get("shipping_ans_nr") or 0) or (_to_int(shipping.erp_ans_nr) or 0)
-            billing_ans_nr = (
-                int(state.get("billing_ans_nr") or 0) or (_to_int(billing.erp_ans_nr) or 0) or shipping_ans_nr
-            )
+            shipping_ans_nr, billing_ans_nr = self._target_default_ans_nrs(workflow)
             if shipping_ans_nr <= 0:
                 raise ValueError(
                     "set_default_addresses ohne bekannte Anschrift-Nummer (weder im Workflow-Zustand "

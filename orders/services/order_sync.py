@@ -218,7 +218,8 @@ class OrderSyncService(BaseService):
         customer.name = _to_str(nested_customer.get("firstName") or order_customer.get("firstName") or customer.name)
         customer.email = _to_str(order_customer.get("email") or nested_customer.get("email")) or customer.email
         customer.api_id = customer_id or customer.api_id
-        customer.is_gross = bool((nested_customer.get("group") or {}).get("displayGross", True))
+        display_gross = bool((nested_customer.get("group") or {}).get("displayGross", True))
+        customer.is_gross = display_gross
         customer.vat_id = _to_str(vat_ids[0]) if vat_ids else customer.vat_id
         customer.save()
 
@@ -271,6 +272,13 @@ class OrderSyncService(BaseService):
         if not default_shipping_address and shipping_address:
             customer.set_shipping_address(shipping_address)
 
+        self._apply_microtech_tax_price_mode(
+            customer=customer,
+            shipping_address=shipping_address,
+            billing_address=billing_address,
+            display_gross=display_gross,
+        )
+
         synced_address_ids = set(default_address_pks)
         if billing_address and billing_address.pk:
             synced_address_ids.add(billing_address.pk)
@@ -279,6 +287,25 @@ class OrderSyncService(BaseService):
         addresses_count = len(synced_address_ids)
 
         return customer, billing_address, shipping_address, addresses_count
+
+    @staticmethod
+    def _apply_microtech_tax_price_mode(
+        *,
+        customer: Customer,
+        shipping_address: Address | None,
+        billing_address: Address | None,
+        display_gross: bool,
+    ) -> None:
+        from customer.services.customer_upsert_microtech import CustomerUpsertMicrotechService
+
+        tax_address = shipping_address or billing_address
+        country_code = _to_str(getattr(tax_address, "country_code", ""))
+        ustkat = CustomerUpsertMicrotechService._resolve_ustkat(country_code, customer.vat_id)
+        should_use_gross_prices = bool(display_gross and ustkat == 1)
+        if customer.is_gross == should_use_gross_prices:
+            return
+        customer.is_gross = should_use_gross_prices
+        customer.save(update_fields=["is_gross", "updated_at"])
 
     def _load_shopware_customer(self, *, customer_id: str) -> dict[str, Any]:
         customer_id = _to_str(customer_id)

@@ -63,6 +63,37 @@ class NextStepResolverTest(TestCase):
         # Neukunde False -> writeback übersprungen -> nächster ist write_vorgang (kein erp_order_id -> kein probe_vorgang)
         self.assertEqual(OrderSyncWorkflowService().next_step(wf), "write_vorgang")
 
+    def test_clears_old_shipping_default_before_setting_new_defaults(self):
+        wf = self._wf(
+            state={
+                "billing_same_as_shipping": True,
+                "is_new_customer": False,
+                "erp_order_id": "",
+                "shipping_ans_nr": 8,
+                "billing_ans_nr": 8,
+                "existing_default_shipping_ans_nr": 4,
+            },
+            completed=["probe_customer", "write_customer", "shipping_address", "shipping_contact"],
+        )
+
+        self.assertEqual(OrderSyncWorkflowService().next_step(wf), "clear_default_shipping_address")
+
+    def test_skips_clear_default_when_existing_default_is_target(self):
+        wf = self._wf(
+            state={
+                "billing_same_as_shipping": True,
+                "is_new_customer": False,
+                "erp_order_id": "",
+                "shipping_ans_nr": 8,
+                "billing_ans_nr": 8,
+                "existing_default_shipping_ans_nr": 8,
+                "existing_default_billing_ans_nr": 8,
+            },
+            completed=["probe_customer", "write_customer", "shipping_address", "shipping_contact"],
+        )
+
+        self.assertEqual(OrderSyncWorkflowService().next_step(wf), "set_default_addresses")
+
     def test_all_done_returns_none(self):
         wf = self._wf(
             state={"billing_same_as_shipping": True, "is_new_customer": False, "erp_order_id": ""},
@@ -110,13 +141,26 @@ class AdvanceHandlerTest(TestCase):
         wf = MicrotechOrderSyncWorkflow.objects.create(
             order=make_order(), status=MicrotechOrderSyncWorkflow.Status.WAITING, current_step="probe_customer"
         )
-        job = self._job(wf, "probe_customer", {"customer": {"customerNumber": "100012", "erpAddressNumber": 100012}})
+        job = self._job(
+            wf,
+            "probe_customer",
+            {
+                "customer": {
+                    "customerNumber": "100012",
+                    "erpAddressNumber": 100012,
+                    "defaultShippingAddressNumber": 4,
+                    "addresses": [{"addressSubNumber": 8, "isDefaultShipping": True, "isDefaultBilling": True}],
+                }
+            },
+        )
 
         OrderSyncWorkflowService().advance(job)
 
         wf.refresh_from_db()
         self.assertFalse(wf.state["is_new_customer"])
         self.assertEqual(wf.state["address_number"], 100012)
+        self.assertEqual(wf.state["existing_default_shipping_ans_nr"], 8)
+        self.assertEqual(wf.state["existing_default_billing_ans_nr"], 8)
         self.assertIn({"step": "probe_customer", "status": "completed"}, [
             {"step": e["step"], "status": e["status"]} for e in wf.step_log
         ])
@@ -671,6 +715,64 @@ class LogStepDedupeTest(TestCase):
 
 
 class SetDefaultAddressesTest(TestCase):
+    @patch("orders.services.order_sync_workflow.MicrotechGraphQLClientService")
+    @patch("orders.services.order_sync_workflow.MicrotechJobSentinelService.submit_wrapper_job")
+    def test_clear_default_shipping_submits_false_flag(self, mock_submit, mock_client):
+        mock_submit.return_value = MagicMock(pk=4)
+        order = make_order()
+        wf = MicrotechOrderSyncWorkflow.objects.create(
+            order=order,
+            status=MicrotechOrderSyncWorkflow.Status.RUNNING,
+            state={
+                "erp_nr": order.customer.erp_nr,
+                "address_number": int(order.customer.erp_nr),
+                "existing_default_shipping_ans_nr": 2,
+                "shipping_ans_nr": 3,
+            },
+        )
+
+        OrderSyncWorkflowService().submit_step(wf, "clear_default_shipping_address")
+
+        called = mock_submit.call_args.kwargs
+        self.assertEqual(called["operation"], "updatePostalAddress")
+        self.assertEqual(
+            called["request_payload"],
+            {
+                "addressNumber": int(order.customer.erp_nr),
+                "addressSubNumber": 2,
+                "input": {"isDefaultShipping": False},
+            },
+        )
+
+    @patch("orders.services.order_sync_workflow.MicrotechGraphQLClientService")
+    @patch("orders.services.order_sync_workflow.MicrotechJobSentinelService.submit_wrapper_job")
+    def test_clear_default_billing_submits_false_flag(self, mock_submit, mock_client):
+        mock_submit.return_value = MagicMock(pk=4)
+        order = make_order()
+        wf = MicrotechOrderSyncWorkflow.objects.create(
+            order=order,
+            status=MicrotechOrderSyncWorkflow.Status.RUNNING,
+            state={
+                "erp_nr": order.customer.erp_nr,
+                "address_number": int(order.customer.erp_nr),
+                "existing_default_billing_ans_nr": 2,
+                "billing_ans_nr": 3,
+            },
+        )
+
+        OrderSyncWorkflowService().submit_step(wf, "clear_default_billing_address")
+
+        called = mock_submit.call_args.kwargs
+        self.assertEqual(called["operation"], "updatePostalAddress")
+        self.assertEqual(
+            called["request_payload"],
+            {
+                "addressNumber": int(order.customer.erp_nr),
+                "addressSubNumber": 2,
+                "input": {"isDefaultBilling": False},
+            },
+        )
+
     @patch("orders.services.order_sync_workflow.MicrotechGraphQLClientService")
     @patch("orders.services.order_sync_workflow.MicrotechJobSentinelService.submit_wrapper_job")
     def test_falls_back_to_locally_persisted_ans_nr(self, mock_submit, mock_client):
