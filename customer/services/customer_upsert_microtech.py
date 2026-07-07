@@ -345,6 +345,7 @@ class CustomerUpsertMicrotechService(BaseService):
                 "phone": address.phone,
                 "department": address.department,
                 "country": address.country_code,
+                "vatId": customer.vat_id,
             }
         )
 
