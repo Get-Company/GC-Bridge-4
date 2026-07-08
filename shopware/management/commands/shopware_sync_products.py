@@ -186,14 +186,19 @@ def _resolve_product_name(product: Product) -> str:
 
 def _prefetch_sync_queryset(products):
     if hasattr(products, "select_related"):
-        products = products.select_related("tax")
+        products = products.select_related("tax", "storage")
     if hasattr(products, "prefetch_related"):
         products = products.prefetch_related(
             Prefetch(
                 "product_images",
                 queryset=ProductImage.objects.select_related("image").order_by("order", "id"),
                 to_attr="ordered_product_images",
-            )
+            ),
+            Prefetch(
+                "prices",
+                queryset=Price.objects.select_related("sales_channel").order_by("sales_channel_id", "id"),
+                to_attr="prefetched_prices_for_shopware_sync",
+            ),
         )
     if hasattr(products, "only"):
         products = products.only(
@@ -205,9 +210,15 @@ def _prefetch_sync_queryset(products):
             "name_en",
             "description",
             "is_active",
+            "factor",
+            "unit",
+            "min_purchase",
+            "purchase_unit",
             "shopware_image_sync_hash",
             "tax_id",
             "tax__shopware_id",
+            "storage__stock",
+            "storage__virtual_stock",
         )
     return products
 

@@ -49,6 +49,23 @@ CELERY_ADMIN_TASKS: tuple[TaskDefinition, ...] = (
         ),
     ),
     TaskDefinition(
+        name="shopware.shopware5_sync_products",
+        label="Shopware 5 Produkte synchronisieren",
+        description="Schreibt Bestand, Preise und Aktiv-Status aus Django nach Shopware 5.",
+        fields=(
+            TaskField("erp_nrs", "ERP-Nummern", "csv", "", "Leer lassen fuer alle Produkte mit ERP-Nummer."),
+            TaskField("limit", "Limit", "int", ""),
+            TaskField("batch_size", "Batch-Groesse", "int", 50),
+            TaskField(
+                "active_only",
+                "Nur aktive Produkte",
+                "bool",
+                False,
+                "Standard ist aus, damit auch Inaktiv-Status nach Shopware 5 geschrieben wird.",
+            ),
+        ),
+    ),
+    TaskDefinition(
         name="mappei.scrape_daily_prices",
         label="Mappei Preise scrapen",
         description="Mappei-Produktseiten scrapen und geaenderte Preise speichern.",

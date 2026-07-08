@@ -311,7 +311,7 @@ CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 CELERY_BEAT_SCHEDULE = {}
-CELERY_IMPORTS = ("newsletter.tasks", "microtech.tasks", "products.tasks")
+CELERY_IMPORTS = ("newsletter.tasks", "microtech.tasks", "products.tasks", "shopware.tasks")
 
 
 UNFOLD = {
@@ -619,6 +619,12 @@ UNFOLD = {
                         "icon": "storefront",
                         "link": reverse_lazy("admin:shopware_shopwaresettings_changelist"),
                         "permission": sidebar_model_view_permission("shopware", "ShopwareSettings"),
+                    },
+                    {
+                        "title": _("Shopware 5 Sync"),
+                        "icon": "sync_alt",
+                        "link": reverse_lazy("admin:shopware_shopware5settings_changelist"),
+                        "permission": sidebar_model_view_permission("shopware", "Shopware5Settings"),
                     },
                 ],
             },

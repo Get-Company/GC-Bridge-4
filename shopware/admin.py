@@ -6,7 +6,7 @@ from django.urls import reverse
 from unfold.contrib.filters.admin import BooleanRadioFilter
 
 from core.admin import BaseAdmin
-from .models import ShopwareConnection, ShopwareSettings
+from .models import Shopware5Settings, ShopwareConnection, ShopwareSettings
 
 
 class SingletonAdmin(BaseAdmin):
@@ -80,3 +80,35 @@ class ShopwareSettingsAdmin(BaseAdmin):
             },
         ),
     )
+
+
+@admin.register(Shopware5Settings)
+class Shopware5SettingsAdmin(SingletonAdmin):
+    list_display = ("is_active", "api_url", "username", "fail_on_error")
+    fieldsets = (
+        (
+            "Sync",
+            {
+                "fields": (
+                    "is_active",
+                    "fail_on_error",
+                ),
+            },
+        ),
+        (
+            "API-Verbindung",
+            {
+                "fields": (
+                    "api_url",
+                    "username",
+                    "api_token",
+                ),
+                "description": "Leere Felder werden aus SHOPWARE5_API_URL, SHOPWARE5_API_USER und SHOPWARE5_API_TOKEN gelesen.",
+            },
+        ),
+    )
+
+    def formfield_for_dbfield(self, db_field, request, **kwargs):
+        if db_field.name == "api_token":
+            kwargs["widget"] = PasswordInput(render_value=True)
+        return super().formfield_for_dbfield(db_field, request, **kwargs)

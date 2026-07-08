@@ -1,4 +1,5 @@
 from decimal import Decimal
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from django.core.management.base import CommandError
@@ -12,6 +13,7 @@ from shopware.models import ShopwareSettings
 from shopware.services.order import OrderService
 from shopware.services.product import ProductService
 from shopware.services.product_media import ProductMediaSyncService
+from shopware.services.shopware5 import Shopware5ProductSyncService
 from shopware.services.shopware6 import Criteria, EqualsFilter, InvalidTokenError, Shopware6Service
 
 
@@ -76,6 +78,94 @@ class Shopware6ServiceTokenRetryTest(SimpleTestCase):
                 ],
             },
             additional_query_params=None,
+        )
+
+
+class Shopware5ProductSyncServiceTest(SimpleTestCase):
+    def test_build_product_payload_updates_active_stock_factor_and_group_prices(self):
+        price = SimpleNamespace(
+            price=Decimal("10.00"),
+            rebate_quantity=None,
+            rebate_price=None,
+            special_price=None,
+            is_special_active=False,
+            sales_channel=SimpleNamespace(is_default=True, is_active=True),
+        )
+        product = SimpleNamespace(
+            erp_nr="581000",
+            is_active=False,
+            purchase_unit=5,
+            min_purchase=10,
+            unit="% Stck",
+            factor=3,
+            storage=SimpleNamespace(get_stock=42),
+            prefetched_prices_for_shopware_sync=[price],
+        )
+
+        service = Shopware5ProductSyncService(settings_obj=SimpleNamespace(is_active=False), session=MagicMock())
+        payload = service.build_product_payload(product)
+
+        self.assertFalse(payload["active"])
+        self.assertEqual(payload["mainDetail"]["inStock"], 42)
+        self.assertEqual(payload["mainDetail"]["maxPurchase"], 10000)
+        self.assertEqual(payload["mainDetail"]["minPurchase"], 10)
+        self.assertEqual(payload["mainDetail"]["purchaseSteps"], 5)
+        self.assertEqual(payload["mainDetail"]["packUnit"], "Stck")
+        self.assertEqual(payload["mainDetail"]["gcFaktor"], 3)
+        prices = payload["mainDetail"]["prices"]
+        self.assertIn(
+            {
+                "customerGroupKey": "CHB2C",
+                "from": 1,
+                "to": "beliebig",
+                "price": 13.0,
+                "pseudoPrice": None,
+            },
+            prices,
+        )
+        self.assertIn(
+            {
+                "customerGroupKey": "IT_de",
+                "from": 1,
+                "to": "beliebig",
+                "price": 10.45,
+                "pseudoPrice": None,
+            },
+            prices,
+        )
+
+    def test_build_product_payload_uses_special_price_as_price_and_standard_as_pseudo_price(self):
+        price = SimpleNamespace(
+            price=Decimal("10.00"),
+            rebate_quantity=None,
+            rebate_price=None,
+            special_price=Decimal("8.00"),
+            is_special_active=True,
+            sales_channel=SimpleNamespace(is_default=True, is_active=True),
+        )
+        product = SimpleNamespace(
+            erp_nr="581000",
+            is_active=True,
+            purchase_unit=1,
+            min_purchase=1,
+            unit="Stck",
+            factor=None,
+            storage=SimpleNamespace(get_stock=5),
+            prefetched_prices_for_shopware_sync=[price],
+        )
+
+        service = Shopware5ProductSyncService(settings_obj=SimpleNamespace(is_active=False), session=MagicMock())
+        payload = service.build_product_payload(product)
+
+        self.assertIn(
+            {
+                "customerGroupKey": "Vk0",
+                "from": 1,
+                "to": "beliebig",
+                "price": 8.0,
+                "pseudoPrice": 10.0,
+            },
+            payload["mainDetail"]["prices"],
         )
 
 
