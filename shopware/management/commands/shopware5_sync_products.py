@@ -103,7 +103,7 @@ class Command(MonitoredBaseCommand):
             }
             if not products:
                 self.stdout.write("Keine Produkte fuer Shopware5 Sync gefunden.")
-                return summary
+                return
 
             total_batches = (total_products + batch_size - 1) // batch_size
             for batch_no, batch in enumerate(_chunked(products, batch_size), start=1):
@@ -139,6 +139,5 @@ class Command(MonitoredBaseCommand):
                 self.stdout.write("Shopware5 Sync ist deaktiviert.")
             else:
                 self.stdout.write(self.style.SUCCESS(f"Shopware5 Sync abgeschlossen: {summary['success']} Produkt(e)."))
-            return summary
         finally:
             runtime.close()
