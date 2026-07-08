@@ -95,7 +95,6 @@ class Command(MonitoredBaseCommand):
             runtime.update(stage="prepare", total_products=total_products)
 
             summary = {
-                "enabled": service.is_enabled,
                 "processed": 0,
                 "success": 0,
                 "errors": 0,
@@ -120,7 +119,10 @@ class Command(MonitoredBaseCommand):
                     len(batch),
                     [product.erp_nr for product in batch],
                 )
-                batch_summary = service.sync_products(batch)
+                try:
+                    batch_summary = service.sync_products(batch)
+                except ValueError as exc:
+                    raise CommandError(str(exc)) from exc
                 summary["processed"] += int(batch_summary.get("processed") or 0)
                 summary["success"] += int(batch_summary.get("success") or 0)
                 summary["errors"] += int(batch_summary.get("errors") or 0)
@@ -135,8 +137,6 @@ class Command(MonitoredBaseCommand):
                         f"{summary['errors']} Fehler(n), {summary['success']} erfolgreich."
                     )
                 )
-            elif not service.is_enabled:
-                self.stdout.write("Shopware5 Sync ist deaktiviert.")
             else:
                 self.stdout.write(self.style.SUCCESS(f"Shopware5 Sync abgeschlossen: {summary['success']} Produkt(e)."))
         finally:

@@ -81,11 +81,6 @@ class ShopwareSettings(BaseModel):
 
 
 class Shopware5Settings(BaseModel):
-    is_active = models.BooleanField(
-        default=False,
-        verbose_name=_("Shopware 5 Sync aktiv"),
-        help_text=_("Wenn aktiv, schreibt der Shopware-6-Produktsync Bestand, Preise und Aktiv-Status auch nach Shopware 5."),
-    )
     api_url = models.CharField(
         max_length=500,
         blank=True,
@@ -106,11 +101,6 @@ class Shopware5Settings(BaseModel):
         default="",
         verbose_name=_("API Token"),
         help_text=_("Optional. Falls leer, wird SHOPWARE5_API_TOKEN aus der Umgebung verwendet."),
-    )
-    fail_on_error = models.BooleanField(
-        default=False,
-        verbose_name=_("Sync bei Shopware-5-Fehler abbrechen"),
-        help_text=_("Standard: Fehler werden protokolliert, aber der Shopware-6-Sync bleibt erfolgreich."),
     )
 
     class Meta:

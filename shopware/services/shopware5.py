@@ -42,26 +42,17 @@ class Shopware5ProductSyncService(BaseService):
         session: requests.Session | None = None,
     ) -> None:
         self.settings = settings_obj if settings_obj is not None else self._load_settings()
-        self.base_url = self._config_value("api_url", "SHOPWARE5_API_URL").rstrip("/")
-        self.username = self._config_value("username", "SHOPWARE5_API_USER")
-        self.api_token = self._config_value("api_token", "SHOPWARE5_API_TOKEN")
+        self.base_url = self._config_value("api_url", ("SHOPWARE5_API_URL", "SHOPWARE_API_URL")).rstrip("/")
+        self.username = self._config_value("username", ("SHOPWARE5_API_USER", "SHOPWARE_API_USER"))
+        self.api_token = self._config_value("api_token", ("SHOPWARE5_API_TOKEN", "SHOPWARE_API_TOKEN"))
+        legacy_credentials = os.getenv("SHOPWARE_API_CREDENTIALS", "")
+        if (not self.username or not self.api_token) and ":" in legacy_credentials:
+            self.username, self.api_token = legacy_credentials.split(":", 1)
         self.session = session or self._build_session()
 
-    @property
-    def is_enabled(self) -> bool:
-        return bool(self.settings and getattr(self.settings, "is_active", False))
-
-    @property
-    def fail_on_error(self) -> bool:
-        return bool(self.settings and getattr(self.settings, "fail_on_error", False))
-
     def sync_products(self, products: list[Product] | tuple[Product, ...]) -> dict[str, object]:
-        if not self.is_enabled:
-            return {"enabled": False, "processed": 0, "success": 0, "errors": 0, "skipped": len(products)}
-
         self._validate_config()
         summary: dict[str, object] = {
-            "enabled": True,
             "processed": 0,
             "success": 0,
             "errors": 0,
@@ -83,8 +74,6 @@ class Shopware5ProductSyncService(BaseService):
                 if isinstance(error_details, list):
                     error_details.append(detail)
                 logger.warning("Shopware5 sync failed for {}: {}", getattr(product, "erp_nr", ""), exc)
-                if self.fail_on_error:
-                    raise
 
         return summary
 
@@ -185,9 +174,15 @@ class Shopware5ProductSyncService(BaseService):
         session.mount("https://", adapter)
         return session
 
-    def _config_value(self, field_name: str, env_name: str) -> str:
+    def _config_value(self, field_name: str, env_names: tuple[str, ...]) -> str:
         setting_value = getattr(self.settings, field_name, "") if self.settings else ""
-        return str(setting_value or os.getenv(env_name, "") or "").strip()
+        if setting_value:
+            return str(setting_value).strip()
+        for env_name in env_names:
+            value = os.getenv(env_name)
+            if value:
+                return value.strip()
+        return ""
 
     def _validate_config(self) -> None:
         missing = []
@@ -198,7 +193,10 @@ class Shopware5ProductSyncService(BaseService):
         if not self.api_token:
             missing.append("SHOPWARE5_API_TOKEN")
         if missing:
-            raise ValueError(f"Missing Shopware5 config: {', '.join(missing)}")
+            raise ValueError(
+                "Missing Shopware5 config: "
+                f"{', '.join(missing)}. Set them in .env or configure the optional Shopware 5 admin overrides."
+            )
 
     @staticmethod
     def _stock(product: Product) -> int:

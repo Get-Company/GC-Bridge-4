@@ -84,17 +84,8 @@ class ShopwareSettingsAdmin(BaseAdmin):
 
 @admin.register(Shopware5Settings)
 class Shopware5SettingsAdmin(SingletonAdmin):
-    list_display = ("is_active", "api_url", "username", "fail_on_error")
+    list_display = ("api_url", "username")
     fieldsets = (
-        (
-            "Sync",
-            {
-                "fields": (
-                    "is_active",
-                    "fail_on_error",
-                ),
-            },
-        ),
         (
             "API-Verbindung",
             {
