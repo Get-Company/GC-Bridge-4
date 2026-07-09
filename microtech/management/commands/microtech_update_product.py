@@ -76,22 +76,9 @@ class Command(MonitoredBaseCommand):
             "description": product.description or "",
             "descriptionShort": product.description_short or "",
             "isActive": product.is_active,
-            "factor": product.factor,
-            "unit": product.unit or "",
-            "minPurchase": product.min_purchase,
             "purchaseUnit": product.purchase_unit,
             "sortOrder": product.sort_order,
         }
-
-        if product.tax:
-            # Map tax rate to common Microtech keys
-            rate = product.tax.rate
-            if rate == Decimal("19.00"):
-                input_data["taxKey"] = "M19"
-            elif rate == Decimal("7.00"):
-                input_data["taxKey"] = "M7"
-            else:
-                input_data["taxKey"] = product.tax.name
 
         if price_entry:
             input_data.update({

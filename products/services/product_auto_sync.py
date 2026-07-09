@@ -32,6 +32,7 @@ class ProductAutoSyncService(BaseService):
 
     targets = (
         ProductSyncJob.Target.SHOPWARE,
+        ProductSyncJob.Target.SHOPWARE5,
         ProductSyncJob.Target.MICROTECH,
     )
 
@@ -84,6 +85,8 @@ class ProductAutoSyncService(BaseService):
         try:
             if target == ProductSyncJob.Target.SHOPWARE:
                 call_command("shopware_sync_products", product_erp_nr, skip_images=True)
+            elif target == ProductSyncJob.Target.SHOPWARE5:
+                call_command("shopware5_sync_products", product_erp_nr)
             elif target == ProductSyncJob.Target.MICROTECH:
                 self._submit_microtech_sentinel_jobs(
                     product_id=product_id,

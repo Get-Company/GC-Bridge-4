@@ -141,13 +141,13 @@ class ProductAutoSyncSignalTest(TestCase):
             product.save(update_fields=["name"])
 
         jobs = list(ProductSyncJob.objects.order_by("target"))
-        self.assertEqual(len(jobs), 2)
+        self.assertEqual(len(jobs), 3)
         self.assertEqual(
             {job.target for job in jobs},
-            {ProductSyncJob.Target.MICROTECH, ProductSyncJob.Target.SHOPWARE},
+            {ProductSyncJob.Target.MICROTECH, ProductSyncJob.Target.SHOPWARE, ProductSyncJob.Target.SHOPWARE5},
         )
         self.assertEqual({tuple(job.changed_fields) for job in jobs}, {("name",)})
-        self.assertEqual(mock_delay.call_count, 2)
+        self.assertEqual(mock_delay.call_count, 3)
 
     @patch("products.tasks.process_product_sync_job.delay")
     def test_unchanged_product_save_does_not_queue_jobs(self, mock_delay):
@@ -172,13 +172,13 @@ class ProductAutoSyncSignalTest(TestCase):
             product.save(update_fields=["unit"])
 
         jobs = list(ProductSyncJob.objects.order_by("target"))
-        self.assertEqual(len(jobs), 2)
+        self.assertEqual(len(jobs), 3)
         self.assertEqual(
             {job.target for job in jobs},
-            {ProductSyncJob.Target.MICROTECH, ProductSyncJob.Target.SHOPWARE},
+            {ProductSyncJob.Target.MICROTECH, ProductSyncJob.Target.SHOPWARE, ProductSyncJob.Target.SHOPWARE5},
         )
         self.assertEqual({tuple(job.changed_fields) for job in jobs}, {("name", "unit")})
-        self.assertEqual(mock_delay.call_count, 2)
+        self.assertEqual(mock_delay.call_count, 3)
 
     @patch("products.tasks.process_product_sync_job.delay")
     def test_auto_sync_can_be_suppressed_for_imports(self, mock_delay):
@@ -202,10 +202,10 @@ class ProductAutoSyncSignalTest(TestCase):
             price.save(update_fields=["price"])
 
         jobs = list(ProductSyncJob.objects.order_by("target"))
-        self.assertEqual(len(jobs), 2)
+        self.assertEqual(len(jobs), 3)
         self.assertEqual(
             {job.target for job in jobs},
-            {ProductSyncJob.Target.MICROTECH, ProductSyncJob.Target.SHOPWARE},
+            {ProductSyncJob.Target.MICROTECH, ProductSyncJob.Target.SHOPWARE, ProductSyncJob.Target.SHOPWARE5},
         )
         self.assertEqual({tuple(job.changed_fields) for job in jobs}, {("price.price",)})
 
@@ -220,10 +220,10 @@ class ProductAutoSyncSignalTest(TestCase):
             storage.save(update_fields=["stock"])
 
         jobs = list(ProductSyncJob.objects.order_by("target"))
-        self.assertEqual(len(jobs), 2)
+        self.assertEqual(len(jobs), 3)
         self.assertEqual(
             {job.target for job in jobs},
-            {ProductSyncJob.Target.MICROTECH, ProductSyncJob.Target.SHOPWARE},
+            {ProductSyncJob.Target.MICROTECH, ProductSyncJob.Target.SHOPWARE, ProductSyncJob.Target.SHOPWARE5},
         )
         self.assertEqual({tuple(job.changed_fields) for job in jobs}, {("storage.stock",)})
 
@@ -237,6 +237,15 @@ class ProductAutoSyncServiceTest(TestCase):
         ProductAutoSyncService().process_job(job_id=job.pk)
 
         mock_call_command.assert_called_once_with("shopware_sync_products", "A-9201", skip_images=True)
+
+    @patch("products.services.product_auto_sync.call_command")
+    def test_process_shopware5_job_calls_sync_command(self, mock_call_command):
+        product = Product.objects.create(erp_nr="A-9202", name="Artikel")
+        job = ProductSyncJob.objects.create(product=product, target=ProductSyncJob.Target.SHOPWARE5)
+
+        ProductAutoSyncService().process_job(job_id=job.pk)
+
+        mock_call_command.assert_called_once_with("shopware5_sync_products", "A-9202")
 
     @patch("microtech.services.MicrotechJobSentinelService")
     def test_process_microtech_job_submits_product_update_to_sentinel(self, mock_sentinel_cls):
@@ -2479,6 +2488,11 @@ class ProductSyncJobTargetTest(SimpleTestCase):
         self.assertEqual(ProductSyncJob.Target.MICROTECH, "microtech")
         choices = dict(ProductSyncJob.Target.choices)
         self.assertIn("microtech", choices)
+
+    def test_shopware5_target_choice_exists(self):
+        self.assertEqual(ProductSyncJob.Target.SHOPWARE5, "shopware5")
+        choices = dict(ProductSyncJob.Target.choices)
+        self.assertIn("shopware5", choices)
 
 
 class SyncFromMicrotechTaskTest(SimpleTestCase):
