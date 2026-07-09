@@ -41,10 +41,13 @@ class Shopware5ProductSyncService(BaseService):
         settings_obj: Shopware5Settings | None = None,
         session: requests.Session | None = None,
     ) -> None:
-        self.settings = settings_obj if settings_obj is not None else self._load_settings()
-        self.base_url = self._config_value("api_url", ("SHOPWARE5_API_URL", "SHOPWARE_API_URL")).rstrip("/")
-        self.username = self._config_value("username", ("SHOPWARE5_API_USER", "SHOPWARE_API_USER"))
-        self.api_token = self._config_value("api_token", ("SHOPWARE5_API_TOKEN", "SHOPWARE_API_TOKEN"))
+        # self.settings = settings_obj if settings_obj is not None else self._load_settings()
+        self.base_url = "https://www.classei-shop.com/api"
+        # self.base_url = self._config_value("api_url", ("SHOPWARE5_API_URL", "SHOPWARE_API_URL")).rstrip("/")
+        self.username = 'geco_bot'
+        # self.username = self._config_value("username", ("SHOPWARE5_API_USER", "SHOPWARE_API_USER"))
+        self.api_token = 'gpTCCXGurNt2JTnw0FDqXTLl0yMuh41hl18SVq3I'
+        # self.api_token = self._config_value("api_token", ("SHOPWARE5_API_TOKEN", "SHOPWARE_API_TOKEN"))
         legacy_credentials = os.getenv("SHOPWARE_API_CREDENTIALS", "")
         if (not self.username or not self.api_token) and ":" in legacy_credentials:
             self.username, self.api_token = legacy_credentials.split(":", 1)
