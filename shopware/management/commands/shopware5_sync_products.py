@@ -131,11 +131,9 @@ class Command(MonitoredBaseCommand):
 
             runtime.update(stage="done", processed=summary["processed"], total_products=total_products)
             if summary["errors"]:
-                self.stdout.write(
-                    self.style.WARNING(
-                        "Shopware5 Sync abgeschlossen mit "
-                        f"{summary['errors']} Fehler(n), {summary['success']} erfolgreich."
-                    )
+                raise CommandError(
+                    "Shopware5 Sync abgeschlossen mit "
+                    f"{summary['errors']} Fehler(n), {summary['success']} erfolgreich."
                 )
             else:
                 self.stdout.write(self.style.SUCCESS(f"Shopware5 Sync abgeschlossen: {summary['success']} Produkt(e)."))

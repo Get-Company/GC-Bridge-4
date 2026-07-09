@@ -14,6 +14,7 @@ from django.contrib.admin.sites import AdminSite
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.core.management.base import CommandError
+from django.db import connection
 from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -54,6 +55,55 @@ from products.services import ProductAutoSyncService, disable_product_auto_sync
 from products import tasks as product_tasks
 from products.tasks import sync_from_microtech, sync_to_shopware, sync_to_microtech
 from shopware.models import ShopwareSettings
+
+
+class ProductSchemaTest(TestCase):
+    def test_product_model_base_columns_exist_in_database(self):
+        expected_columns = {
+            "description_short",
+            "factor",
+            "unit",
+            "min_purchase",
+            "purchase_unit",
+        }
+
+        with connection.cursor() as cursor:
+            existing_columns = {
+                column.name
+                for column in connection.introspection.get_table_description(
+                    cursor,
+                    Product._meta.db_table,
+                )
+            }
+
+        self.assertTrue(expected_columns <= existing_columns)
+
+    def test_storage_table_exists_in_database(self):
+        self.assertIn(
+            Storage._meta.db_table,
+            connection.introspection.table_names(),
+        )
+
+    def test_price_model_columns_exist_in_database(self):
+        expected_columns = {
+            "price",
+            "rebate_quantity",
+            "rebate_price",
+            "special_price",
+            "special_start_date",
+            "special_end_date",
+        }
+
+        with connection.cursor() as cursor:
+            existing_columns = {
+                column.name
+                for column in connection.introspection.get_table_description(
+                    cursor,
+                    Price._meta.db_table,
+                )
+            }
+
+        self.assertTrue(expected_columns <= existing_columns)
 
 
 class ProductAdminActionConfigurationTest(SimpleTestCase):

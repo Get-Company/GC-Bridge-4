@@ -1,7 +1,9 @@
 from decimal import Decimal
+from io import StringIO
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
@@ -173,6 +175,26 @@ class Shopware5ProductSyncServiceTest(SimpleTestCase):
             },
             payload["mainDetail"]["prices"],
         )
+
+
+class Shopware5SyncProductsCommandTest(TestCase):
+    @patch("shopware.management.commands.shopware5_sync_products.CommandRuntimeService.start")
+    @patch("shopware.management.commands.shopware5_sync_products.Shopware5ProductSyncService")
+    def test_raises_command_error_when_batch_contains_errors(self, service_cls, runtime_start):
+        Product.objects.create(erp_nr="581000", name="Mappe A4")
+        runtime = MagicMock()
+        runtime_start.return_value = runtime
+        service_cls.return_value.sync_products.return_value = {
+            "processed": 1,
+            "success": 0,
+            "errors": 1,
+            "skipped": 0,
+        }
+
+        with self.assertRaisesMessage(CommandError, "Shopware5 Sync abgeschlossen mit 1 Fehler"):
+            call_command("shopware5_sync_products", "581000", stdout=StringIO())
+
+        runtime.close.assert_called_once()
 
 
 class OrderServiceMicrotechWritebackTest(SimpleTestCase):
