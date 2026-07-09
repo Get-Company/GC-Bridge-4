@@ -87,7 +87,7 @@ class Shopware5ProductSyncService(BaseService):
 
     def get_article_by_number(self, product_number: str) -> dict[str, Any]:
         product_number = quote(str(product_number).strip(), safe="")
-        response = self.get(f"/articles/{product_number}", params={"useNumberAsId": "true"})
+        response = self.get(f"/articles/{product_number}?useNumberAsId=true")
         data = response.get("data")
         if not isinstance(data, dict):
             raise Shopware5APIError(f"Shopware5 article not found for {product_number}.")
@@ -96,7 +96,7 @@ class Shopware5ProductSyncService(BaseService):
     def build_product_payload(self, product: Product) -> dict[str, Any]:
         purchase_unit = self._positive_int(getattr(product, "purchase_unit", None), default=1)
         min_purchase = self._positive_int(getattr(product, "min_purchase", None), default=1)
-        name = str(getattr(product, "name", "") or "").strip()
+        name = (self._localized_value(product, "name") or "").strip()
         main_detail: dict[str, Any] = {
             "inStock": self._stock(product),
             "maxPurchase": 2000 * purchase_unit,
@@ -121,16 +121,16 @@ class Shopware5ProductSyncService(BaseService):
         }
         if name:
             payload["name"] = name
-        description_short = getattr(product, "description_short", None)
+        description_short = self._localized_value(product, "description_short")
         if description_short is not None:
-            payload["description"] = description_short or ""
-        description = getattr(product, "description", None)
+            payload["description"] = description_short
+        description = self._localized_value(product, "description")
         if description is not None:
-            payload["descriptionLong"] = description or ""
+            payload["descriptionLong"] = description
         return payload
 
-    def get(self, path: str, *, params: dict[str, str] | None = None) -> dict[str, Any]:
-        return self._request("get", path, params=params)
+    def get(self, path: str) -> dict[str, Any]:
+        return self._request("get", path)
 
     def put(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
         return self._request("put", path, payload=payload)
@@ -141,13 +141,11 @@ class Shopware5ProductSyncService(BaseService):
         path: str,
         *,
         payload: dict[str, Any] | None = None,
-        params: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         response = self.session.request(
             method=method.upper(),
             url=f"{self.base_url}{path}",
             json=payload,
-            params=params,
             timeout=self.timeout_seconds,
         )
         try:
@@ -232,6 +230,28 @@ class Shopware5ProductSyncService(BaseService):
         if "% Stck" in unit:
             return "Stck"
         return unit
+
+    @classmethod
+    def _localized_value(cls, product: Product, field_name: str) -> str | None:
+        translated_value = cls._string_or_none(getattr(product, f"{field_name}_de", None))
+        if translated_value:
+            return translated_value
+
+        base_value = cls._string_or_none(getattr(product, field_name, None))
+        if base_value is not None:
+            return base_value
+
+        fallback_value = cls._string_or_none(getattr(product, f"{field_name}_en", None))
+        if fallback_value:
+            return fallback_value
+
+        return None
+
+    @staticmethod
+    def _string_or_none(value: object) -> str | None:
+        if value is None:
+            return None
+        return str(value or "")
 
     @staticmethod
     def _select_price(product: Product) -> Price | None:

@@ -84,6 +84,25 @@ class Shopware6ServiceTokenRetryTest(SimpleTestCase):
 
 
 class Shopware5ProductSyncServiceTest(SimpleTestCase):
+    def test_get_article_by_number_uses_inline_use_number_query_like_legacy_client(self):
+        response = MagicMock()
+        response.status_code = 200
+        response.json.return_value = {"success": True, "data": {"id": 123, "number": "091300"}}
+        session = MagicMock()
+        session.request.return_value = response
+        service = Shopware5ProductSyncService(settings_obj=SimpleNamespace(is_active=False), session=session)
+        service.base_url = "https://www.classei-shop.com/api"
+
+        article = service.get_article_by_number("091300")
+
+        self.assertEqual(article["id"], 123)
+        session.request.assert_called_once_with(
+            method="GET",
+            url="https://www.classei-shop.com/api/articles/091300?useNumberAsId=true",
+            json=None,
+            timeout=service.timeout_seconds,
+        )
+
     def test_build_product_payload_updates_active_stock_factor_and_group_prices(self):
         price = SimpleNamespace(
             price=Decimal("10.00"),
@@ -175,6 +194,56 @@ class Shopware5ProductSyncServiceTest(SimpleTestCase):
             },
             payload["mainDetail"]["prices"],
         )
+
+    def test_build_product_payload_prefers_german_translation_fields_for_texts(self):
+        product = SimpleNamespace(
+            erp_nr="581000",
+            name="Alter Name",
+            name_de="Neuer Name",
+            description_short="Alter Kurztext",
+            description_short_de="<p>Neuer Kurztext</p>",
+            description="Alter Langtext",
+            description_de="<p>Neuer Langtext</p>",
+            is_active=True,
+            purchase_unit=1,
+            min_purchase=1,
+            unit="Stck",
+            factor=None,
+            storage=SimpleNamespace(get_stock=5),
+            prefetched_prices_for_shopware_sync=[],
+        )
+
+        service = Shopware5ProductSyncService(settings_obj=SimpleNamespace(is_active=False), session=MagicMock())
+        payload = service.build_product_payload(product)
+
+        self.assertEqual(payload["name"], "Neuer Name")
+        self.assertEqual(payload["description"], "<p>Neuer Kurztext</p>")
+        self.assertEqual(payload["descriptionLong"], "<p>Neuer Langtext</p>")
+
+    def test_build_product_payload_keeps_base_texts_when_translation_fields_are_empty(self):
+        product = SimpleNamespace(
+            erp_nr="581000",
+            name="Basis Name",
+            name_de="",
+            description_short="Basis Kurztext",
+            description_short_de="",
+            description="Basis Langtext",
+            description_de="",
+            is_active=True,
+            purchase_unit=1,
+            min_purchase=1,
+            unit="Stck",
+            factor=None,
+            storage=SimpleNamespace(get_stock=5),
+            prefetched_prices_for_shopware_sync=[],
+        )
+
+        service = Shopware5ProductSyncService(settings_obj=SimpleNamespace(is_active=False), session=MagicMock())
+        payload = service.build_product_payload(product)
+
+        self.assertEqual(payload["name"], "Basis Name")
+        self.assertEqual(payload["description"], "Basis Kurztext")
+        self.assertEqual(payload["descriptionLong"], "Basis Langtext")
 
 
 class Shopware5SyncProductsCommandTest(TestCase):
