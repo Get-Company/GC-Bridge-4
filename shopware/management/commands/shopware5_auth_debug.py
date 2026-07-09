@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import hashlib
 import json
+import os
+from types import SimpleNamespace
 from typing import Any
 
 import requests
@@ -9,6 +12,7 @@ from loguru import logger
 from requests.auth import HTTPBasicAuth, HTTPDigestAuth
 
 from core.management.base import MonitoredBaseCommand
+from shopware.models import Shopware5Settings
 from shopware.services import Shopware5ProductSyncService
 
 
@@ -47,6 +51,67 @@ def _response_summary(response: requests.Response) -> dict[str, Any]:
     }
 
 
+def _fingerprint(value: str) -> str:
+    if not value:
+        return ""
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()[:12]
+
+
+def _env_value(names: tuple[str, ...]) -> tuple[str, str]:
+    for name in names:
+        value = os.getenv(name)
+        if value:
+            return name, value.strip()
+    return "", ""
+
+
+def _config_field_summary(
+    *,
+    settings_obj: Shopware5Settings | None,
+    field_name: str,
+    env_names: tuple[str, ...],
+    effective_value: str,
+    is_secret: bool = False,
+) -> dict[str, Any]:
+    db_value = str(getattr(settings_obj, field_name, "") or "").strip() if settings_obj else ""
+    env_name, env_value = _env_value(env_names)
+    if db_value:
+        source = "db"
+    elif env_value:
+        source = env_name
+    else:
+        source = "missing"
+
+    result: dict[str, Any] = {
+        "source": source,
+        "db_set": bool(db_value),
+        "env_name": env_name,
+        "env_set": bool(env_value),
+    }
+    if is_secret:
+        result.update(
+            {
+                "effective_len": len(effective_value or ""),
+                "effective_fingerprint": _fingerprint(effective_value or ""),
+                "db_len": len(db_value),
+                "db_fingerprint": _fingerprint(db_value),
+                "env_len": len(env_value),
+                "env_fingerprint": _fingerprint(env_value),
+                "db_env_match": bool(db_value and env_value and db_value == env_value),
+            }
+        )
+    else:
+        result.update(
+            {
+                "effective": effective_value,
+                "db": db_value,
+                "env": env_value,
+                "db_env_match": bool(db_value and env_value and db_value == env_value),
+            }
+        )
+    return result
+
+
 class Command(MonitoredBaseCommand):
     help = "Debug Shopware5 API authentication step by step without writing product data."
 
@@ -64,6 +129,12 @@ class Command(MonitoredBaseCommand):
             help="Welche Auth-Methode getestet wird (Default: both).",
         )
         parser.add_argument(
+            "--config-source",
+            choices=("auto", "env"),
+            default="auto",
+            help="Konfigurationsquelle fuer den Test. auto nutzt DB mit .env-Fallback, env ignoriert DB-Werte.",
+        )
+        parser.add_argument(
             "--timeout",
             type=int,
             default=30,
@@ -79,10 +150,15 @@ class Command(MonitoredBaseCommand):
         product_number = str(options["product_number"] or "").strip()
         timeout = int(options["timeout"] or 30)
         auth_mode = options["auth_mode"]
+        config_source = options["config_source"]
         if not product_number:
             raise CommandError("Keine Artikelnummer angegeben.")
 
-        service = Shopware5ProductSyncService()
+        settings_obj = None
+        if config_source == "env":
+            settings_obj = SimpleNamespace(api_url="", username="", api_token="")
+        service = Shopware5ProductSyncService(settings_obj=settings_obj)
+        loaded_settings = None if config_source == "env" else service.settings
         path = f"/articles/{product_number}?useNumberAsId=true"
         url = f"{service.base_url}{path}"
 
@@ -90,6 +166,28 @@ class Command(MonitoredBaseCommand):
             "config",
             {
                 "base_url": service.base_url,
+                "config_source": config_source,
+                "config_fields": {
+                    "api_url": _config_field_summary(
+                        settings_obj=loaded_settings,
+                        field_name="api_url",
+                        env_names=("SHOPWARE5_API_URL", "SHOPWARE_API_URL"),
+                        effective_value=service.base_url,
+                    ),
+                    "username": _config_field_summary(
+                        settings_obj=loaded_settings,
+                        field_name="username",
+                        env_names=("SHOPWARE5_API_USER", "SHOPWARE_API_USER"),
+                        effective_value=service.username,
+                    ),
+                    "api_token": _config_field_summary(
+                        settings_obj=loaded_settings,
+                        field_name="api_token",
+                        env_names=("SHOPWARE5_API_TOKEN", "SHOPWARE_API_TOKEN"),
+                        effective_value=service.api_token,
+                        is_secret=True,
+                    ),
+                },
                 "product_number": product_number,
                 "url": url,
                 "username": service.username,
