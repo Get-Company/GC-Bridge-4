@@ -7,6 +7,7 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
+from requests.auth import HTTPBasicAuth, HTTPDigestAuth
 
 from products.models import Image, Price, Product, ProductImage
 from shopware.management.commands.shopware_sync_products import Command as ShopwareSyncProductsCommand
@@ -84,6 +85,74 @@ class Shopware6ServiceTokenRetryTest(SimpleTestCase):
 
 
 class Shopware5ProductSyncServiceTest(SimpleTestCase):
+    def test_configured_shop_url_is_normalized_to_shopware_api_url(self):
+        service = Shopware5ProductSyncService(
+            settings_obj=SimpleNamespace(
+                api_url="https://www.classei-shop.com/",
+                username="user",
+                api_token="token",
+            ),
+            session=MagicMock(),
+        )
+
+        self.assertEqual(service.base_url, "https://www.classei-shop.com/api")
+
+    def test_configured_api_url_is_not_duplicated(self):
+        service = Shopware5ProductSyncService(
+            settings_obj=SimpleNamespace(
+                api_url="https://www.classei-shop.com/api/",
+                username="user",
+                api_token="token",
+            ),
+            session=MagicMock(),
+        )
+
+        self.assertEqual(service.base_url, "https://www.classei-shop.com/api")
+
+    def test_default_session_uses_digest_auth_like_legacy_client(self):
+        service = Shopware5ProductSyncService(
+            settings_obj=SimpleNamespace(
+                api_url="https://www.classei-shop.com/api",
+                username="user",
+                api_token="token",
+            ),
+        )
+
+        self.assertIsInstance(service.session.auth, HTTPDigestAuth)
+
+    def test_request_retries_once_with_basic_auth_after_auth_rejection(self):
+        first_response = MagicMock()
+        first_response.status_code = 401
+        first_response.request = SimpleNamespace(
+            url="https://www.classei-shop.com/api/articles/091300?useNumberAsId=true",
+            headers={"Authorization": "Digest username=\"user\""},
+        )
+        first_response.json.return_value = {"success": False}
+        second_response = MagicMock()
+        second_response.status_code = 200
+        second_response.request = SimpleNamespace(
+            url="https://www.classei-shop.com/api/articles/091300?useNumberAsId=true",
+            headers={"Authorization": "Basic abc"},
+        )
+        second_response.json.return_value = {"success": True, "data": {"id": 123}}
+        session = MagicMock()
+        session.request.side_effect = [first_response, second_response]
+        service = Shopware5ProductSyncService(
+            settings_obj=SimpleNamespace(
+                api_url="https://www.classei-shop.com/api",
+                username="user",
+                api_token="token",
+            ),
+            session=session,
+        )
+
+        result = service.get_article_by_number("091300")
+
+        self.assertEqual(result["id"], 123)
+        self.assertEqual(session.request.call_count, 2)
+        self.assertNotIn("auth", session.request.call_args_list[0].kwargs)
+        self.assertIsInstance(session.request.call_args_list[1].kwargs["auth"], HTTPBasicAuth)
+
     def test_get_article_by_number_uses_inline_use_number_query_like_legacy_client(self):
         response = MagicMock()
         response.status_code = 200

@@ -8,7 +8,7 @@ from urllib.parse import quote
 import requests
 from loguru import logger
 from requests.adapters import HTTPAdapter
-from requests.auth import HTTPDigestAuth
+from requests.auth import HTTPBasicAuth, HTTPDigestAuth
 from urllib3 import Retry
 
 from core.services import BaseService
@@ -41,13 +41,12 @@ class Shopware5ProductSyncService(BaseService):
         settings_obj: Shopware5Settings | None = None,
         session: requests.Session | None = None,
     ) -> None:
-        # self.settings = settings_obj if settings_obj is not None else self._load_settings()
-        self.base_url = "https://www.classei-shop.com/api"
-        # self.base_url = self._config_value("api_url", ("SHOPWARE5_API_URL", "SHOPWARE_API_URL")).rstrip("/")
-        self.username = 'geco_bot'
-        # self.username = self._config_value("username", ("SHOPWARE5_API_USER", "SHOPWARE_API_USER"))
-        self.api_token = 'gpTCCXGurNt2JTnw0FDqXTLl0yMuh41hl18SVq3I'
-        # self.api_token = self._config_value("api_token", ("SHOPWARE5_API_TOKEN", "SHOPWARE_API_TOKEN"))
+        self.settings = settings_obj if settings_obj is not None else self._load_settings()
+        self.base_url = self._normalize_api_url(
+            self._config_value("api_url", ("SHOPWARE5_API_URL", "SHOPWARE_API_URL"))
+        )
+        self.username = self._config_value("username", ("SHOPWARE5_API_USER", "SHOPWARE_API_USER"))
+        self.api_token = self._config_value("api_token", ("SHOPWARE5_API_TOKEN", "SHOPWARE_API_TOKEN"))
         legacy_credentials = os.getenv("SHOPWARE_API_CREDENTIALS", "")
         if (not self.username or not self.api_token) and ":" in legacy_credentials:
             self.username, self.api_token = legacy_credentials.split(":", 1)
@@ -145,22 +144,49 @@ class Shopware5ProductSyncService(BaseService):
         *,
         payload: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        response = self.session.request(
-            method=method.upper(),
-            url=f"{self.base_url}{path}",
-            json=payload,
-            timeout=self.timeout_seconds,
-        )
+        response = self._request_once(method=method, path=path, payload=payload)
+        if self._should_retry_with_basic(response):
+            logger.warning(
+                "Shopware5 Digest auth was rejected for {}. Retrying once with Basic auth.",
+                response.request.url,
+            )
+            response = self._request_once(
+                method=method,
+                path=path,
+                payload=payload,
+                auth=HTTPBasicAuth(self.username, self.api_token),
+            )
+
         try:
             data = response.json()
         except ValueError as exc:
             raise Shopware5APIError(f"Shopware5 returned no JSON: HTTP {response.status_code}") from exc
 
+        if not isinstance(data, dict):
+            raise Shopware5APIError(f"Shopware5 returned unexpected JSON: HTTP {response.status_code}: {data}")
         if response.status_code >= 400:
             raise Shopware5APIError(f"Shopware5 request failed: HTTP {response.status_code}: {data}")
         if not data.get("success"):
             raise Shopware5APIError(f"Shopware5 indicated failure: {data}")
         return data
+
+    def _request_once(
+        self,
+        *,
+        method: str,
+        path: str,
+        payload: dict[str, Any] | None,
+        auth: HTTPBasicAuth | None = None,
+    ) -> requests.Response:
+        kwargs: dict[str, Any] = {
+            "method": method.upper(),
+            "url": f"{self.base_url}{path}",
+            "json": payload,
+            "timeout": self.timeout_seconds,
+        }
+        if auth is not None:
+            kwargs["auth"] = auth
+        return self.session.request(**kwargs)
 
     @staticmethod
     def _load_settings() -> Shopware5Settings | None:
@@ -184,6 +210,25 @@ class Shopware5ProductSyncService(BaseService):
         session.mount("http://", adapter)
         session.mount("https://", adapter)
         return session
+
+    @staticmethod
+    def _normalize_api_url(value: str) -> str:
+        url = str(value or "").strip().rstrip("/")
+        if not url:
+            return ""
+        if not url.lower().endswith("/api"):
+            url = f"{url}/api"
+        return url
+
+    def _should_retry_with_basic(self, response: requests.Response) -> bool:
+        if response.status_code not in {401, 403}:
+            return False
+        if not self.username or not self.api_token:
+            return False
+        authorization = response.request.headers.get("Authorization", "")
+        if authorization.startswith("Basic "):
+            return False
+        return True
 
     def _config_value(self, field_name: str, env_names: tuple[str, ...]) -> str:
         setting_value = getattr(self.settings, field_name, "") if self.settings else ""
