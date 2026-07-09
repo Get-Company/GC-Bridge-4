@@ -96,6 +96,7 @@ class Shopware5ProductSyncService(BaseService):
     def build_product_payload(self, product: Product) -> dict[str, Any]:
         purchase_unit = self._positive_int(getattr(product, "purchase_unit", None), default=1)
         min_purchase = self._positive_int(getattr(product, "min_purchase", None), default=1)
+        name = str(getattr(product, "name", "") or "").strip()
         main_detail: dict[str, Any] = {
             "inStock": self._stock(product),
             "maxPurchase": 2000 * purchase_unit,
@@ -114,10 +115,19 @@ class Shopware5ProductSyncService(BaseService):
         if price:
             main_detail["prices"] = self._build_prices(price)
 
-        return {
+        payload: dict[str, Any] = {
             "active": bool(product.is_active),
             "mainDetail": main_detail,
         }
+        if name:
+            payload["name"] = name
+        description_short = getattr(product, "description_short", None)
+        if description_short is not None:
+            payload["description"] = description_short or ""
+        description = getattr(product, "description", None)
+        if description is not None:
+            payload["descriptionLong"] = description or ""
+        return payload
 
     def get(self, path: str, *, params: dict[str, str] | None = None) -> dict[str, Any]:
         return self._request("get", path, params=params)

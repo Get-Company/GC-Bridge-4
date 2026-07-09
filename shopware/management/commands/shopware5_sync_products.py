@@ -33,7 +33,7 @@ def _prefetch_shopware5_queryset(queryset):
 
 
 class Command(MonitoredBaseCommand):
-    help = "Sync products from Django to Shopware5: stock, prices and active state only."
+    help = "Sync products from Django to Shopware5: texts, stock, prices and active state."
 
     def add_arguments(self, parser):
         parser.add_argument(

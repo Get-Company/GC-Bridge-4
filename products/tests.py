@@ -150,6 +150,24 @@ class ProductAutoSyncSignalTest(TestCase):
         self.assertEqual(mock_delay.call_count, 3)
 
     @patch("products.tasks.process_product_sync_job.delay")
+    def test_changed_translated_description_queues_sync_jobs_after_commit(self, mock_delay):
+        mock_delay.return_value.id = "celery-task"
+        product = Product.objects.create(erp_nr="A-9106", description="Alt")
+
+        with self.captureOnCommitCallbacks(execute=True):
+            product.description_de = "Neu."
+            product.save(update_fields=["description_de"])
+
+        jobs = list(ProductSyncJob.objects.order_by("target"))
+        self.assertEqual(len(jobs), 3)
+        self.assertEqual(
+            {job.target for job in jobs},
+            {ProductSyncJob.Target.MICROTECH, ProductSyncJob.Target.SHOPWARE, ProductSyncJob.Target.SHOPWARE5},
+        )
+        self.assertEqual({tuple(job.changed_fields) for job in jobs}, {("description_de",)})
+        self.assertEqual(mock_delay.call_count, 3)
+
+    @patch("products.tasks.process_product_sync_job.delay")
     def test_unchanged_product_save_does_not_queue_jobs(self, mock_delay):
         product = Product.objects.create(erp_nr="A-9101", name="Alt")
 

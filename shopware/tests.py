@@ -93,6 +93,9 @@ class Shopware5ProductSyncServiceTest(SimpleTestCase):
         )
         product = SimpleNamespace(
             erp_nr="581000",
+            name="Mappe A4",
+            description_short="Kurztext",
+            description="Langtext.",
             is_active=False,
             purchase_unit=5,
             min_purchase=10,
@@ -106,6 +109,9 @@ class Shopware5ProductSyncServiceTest(SimpleTestCase):
         payload = service.build_product_payload(product)
 
         self.assertFalse(payload["active"])
+        self.assertEqual(payload["name"], "Mappe A4")
+        self.assertEqual(payload["description"], "Kurztext")
+        self.assertEqual(payload["descriptionLong"], "Langtext.")
         self.assertEqual(payload["mainDetail"]["inStock"], 42)
         self.assertEqual(payload["mainDetail"]["maxPurchase"], 10000)
         self.assertEqual(payload["mainDetail"]["minPurchase"], 10)
