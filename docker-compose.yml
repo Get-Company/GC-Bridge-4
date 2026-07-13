@@ -92,6 +92,7 @@ services:
       CELERY_RESULT_BACKEND: redis://redis:6379/1
       CELERY_WORKER_CONCURRENCY: ${CELERY_WORKER_CONCURRENCY:-2}
       LOGS_ROOT: /app/tmp/logs
+      DB_BACKUP_DIR: /app/tmp/backups
       MICROTECH_GRAPHQL_URL: ${MICROTECH_GRAPHQL_URL:-http://10.0.0.5:8888/graphql/}
       RUN_DJANGO_CHECK: "false"
       RUN_COLLECTSTATIC: "false"
@@ -100,6 +101,7 @@ services:
     volumes:
       - media:/app/media
       - applogs:/app/tmp/logs
+      - backups:/app/tmp/backups
     depends_on:
       db:
         condition: service_healthy

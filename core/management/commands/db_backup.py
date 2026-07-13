@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-import os
-import subprocess
 from datetime import datetime
 from pathlib import Path
 
-from django.conf import settings
 from django.core.management.base import CommandError
 from core.management.base import MonitoredBaseCommand
+from core.services import DatabaseBackupError, DatabaseBackupService
 
 
 class Command(MonitoredBaseCommand):
@@ -43,6 +41,13 @@ class Command(MonitoredBaseCommand):
             help="Nur die letzten N Backups behalten (0 = alle behalten).",
         )
         parser.add_argument(
+            "--table",
+            action="append",
+            default=[],
+            metavar="TABLE",
+            help="Nur diese Tabelle sichern bzw. wiederherstellen. Mehrfach angeben.",
+        )
+        parser.add_argument(
             "--confirm",
             action="store_true",
             help="Pflicht-Flag fuer restore, um versehentlichen Datenverlust zu verhindern.",
@@ -57,74 +62,30 @@ class Command(MonitoredBaseCommand):
         else:
             self._list(options)
 
-    # ------------------------------------------------------------------ helpers
-
-    def _db_params(self) -> dict[str, str]:
-        db = settings.DATABASES["default"]
-        return {
-            "host": str(db.get("HOST") or "localhost"),
-            "port": str(db.get("PORT") or "5432"),
-            "user": str(db.get("USER") or ""),
-            "password": str(db.get("PASSWORD") or ""),
-            "name": str(db.get("NAME") or ""),
-        }
-
-    def _pg_env(self, password: str) -> dict[str, str]:
-        env = os.environ.copy()
-        env["PGPASSWORD"] = password
-        return env
-
-    def _backup_dir(self, options) -> Path:
-        raw = options["dir"] or os.getenv("DB_BACKUP_DIR", "tmp/backups")
-        path = Path(raw)
-        if not path.is_absolute():
-            path = Path(settings.BASE_DIR) / path
-        path.mkdir(parents=True, exist_ok=True)
-        return path
-
-    def _existing_dumps(self, backup_dir: Path) -> list[Path]:
-        return sorted(backup_dir.glob("gc_bridge_*.dump"), key=lambda p: p.stat().st_mtime)
-
     # ------------------------------------------------------------------ actions
 
     def _backup(self, options):
-        db = self._db_params()
+        service = DatabaseBackupService()
+        table_names = service.validate_table_names(options["table"])
 
         if options["file"]:
             output_path = Path(options["file"])
-            output_path.parent.mkdir(parents=True, exist_ok=True)
         else:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             output_path = self._backup_dir(options) / f"gc_bridge_{timestamp}.dump"
 
-        cmd = [
-            "pg_dump",
-            "--format=custom",
-            "--compress=6",
-            f"--host={db['host']}",
-            f"--port={db['port']}",
-            f"--username={db['user']}",
-            f"--dbname={db['name']}",
-            f"--file={output_path}",
-        ]
-
         self.stdout.write(f"Backup → {output_path} …")
         try:
-            result = subprocess.run(cmd, env=self._pg_env(db["password"]), capture_output=True, text=True)
-        except FileNotFoundError:
-            raise CommandError(
-                "pg_dump nicht gefunden. "
-                "Stelle sicher, dass postgresql-client-16 im Container installiert ist."
-            )
-
-        if result.returncode != 0:
-            raise CommandError(f"pg_dump fehlgeschlagen (exit {result.returncode}):\n{result.stderr.strip()}")
+            service.create_dump(output_path, table_names)
+        except DatabaseBackupError as exc:
+            raise CommandError(str(exc)) from exc
 
         size_mb = output_path.stat().st_size / 1024 / 1024
         self.stdout.write(self.style.SUCCESS(f"Backup erstellt: {output_path} ({size_mb:.1f} MB)"))
 
         if options["keep"] > 0 and not options["file"]:
-            self._prune(self._backup_dir(options), options["keep"])
+            for old in service.prune_backup_files(options["keep"], directory=output_path.parent):
+                self.stdout.write(f"Altes Backup geloescht: {old.name}")
 
     def _restore(self, options):
         if not options["confirm"]:
@@ -141,43 +102,23 @@ class Command(MonitoredBaseCommand):
         if not backup_path.exists():
             raise CommandError(f"Backup-Datei nicht gefunden: {backup_path}")
 
-        db = self._db_params()
-        cmd = [
-            "pg_restore",
-            "--clean",
-            "--if-exists",
-            "--no-owner",
-            "--no-privileges",
-            f"--host={db['host']}",
-            f"--port={db['port']}",
-            f"--username={db['user']}",
-            f"--dbname={db['name']}",
-            str(backup_path),
-        ]
-
-        self.stdout.write(self.style.WARNING(
-            f"Restore von {backup_path.name} in Datenbank '{db['name']}' …"
-        ))
+        service = DatabaseBackupService()
         try:
-            result = subprocess.run(cmd, env=self._pg_env(db["password"]), capture_output=True, text=True)
-        except FileNotFoundError:
-            raise CommandError(
-                "pg_restore nicht gefunden. "
-                "Stelle sicher, dass postgresql-client-16 im Container installiert ist."
-            )
+            table_names = service.validate_table_names(options["table"])
+        except DatabaseBackupError as exc:
+            raise CommandError(str(exc)) from exc
 
-        # pg_restore exits with 1 on non-fatal warnings (e.g. DROP on non-existent objects).
-        if result.returncode > 1:
-            raise CommandError(f"pg_restore fehlgeschlagen (exit {result.returncode}):\n{result.stderr.strip()}")
-
-        if result.stderr.strip():
-            self.stderr.write(self.style.WARNING(f"Warnungen:\n{result.stderr.strip()}"))
+        self.stdout.write(self.style.WARNING(f"Restore von {backup_path.name} …"))
+        try:
+            service.restore_dump(backup_path, table_names)
+        except DatabaseBackupError as exc:
+            raise CommandError(str(exc)) from exc
 
         self.stdout.write(self.style.SUCCESS(f"Restore abgeschlossen: {backup_path.name}"))
 
     def _list(self, options):
         backup_dir = self._backup_dir(options)
-        dumps = self._existing_dumps(backup_dir)
+        dumps = DatabaseBackupService().list_backup_files(directory=backup_dir)
         if not dumps:
             self.stdout.write(f"Keine Backups in {backup_dir}")
             return
@@ -187,8 +128,5 @@ class Command(MonitoredBaseCommand):
             mtime = datetime.fromtimestamp(dump.stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S")
             self.stdout.write(f"  {dump.name}  {size_mb:6.1f} MB  {mtime}")
 
-    def _prune(self, backup_dir: Path, keep: int):
-        dumps = self._existing_dumps(backup_dir)
-        for old in dumps[:-keep]:
-            old.unlink()
-            self.stdout.write(f"Altes Backup geloescht: {old.name}")
+    def _backup_dir(self, options) -> Path:
+        return DatabaseBackupService().backup_directory(options["dir"] or None)

@@ -30,6 +30,11 @@ class TaskDefinition:
 
 CELERY_ADMIN_TASKS: tuple[TaskDefinition, ...] = (
     TaskDefinition(
+        name="core.create_database_backup",
+        label="Datenbank-Backup erstellen",
+        description="Erstellt ein vollstaendiges PostgreSQL-Backup im konfigurierten Backup-Verzeichnis.",
+    ),
+    TaskDefinition(
         name="microtech.poll_graphql_jobs",
         label="Microtech GraphQL Jobs pruefen",
         description="Fallback-Poller fuer Microtech GraphQL Jobs, falls ein Webhook nicht angekommen ist.",

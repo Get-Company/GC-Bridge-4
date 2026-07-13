@@ -426,3 +426,6 @@ def _admin_get_urls():
 
 
 admin.site.get_urls = _admin_get_urls
+
+
+from core.database_backup_admin import DatabaseBackupAdmin  # noqa: F401

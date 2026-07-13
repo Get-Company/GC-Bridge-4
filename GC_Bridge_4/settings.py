@@ -302,6 +302,8 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 DOCUMENT_PDF_ROOT = BASE_DIR / 'Dokumente'
+DB_BACKUP_DIR = os.getenv("DB_BACKUP_DIR", "tmp/backups")
+DB_BACKUP_SCHEMA = os.getenv("DB_BACKUP_SCHEMA", "public")
 
 CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
 CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/1")
@@ -311,7 +313,7 @@ CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 CELERY_BEAT_SCHEDULE = {}
-CELERY_IMPORTS = ("newsletter.tasks", "microtech.tasks", "products.tasks", "shopware.tasks")
+CELERY_IMPORTS = ("core.tasks", "newsletter.tasks", "microtech.tasks", "products.tasks", "shopware.tasks")
 
 
 UNFOLD = {
@@ -825,6 +827,12 @@ UNFOLD = {
                         "title": _("Celery Tasks"),
                         "icon": "task_alt",
                         "link": reverse_lazy("admin:core_celery_tasks"),
+                        "permission": "core.unfold.superuser_only",
+                    },
+                    {
+                        "title": _("Datenbank-Backups"),
+                        "icon": "backup",
+                        "link": reverse_lazy("admin:core_databasebackup_changelist"),
                         "permission": "core.unfold.superuser_only",
                     },
                     {

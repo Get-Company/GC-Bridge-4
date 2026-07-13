@@ -1,0 +1,26 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+<form method="post" novalidate>
+    {% csrf_token %}
+    <div class="mb-6">
+        <h1>{{ title }}</h1>
+        <p>Die Wiederherstellung ersetzt die ausgewaehlten Daten im Zielsystem.</p>
+    </div>
+    {% if form.non_field_errors %}
+        <div class="mb-6 text-red-600">{{ form.non_field_errors }}</div>
+    {% endif %}
+    {% for field in form %}
+        <div class="mb-6">
+            {{ field.errors }}
+            {{ field.label_tag }}
+            {{ field }}
+            {% if field.help_text %}<div class="mt-1 text-sm text-gray-500">{{ field.help_text }}</div>{% endif %}
+        </div>
+    {% endfor %}
+    <div class="flex gap-3">
+        <button type="submit" class="bg-red-600 px-4 py-2 text-white">Wiederherstellung einreihen</button>
+        <a href="{% url 'admin:core_databasebackup_change' backup.pk %}" class="px-4 py-2">Abbrechen</a>
+    </div>
+</form>
+{% endblock %}
