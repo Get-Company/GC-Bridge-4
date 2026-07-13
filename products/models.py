@@ -653,11 +653,12 @@ class Storage(BaseModel):
     )
     stock = models.IntegerField(null=True, blank=True, verbose_name=_("Bestand"))
     location = models.CharField(max_length=255, null=True, blank=True, verbose_name=_("Lagerort"))
-    virtual_stock = models.PositiveIntegerField(default=0, verbose_name=_("Virtueller Bestand"))
+    virtual_stock = models.PositiveIntegerField(default=0, blank=True, verbose_name=_("Virtueller Bestand"))
 
     @property
     def get_stock(self) -> int:
-        return self.virtual_stock if self.virtual_stock > 0 else (self.stock or 0)
+        virtual_stock = self.virtual_stock or 0
+        return virtual_stock if virtual_stock > 0 else (self.stock or 0)
 
     class Meta:
         verbose_name = _("Lagerbestand")

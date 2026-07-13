@@ -235,7 +235,6 @@ def _scheduled_product_sync_continuation(job) -> None:
     )
     from microtech.services import MicrotechGraphQLClientService
     from microtech.services.artikel import MicrotechArtikelService
-    from microtech.services.lager import MicrotechLagerService
     from django.contrib.contenttypes.models import ContentType
     from products.models import Product as ProductModel
     from products.services import disable_product_auto_sync
@@ -254,7 +253,8 @@ def _scheduled_product_sync_continuation(job) -> None:
     result = client.product_list_job(str(job.external_job_id))
     products = result.get("products") or []
     artikel_service = MicrotechArtikelService(erp=client)
-    lager_service = MicrotechLagerService(erp=client)
+    # GraphQL product jobs already contain stock and storageLocation.
+    lager_service = None
     tax_map = SyncCommand._ensure_taxes()
     cmd = SyncCommand()
     admin_user_id = _get_admin_user_id()
@@ -319,6 +319,11 @@ def _finalize_scheduled_product_sync(
                 limit=limit,
                 skip_images=True,
             )
+        logger.info("scheduled_product_sync: Django -> Shopware5 starten")
+        if cleaned_erp_nrs:
+            call_command("shopware5_sync_products", *cleaned_erp_nrs)
+        else:
+            call_command("shopware5_sync_products", limit=limit)
         if include_images:
             logger.info("scheduled_product_sync: Shopware Bilder loeschen und neu hochladen")
             if cleaned_erp_nrs:

@@ -449,19 +449,31 @@ class PriceIncreaseDocumentRenderingTest(SimpleTestCase):
 
 
 class ProductCeleryTaskTest(SimpleTestCase):
+    @patch("products.tasks.call_command")
+    def test_product_sync_finalization_syncs_stock_to_both_shopware_versions(self, mock_call_command):
+        product_tasks._finalize_scheduled_product_sync(
+            include_images=False,
+            erp_nrs=["A-1000", "A-1001"],
+        )
+
+        mock_call_command.assert_has_calls(
+            [
+                call("shopware_sync_products", "A-1000", "A-1001", skip_images=True),
+                call("shopware5_sync_products", "A-1000", "A-1001"),
+            ]
+        )
+
     @patch("products.tasks._finalize_scheduled_product_sync")
     @patch("products.tasks.TaskIssueCollector")
     @patch("products.services.disable_product_auto_sync")
     @patch("microtech.management.commands.microtech_sync_products._get_admin_user_id", return_value=None)
     @patch("microtech.management.commands.microtech_sync_products.Command")
-    @patch("microtech.services.lager.MicrotechLagerService")
     @patch("microtech.services.artikel.MicrotechArtikelService")
     @patch("microtech.services.MicrotechGraphQLClientService")
-    def test_product_sync_continuation_passes_lager_service_to_import(
+    def test_product_sync_continuation_uses_graphql_stock_without_lager_lookup(
         self,
         microtech_client_cls,
         artikel_service_cls,
-        lager_service_cls,
         sync_command_cls,
         _admin_user_id,
         _disable_auto_sync,
@@ -478,12 +490,8 @@ class ProductCeleryTaskTest(SimpleTestCase):
 
         product_tasks._scheduled_product_sync_continuation(job)
 
-        lager_service_cls.assert_called_once_with(erp=client)
         sync_command_cls.return_value._sync_current_record.assert_called_once()
-        self.assertIs(
-            sync_command_cls.return_value._sync_current_record.call_args.args[1],
-            lager_service_cls.return_value,
-        )
+        self.assertIsNone(sync_command_cls.return_value._sync_current_record.call_args.args[1])
         finalize_sync.assert_called_once_with(include_images=False, limit=None, erp_nrs=["A-1000"])
 
     @patch("products.tasks._active_product_erp_nrs", return_value=["A-1000", "A-1001"])
@@ -555,6 +563,14 @@ class ProductCeleryTaskTest(SimpleTestCase):
         self.assertEqual(kwargs["context"]["mode"], "selected")
         self.assertEqual(kwargs["context"]["erp_nrs"], ["A-1000", "A-1001"])
         mock_active_erp_nrs.assert_not_called()
+
+
+class StorageStockSelectionTest(SimpleTestCase):
+    def test_virtual_stock_is_optional_and_only_overrides_when_positive(self):
+        self.assertTrue(Storage._meta.get_field("virtual_stock").blank)
+        self.assertEqual(Storage.get_stock.fget(SimpleNamespace(virtual_stock=12, stock=150)), 12)
+        self.assertEqual(Storage.get_stock.fget(SimpleNamespace(virtual_stock=0, stock=150)), 150)
+        self.assertEqual(Storage.get_stock.fget(SimpleNamespace(virtual_stock=None, stock=None)), 0)
 
 
 class PriceMigrationTest(SimpleTestCase):
