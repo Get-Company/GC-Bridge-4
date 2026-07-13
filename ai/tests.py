@@ -179,7 +179,9 @@ class AIRewriteJobAdminTest(TestCase):
 
         target_field_names = [field_name for field_name, _label in form.fields["target_field"].choices]
         self.assertIn("description_de", target_field_names)
-        self.assertIn("name_de", target_field_names)
+        self.assertIn("description_short_de", target_field_names)
+        self.assertNotIn("name_de", target_field_names)
+        self.assertNotIn("sku", target_field_names)
         self.assertEqual(list(form.fields["prompt"].queryset), [])
 
     def test_request_form_uses_unfold_autocomplete_widgets(self):
