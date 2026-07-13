@@ -400,7 +400,7 @@ class Command(MonitoredBaseCommand):
         location_value = artikel_service.get_storage_location() if hasattr(artikel_service, "get_storage_location") else None
         stock = _to_int(stock_value)
         location = location_value
-        if lager_service:
+        if lager_service and (stock is None or location_value in (None, "")):
             lager_kwargs = {"art_nr": product.erp_nr}
             warehouse_number = (
                 artikel_service.get_warehouse_number()
@@ -410,9 +410,9 @@ class Command(MonitoredBaseCommand):
             if warehouse_number is not None:
                 lager_kwargs["lager_nr"] = warehouse_number
             lager_stock, lager_location = lager_service.get_stock_and_location(**lager_kwargs)
-            if lager_stock not in (None, ""):
+            if stock is None and lager_stock not in (None, ""):
                 stock = _to_int(lager_stock)
-            if lager_location not in (None, ""):
+            if location_value in (None, "") and lager_location not in (None, ""):
                 location = lager_location
         storage.stock = stock
         storage.location = location

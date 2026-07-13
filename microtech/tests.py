@@ -240,11 +240,11 @@ class MicrotechSyncProductsCommandTest(TestCase):
         )
         self.assertEqual([image.path for image in product.get_images()], ["second.png", "first.jpg"])
 
-    def test_sync_prefers_lager_stock_over_product_job_stock(self):
+    def test_sync_uses_product_job_stock_without_lager_lookup(self):
         cmd = MicrotechSyncProductsCommand()
         artikel_service = self._build_artikel_service(erp_nr="1008", is_active=True)
-        artikel_service.get_stock.return_value = "12"
-        artikel_service.get_storage_location.return_value = "B2"
+        artikel_service.get_stock.return_value = "150.00"
+        artikel_service.get_storage_location.return_value = "B6f"
         lager_service = self._build_lager_service()
 
         cmd._sync_current_record(
@@ -258,9 +258,9 @@ class MicrotechSyncProductsCommandTest(TestCase):
         )
 
         storage = Product.objects.get(erp_nr="1008").storage
-        self.assertEqual(storage.stock, 5)
-        self.assertEqual(storage.location, "A1")
-        lager_service.get_stock_and_location.assert_called_once_with(art_nr="1008")
+        self.assertEqual(storage.stock, 150)
+        self.assertEqual(storage.location, "B6f")
+        lager_service.get_stock_and_location.assert_not_called()
 
     def test_sync_uses_lager_stock_when_product_job_stock_is_empty(self):
         cmd = MicrotechSyncProductsCommand()
