@@ -3,6 +3,7 @@ import importlib
 from pathlib import Path
 from datetime import datetime, timedelta, timezone as datetime_timezone
 from decimal import Decimal
+from types import SimpleNamespace
 import sqlite3
 from tempfile import TemporaryDirectory
 from tempfile import NamedTemporaryFile
@@ -107,6 +108,14 @@ class ProductSchemaTest(TestCase):
 
 
 class ProductAdminActionConfigurationTest(SimpleTestCase):
+    def test_product_admin_displays_sortable_available_stock(self):
+        admin_instance = ProductAdmin(Product, AdminSite())
+        queryset = admin_instance.get_queryset(RequestFactory().get("/admin/products/product/"))
+
+        self.assertIn("available_stock", ProductAdmin.list_display)
+        self.assertIn("available_stock_value", queryset.query.annotations)
+        self.assertEqual(admin_instance.available_stock(SimpleNamespace(available_stock_value=7)), 7)
+
     def test_product_queryset_actions_are_not_registered_as_unfold_navigation(self):
         request = RequestFactory().get("/admin/products/product/")
         admin_instance = ProductAdmin(Product, AdminSite())

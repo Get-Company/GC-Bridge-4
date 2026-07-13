@@ -18,7 +18,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Case, Count, F, IntegerField, Prefetch, Q, Value, When, Window
-from django.db.models.functions import RowNumber
+from django.db.models.functions import Coalesce, RowNumber
 from django.http import Http404, HttpResponse, HttpResponseRedirect, HttpResponseNotAllowed, JsonResponse
 from django.template.loader import render_to_string
 from django.template.response import TemplateResponse
@@ -436,7 +436,7 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
     change_form_show_cancel_button = BaseAdmin.change_form_show_cancel_button
     list_filter_sheet = BaseAdmin.list_filter_sheet
     list_horizontal_scrollbar_top = BaseAdmin.list_horizontal_scrollbar_top
-    list_display = ("image_preview", "erp_nr", "name", "customs_tariff_number", "is_active", "created_at")
+    list_display = ("image_preview", "erp_nr", "name", "available_stock", "is_active", "created_at")
     list_display_links = list_display
     ordering = ("-is_active", "erp_nr")
     search_fields = ("erp_nr", "sku", "name")
@@ -470,7 +470,13 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
 
     def get_queryset(self, request):
         queryset = super().get_queryset(request)
-        return queryset.prefetch_related(
+        return queryset.select_related("storage").annotate(
+            available_stock_value=Case(
+                When(storage__virtual_stock__gt=0, then=F("storage__virtual_stock")),
+                default=Coalesce("storage__stock", Value(0)),
+                output_field=IntegerField(),
+            )
+        ).prefetch_related(
             Prefetch(
                 "product_images",
                 queryset=ProductImage.objects.select_related("image").order_by("order", "id"),
@@ -511,6 +517,10 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
             '<img src="{}" loading="lazy" style="width:50px;height:50px;object-fit:cover;border-radius:4px;" />',
             image.url,
         )
+
+    @admin.display(description="Verfuegbarer Bestand", ordering="available_stock_value")
+    def available_stock(self, obj: Product) -> int:
+        return obj.available_stock_value
 
     def render_change_form(self, request, context, add=False, change=False, form_url="", obj=None):
         context = {
