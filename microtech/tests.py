@@ -61,6 +61,7 @@ class MicrotechArtikelServiceProductJobTest(SimpleTestCase):
                 "customsTariffNumber": "48203000",
                 "weightGrossKg": "1.25",
                 "weightNetKg": "1.00",
+                "warehouseNumber": 3,
                 "stock": 7,
                 "storageLocation": "A1",
                 "images": ["https://cdn.example.test/img/first.jpg", {"fileName": "second.png"}],
@@ -80,6 +81,7 @@ class MicrotechArtikelServiceProductJobTest(SimpleTestCase):
         self.assertEqual(service.get_customs_tariff_number(), "48203000")
         self.assertEqual(service.get_weight_gross(), Decimal("1.25"))
         self.assertEqual(service.get_weight_net(), Decimal("1.00"))
+        self.assertEqual(service.get_warehouse_number(), 3)
         self.assertEqual(service.get_stock(), 7)
         self.assertEqual(service.get_storage_location(), "A1")
         self.assertEqual(service.get_image_list(), ["first.jpg", "second.png"])
@@ -175,7 +177,7 @@ class MicrotechSyncProductsCommandTest(TestCase):
         # Inline-Stock-Pfad statt des Lager-Fallbacks genommen.
         artikel_service.get_stock.return_value = None
         artikel_service.get_storage_location.return_value = None
-        artikel_service.has_inline_stock_fields.return_value = False
+        artikel_service.get_warehouse_number.return_value = None
         return artikel_service
 
     @staticmethod
@@ -231,7 +233,7 @@ class MicrotechSyncProductsCommandTest(TestCase):
         )
         self.assertEqual([image.path for image in product.get_images()], ["second.png", "first.jpg"])
 
-    def test_sync_uses_product_job_stock_without_lager_lookup(self):
+    def test_sync_prefers_lager_stock_over_product_job_stock(self):
         cmd = MicrotechSyncProductsCommand()
         artikel_service = self._build_artikel_service(erp_nr="1008", is_active=True)
         artikel_service.get_stock.return_value = "12"
@@ -249,14 +251,13 @@ class MicrotechSyncProductsCommandTest(TestCase):
         )
 
         storage = Product.objects.get(erp_nr="1008").storage
-        self.assertEqual(storage.stock, 12)
-        self.assertEqual(storage.location, "B2")
-        lager_service.get_stock_and_location.assert_not_called()
+        self.assertEqual(storage.stock, 5)
+        self.assertEqual(storage.location, "A1")
+        lager_service.get_stock_and_location.assert_called_once_with(art_nr="1008")
 
-    def test_sync_uses_lager_fallback_when_product_job_stock_is_empty(self):
+    def test_sync_uses_lager_stock_when_product_job_stock_is_empty(self):
         cmd = MicrotechSyncProductsCommand()
         artikel_service = self._build_artikel_service(erp_nr="1009", is_active=True)
-        artikel_service.has_inline_stock_fields.return_value = True
         lager_service = self._build_lager_service()
 
         cmd._sync_current_record(
@@ -273,6 +274,24 @@ class MicrotechSyncProductsCommandTest(TestCase):
         self.assertEqual(storage.stock, 5)
         self.assertEqual(storage.location, "A1")
         lager_service.get_stock_and_location.assert_called_once_with(art_nr="1009")
+
+    def test_sync_uses_product_warehouse_for_lager_lookup(self):
+        cmd = MicrotechSyncProductsCommand()
+        artikel_service = self._build_artikel_service(erp_nr="1010", is_active=True)
+        artikel_service.get_warehouse_number.return_value = 3
+        lager_service = self._build_lager_service()
+
+        cmd._sync_current_record(
+            artikel_service,
+            lager_service,
+            tax_map={
+                Decimal("19.00"): self.tax_19,
+                Decimal("7.00"): self.tax_7,
+            },
+            preserve_is_active=False,
+        )
+
+        lager_service.get_stock_and_location.assert_called_once_with(art_nr="1010", lager_nr=3)
 
     def test_sync_preserves_microtech_special_price_without_percentage(self):
         cmd = MicrotechSyncProductsCommand()

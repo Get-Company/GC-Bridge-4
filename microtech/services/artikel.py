@@ -106,9 +106,13 @@ class MicrotechArtikelService(MicrotechDatasetService):
     def get_storage_location(self):
         return self.get_field("storageLocation", silent=True)
 
-    def has_inline_stock_fields(self) -> bool:
-        record = self._current_record()
-        return isinstance(record, dict) and ("stock" in record or "storageLocation" in record)
+    def get_warehouse_number(self) -> int | None:
+        value = self.get_field("warehouseNumber", silent=True)
+        try:
+            warehouse_number = int(value)
+        except (TypeError, ValueError):
+            return None
+        return warehouse_number if warehouse_number > 0 else None
 
     def get_price(self):
         return self.get_field("Vk0.Preis")
@@ -208,6 +212,7 @@ class MicrotechArtikelService(MicrotechDatasetService):
             "customsTariffNumber": product.get("customsTariffNumber"),
             "weightGrossKg": product.get("weightGrossKg"),
             "weightNetKg": product.get("weightNetKg"),
+            "warehouseNumber": product.get("warehouseNumber"),
             "stock": product.get("stock"),
             "storageLocation": product.get("storageLocation"),
         }
