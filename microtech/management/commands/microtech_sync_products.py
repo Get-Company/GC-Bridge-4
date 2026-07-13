@@ -36,9 +36,12 @@ def _to_int(value):
     if value is None or value == "":
         return None
     try:
-        return int(value)
-    except (TypeError, ValueError):
+        decimal_value = Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError):
         return None
+    if decimal_value != decimal_value.to_integral_value():
+        return None
+    return int(decimal_value)
 
 
 def _unique_preserve_order(values: list[str]) -> list[str]:

@@ -5,7 +5,10 @@ from unittest.mock import MagicMock
 from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 
-from microtech.management.commands.microtech_sync_products import Command as MicrotechSyncProductsCommand
+from microtech.management.commands.microtech_sync_products import (
+    Command as MicrotechSyncProductsCommand,
+    _to_int,
+)
 from microtech.management.commands.microtech_update_prices import Command as MicrotechUpdatePricesCommand
 from microtech.management.commands.microtech_update_product import Command as MicrotechUpdateProductCommand
 from microtech.services.base import MicrotechDatasetService
@@ -22,6 +25,10 @@ class _FakeGraphQLClient(MicrotechGraphQLClientService):
 
 
 class MicrotechArtikelServiceProductJobTest(SimpleTestCase):
+    def test_integer_conversion_accepts_microtech_decimal_stock(self):
+        self.assertEqual(_to_int("150.00"), 150)
+        self.assertIsNone(_to_int("150.50"))
+
     def test_range_request_uses_graphql_filter_string(self):
         client = _FakeGraphQLClient({})
         service = MicrotechArtikelService(erp=client)
