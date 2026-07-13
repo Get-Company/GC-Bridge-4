@@ -235,6 +235,7 @@ def _scheduled_product_sync_continuation(job) -> None:
     )
     from microtech.services import MicrotechGraphQLClientService
     from microtech.services.artikel import MicrotechArtikelService
+    from microtech.services.lager import MicrotechLagerService
     from django.contrib.contenttypes.models import ContentType
     from products.models import Product as ProductModel
     from products.services import disable_product_auto_sync
@@ -253,7 +254,7 @@ def _scheduled_product_sync_continuation(job) -> None:
     result = client.product_list_job(str(job.external_job_id))
     products = result.get("products") or []
     artikel_service = MicrotechArtikelService(erp=client)
-    lager_service = None
+    lager_service = MicrotechLagerService(erp=client)
     tax_map = SyncCommand._ensure_taxes()
     cmd = SyncCommand()
     admin_user_id = _get_admin_user_id()

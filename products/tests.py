@@ -449,6 +449,43 @@ class PriceIncreaseDocumentRenderingTest(SimpleTestCase):
 
 
 class ProductCeleryTaskTest(SimpleTestCase):
+    @patch("products.tasks._finalize_scheduled_product_sync")
+    @patch("products.tasks.TaskIssueCollector")
+    @patch("products.services.disable_product_auto_sync")
+    @patch("microtech.management.commands.microtech_sync_products._get_admin_user_id", return_value=None)
+    @patch("microtech.management.commands.microtech_sync_products.Command")
+    @patch("microtech.services.lager.MicrotechLagerService")
+    @patch("microtech.services.artikel.MicrotechArtikelService")
+    @patch("microtech.services.MicrotechGraphQLClientService")
+    def test_product_sync_continuation_passes_lager_service_to_import(
+        self,
+        microtech_client_cls,
+        artikel_service_cls,
+        lager_service_cls,
+        sync_command_cls,
+        _admin_user_id,
+        _disable_auto_sync,
+        _issue_collector,
+        finalize_sync,
+    ):
+        client = microtech_client_cls.return_value
+        client.product_list_job.return_value = {"products": [{"erpNumber": "A-1000"}]}
+        artikel_service_cls.return_value.range_eof.return_value = False
+        job = SimpleNamespace(
+            context={"erp_nrs": ["A-1000"], "include_images": False},
+            external_job_id="remote-1000",
+        )
+
+        product_tasks._scheduled_product_sync_continuation(job)
+
+        lager_service_cls.assert_called_once_with(erp=client)
+        sync_command_cls.return_value._sync_current_record.assert_called_once()
+        self.assertIs(
+            sync_command_cls.return_value._sync_current_record.call_args.args[1],
+            lager_service_cls.return_value,
+        )
+        finalize_sync.assert_called_once_with(include_images=False, limit=None, erp_nrs=["A-1000"])
+
     @patch("products.tasks._active_product_erp_nrs", return_value=["A-1000", "A-1001"])
     @patch("microtech.services.MicrotechJobSentinelService")
     def test_scheduled_product_sync_task_starts_sentinel_import_for_active_django_products(
