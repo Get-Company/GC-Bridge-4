@@ -15,7 +15,7 @@ from microtech.services.base import MicrotechDatasetService
 from microtech.services.artikel import MicrotechArtikelService
 from microtech.services.graphql_client import MicrotechGraphQLClientService
 from microtech.services.product_payload import MicrotechProductPayloadService
-from products.models import Price, Product, ProductImage, Tax
+from products.models import Price, Product, ProductImage, Storage, Tax
 from shopware.models import ShopwareSettings
 
 
@@ -281,6 +281,28 @@ class MicrotechSyncProductsCommandTest(TestCase):
         self.assertEqual(storage.stock, 5)
         self.assertEqual(storage.location, "A1")
         lager_service.get_stock_and_location.assert_called_once_with(art_nr="1009")
+
+    def test_sync_keeps_existing_stock_when_graph_stock_is_invalid(self):
+        product = Product.objects.create(erp_nr="1009a", name="Bestehend")
+        storage = Storage.objects.create(product=product, stock=150)
+        cmd = MicrotechSyncProductsCommand()
+        artikel_service = self._build_artikel_service(erp_nr=product.erp_nr, is_active=True)
+        artikel_service.get_stock.return_value = "ungueltig"
+        artikel_service.get_storage_location.return_value = "B6f"
+
+        cmd._sync_current_record(
+            artikel_service,
+            None,
+            tax_map={
+                Decimal("19.00"): self.tax_19,
+                Decimal("7.00"): self.tax_7,
+            },
+            preserve_is_active=False,
+        )
+
+        storage.refresh_from_db()
+        self.assertEqual(storage.stock, 150)
+        self.assertEqual(storage.location, "B6f")
 
     def test_sync_uses_product_warehouse_for_lager_lookup(self):
         cmd = MicrotechSyncProductsCommand()

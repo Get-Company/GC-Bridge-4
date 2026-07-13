@@ -6,6 +6,7 @@ from django.core.management.base import CommandError
 from core.management.base import MonitoredBaseCommand
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
+from loguru import logger
 
 from microtech.services.artikel import MicrotechArtikelService
 from microtech.services.lager import MicrotechLagerService
@@ -414,7 +415,15 @@ class Command(MonitoredBaseCommand):
                 stock = _to_int(lager_stock)
             if location_value in (None, "") and lager_location not in (None, ""):
                 location = lager_location
-        storage.stock = stock
+        if stock is None:
+            logger.warning(
+                "Microtech sync: Bestand fuer Artikel {} ist ungueltig ({!r}); bestehender Bestand {} bleibt erhalten.",
+                product.erp_nr,
+                stock_value,
+                storage.stock,
+            )
+        else:
+            storage.stock = stock
         storage.location = location
         storage.save()
 
