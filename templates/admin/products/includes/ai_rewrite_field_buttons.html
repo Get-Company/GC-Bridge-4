@@ -66,7 +66,13 @@
           continue;
         }
 
-        const label = document.querySelector(`label[for="${CSS.escape(field.id)}"]`);
+        // Widgets like the WYSIWYG/Trix editor give the underlying input a
+        // synthetic id (e.g. "wysiwyg-description_de"), so the label can't be
+        // found via field.id. Django's admin always labels the field itself
+        // as "id_<field name>", regardless of widget, so match on that first.
+        const label =
+          document.querySelector(`label[for="id_${CSS.escape(config.field)}"]`) ||
+          document.querySelector(`label[for="${CSS.escape(field.id)}"]`);
         const labelContainer = label ? (label.parentElement || label) : null;
         if (!labelContainer || labelContainer.querySelector("[data-ai-rewrite-button='true']")) {
           continue;
