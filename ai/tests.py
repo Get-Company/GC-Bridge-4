@@ -1,6 +1,8 @@
 from unittest.mock import patch
 
+from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase
+from django.urls import reverse
 
 from ai.models import AIProviderConfig, AIRewriteJob, AIRewritePrompt
 from ai.services import AIRewriteService
@@ -135,3 +137,42 @@ class AIRewriteTaskTest(TestCase):
         run_ai_rewrite_job(job.pk)
         job.refresh_from_db()
         self.assertEqual(job.status, AIRewriteJob.Status.READY)
+
+
+class AIRewriteCreateViewTest(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_superuser("admin", "a@b.de", "pw")
+        self.client.force_login(self.user)
+        self.provider = AIProviderConfig.objects.create(name="P", model_name="m", api_key="k")
+        self.prompt = AIRewritePrompt.objects.create(name="SEO", system_prompt="x")
+        self.product = Product.objects.create(erp_nr="T-1", name="Test", description_de="<p>alt</p>")
+
+    def test_get_renders_with_product_and_field(self):
+        url = reverse("admin:ai_airewritejob_create")
+        resp = self.client.get(url, {"product": self.product.pk, "field": "description_de"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "description_de")
+
+    @patch("ai.admin.run_ai_rewrite_job.delay")
+    def test_post_creates_job_and_redirects(self, mock_delay):
+        mock_delay.return_value.id = "task-123"
+        url = reverse("admin:ai_airewritejob_create")
+        resp = self.client.post(url, {
+            "product": self.product.pk, "field": "description_de",
+            "prompt": self.prompt.pk, "provider": self.provider.pk,
+        })
+        job = AIRewriteJob.objects.get()
+        self.assertEqual(job.field, "description_de")
+        self.assertEqual(job.status, AIRewriteJob.Status.QUEUED)
+        self.assertEqual(job.celery_task_id, "task-123")
+        mock_delay.assert_called_once_with(job.pk)
+        self.assertRedirects(resp, reverse("admin:ai_airewritejob_change", args=(job.pk,)))
+
+    def test_post_rejects_field_outside_whitelist(self):
+        url = reverse("admin:ai_airewritejob_create")
+        resp = self.client.post(url, {
+            "product": self.product.pk, "field": "sku",
+            "prompt": self.prompt.pk, "provider": self.provider.pk,
+        })
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(AIRewriteJob.objects.count(), 0)

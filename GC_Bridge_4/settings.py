@@ -580,12 +580,6 @@ UNFOLD = {
                 "collapsible": True,
                 "items": [
                     {
-                        "title": _("Rewrite erzeugen"),
-                        "icon": "edit_note",
-                        "link": reverse_lazy("admin:ai_airewritejob_request"),
-                        "permission": sidebar_model_add_permission("ai", "AIRewriteJob"),
-                    },
-                    {
                         "title": _("Rewrite Jobs"),
                         "icon": "auto_awesome",
                         "link": reverse_lazy("admin:ai_airewritejob_changelist"),
