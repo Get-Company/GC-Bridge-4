@@ -7,15 +7,19 @@
 
 {% block content %}
 <div id="content-main" class="flex flex-col gap-6">
-  <div class="max-w-5xl">
+  <div class="max-w-3xl">
     <div class="rounded-xl border border-base-200 bg-white px-6 py-6 shadow-sm dark:border-base-800 dark:bg-base-900">
       <div class="flex flex-col gap-1 border-b border-base-200 pb-5 dark:border-base-800">
         <h1 class="text-2xl font-semibold text-font-important-light dark:text-font-important-dark">{{ title }}</h1>
-        <p class="text-sm text-font-subtle-light dark:text-font-subtle-dark">{{ subtitle }}</p>
+        <p class="text-sm text-font-subtle-light dark:text-font-subtle-dark">
+          Produkt: <strong>{{ product }}</strong> · Feld: <strong>{{ field_name }}</strong>
+        </p>
       </div>
 
       <form method="post" novalidate class="mt-6 flex flex-col gap-6">
         {% csrf_token %}
+        <input type="hidden" name="product" value="{{ product.pk }}">
+        <input type="hidden" name="field" value="{{ field_name }}">
 
         {% if form.non_field_errors %}
           <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
@@ -24,15 +28,8 @@
         {% endif %}
 
         <div class="grid gap-6 lg:grid-cols-2">
-          <div class="lg:col-span-2">
-            {% include "unfold/helpers/field.html" with field=form.product %}
-          </div>
-          <div>
-            {% include "unfold/helpers/field.html" with field=form.target_field %}
-          </div>
-          <div>
-            {% include "unfold/helpers/field.html" with field=form.prompt %}
-          </div>
+          <div>{% include "unfold/helpers/field.html" with field=form.prompt %}</div>
+          <div>{% include "unfold/helpers/field.html" with field=form.provider %}</div>
         </div>
 
         <div class="flex flex-wrap items-center gap-3 border-t border-base-200 pt-5 dark:border-base-800">

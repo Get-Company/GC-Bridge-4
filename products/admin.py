@@ -27,6 +27,7 @@ from django.utils.text import slugify
 from django.utils import timezone
 from django.utils.html import format_html, format_html_join
 from django.utils.safestring import mark_safe
+from django.utils.translation import gettext_lazy as _
 from modeltranslation.admin import TabbedTranslationAdmin
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_RIGHT
@@ -51,9 +52,8 @@ from django.views.generic import TemplateView
 from pypdf import PdfReader, PdfWriter
 from weasyprint import HTML as WeasyHTML
 
-from ai.models import AIRewriteJob, AIRewritePrompt
 from ai.rewrite_fields import get_rewriteable_product_field_names
-from ai.services import AIRewriteService
+from emails.models import EmailCampaign
 from unfold.contrib.filters.admin import (
     BooleanRadioFilter,
     RangeDateTimeFilter,
@@ -91,6 +91,25 @@ from .models import (
     Storage,
     Tax,
 )
+
+
+class EmailCampaignFilter(admin.SimpleListFilter):
+    title = _("E-Mail-Kampagne")
+    parameter_name = "email_campaign"
+
+    def lookups(self, request, model_admin):
+        return list(
+            EmailCampaign.objects.order_by("-created_at", "internal_title").values_list("pk", "internal_title")
+        )
+
+    def queryset(self, request, queryset):
+        campaign_id = self.value()
+        if not campaign_id:
+            return queryset
+        return queryset.filter(
+            Q(email_campaign_products__campaign_id=campaign_id)
+            | Q(email_campaign_components__campaign_id=campaign_id)
+        ).distinct()
 
 
 class FullWidthHeadingBar(Flowable):
@@ -452,6 +471,7 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
         ("is_active", BooleanRadioFilter),
         ("tax", RelatedDropdownFilter),
         ("categories", RelatedDropdownFilter),
+        EmailCampaignFilter,
         ("created_at", RangeDateTimeFilter),
     ]
     inlines = (ProductImageInline, ProductPropertyInline, StorageInline, PriceInline)
@@ -502,11 +522,6 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
                 "set-virtual-stock/<int:object_id>/",
                 self.admin_site.admin_view(self.set_virtual_stock),
                 name="products_product_set_virtual_stock",
-            ),
-            path(
-                "<path:object_id>/request-ai-rewrite/",
-                self.admin_site.admin_view(self.request_ai_rewrite_for_field),
-                name="products_product_request_ai_rewrite",
             ),
         ] + super().get_urls()
 
@@ -593,11 +608,8 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
         context = {
             **context,
             "ai_rewrite_field_targets_json": self._build_ai_rewrite_field_targets_json(context),
-            "ai_rewrite_create_url": (
-                reverse("admin:products_product_request_ai_rewrite", args=(obj.pk,))
-                if obj and obj.pk
-                else ""
-            ),
+            "ai_rewrite_create_url": reverse("admin:ai_airewritejob_create"),
+            "ai_rewrite_product_id": obj.pk if obj and obj.pk else "",
         }
         return super().render_change_form(
             request,
@@ -613,97 +625,8 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
         if adminform is None:
             return []
         rewriteable_field_names = get_rewriteable_product_field_names()
-        form_field_names = set(adminform.form.fields.keys()) & rewriteable_field_names
-        product_content_type = ContentType.objects.get_for_model(Product)
-        prompt_counts: dict[str, int] = {}
-        for target_field in (
-            AIRewritePrompt.objects.filter(
-                is_active=True,
-                content_type=product_content_type,
-                target_field__in=form_field_names,
-            )
-            .order_by("target_field")
-            .values_list("target_field", flat=True)
-        ):
-            prompt_counts[target_field] = prompt_counts.get(target_field, 0) + 1
-        payload = [
-            {
-                "field": field_name,
-                "label": "AI",
-                "title": (
-                    "Rewrite mit Standard-Prompt erzeugen"
-                    if prompt_counts.get(field_name, 0) == 1
-                    else "Rewrite fuer dieses Feld anlegen"
-                ),
-                "hasMultiplePrompts": prompt_counts.get(field_name, 0) > 1,
-            }
-            for field_name in sorted(form_field_names)
-        ]
-        return payload
-
-    def request_ai_rewrite_for_field(self, request, object_id: str):
-        if request.method != "POST":
-            return HttpResponseNotAllowed(["POST"])
-        if not request.user.has_perm("ai.add_airewritejob"):
-            self.message_user(request, "Keine Berechtigung fuer AI Rewrite Jobs.", level=messages.ERROR)
-            return self._redirect_to_change_page(object_id)
-
-        product = self.get_object(request, object_id)
-        if not product:
-            self.message_user(request, "Produkt nicht gefunden.", level=messages.ERROR)
-            return self._redirect_to_change_page(object_id)
-
-        target_field = str(request.POST.get("target_field") or "").strip()
-        if not target_field:
-            self.message_user(request, "Kein Zielfeld uebergeben.", level=messages.ERROR)
-            return self._redirect_to_change_page(object_id)
-
-        product_content_type = ContentType.objects.get_for_model(Product)
-        prompt_queryset = (
-            AIRewritePrompt.objects.filter(
-                is_active=True,
-                content_type=product_content_type,
-                target_field=target_field,
-            )
-            .select_related("provider")
-            .order_by("name", "pk")
-        )
-        prompt_count = prompt_queryset.count()
-
-        if prompt_count != 1:
-            if prompt_count == 0:
-                self.message_user(
-                    request,
-                    f"Kein aktiver AI-Prompt fuer das Feld '{target_field}' vorhanden. Bitte im Request-Formular einen Prompt auswaehlen oder anlegen.",
-                    level=messages.WARNING,
-                )
-            request_url = reverse("admin:ai_airewritejob_request")
-            return HttpResponseRedirect(
-                f"{request_url}?product={product.pk}&target_field={target_field}"
-            )
-
-        prompt = prompt_queryset.first()
-        if prompt is None:
-            self.message_user(request, "Kein passender Prompt gefunden.", level=messages.ERROR)
-            return self._redirect_to_change_page(object_id)
-
-        job = AIRewriteService().request_rewrite(
-            content_object=product,
-            prompt=prompt,
-            requested_by=request.user,
-        )
-        if job.status == AIRewriteJob.Status.FAILED:
-            self.message_user(
-                request,
-                f"Rewrite fehlgeschlagen: {job.error_message}",
-                level=messages.ERROR,
-            )
-        else:
-            self.message_user(
-                request,
-                f"Rewrite-Job fuer {product.erp_nr} / {target_field} erzeugt.",
-            )
-        return HttpResponseRedirect(reverse("admin:ai_airewritejob_change", args=(job.pk,)))
+        form_field_names = sorted(set(adminform.form.fields.keys()) & rewriteable_field_names)
+        return [{"field": field_name, "label": "AI"} for field_name in form_field_names]
 
     @action(
         description="Produkt komplett synchronisieren",
@@ -3544,20 +3467,33 @@ class PropertyValueAdmin(TabbedTranslationAdmin, BaseAdmin):
 
 
 @admin.register(Category)
-class CategoryAdmin(BaseAdmin):
+class CategoryAdmin(TabbedTranslationAdmin, BaseAdmin):
+    formfield_overrides = {
+        **getattr(TabbedTranslationAdmin, "formfield_overrides", {}),
+        **BaseAdmin.formfield_overrides,
+    }
+    compressed_fields = BaseAdmin.compressed_fields
+    warn_unsaved_form = BaseAdmin.warn_unsaved_form
+    change_form_show_cancel_button = BaseAdmin.change_form_show_cancel_button
+    list_filter_sheet = BaseAdmin.list_filter_sheet
     list_display = (
         "name",
+        "sw6_id",
         "sku",
         "slug",
         "legacy_erp_nr",
         "parent",
+        "is_active",
+        "is_visible",
         "sort_order",
         "created_at",
     )
     list_display_links = ("name",)
-    search_fields = ("name", "sku", "slug", "legacy_erp_nr", "legacy_api_id", "parent__name")
+    search_fields = ("name", "sw6_id", "sku", "slug", "legacy_erp_nr", "legacy_api_id", "parent__name")
     list_filter = [
         ("parent", RelatedDropdownFilter),
+        ("is_active", BooleanRadioFilter),
+        ("is_visible", BooleanRadioFilter),
         ("created_at", RangeDateTimeFilter),
     ]
     readonly_fields = BaseAdmin.readonly_fields + (
@@ -3688,6 +3624,7 @@ class CategoryAdmin(BaseAdmin):
         categories = Category.objects.order_by("tree_id", "lft").values(
             "id",
             "name",
+            "sw6_id",
             "sku",
             "slug",
             "parent_id",
@@ -3701,6 +3638,7 @@ class CategoryAdmin(BaseAdmin):
             {
                 "id": row["id"],
                 "name": row["name"],
+                "sw6_id": row["sw6_id"] or "",
                 "sku": row["sku"] or "",
                 "slug": row["slug"],
                 "parent_id": row["parent_id"],
@@ -3779,6 +3717,7 @@ class CategoryAdmin(BaseAdmin):
             "category": {
                 "id": category.pk,
                 "name": category.name,
+                "sw6_id": category.sw6_id or "",
                 "sku": category.sku or "",
                 "slug": category.slug,
                 "legacy_erp_nr": category.legacy_erp_nr,
