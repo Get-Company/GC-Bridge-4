@@ -108,6 +108,11 @@ class AIRewriteJob(BaseModel):
     )
     source_snapshot = models.TextField(blank=True, default="", verbose_name=_("Quellinhalt"))
     result_text = models.TextField(blank=True, default="", verbose_name=_("Ergebnis"))
+    provider_response = models.TextField(
+        blank=True,
+        default="",
+        verbose_name=_("KI-Rueckgabe (roh)"),
+    )
     rendered_prompt = models.TextField(blank=True, default="", verbose_name=_("Gerenderter Prompt"))
     error_message = models.TextField(blank=True, default="", verbose_name=_("Fehler"))
     celery_task_id = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Celery Task-ID"))

@@ -21,6 +21,22 @@ class AIProviderService(BaseService):
         user_prompt: str,
         temperature: float | None = None,
     ) -> str:
+        result_text, _provider_response = self.rewrite_text_with_response(
+            provider=provider,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            temperature=temperature,
+        )
+        return result_text
+
+    def rewrite_text_with_response(
+        self,
+        *,
+        provider: AIProviderConfig,
+        system_prompt: str,
+        user_prompt: str,
+        temperature: float | None = None,
+    ) -> tuple[str, str]:
         api_key = (provider.api_key or "").strip()
         if not api_key:
             raise ValueError(f"AI Provider '{provider.name}' hat keinen API-Key.")
@@ -53,7 +69,10 @@ class AIProviderService(BaseService):
         except urllib.error.URLError as exc:
             raise RuntimeError("AI request failed (connection error)") from exc
 
-        return self._extract_message_content(parsed)
+        return (
+            self._extract_message_content(parsed),
+            json.dumps(parsed, ensure_ascii=False, indent=2, default=str),
+        )
 
     @staticmethod
     def _extract_message_content(payload: dict[str, Any]) -> str:
@@ -73,4 +92,3 @@ class AIProviderService(BaseService):
             if result:
                 return result
         raise RuntimeError("AI response enthaelt keinen Textinhalt.")
-

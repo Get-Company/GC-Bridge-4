@@ -41,6 +41,9 @@ class AIRewriteJobCreateForm(forms.Form):
         self.product = product
         self.category = category
         self.field_name = field
+        if not self.is_bound:
+            self.initial.setdefault("prompt", self.fields["prompt"].queryset.first())
+            self.initial.setdefault("provider", self.fields["provider"].queryset.first())
 
     def clean(self):
         cleaned = super().clean()
@@ -145,7 +148,7 @@ class AIRewriteJobAdmin(BaseAdmin):
     readonly_fields = BaseAdmin.readonly_fields + (
         "target_object", "field", "prompt", "provider", "status",
         "source_snapshot_preview", "rendered_prompt", "error_message",
-        "celery_task_id", "requested_by", "applied_at",
+        "provider_response", "celery_task_id", "requested_by", "applied_at",
     )
     fieldsets = (
         ("Ergebnis", {
@@ -153,7 +156,7 @@ class AIRewriteJobAdmin(BaseAdmin):
             "description": "Ergebnis pruefen, bei Bedarf bearbeiten und uebernehmen.",
         }),
         ("Kontext", {
-            "fields": ("target_object", "field", "prompt", "provider", "rendered_prompt",
+            "fields": ("target_object", "field", "prompt", "provider", "rendered_prompt", "provider_response",
                        "celery_task_id", "requested_by", "applied_at", "created_at", "updated_at"),
             "classes": ("collapse",),
         }),

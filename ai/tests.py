@@ -109,7 +109,10 @@ class AIRewriteServiceTest(TestCase):
         self.assertEqual(job.target, self.category)
         self.assertEqual(job.source_snapshot, "Alt")
 
-    @patch("ai.services.rewrite.AIProviderService.rewrite_text", return_value="<p>neu</p>")
+    @patch(
+        "ai.services.rewrite.AIProviderService.rewrite_text_with_response",
+        return_value=("<p>neu</p>", '{"choices": [{"message": {"content": "<p>neu</p>"}}]}'),
+    )
     def test_execute_sets_ready(self, _mock):
         job = AIRewriteService().create_job(
             product=self.product, field="description_de",
@@ -119,8 +122,9 @@ class AIRewriteServiceTest(TestCase):
         job.refresh_from_db()
         self.assertEqual(job.status, AIRewriteJob.Status.READY)
         self.assertEqual(job.result_text, "<p>neu</p>")
+        self.assertIn('"choices"', job.provider_response)
 
-    @patch("ai.services.rewrite.AIProviderService.rewrite_text", side_effect=RuntimeError("boom"))
+    @patch("ai.services.rewrite.AIProviderService.rewrite_text_with_response", side_effect=RuntimeError("boom"))
     def test_execute_failure_sets_failed(self, _mock):
         job = AIRewriteService().create_job(
             product=self.product, field="description_de",
@@ -162,7 +166,10 @@ class AIRewriteServiceTest(TestCase):
 
 
 class AIRewriteTaskTest(TestCase):
-    @patch("ai.services.rewrite.AIProviderService.rewrite_text", return_value="<p>neu</p>")
+    @patch(
+        "ai.services.rewrite.AIProviderService.rewrite_text_with_response",
+        return_value=("<p>neu</p>", '{"choices": [{"message": {"content": "<p>neu</p>"}}]}'),
+    )
     def test_task_executes_job(self, _mock):
         provider = AIProviderConfig.objects.create(name="P", model_name="m", api_key="k")
         prompt = AIRewritePrompt.objects.create(name="SEO", system_prompt="x")
@@ -194,6 +201,13 @@ class AIRewriteCreateViewTest(TestCase):
         resp = self.client.get(url, {"product": self.product.pk, "field": "description_de"})
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "description_de")
+
+    def test_get_preselects_active_prompt_and_provider(self):
+        url = reverse("admin:ai_airewritejob_create")
+        resp = self.client.get(url, {"product": self.product.pk, "field": "description_de"})
+
+        self.assertEqual(resp.context["form"].initial["prompt"], self.prompt)
+        self.assertEqual(resp.context["form"].initial["provider"], self.provider)
 
     def test_get_renders_with_category_and_field(self):
         url = reverse("admin:ai_airewritejob_create")

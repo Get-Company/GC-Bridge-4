@@ -63,7 +63,7 @@ class AIRewriteService(BaseService):
         rendered = self._render_user_prompt(job)
         job.rendered_prompt = rendered
         try:
-            job.result_text = self.provider_service.rewrite_text(
+            job.result_text, job.provider_response = self.provider_service.rewrite_text_with_response(
                 provider=job.provider,
                 system_prompt=job.prompt.system_prompt,
                 user_prompt=rendered,
@@ -73,7 +73,16 @@ class AIRewriteService(BaseService):
         except Exception as exc:  # noqa: BLE001 - Fehler landet im Job
             job.status = AIRewriteJob.Status.FAILED
             job.error_message = str(exc)
-        job.save(update_fields=["rendered_prompt", "result_text", "status", "error_message", "updated_at"])
+        job.save(
+            update_fields=[
+                "rendered_prompt",
+                "result_text",
+                "provider_response",
+                "status",
+                "error_message",
+                "updated_at",
+            ]
+        )
         return job
 
     @transaction.atomic
