@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 from django import forms
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.http import HttpResponseRedirect
 from django.urls import path, reverse
+from django.utils.html import format_html
+from django.utils.safestring import mark_safe
 from django.views.generic import FormView
+from unfold.contrib.forms.widgets import WYSIWYG_CLASSES
+from unfold.decorators import action
 from unfold.views import UnfoldModelAdminViewMixin
 from unfold.widgets import UnfoldAdminSelect2Widget
 
@@ -103,9 +107,27 @@ class AIRewritePromptAdmin(BaseAdmin):
 
 @admin.register(AIRewriteJob)
 class AIRewriteJobAdmin(BaseAdmin):
-    list_display = ("__str__", "product", "field", "prompt", "provider", "status", "created_at")
+    list_display = ("__str__", "product", "field", "prompt", "provider", "status", "requested_by", "created_at")
     search_fields = ("product__erp_nr", "product__name", "field", "prompt__name", "result_text")
     list_filter = ("status", "prompt", "provider", "created_at")
+    actions_detail = ("apply_rewrite_detail",)
+    change_form_template = "admin/ai/airewritejob/change_form.html"
+    readonly_fields = BaseAdmin.readonly_fields + (
+        "product", "field", "prompt", "provider", "status",
+        "source_snapshot_preview", "rendered_prompt", "error_message",
+        "celery_task_id", "requested_by", "applied_at",
+    )
+    fieldsets = (
+        ("Ergebnis", {
+            "fields": ("status", "source_snapshot_preview", "result_text", "error_message"),
+            "description": "Ergebnis pruefen, bei Bedarf bearbeiten und uebernehmen.",
+        }),
+        ("Kontext", {
+            "fields": ("product", "field", "prompt", "provider", "rendered_prompt",
+                       "celery_task_id", "requested_by", "applied_at", "created_at", "updated_at"),
+            "classes": ("collapse",),
+        }),
+    )
 
     def get_urls(self):
         create_view = self.admin_site.admin_view(
@@ -114,3 +136,28 @@ class AIRewriteJobAdmin(BaseAdmin):
         return [
             path("new/", create_view, name="ai_airewritejob_create"),
         ] + super().get_urls()
+
+    @admin.display(description="Aktueller Quellinhalt")
+    def source_snapshot_preview(self, obj: AIRewriteJob):
+        value = obj.source_snapshot or "<p><em>Kein Inhalt.</em></p>"
+        return format_html(
+            '<div class="max-w-4xl relative"><div class="trix-content {}">{}</div></div>',
+            " ".join(WYSIWYG_CLASSES), mark_safe(value),
+        )
+
+    @action(description="In Feld uebernehmen", icon="task_alt")
+    def apply_rewrite_detail(self, request, object_id: str):
+        job = self.get_object(request, object_id)
+        if not job:
+            self.message_user(request, "Rewrite-Job nicht gefunden.", level=messages.ERROR)
+            return HttpResponseRedirect(reverse("admin:ai_airewritejob_changelist"))
+        if job.status not in (AIRewriteJob.Status.READY, AIRewriteJob.Status.APPLIED):
+            self.message_user(request, "Job hat noch kein Ergebnis.", level=messages.WARNING)
+            return HttpResponseRedirect(reverse("admin:ai_airewritejob_change", args=(job.pk,)))
+        try:
+            AIRewriteService().apply(job=job)
+        except Exception as exc:
+            self.message_user(request, f"Konnte nicht uebernommen werden: {exc}", level=messages.ERROR)
+        else:
+            self.message_user(request, "Ergebnis wurde in das Produktfeld uebernommen.")
+        return HttpResponseRedirect(reverse("admin:ai_airewritejob_change", args=(job.pk,)))

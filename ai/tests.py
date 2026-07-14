@@ -1,9 +1,12 @@
 from unittest.mock import patch
 
+from django.contrib.admin.sites import AdminSite
 from django.contrib.auth import get_user_model
-from django.test import SimpleTestCase, TestCase
+from django.contrib.messages.storage.fallback import FallbackStorage
+from django.test import RequestFactory, SimpleTestCase, TestCase
 from django.urls import reverse
 
+from ai.admin import AIRewriteJobAdmin
 from ai.models import AIProviderConfig, AIRewriteJob, AIRewritePrompt
 from ai.services import AIRewriteService
 from ai.services.provider import AIProviderService
@@ -176,3 +179,44 @@ class AIRewriteCreateViewTest(TestCase):
         })
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(AIRewriteJob.objects.count(), 0)
+
+
+class AIRewriteJobWorkspaceTest(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_superuser("admin2", "a2@b.de", "pw")
+        self.client.force_login(self.user)
+        self.provider = AIProviderConfig.objects.create(name="P", model_name="m", api_key="k")
+        self.prompt = AIRewritePrompt.objects.create(name="SEO", system_prompt="x")
+        self.product = Product.objects.create(erp_nr="T-1", name="Test", description_de="<p>alt</p>")
+
+    def _job(self, **overrides):
+        data = dict(product=self.product, field="description_de", prompt=self.prompt,
+                    provider=self.provider, source_snapshot="<p>alt</p>")
+        data.update(overrides)
+        return AIRewriteJob.objects.create(**data)
+
+    def _request(self):
+        request = RequestFactory().post("/")
+        request.user = self.user
+        setattr(request, "session", self.client.session)
+        setattr(request, "_messages", FallbackStorage(request))
+        return request
+
+    def test_change_page_renders_for_ready_job(self):
+        job = self._job(status=AIRewriteJob.Status.READY, result_text="<p>neu</p>")
+        resp = self.client.get(reverse("admin:ai_airewritejob_change", args=(job.pk,)))
+        self.assertEqual(resp.status_code, 200)
+
+    def test_change_page_shows_processing_hint_for_queued_job(self):
+        job = self._job(status=AIRewriteJob.Status.QUEUED)
+        resp = self.client.get(reverse("admin:ai_airewritejob_change", args=(job.pk,)))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "verarbeitet")
+
+    def test_apply_detail_writes_field(self):
+        job = self._job(status=AIRewriteJob.Status.READY, result_text="<p>neu</p>")
+        admin_obj = AIRewriteJobAdmin(AIRewriteJob, AdminSite())
+        admin_obj.apply_rewrite_detail(self._request(), str(job.pk))
+        job.refresh_from_db(); self.product.refresh_from_db()
+        self.assertEqual(self.product.description_de, "<p>neu</p>")
+        self.assertEqual(job.status, AIRewriteJob.Status.APPLIED)
