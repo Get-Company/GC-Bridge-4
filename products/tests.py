@@ -194,39 +194,9 @@ class ProductAdminActionConfigurationTest(SimpleTestCase):
         queryset = admin_instance.get_queryset(RequestFactory().get("/admin/products/product/"))
 
         self.assertIn("available_stock", ProductAdmin.list_display)
-        self.assertIn("virtual_stock_input", ProductAdmin.list_display)
+        self.assertNotIn("virtual_stock_input", ProductAdmin.list_display)
         self.assertIn("available_stock_value", queryset.query.annotations)
         self.assertEqual(admin_instance.available_stock(SimpleNamespace(available_stock_value=7)), 7)
-
-    def test_product_admin_renders_virtual_stock_input(self):
-        admin_instance = ProductAdmin(Product, AdminSite())
-        product = SimpleNamespace(pk=7, erp_nr="A-1000", storage=SimpleNamespace(virtual_stock=12))
-
-        html = admin_instance.virtual_stock_input(product)
-
-        self.assertIn('value="12"', html)
-        self.assertIn("data-virtual-stock-url", html)
-        self.assertIn("set-virtual-stock/7/", html)
-
-    @patch("products.admin.Storage.objects.get_or_create")
-    def test_product_admin_sets_virtual_stock_from_list_input(self, get_or_create):
-        request = RequestFactory().post("/admin/products/product/set-virtual-stock/7/", {"virtual_stock": "12"})
-        request.user = SimpleNamespace()
-        product = SimpleNamespace(pk=7, erp_nr="A-1000")
-        storage = SimpleNamespace(virtual_stock=0, get_stock=150, save=Mock())
-        get_or_create.return_value = (storage, False)
-        admin_instance = ProductAdmin(Product, AdminSite())
-        admin_instance.get_object = Mock(return_value=product)
-        admin_instance.has_change_permission = Mock(return_value=True)
-        admin_instance.log_change = Mock()
-
-        response = admin_instance.set_virtual_stock(request, 7)
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(json.loads(response.content), {"virtual_stock": 12, "available_stock": 150})
-        self.assertEqual(storage.virtual_stock, 12)
-        storage.save.assert_called_once_with(update_fields=("virtual_stock", "updated_at"))
-        admin_instance.log_change.assert_called_once_with(request, product, "Virtueller Bestand auf 12 gesetzt.")
 
     def test_product_queryset_actions_are_not_registered_as_unfold_navigation(self):
         request = RequestFactory().get("/admin/products/product/")

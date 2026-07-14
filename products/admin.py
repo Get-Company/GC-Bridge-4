@@ -462,7 +462,6 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
         "image_preview",
         "erp_nr",
         "name",
-        "virtual_stock_input",
         "available_stock",
         "is_active",
         "created_at",
@@ -519,15 +518,6 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
         change_url = reverse("admin:products_product_change", args=(object_id,))
         return HttpResponseRedirect(change_url)
 
-    def get_urls(self):
-        return [
-            path(
-                "set-virtual-stock/<int:object_id>/",
-                self.admin_site.admin_view(self.set_virtual_stock),
-                name="products_product_set_virtual_stock",
-            ),
-        ] + super().get_urls()
-
     def _build_action_form(self, request):
         form = self.action_form(request.POST)
         form.fields["action"].choices = self.get_action_choices(request)
@@ -552,60 +542,6 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
     @admin.display(description="Verfuegbarer Bestand", ordering="available_stock_value")
     def available_stock(self, obj: Product) -> int:
         return obj.available_stock_value
-
-    @admin.display(description="Virtueller Bestand")
-    def virtual_stock_input(self, obj: Product):
-        storage = getattr(obj, "storage", None)
-        value = getattr(storage, "virtual_stock", 0) or ""
-        url = reverse("admin:products_product_set_virtual_stock", args=(obj.pk,))
-        return format_html(
-            '<input type="number" min="0" step="1" inputmode="numeric" '
-            'class="w-24 text-right" value="{}" data-virtual-stock-url="{}" '
-            'aria-label="Virtueller Bestand fuer {}">',
-            value,
-            url,
-            obj.erp_nr,
-        )
-
-    def set_virtual_stock(self, request, object_id: int):
-        if request.method != "POST":
-            return HttpResponseNotAllowed(["POST"])
-
-        product = self.get_object(request, object_id)
-        if product is None:
-            return JsonResponse({"error": "Produkt nicht gefunden."}, status=404)
-        if not self.has_change_permission(request, product):
-            return JsonResponse({"error": "Keine Berechtigung zum Speichern."}, status=403)
-
-        raw_value = (request.POST.get("virtual_stock") or "").strip()
-        if not raw_value:
-            virtual_stock = 0
-        else:
-            try:
-                virtual_stock = int(raw_value)
-            except (TypeError, ValueError):
-                return JsonResponse({"error": "Ungueltiger virtueller Bestand."}, status=400)
-            if virtual_stock < 0:
-                return JsonResponse({"error": "Ungueltiger virtueller Bestand."}, status=400)
-
-        storage, created = Storage.objects.get_or_create(
-            product=product,
-            defaults={"virtual_stock": virtual_stock},
-        )
-        if not created and storage.virtual_stock != virtual_stock:
-            storage.virtual_stock = virtual_stock
-            storage.save(update_fields=("virtual_stock", "updated_at"))
-
-        self.log_change(request, product, f"Virtueller Bestand auf {virtual_stock} gesetzt.")
-        return JsonResponse(
-            {
-                "virtual_stock": virtual_stock,
-                "available_stock": storage.get_stock,
-            }
-        )
-
-    class Media:
-        js = ("products/admin/virtual_stock.js",)
 
     def render_change_form(self, request, context, add=False, change=False, form_url="", obj=None):
         context = {
