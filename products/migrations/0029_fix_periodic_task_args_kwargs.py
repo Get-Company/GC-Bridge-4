@@ -18,6 +18,7 @@ def fix_periodic_task_json_fields(apps, schema_editor):
 class Migration(migrations.Migration):
     dependencies = [
         ("products", "0028_category_description_it_it_and_more"),
+        ("django_celery_beat", "0001_initial"),
     ]
 
     operations = [

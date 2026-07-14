@@ -2,17 +2,11 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from django.contrib.admin.sites import AdminSite
-from django.contrib.auth import get_user_model
-from django.contrib.contenttypes.models import ContentType
 from django.core.management.base import CommandError
 from django.test import SimpleTestCase, TestCase
-from django.urls import reverse
 
-from ai.admin import AIRewriteJobAdmin, AIRewriteJobRequestForm
 from ai.models import AIProviderConfig, AIRewriteJob, AIRewritePrompt
 from ai.management.commands.import_legacy_ai_rewrites import Command as ImportLegacyAIRewritesCommand
-from ai.services import AIRewriteApplyService
 from ai.services.provider import AIProviderService
 from products.models import Product
 
@@ -118,197 +112,28 @@ class ImportLegacyAIRewritesCommandTest(SimpleTestCase):
                 )
 
 
-class AIRewriteJobAdminTest(TestCase):
-    def setUp(self):
-        self.user = get_user_model().objects.create_superuser(
-            username="ai-admin",
-            email="ai-admin@example.com",
-            password="pass",
+class AIModelShapeTest(TestCase):
+    def test_prompt_has_only_slim_fields(self):
+        prompt = AIRewritePrompt.objects.create(
+            name="SEO", system_prompt="Schreibe verkaufsstark um."
         )
-        self.product = Product.objects.create(
-            erp_nr="581001",
-            name="Rewrite Produkt",
-            description_de="<p>Aktueller Inhalt</p>",
-            description_short_de="<p>Kurz aktuell</p>",
+        self.assertTrue(prompt.slug)
+        self.assertTrue(prompt.is_active)
+        field_names = {f.name for f in AIRewritePrompt._meta.get_fields()}
+        for removed in ("provider", "content_type", "source_field", "target_field",
+                        "output_format", "user_prompt_template", "temperature_override"):
+            self.assertNotIn(removed, field_names)
+
+    def test_job_uses_product_fk_and_single_field(self):
+        provider = AIProviderConfig.objects.create(name="P", model_name="gpt-5-mini")
+        prompt = AIRewritePrompt.objects.create(name="SEO", system_prompt="x")
+        product = Product.objects.create(erp_nr="T-1", name="Test")
+        job = AIRewriteJob.objects.create(
+            product=product, field="description_de", prompt=prompt,
+            provider=provider, source_snapshot="<p>alt</p>",
         )
-        self.provider = AIProviderConfig.objects.create(
-            name="Test Provider",
-            model_name="gpt-5-mini",
-        )
-        self.prompt = AIRewritePrompt.objects.create(
-            name="Beschreibung SEO",
-            provider=self.provider,
-            content_type=ContentType.objects.get_for_model(Product),
-            source_field="description_de",
-            target_field="description_de",
-            system_prompt="Bitte umschreiben",
-        )
-        self.short_prompt = AIRewritePrompt.objects.create(
-            name="Kurzbeschreibung",
-            provider=self.provider,
-            content_type=ContentType.objects.get_for_model(Product),
-            source_field="description_short_de",
-            target_field="description_short_de",
-            system_prompt="Bitte kurz umschreiben",
-        )
-        self.job = AIRewriteJob.objects.create(
-            content_type=ContentType.objects.get_for_model(Product),
-            object_id=self.product.pk,
-            object_repr=str(self.product),
-            prompt=self.prompt,
-            provider=self.provider,
-            source_field="description_de",
-            target_field="description_de",
-            source_snapshot="<p>Alter Inhalt</p>",
-            result_text="<p>Neuer Inhalt</p>",
-            requested_by=self.user,
-            status=AIRewriteJob.Status.PENDING_REVIEW,
-        )
-        self.admin_instance = AIRewriteJobAdmin(AIRewriteJob, AdminSite())
-        self.client.force_login(self.user)
-
-    def test_request_form_filters_prompts_by_target_field(self):
-        form = AIRewriteJobRequestForm(initial={"target_field": "description_de"})
-
-        self.assertEqual(list(form.fields["prompt"].queryset), [self.prompt])
-
-    def test_request_form_lists_rewriteable_product_fields_even_without_prompts(self):
-        AIRewritePrompt.objects.all().delete()
-
-        form = AIRewriteJobRequestForm(initial={"target_field": "description_de"})
-
-        target_field_names = [field_name for field_name, _label in form.fields["target_field"].choices]
-        self.assertIn("description_de", target_field_names)
-        self.assertIn("description_short_de", target_field_names)
-        self.assertNotIn("name_de", target_field_names)
-        self.assertNotIn("sku", target_field_names)
-        self.assertEqual(list(form.fields["prompt"].queryset), [])
-
-    def test_request_form_uses_unfold_autocomplete_widgets(self):
-        form = AIRewriteJobRequestForm(
-            initial={
-                "product": self.product.pk,
-                "target_field": "description_de",
-            }
-        )
-
-        self.assertEqual(form.fields["product"].widget.attrs["data-theme"], "admin-autocomplete")
-        self.assertEqual(form.fields["target_field"].widget.attrs["data-theme"], "admin-autocomplete")
-        self.assertEqual(form.fields["prompt"].widget.attrs["data-theme"], "admin-autocomplete")
-
-    def test_job_list_links_point_to_job_change_view(self):
-        self.assertEqual(self.admin_instance.list_display_links, ("job_label",))
-        self.assertIn("#", self.admin_instance.job_label(self.job))
-
-    def test_product_link_points_to_product_change_view(self):
-        html = self.admin_instance.product_link(self.job)
-
-        self.assertIn(reverse("admin:products_product_change", args=(self.product.pk,)), html)
-        self.assertIn(self.product.erp_nr, html)
-
-    def test_current_target_preview_uses_wysiwyg_style_and_live_product_field_value(self):
-        html = self.admin_instance.current_target_preview(self.job)
-
-        self.assertIn("trix-content", html)
-        self.assertIn("<p>Aktueller Inhalt</p>", html)
-
-    def test_target_reference_combines_object_and_object_id(self):
-        html = self.admin_instance.target_reference(self.job)
-
-        self.assertIn("Objekt-ID", html)
-        self.assertIn(str(self.product.pk), html)
-        self.assertIn(self.product.erp_nr, html)
-
-    def test_product_inline_preview_shows_product_information(self):
-        html = self.admin_instance.product_inline_preview(self.job)
-
-        self.assertIn("ERP-Nr.", html)
-        self.assertIn(self.product.erp_nr, html)
-        self.assertIn("Rewrite Produkt", html)
-
-    def test_fieldsets_are_grouped_as_tabs_with_metadata_last(self):
-        fieldset_titles = [fieldset[0] for fieldset in self.admin_instance.fieldsets]
-        fieldset_classes = [fieldset[1].get("classes", ()) for fieldset in self.admin_instance.fieldsets]
-
-        self.assertEqual(fieldset_titles, ["Freigabe", "Produkt", "Prompt", "Metadaten"])
-        self.assertTrue(all("tab" in classes for classes in fieldset_classes))
-
-    def test_apply_service_marks_job_as_archived(self):
-        AIRewriteApplyService().apply(job=self.job, approved_by=self.user)
-
-        self.job.refresh_from_db()
-        self.product.refresh_from_db()
-        self.assertEqual(self.job.status, AIRewriteJob.Status.APPLIED)
-        self.assertTrue(self.job.is_archived)
-        self.assertEqual(self.product.description_de, "<p>Neuer Inhalt</p>")
-
-    def test_request_view_renders_unfold_widgets(self):
-        response = self.client.get(
-            reverse("admin:ai_airewritejob_request"),
-            {
-                "product": self.product.pk,
-                "target_field": "description_de",
-            },
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "unfold-admin-autocomplete")
-        self.assertContains(response, "Rewrite erzeugen")
-
-    def test_product_change_view_exposes_ai_field_button_config(self):
-        response = self.client.get(reverse("admin:products_product_change", args=(self.product.pk,)))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "product-ai-rewrite-fields")
-        self.assertContains(response, "description_de")
-        self.assertContains(response, "description_short_de")
-        self.assertContains(response, reverse("admin:products_product_request_ai_rewrite", args=(self.product.pk,)))
-
-    @patch("products.admin.AIRewriteService.request_rewrite")
-    def test_product_field_action_creates_job_when_single_prompt(self, mocked_request_rewrite):
-        mocked_request_rewrite.return_value = self.job
-
-        response = self.client.post(
-            reverse("admin:products_product_request_ai_rewrite", args=(self.product.pk,)),
-            {"target_field": "description_de"},
-        )
-
-        self.assertRedirects(response, reverse("admin:ai_airewritejob_change", args=(self.job.pk,)))
-        mocked_request_rewrite.assert_called_once_with(
-            content_object=self.product,
-            prompt=self.prompt,
-            requested_by=self.user,
-        )
-
-    def test_product_field_action_redirects_to_request_page_when_multiple_prompts_exist(self):
-        AIRewritePrompt.objects.create(
-            name="Beschreibung Marktplatz",
-            provider=self.provider,
-            content_type=ContentType.objects.get_for_model(Product),
-            source_field="description_de",
-            target_field="description_de",
-            system_prompt="Alternative Variante",
-        )
-
-        response = self.client.post(
-            reverse("admin:products_product_request_ai_rewrite", args=(self.product.pk,)),
-            {"target_field": "description_de"},
-        )
-
-        self.assertRedirects(
-            response,
-            f"{reverse('admin:ai_airewritejob_request')}?product={self.product.pk}&target_field=description_de",
-            fetch_redirect_response=False,
-        )
-
-    def test_product_field_action_redirects_to_request_page_when_no_prompt_exists(self):
-        response = self.client.post(
-            reverse("admin:products_product_request_ai_rewrite", args=(self.product.pk,)),
-            {"target_field": "name_de"},
-        )
-
-        self.assertRedirects(
-            response,
-            f"{reverse('admin:ai_airewritejob_request')}?product={self.product.pk}&target_field=name_de",
-            fetch_redirect_response=False,
-        )
+        self.assertEqual(job.status, AIRewriteJob.Status.QUEUED)
+        field_names = {f.name for f in AIRewriteJob._meta.get_fields()}
+        for removed in ("content_type", "object_id", "object_repr", "approved_by",
+                        "approved_at", "is_archived", "source_field", "target_field"):
+            self.assertNotIn(removed, field_names)
