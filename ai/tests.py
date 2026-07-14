@@ -120,3 +120,18 @@ class AIRewriteServiceTest(TestCase):
         self.assertEqual(self.product.description_de, "<p>final</p>")
         self.assertEqual(job.status, AIRewriteJob.Status.APPLIED)
         self.assertIsNotNone(job.applied_at)
+
+
+class AIRewriteTaskTest(TestCase):
+    @patch("ai.services.rewrite.AIProviderService.rewrite_text", return_value="<p>neu</p>")
+    def test_task_executes_job(self, _mock):
+        provider = AIProviderConfig.objects.create(name="P", model_name="m", api_key="k")
+        prompt = AIRewritePrompt.objects.create(name="SEO", system_prompt="x")
+        product = Product.objects.create(erp_nr="T-1", name="Test", description_de="<p>alt</p>")
+        job = AIRewriteService().create_job(
+            product=product, field="description_de", prompt=prompt, provider=provider,
+        )
+        from ai.tasks import run_ai_rewrite_job
+        run_ai_rewrite_job(job.pk)
+        job.refresh_from_db()
+        self.assertEqual(job.status, AIRewriteJob.Status.READY)
