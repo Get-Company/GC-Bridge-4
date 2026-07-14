@@ -350,6 +350,11 @@ class AIRewriteJobWorkspaceTest(TestCase):
         self.assertEqual(job.status, AIRewriteJob.Status.APPLIED)
 
 
+    def test_admin_loads_extended_wysiwyg_media(self):
+        admin_obj = AIRewriteJobAdmin(AIRewriteJob, AdminSite())
+
+        self.assertIn("core/admin/ai_rewrite_wysiwyg.js", str(admin_obj.media))
+
 class ProductFieldButtonTest(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_superuser("admin3", "a3@b.de", "pw")

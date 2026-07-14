@@ -56,7 +56,6 @@ from ai.rewrite_fields import (
     get_rewriteable_category_field_names,
     get_rewriteable_product_field_names,
 )
-from emails.models import EmailCampaign
 from unfold.contrib.filters.admin import (
     BooleanRadioFilter,
     RangeDateTimeFilter,
@@ -94,25 +93,6 @@ from .models import (
     Storage,
     Tax,
 )
-
-
-class EmailCampaignFilter(admin.SimpleListFilter):
-    title = _("E-Mail-Kampagne")
-    parameter_name = "email_campaign"
-
-    def lookups(self, request, model_admin):
-        return list(
-            EmailCampaign.objects.order_by("-created_at", "internal_title").values_list("pk", "internal_title")
-        )
-
-    def queryset(self, request, queryset):
-        campaign_id = self.value()
-        if not campaign_id:
-            return queryset
-        return queryset.filter(
-            Q(email_campaign_products__campaign_id=campaign_id)
-            | Q(email_campaign_components__campaign_id=campaign_id)
-        ).distinct()
 
 
 class FullWidthHeadingBar(Flowable):
@@ -473,7 +453,6 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
         ("is_active", BooleanRadioFilter),
         ("tax", RelatedDropdownFilter),
         ("categories", RelatedDropdownFilter),
-        EmailCampaignFilter,
         ("created_at", RangeDateTimeFilter),
     ]
     inlines = (ProductImageInline, ProductPropertyInline, StorageInline, PriceInline)

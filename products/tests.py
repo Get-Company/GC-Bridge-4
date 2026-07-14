@@ -23,7 +23,6 @@ from modeltranslation.admin import TabbedTranslationAdmin
 
 from products.admin import (
     CategoryAdmin,
-    EmailCampaignFilter,
     ImageAdmin,
     PriceActionForm,
     PriceAdmin,
@@ -128,27 +127,6 @@ class CategorySyncDefinitionTest(SimpleTestCase):
 
     def test_category_admin_supports_translated_category_fields(self):
         self.assertTrue(issubclass(CategoryAdmin, TabbedTranslationAdmin))
-
-    def test_product_admin_has_email_campaign_filter(self):
-        self.assertIn(EmailCampaignFilter, ProductAdmin.list_filter)
-
-    def test_email_campaign_filter_matches_current_and_legacy_campaign_products(self):
-        filter_instance = EmailCampaignFilter.__new__(EmailCampaignFilter)
-        filter_instance.value = lambda: "campaign-id"
-        queryset = MagicMock()
-
-        filter_instance.queryset(None, queryset)
-
-        query = queryset.filter.call_args.args[0]
-        self.assertEqual(query.connector, "OR")
-        self.assertEqual(
-            set(query.children),
-            {
-                ("email_campaign_products__campaign_id", "campaign-id"),
-                ("email_campaign_components__campaign_id", "campaign-id"),
-            },
-        )
-        queryset.filter.return_value.distinct.assert_called_once_with()
 
     def test_category_search_payload_requests_translation_locales(self):
         payload = ShopwareCategorySyncService._search_payload(page=2, limit=25)

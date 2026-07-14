@@ -137,6 +137,9 @@ class AIRewritePromptAdmin(BaseAdmin):
 
 @admin.register(AIRewriteJob)
 class AIRewriteJobAdmin(BaseAdmin):
+    class Media:
+        js = ("core/admin/ai_rewrite_wysiwyg.js",)
+
     list_display = ("__str__", "target_object", "field", "prompt", "provider", "status", "requested_by", "created_at")
     search_fields = (
         "product__erp_nr", "product__name", "category__name", "category__slug",
