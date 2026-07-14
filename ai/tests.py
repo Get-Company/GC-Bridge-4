@@ -10,7 +10,7 @@ from ai.admin import AIRewriteJobAdmin
 from ai.models import AIProviderConfig, AIRewriteJob, AIRewritePrompt
 from ai.services import AIRewriteService
 from ai.services.provider import AIProviderService
-from products.models import Category, Product
+from products.models import Category, Product, ProductProperty, PropertyGroup, PropertyValue
 
 
 class AIProviderServiceTest(SimpleTestCase):
@@ -108,6 +108,18 @@ class AIRewriteServiceTest(TestCase):
         self.assertEqual(job.category, self.category)
         self.assertEqual(job.target, self.category)
         self.assertEqual(job.source_snapshot, "Alt")
+
+    def test_serialize_includes_product_attributes_in_the_rewrite_language(self):
+        group = PropertyGroup.objects.create(name="Material", name_de="Werkstoff")
+        value = PropertyValue.objects.create(group=group, name="Karton", name_de="Pappe")
+        ProductProperty.objects.create(product=self.product, value=value)
+
+        context = AIRewriteService()._serialize(self.product, field_name="description_de")
+
+        self.assertEqual(
+            context["attributes"],
+            [{"gruppe": "Werkstoff", "werte": ["Pappe"]}],
+        )
 
     @patch(
         "ai.services.rewrite.AIProviderService.rewrite_text_with_response",

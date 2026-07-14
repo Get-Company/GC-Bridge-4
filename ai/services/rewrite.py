@@ -100,7 +100,11 @@ class AIRewriteService(BaseService):
             "field": job.field,
             "object_repr": str(job.target),
             "source_value": job.source_snapshot,
-            "object_context_json": json.dumps(self._serialize(job.target), ensure_ascii=True, indent=2),
+            "object_context_json": json.dumps(
+                self._serialize(job.target, field_name=job.field),
+                ensure_ascii=True,
+                indent=2,
+            ),
         }
         template = self.template_engine.from_string(DEFAULT_USER_PROMPT_TEMPLATE)
         return template.render(Context(context)).strip()
@@ -116,7 +120,7 @@ class AIRewriteService(BaseService):
             raise ValueError("Ein AI Rewrite Job braucht genau ein Zielobjekt.")
         return product or category
 
-    def _serialize(self, obj) -> dict[str, Any]:
+    def _serialize(self, obj, *, field_name: str = "") -> dict[str, Any]:
         data: dict[str, Any] = {}
         for f in obj._meta.fields:
             value = getattr(obj, f.name, None)
@@ -128,4 +132,48 @@ class AIRewriteService(BaseService):
                 data[f.name] = str(value)
         if hasattr(obj, "categories"):
             data["categories"] = list(obj.categories.values_list("name", flat=True))
+        if hasattr(obj, "product_properties"):
+            data["attributes"] = self._serialize_product_attributes(
+                obj,
+                language_suffix=self._field_language_suffix(field_name),
+            )
         return data
+
+    @staticmethod
+    def _field_language_suffix(field_name: str) -> str:
+        for base_name in ("description_short", "description"):
+            prefix = f"{base_name}_"
+            if field_name.startswith(prefix):
+                return field_name.removeprefix(prefix)
+        return ""
+
+    @staticmethod
+    def _translated_name(obj, *, language_suffix: str) -> str:
+        if language_suffix:
+            translated_name = getattr(obj, f"name_{language_suffix}", "")
+            if translated_name:
+                return str(translated_name)
+        return str(getattr(obj, "name", ""))
+
+    @classmethod
+    def _serialize_product_attributes(cls, product, *, language_suffix: str) -> list[dict[str, Any]]:
+        attribute_groups: dict[int, dict[str, Any]] = {}
+        product_properties = product.product_properties.select_related("value__group").order_by(
+            "value__group__name",
+            "value__name",
+            "id",
+        )
+        for product_property in product_properties:
+            value = product_property.value
+            group = value.group
+            attribute_group = attribute_groups.setdefault(
+                group.pk,
+                {
+                    "gruppe": cls._translated_name(group, language_suffix=language_suffix),
+                    "werte": [],
+                },
+            )
+            attribute_group["werte"].append(
+                cls._translated_name(value, language_suffix=language_suffix)
+            )
+        return list(attribute_groups.values())
