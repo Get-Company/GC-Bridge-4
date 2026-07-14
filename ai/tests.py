@@ -125,6 +125,45 @@ class AIRewriteServiceTest(TestCase):
         "ai.services.rewrite.AIProviderService.rewrite_text_with_response",
         return_value=("<p>neu</p>", '{"choices": [{"message": {"content": "<p>neu</p>"}}]}'),
     )
+    def test_execute_renders_category_prompt_template_with_products_and_properties(self, mock_rewrite):
+        self.prompt.system_prompt = """Kategorie: {{ category.name }}
+Kategoriepfad: {{ category.get_category_path|default:'Nicht verfuegbar' }}
+{% for product in category.products.all %}
+Produktname: {{ product.name|default:product.erp_nr }}
+Beschreibung: {{ product.description|striptags|default:product.description_short|striptags|default:'Keine Beschreibung vorhanden.' }}
+Eigenschaft: {% for prop in product.product_properties.all %}{{ prop.value.group.name }}: {{ prop.value.name }}{% empty %}Keine Eigenschaften vorhanden.{% endfor %}
+{% empty %}Keine Produktdaten vorhanden.{% endfor %}"""
+        self.prompt.save(update_fields=["system_prompt"])
+        product = Product.objects.create(
+            erp_nr="P-1",
+            name="",
+            description="<p>Beschreibung des Produkts</p>",
+        )
+        product.categories.add(self.category)
+        group = PropertyGroup.objects.create(name="Material")
+        value = PropertyValue.objects.create(group=group, name="Karton")
+        ProductProperty.objects.create(product=product, value=value)
+        job = AIRewriteService().create_job(
+            category=self.category,
+            field="description",
+            prompt=self.prompt,
+            provider=self.provider,
+        )
+
+        AIRewriteService().execute(job)
+
+        rendered_system_prompt = mock_rewrite.call_args.kwargs["system_prompt"]
+        self.assertIn("Kategorie: Buerobedarf", rendered_system_prompt)
+        self.assertIn("Kategoriepfad: Buerobedarf", rendered_system_prompt)
+        self.assertIn("Produktname: P-1", rendered_system_prompt)
+        self.assertIn("Beschreibung: Beschreibung des Produkts", rendered_system_prompt)
+        self.assertIn("Eigenschaft: Material: Karton", rendered_system_prompt)
+        self.assertNotIn("Keine Produktdaten vorhanden.", rendered_system_prompt)
+
+    @patch(
+        "ai.services.rewrite.AIProviderService.rewrite_text_with_response",
+        return_value=("<p>neu</p>", '{"choices": [{"message": {"content": "<p>neu</p>"}}]}'),
+    )
     def test_execute_sets_ready(self, _mock):
         job = AIRewriteService().create_job(
             product=self.product, field="description_de",

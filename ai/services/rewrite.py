@@ -63,9 +63,10 @@ class AIRewriteService(BaseService):
         rendered = self._render_user_prompt(job)
         job.rendered_prompt = rendered
         try:
+            rendered_system_prompt = self._render_system_prompt(job)
             job.result_text, job.provider_response = self.provider_service.rewrite_text_with_response(
                 provider=job.provider,
-                system_prompt=job.prompt.system_prompt,
+                system_prompt=rendered_system_prompt,
                 user_prompt=rendered,
             )
             job.status = AIRewriteJob.Status.READY
@@ -96,18 +97,28 @@ class AIRewriteService(BaseService):
         return job
 
     def _render_user_prompt(self, job: AIRewriteJob) -> str:
-        context = {
+        template = self.template_engine.from_string(DEFAULT_USER_PROMPT_TEMPLATE)
+        return template.render(Context(self._get_template_context(job))).strip()
+
+    def _render_system_prompt(self, job: AIRewriteJob) -> str:
+        template = self.template_engine.from_string(job.prompt.system_prompt)
+        return template.render(Context(self._get_template_context(job))).strip()
+
+    def _get_template_context(self, job: AIRewriteJob) -> dict[str, Any]:
+        target = job.target
+        return {
+            "product": job.product,
+            "category": job.category,
+            "target": target,
             "field": job.field,
-            "object_repr": str(job.target),
+            "object_repr": str(target),
             "source_value": job.source_snapshot,
             "object_context_json": json.dumps(
-                self._serialize(job.target, field_name=job.field),
+                self._serialize(target, field_name=job.field),
                 ensure_ascii=True,
                 indent=2,
             ),
         }
-        template = self.template_engine.from_string(DEFAULT_USER_PROMPT_TEMPLATE)
-        return template.render(Context(context)).strip()
 
     @staticmethod
     def _get_field_value(obj, field_name: str) -> str:

@@ -108,6 +108,19 @@ class Category(MPTTModel, BaseModel):
     def __str__(self) -> str:
         return self.name
 
+    def get_category_path(self) -> str:
+        """Return the complete category path for prompt templates and displays."""
+        return " > ".join(category.name for category in self.get_ancestors(include_self=True))
+
+    @property
+    def products(self):
+        """Produkte, die dieser Kategorie zugeordnet sind.
+
+        Der sprechende Alias macht die Reverse-Relation auch in Prompt-Templates
+        als ``category.products.all`` verfuegbar.
+        """
+        return self.product_set
+
 
 class Image(BaseModel):
     path = models.CharField(max_length=255, verbose_name=_("Bildpfad"))
