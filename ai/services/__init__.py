@@ -1,9 +1,7 @@
 from .provider import AIProviderService
-from .rewrite import AIRewriteApplyService, AIRewriteService
+from .rewrite import AIRewriteService
 
 __all__ = [
     "AIProviderService",
-    "AIRewriteApplyService",
     "AIRewriteService",
 ]
-

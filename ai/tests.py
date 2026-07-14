@@ -1,12 +1,9 @@
-from pathlib import Path
-from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from django.core.management.base import CommandError
 from django.test import SimpleTestCase, TestCase
 
 from ai.models import AIProviderConfig, AIRewriteJob, AIRewritePrompt
-from ai.management.commands.import_legacy_ai_rewrites import Command as ImportLegacyAIRewritesCommand
+from ai.services import AIRewriteService
 from ai.services.provider import AIProviderService
 from products.models import Product
 
@@ -46,72 +43,6 @@ class AIProviderServiceTest(SimpleTestCase):
         self.assertEqual(result, "Teil 1 Teil 2")
 
 
-class ImportLegacyAIRewritesCommandTest(SimpleTestCase):
-    def test_map_field_name_maps_legacy_description_fields(self):
-        command = ImportLegacyAIRewritesCommand()
-
-        self.assertEqual(command._map_field_name("description"), "description_de")
-        self.assertEqual(command._map_field_name("description_short"), "description_short_de")
-
-    def test_normalize_result_text_unwraps_json_string(self):
-        result = ImportLegacyAIRewritesCommand._normalize_result_text('"Hallo"')
-
-        self.assertEqual(result, "Hallo")
-
-    def test_map_status_marks_matching_legacy_value_as_applied(self):
-        command = ImportLegacyAIRewritesCommand()
-
-        status = command._map_status(
-            legacy_status="FOR_APPROVAL",
-            legacy_target_value="<p>Text</p>",
-            result_text="<p>Text</p>",
-        )
-
-        self.assertEqual(status, "applied")
-
-    def test_resolve_sqlite_path_builds_from_dump_when_missing(self):
-        command = ImportLegacyAIRewritesCommand()
-
-        with TemporaryDirectory() as temp_dir:
-            temp_path = Path(temp_dir)
-            dump_path = temp_path / "database.sql"
-            sqlite_path = temp_path / "legacy.sqlite3"
-            dump_path.write_text("-- dump", encoding="utf-8")
-
-            with patch("ai.management.commands.import_legacy_ai_rewrites.call_command") as mocked_call_command:
-                def _create_sqlite(*args, **kwargs):
-                    sqlite_path.write_text("", encoding="utf-8")
-
-                mocked_call_command.side_effect = _create_sqlite
-
-                resolved_path = command._resolve_sqlite_path(
-                    sqlite_path_value=str(sqlite_path),
-                    dump_path_value=str(dump_path),
-                    rebuild_sqlite=False,
-                )
-
-            self.assertEqual(resolved_path, sqlite_path.resolve())
-            mocked_call_command.assert_called_once_with(
-                "legacy_dump_to_sqlite",
-                str(dump_path.resolve()),
-                str(sqlite_path.resolve()),
-                overwrite=True,
-            )
-
-    def test_resolve_sqlite_path_raises_when_neither_dump_nor_sqlite_exists(self):
-        command = ImportLegacyAIRewritesCommand()
-
-        with TemporaryDirectory() as temp_dir:
-            missing_sqlite = Path(temp_dir) / "missing.sqlite3"
-
-            with self.assertRaises(CommandError):
-                command._resolve_sqlite_path(
-                    sqlite_path_value=str(missing_sqlite),
-                    dump_path_value="",
-                    rebuild_sqlite=False,
-                )
-
-
 class AIModelShapeTest(TestCase):
     def test_prompt_has_only_slim_fields(self):
         prompt = AIRewritePrompt.objects.create(
@@ -137,3 +68,55 @@ class AIModelShapeTest(TestCase):
         for removed in ("content_type", "object_id", "object_repr", "approved_by",
                         "approved_at", "is_archived", "source_field", "target_field"):
             self.assertNotIn(removed, field_names)
+
+
+class AIRewriteServiceTest(TestCase):
+    def setUp(self):
+        self.provider = AIProviderConfig.objects.create(name="P", model_name="gpt-5-mini", api_key="k")
+        self.prompt = AIRewritePrompt.objects.create(name="SEO", system_prompt="Schreibe um.")
+        self.product = Product.objects.create(erp_nr="T-1", name="Test", description_de="<p>alt</p>")
+
+    def test_create_job_is_queued_with_snapshot(self):
+        job = AIRewriteService().create_job(
+            product=self.product, field="description_de",
+            prompt=self.prompt, provider=self.provider,
+        )
+        self.assertEqual(job.status, AIRewriteJob.Status.QUEUED)
+        self.assertEqual(job.source_snapshot, "<p>alt</p>")
+        self.assertEqual(job.result_text, "")
+
+    @patch("ai.services.rewrite.AIProviderService.rewrite_text", return_value="<p>neu</p>")
+    def test_execute_sets_ready(self, _mock):
+        job = AIRewriteService().create_job(
+            product=self.product, field="description_de",
+            prompt=self.prompt, provider=self.provider,
+        )
+        AIRewriteService().execute(job)
+        job.refresh_from_db()
+        self.assertEqual(job.status, AIRewriteJob.Status.READY)
+        self.assertEqual(job.result_text, "<p>neu</p>")
+
+    @patch("ai.services.rewrite.AIProviderService.rewrite_text", side_effect=RuntimeError("boom"))
+    def test_execute_failure_sets_failed(self, _mock):
+        job = AIRewriteService().create_job(
+            product=self.product, field="description_de",
+            prompt=self.prompt, provider=self.provider,
+        )
+        AIRewriteService().execute(job)
+        job.refresh_from_db()
+        self.assertEqual(job.status, AIRewriteJob.Status.FAILED)
+        self.assertIn("boom", job.error_message)
+
+    def test_apply_writes_edited_text_to_field(self):
+        job = AIRewriteService().create_job(
+            product=self.product, field="description_de",
+            prompt=self.prompt, provider=self.provider,
+        )
+        job.result_text = "<p>final</p>"
+        job.status = AIRewriteJob.Status.READY
+        job.save(update_fields=["result_text", "status"])
+        AIRewriteService().apply(job=job)
+        job.refresh_from_db(); self.product.refresh_from_db()
+        self.assertEqual(self.product.description_de, "<p>final</p>")
+        self.assertEqual(job.status, AIRewriteJob.Status.APPLIED)
+        self.assertIsNotNone(job.applied_at)
