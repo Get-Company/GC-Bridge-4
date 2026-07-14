@@ -36,6 +36,14 @@ class Tax(BaseModel):
 class Category(MPTTModel, BaseModel):
     name = models.CharField(max_length=128, verbose_name=_("Name"))
     slug = models.SlugField(max_length=160, unique=True, verbose_name=_("Slug"))
+    sw6_id = models.CharField(
+        max_length=32,
+        unique=True,
+        null=True,
+        blank=True,
+        db_index=True,
+        verbose_name=_("Shopware 6 ID"),
+    )
     sku = models.CharField(
         max_length=64,
         unique=True,
@@ -74,6 +82,11 @@ class Category(MPTTModel, BaseModel):
     image = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Bild"))
     description_short = models.TextField(blank=True, default="", verbose_name=_("Kurzbeschreibung (HTML)"))
     description = models.TextField(blank=True, default="", verbose_name=_("Beschreibung (HTML)"))
+    meta_title = models.CharField(max_length=255, blank=True, default="", verbose_name=_("SEO-Meta-Titel"))
+    meta_description = models.TextField(blank=True, default="", verbose_name=_("SEO-Meta-Beschreibung"))
+    meta_keywords = models.CharField(max_length=255, blank=True, default="", verbose_name=_("SEO-Keywords"))
+    is_active = models.BooleanField(default=True, verbose_name=_("Aktiv"))
+    is_visible = models.BooleanField(default=True, verbose_name=_("Sichtbar"))
     legacy_changed_at = models.DateTimeField(
         null=True,
         blank=True,

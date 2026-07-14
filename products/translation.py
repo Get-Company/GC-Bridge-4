@@ -19,6 +19,9 @@ class CategoryTranslationOptions(TranslationOptions):
         "name",
         "description",
         "description_short",
+        "meta_title",
+        "meta_description",
+        "meta_keywords",
     )
 
 

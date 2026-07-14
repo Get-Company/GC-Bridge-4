@@ -19,8 +19,11 @@ from django.db import connection
 from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
+from modeltranslation.admin import TabbedTranslationAdmin
 
 from products.admin import (
+    CategoryAdmin,
+    EmailCampaignFilter,
     ImageAdmin,
     PriceActionForm,
     PriceAdmin,
@@ -52,7 +55,7 @@ from products.models import (
     Storage,
 )
 from products.services import PriceIncreaseService
-from products.services import ProductAutoSyncService, disable_product_auto_sync
+from products.services import ProductAutoSyncService, ShopwareCategorySyncService, disable_product_auto_sync
 from products import tasks as product_tasks
 from products.tasks import sync_from_microtech, sync_to_shopware, sync_to_microtech
 from shopware.models import ShopwareSettings
@@ -105,6 +108,84 @@ class ProductSchemaTest(TestCase):
             }
 
         self.assertTrue(expected_columns <= existing_columns)
+
+
+class CategorySyncDefinitionTest(SimpleTestCase):
+    def test_category_has_shopware_id_and_seo_fields(self):
+        field_names = {field.name for field in Category._meta.get_fields()}
+
+        self.assertTrue(
+            {
+                "sw6_id",
+                "name",
+                "description",
+                "meta_title",
+                "meta_description",
+                "meta_keywords",
+            }
+            <= field_names
+        )
+
+    def test_category_admin_supports_translated_category_fields(self):
+        self.assertTrue(issubclass(CategoryAdmin, TabbedTranslationAdmin))
+
+    def test_product_admin_has_email_campaign_filter(self):
+        self.assertIn(EmailCampaignFilter, ProductAdmin.list_filter)
+
+    def test_email_campaign_filter_matches_current_and_legacy_campaign_products(self):
+        filter_instance = EmailCampaignFilter.__new__(EmailCampaignFilter)
+        filter_instance.value = lambda: "campaign-id"
+        queryset = MagicMock()
+
+        filter_instance.queryset(None, queryset)
+
+        query = queryset.filter.call_args.args[0]
+        self.assertEqual(query.connector, "OR")
+        self.assertEqual(
+            set(query.children),
+            {
+                ("email_campaign_products__campaign_id", "campaign-id"),
+                ("email_campaign_components__campaign_id", "campaign-id"),
+            },
+        )
+        queryset.filter.return_value.distinct.assert_called_once_with()
+
+    def test_category_search_payload_requests_translation_locales(self):
+        payload = ShopwareCategorySyncService._search_payload(page=2, limit=25)
+
+        self.assertEqual(payload["page"], 2)
+        self.assertEqual(payload["limit"], 25)
+        self.assertEqual(
+            payload["associations"]["translations"]["associations"]["language"]["associations"],
+            {"locale": {}},
+        )
+
+    def test_category_translation_fields_map_shopware_locales(self):
+        defaults = ShopwareCategorySyncService._translation_defaults(
+            {
+                "translations": [
+                    {
+                        "language": {"locale": {"code": "de-CH"}},
+                        "name": "Schweizer Papier",
+                        "description": "<p>Beschreibung</p>",
+                        "metaTitle": "Schweizer Meta-Titel",
+                        "metaDescription": "Schweizer Meta-Beschreibung",
+                        "keywords": "papier, schweiz",
+                    },
+                    {
+                        "language": {"locale": {"code": "it-IT"}},
+                        "name": "Carta italiana",
+                    },
+                ]
+            }
+        )
+
+        self.assertEqual(defaults["name_ch_de"], "Schweizer Papier")
+        self.assertEqual(defaults["description_ch_de"], "<p>Beschreibung</p>")
+        self.assertEqual(defaults["meta_title_ch_de"], "Schweizer Meta-Titel")
+        self.assertEqual(defaults["meta_description_ch_de"], "Schweizer Meta-Beschreibung")
+        self.assertEqual(defaults["meta_keywords_ch_de"], "papier, schweiz")
+        self.assertEqual(defaults["name_it_it"], "Carta italiana")
 
 
 class ProductAdminActionConfigurationTest(SimpleTestCase):

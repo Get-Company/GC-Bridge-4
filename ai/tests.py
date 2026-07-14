@@ -220,3 +220,17 @@ class AIRewriteJobWorkspaceTest(TestCase):
         job.refresh_from_db(); self.product.refresh_from_db()
         self.assertEqual(self.product.description_de, "<p>neu</p>")
         self.assertEqual(job.status, AIRewriteJob.Status.APPLIED)
+
+
+class ProductFieldButtonTest(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_superuser("admin3", "a3@b.de", "pw")
+        self.client.force_login(self.user)
+        self.product = Product.objects.create(erp_nr="T-1", name="Test", description_de="<p>x</p>")
+
+    def test_change_view_exposes_create_link_and_field(self):
+        resp = self.client.get(reverse("admin:products_product_change", args=(self.product.pk,)))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "product-ai-rewrite-fields")
+        self.assertContains(resp, reverse("admin:ai_airewritejob_create"))
+        self.assertContains(resp, "description_de")

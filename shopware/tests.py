@@ -199,6 +199,7 @@ class Shopware5ProductSyncServiceTest(SimpleTestCase):
         payload = service.build_product_payload(product)
 
         self.assertFalse(payload["active"])
+        self.assertFalse(payload["is_active"])
         self.assertEqual(payload["name"], "Mappe A4")
         self.assertEqual(payload["description"], "Kurztext")
         self.assertEqual(payload["descriptionLong"], "Langtext.")
@@ -253,6 +254,8 @@ class Shopware5ProductSyncServiceTest(SimpleTestCase):
         service = Shopware5ProductSyncService(settings_obj=SimpleNamespace(is_active=False), session=MagicMock())
         payload = service.build_product_payload(product)
 
+        self.assertTrue(payload["active"])
+        self.assertTrue(payload["is_active"])
         self.assertIn(
             {
                 "customerGroupKey": "Vk0",

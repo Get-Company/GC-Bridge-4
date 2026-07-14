@@ -68,7 +68,7 @@
 
     const visibleIds = new Set()
     categories.forEach((category) => {
-      const haystack = `${category.name} ${category.sku || ""} ${category.slug} ${category.legacy_erp_nr || ""}`.toLowerCase()
+      const haystack = `${category.name} ${category.sw6_id || ""} ${category.sku || ""} ${category.slug} ${category.legacy_erp_nr || ""}`.toLowerCase()
       if (!haystack.includes(searchTerm)) {
         return
       }
@@ -103,6 +103,9 @@
   function categoryMetaText(category) {
     if (!category) {
       return ""
+    }
+    if (category.sw6_id) {
+      return `SW6 ${category.sw6_id}`
     }
     if (category.sku) {
       return `SKU ${category.sku}`

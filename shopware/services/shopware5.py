@@ -119,6 +119,7 @@ class Shopware5ProductSyncService(BaseService):
 
         payload: dict[str, Any] = {
             "active": bool(product.is_active),
+            "is_active": bool(product.is_active),
             "mainDetail": main_detail,
         }
         if name:
