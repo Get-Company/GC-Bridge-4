@@ -4,6 +4,7 @@ from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.db import models
+from django.db.models import Q
 from django.utils.text import slugify
 from django.utils.translation import gettext_lazy as _
 
@@ -73,7 +74,17 @@ class AIRewriteJob(BaseModel):
         "products.Product",
         on_delete=models.PROTECT,
         related_name="ai_rewrite_jobs",
+        null=True,
+        blank=True,
         verbose_name=_("Produkt"),
+    )
+    category = models.ForeignKey(
+        "products.Category",
+        on_delete=models.PROTECT,
+        related_name="ai_rewrite_jobs",
+        null=True,
+        blank=True,
+        verbose_name=_("Kategorie"),
     )
     field = models.CharField(max_length=120, verbose_name=_("Feld"))
     prompt = models.ForeignKey(
@@ -114,7 +125,29 @@ class AIRewriteJob(BaseModel):
         verbose_name = _("AI Rewrite Job")
         verbose_name_plural = _("AI Rewrite Jobs")
         ordering = ("-created_at",)
-        indexes = [models.Index(fields=("product", "field"))]
+        indexes = [
+            models.Index(fields=("product", "field")),
+            models.Index(fields=("category", "field")),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    Q(product__isnull=False, category__isnull=True)
+                    | Q(product__isnull=True, category__isnull=False)
+                ),
+                name="ai_rewrite_job_has_one_target",
+            )
+        ]
 
     def __str__(self) -> str:
-        return f"#{self.pk} · {self.product_id} · {self.field} · {self.get_status_display()}"
+        target_type = "Produkt" if self.product_id else "Kategorie"
+        target_id = self.product_id or self.category_id
+        return f"#{self.pk} · {target_type} {target_id} · {self.field} · {self.get_status_display()}"
+
+    @property
+    def target(self):
+        if self.product_id:
+            return self.product
+        if self.category_id:
+            return self.category
+        raise ValueError("AI Rewrite Job hat kein Zielobjekt.")

@@ -15,10 +15,13 @@ from unfold.widgets import UnfoldAdminSelect2Widget
 from core.admin import BaseAdmin
 
 from ai.models import AIProviderConfig, AIRewriteJob, AIRewritePrompt
-from ai.rewrite_fields import get_rewriteable_product_field_names
+from ai.rewrite_fields import (
+    get_rewriteable_category_field_names,
+    get_rewriteable_product_field_names,
+)
 from ai.services import AIRewriteService
 from ai.tasks import run_ai_rewrite_job
-from products.models import Product
+from products.models import Category, Product
 
 
 class AIRewriteJobCreateForm(forms.Form):
@@ -33,16 +36,22 @@ class AIRewriteJobCreateForm(forms.Form):
         widget=UnfoldAdminSelect2Widget,
     )
 
-    def __init__(self, *args, product=None, field="", **kwargs):
+    def __init__(self, *args, product=None, category=None, field="", **kwargs):
         super().__init__(*args, **kwargs)
         self.product = product
+        self.category = category
         self.field_name = field
 
     def clean(self):
         cleaned = super().clean()
-        if self.product is None:
-            raise forms.ValidationError("Kein gueltiges Produkt uebergeben.")
-        if self.field_name not in get_rewriteable_product_field_names():
+        if (self.product is None) == (self.category is None):
+            raise forms.ValidationError("Kein gueltiges Zielobjekt uebergeben.")
+        allowed_fields = (
+            get_rewriteable_product_field_names()
+            if self.product is not None
+            else get_rewriteable_category_field_names()
+        )
+        if self.field_name not in allowed_fields:
             raise forms.ValidationError("Dieses Feld kann nicht per KI umgeschrieben werden.")
         return cleaned
 
@@ -57,18 +66,30 @@ class AIRewriteJobCreateView(UnfoldModelAdminViewMixin, FormView):
         pk = self.request.GET.get("product") or self.request.POST.get("product")
         return Product.objects.filter(pk=pk).first() if pk else None
 
+    def _get_category(self):
+        pk = self.request.GET.get("category") or self.request.POST.get("category")
+        return Category.objects.filter(pk=pk).first() if pk else None
+
     def _get_field(self):
-        return self.request.GET.get("field") or self.request.POST.get("field") or ""
+        return (
+            self.request.GET.get("field")
+            or self.request.POST.get("field")
+            or self.request.GET.get("target_field")
+            or self.request.POST.get("target_field")
+            or ""
+        )
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
         kwargs["product"] = self._get_product()
+        kwargs["category"] = self._get_category()
         kwargs["field"] = self._get_field()
         return kwargs
 
     def form_valid(self, form):
         job = AIRewriteService().create_job(
             product=form.product,
+            category=form.category,
             field=form.field_name,
             prompt=form.cleaned_data["prompt"],
             provider=form.cleaned_data["provider"],
@@ -82,8 +103,14 @@ class AIRewriteJobCreateView(UnfoldModelAdminViewMixin, FormView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        product = self._get_product()
+        category = self._get_category()
+        target = product or category
         context.update({
-            "product": self._get_product(),
+            "product": product,
+            "category": category,
+            "target": target,
+            "target_label": "Produkt" if product else "Kategorie" if category else "Zielobjekt",
             "field_name": self._get_field(),
             "changelist_url": reverse("admin:ai_airewritejob_changelist"),
         })
@@ -107,13 +134,16 @@ class AIRewritePromptAdmin(BaseAdmin):
 
 @admin.register(AIRewriteJob)
 class AIRewriteJobAdmin(BaseAdmin):
-    list_display = ("__str__", "product", "field", "prompt", "provider", "status", "requested_by", "created_at")
-    search_fields = ("product__erp_nr", "product__name", "field", "prompt__name", "result_text")
+    list_display = ("__str__", "target_object", "field", "prompt", "provider", "status", "requested_by", "created_at")
+    search_fields = (
+        "product__erp_nr", "product__name", "category__name", "category__slug",
+        "field", "prompt__name", "result_text",
+    )
     list_filter = ("status", "prompt", "provider", "created_at")
     actions_detail = ("apply_rewrite_detail",)
     change_form_template = "admin/ai/airewritejob/change_form.html"
     readonly_fields = BaseAdmin.readonly_fields + (
-        "product", "field", "prompt", "provider", "status",
+        "target_object", "field", "prompt", "provider", "status",
         "source_snapshot_preview", "rendered_prompt", "error_message",
         "celery_task_id", "requested_by", "applied_at",
     )
@@ -123,7 +153,7 @@ class AIRewriteJobAdmin(BaseAdmin):
             "description": "Ergebnis pruefen, bei Bedarf bearbeiten und uebernehmen.",
         }),
         ("Kontext", {
-            "fields": ("product", "field", "prompt", "provider", "rendered_prompt",
+            "fields": ("target_object", "field", "prompt", "provider", "rendered_prompt",
                        "celery_task_id", "requested_by", "applied_at", "created_at", "updated_at"),
             "classes": ("collapse",),
         }),
@@ -145,6 +175,10 @@ class AIRewriteJobAdmin(BaseAdmin):
             " ".join(WYSIWYG_CLASSES), mark_safe(value),
         )
 
+    @admin.display(description="Zielobjekt")
+    def target_object(self, obj: AIRewriteJob):
+        return obj.target
+
     @action(description="In Feld uebernehmen", icon="task_alt")
     def apply_rewrite_detail(self, request, object_id: str):
         job = self.get_object(request, object_id)
@@ -159,5 +193,5 @@ class AIRewriteJobAdmin(BaseAdmin):
         except Exception as exc:
             self.message_user(request, f"Konnte nicht uebernommen werden: {exc}", level=messages.ERROR)
         else:
-            self.message_user(request, "Ergebnis wurde in das Produktfeld uebernommen.")
+            self.message_user(request, "Ergebnis wurde in das Zielfeld uebernommen.")
         return HttpResponseRedirect(reverse("admin:ai_airewritejob_change", args=(job.pk,)))

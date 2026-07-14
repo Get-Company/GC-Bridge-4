@@ -9,7 +9,7 @@ from ai.services import AIRewriteService
 @shared_task
 def run_ai_rewrite_job(job_id: int) -> None:
     try:
-        job = AIRewriteJob.objects.select_related("product", "prompt", "provider").get(pk=job_id)
+        job = AIRewriteJob.objects.select_related("product", "category", "prompt", "provider").get(pk=job_id)
     except AIRewriteJob.DoesNotExist:
         return
     AIRewriteService().execute(job)

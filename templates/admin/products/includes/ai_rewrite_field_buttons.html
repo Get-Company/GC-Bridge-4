@@ -18,7 +18,7 @@
       }
     }
 
-    function createButton(config, createUrl) {
+    function createButton(config, createUrl, targetParam, targetId) {
       const button = document.createElement("button");
       button.type = "button";
       button.className = [
@@ -45,6 +45,8 @@
       button.title = config.title || "Rewrite fuer dieses Feld anlegen";
       button.dataset.targetField = config.field;
       button.dataset.createUrl = createUrl;
+      button.dataset.targetParam = targetParam;
+      button.dataset.targetId = targetId;
       button.dataset.hasMultiplePrompts = config.hasMultiplePrompts ? "true" : "false";
       button.addEventListener("click", submitRewriteRequest);
       return button;
@@ -52,7 +54,9 @@
 
     function appendButtons() {
       const createUrl = "{{ ai_rewrite_create_url|escapejs }}";
-      if (!createUrl) {
+      const targetParam = "{{ ai_rewrite_target_param|escapejs }}";
+      const targetId = "{{ ai_rewrite_target_id|escapejs }}";
+      if (!createUrl || !targetParam || !targetId) {
         return;
       }
 
@@ -78,7 +82,7 @@
           continue;
         }
 
-        const button = createButton(config, createUrl);
+        const button = createButton(config, createUrl, targetParam, targetId);
         button.dataset.aiRewriteButton = "true";
         labelContainer.classList.add("flex", "items-center", "gap-2", "flex-wrap");
         labelContainer.appendChild(button);
@@ -96,9 +100,19 @@
         return;
       }
 
+      const targetParam = button.dataset.targetParam || "";
+      const targetId = button.dataset.targetId || "";
+      const targetFieldName = button.dataset.targetField || "";
+      if (!targetParam || !targetId || !targetFieldName) {
+        return;
+      }
+
       const form = document.createElement("form");
       form.method = "post";
-      form.action = button.dataset.createUrl;
+      const createUrl = new URL(button.dataset.createUrl, window.location.origin);
+      createUrl.searchParams.set(targetParam, targetId);
+      createUrl.searchParams.set("field", targetFieldName);
+      form.action = createUrl.toString();
 
       const csrfField = document.createElement("input");
       csrfField.type = "hidden";
@@ -108,9 +122,15 @@
 
       const targetField = document.createElement("input");
       targetField.type = "hidden";
-      targetField.name = "target_field";
-      targetField.value = button.dataset.targetField || "";
+      targetField.name = "field";
+      targetField.value = targetFieldName;
       form.appendChild(targetField);
+
+      const targetObject = document.createElement("input");
+      targetObject.type = "hidden";
+      targetObject.name = targetParam;
+      targetObject.value = targetId;
+      form.appendChild(targetObject);
 
       button.disabled = true;
       button.classList.add("opacity-60");

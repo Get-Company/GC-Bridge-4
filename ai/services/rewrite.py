@@ -39,15 +39,18 @@ class AIRewriteService(BaseService):
     def create_job(
         self,
         *,
-        product,
+        product=None,
+        category=None,
         field: str,
         prompt: AIRewritePrompt,
         provider: AIProviderConfig,
         requested_by=None,
     ) -> AIRewriteJob:
-        snapshot = self._get_field_value(product, field)
+        target = self._get_target(product=product, category=category)
+        snapshot = self._get_field_value(target, field)
         return self.model.objects.create(
             product=product,
+            category=category,
             field=field,
             prompt=prompt,
             provider=provider,
@@ -75,9 +78,9 @@ class AIRewriteService(BaseService):
 
     @transaction.atomic
     def apply(self, *, job: AIRewriteJob) -> AIRewriteJob:
-        product = job.product
-        setattr(product, job.field, job.result_text)
-        product.save(update_fields=[job.field, "updated_at"])
+        target = job.target
+        setattr(target, job.field, job.result_text)
+        target.save(update_fields=[job.field, "updated_at"])
         job.status = AIRewriteJob.Status.APPLIED
         job.applied_at = timezone.now()
         job.save(update_fields=["status", "applied_at", "updated_at"])
@@ -86,9 +89,9 @@ class AIRewriteService(BaseService):
     def _render_user_prompt(self, job: AIRewriteJob) -> str:
         context = {
             "field": job.field,
-            "object_repr": str(job.product),
+            "object_repr": str(job.target),
             "source_value": job.source_snapshot,
-            "object_context_json": json.dumps(self._serialize(job.product), ensure_ascii=True, indent=2),
+            "object_context_json": json.dumps(self._serialize(job.target), ensure_ascii=True, indent=2),
         }
         template = self.template_engine.from_string(DEFAULT_USER_PROMPT_TEMPLATE)
         return template.render(Context(context)).strip()
@@ -97,6 +100,12 @@ class AIRewriteService(BaseService):
     def _get_field_value(obj, field_name: str) -> str:
         value = getattr(obj, field_name, "")
         return "" if value is None else str(value)
+
+    @staticmethod
+    def _get_target(*, product=None, category=None):
+        if (product is None) == (category is None):
+            raise ValueError("Ein AI Rewrite Job braucht genau ein Zielobjekt.")
+        return product or category
 
     def _serialize(self, obj) -> dict[str, Any]:
         data: dict[str, Any] = {}

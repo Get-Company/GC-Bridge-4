@@ -52,7 +52,10 @@ from django.views.generic import TemplateView
 from pypdf import PdfReader, PdfWriter
 from weasyprint import HTML as WeasyHTML
 
-from ai.rewrite_fields import get_rewriteable_product_field_names
+from ai.rewrite_fields import (
+    get_rewriteable_category_field_names,
+    get_rewriteable_product_field_names,
+)
 from emails.models import EmailCampaign
 from unfold.contrib.filters.admin import (
     BooleanRadioFilter,
@@ -609,7 +612,8 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
             **context,
             "ai_rewrite_field_targets_json": self._build_ai_rewrite_field_targets_json(context),
             "ai_rewrite_create_url": reverse("admin:ai_airewritejob_create"),
-            "ai_rewrite_product_id": obj.pk if obj and obj.pk else "",
+            "ai_rewrite_target_param": "product",
+            "ai_rewrite_target_id": obj.pk if obj and obj.pk else "",
         }
         return super().render_change_form(
             request,
@@ -3502,6 +3506,32 @@ class CategoryAdmin(TabbedTranslationAdmin, BaseAdmin):
         "legacy_parent_erp_nr",
     )
     ordering = ("tree_id", "lft")
+    change_form_after_template = "admin/products/includes/ai_rewrite_field_buttons.html"
+
+    def render_change_form(self, request, context, add=False, change=False, form_url="", obj=None):
+        context = {
+            **context,
+            "ai_rewrite_field_targets_json": self._build_ai_rewrite_field_targets_json(context),
+            "ai_rewrite_create_url": reverse("admin:ai_airewritejob_create"),
+            "ai_rewrite_target_param": "category",
+            "ai_rewrite_target_id": obj.pk if obj and obj.pk else "",
+        }
+        return super().render_change_form(
+            request,
+            context,
+            add=add,
+            change=change,
+            form_url=form_url,
+            obj=obj,
+        )
+
+    def _build_ai_rewrite_field_targets_json(self, context) -> list[dict[str, object]]:
+        adminform = context.get("adminform")
+        if adminform is None:
+            return []
+        rewriteable_field_names = get_rewriteable_category_field_names()
+        form_field_names = sorted(set(adminform.form.fields.keys()) & rewriteable_field_names)
+        return [{"field": field_name, "label": "AI"} for field_name in form_field_names]
 
     def get_urls(self):
         manager_view = self.admin_site.admin_view(CategoryManagerPageView.as_view(model_admin=self))
