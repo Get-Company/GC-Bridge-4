@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hmac
 import json
+import logging
 import random
 from collections.abc import Callable, Sequence
 from datetime import timedelta
@@ -19,6 +20,7 @@ from microtech.services.graphql_client import GraphQLMicrotechError, MicrotechGr
 ContinuationHandler = Callable[[MicrotechGraphQLJob], None]
 
 CONTINUATIONS: dict[str, ContinuationHandler] = {}
+logger = logging.getLogger(__name__)
 
 
 def register_continuation(name: str, handler: ContinuationHandler) -> None:
@@ -533,16 +535,17 @@ class MicrotechJobSentinelService(BaseService):
             from microtech.tasks import process_graphql_job_result
 
             process_graphql_job_result.delay(job_id)
-        except Exception as exc:
+        except Exception:
+            # Der Remote-Job ist bereits erfolgreich abgeschlossen. Ein temporärer
+            # Broker-Ausfall darf diesen fachlichen Erfolg nicht in einen Fehler
+            # umwandeln. Der Beat-Poller beansprucht den weiterhin erfolgreichen,
+            # ausstehenden Job beim nächsten Lauf erneut.
             MicrotechGraphQLJob.objects.filter(pk=job_id).update(
-                status=MicrotechGraphQLJob.Status.FAILED,
-                error_message=str(exc),
-                next_step="Continuation konnte nicht eingereiht werden.",
-                next_poll_at=None,
-                completed_at=timezone.now(),
+                next_step="Continuation ausfuehren.",
+                next_poll_at=timezone.now(),
                 updated_at=timezone.now(),
             )
-            raise
+            logger.exception("Continuation für Microtech GraphQL Job %s konnte nicht eingereiht werden.", job_id)
 
     def _apply_remote_status(self, job: MicrotechGraphQLJob, payload: dict[str, Any]) -> None:
         remote_status = str(self._payload_value(payload, "status") or "").upper()

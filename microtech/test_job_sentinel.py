@@ -152,6 +152,26 @@ class TestJobSentinelPoller(TestCase):
 
 
 class TestJobSentinelContinuations(TestCase):
+    @patch(
+        "microtech.tasks.process_graphql_job_result.delay",
+        side_effect=ConnectionError("Celery broker nicht erreichbar"),
+    )
+    def test_dispatch_failure_keeps_successful_continuation_pending(self, _mock_delay):
+        job = _make_job(
+            status=MicrotechGraphQLJob.Status.SUCCEEDED,
+            continuation="products.scheduled_product_sync_page",
+            next_step="Continuation ausfuehren.",
+            delete_after_completion=False,
+        )
+
+        MicrotechJobSentinelService()._dispatch_continuation(job.pk)
+
+        job.refresh_from_db()
+        self.assertEqual(job.status, MicrotechGraphQLJob.Status.SUCCEEDED)
+        self.assertEqual(job.next_step, "Continuation ausfuehren.")
+        self.assertIsNotNone(job.next_poll_at)
+        self.assertLessEqual(job.next_poll_at, timezone.now())
+
     @patch.dict(CONTINUATIONS, {}, clear=True)
     def test_process_continuation_marks_job_failed_when_handler_raises(self):
         def failing_handler(_job):
