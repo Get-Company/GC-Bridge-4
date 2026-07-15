@@ -271,17 +271,22 @@ class TestEmailVariableJSONForms(SimpleTestCase):
         assert cleaned["description"].startswith("<p>hol den Sommer ins Büro</p>")
         assert "href='https://www.classei-shop.com/Fertig-Sets'" in cleaned["description"]
 
-    def test_json_widget_formats_saved_values_with_unicode(self):
-        from emails.admin import PrettyJSONWidget
+    def test_campaign_variables_use_json_editor_widget(self):
+        from django_json_widget.widgets import JSONEditorWidget
+        from emails.admin import EmailCampaignComponentInlineForm
 
         value = {
             "description": "<p>hol den Sommer ins Büro</p>",
         }
 
-        rendered = PrettyJSONWidget().format_value(value)
+        widget = EmailCampaignComponentInlineForm.base_fields["variables"].widget
+        rendered = widget.render("variables", value, attrs={"id": "id_variables"})
 
-        assert "Büro" in rendered
-        assert "\\u00fc" not in rendered
+        assert isinstance(widget, JSONEditorWidget)
+        assert '"mode": "code"' in rendered
+        assert "JSONEditor" in rendered
+        assert "description" in rendered
+        assert "dist/jsoneditor.min.js" in str(widget.media)
 
     def test_json_field_normalizes_line_breaks_inside_strings(self):
         from emails.admin import EmailCampaignComponentInlineForm

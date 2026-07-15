@@ -14,6 +14,7 @@ from django.http import HttpResponse, JsonResponse
 from django.urls import path
 from django.utils.html import format_html, format_html_join
 from django.utils.translation import gettext_lazy as _
+from django_json_widget.widgets import JSONEditorWidget
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +29,6 @@ from emails.models import (
 )
 
 _MONOSPACE_STYLE = "font-family: monospace; width: 100%; min-height: 300px;"
-_JSON_STYLE = "font-family: monospace; width: 100%; min-height: 180px;"
 _PRODUCT_FIELD_EXCLUDES = {
     "id",
     "created_at",
@@ -247,15 +247,6 @@ def _copy_campaign_components(
         EmailCampaignComponent.objects.bulk_update(parent_updates, ["parent"])
 
 
-class PrettyJSONWidget(forms.Textarea):
-    def format_value(self, value):
-        if value in (None, ""):
-            return ""
-        if isinstance(value, str):
-            return value
-        return json.dumps(value, ensure_ascii=False, indent=2)
-
-
 class LenientJSONField(forms.JSONField):
     def to_python(self, value):
         try:
@@ -308,7 +299,11 @@ def _json_variables_field(*, label: str, help_text: str = "") -> LenientJSONFiel
         label=label,
         required=False,
         help_text=help_text,
-        widget=PrettyJSONWidget(attrs={"style": _JSON_STYLE}),
+        widget=JSONEditorWidget(
+            width="100%",
+            height="320px",
+            options={"modes": ["code", "tree"]},
+        ),
     )
 
 

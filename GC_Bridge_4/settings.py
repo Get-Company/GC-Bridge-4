@@ -134,6 +134,7 @@ INSTALLED_APPS = [
     'unfold',
     'unfold.contrib.filters',
     'unfold.contrib.forms',
+    'django_json_widget',
     'modeltranslation',
     'mptt',
     'django_celery_beat',

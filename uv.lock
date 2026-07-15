@@ -480,6 +480,15 @@ wheels = [
 ]
 
 [[package]]
+name = "django-json-widget"
+version = "2.1.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/f9/30/923ff229ee284bf2fac7a289ca446fb2725d94b2a34c7cb006c4f811e6c0/django_json_widget-2.1.1.tar.gz", hash = "sha256:dc8102e2fa9accd0f661ea1988c9389f8fbbcb8a4bb9cbfb8fa0525b3c1265c1", size = 384026, upload-time = "2025-12-12T11:22:05.953Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/19/6a/bdbcc079d11d312e463565819089fe83ae6c7f17f274effa4777ca069f64/django_json_widget-2.1.1-py2.py3-none-any.whl", hash = "sha256:2fa3d6fb6dba9436a29ad2cee23fa794381f54a6678ec7d74e990ae081d9800b", size = 293721, upload-time = "2025-12-12T11:22:04.195Z" },
+]
+
+[[package]]
 name = "django-modeltranslation"
 version = "0.19.19"
 source = { registry = "https://pypi.org/simple" }
@@ -610,6 +619,7 @@ dependencies = [
     { name = "celery" },
     { name = "django" },
     { name = "django-celery-beat" },
+    { name = "django-json-widget" },
     { name = "django-modeltranslation" },
     { name = "django-mptt" },
     { name = "django-unfold" },
@@ -635,6 +645,7 @@ requires-dist = [
     { name = "celery", specifier = ">=5.5.0" },
     { name = "django", specifier = ">=6.0.2" },
     { name = "django-celery-beat", specifier = ">=2.9.0" },
+    { name = "django-json-widget", specifier = ">=2.1.1" },
     { name = "django-modeltranslation", specifier = ">=0.19.19" },
     { name = "django-mptt", specifier = ">=0.18.0" },
     { name = "django-unfold", specifier = ">=0.97.0" },
