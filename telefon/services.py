@@ -43,10 +43,17 @@ class NfonTimeControlService(BaseService):
         return None
 
     def list_time_controls(self) -> list[dict[str, str]]:
-        response = self.client.get(self._collection_path())
-        response.raise_for_status()
-        raw = response.json()
-        items = raw if isinstance(raw, list) else raw.get("items", [raw])
+        path = self._collection_path()
+        seen_paths = set()
+        items = []
+
+        while path and path not in seen_paths:
+            seen_paths.add(path)
+            response = self.client.get(path)
+            response.raise_for_status()
+            raw = response.json()
+            items.extend(raw if isinstance(raw, list) else raw.get("items", [raw]))
+            path = self._next_page_path(raw)
 
         services = []
         for item in items:
@@ -56,6 +63,16 @@ class NfonTimeControlService(BaseService):
             display_name = self.data_value(data, "displayName") or self.data_value(data, "name") or service_id
             services.append({"id": service_id, "name": display_name})
         return services
+
+    @staticmethod
+    def _next_page_path(payload: Any) -> str | None:
+        if not isinstance(payload, dict):
+            return None
+
+        for link in payload.get("links", []):
+            if link.get("rel") == "next" and link.get("href"):
+                return link["href"]
+        return None
 
     def get_time_control_dates(self, service_id: str) -> dict[str, Any]:
         service = self._fetch_time_control(service_id)

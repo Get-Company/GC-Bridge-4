@@ -35,6 +35,16 @@ class FakeNfonClient:
         return FakeResponse(self.payload)
 
 
+class PaginatedFakeNfonClient:
+    def __init__(self, pages):
+        self.pages = pages
+        self.get_calls = []
+
+    def get(self, path):
+        self.get_calls.append(path)
+        return FakeResponse(self.pages[path])
+
+
 def test_list_time_controls_normalizes_list_payload():
     client = FakeNfonClient(
         [
@@ -47,6 +57,40 @@ def test_list_time_controls_normalizes_list_payload():
     service = NfonTimeControlService(client=client, customer_id="customer")
 
     assert service.list_time_controls() == [{"id": "42", "name": "Ferien"}]
+
+
+def test_list_time_controls_fetches_all_pages():
+    collection_path = "/api/customers/customer/targets/time-control-services"
+    second_page_path = f"{collection_path}?_offset=16&_pagesize=16"
+    client = PaginatedFakeNfonClient(
+        {
+            collection_path: {
+                "items": [
+                    {
+                        "href": f"{collection_path}/1",
+                        "data": [{"name": "displayName", "value": "Ferien"}],
+                    }
+                ],
+                "links": [{"rel": "next", "href": second_page_path}],
+            },
+            second_page_path: {
+                "items": [
+                    {
+                        "href": f"{collection_path}/2",
+                        "data": [{"name": "name", "value": "Weihnachten"}],
+                    }
+                ],
+                "links": [],
+            },
+        }
+    )
+    service = NfonTimeControlService(client=client, customer_id="customer")
+
+    assert service.list_time_controls() == [
+        {"id": "1", "name": "Ferien"},
+        {"id": "2", "name": "Weihnachten"},
+    ]
+    assert client.get_calls == [collection_path, second_page_path]
 
 
 def test_add_denied_date_filters_writable_payload_and_sorts_dates():
