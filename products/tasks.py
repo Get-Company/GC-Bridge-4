@@ -233,7 +233,10 @@ def _scheduled_product_sync_continuation(job) -> None:
         Command as SyncCommand,
         _get_admin_user_id,
     )
-    from microtech.services import MicrotechGraphQLClientService
+    from microtech.services import (
+        MicrotechExpiredSpecialSyncService,
+        MicrotechGraphQLClientService,
+    )
     from microtech.services.artikel import MicrotechArtikelService
     from django.contrib.contenttypes.models import ContentType
     from products.models import Product as ProductModel
@@ -292,6 +295,18 @@ def _scheduled_product_sync_continuation(job) -> None:
         state["errors"],
         include_images,
     )
+    expired_special_service = MicrotechExpiredSpecialSyncService()
+    expired_count, affected_product_ids = expired_special_service.clear_expired_specials()
+    if affected_product_ids:
+        restored_count, _ = expired_special_service.sync_expired_specials_to_microtech(
+            erp=client,
+            affected_product_ids=affected_product_ids,
+        )
+        logger.info(
+            "scheduled_product_sync: abgelaufene Sonderpreise bereinigt (prices={}, products={})",
+            expired_count,
+            restored_count,
+        )
     _finalize_scheduled_product_sync(
         include_images=include_images,
         limit=None if erp_nrs else limit,

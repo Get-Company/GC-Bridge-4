@@ -112,11 +112,14 @@ class Command(MonitoredBaseCommand):
         if not price_entry:
             return {}
 
-        return MicrotechProductPayloadService.duplicate_vk0_prices_to_vk1({
-            "price": self._format_price(price_entry.price),
-            "rebateQuantity": price_entry.rebate_quantity,
-            "rebatePrice": self._format_price(price_entry.rebate_price) if price_entry.rebate_price else None,
-        })
+        return MicrotechProductPayloadService.build_complete_price_payload(
+            price=self._format_price(price_entry.price),
+            rebate_quantity=price_entry.rebate_quantity,
+            rebate_price=self._format_price(price_entry.rebate_price),
+            special_price=self._format_price(price_entry.special_price),
+            special_start_date=price_entry.special_start_date.isoformat() if price_entry.special_start_date else None,
+            special_end_date=price_entry.special_end_date.isoformat() if price_entry.special_end_date else None,
+        )
 
     def _format_price(self, value: Decimal | None) -> str | None:
         if value is None:

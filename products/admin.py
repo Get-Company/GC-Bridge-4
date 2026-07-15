@@ -682,12 +682,16 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
             self.message_user(request, "Bitte einen Sales-Channel auswaehlen.", level=messages.ERROR)
             return
 
-        updated = Price.objects.filter(product__in=queryset, sales_channel=sales_channel).update(
-            special_percentage=None,
-            special_price=None,
-            special_start_date=None,
-            special_end_date=None,
-        )
+        prices = Price.objects.filter(product__in=queryset, sales_channel=sales_channel).select_related("product")
+        updated = 0
+        for price in prices:
+            price.special_percentage = None
+            price.special_price = None
+            price.special_start_date = None
+            price.special_end_date = None
+            price.save()
+            updated += 1
+
         self.message_user(
             request,
             f"Sonderpreis fuer {updated} Preis(e) in {sales_channel.name} aufgehoben.",

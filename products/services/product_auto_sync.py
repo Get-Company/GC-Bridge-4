@@ -171,7 +171,6 @@ class ProductAutoSyncService(BaseService):
         product_erp_nr: str,
         changed_fields: list[str],
     ) -> None:
-        from microtech.management.commands.microtech_update_prices import Command as MicrotechUpdatePricesCommand
         from microtech.management.commands.microtech_update_product import Command as MicrotechUpdateProductCommand
         from microtech.services import MicrotechJobSentinelService
 
@@ -189,15 +188,6 @@ class ProductAutoSyncService(BaseService):
         sentinel.submit_product_update(
             erp_number=product_erp_nr,
             input_data=product_payload,
-            context={**base_context, "payload": "product"},
-            next_step="Produktdaten per Auto-Sync nach Microtech schreiben.",
+            context={**base_context, "payload": "product_with_prices"},
+            next_step="Produktdaten und Preise per Auto-Sync nach Microtech schreiben.",
         )
-
-        price_payload = MicrotechUpdatePricesCommand()._get_price_data(product)
-        if price_payload:
-            sentinel.submit_product_update(
-                erp_number=product_erp_nr,
-                input_data=price_payload,
-                context={**base_context, "payload": "prices"},
-                next_step="Preise per Auto-Sync nach Microtech schreiben.",
-            )

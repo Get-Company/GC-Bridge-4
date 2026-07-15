@@ -35,8 +35,8 @@ class Command(MonitoredBaseCommand):
             "--write-base-price-back",
             action="store_true",
             help=(
-                "Schreibt den Django-Basispreis nach Microtech (Vk0.Preis) zurueck. "
-                "Standard ist AUS, um versehentliche Preisfaktor-Fehler zu vermeiden."
+                "Veraltet und nur fuer bestehende Aufrufe erhalten. Preisbäume werden "
+                "bei abgelaufenen Sonderpreisen immer vollständig nach Microtech geschrieben."
             ),
         )
         parser.add_argument(
@@ -126,17 +126,10 @@ class Command(MonitoredBaseCommand):
                 updated_microtech,
                 skipped_price_writes,
             )
-            if write_base_price_back:
-                self.stdout.write(
-                    "Microtech aktualisiert: "
-                    f"{updated_microtech} Produkt(e), "
-                    f"{skipped_price_writes} Preis-Writeback(s) wegen Plausibilitaetspruefung uebersprungen."
-                )
-            else:
-                self.stdout.write(
-                    f"Microtech aktualisiert: {updated_microtech} Produkt(e) "
-                    "(nur Sonderpreisfelder, kein Basispreis-Writeback)."
-                )
+            self.stdout.write(
+                f"Microtech aktualisiert: {updated_microtech} Produkt(e) "
+                "mit vollständigen Preisbäumen."
+            )
 
             runtime.update(stage=f"4/{total_stages} django_to_shopware")
             self.stdout.write(f"4/{total_stages} Django -> Shopware sync starten")

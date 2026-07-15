@@ -13,6 +13,7 @@ from microtech.management.commands.microtech_update_prices import Command as Mic
 from microtech.management.commands.microtech_update_product import Command as MicrotechUpdateProductCommand
 from microtech.services.base import MicrotechDatasetService
 from microtech.services.artikel import MicrotechArtikelService
+from microtech.services.expired_specials import MicrotechExpiredSpecialSyncService
 from microtech.services.graphql_client import MicrotechGraphQLClientService
 from microtech.services.product_payload import MicrotechProductPayloadService
 from products.models import Price, Product, ProductImage, Storage, Tax
@@ -22,6 +23,18 @@ from shopware.models import ShopwareSettings
 class _FakeGraphQLClient(MicrotechGraphQLClientService):
     def __init__(self, product_result):
         self.request_product = MagicMock(return_value=product_result)
+
+
+class _FakeExpiredSpecialClient(MicrotechGraphQLClientService):
+    def __init__(self):
+        self.updated_products: list[tuple[str, dict]] = []
+
+    def request_product(self, erp_number: str) -> dict:
+        return {"status": "DONE", "product": {"erpNumber": erp_number}}
+
+    def update_product(self, erp_number: str, input_data: dict) -> dict:
+        self.updated_products.append((erp_number, input_data))
+        return {"status": "DONE"}
 
 
 class MicrotechArtikelServiceProductJobTest(SimpleTestCase):
@@ -95,23 +108,13 @@ class MicrotechArtikelServiceProductJobTest(SimpleTestCase):
 
 
 class MicrotechProductPayloadServiceTest(SimpleTestCase):
-    def test_duplicate_vk0_prices_to_vk1_writes_vk0_and_vk1_price_trees(self):
-        payload = {
-            "name": "Artikel",
-            "price": "10,25",
-            "rebateQuantity": 5,
-            "rebatePrice": "9,25",
-            "specialPrice": "",
-            "specialStartDate": "",
-            "specialEndDate": "",
-        }
+    def test_complete_price_payload_clears_special_fields_when_no_special_exists(self):
+        result = MicrotechProductPayloadService.build_complete_price_payload(
+            price="10,25",
+            rebate_quantity=5,
+            rebate_price="9,25",
+        )
 
-        result = MicrotechProductPayloadService.duplicate_vk0_prices_to_vk1(payload)
-
-        self.assertNotIn("price", result)
-        self.assertNotIn("rebateQuantity", result)
-        self.assertNotIn("rebatePrice", result)
-        self.assertNotIn("specialPrice", result)
         self.assertEqual(
             result["priceTrees"],
             [
@@ -123,19 +126,23 @@ class MicrotechProductPayloadServiceTest(SimpleTestCase):
                     "specialPrice": "",
                     "specialStartDate": "",
                     "specialEndDate": "",
-                },
-                {
-                    "tree": "Vk1",
-                    "price": "10,25",
-                    "rebateQuantity": 5,
-                    "rebatePrice": "9,25",
-                    "specialPrice": "",
-                    "specialStartDate": "",
-                    "specialEndDate": "",
                 }
             ],
         )
-        self.assertNotIn("priceTrees", payload)
+
+    def test_complete_price_payload_clears_rebate_for_special_price(self):
+        result = MicrotechProductPayloadService.build_complete_price_payload(
+            price="10,25",
+            rebate_quantity=5,
+            rebate_price="9,25",
+            special_price="8,25",
+            special_start_date="2026-07-15T00:00:00+02:00",
+            special_end_date="2026-07-31T23:59:59+02:00",
+        )
+
+        self.assertEqual(result["priceTrees"][0]["rebateQuantity"], "")
+        self.assertEqual(result["priceTrees"][0]["rebatePrice"], "")
+        self.assertEqual(result["priceTrees"][0]["specialPrice"], "8,25")
 
 
 class MicrotechSyncProductsCommandTest(TestCase):
@@ -420,6 +427,34 @@ class MicrotechSyncProductsCommandTest(TestCase):
         self.assertEqual(price.special_price, Decimal("79.95"))
         self.assertEqual(price.history_entries.count(), initial_history_count)
 
+    def test_sync_preserves_local_rebate_when_special_price_has_no_rebate(self):
+        product = Product.objects.create(erp_nr="1004-special", name="Bestehend", tax=self.tax_19)
+        Price.objects.create(
+            product=product,
+            sales_channel=self.default_channel,
+            price=Decimal("100.00"),
+            rebate_quantity=10,
+            rebate_price=Decimal("95.00"),
+        )
+        artikel_service = self._build_artikel_service(erp_nr=product.erp_nr, is_active=True)
+        artikel_service.get_price.return_value = Decimal("100.00")
+        artikel_service.get_rebate_quantity.return_value = None
+        artikel_service.get_rebate_price.return_value = None
+        artikel_service.get_special_price.return_value = Decimal("80.00")
+        artikel_service.get_special_start_date.return_value = timezone.now() - timedelta(days=1)
+        artikel_service.get_special_end_date.return_value = timezone.now() + timedelta(days=1)
+
+        MicrotechSyncProductsCommand()._sync_current_record(
+            artikel_service,
+            self._build_lager_service(),
+            tax_map={Decimal("19.00"): self.tax_19, Decimal("7.00"): self.tax_7},
+            preserve_is_active=False,
+        )
+
+        price = Price.objects.get(product=product, sales_channel=self.default_channel)
+        self.assertEqual(price.rebate_quantity, 10)
+        self.assertEqual(price.rebate_price, Decimal("95.00"))
+
     def test_sync_changed_rebate_quantity_writes_history_entry(self):
         cmd = MicrotechSyncProductsCommand()
         artikel_service = self._build_artikel_service(erp_nr="1005", is_active=True)
@@ -540,7 +575,7 @@ class MicrotechSyncProductsCommandTest(TestCase):
         self.assertEqual(derived_price.rebate_price, Decimal("118.75"))
         self.assertEqual(derived_price.special_price, Decimal("100.00"))
 
-    def test_update_product_payload_writes_default_price_to_vk0_and_vk1(self):
+    def test_update_product_payload_writes_default_price_to_vk0(self):
         product = Product.objects.create(erp_nr="1008", name="Payload Artikel", tax=self.tax_19)
         Price.objects.create(
             product=product,
@@ -565,17 +600,8 @@ class MicrotechSyncProductsCommandTest(TestCase):
                 {
                     "tree": "Vk0",
                     "price": "10,25",
-                    "rebateQuantity": 5,
-                    "rebatePrice": "9,25",
-                    "specialPrice": "8,25",
-                    "specialStartDate": payload["priceTrees"][0]["specialStartDate"],
-                    "specialEndDate": payload["priceTrees"][0]["specialEndDate"],
-                },
-                {
-                    "tree": "Vk1",
-                    "price": "10,25",
-                    "rebateQuantity": 5,
-                    "rebatePrice": "9,25",
+                    "rebateQuantity": "",
+                    "rebatePrice": "",
                     "specialPrice": "8,25",
                     "specialStartDate": payload["priceTrees"][0]["specialStartDate"],
                     "specialEndDate": payload["priceTrees"][0]["specialEndDate"],
@@ -583,7 +609,7 @@ class MicrotechSyncProductsCommandTest(TestCase):
             ],
         )
 
-    def test_update_prices_payload_writes_default_price_to_vk0_and_vk1(self):
+    def test_update_prices_payload_writes_default_price_to_vk0(self):
         product = Product.objects.create(erp_nr="1009", name="Nur Preis")
         Price.objects.create(
             product=product,
@@ -606,12 +632,42 @@ class MicrotechSyncProductsCommandTest(TestCase):
                     "price": "11,25",
                     "rebateQuantity": 10,
                     "rebatePrice": "10,25",
-                },
+                    "specialPrice": "",
+                    "specialStartDate": "",
+                    "specialEndDate": "",
+                }
+            ],
+        )
+
+    def test_expired_special_sync_restores_complete_price_tree(self):
+        product = Product.objects.create(erp_nr="1010", name="Angebotsartikel")
+        price = Price.objects.create(
+            product=product,
+            sales_channel=self.default_channel,
+            price=Decimal("12.50"),
+            rebate_quantity=10,
+            rebate_price=Decimal("11.25"),
+        )
+        client = _FakeExpiredSpecialClient()
+
+        updated, skipped = MicrotechExpiredSpecialSyncService().sync_expired_specials_to_microtech(
+            erp=client,
+            affected_product_ids={product.pk},
+        )
+
+        self.assertEqual((updated, skipped), (1, 0))
+        self.assertEqual(client.updated_products[0][0], product.erp_nr)
+        self.assertEqual(
+            client.updated_products[0][1]["priceTrees"],
+            [
                 {
-                    "tree": "Vk1",
-                    "price": "11,25",
+                    "tree": "Vk0",
+                    "price": "12.50",
                     "rebateQuantity": 10,
-                    "rebatePrice": "10,25",
+                    "rebatePrice": "11.25",
+                    "specialPrice": "",
+                    "specialStartDate": "",
+                    "specialEndDate": "",
                 }
             ],
         )

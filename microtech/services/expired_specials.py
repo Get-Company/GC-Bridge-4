@@ -35,6 +35,10 @@ class MicrotechExpiredSpecialSyncService(BaseService):
         affected_product_ids: set[int],
         write_base_price_back: bool = False,
     ) -> tuple[int, int]:
+        # Der Parameter bleibt fuer bestehende Aufrufer kompatibel. Preisbäume
+        # werden jedoch immer vollständig geschrieben, damit gelöschte
+        # Sonderpreisfelder in Microtech nicht erhalten bleiben.
+        _ = write_base_price_back
         if not affected_product_ids:
             return 0, 0
 
@@ -59,21 +63,11 @@ class MicrotechExpiredSpecialSyncService(BaseService):
             if not artikel_service.find(erp_nr):
                 continue
 
-            input_data = {
-                "specialPrice": "",
-                "specialStartDate": "",
-                "specialEndDate": "",
-            }
-            if write_base_price_back:
-                current_microtech_price = self._to_decimal(artikel_service.get_price())
-                if self._is_suspicious_price_ratio(
-                    django_price=price.price,
-                    microtech_price=current_microtech_price,
-                ):
-                    skipped_price_writes += 1
-                else:
-                    input_data["price"] = self._format_decimal(price.price)
-            input_data = MicrotechProductPayloadService.duplicate_vk0_prices_to_vk1(input_data)
+            input_data = MicrotechProductPayloadService.build_complete_price_payload(
+                price=self._format_decimal(price.price),
+                rebate_quantity=price.rebate_quantity,
+                rebate_price=self._format_decimal(price.rebate_price),
+            )
             if isinstance(erp, MicrotechGraphQLClientService):
                 erp.update_product(erp_nr, input_data)
             else:

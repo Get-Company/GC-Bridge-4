@@ -81,16 +81,18 @@ class Command(MonitoredBaseCommand):
         }
 
         if price_entry:
-            input_data.update({
-                "price": self._format_price(price_entry.price),
-                "rebateQuantity": price_entry.rebate_quantity,
-                "rebatePrice": self._format_price(price_entry.rebate_price) if price_entry.rebate_price else None,
-                "specialPrice": self._format_price(price_entry.special_price) if price_entry.special_price else None,
-                "specialStartDate": price_entry.special_start_date.isoformat() if price_entry.special_start_date else None,
-                "specialEndDate": price_entry.special_end_date.isoformat() if price_entry.special_end_date else None,
-            })
-
-        input_data = MicrotechProductPayloadService.duplicate_vk0_prices_to_vk1(input_data)
+            input_data.update(
+                MicrotechProductPayloadService.build_complete_price_payload(
+                    price=self._format_price(price_entry.price),
+                    rebate_quantity=price_entry.rebate_quantity,
+                    rebate_price=self._format_price(price_entry.rebate_price),
+                    special_price=self._format_price(price_entry.special_price),
+                    special_start_date=price_entry.special_start_date.isoformat()
+                    if price_entry.special_start_date
+                    else None,
+                    special_end_date=price_entry.special_end_date.isoformat() if price_entry.special_end_date else None,
+                )
+            )
 
         # Remove None values to avoid sending them if not explicitly needed,
         # but keep empty strings if that's the intent.

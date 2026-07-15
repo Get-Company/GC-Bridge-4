@@ -113,6 +113,18 @@ class Command(MonitoredBaseCommand):
         if price_entry is None:
             price_entry = Price(product=product, sales_channel=sales_channel)
 
+        # Während eines Sonderpreises wird die Staffel bewusst aus Microtech
+        # entfernt. Sie bleibt in Django als Wiederherstellungswert erhalten und
+        # darf beim naechsten Microtech-Import nicht verloren gehen.
+        if (
+            special_price not in (None, "")
+            and rebate_quantity in (None, 0)
+            and rebate_price in (None, Decimal("0"))
+            and (price_entry.rebate_quantity is not None or price_entry.rebate_price is not None)
+        ):
+            rebate_quantity = price_entry.rebate_quantity
+            rebate_price = price_entry.rebate_price
+
         price_entry.price = price
         price_entry.rebate_quantity = rebate_quantity
         price_entry.rebate_price = rebate_price

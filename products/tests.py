@@ -407,6 +407,35 @@ class ProductAutoSyncServiceTest(TestCase):
         job.refresh_from_db()
         self.assertEqual(job.status, ProductSyncJob.Status.SUCCEEDED)
 
+    @patch("microtech.services.MicrotechJobSentinelService")
+    def test_process_microtech_job_submits_one_complete_price_payload(self, mock_sentinel_cls):
+        channel = ShopwareSettings.objects.create(name="Default", is_active=True, is_default=True)
+        product = Product.objects.create(erp_nr="A-9204", name="Angebotsartikel")
+        Price.objects.create(
+            product=product,
+            sales_channel=channel,
+            price=Decimal("100.00"),
+            rebate_quantity=10,
+            rebate_price=Decimal("95.00"),
+            special_percentage=Decimal("10.00"),
+        )
+        job = ProductSyncJob.objects.create(
+            product=product,
+            target=ProductSyncJob.Target.MICROTECH,
+            changed_fields=["price.special_percentage"],
+        )
+
+        ProductAutoSyncService().process_job(job_id=job.pk)
+
+        sentinel = mock_sentinel_cls.return_value
+        sentinel.submit_product_update.assert_called_once()
+        payload = sentinel.submit_product_update.call_args.kwargs["input_data"]
+        self.assertEqual(payload["priceTrees"][0]["price"], "100,00")
+        self.assertEqual(payload["priceTrees"][0]["rebateQuantity"], "")
+        self.assertEqual(payload["priceTrees"][0]["rebatePrice"], "")
+        self.assertEqual(len(payload["priceTrees"]), 1)
+        self.assertEqual(sentinel.submit_product_update.call_args.kwargs["context"]["payload"], "product_with_prices")
+
     @patch("products.services.product_auto_sync.call_command", side_effect=CommandError("boom"))
     def test_process_job_marks_failures(self, mock_call_command):
         product = Product.objects.create(erp_nr="A-9202", name="Artikel")
@@ -530,8 +559,10 @@ class ProductCeleryTaskTest(SimpleTestCase):
     @patch("microtech.management.commands.microtech_sync_products.Command")
     @patch("microtech.services.artikel.MicrotechArtikelService")
     @patch("microtech.services.MicrotechGraphQLClientService")
+    @patch("microtech.services.MicrotechExpiredSpecialSyncService")
     def test_product_sync_continuation_uses_graphql_stock_without_lager_lookup(
         self,
+        expired_special_service_cls,
         microtech_client_cls,
         artikel_service_cls,
         sync_command_cls,
@@ -540,6 +571,7 @@ class ProductCeleryTaskTest(SimpleTestCase):
         _issue_collector,
         finalize_sync,
     ):
+        expired_special_service_cls.return_value.clear_expired_specials.return_value = (0, set())
         client = microtech_client_cls.return_value
         client.product_list_job.return_value = {"products": [{"erpNumber": "A-1000"}]}
         artikel_service_cls.return_value.range_eof.return_value = False
@@ -552,6 +584,7 @@ class ProductCeleryTaskTest(SimpleTestCase):
 
         sync_command_cls.return_value._sync_current_record.assert_called_once()
         self.assertIsNone(sync_command_cls.return_value._sync_current_record.call_args.args[1])
+        expired_special_service_cls.return_value.clear_expired_specials.assert_called_once_with()
         finalize_sync.assert_called_once_with(include_images=False, limit=None, erp_nrs=["A-1000"])
 
     @patch("products.tasks._active_product_erp_nrs", return_value=["A-1000", "A-1001"])
@@ -1905,7 +1938,9 @@ class ProductAdminSpecialPriceActionTest(TestCase):
         self.assertTrue(timezone.is_aware(self.price.special_start_date))
         self.assertTrue(timezone.is_aware(self.price.special_end_date))
 
-    def test_clear_special_price_for_channel_resets_product_prices(self):
+    @patch("products.tasks.process_product_sync_job.delay")
+    def test_clear_special_price_for_channel_resets_product_prices(self, mock_delay):
+        mock_delay.return_value.id = "celery-task"
         self.price.special_percentage = Decimal("12.50")
         self.price.save()
 
@@ -1920,13 +1955,22 @@ class ProductAdminSpecialPriceActionTest(TestCase):
 
         admin_instance = ProductAdmin(Product, AdminSite())
         admin_instance.message_user = lambda *args, **kwargs: None
-        admin_instance.clear_special_price_for_channel(request, Product.objects.filter(pk=self.product.pk))
+        with self.captureOnCommitCallbacks(execute=True):
+            admin_instance.clear_special_price_for_channel(request, Product.objects.filter(pk=self.product.pk))
 
         self.price.refresh_from_db()
         self.assertIsNone(self.price.special_percentage)
         self.assertIsNone(self.price.special_price)
         self.assertIsNone(self.price.special_start_date)
         self.assertIsNone(self.price.special_end_date)
+
+        # Aufheben muss den Auto-Sync anstossen (Regression: frueher .update() ohne Signals)
+        jobs = list(ProductSyncJob.objects.order_by("target"))
+        self.assertEqual(
+            {job.target for job in jobs},
+            {ProductSyncJob.Target.MICROTECH, ProductSyncJob.Target.SHOPWARE, ProductSyncJob.Target.SHOPWARE5},
+        )
+        self.assertEqual(mock_delay.call_count, 3)
 
 class LegacyCategoryImportCommandTest(TestCase):
     def test_import_legacy_categories_builds_mptt_tree(self):
