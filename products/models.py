@@ -167,6 +167,13 @@ class PropertyGroup(BaseModel):
         db_index=True,
         verbose_name=_("Externe Referenz"),
     )
+    shopware_id = models.CharField(
+        max_length=32,
+        blank=True,
+        default="",
+        db_index=True,
+        verbose_name=_("Shopware Attributgruppen-ID"),
+    )
     name = models.CharField(max_length=255, verbose_name=_("Name"))
 
     class Meta:
@@ -185,6 +192,13 @@ class PropertyValue(BaseModel):
         default="",
         db_index=True,
         verbose_name=_("Externe Referenz"),
+    )
+    shopware_id = models.CharField(
+        max_length=32,
+        blank=True,
+        default="",
+        db_index=True,
+        verbose_name=_("Shopware Attributwert-ID"),
     )
     group = models.ForeignKey(
         PropertyGroup,
@@ -459,6 +473,142 @@ class ProductProperty(BaseModel):
 
     def __str__(self) -> str:
         return f"{self.product.erp_nr} | {self.value.group.name}: {self.value.name}"
+
+
+class ProductVariantFamily(BaseModel):
+    """A Shopware parent product whose children are derived from product attributes.
+
+    The actual sellable products remain regular :class:`Product` instances with
+    their Microtech article numbers.  A family only defines where to find those
+    products and which existing attribute groups form the Shopware configurator.
+    """
+
+    slug = models.SlugField(max_length=100, unique=True, verbose_name=_("Technischer Schlüssel"))
+    name = models.CharField(max_length=255, verbose_name=_("Shopware Parent-Name"))
+    description = models.TextField(blank=True, default="", verbose_name=_("Shopware Parent-Beschreibung"))
+    shopware_product_number = models.CharField(
+        max_length=64,
+        unique=True,
+        verbose_name=_("Shopware Parent-Artikelnummer"),
+        help_text=_("Technische Shopware-Artikelnummer ohne Microtech-Gegenstück."),
+    )
+    shopware_id = models.CharField(
+        max_length=32,
+        blank=True,
+        default="",
+        db_index=True,
+        verbose_name=_("Shopware Parent-ID"),
+    )
+    target_category = models.ForeignKey(
+        Category,
+        on_delete=models.PROTECT,
+        related_name="variant_parent_families",
+        verbose_name=_("Shopware Zielkategorie"),
+        help_text=_("Kategorie, in der nur der Varianten-Parent sichtbar sein soll."),
+    )
+    source_categories = models.ManyToManyField(
+        Category,
+        related_name="variant_source_families",
+        verbose_name=_("Quellkategorien"),
+        help_text=_("Produkte aus diesen Kategorien werden anhand ihrer Attribute als Varianten geprüft."),
+    )
+    synced_products = models.ManyToManyField(
+        Product,
+        blank=True,
+        editable=False,
+        related_name="synced_variant_families",
+        verbose_name=_("Zuletzt synchronisierte Varianten"),
+        help_text=_("Technischer Sync-Merker. Wird automatisch gepflegt und nicht manuell bearbeitet."),
+    )
+    default_product = models.ForeignKey(
+        Product,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="default_for_variant_families",
+        verbose_name=_("Standardvariante"),
+    )
+    seo_path = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        verbose_name=_("Gewünschter SEO-Pfad"),
+        help_text=_("Wird als Zielvorgabe dokumentiert; die SEO-URL wird erst im Shopware-Rollout freigegeben."),
+    )
+    is_active = models.BooleanField(default=True, verbose_name=_("Aktiv"))
+
+    class Meta:
+        verbose_name = _("Variantenfamilie")
+        verbose_name_plural = _("Variantenfamilien")
+        ordering = ("name", "id")
+
+    def __str__(self) -> str:
+        return self.name
+
+    def candidate_products(self):
+        return Product.objects.filter(categories__in=self.source_categories.all()).distinct()
+
+    def clean(self):
+        super().clean()
+        if self.default_product_id and self.pk and not self.candidate_products().filter(pk=self.default_product_id).exists():
+            raise ValidationError({"default_product": _("Die Standardvariante muss aus einer Quellkategorie stammen.")})
+
+
+class ProductVariantAttribute(BaseModel):
+    """Marks one existing property group as a variant axis for one family."""
+
+    class DisplayType(models.TextChoices):
+        TEXT = "text", _("Text")
+        COLOR = "color", _("Farbe")
+        IMAGE = "image", _("Bild")
+
+    family = models.ForeignKey(
+        ProductVariantFamily,
+        on_delete=models.CASCADE,
+        related_name="variant_attributes",
+        verbose_name=_("Variantenfamilie"),
+    )
+    property_group = models.ForeignKey(
+        PropertyGroup,
+        on_delete=models.PROTECT,
+        related_name="variant_family_attributes",
+        verbose_name=_("Attributgruppe"),
+    )
+    position = models.PositiveSmallIntegerField(default=100, verbose_name=_("Position"))
+    display_type = models.CharField(
+        max_length=16,
+        choices=DisplayType.choices,
+        default=DisplayType.TEXT,
+        verbose_name=_("Darstellung in Shopware"),
+    )
+    fallback_value = models.ForeignKey(
+        PropertyValue,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="variant_attribute_fallbacks",
+        verbose_name=_("Ersatzwert bei fehlendem Attribut"),
+        help_text=_("Beispiel: ‚Ohne Aufdruck‘ für Produkte ohne Tab-Beschriftung."),
+    )
+
+    class Meta:
+        verbose_name = _("Variantenattribut")
+        verbose_name_plural = _("Variantenattribute")
+        ordering = ("family", "position", "property_group__name", "id")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("family", "property_group"),
+                name="unique_variant_attribute_per_family",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.family}: {self.property_group}"
+
+    def clean(self):
+        super().clean()
+        if self.fallback_value_id and self.fallback_value.group_id != self.property_group_id:
+            raise ValidationError({"fallback_value": _("Der Ersatzwert muss zu dieser Attributgruppe gehören.")})
 
 
 class Price(BaseModel):

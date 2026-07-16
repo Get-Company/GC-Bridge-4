@@ -139,6 +139,12 @@ class Command(MonitoredBaseCommand):
                 limit=limit,
                 skip_images=force_images,
             )
+            call_command(
+                "shopware_sync_variants",
+                all=True,
+                apply=True,
+                skip_product_sync=True,
+            )
             if force_images:
                 runtime.update(stage="5/5 force_shopware_images")
                 self.stdout.write("5/5 Shopware-Bilder vollstaendig neu hochladen")

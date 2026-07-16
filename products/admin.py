@@ -88,6 +88,8 @@ from .models import (
     ProductImage,
     ProductProperty,
     ProductSyncJob,
+    ProductVariantAttribute,
+    ProductVariantFamily,
     PropertyGroup,
     PropertyValue,
     Storage,
@@ -3348,8 +3350,8 @@ class PropertyGroupAdmin(TabbedTranslationAdmin, BaseAdmin):
         **getattr(TabbedTranslationAdmin, "formfield_overrides", {}),
         **BaseAdmin.formfield_overrides,
     }
-    list_display = ("name", "created_at")
-    search_fields = ("name", "name_de", "name_en")
+    list_display = ("name", "shopware_id", "external_key", "created_at")
+    search_fields = ("name", "name_de", "name_en", "shopware_id", "external_key")
     ordering = ("name",)
 
 
@@ -3360,8 +3362,16 @@ class PropertyValueAdmin(TabbedTranslationAdmin, BaseAdmin):
         **getattr(TabbedTranslationAdmin, "formfield_overrides", {}),
         **BaseAdmin.formfield_overrides,
     }
-    list_display = ("name", "group", "external_key", "created_at")
-    search_fields = ("name", "name_de", "name_en", "group__name", "group__name_de", "external_key")
+    list_display = ("name", "group", "shopware_id", "external_key", "created_at")
+    search_fields = (
+        "name",
+        "name_de",
+        "name_en",
+        "group__name",
+        "group__name_de",
+        "shopware_id",
+        "external_key",
+    )
     list_filter = [("group", RelatedDropdownFilter), ("created_at", RangeDateTimeFilter)]
     autocomplete_fields = ("group",)
     ordering = ("group__name", "name")
@@ -3387,6 +3397,55 @@ class PropertyValueAdmin(TabbedTranslationAdmin, BaseAdmin):
     def save_related(self, request, form, formsets, change):
         super().save_related(request, form, formsets, change)
         self._save_product_assignments(form.instance, form.cleaned_data.get("products"))
+
+
+class ProductVariantAttributeInline(BaseTabularInline):
+    model = ProductVariantAttribute
+    fields = ("property_group", "position", "display_type", "fallback_value")
+    autocomplete_fields = ("property_group", "fallback_value")
+    extra = 0
+
+
+@admin.register(ProductVariantFamily)
+class ProductVariantFamilyAdmin(BaseAdmin):
+    list_display = (
+        "name",
+        "shopware_product_number",
+        "target_category",
+        "source_category_count",
+        "is_active",
+        "created_at",
+    )
+    list_filter = (("is_active", BooleanRadioFilter), ("target_category", RelatedDropdownFilter))
+    search_fields = ("name", "slug", "shopware_product_number", "shopware_id", "seo_path")
+    ordering = ("name", "id")
+    autocomplete_fields = ("target_category", "default_product")
+    filter_horizontal = ("source_categories",)
+    inlines = (ProductVariantAttributeInline,)
+    fieldsets = (
+        (
+            _("Shopware Parent"),
+            {
+                "fields": (
+                    "name",
+                    "slug",
+                    "description",
+                    "shopware_product_number",
+                    "shopware_id",
+                    "is_active",
+                )
+            },
+        ),
+        (
+            _("Ableitung aus bestehenden Produkten"),
+            {"fields": ("target_category", "source_categories", "default_product")},
+        ),
+        (_("SEO-Vorgabe"), {"fields": ("seo_path",)}),
+    )
+
+    @admin.display(description=_("Quellkategorien"))
+    def source_category_count(self, obj: ProductVariantFamily) -> int:
+        return obj.source_categories.count()
 
 
 @admin.register(Category)

@@ -49,11 +49,13 @@ from products.models import (
     ProductImage,
     ProductProperty,
     ProductSyncJob,
+    ProductVariantAttribute,
+    ProductVariantFamily,
     PropertyGroup,
     PropertyValue,
     Storage,
 )
-from products.services import PriceIncreaseService
+from products.services import PriceIncreaseService, ProductVariantFamilyResolverService
 from products.services import ProductAutoSyncService, ShopwareCategorySyncService, disable_product_auto_sync
 from products import tasks as product_tasks
 from products.tasks import sync_from_microtech, sync_to_shopware, sync_to_microtech
@@ -2775,3 +2777,81 @@ class SyncToMicrotechTaskTest(SimpleTestCase):
         sync_to_microtech(["1001", "1002"])
 
         mock_run.assert_called_once_with(erp_nrs=["1001", "1002"], include_images=False)
+
+
+class ProductVariantFamilyResolverServiceTest(TestCase):
+    def setUp(self):
+        self.target_category = Category.objects.create(
+            name="Quick-Tabs",
+            slug="quick-tabs-parent",
+            sw6_id="quick-tabs-category-id",
+        )
+        self.source_category = Category.objects.create(name="Quick-Tabs 6 cm", slug="quick-tabs-6-cm")
+        self.size_group = PropertyGroup.objects.create(name="Tab-Größe", external_key="size")
+        self.color_group = PropertyGroup.objects.create(name="Farbe", external_key="color")
+        self.print_group = PropertyGroup.objects.create(name="Tab Beschriftung", external_key="print")
+        self.size_6 = PropertyValue.objects.create(group=self.size_group, name="6 cm", external_key="6cm")
+        self.size_3 = PropertyValue.objects.create(group=self.size_group, name="3 cm", external_key="3cm")
+        self.white = PropertyValue.objects.create(group=self.color_group, name="Weiß", external_key="white")
+        self.yellow = PropertyValue.objects.create(group=self.color_group, name="Gelb", external_key="yellow")
+        self.without_print = PropertyValue.objects.create(
+            group=self.print_group,
+            name="Ohne Aufdruck",
+            external_key="without-print",
+        )
+        self.printed = PropertyValue.objects.create(group=self.print_group, name="Druck", external_key="print")
+
+        self.six_cm = Product.objects.create(erp_nr="581000", name="Quick-Tabs 6 cm weiß")
+        self.three_cm = Product.objects.create(erp_nr="291001", name="Quick-Tabs 3 cm gelb")
+        self.incomplete = Product.objects.create(erp_nr="ASSORT-1", name="Quick-Tabs Sortiment")
+        for product in (self.six_cm, self.three_cm, self.incomplete):
+            product.categories.add(self.source_category)
+        for product, value in (
+            (self.six_cm, self.size_6),
+            (self.six_cm, self.white),
+            (self.three_cm, self.size_3),
+            (self.three_cm, self.yellow),
+            (self.three_cm, self.printed),
+            (self.incomplete, self.size_6),
+        ):
+            ProductProperty.objects.create(product=product, value=value)
+
+        self.family = ProductVariantFamily.objects.create(
+            slug="quick-tabs",
+            name="Quick-Tabs",
+            shopware_product_number="PARENT-QUICK-TABS",
+            target_category=self.target_category,
+            default_product=self.six_cm,
+        )
+        self.family.source_categories.add(self.source_category)
+        ProductVariantAttribute.objects.create(family=self.family, property_group=self.size_group, position=10)
+        ProductVariantAttribute.objects.create(family=self.family, property_group=self.color_group, position=20)
+        ProductVariantAttribute.objects.create(
+            family=self.family,
+            property_group=self.print_group,
+            position=30,
+            fallback_value=self.without_print,
+        )
+
+    def test_resolver_uses_existing_attributes_and_fallback_without_cartesian_products(self):
+        resolution = ProductVariantFamilyResolverService().resolve(self.family)
+
+        self.assertTrue(resolution.is_valid)
+        self.assertEqual([variant.product.erp_nr for variant in resolution.variants], ["291001", "581000"])
+        self.assertEqual(len(resolution.skipped), 1)
+        self.assertEqual(resolution.skipped[0].product.erp_nr, "ASSORT-1")
+        self.assertIn("Farbe: kein Wert", resolution.skipped[0].reason)
+        options_by_erp = {
+            variant.product.erp_nr: [value.name for value in variant.option_values]
+            for variant in resolution.variants
+        }
+        self.assertEqual(options_by_erp["581000"], ["6 cm", "Weiß", "Ohne Aufdruck"])
+        self.assertEqual(options_by_erp["291001"], ["3 cm", "Gelb", "Druck"])
+
+    def test_product_keeps_family_lookup_after_it_is_no_longer_in_a_source_category(self):
+        self.family.synced_products.add(self.six_cm)
+        self.six_cm.categories.clear()
+
+        families = ProductVariantFamilyResolverService().families_for_product(self.six_cm)
+
+        self.assertEqual(families, (self.family,))

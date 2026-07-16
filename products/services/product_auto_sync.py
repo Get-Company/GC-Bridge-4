@@ -85,6 +85,19 @@ class ProductAutoSyncService(BaseService):
         try:
             if target == ProductSyncJob.Target.SHOPWARE:
                 call_command("shopware_sync_products", product_erp_nr, skip_images=True)
+                from products.services.variant_family import ProductVariantFamilyResolverService
+
+                variant_family_slugs = [
+                    family.slug
+                    for family in ProductVariantFamilyResolverService().families_for_product(job.product)
+                ]
+                if variant_family_slugs:
+                    call_command(
+                        "shopware_sync_variants",
+                        *variant_family_slugs,
+                        apply=True,
+                        skip_product_sync=True,
+                    )
             elif target == ProductSyncJob.Target.SHOPWARE5:
                 call_command("shopware5_sync_products", product_erp_nr)
             elif target == ProductSyncJob.Target.MICROTECH:

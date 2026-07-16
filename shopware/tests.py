@@ -9,7 +9,18 @@ from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 from requests.auth import HTTPBasicAuth, HTTPDigestAuth
 
-from products.models import Image, Price, Product, ProductImage
+from products.models import (
+    Category,
+    Image,
+    Price,
+    Product,
+    ProductImage,
+    ProductProperty,
+    ProductVariantAttribute,
+    ProductVariantFamily,
+    PropertyGroup,
+    PropertyValue,
+)
 from shopware.management.commands.shopware_sync_products import Command as ShopwareSyncProductsCommand
 from shopware.management.commands.shopware_force_product_image_uploads import Command as ForceProductImageUploadsCommand
 from shopware.models import ShopwareSettings
@@ -18,6 +29,7 @@ from shopware.services.product import ProductService
 from shopware.services.product_media import ProductMediaSyncService
 from shopware.services.shopware5 import Shopware5ProductSyncService
 from shopware.services.shopware6 import Criteria, EqualsFilter, InvalidTokenError, Shopware6Service
+from shopware.services.variant_sync import ShopwareVariantSyncService
 
 
 class Shopware6ServiceTokenRetryTest(SimpleTestCase):
@@ -686,6 +698,99 @@ class ShopwareSyncProductsCommandBatchTest(TestCase):
         payloads = service.bulk_upsert.call_args.args[0]
         self.assertEqual(payloads[0]["name"], "A-7003")
         runtime.close.assert_called_once()
+
+
+class ShopwareVariantSyncServiceTest(TestCase):
+    def setUp(self):
+        self.target_category = Category.objects.create(
+            name="Quick-Tabs",
+            slug="shopware-quick-tabs-parent",
+            sw6_id="quick-tabs-category-id",
+        )
+        self.source_category = Category.objects.create(name="Quick-Tabs Quelle", slug="shopware-quick-tabs-source")
+        self.size_group = PropertyGroup.objects.create(name="Tab-Größe", external_key="size")
+        self.color_group = PropertyGroup.objects.create(name="Farbe", external_key="color")
+        self.size = PropertyValue.objects.create(group=self.size_group, name="6 cm", external_key="6cm")
+        self.color = PropertyValue.objects.create(group=self.color_group, name="Weiß", external_key="white")
+        self.product = Product.objects.create(erp_nr="581000", name="Quick-Tabs 6 cm weiß")
+        self.product.categories.add(self.source_category)
+        ProductProperty.objects.create(product=self.product, value=self.size)
+        ProductProperty.objects.create(product=self.product, value=self.color)
+        self.family = ProductVariantFamily.objects.create(
+            slug="quick-tabs",
+            name="Quick-Tabs",
+            description="Parent für Quick-Tabs",
+            shopware_product_number="PARENT-QUICK-TABS",
+            target_category=self.target_category,
+            default_product=self.product,
+        )
+        self.family.source_categories.add(self.source_category)
+        ProductVariantAttribute.objects.create(family=self.family, property_group=self.size_group, position=10)
+        ProductVariantAttribute.objects.create(family=self.family, property_group=self.color_group, position=20)
+
+    def test_dry_run_derives_variant_without_calling_shopware(self):
+        product_service = MagicMock()
+
+        result = ShopwareVariantSyncService(product_service=product_service).sync(self.family, dry_run=True)
+
+        self.assertTrue(result.dry_run)
+        self.assertEqual(result.variant_count, 1)
+        product_service.method_calls.assert_not_called()
+
+    def test_apply_creates_parent_attaches_options_and_detaches_previously_managed_child(self):
+        stale_product = Product.objects.create(erp_nr="291004W", name="Alte Quick-Tab-Variante")
+        self.family.synced_products.add(stale_product)
+        product_service = MagicMock()
+        product_service.request_post.return_value = {"data": []}
+        product_service.find_sku_by_number.return_value = "parent-shopware-id"
+        product_service.get_sku_map.side_effect = lambda numbers: {
+            number: {"581000": "child-shopware-id", "291004W": "stale-shopware-id"}[number]
+            for number in numbers
+        }
+
+        result = ShopwareVariantSyncService(product_service=product_service).sync(self.family)
+
+        self.assertFalse(result.dry_run)
+        self.assertEqual(result.parent_id, "parent-shopware-id")
+        self.assertEqual(result.variant_count, 1)
+        self.assertEqual(result.detached_count, 1)
+        self.assertEqual(
+            list(self.family.synced_products.values_list("erp_nr", flat=True)),
+            ["581000"],
+        )
+
+        product_payloads = [
+            call.args[0]
+            for call in product_service.bulk_upsert.call_args_list
+            if call.kwargs.get("entity_name", "product") == "product"
+        ]
+        self.assertTrue(
+            any(
+                payload == [
+                    {
+                        "id": "child-shopware-id",
+                        "productNumber": "581000",
+                        "parentId": "parent-shopware-id",
+                        "options": [
+                            {"id": self.size.shopware_id},
+                            {"id": self.color.shopware_id},
+                        ],
+                    }
+                ]
+                for payload in product_payloads
+            )
+        )
+        self.assertIn(
+            [
+                {
+                    "id": "stale-shopware-id",
+                    "productNumber": "291004W",
+                    "parentId": None,
+                    "options": [],
+                }
+            ],
+            product_payloads,
+        )
 
 
 class ForceProductImageUploadsCommandTest(TestCase):
