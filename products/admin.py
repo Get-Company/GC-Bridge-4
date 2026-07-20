@@ -76,6 +76,7 @@ from .services import PriceIncreaseService
 from .tasks import (
     scheduled_product_sync as scheduled_product_sync_task,
     microtech_update_prices as microtech_update_prices_task,
+    sync_restored_price_increase as sync_restored_price_increase_task,
 )
 from .models import (
     Category,
@@ -931,6 +932,7 @@ class PriceIncreaseAdmin(BaseAdmin):
                 "reload_products_detail",
                 "apply_price_increase_detail",
                 "sync_price_increase_prices_to_microtech_detail",
+                "restore_price_increase_detail",
             ],
         }
     ]
@@ -940,6 +942,7 @@ class PriceIncreaseAdmin(BaseAdmin):
         "position_count",
         "positions_synced_at",
         "applied_at",
+        "restore_notice",
     )
     fieldsets = (
         (
@@ -953,6 +956,7 @@ class PriceIncreaseAdmin(BaseAdmin):
                     "position_count",
                     "positions_synced_at",
                     "applied_at",
+                    "restore_notice",
                     "created_at",
                     "updated_at",
                 ),
@@ -967,6 +971,13 @@ class PriceIncreaseAdmin(BaseAdmin):
         if annotated_count is not None:
             return annotated_count
         return obj.position_count
+
+    @admin.display(description="Hinweis zur Wiederherstellung")
+    def restore_notice(self, obj: PriceIncrease | None):
+        return (
+            "Achtung: Direkte Sonderpreise sind nicht in der Preiserhoehung gespeichert und werden geloescht. "
+            "Prozentuale Sonderpreise werden aus dem wiederhergestellten Grundpreis neu berechnet."
+        )
 
     def get_queryset(self, request):
         queryset = super().get_queryset(request)
@@ -3148,6 +3159,70 @@ class PriceIncreaseAdmin(BaseAdmin):
             request,
             f"{len(erp_nrs)} Produkt(e) zur Microtech-Preisaktualisierung (VK0/VK1) eingereiht.",
         )
+        return HttpResponseRedirect(reverse("admin:products_priceincrease_change", args=(object_id,)))
+
+    @action(
+        description="Preise wiederherstellen und synchronisieren",
+        icon="restore",
+        variant=ActionVariant.PRIMARY,
+    )
+    def restore_price_increase_detail(self, request, object_id: str):
+        obj = self.get_object(request, object_id)
+        if not obj:
+            self.message_user(request, "Preiserhoehung nicht gefunden.", level=messages.ERROR)
+            return HttpResponseRedirect(reverse("admin:products_priceincrease_changelist"))
+
+        try:
+            result = PriceIncreaseService().restore_applied(obj)
+        except ValueError as exc:
+            self.message_user(request, str(exc), level=messages.ERROR)
+        else:
+            special_price_info = ""
+            if result.cleared_direct_special_price_count:
+                special_price_info += f" {result.cleared_direct_special_price_count} direkte Sonderpreis(e) geloescht."
+            if result.regenerated_special_price_count:
+                special_price_info += (
+                    f" {result.regenerated_special_price_count} prozentuale Sonderpreis(e) neu berechnet."
+                )
+            try:
+                sync_restored_price_increase_task.delay(list(result.erp_nrs))
+            except Exception as exc:
+                self.log_change(
+                    request,
+                    obj,
+                    (
+                        "Preise aus der bereits uebernommenen Preiserhoehung wiederhergestellt, "
+                        f"aber nicht zur Synchronisierung eingereiht: {exc}"
+                    ),
+                )
+                self.message_user(
+                    request,
+                    (
+                        f"{result.restored_price_count} Standardpreis(e) wurden lokal wiederhergestellt, "
+                        "die Synchronisierung konnte jedoch nicht eingereiht werden."
+                    ),
+                    level=messages.ERROR,
+                )
+            else:
+                self.log_change(
+                    request,
+                    obj,
+                    (
+                        "Preise aus der bereits uebernommenen Preiserhoehung wiederhergestellt: "
+                        f"{result.restored_price_count} Standardpreis(e); "
+                        f"{result.cleared_direct_special_price_count} direkte Sonderpreis(e) geloescht; "
+                        f"{result.regenerated_special_price_count} prozentuale Sonderpreis(e) neu berechnet; "
+                        "Microtech, Shopware 6 und Shopware 5 gezielt eingereiht."
+                    ),
+                )
+                self.message_user(
+                    request,
+                    (
+                        f"{result.restored_price_count} Standardpreis(e) wiederhergestellt. "
+                        f"{len(result.erp_nrs)} Produkt(e) wurden fuer Microtech, Shopware 6 und Shopware 5 eingereiht."
+                        f"{special_price_info}"
+                    ),
+                )
         return HttpResponseRedirect(reverse("admin:products_priceincrease_change", args=(object_id,)))
 
 

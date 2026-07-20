@@ -390,6 +390,20 @@ def microtech_update_prices(erp_nrs: Sequence[str]) -> None:
     call_command("microtech_update_prices", *_clean_erp_nrs(erp_nrs))
 
 
+@shared_task(name="products.sync_restored_price_increase")
+def sync_restored_price_increase(erp_nrs: Sequence[str]) -> dict[str, int]:
+    """Push restored Bridge prices to Microtech, Shopware 6, and Shopware 5."""
+    cleaned_erp_nrs = _clean_erp_nrs(erp_nrs)
+    if not cleaned_erp_nrs:
+        return {"microtech": 0, "shopware": 0, "shopware5": 0}
+
+    call_command("microtech_update_prices", *cleaned_erp_nrs)
+    call_command("shopware_sync_products", *cleaned_erp_nrs, skip_images=True)
+    call_command("shopware5_sync_products", *cleaned_erp_nrs)
+    count = len(cleaned_erp_nrs)
+    return {"microtech": count, "shopware": count, "shopware5": count}
+
+
 @shared_task(name="products.shopware_sync_products")
 def shopware_sync_products(
     erp_nrs: Sequence[str] | None = None,

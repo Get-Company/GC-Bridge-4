@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from django.db import transaction
 from django.utils import timezone
 
@@ -7,6 +9,14 @@ from core.services import BaseService
 from products.models import Price, PriceIncrease, PriceIncreaseItem
 from products.signals import price_increase_applied
 from shopware.models import ShopwareSettings
+
+
+@dataclass(frozen=True)
+class PriceIncreaseRestoreResult:
+    restored_price_count: int
+    erp_nrs: tuple[str, ...]
+    regenerated_special_price_count: int
+    cleared_direct_special_price_count: int
 
 
 class PriceIncreaseService(BaseService):
@@ -74,6 +84,68 @@ class PriceIncreaseService(BaseService):
                 "Die Preiserhoehung enthaelt blockierende Preispruefungen und kann nicht uebernommen werden: "
                 f"{preview}"
             )
+
+    @staticmethod
+    def _get_applied_items(instance: PriceIncrease) -> list[PriceIncreaseItem]:
+        if instance.status != PriceIncrease.Status.APPLIED:
+            raise ValueError("Nur bereits uebernommene Preiserhoehungen koennen wiederhergestellt werden.")
+        if not instance.sales_channel_id:
+            raise ValueError("Die Preiserhoehung hat keinen Standard-Verkaufskanal.")
+
+        items = list(
+            instance.items.select_related("source_price", "product")
+            .order_by("product__erp_nr", "id")
+        )
+        if not items:
+            raise ValueError("Die Preiserhoehung enthaelt keine Positionen.")
+        return items
+
+    @transaction.atomic
+    def restore_applied(self, instance: PriceIncrease) -> PriceIncreaseRestoreResult:
+        """Restore saved targets; clear direct specials and recalculate percentage specials."""
+        from products.services.product_auto_sync import disable_product_auto_sync
+
+        items = self._get_applied_items(instance)
+        self._validate_items_before_apply(items)
+
+        updated_price_ids: list[int] = []
+        erp_nrs: list[str] = []
+        regenerated_special_price_count = 0
+        cleared_direct_special_price_count = 0
+        with disable_product_auto_sync():
+            for item in items:
+                source_price = item.source_price
+                source_price.price = item.effective_new_price
+                source_price.rebate_quantity = item.current_rebate_quantity
+                source_price.rebate_price = item.effective_new_rebate_price
+                if source_price.special_percentage not in (None, 0):
+                    regenerated_special_price_count += 1
+                elif source_price.special_price is not None:
+                    source_price.special_price = None
+                    source_price.special_start_date = None
+                    source_price.special_end_date = None
+                    cleared_direct_special_price_count += 1
+                source_price.save()
+                updated_price_ids.append(source_price.id)
+
+                erp_nr = str(item.product.erp_nr or "").strip()
+                if erp_nr:
+                    erp_nrs.append(erp_nr)
+
+            # Rebuild all derived sales-channel prices using the existing
+            # price-factor logic, while suppressing generic auto-sync jobs.
+            price_increase_applied.send(
+                sender=self.__class__,
+                price_increase_id=instance.id,
+                updated_price_ids=updated_price_ids,
+            )
+
+        return PriceIncreaseRestoreResult(
+            restored_price_count=len(updated_price_ids),
+            erp_nrs=tuple(dict.fromkeys(erp_nrs)),
+            regenerated_special_price_count=regenerated_special_price_count,
+            cleared_direct_special_price_count=cleared_direct_special_price_count,
+        )
 
     @transaction.atomic
     def apply(self, instance: PriceIncrease) -> int:

@@ -432,7 +432,7 @@ class ProductAutoSyncServiceTest(TestCase):
         sentinel = mock_sentinel_cls.return_value
         sentinel.submit_product_update.assert_called_once()
         payload = sentinel.submit_product_update.call_args.kwargs["input_data"]
-        self.assertEqual(payload["priceTrees"][0]["price"], "100,00")
+        self.assertEqual(payload["priceTrees"][0]["price"], "100.00")
         self.assertEqual(payload["priceTrees"][0]["rebateQuantity"], "")
         self.assertEqual(payload["priceTrees"][0]["rebatePrice"], "")
         self.assertEqual(len(payload["priceTrees"]), 1)
@@ -1028,6 +1028,142 @@ class PriceIncreaseServiceTest(TestCase):
 
         with self.assertRaisesMessage(ValueError, "blockierende Preispruefungen"):
             PriceIncreaseService().apply(price_increase)
+
+    def test_restore_applied_uses_saved_targets_and_rebuilds_other_channels(self):
+        price_increase = PriceIncrease.objects.create(
+            title="Wiederherstellung",
+            status=PriceIncrease.Status.APPLIED,
+            applied_at=timezone.now(),
+        )
+        PriceIncreaseItem.objects.create(
+            price_increase=price_increase,
+            product=self.product,
+            source_price=self.default_price,
+            unit="Stk",
+            current_price=Decimal("10.00"),
+            current_rebate_quantity=5,
+            current_rebate_price=Decimal("9.00"),
+            new_price=Decimal("10.25"),
+            new_rebate_price=Decimal("9.25"),
+        )
+        self.default_price.price = Decimal("1025.00")
+        self.default_price.rebate_price = Decimal("925.00")
+        self.default_price.save()
+        self.other_price.price = Decimal("1281.25")
+        self.other_price.rebate_price = Decimal("1156.25")
+        self.other_price.save()
+
+        result = PriceIncreaseService().restore_applied(price_increase)
+
+        self.assertEqual(result.restored_price_count, 1)
+        self.assertEqual(result.erp_nrs, ("A-5000",))
+        self.default_price.refresh_from_db()
+        self.assertEqual(self.default_price.price, Decimal("10.25"))
+        self.assertEqual(self.default_price.rebate_price, Decimal("9.25"))
+        self.other_price.refresh_from_db()
+        self.assertEqual(self.other_price.price, Decimal("12.85"))
+        self.assertEqual(self.other_price.rebate_price, Decimal("11.60"))
+
+    def test_restore_applied_clears_direct_special_prices(self):
+        price_increase = PriceIncrease.objects.create(
+            title="Direkter Sonderpreis",
+            status=PriceIncrease.Status.APPLIED,
+            applied_at=timezone.now(),
+        )
+        self.default_price.special_price = Decimal("5.00")
+        self.default_price.save()
+        PriceIncreaseItem.objects.create(
+            price_increase=price_increase,
+            product=self.product,
+            source_price=self.default_price,
+            unit="Stk",
+            current_price=Decimal("10.00"),
+            current_rebate_quantity=5,
+            current_rebate_price=Decimal("9.00"),
+            new_price=Decimal("10.25"),
+            new_rebate_price=Decimal("9.25"),
+        )
+
+        result = PriceIncreaseService().restore_applied(price_increase)
+
+        self.assertEqual(result.cleared_direct_special_price_count, 1)
+        self.default_price.refresh_from_db()
+        self.assertIsNone(self.default_price.special_price)
+        self.assertIsNone(self.default_price.special_start_date)
+        self.assertIsNone(self.default_price.special_end_date)
+
+    def test_restore_applied_recalculates_percentage_special_prices(self):
+        price_increase = PriceIncrease.objects.create(
+            title="Prozentualer Sonderpreis",
+            status=PriceIncrease.Status.APPLIED,
+            applied_at=timezone.now(),
+        )
+        self.default_price.special_percentage = Decimal("10.00")
+        self.default_price.save()
+        PriceIncreaseItem.objects.create(
+            price_increase=price_increase,
+            product=self.product,
+            source_price=self.default_price,
+            unit="Stk",
+            current_price=Decimal("10.00"),
+            current_rebate_quantity=5,
+            current_rebate_price=Decimal("9.00"),
+            new_price=Decimal("10.25"),
+            new_rebate_price=Decimal("9.25"),
+        )
+
+        result = PriceIncreaseService().restore_applied(price_increase)
+
+        self.assertEqual(result.regenerated_special_price_count, 1)
+        self.default_price.refresh_from_db()
+        self.assertEqual(self.default_price.special_price, Decimal("9.25"))
+
+    @patch("products.admin.sync_restored_price_increase_task.delay")
+    def test_price_increase_restore_action_restores_and_queues_all_targets(self, mock_delay):
+        price_increase = PriceIncrease.objects.create(
+            title="Wiederherstellung einreihen",
+            status=PriceIncrease.Status.APPLIED,
+            applied_at=timezone.now(),
+        )
+        PriceIncreaseItem.objects.create(
+            price_increase=price_increase,
+            product=self.product,
+            source_price=self.default_price,
+            unit="Stk",
+            current_price=Decimal("10.00"),
+            current_rebate_quantity=5,
+            current_rebate_price=Decimal("9.00"),
+            new_price=Decimal("10.25"),
+            new_rebate_price=Decimal("9.25"),
+        )
+        self.default_price.price = Decimal("1025.00")
+        self.default_price.save()
+        request = RequestFactory().get("/")
+        admin_instance = PriceIncreaseAdmin(PriceIncrease, AdminSite())
+        admin_instance.get_object = Mock(return_value=price_increase)
+        admin_instance.log_change = Mock()
+        admin_instance.message_user = Mock()
+
+        admin_instance.restore_price_increase_detail(request, str(price_increase.pk))
+
+        mock_delay.assert_called_once_with(["A-5000"])
+        admin_instance.log_change.assert_called_once()
+        self.default_price.refresh_from_db()
+        self.assertEqual(self.default_price.price, Decimal("10.25"))
+
+    @patch("products.tasks.call_command")
+    def test_restored_price_sync_writes_microtech_then_both_shopwares(self, mock_call_command):
+        result = product_tasks.sync_restored_price_increase(["A-5000"])
+
+        self.assertEqual(result, {"microtech": 1, "shopware": 1, "shopware5": 1})
+        self.assertEqual(
+            mock_call_command.call_args_list,
+            [
+                call("microtech_update_prices", "A-5000"),
+                call("shopware_sync_products", "A-5000", skip_images=True),
+                call("shopware5_sync_products", "A-5000"),
+            ],
+        )
 
     @patch("products.admin.microtech_update_prices_task.delay")
     def test_price_increase_microtech_resync_action_queues_applied_products(self, mock_delay):
