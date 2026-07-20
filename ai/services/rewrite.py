@@ -89,12 +89,37 @@ class AIRewriteService(BaseService):
     @transaction.atomic
     def apply(self, *, job: AIRewriteJob) -> AIRewriteJob:
         target = job.target
-        setattr(target, job.field, job.result_text)
-        target.save(update_fields=[job.field, "updated_at"])
+        self._apply_result_to_target(job=job, target=target)
         job.status = AIRewriteJob.Status.APPLIED
         job.applied_at = timezone.now()
         job.save(update_fields=["status", "applied_at", "updated_at"])
         return job
+
+    @staticmethod
+    def _apply_result_to_target(*, job: AIRewriteJob, target) -> None:
+        setattr(target, job.field, job.result_text)
+        if not job.product_id:
+            target.save(update_fields=[job.field, "updated_at"])
+            return
+
+        from products.models import ProductSyncJob
+        from products.services import ProductAutoSyncService, disable_product_auto_sync
+
+        with disable_product_auto_sync():
+            target.save(update_fields=[job.field, "updated_at"])
+
+        transaction.on_commit(
+            lambda: ProductAutoSyncService().enqueue_product_sync(
+                product_id=target.pk,
+                changed_fields=[job.field],
+                trigger="ai_rewrite_apply",
+                targets=(
+                    ProductSyncJob.Target.MICROTECH,
+                    ProductSyncJob.Target.SHOPWARE5,
+                    ProductSyncJob.Target.SHOPWARE,
+                ),
+            )
+        )
 
     def _render_user_prompt(self, job: AIRewriteJob) -> str:
         template = self.template_engine.from_string(DEFAULT_USER_PROMPT_TEMPLATE)

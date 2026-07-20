@@ -10,7 +10,7 @@ from django.views.generic import FormView
 from unfold.contrib.forms.widgets import WYSIWYG_CLASSES
 from unfold.decorators import action
 from unfold.views import UnfoldModelAdminViewMixin
-from unfold.widgets import UnfoldAdminSelect2Widget
+from unfold.widgets import UnfoldAdminSelect2Widget, UnfoldAdminTextareaWidget
 
 from core.admin import BaseAdmin
 
@@ -120,6 +120,29 @@ class AIRewriteJobCreateView(UnfoldModelAdminViewMixin, FormView):
         return context
 
 
+class AIRewriteJobAdminForm(forms.ModelForm):
+    result_html = forms.CharField(
+        label="HTML-Quelltext",
+        required=False,
+        help_text="Aenderungen hier haben Vorrang vor dem visuellen Editor.",
+        widget=UnfoldAdminTextareaWidget(attrs={"class": "font-mono", "rows": 18}),
+    )
+
+    class Meta:
+        model = AIRewriteJob
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["result_html"].initial = self.instance.result_text
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if "result_html" in self.changed_data:
+            cleaned_data["result_text"] = cleaned_data.get("result_html", "")
+        return cleaned_data
+
+
 @admin.register(AIProviderConfig)
 class AIProviderConfigAdmin(BaseAdmin):
     list_display = ("name", "model_name", "base_url", "is_active", "created_at")
@@ -137,6 +160,8 @@ class AIRewritePromptAdmin(BaseAdmin):
 
 @admin.register(AIRewriteJob)
 class AIRewriteJobAdmin(BaseAdmin):
+    form = AIRewriteJobAdminForm
+
     class Media:
         js = ("core/admin/ai_rewrite_wysiwyg.js",)
 
@@ -155,8 +180,8 @@ class AIRewriteJobAdmin(BaseAdmin):
     )
     fieldsets = (
         ("Ergebnis", {
-            "fields": ("status", "source_snapshot_preview", "result_text", "error_message"),
-            "description": "Ergebnis pruefen, bei Bedarf bearbeiten und uebernehmen.",
+            "fields": ("status", "source_snapshot_preview", "result_text", "result_html", "error_message"),
+            "description": "Ergebnis visuell oder als HTML-Quelltext bearbeiten und anschliessend uebernehmen.",
         }),
         ("Kontext", {
             "fields": ("target_object", "field", "prompt", "provider", "rendered_prompt", "provider_response",

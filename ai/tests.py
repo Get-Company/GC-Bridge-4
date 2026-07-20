@@ -10,7 +10,14 @@ from ai.admin import AIRewriteJobAdmin
 from ai.models import AIProviderConfig, AIRewriteJob, AIRewritePrompt
 from ai.services import AIRewriteService
 from ai.services.provider import AIProviderService
-from products.models import Category, Product, ProductProperty, PropertyGroup, PropertyValue
+from products.models import (
+    Category,
+    Product,
+    ProductProperty,
+    ProductSyncJob,
+    PropertyGroup,
+    PropertyValue,
+)
 
 
 class AIProviderServiceTest(SimpleTestCase):
@@ -200,6 +207,36 @@ Eigenschaft: {% for prop in product.product_properties.all %}{{ prop.value.group
         self.assertEqual(job.status, AIRewriteJob.Status.APPLIED)
         self.assertIsNotNone(job.applied_at)
 
+    @patch("products.tasks.process_product_sync_job.delay")
+    def test_apply_enqueues_product_syncs_in_target_order(self, mock_delay):
+        mock_delay.return_value.id = "sync-task"
+        job = AIRewriteService().create_job(
+            product=self.product,
+            field="description_de",
+            prompt=self.prompt,
+            provider=self.provider,
+        )
+        job.result_text = "<p>final</p>"
+        job.status = AIRewriteJob.Status.READY
+        job.save(update_fields=["result_text", "status"])
+
+        with self.captureOnCommitCallbacks(execute=True):
+            AIRewriteService().apply(job=job)
+
+        self.product.refresh_from_db()
+        sync_jobs = list(ProductSyncJob.objects.order_by("pk"))
+        self.assertEqual(self.product.description_de, "<p>final</p>")
+        self.assertEqual(
+            [sync_job.target for sync_job in sync_jobs],
+            [
+                ProductSyncJob.Target.MICROTECH,
+                ProductSyncJob.Target.SHOPWARE5,
+                ProductSyncJob.Target.SHOPWARE,
+            ],
+        )
+        self.assertEqual({tuple(sync_job.changed_fields) for sync_job in sync_jobs}, {("description_de",)})
+        self.assertEqual({sync_job.trigger for sync_job in sync_jobs}, {"ai_rewrite_apply"})
+
     def test_apply_writes_edited_text_to_category_field(self):
         job = AIRewriteService().create_job(
             category=self.category,
@@ -334,6 +371,24 @@ class AIRewriteJobWorkspaceTest(TestCase):
         job = self._job(status=AIRewriteJob.Status.READY, result_text="<p>neu</p>")
         resp = self.client.get(reverse("admin:ai_airewritejob_change", args=(job.pk,)))
         self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "HTML-Quelltext")
+        self.assertContains(resp, 'name="result_html"')
+        self.assertContains(resp, "core/admin/ai_rewrite_wysiwyg.js")
+
+    def test_html_source_takes_precedence_over_visual_editor(self):
+        job = self._job(status=AIRewriteJob.Status.READY, result_text="<p>alt</p>")
+        admin_obj = AIRewriteJobAdmin(AIRewriteJob, AdminSite())
+        form_class = admin_obj.get_form(RequestFactory().get("/"), obj=job)
+        form = form_class(
+            data={
+                "result_text": "<p>Visueller Editor</p>",
+                "result_html": "<p>HTML-Quelltext</p>",
+            },
+            instance=job,
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.save(commit=False).result_text, "<p>HTML-Quelltext</p>")
 
     def test_change_page_shows_processing_hint_for_queued_job(self):
         job = self._job(status=AIRewriteJob.Status.QUEUED)
@@ -349,11 +404,11 @@ class AIRewriteJobWorkspaceTest(TestCase):
         self.assertEqual(self.product.description_de, "<p>neu</p>")
         self.assertEqual(job.status, AIRewriteJob.Status.APPLIED)
 
-
     def test_admin_loads_extended_wysiwyg_media(self):
         admin_obj = AIRewriteJobAdmin(AIRewriteJob, AdminSite())
 
         self.assertIn("core/admin/ai_rewrite_wysiwyg.js", str(admin_obj.media))
+
 
 class ProductFieldButtonTest(TestCase):
     def setUp(self):
