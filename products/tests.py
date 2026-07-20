@@ -3002,6 +3002,16 @@ class ProductVariantFamilyResolverServiceTest(TestCase):
         self.assertEqual(options_by_erp["581000"], ["6 cm", "Weiß", "Ohne Aufdruck"])
         self.assertEqual(options_by_erp["291001"], ["3 cm", "Gelb", "Druck"])
 
+    def test_resolver_excludes_inactive_source_products(self):
+        self.three_cm.is_active = False
+        self.three_cm.save(update_fields=("is_active",))
+
+        resolution = ProductVariantFamilyResolverService().resolve(self.family)
+
+        self.assertTrue(resolution.is_valid)
+        self.assertEqual([variant.product.erp_nr for variant in resolution.variants], ["581000"])
+        self.assertEqual([candidate.product.erp_nr for candidate in resolution.skipped], ["ASSORT-1"])
+
     def test_product_keeps_family_lookup_after_it_is_no_longer_in_a_source_category(self):
         self.family.synced_products.add(self.six_cm)
         self.six_cm.categories.clear()

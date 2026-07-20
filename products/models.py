@@ -512,7 +512,7 @@ class ProductVariantFamily(BaseModel):
         return self.name
 
     def candidate_products(self):
-        return Product.objects.filter(categories__in=self.source_categories.all()).distinct()
+        return Product.objects.filter(categories__in=self.source_categories.all(), is_active=True).distinct()
 
     def clean(self):
         super().clean()
