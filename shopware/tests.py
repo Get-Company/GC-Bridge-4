@@ -21,7 +21,10 @@ from products.models import (
     PropertyGroup,
     PropertyValue,
 )
-from shopware.management.commands.shopware_sync_products import Command as ShopwareSyncProductsCommand
+from shopware.management.commands.shopware_sync_products import (
+    Command as ShopwareSyncProductsCommand,
+    _build_product_sync_payload,
+)
 from shopware.management.commands.shopware_force_product_image_uploads import Command as ForceProductImageUploadsCommand
 from shopware.models import ShopwareSettings
 from shopware.services.order import OrderService
@@ -30,6 +33,34 @@ from shopware.services.product_media import ProductMediaSyncService
 from shopware.services.shopware5 import Shopware5ProductSyncService
 from shopware.services.shopware6 import Criteria, EqualsFilter, InvalidTokenError, Shopware6Service
 from shopware.services.variant_sync import ShopwareVariantSyncService
+
+
+class Shopware6ProductStockPayloadTest(SimpleTestCase):
+    def test_payload_uses_integer_shopware_stock(self):
+        prices = MagicMock()
+        prices.select_related.return_value.all.return_value = []
+        product = SimpleNamespace(
+            erp_nr="581001",
+            is_active=True,
+            tax=None,
+            name="Mappe A4",
+            name_de="",
+            name_en="",
+            description=None,
+            storage=SimpleNamespace(get_shopware_stock=91),
+            prices=prices,
+        )
+
+        payload = _build_product_sync_payload(
+            product=product,
+            effective_sku="",
+            default_channel=None,
+            channels=[],
+            admin_user_id=None,
+            content_type_id=None,
+        )
+
+        self.assertEqual(payload["stock"], 91)
 
 
 class Shopware6ServiceTokenRetryTest(SimpleTestCase):
@@ -203,7 +234,7 @@ class Shopware5ProductSyncServiceTest(SimpleTestCase):
             min_purchase=10,
             unit="% Stck",
             factor=3,
-            storage=SimpleNamespace(get_stock=42),
+            storage=SimpleNamespace(get_shopware_stock=42),
             prefetched_prices_for_shopware_sync=[price],
         )
 
@@ -259,7 +290,7 @@ class Shopware5ProductSyncServiceTest(SimpleTestCase):
             min_purchase=1,
             unit="Stck",
             factor=None,
-            storage=SimpleNamespace(get_stock=5),
+            storage=SimpleNamespace(get_shopware_stock=5),
             prefetched_prices_for_shopware_sync=[price],
         )
 
@@ -293,7 +324,7 @@ class Shopware5ProductSyncServiceTest(SimpleTestCase):
             min_purchase=1,
             unit="Stck",
             factor=None,
-            storage=SimpleNamespace(get_stock=5),
+            storage=SimpleNamespace(get_shopware_stock=5),
             prefetched_prices_for_shopware_sync=[],
         )
 
@@ -318,7 +349,7 @@ class Shopware5ProductSyncServiceTest(SimpleTestCase):
             min_purchase=1,
             unit="Stck",
             factor=None,
-            storage=SimpleNamespace(get_stock=5),
+            storage=SimpleNamespace(get_shopware_stock=5),
             prefetched_prices_for_shopware_sync=[],
         )
 

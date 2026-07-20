@@ -17,7 +17,7 @@ from django.contrib.admin.models import LogEntry
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import Case, Count, F, IntegerField, Prefetch, Q, Value, When, Window
+from django.db.models import Case, Count, DecimalField, F, IntegerField, Prefetch, Q, Value, When, Window
 from django.db.models.functions import Coalesce, RowNumber
 from django.http import Http404, HttpResponse, HttpResponseRedirect, HttpResponseNotAllowed, JsonResponse
 from django.template.loader import render_to_string
@@ -485,8 +485,8 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
         return queryset.select_related("storage").annotate(
             available_stock_value=Case(
                 When(storage__virtual_stock__gt=0, then=F("storage__virtual_stock")),
-                default=Coalesce("storage__stock", Value(0)),
-                output_field=IntegerField(),
+                default=Coalesce("storage__stock", Value(Decimal("0"))),
+                output_field=DecimalField(max_digits=15, decimal_places=4),
             )
         ).prefetch_related(
             Prefetch(
@@ -522,7 +522,7 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
         )
 
     @admin.display(description="Verfuegbarer Bestand", ordering="available_stock_value")
-    def available_stock(self, obj: Product) -> int:
+    def available_stock(self, obj: Product) -> Decimal:
         return obj.available_stock_value
 
     def render_change_form(self, request, context, add=False, change=False, form_url="", obj=None):

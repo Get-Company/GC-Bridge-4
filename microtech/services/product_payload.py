@@ -20,12 +20,14 @@ class MicrotechProductPayloadService(BaseService):
     def format_price(value: Decimal | None) -> str | None:
         """Format a price for the Microtech GraphQL API.
 
-        Microtech expects a dot as decimal separator. Formatting explicitly also
-        preserves the two decimal places required for price values.
+        The Microtech GraphQL price-tree input expects a decimal comma. A dot is
+        interpreted as a thousands separator (for example ``"5.85"`` becomes
+        ``585.00``). Formatting explicitly also preserves the two decimal
+        places required for price values.
         """
         if value is None:
             return None
-        return format(value.quantize(Decimal("0.01")), "f")
+        return format(value.quantize(Decimal("0.01")), "f").replace(".", ",")
 
     @classmethod
     def build_complete_price_payload(

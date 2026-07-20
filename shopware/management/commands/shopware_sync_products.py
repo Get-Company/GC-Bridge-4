@@ -252,7 +252,7 @@ def _build_product_sync_payload(
     except Storage.DoesNotExist:
         storage = None
     if storage:
-        payload["stock"] = storage.get_stock
+        payload["stock"] = storage.get_shopware_stock
 
     if default_channel:
         default_price = prices_by_channel.get(default_channel.id)

@@ -45,6 +45,16 @@ def _to_int(value):
     return int(decimal_value)
 
 
+def _to_stock(value) -> Decimal | None:
+    if value is None or value == "":
+        return None
+    try:
+        stock = Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError):
+        return None
+    return stock if stock.is_finite() else None
+
+
 def _unique_preserve_order(values: list[str]) -> list[str]:
     seen: set[str] = set()
     result: list[str] = []
@@ -411,7 +421,7 @@ class Command(MonitoredBaseCommand):
         storage, _ = Storage.objects.get_or_create(product=product)
         stock_value = artikel_service.get_stock() if hasattr(artikel_service, "get_stock") else None
         location_value = artikel_service.get_storage_location() if hasattr(artikel_service, "get_storage_location") else None
-        stock = _to_int(stock_value)
+        stock = _to_stock(stock_value)
         location = location_value
         if lager_service and (stock is None or location_value in (None, "")):
             lager_kwargs = {"art_nr": product.erp_nr}
@@ -424,7 +434,7 @@ class Command(MonitoredBaseCommand):
                 lager_kwargs["lager_nr"] = warehouse_number
             lager_stock, lager_location = lager_service.get_stock_and_location(**lager_kwargs)
             if stock is None and lager_stock not in (None, ""):
-                stock = _to_int(lager_stock)
+                stock = _to_stock(lager_stock)
             if location_value in (None, "") and lager_location not in (None, ""):
                 location = lager_location
         if stock is None:

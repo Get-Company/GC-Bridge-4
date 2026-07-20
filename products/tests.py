@@ -432,7 +432,7 @@ class ProductAutoSyncServiceTest(TestCase):
         sentinel = mock_sentinel_cls.return_value
         sentinel.submit_product_update.assert_called_once()
         payload = sentinel.submit_product_update.call_args.kwargs["input_data"]
-        self.assertEqual(payload["priceTrees"][0]["price"], "100.00")
+        self.assertEqual(payload["priceTrees"][0]["price"], "100,00")
         self.assertEqual(payload["priceTrees"][0]["rebateQuantity"], "")
         self.assertEqual(payload["priceTrees"][0]["rebatePrice"], "")
         self.assertEqual(len(payload["priceTrees"]), 1)
@@ -666,6 +666,10 @@ class StorageStockSelectionTest(SimpleTestCase):
         self.assertEqual(Storage.get_stock.fget(SimpleNamespace(virtual_stock=12, stock=150)), 12)
         self.assertEqual(Storage.get_stock.fget(SimpleNamespace(virtual_stock=0, stock=150)), 150)
         self.assertEqual(Storage.get_stock.fget(SimpleNamespace(virtual_stock=None, stock=None)), 0)
+
+    def test_shopware_stock_is_rounded_down_from_microtech_decimal_stock(self):
+        storage = Storage(virtual_stock=0, stock=Decimal("91.59"))
+        self.assertEqual(storage.get_shopware_stock, 91)
 
 
 class PriceMigrationTest(SimpleTestCase):
@@ -2382,7 +2386,7 @@ class ScheduledProductSyncCommandTest(TestCase):
         self.assertEqual(active.special_percentage, Decimal("5.00"))
 
     @patch("products.management.commands.scheduled_product_sync.call_command")
-    def test_handle_runs_microtech_with_preserve_and_then_shopware(self, mock_call_command):
+    def test_handle_runs_microtech_with_preserve_and_then_shopware5_and_shopware6(self, mock_call_command):
         cmd = ScheduledProductSyncCommand()
         with (
             patch.object(cmd, "_clear_expired_specials", return_value=(0, set())),
@@ -2391,7 +2395,7 @@ class ScheduledProductSyncCommandTest(TestCase):
             cmd.handle(limit=50, exclude_inactive=False)
 
         mock_sync_microtech.assert_called_once_with(set(), write_base_price_back=False)
-        self.assertEqual(mock_call_command.call_count, 3)
+        self.assertEqual(mock_call_command.call_count, 5)
         mock_call_command.assert_has_calls(
             [
                 call(
@@ -2407,6 +2411,13 @@ class ScheduledProductSyncCommandTest(TestCase):
                     limit=50,
                     skip_images=True,
                 ),
+                call(
+                    "shopware_sync_variants",
+                    all=True,
+                    apply=True,
+                    skip_product_sync=True,
+                ),
+                call("shopware5_sync_products", limit=50),
                 call(
                     "shopware_force_product_image_uploads",
                     all=True,
@@ -2425,7 +2436,7 @@ class ScheduledProductSyncCommandTest(TestCase):
             cmd.handle(limit=10, exclude_inactive=True, write_base_price_back=True)
 
         mock_sync_microtech.assert_called_once_with(set(), write_base_price_back=True)
-        self.assertEqual(mock_call_command.call_count, 3)
+        self.assertEqual(mock_call_command.call_count, 5)
 
     @patch("products.management.commands.scheduled_product_sync.call_command")
     def test_handle_can_skip_forced_shopware_images(self, mock_call_command):
@@ -2436,7 +2447,7 @@ class ScheduledProductSyncCommandTest(TestCase):
         ):
             cmd.handle(limit=20, exclude_inactive=False, skip_force_images=True)
 
-        self.assertEqual(mock_call_command.call_count, 2)
+        self.assertEqual(mock_call_command.call_count, 4)
         mock_call_command.assert_has_calls(
             [
                 call(
@@ -2452,6 +2463,13 @@ class ScheduledProductSyncCommandTest(TestCase):
                     limit=20,
                     skip_images=False,
                 ),
+                call(
+                    "shopware_sync_variants",
+                    all=True,
+                    apply=True,
+                    skip_product_sync=True,
+                ),
+                call("shopware5_sync_products", limit=20),
             ]
         )
 

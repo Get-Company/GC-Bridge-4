@@ -8,6 +8,7 @@ from django.utils import timezone
 from microtech.management.commands.microtech_sync_products import (
     Command as MicrotechSyncProductsCommand,
     _to_int,
+    _to_stock,
 )
 from microtech.management.commands.microtech_update_prices import Command as MicrotechUpdatePricesCommand
 from microtech.management.commands.microtech_update_product import Command as MicrotechUpdateProductCommand
@@ -38,9 +39,14 @@ class _FakeExpiredSpecialClient(MicrotechGraphQLClientService):
 
 
 class MicrotechArtikelServiceProductJobTest(SimpleTestCase):
-    def test_integer_conversion_accepts_microtech_decimal_stock(self):
+    def test_integer_conversion_accepts_integral_decimal_values(self):
         self.assertEqual(_to_int("150.00"), 150)
         self.assertIsNone(_to_int("150.50"))
+
+    def test_stock_conversion_preserves_microtech_decimal_values(self):
+        self.assertEqual(_to_stock("150.00"), Decimal("150.00"))
+        self.assertEqual(_to_stock("150.50"), Decimal("150.50"))
+        self.assertIsNone(_to_stock("ungueltig"))
 
     def test_range_request_uses_graphql_filter_string(self):
         client = _FakeGraphQLClient({})
@@ -108,16 +114,16 @@ class MicrotechArtikelServiceProductJobTest(SimpleTestCase):
 
 
 class MicrotechProductPayloadServiceTest(SimpleTestCase):
-    def test_format_price_uses_microtech_decimal_notation(self):
-        self.assertEqual(MicrotechProductPayloadService.format_price(Decimal("10.24")), "10.24")
-        self.assertEqual(MicrotechProductPayloadService.format_price(Decimal("10")), "10.00")
+    def test_format_price_uses_microtech_decimal_comma(self):
+        self.assertEqual(MicrotechProductPayloadService.format_price(Decimal("5.85")), "5,85")
+        self.assertEqual(MicrotechProductPayloadService.format_price(Decimal("10")), "10,00")
         self.assertIsNone(MicrotechProductPayloadService.format_price(None))
 
     def test_complete_price_payload_clears_special_fields_when_no_special_exists(self):
         result = MicrotechProductPayloadService.build_complete_price_payload(
-            price="10.25",
+            price="10,25",
             rebate_quantity=5,
-            rebate_price="9.25",
+            rebate_price="9,25",
         )
 
         self.assertEqual(
@@ -125,9 +131,9 @@ class MicrotechProductPayloadServiceTest(SimpleTestCase):
             [
                 {
                     "tree": "Vk0",
-                    "price": "10.25",
+                    "price": "10,25",
                     "rebateQuantity": 5,
-                    "rebatePrice": "9.25",
+                    "rebatePrice": "9,25",
                     "specialPrice": "",
                     "specialStartDate": "",
                     "specialEndDate": "",
@@ -137,17 +143,17 @@ class MicrotechProductPayloadServiceTest(SimpleTestCase):
 
     def test_complete_price_payload_clears_rebate_for_special_price(self):
         result = MicrotechProductPayloadService.build_complete_price_payload(
-            price="10.25",
+            price="10,25",
             rebate_quantity=5,
-            rebate_price="9.25",
-            special_price="8.25",
+            rebate_price="9,25",
+            special_price="8,25",
             special_start_date="2026-07-15T00:00:00+02:00",
             special_end_date="2026-07-31T23:59:59+02:00",
         )
 
         self.assertEqual(result["priceTrees"][0]["rebateQuantity"], "")
         self.assertEqual(result["priceTrees"][0]["rebatePrice"], "")
-        self.assertEqual(result["priceTrees"][0]["specialPrice"], "8.25")
+        self.assertEqual(result["priceTrees"][0]["specialPrice"], "8,25")
 
 
 class MicrotechSyncProductsCommandTest(TestCase):
@@ -272,6 +278,28 @@ class MicrotechSyncProductsCommandTest(TestCase):
         storage = Product.objects.get(erp_nr="1008").storage
         self.assertEqual(storage.stock, 150)
         self.assertEqual(storage.location, "B6f")
+        lager_service.get_stock_and_location.assert_not_called()
+
+    def test_sync_preserves_fractional_product_job_stock_without_lager_lookup(self):
+        cmd = MicrotechSyncProductsCommand()
+        artikel_service = self._build_artikel_service(erp_nr="1008a", is_active=True)
+        artikel_service.get_stock.return_value = "91.59"
+        artikel_service.get_storage_location.return_value = "B6g"
+        lager_service = self._build_lager_service()
+
+        cmd._sync_current_record(
+            artikel_service,
+            lager_service,
+            tax_map={
+                Decimal("19.00"): self.tax_19,
+                Decimal("7.00"): self.tax_7,
+            },
+            preserve_is_active=False,
+        )
+
+        storage = Product.objects.get(erp_nr="1008a").storage
+        self.assertEqual(storage.stock, Decimal("91.59"))
+        self.assertEqual(storage.location, "B6g")
         lager_service.get_stock_and_location.assert_not_called()
 
     def test_sync_uses_lager_stock_when_product_job_stock_is_empty(self):
@@ -604,10 +632,10 @@ class MicrotechSyncProductsCommandTest(TestCase):
             [
                 {
                     "tree": "Vk0",
-                    "price": "10.25",
+                    "price": "10,25",
                     "rebateQuantity": "",
                     "rebatePrice": "",
-                    "specialPrice": "8.25",
+                    "specialPrice": "8,25",
                     "specialStartDate": payload["priceTrees"][0]["specialStartDate"],
                     "specialEndDate": payload["priceTrees"][0]["specialEndDate"],
                 }
@@ -634,9 +662,9 @@ class MicrotechSyncProductsCommandTest(TestCase):
             [
                 {
                     "tree": "Vk0",
-                    "price": "11.25",
+                    "price": "11,25",
                     "rebateQuantity": 10,
-                    "rebatePrice": "10.25",
+                    "rebatePrice": "10,25",
                     "specialPrice": "",
                     "specialStartDate": "",
                     "specialEndDate": "",
@@ -667,9 +695,9 @@ class MicrotechSyncProductsCommandTest(TestCase):
             [
                 {
                     "tree": "Vk0",
-                    "price": "12.50",
+                    "price": "12,50",
                     "rebateQuantity": 10,
-                    "rebatePrice": "11.25",
+                    "rebatePrice": "11,25",
                     "specialPrice": "",
                     "specialStartDate": "",
                     "specialEndDate": "",

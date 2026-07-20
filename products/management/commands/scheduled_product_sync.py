@@ -16,7 +16,7 @@ from microtech.services import MicrotechExpiredSpecialSyncService, microtech_con
 class Command(MonitoredBaseCommand):
     help = (
         "Scheduler command: sync products from Microtech to Django, clear expired specials, "
-        "update Microtech specials, and sync everything to Shopware."
+        "update Microtech specials, and sync everything to Shopware 5 and 6."
     )
 
     def add_arguments(self, parser):
@@ -132,7 +132,7 @@ class Command(MonitoredBaseCommand):
             )
 
             runtime.update(stage=f"4/{total_stages} django_to_shopware")
-            self.stdout.write(f"4/{total_stages} Django -> Shopware sync starten")
+            self.stdout.write(f"4/{total_stages} Django -> Shopware 6 und Shopware 5 sync starten")
             call_command(
                 "shopware_sync_products",
                 all=True,
@@ -145,6 +145,7 @@ class Command(MonitoredBaseCommand):
                 apply=True,
                 skip_product_sync=True,
             )
+            call_command("shopware5_sync_products", limit=limit)
             if force_images:
                 runtime.update(stage="5/5 force_shopware_images")
                 self.stdout.write("5/5 Shopware-Bilder vollstaendig neu hochladen")

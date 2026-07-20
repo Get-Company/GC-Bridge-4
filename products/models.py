@@ -1,5 +1,5 @@
 import calendar
-from decimal import Decimal, ROUND_UP
+from decimal import Decimal, ROUND_FLOOR, ROUND_UP
 
 from django.conf import settings
 from django.db import models
@@ -285,42 +285,8 @@ class Product(BaseModel):
         verbose_name_plural = _("Produkte")
         ordering = ("erp_nr", "name")
 
-    MICROTECH_SYNC_FIELDS = (
-        ("KuBez5", "name"),
-        ("Bez5", "description"),
-        ("Bez2", "description_short"),
-        ("WShopKz", "is_active"),
-    )
-
     def __str__(self) -> str:
         return f"{self.erp_nr} - {self.name}"
-
-    def get_microtech_sync_payload(self) -> dict[str, object]:
-        payload: dict[str, object] = {}
-        for field_name, attribute_name in self.MICROTECH_SYNC_FIELDS:
-            value = getattr(self, attribute_name)
-            payload[field_name] = bool(value) if attribute_name == "is_active" else (value or "")
-        return payload
-
-    def sync_to_microtech(self, *, erp: object | None = None) -> dict[str, object]:
-        from microtech.services import microtech_connection
-
-        erp_nr = str(self.erp_nr or "").strip()
-        if not erp_nr:
-            raise ValueError("Product.erp_nr is required for Microtech sync.")
-
-        if erp is None:
-            with microtech_connection() as erp_connection:
-                return self.sync_to_microtech(erp=erp_connection)
-
-        input_data = {
-            "name": self.name or "",
-            "description": self.description or "",
-            "descriptionShort": self.description_short or "",
-            "isActive": bool(self.is_active),
-        }
-        erp.update_product(erp_nr, input_data)
-        return self.get_microtech_sync_payload()
 
     def get_ordered_product_images(self) -> list["ProductImage"]:
         if hasattr(self, "ordered_product_images"):
@@ -827,14 +793,31 @@ class Storage(BaseModel):
         related_name="storage",
         verbose_name=_("Produkt"),
     )
-    stock = models.IntegerField(null=True, blank=True, verbose_name=_("Bestand"))
+    stock = models.DecimalField(
+        max_digits=15,
+        decimal_places=4,
+        null=True,
+        blank=True,
+        verbose_name=_("Bestand"),
+    )
     location = models.CharField(max_length=255, null=True, blank=True, verbose_name=_("Lagerort"))
     virtual_stock = models.PositiveIntegerField(default=0, blank=True, verbose_name=_("Virtueller Bestand"))
 
     @property
-    def get_stock(self) -> int:
+    def get_stock(self) -> Decimal:
         virtual_stock = self.virtual_stock or 0
-        return virtual_stock if virtual_stock > 0 else (self.stock or 0)
+        return Decimal(virtual_stock) if virtual_stock > 0 else (self.stock or Decimal("0"))
+
+    @property
+    def get_shopware_stock(self) -> int:
+        """Return the conservatively rounded stock required by both Shopware APIs."""
+        try:
+            stock = Decimal(str(self.get_stock))
+        except (TypeError, ValueError):
+            return 0
+        if not stock.is_finite():
+            return 0
+        return int(stock.to_integral_value(rounding=ROUND_FLOOR))
 
     class Meta:
         verbose_name = _("Lagerbestand")

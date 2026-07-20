@@ -263,7 +263,7 @@ class Shopware5ProductSyncService(BaseService):
             storage = None
         if not storage:
             return 0
-        return int(storage.get_stock or 0)
+        return storage.get_shopware_stock
 
     @staticmethod
     def _positive_int(value: object, *, default: int) -> int:
