@@ -1,238 +1,317 @@
-Batch 5 | Produkte: ['104006', '104011', '104011+2H', '104014', '104014-1', '104016', '104025', '104030', '104031', '104032']
-Traceback (most recent call last):
-File "/app/.venv/lib/python3.12/site-packages/lib_shopware6_api_base/lib_shopware6_admin_client.py", line 654, in _request
-response.raise_for_status()  # type: ignore[possibly-undefined]
-^^^^^^^^^^^^^^^^^^^^^^^^^^^
-File "/app/.venv/lib/python3.12/site-packages/httpx/_models.py", line 829, in raise_for_status
-raise HTTPStatusError(message, request=request, response=self)
-httpx.HTTPStatusError: Client error '400 Bad Request' for url 'https://sw6dev.classei-shop.de/api/_action/media/97d981c8969c07a32f7fcd678739bf6c/upload?extension=png&fileName=01_orgaablaeufe_Set5'
-For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400
+Du bist ein professioneller, deutschsprachiger E-Commerce-SEO-Texter und HTML-Redakteur.
 
-The above exception was the direct cause of the following exception:
+Deine Aufgabe ist es, aus den bereitgestellten Kategoriedaten hochwertige Texte für eine E-Commerce-Kategorieseite zu erstellen.
 
-Traceback (most recent call last):
-File "/app/shopware/management/commands/shopware_force_product_image_uploads.py", line 283, in _run_upload_step
-media_sync_service.sync_media_assets(
-File "/app/shopware/services/product_media.py", line 89, in sync_media_assets
-product_service.upload_media_from_url(
-File "/app/shopware/services/product.py", line 264, in upload_media_from_url
-return self.request_post(
-^^^^^^^^^^^^^^^^^^
-File "/app/shopware/services/shopware6.py", line 123, in request_post
-result = self._request_with_retry(
-^^^^^^^^^^^^^^^^^^^^^^^^^
-File "/app/shopware/services/shopware6.py", line 37, in _request_with_retry
-return request_method(*args, **kwargs)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-File "/app/.venv/lib/python3.12/site-packages/lib_shopware6_api_base/lib_shopware6_admin_client.py", line 221, in request_post
-response_dict = self._make_request(
-^^^^^^^^^^^^^^^^^^^
-File "/app/.venv/lib/python3.12/site-packages/lib_shopware6_api_base/lib_shopware6_admin_client.py", line 552, in _make_request
-raise exc
-File "/app/.venv/lib/python3.12/site-packages/lib_shopware6_api_base/lib_shopware6_admin_client.py", line 516, in _make_request
-response = self._request(
-^^^^^^^^^^^^^^
-File "/app/.venv/lib/python3.12/site-packages/lib_shopware6_api_base/lib_shopware6_admin_client.py", line 657, in _request
-raise ShopwareAPIError(f"{exc}{detailed_error}") from exc
-lib_shopware6_api_base.conf_shopware6_api_base_classes.ShopwareAPIError: Client error '400 Bad Request' for url 'https://sw6dev.classei-shop.de/api/_action/media/97d981c8969c07a32f7fcd678739bf6c/upload?extension=png&fileName=01_orgaablaeufe_Set5'
-For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400 : {"errors":[{"status":"400","code":"CONTENT__MEDIA_CANNOT_OPEN_SOURCE_STREAM_TO_READ","title":"Bad Request","detail":"Cannot open source stream to read from https:\/\/assets.classei.de\/img\/01_orgaablaeufe_Set5.png.","meta":{"parameters":{"url":"https:\/\/assets.classei.de\/img\/01_orgaablaeufe_Set5.png"}},"trace":[{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/shopware\/core\/Content\/Media\/File\/FileFetcher.php","line":172,"function":"cannotOpenSourceStreamToRead","class":"Shopware\\Core\\Content\\Media\\MediaException","type":"::"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/shopware\/core\/Content\/Media\/File\/FileFetcher.php","line":68,"function":"openSourceFromUrl","class":"Shopware\\Core\\Content\\Media\\File\\FileFetcher","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/shopware\/core\/Content\/Media\/File\/FileFetcher.php","line":95,"function":"fetchFromURL","class":"Shopware\\Core\\Content\\Media\\File\\FileFetcher","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/shopware\/core\/Content\/Media\/MediaService.php","line":112,"function":"fetchFileFromURL","class":"Shopware\\Core\\Content\\Media\\File\\FileFetcher","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/shopware\/core\/Content\/Media\/Api\/MediaUploadController.php","line":56,"function":"fetchFile","class":"Shopware\\Core\\Content\\Media\\MediaService","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/symfony\/http-kernel\/HttpKernel.php","line":183,"function":"upload","class":"Shopware\\Core\\Content\\Media\\Api\\MediaUploadController","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/symfony\/http-kernel\/HttpKernel.php","line":76,"function":"handleRaw","class":"Symfony\\Component\\HttpKernel\\HttpKernel","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/shopware\/core\/Framework\/Adapter\/Kernel\/HttpKernel.php","line":72,"function":"handle","class":"Symfony\\Component\\HttpKernel\\HttpKernel","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/symfony\/http-kernel\/HttpCache\/SubRequestHandler.php","line":86,"function":"handle","class":"Shopware\\Core\\Framework\\Adapter\\Kernel\\HttpKernel","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/symfony\/http-kernel\/HttpCache\/HttpCache.php","line":466,"function":"handle","class":"Symfony\\Component\\HttpKernel\\HttpCache\\SubRequestHandler","type":"::"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/symfony\/http-kernel\/HttpCache\/HttpCache.php","line":268,"function":"forward","class":"Symfony\\Component\\HttpKernel\\HttpCache\\HttpCache","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/symfony\/http-kernel\/HttpCache\/HttpCache.php","line":282,"function":"pass","class":"Symfony\\Component\\HttpKernel\\HttpCache\\HttpCache","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/symfony\/http-kernel\/HttpCache\/HttpCache.php","line":202,"function":"invalidate","class":"Symfony\\Component\\HttpKernel\\HttpCache\\HttpCache","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/shopware\/core\/Framework\/Adapter\/Kernel\/HttpCacheKernel.php","line":61,"function":"handle","class":"Symfony\\Component\\HttpKernel\\HttpCache\\HttpCache","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/shopware\/core\/Kernel.php","line":129,"function":"handle","class":"Shopware\\Core\\Framework\\Adapter\\Kernel\\HttpCacheKernel","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/symfony\/runtime\/Runner\/Symfony\/HttpKernelRunner.php","line":35,"function":"handle","class":"Shopware\\Core\\Kernel","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/autoload_runtime.php","line":32,"function":"run","class":"Symfony\\Component\\Runtime\\Runner\\Symfony\\HttpKernelRunner","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/public\/index.php","line":11,"args":["\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/autoload_runtime.php"],"function":"require_once"}]}]}
+Erstelle folgende fünf Felder:
 
+1. Kurzbeschreibung als HTML
+2. Ausführliche Beschreibung als HTML
+3. SEO-Meta-Titel
+4. SEO-Meta-Beschreibung
+5. SEO-Keywords
 
-Batch 10 | Produkte: ['14IT18/Z', '14IT20/Z', '14IT78', '16200', '16200S', '16210', '180002', '180003', '180006', '180011']
-Traceback (most recent call last):
-File "/app/.venv/lib/python3.12/site-packages/lib_shopware6_api_base/lib_shopware6_admin_client.py", line 654, in _request
-response.raise_for_status()  # type: ignore[possibly-undefined]
-^^^^^^^^^^^^^^^^^^^^^^^^^^^
-File "/app/.venv/lib/python3.12/site-packages/httpx/_models.py", line 829, in raise_for_status
-raise HTTPStatusError(message, request=request, response=self)
-httpx.HTTPStatusError: Client error '400 Bad Request' for url 'https://sw6dev.classei-shop.de/api/_action/media/7f805cfb3ca0fd62943dad65caf5dc8b/upload?extension=png&fileName=16200'
-For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400
+## Ziele
 
-The above exception was the direct cause of the following exception:
+* Erkläre verständlich, welche Produkte und Lösungen die Kategorie umfasst.
+* Hilf Besuchern dabei, die passenden Produkte auszuwählen.
+* Stelle relevante Unterschiede, Eigenschaften und Einsatzmöglichkeiten heraus.
+* Schreibe suchmaschinenoptimiert, ohne Keyword-Stuffing.
+* Formuliere sachlich, freundlich und nutzenorientiert.
+* Verwende ausschließlich Informationen aus der bereitgestellten Datenbasis.
 
-Traceback (most recent call last):
-File "/app/shopware/management/commands/shopware_force_product_image_uploads.py", line 283, in _run_upload_step
-media_sync_service.sync_media_assets(
-File "/app/shopware/services/product_media.py", line 89, in sync_media_assets
-product_service.upload_media_from_url(
-File "/app/shopware/services/product.py", line 264, in upload_media_from_url
-return self.request_post(
-^^^^^^^^^^^^^^^^^^
-File "/app/shopware/services/shopware6.py", line 123, in request_post
-result = self._request_with_retry(
-^^^^^^^^^^^^^^^^^^^^^^^^^
-File "/app/shopware/services/shopware6.py", line 37, in _request_with_retry
-return request_method(*args, **kwargs)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-File "/app/.venv/lib/python3.12/site-packages/lib_shopware6_api_base/lib_shopware6_admin_client.py", line 221, in request_post
-response_dict = self._make_request(
-^^^^^^^^^^^^^^^^^^^
-File "/app/.venv/lib/python3.12/site-packages/lib_shopware6_api_base/lib_shopware6_admin_client.py", line 552, in _make_request
-raise exc
-File "/app/.venv/lib/python3.12/site-packages/lib_shopware6_api_base/lib_shopware6_admin_client.py", line 516, in _make_request
-response = self._request(
-^^^^^^^^^^^^^^
-File "/app/.venv/lib/python3.12/site-packages/lib_shopware6_api_base/lib_shopware6_admin_client.py", line 657, in _request
-raise ShopwareAPIError(f"{exc}{detailed_error}") from exc
-lib_shopware6_api_base.conf_shopware6_api_base_classes.ShopwareAPIError: Client error '400 Bad Request' for url 'https://sw6dev.classei-shop.de/api/_action/media/7f805cfb3ca0fd62943dad65caf5dc8b/upload?extension=png&fileName=16200'
-For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400 : {"errors":[{"status":"400","code":"CONTENT__MEDIA_CANNOT_OPEN_SOURCE_STREAM_TO_READ","title":"Bad Request","detail":"Cannot open source stream to read from https:\/\/assets.classei.de\/img\/16200.png.","meta":{"parameters":{"url":"https:\/\/assets.classei.de\/img\/16200.png"}},"trace":[{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/shopware\/core\/Content\/Media\/File\/FileFetcher.php","line":172,"function":"cannotOpenSourceStreamToRead","class":"Shopware\\Core\\Content\\Media\\MediaException","type":"::"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/shopware\/core\/Content\/Media\/File\/FileFetcher.php","line":68,"function":"openSourceFromUrl","class":"Shopware\\Core\\Content\\Media\\File\\FileFetcher","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/shopware\/core\/Content\/Media\/File\/FileFetcher.php","line":95,"function":"fetchFromURL","class":"Shopware\\Core\\Content\\Media\\File\\FileFetcher","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/shopware\/core\/Content\/Media\/MediaService.php","line":112,"function":"fetchFileFromURL","class":"Shopware\\Core\\Content\\Media\\File\\FileFetcher","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/shopware\/core\/Content\/Media\/Api\/MediaUploadController.php","line":56,"function":"fetchFile","class":"Shopware\\Core\\Content\\Media\\MediaService","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/symfony\/http-kernel\/HttpKernel.php","line":183,"function":"upload","class":"Shopware\\Core\\Content\\Media\\Api\\MediaUploadController","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/symfony\/http-kernel\/HttpKernel.php","line":76,"function":"handleRaw","class":"Symfony\\Component\\HttpKernel\\HttpKernel","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/shopware\/core\/Framework\/Adapter\/Kernel\/HttpKernel.php","line":72,"function":"handle","class":"Symfony\\Component\\HttpKernel\\HttpKernel","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/symfony\/http-kernel\/HttpCache\/SubRequestHandler.php","line":86,"function":"handle","class":"Shopware\\Core\\Framework\\Adapter\\Kernel\\HttpKernel","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/symfony\/http-kernel\/HttpCache\/HttpCache.php","line":466,"function":"handle","class":"Symfony\\Component\\HttpKernel\\HttpCache\\SubRequestHandler","type":"::"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/symfony\/http-kernel\/HttpCache\/HttpCache.php","line":268,"function":"forward","class":"Symfony\\Component\\HttpKernel\\HttpCache\\HttpCache","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/symfony\/http-kernel\/HttpCache\/HttpCache.php","line":282,"function":"pass","class":"Symfony\\Component\\HttpKernel\\HttpCache\\HttpCache","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/symfony\/http-kernel\/HttpCache\/HttpCache.php","line":202,"function":"invalidate","class":"Symfony\\Component\\HttpKernel\\HttpCache\\HttpCache","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/shopware\/core\/Framework\/Adapter\/Kernel\/HttpCacheKernel.php","line":61,"function":"handle","class":"Symfony\\Component\\HttpKernel\\HttpCache\\HttpCache","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/shopware\/core\/Kernel.php","line":129,"function":"handle","class":"Shopware\\Core\\Framework\\Adapter\\Kernel\\HttpCacheKernel","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/symfony\/runtime\/Runner\/Symfony\/HttpKernelRunner.php","line":35,"function":"handle","class":"Shopware\\Core\\Kernel","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/autoload_runtime.php","line":32,"function":"run","class":"Symfony\\Component\\Runtime\\Runner\\Symfony\\HttpKernelRunner","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/public\/index.php","line":11,"args":["\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/autoload_runtime.php"],"function":"require_once"}]}]}
+## Grundregeln
 
+1. Erfinde keine Produkte, Materialien, Eigenschaften, Einsatzmöglichkeiten, Zielgruppen oder Vorteile.
+2. Verwende nur Informationen, die ausdrücklich in der Datenbasis enthalten sind oder sich eindeutig daraus ableiten lassen.
+3. Beschreibe die Kategorie als Ganzes und nicht nur ein einzelnes Produkt.
+4. Berücksichtige Gemeinsamkeiten und Unterschiede der enthaltenen Produkte.
+5. Erwähne einzelne Produkte nur dann namentlich, wenn dies für die Erklärung der Kategorie sinnvoll ist.
+6. Verwende keine unbelegten Superlative wie:
 
-Batch 13 | Produkte: ['204013U', '204021', '204021-ALT', '204045', '204045/00', '204045/00-10', '204045/01', '204045/01-10', '204045/02', '204045/02-10']
-Traceback (most recent call last):
-File "/app/.venv/lib/python3.12/site-packages/lib_shopware6_api_base/lib_shopware6_admin_client.py", line 654, in _request
-response.raise_for_status()  # type: ignore[possibly-undefined]
-^^^^^^^^^^^^^^^^^^^^^^^^^^^
-File "/app/.venv/lib/python3.12/site-packages/httpx/_models.py", line 829, in raise_for_status
-raise HTTPStatusError(message, request=request, response=self)
-httpx.HTTPStatusError: Client error '400 Bad Request' for url 'https://sw6dev.classei-shop.de/api/_action/media/3639377a252b08bff32a6bda803c15cf/upload?extension=png&fileName=204045-00'
-For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400
+    * „die besten Produkte“
+    * „unschlagbare Qualität“
+    * „einzigartige Auswahl“
+    * „perfekte Lösung“
+7. Verwende keine Emojis.
+8. Verwende keine künstlichen Werbeformulierungen wie:
 
-The above exception was the direct cause of the following exception:
+    * „Entdecken Sie jetzt“
+    * „Tauchen Sie ein“
+    * „Willkommen in unserer Kategorie“
+    * „Lassen Sie sich begeistern“
+9. Erwähne keine Preise, Rabatte, Lieferzeiten, Lagerbestände oder Garantien, sofern diese nicht ausdrücklich in der Datenbasis enthalten sind.
+10. Erfinde keine Zertifizierungen, Umweltvorteile oder Nachhaltigkeitsaussagen.
+11. Vermeide Wiederholungen zwischen Kurzbeschreibung und ausführlicher Beschreibung.
+12. Verwende die vorliegenden Produktdaten nicht als bloße Aufzählung. Erkläre ihren praktischen Nutzen.
+13. Sind nur wenige Informationen vorhanden, schreibe kürzer und zurückhaltender, statt Inhalte zu erfinden.
+14. Schreibe ausschließlich auf Deutsch.
+15. Verwende ein gut verständliches Sprachniveau von B1 bis B2.
 
-Traceback (most recent call last):
-File "/app/shopware/management/commands/shopware_force_product_image_uploads.py", line 283, in _run_upload_step
-media_sync_service.sync_media_assets(
-File "/app/shopware/services/product_media.py", line 89, in sync_media_assets
-product_service.upload_media_from_url(
-File "/app/shopware/services/product.py", line 264, in upload_media_from_url
-return self.request_post(
-^^^^^^^^^^^^^^^^^^
-File "/app/shopware/services/shopware6.py", line 123, in request_post
-result = self._request_with_retry(
-^^^^^^^^^^^^^^^^^^^^^^^^^
-File "/app/shopware/services/shopware6.py", line 37, in _request_with_retry
-return request_method(*args, **kwargs)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-File "/app/.venv/lib/python3.12/site-packages/lib_shopware6_api_base/lib_shopware6_admin_client.py", line 221, in request_post
-response_dict = self._make_request(
-^^^^^^^^^^^^^^^^^^^
-File "/app/.venv/lib/python3.12/site-packages/lib_shopware6_api_base/lib_shopware6_admin_client.py", line 552, in _make_request
-raise exc
-File "/app/.venv/lib/python3.12/site-packages/lib_shopware6_api_base/lib_shopware6_admin_client.py", line 516, in _make_request
-response = self._request(
-^^^^^^^^^^^^^^
-File "/app/.venv/lib/python3.12/site-packages/lib_shopware6_api_base/lib_shopware6_admin_client.py", line 657, in _request
-raise ShopwareAPIError(f"{exc}{detailed_error}") from exc
-lib_shopware6_api_base.conf_shopware6_api_base_classes.ShopwareAPIError: Client error '400 Bad Request' for url 'https://sw6dev.classei-shop.de/api/_action/media/3639377a252b08bff32a6bda803c15cf/upload?extension=png&fileName=204045-00'
-For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400 : {"errors":[{"status":"400","code":"CONTENT__MEDIA_CANNOT_OPEN_SOURCE_STREAM_TO_READ","title":"Bad Request","detail":"Cannot open source stream to read from https:\/\/assets.classei.de\/img\/204045-00.png.","meta":{"parameters":{"url":"https:\/\/assets.classei.de\/img\/204045-00.png"}},"trace":[{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/shopware\/core\/Content\/Media\/File\/FileFetcher.php","line":172,"function":"cannotOpenSourceStreamToRead","class":"Shopware\\Core\\Content\\Media\\MediaException","type":"::"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/shopware\/core\/Content\/Media\/File\/FileFetcher.php","line":68,"function":"openSourceFromUrl","class":"Shopware\\Core\\Content\\Media\\File\\FileFetcher","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/shopware\/core\/Content\/Media\/File\/FileFetcher.php","line":95,"function":"fetchFromURL","class":"Shopware\\Core\\Content\\Media\\File\\FileFetcher","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/shopware\/core\/Content\/Media\/MediaService.php","line":112,"function":"fetchFileFromURL","class":"Shopware\\Core\\Content\\Media\\File\\FileFetcher","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/shopware\/core\/Content\/Media\/Api\/MediaUploadController.php","line":56,"function":"fetchFile","class":"Shopware\\Core\\Content\\Media\\MediaService","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/symfony\/http-kernel\/HttpKernel.php","line":183,"function":"upload","class":"Shopware\\Core\\Content\\Media\\Api\\MediaUploadController","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/symfony\/http-kernel\/HttpKernel.php","line":76,"function":"handleRaw","class":"Symfony\\Component\\HttpKernel\\HttpKernel","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/shopware\/core\/Framework\/Adapter\/Kernel\/HttpKernel.php","line":72,"function":"handle","class":"Symfony\\Component\\HttpKernel\\HttpKernel","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/symfony\/http-kernel\/HttpCache\/SubRequestHandler.php","line":86,"function":"handle","class":"Shopware\\Core\\Framework\\Adapter\\Kernel\\HttpKernel","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/symfony\/http-kernel\/HttpCache\/HttpCache.php","line":466,"function":"handle","class":"Symfony\\Component\\HttpKernel\\HttpCache\\SubRequestHandler","type":"::"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/symfony\/http-kernel\/HttpCache\/HttpCache.php","line":268,"function":"forward","class":"Symfony\\Component\\HttpKernel\\HttpCache\\HttpCache","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/symfony\/http-kernel\/HttpCache\/HttpCache.php","line":282,"function":"pass","class":"Symfony\\Component\\HttpKernel\\HttpCache\\HttpCache","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/symfony\/http-kernel\/HttpCache\/HttpCache.php","line":202,"function":"invalidate","class":"Symfony\\Component\\HttpKernel\\HttpCache\\HttpCache","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/shopware\/core\/Framework\/Adapter\/Kernel\/HttpCacheKernel.php","line":61,"function":"handle","class":"Symfony\\Component\\HttpKernel\\HttpCache\\HttpCache","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/shopware\/core\/Kernel.php","line":129,"function":"handle","class":"Shopware\\Core\\Framework\\Adapter\\Kernel\\HttpCacheKernel","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/symfony\/runtime\/Runner\/Symfony\/HttpKernelRunner.php","line":35,"function":"handle","class":"Shopware\\Core\\Kernel","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/autoload_runtime.php","line":32,"function":"run","class":"Symfony\\Component\\Runtime\\Runner\\Symfony\\HttpKernelRunner","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/public\/index.php","line":11,"args":["\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/autoload_runtime.php"],"function":"require_once"}]}]}
+## Ermittlung der Suchbegriffe
 
+Ermittle aus folgenden Informationen:
 
-Batch 14 | Produkte: ['204045/03', '204045/03-10', '204045/06', '204045/06-10', '204045S20', '204045S5', '204109', '204109A20', '204109A22', '204109E24']
-Traceback (most recent call last):
-File "/app/.venv/lib/python3.12/site-packages/lib_shopware6_api_base/lib_shopware6_admin_client.py", line 654, in _request
-response.raise_for_status()  # type: ignore[possibly-undefined]
-^^^^^^^^^^^^^^^^^^^^^^^^^^^
-File "/app/.venv/lib/python3.12/site-packages/httpx/_models.py", line 829, in raise_for_status
-raise HTTPStatusError(message, request=request, response=self)
-httpx.HTTPStatusError: Client error '400 Bad Request' for url 'https://sw6dev.classei-shop.de/api/_action/media/51a415f1915414915af5a473c455ca1e/upload?extension=jpg&fileName=204045S20'
-For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400
+* Kategoriename
+* Kategoriepfad
+* bestehende Texte
+* Unterkategorien
+* enthaltene Produkte
+* Produkteigenschaften
+* typische Einsatzmöglichkeiten
 
-The above exception was the direct cause of the following exception:
+ein primäres Hauptkeyword und mehrere passende Nebenkeywords.
 
-Traceback (most recent call last):
-File "/app/shopware/management/commands/shopware_force_product_image_uploads.py", line 283, in _run_upload_step
-media_sync_service.sync_media_assets(
-File "/app/shopware/services/product_media.py", line 89, in sync_media_assets
-product_service.upload_media_from_url(
-File "/app/shopware/services/product.py", line 264, in upload_media_from_url
-return self.request_post(
-^^^^^^^^^^^^^^^^^^
-File "/app/shopware/services/shopware6.py", line 123, in request_post
-result = self._request_with_retry(
-^^^^^^^^^^^^^^^^^^^^^^^^^
-File "/app/shopware/services/shopware6.py", line 37, in _request_with_retry
-return request_method(*args, **kwargs)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-File "/app/.venv/lib/python3.12/site-packages/lib_shopware6_api_base/lib_shopware6_admin_client.py", line 221, in request_post
-response_dict = self._make_request(
-^^^^^^^^^^^^^^^^^^^
-File "/app/.venv/lib/python3.12/site-packages/lib_shopware6_api_base/lib_shopware6_admin_client.py", line 552, in _make_request
-raise exc
-File "/app/.venv/lib/python3.12/site-packages/lib_shopware6_api_base/lib_shopware6_admin_client.py", line 516, in _make_request
-response = self._request(
-^^^^^^^^^^^^^^
-File "/app/.venv/lib/python3.12/site-packages/lib_shopware6_api_base/lib_shopware6_admin_client.py", line 657, in _request
-raise ShopwareAPIError(f"{exc}{detailed_error}") from exc
-lib_shopware6_api_base.conf_shopware6_api_base_classes.ShopwareAPIError: Client error '400 Bad Request' for url 'https://sw6dev.classei-shop.de/api/_action/media/51a415f1915414915af5a473c455ca1e/upload?extension=jpg&fileName=204045S20'
-For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400 : {"errors":[{"status":"400","code":"CONTENT__MEDIA_CANNOT_OPEN_SOURCE_STREAM_TO_READ","title":"Bad Request","detail":"Cannot open source stream to read from https:\/\/assets.classei.de\/img\/204045S20.jpg.","meta":{"parameters":{"url":"https:\/\/assets.classei.de\/img\/204045S20.jpg"}},"trace":[{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/shopware\/core\/Content\/Media\/File\/FileFetcher.php","line":172,"function":"cannotOpenSourceStreamToRead","class":"Shopware\\Core\\Content\\Media\\MediaException","type":"::"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/shopware\/core\/Content\/Media\/File\/FileFetcher.php","line":68,"function":"openSourceFromUrl","class":"Shopware\\Core\\Content\\Media\\File\\FileFetcher","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/shopware\/core\/Content\/Media\/File\/FileFetcher.php","line":95,"function":"fetchFromURL","class":"Shopware\\Core\\Content\\Media\\File\\FileFetcher","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/shopware\/core\/Content\/Media\/MediaService.php","line":112,"function":"fetchFileFromURL","class":"Shopware\\Core\\Content\\Media\\File\\FileFetcher","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/shopware\/core\/Content\/Media\/Api\/MediaUploadController.php","line":56,"function":"fetchFile","class":"Shopware\\Core\\Content\\Media\\MediaService","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/symfony\/http-kernel\/HttpKernel.php","line":183,"function":"upload","class":"Shopware\\Core\\Content\\Media\\Api\\MediaUploadController","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/symfony\/http-kernel\/HttpKernel.php","line":76,"function":"handleRaw","class":"Symfony\\Component\\HttpKernel\\HttpKernel","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/shopware\/core\/Framework\/Adapter\/Kernel\/HttpKernel.php","line":72,"function":"handle","class":"Symfony\\Component\\HttpKernel\\HttpKernel","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/symfony\/http-kernel\/HttpCache\/SubRequestHandler.php","line":86,"function":"handle","class":"Shopware\\Core\\Framework\\Adapter\\Kernel\\HttpKernel","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/symfony\/http-kernel\/HttpCache\/HttpCache.php","line":466,"function":"handle","class":"Symfony\\Component\\HttpKernel\\HttpCache\\SubRequestHandler","type":"::"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/symfony\/http-kernel\/HttpCache\/HttpCache.php","line":268,"function":"forward","class":"Symfony\\Component\\HttpKernel\\HttpCache\\HttpCache","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/symfony\/http-kernel\/HttpCache\/HttpCache.php","line":282,"function":"pass","class":"Symfony\\Component\\HttpKernel\\HttpCache\\HttpCache","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/symfony\/http-kernel\/HttpCache\/HttpCache.php","line":202,"function":"invalidate","class":"Symfony\\Component\\HttpKernel\\HttpCache\\HttpCache","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/shopware\/core\/Framework\/Adapter\/Kernel\/HttpCacheKernel.php","line":61,"function":"handle","class":"Symfony\\Component\\HttpKernel\\HttpCache\\HttpCache","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/shopware\/core\/Kernel.php","line":129,"function":"handle","class":"Shopware\\Core\\Framework\\Adapter\\Kernel\\HttpCacheKernel","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/symfony\/runtime\/Runner\/Symfony\/HttpKernelRunner.php","line":35,"function":"handle","class":"Shopware\\Core\\Kernel","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/autoload_runtime.php","line":32,"function":"run","class":"Symfony\\Component\\Runtime\\Runner\\Symfony\\HttpKernelRunner","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/public\/index.php","line":11,"args":["\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/autoload_runtime.php"],"function":"require_once"}]}]}
+### Regeln für Keywords
 
+* Das Hauptkeyword muss die Kategorie möglichst genau beschreiben.
+* Verwende das Hauptkeyword natürlich und grammatikalisch korrekt.
+* Verwende es im ersten Satz der Kurzbeschreibung.
+* Verwende es außerdem an einer passenden Stelle in der ausführlichen Beschreibung.
+* Wiederhole Keywords nicht unnötig.
+* Verwende keine künstlichen Kombinationen von Suchbegriffen.
+* Verwende keine Suchbegriffe, die Produkteigenschaften versprechen, die nicht belegt sind.
+* Synonyme und verwandte Begriffe dürfen verwendet werden, sofern sie fachlich korrekt sind.
+* Vermeide Keyword-Stuffing.
 
-Batch 19 | Produkte: ['214025', '214045', '214045-10', '214123', '214123-100', '214123-1U', '214123-20', '214123B30', '214123BAM04', '214123BAM06']
-Traceback (most recent call last):
-File "/app/.venv/lib/python3.12/site-packages/lib_shopware6_api_base/lib_shopware6_admin_client.py", line 654, in _request
-response.raise_for_status()  # type: ignore[possibly-undefined]
-^^^^^^^^^^^^^^^^^^^^^^^^^^^
-File "/app/.venv/lib/python3.12/site-packages/httpx/_models.py", line 829, in raise_for_status
-raise HTTPStatusError(message, request=request, response=self)
-httpx.HTTPStatusError: Client error '400 Bad Request' for url 'https://sw6dev.classei-shop.de/api/_action/media/afc50c9a61f132b45abe50579c0a3fe8/upload?extension=png&fileName=fertigset_900050'
-For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400
+## Erlaubte HTML-Tags
 
-The above exception was the direct cause of the following exception:
+In den beiden HTML-Feldern sind ausschließlich folgende Tags erlaubt:
 
-Traceback (most recent call last):
-File "/app/shopware/management/commands/shopware_force_product_image_uploads.py", line 283, in _run_upload_step
-media_sync_service.sync_media_assets(
-File "/app/shopware/services/product_media.py", line 89, in sync_media_assets
-product_service.upload_media_from_url(
-File "/app/shopware/services/product.py", line 264, in upload_media_from_url
-return self.request_post(
-^^^^^^^^^^^^^^^^^^
-File "/app/shopware/services/shopware6.py", line 123, in request_post
-result = self._request_with_retry(
-^^^^^^^^^^^^^^^^^^^^^^^^^
-File "/app/shopware/services/shopware6.py", line 37, in _request_with_retry
-return request_method(*args, **kwargs)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-File "/app/.venv/lib/python3.12/site-packages/lib_shopware6_api_base/lib_shopware6_admin_client.py", line 221, in request_post
-response_dict = self._make_request(
-^^^^^^^^^^^^^^^^^^^
-File "/app/.venv/lib/python3.12/site-packages/lib_shopware6_api_base/lib_shopware6_admin_client.py", line 552, in _make_request
-raise exc
-File "/app/.venv/lib/python3.12/site-packages/lib_shopware6_api_base/lib_shopware6_admin_client.py", line 516, in _make_request
-response = self._request(
-^^^^^^^^^^^^^^
-File "/app/.venv/lib/python3.12/site-packages/lib_shopware6_api_base/lib_shopware6_admin_client.py", line 657, in _request
-raise ShopwareAPIError(f"{exc}{detailed_error}") from exc
-lib_shopware6_api_base.conf_shopware6_api_base_classes.ShopwareAPIError: Client error '400 Bad Request' for url 'https://sw6dev.classei-shop.de/api/_action/media/afc50c9a61f132b45abe50579c0a3fe8/upload?extension=png&fileName=fertigset_900050'
-For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400 : {"errors":[{"status":"400","code":"CONTENT__MEDIA_CANNOT_OPEN_SOURCE_STREAM_TO_READ","title":"Bad Request","detail":"Cannot open source stream to read from https:\/\/assets.classei.de\/img\/fertigset_900050.png.","meta":{"parameters":{"url":"https:\/\/assets.classei.de\/img\/fertigset_900050.png"}},"trace":[{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/shopware\/core\/Content\/Media\/File\/FileFetcher.php","line":172,"function":"cannotOpenSourceStreamToRead","class":"Shopware\\Core\\Content\\Media\\MediaException","type":"::"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/shopware\/core\/Content\/Media\/File\/FileFetcher.php","line":68,"function":"openSourceFromUrl","class":"Shopware\\Core\\Content\\Media\\File\\FileFetcher","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/shopware\/core\/Content\/Media\/File\/FileFetcher.php","line":95,"function":"fetchFromURL","class":"Shopware\\Core\\Content\\Media\\File\\FileFetcher","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/shopware\/core\/Content\/Media\/MediaService.php","line":112,"function":"fetchFileFromURL","class":"Shopware\\Core\\Content\\Media\\File\\FileFetcher","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/shopware\/core\/Content\/Media\/Api\/MediaUploadController.php","line":56,"function":"fetchFile","class":"Shopware\\Core\\Content\\Media\\MediaService","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/symfony\/http-kernel\/HttpKernel.php","line":183,"function":"upload","class":"Shopware\\Core\\Content\\Media\\Api\\MediaUploadController","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/symfony\/http-kernel\/HttpKernel.php","line":76,"function":"handleRaw","class":"Symfony\\Component\\HttpKernel\\HttpKernel","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/shopware\/core\/Framework\/Adapter\/Kernel\/HttpKernel.php","line":72,"function":"handle","class":"Symfony\\Component\\HttpKernel\\HttpKernel","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/symfony\/http-kernel\/HttpCache\/SubRequestHandler.php","line":86,"function":"handle","class":"Shopware\\Core\\Framework\\Adapter\\Kernel\\HttpKernel","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/symfony\/http-kernel\/HttpCache\/HttpCache.php","line":466,"function":"handle","class":"Symfony\\Component\\HttpKernel\\HttpCache\\SubRequestHandler","type":"::"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/symfony\/http-kernel\/HttpCache\/HttpCache.php","line":268,"function":"forward","class":"Symfony\\Component\\HttpKernel\\HttpCache\\HttpCache","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/symfony\/http-kernel\/HttpCache\/HttpCache.php","line":282,"function":"pass","class":"Symfony\\Component\\HttpKernel\\HttpCache\\HttpCache","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/symfony\/http-kernel\/HttpCache\/HttpCache.php","line":202,"function":"invalidate","class":"Symfony\\Component\\HttpKernel\\HttpCache\\HttpCache","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/shopware\/core\/Framework\/Adapter\/Kernel\/HttpCacheKernel.php","line":61,"function":"handle","class":"Symfony\\Component\\HttpKernel\\HttpCache\\HttpCache","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/shopware\/core\/Kernel.php","line":129,"function":"handle","class":"Shopware\\Core\\Framework\\Adapter\\Kernel\\HttpCacheKernel","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/symfony\/runtime\/Runner\/Symfony\/HttpKernelRunner.php","line":35,"function":"handle","class":"Shopware\\Core\\Kernel","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/autoload_runtime.php","line":32,"function":"run","class":"Symfony\\Component\\Runtime\\Runner\\Symfony\\HttpKernelRunner","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/public\/index.php","line":11,"args":["\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/autoload_runtime.php"],"function":"require_once"}]}]}
+* `<p>` für Absätze
+* `<b>` für kurze und wichtige Hervorhebungen
+* `<em>` für einzelne inhaltliche Betonungen
+* `<ul>` für eine ungeordnete Liste
+* `<li>` für Listeneinträge
+* `<br>` nur für einen zwingend notwendigen Zeilenumbruch innerhalb eines Absatzes
 
+## HTML-Regeln
 
-Batch 21 | Produkte: ['224551', '224553', '224553-150', '224553-20', '224553K', '224553P', '224813', '224816', '234123', '234123-10']
-Traceback (most recent call last):
-File "/app/.venv/lib/python3.12/site-packages/lib_shopware6_api_base/lib_shopware6_admin_client.py", line 654, in _request
-response.raise_for_status()  # type: ignore[possibly-undefined]
-^^^^^^^^^^^^^^^^^^^^^^^^^^^
-File "/app/.venv/lib/python3.12/site-packages/httpx/_models.py", line 829, in raise_for_status
-raise HTTPStatusError(message, request=request, response=self)
-httpx.HTTPStatusError: Client error '400 Bad Request' for url 'https://sw6dev.classei-shop.de/api/_action/media/8897a4e70235069066c214d2beab7a99/upload?extension=png&fileName=224553K'
-For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400
+* Erstelle ausschließlich HTML-Fragmente und keine vollständige HTML-Seite.
+* Verwende keine `<html>`, `<head>` oder `<body>`-Tags.
+* Verwende keine Überschriften-Tags wie `<h1>`, `<h2>` oder `<h3>`.
+* Verwende keine `<div>`- oder `<span>`-Tags.
+* Verwende keine Klassen, IDs, Inline-Styles oder anderen HTML-Attribute.
+* Verwende keine Links.
+* Verwende keine Tabellen.
+* Verwende keine HTML-Kommentare.
+* Verwende kein Markdown.
+* Verwende `<b>` und `<em>` sparsam.
+* Formatiere niemals einen vollständigen Absatz fett oder kursiv.
+* Verwende `<br>` nicht als Ersatz für mehrere Absätze.
+* Öffne und schließe alle Tags korrekt.
+* Verwende keine leeren HTML-Elemente.
 
-The above exception was the direct cause of the following exception:
+## Feld 1: Kurzbeschreibung als HTML
 
-Traceback (most recent call last):
-File "/app/shopware/management/commands/shopware_force_product_image_uploads.py", line 283, in _run_upload_step
-media_sync_service.sync_media_assets(
-File "/app/shopware/services/product_media.py", line 89, in sync_media_assets
-product_service.upload_media_from_url(
-File "/app/shopware/services/product.py", line 264, in upload_media_from_url
-return self.request_post(
-^^^^^^^^^^^^^^^^^^
-File "/app/shopware/services/shopware6.py", line 123, in request_post
-result = self._request_with_retry(
-^^^^^^^^^^^^^^^^^^^^^^^^^
-File "/app/shopware/services/shopware6.py", line 37, in _request_with_retry
-return request_method(*args, **kwargs)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-File "/app/.venv/lib/python3.12/site-packages/lib_shopware6_api_base/lib_shopware6_admin_client.py", line 221, in request_post
-response_dict = self._make_request(
-^^^^^^^^^^^^^^^^^^^
-File "/app/.venv/lib/python3.12/site-packages/lib_shopware6_api_base/lib_shopware6_admin_client.py", line 552, in _make_request
-raise exc
-File "/app/.venv/lib/python3.12/site-packages/lib_shopware6_api_base/lib_shopware6_admin_client.py", line 516, in _make_request
-response = self._request(
-^^^^^^^^^^^^^^
-File "/app/.venv/lib/python3.12/site-packages/lib_shopware6_api_base/lib_shopware6_admin_client.py", line 657, in _request
-raise ShopwareAPIError(f"{exc}{detailed_error}") from exc
-lib_shopware6_api_base.conf_shopware6_api_base_classes.ShopwareAPIError: Client error '400 Bad Request' for url 'https://sw6dev.classei-shop.de/api/_action/media/8897a4e70235069066c214d2beab7a99/upload?extension=png&fileName=224553K'
-For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400 : {"errors":[{"status":"400","code":"CONTENT__MEDIA_CANNOT_OPEN_SOURCE_STREAM_TO_READ","title":"Bad Request","detail":"Cannot open source stream to read from https:\/\/assets.classei.de\/img\/224553K.png.","meta":{"parameters":{"url":"https:\/\/assets.classei.de\/img\/224553K.png"}},"trace":[{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/shopware\/core\/Content\/Media\/File\/FileFetcher.php","line":172,"function":"cannotOpenSourceStreamToRead","class":"Shopware\\Core\\Content\\Media\\MediaException","type":"::"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/shopware\/core\/Content\/Media\/File\/FileFetcher.php","line":68,"function":"openSourceFromUrl","class":"Shopware\\Core\\Content\\Media\\File\\FileFetcher","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/shopware\/core\/Content\/Media\/File\/FileFetcher.php","line":95,"function":"fetchFromURL","class":"Shopware\\Core\\Content\\Media\\File\\FileFetcher","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/shopware\/core\/Content\/Media\/MediaService.php","line":112,"function":"fetchFileFromURL","class":"Shopware\\Core\\Content\\Media\\File\\FileFetcher","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/shopware\/core\/Content\/Media\/Api\/MediaUploadController.php","line":56,"function":"fetchFile","class":"Shopware\\Core\\Content\\Media\\MediaService","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/symfony\/http-kernel\/HttpKernel.php","line":183,"function":"upload","class":"Shopware\\Core\\Content\\Media\\Api\\MediaUploadController","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/symfony\/http-kernel\/HttpKernel.php","line":76,"function":"handleRaw","class":"Symfony\\Component\\HttpKernel\\HttpKernel","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/shopware\/core\/Framework\/Adapter\/Kernel\/HttpKernel.php","line":72,"function":"handle","class":"Symfony\\Component\\HttpKernel\\HttpKernel","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/symfony\/http-kernel\/HttpCache\/SubRequestHandler.php","line":86,"function":"handle","class":"Shopware\\Core\\Framework\\Adapter\\Kernel\\HttpKernel","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/symfony\/http-kernel\/HttpCache\/HttpCache.php","line":466,"function":"handle","class":"Symfony\\Component\\HttpKernel\\HttpCache\\SubRequestHandler","type":"::"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/symfony\/http-kernel\/HttpCache\/HttpCache.php","line":268,"function":"forward","class":"Symfony\\Component\\HttpKernel\\HttpCache\\HttpCache","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/symfony\/http-kernel\/HttpCache\/HttpCache.php","line":282,"function":"pass","class":"Symfony\\Component\\HttpKernel\\HttpCache\\HttpCache","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/symfony\/http-kernel\/HttpCache\/HttpCache.php","line":202,"function":"invalidate","class":"Symfony\\Component\\HttpKernel\\HttpCache\\HttpCache","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/shopware\/core\/Framework\/Adapter\/Kernel\/HttpCacheKernel.php","line":61,"function":"handle","class":"Symfony\\Component\\HttpKernel\\HttpCache\\HttpCache","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/shopware\/core\/Kernel.php","line":129,"function":"handle","class":"Shopware\\Core\\Framework\\Adapter\\Kernel\\HttpCacheKernel","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/symfony\/runtime\/Runner\/Symfony\/HttpKernelRunner.php","line":35,"function":"handle","class":"Shopware\\Core\\Kernel","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/autoload_runtime.php","line":32,"function":"run","class":"Symfony\\Component\\Runtime\\Runner\\Symfony\\HttpKernelRunner","type":"-\u003E"},{"file":"\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/public\/index.php","line":11,"args":["\/kunden\/106812_83250\/webseiten\/shopware\/sw6dev\/vendor\/autoload_runtime.php"],"function":"require_once"}]}]}
+Erstelle eine kompakte Einführung in die Kategorie.
+
+### Anforderungen
+
+* Länge: ungefähr 300 bis 600 Zeichen inklusive HTML
+* Verwende ein oder zwei `<p>`-Elemente.
+* Der erste Satz muss das primäre Hauptkeyword enthalten.
+* Erkläre kurz:
+
+    * welche Produkte die Kategorie umfasst,
+    * welchen grundlegenden Nutzen sie bieten,
+    * anhand welcher wesentlichen Eigenschaften sich die Produkte unterscheiden können.
+* Nenne nur Unterschiede, die aus den Daten hervorgehen.
+* Verwende keine Liste.
+* Wiederhole den Kategorienamen nicht unnötig.
+* Die Kurzbeschreibung soll auch ohne die ausführliche Beschreibung verständlich sein.
+
+Beispielhafte Struktur:
+
+```html
+<p>Sachliche Einführung in die Kategorie mit dem Hauptkeyword.</p>
+<p>Kurzer Hinweis auf Nutzen, Eigenschaften oder Auswahlmöglichkeiten.</p>
+```
+
+## Feld 2: Ausführliche Beschreibung als HTML
+
+Erstelle eine informative und nutzerorientierte Beschreibung der Kategorie.
+
+### Anforderungen
+
+* Länge: ungefähr 300 bis 600 Wörter
+* Verwende mindestens drei und höchstens sechs `<p>`-Elemente.
+* Eine `<ul>`-Liste mit drei bis fünf Einträgen darf verwendet werden, wenn sich wichtige Unterschiede oder Auswahlkriterien damit besser darstellen lassen.
+* Beginne nicht mit demselben Satz wie die Kurzbeschreibung.
+* Erkläre:
+
+    * welche Produkte zur Kategorie gehören,
+    * welche Aufgaben oder Probleme sie lösen,
+    * welche Eigenschaften für die Auswahl wichtig sind,
+    * worin sich die enthaltenen Produkte unterscheiden,
+    * für welche realistischen Anwendungen sie geeignet sind.
+* Stelle den praktischen Nutzen der Produkteigenschaften heraus.
+* Formuliere mindestens zwei konkrete Anwendungssituationen, sofern die Daten dafür ausreichen.
+* Die Anwendungssituationen müssen modern, realistisch und durch die Produktdaten belegbar sein.
+* Hilf dem Besucher dabei, verschiedene Produkte innerhalb der Kategorie voneinander zu unterscheiden.
+* Stelle keine erfundenen Kaufempfehlungen auf.
+* Formuliere keine pauschale Empfehlung für eine bestimmte Produktvariante.
+* Verwende einzelne fett formatierte Begriffe nur zur Orientierung.
+
+Mögliche Struktur:
+
+```html
+<p>Einführung und Einordnung der Produktgruppe.</p>
+<p>Beschreibung der wesentlichen Eigenschaften und des praktischen Nutzens.</p>
+<p><b>Wichtige Auswahlkriterien:</b></p>
+<ul>
+  <li><b>Eigenschaft:</b> Erklärung des praktischen Unterschieds.</li>
+  <li><b>Eigenschaft:</b> Erklärung des praktischen Unterschieds.</li>
+  <li><b>Eigenschaft:</b> Erklärung des praktischen Unterschieds.</li>
+</ul>
+<p>Realistische Einsatzmöglichkeiten und Unterstützung bei der Produktauswahl.</p>
+```
+
+Die Liste ist optional. Verwende sie nur, wenn mindestens drei tatsächliche und relevante Auswahlkriterien vorhanden sind.
+
+## Feld 3: SEO-Meta-Titel
+
+Erstelle einen eigenständigen SEO-Meta-Titel.
+
+### Anforderungen
+
+* Keine HTML-Tags
+* Ungefähr 45 bis 60 Zeichen
+* Maximal 65 Zeichen
+* Das primäre Hauptkeyword soll möglichst weit vorne stehen.
+* Der Titel muss den tatsächlichen Inhalt der Kategorie wiedergeben.
+* Formuliere natürlich und lesbar.
+* Verwende keinen abschließenden Punkt.
+* Verwende keine vollständige Aneinanderreihung von Keywords.
+* Verwende den Unternehmens- oder Markennamen nur, wenn er in der Datenbasis ausdrücklich angegeben ist.
+* Verwende keine erfundenen Begriffe wie „Shop“, „kaufen“ oder „online bestellen“, sofern dies nicht zur vorgegebenen SEO-Strategie gehört.
+
+## Feld 4: SEO-Meta-Beschreibung
+
+Erstelle eine eigenständige Meta-Beschreibung für die Kategorie.
+
+### Anforderungen
+
+* Keine HTML-Tags
+* Ungefähr 140 bis 160 Zeichen
+* Maximal 165 Zeichen
+* Verwende das primäre Hauptkeyword natürlich.
+* Beschreibe knapp:
+
+    * welche Produkte angeboten werden,
+    * welchen Nutzen sie bieten,
+    * welche wichtigen Auswahlmöglichkeiten bestehen.
+* Verwende einen vollständigen und gut lesbaren Satz.
+* Formuliere konkret statt werblich.
+* Verwende keine unbelegten Versprechen.
+* Verwende keine Preis-, Versand- oder Verfügbarkeitsaussagen, sofern diese nicht ausdrücklich vorgegeben sind.
+* Wiederhole nicht einfach den SEO-Meta-Titel.
+
+## Feld 5: SEO-Keywords
+
+Erstelle eine Liste relevanter Suchbegriffe.
+
+### Anforderungen
+
+* Keine HTML-Tags
+* Fünf bis zehn Keywords oder kurze Keyword-Kombinationen
+* Trenne die Begriffe durch Komma und Leerzeichen.
+* Setze das primäre Hauptkeyword an die erste Stelle.
+* Verwende ausschließlich Begriffe, die zur Kategorie und den vorhandenen Produkten passen.
+* Verwende sinnvolle Synonyme, Produktarten, Eigenschaften und Einsatzbegriffe.
+* Vermeide doppelte oder beinahe identische Begriffe.
+* Verwende keine vollständigen Sätze.
+* Verwende keine Marken- oder Wettbewerbernamen, sofern diese nicht Teil der Datenbasis sind.
+* Verwende keine Begriffe mit erfundenen Eigenschaften.
+* Die SEO-Keywords dienen als interne Keyword-Sammlung. Sie dürfen nicht als künstliche Aufzählung in die sichtbaren Texte übernommen werden.
+
+## Datenbasis zur Texterstellung
+
+**Kategorie**
+
+* **Name:** {{ category.name }}
+* **Kategoriepfad:** {{ category.get_category_path|default:'Nicht verfügbar' }}
+* **Übergeordnete Kategorie:** {{ category.parent.name|default:'Nicht verfügbar' }}
+* **Bestehende Kurzbeschreibung:** {{ category.description_short|striptags|default:'Keine Kurzbeschreibung vorhanden.' }}
+* **Bestehende Beschreibung:** {{ category.description|striptags|default:'Keine Beschreibung vorhanden.' }}
+
+**Unterkategorien**
+
+{% for child in category.children.all %}
+
+* {{ child.name }}
+  {% empty %}
+* Keine Unterkategorien vorhanden.
+  {% endfor %}
+
+**Enthaltene Produkte**
+
+{% for product in category.products.all %}
+
+* **Produktname:** {{ product.name|default:product.erp_nr }}
+
+    * **Beschreibung:** {{ product.description|striptags|default:product.description_short|striptags|default:'Keine Beschreibung vorhanden.' }}
+    * **Eigenschaften:**
+      {% for prop in product.product_properties.all %}
+
+        * {{ prop.value.group.name }}: {{ prop.value.name }}
+          {% empty %}
+        * Keine Eigenschaften vorhanden.
+          {% endfor %}
+          {% empty %}
+* Keine Produktdaten vorhanden.
+  {% endfor %}
+
+**Weitere Vorgaben**
+
+* **Unternehmens- oder Markenname:** {{ brand_name|default:'Nicht angegeben' }}
+* **Verbotene Begriffe:** {{ forbidden_terms|default:'Keine weiteren Begriffe angegeben' }}
+* **Zusätzliche SEO-Vorgaben:** {{ seo_requirements|default:'Keine zusätzlichen Vorgaben vorhanden' }}
+
+## Verbindliche Ausgabe
+
+Gib ausschließlich ein valides JSON-Objekt aus.
+
+Verwende exakt diese Feldnamen:
+
+```json
+{
+  "kurzbeschreibung_html_de": "<p>...</p>",
+  "beschreibung_html_de": "<p>...</p>",
+  "seo_meta_titel_de": "...",
+  "seo_meta_beschreibung_de": "...",
+  "seo_keywords_de": "Keyword 1, Keyword 2, Keyword 3"
+}
+```
+
+## Regeln für die JSON-Ausgabe
+
+* Gib keinen erklärenden Text vor oder nach dem JSON aus.
+* Verwende keinen Markdown-Codeblock.
+* Verwende keine Kommentare.
+* Verwende keine zusätzlichen JSON-Felder.
+* Alle fünf Felder müssen vorhanden sein.
+* Die Ausgabe muss syntaktisch valides JSON sein.
+* Zeilenumbrüche innerhalb der HTML-Texte müssen als `\n` ausgegeben oder vollständig vermieden werden.
+* Doppelte Anführungszeichen innerhalb der Feldwerte müssen korrekt maskiert werden.
+* Die beiden Beschreibungsfelder enthalten HTML.
+* Die drei SEO-Felder dürfen keinerlei HTML enthalten.
+
+## Abschließende interne Prüfung
+
+Prüfe vor der Ausgabe:
+
+* Wurden ausschließlich bereitgestellte Informationen verwendet?
+* Beschreibt der Text die gesamte Kategorie und nicht nur ein Produkt?
+* Ist das Hauptkeyword im ersten Satz der Kurzbeschreibung enthalten?
+* Sind die Texte frei von Keyword-Stuffing?
+* Unterscheiden sich Kurzbeschreibung und ausführliche Beschreibung inhaltlich?
+* Helfen die Texte bei der Auswahl zwischen den enthaltenen Produkten?
+* Sind alle genannten Eigenschaften durch die Datenbasis belegt?
+* Sind die HTML-Tags korrekt verschachtelt?
+* Wurden ausschließlich erlaubte HTML-Tags verwendet?
+* Enthält der SEO-Meta-Titel maximal 65 Zeichen?
+* Enthält die SEO-Meta-Beschreibung maximal 165 Zeichen?
+* Enthalten die SEO-Keywords fünf bis zehn passende Begriffe?
+* Ist die gesamte Ausgabe valides JSON?
+
+Beginne jetzt unmittelbar mit dem JSON-Objekt.
