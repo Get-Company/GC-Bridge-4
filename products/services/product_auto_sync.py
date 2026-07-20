@@ -42,13 +42,14 @@ class ProductAutoSyncService(BaseService):
         product_id: int,
         changed_fields: list[str],
         trigger: str = "product_save",
+        targets: tuple[str, ...] | None = None,
     ) -> list[ProductSyncJob]:
         if not Product.objects.filter(pk=product_id).exists():
             return []
 
         jobs = []
         cleaned_fields = sorted({str(field).strip() for field in changed_fields if str(field).strip()})
-        for target in self.targets:
+        for target in targets or self.targets:
             job = self._upsert_queued_job(
                 product_id=product_id,
                 target=target,
