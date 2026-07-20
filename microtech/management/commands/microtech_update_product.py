@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from decimal import Decimal
 from typing import Any
 
 from django.core.management.base import CommandError
@@ -83,10 +82,10 @@ class Command(MonitoredBaseCommand):
         if price_entry:
             input_data.update(
                 MicrotechProductPayloadService.build_complete_price_payload(
-                    price=self._format_price(price_entry.price),
+                    price=MicrotechProductPayloadService.format_price(price_entry.price),
                     rebate_quantity=price_entry.rebate_quantity,
-                    rebate_price=self._format_price(price_entry.rebate_price),
-                    special_price=self._format_price(price_entry.special_price),
+                    rebate_price=MicrotechProductPayloadService.format_price(price_entry.rebate_price),
+                    special_price=MicrotechProductPayloadService.format_price(price_entry.special_price),
                     special_start_date=price_entry.special_start_date.isoformat()
                     if price_entry.special_start_date
                     else None,
@@ -97,8 +96,3 @@ class Command(MonitoredBaseCommand):
         # Remove None values to avoid sending them if not explicitly needed,
         # but keep empty strings if that's the intent.
         return {k: v for k, v in input_data.items() if v is not None}
-
-    def _format_price(self, value: Decimal | None) -> str | None:
-        if value is None:
-            return None
-        return str(value).replace(".", ",")

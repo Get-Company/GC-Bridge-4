@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Any
 
 from core.services import BaseService
@@ -14,6 +15,18 @@ class MicrotechProductPayloadService(BaseService):
         "specialStartDate",
         "specialEndDate",
     )
+
+    @staticmethod
+    def format_price(value: Decimal | None) -> str | None:
+        """Format a price for the Microtech GraphQL API.
+
+        Microtech expects a dot as decimal separator. Formatting explicitly also
+        preserves the two decimal places required for price values.
+        """
+        if value is None:
+            return None
+        return format(value.quantize(Decimal("0.01")), "f")
+
     @classmethod
     def build_complete_price_payload(
         cls,

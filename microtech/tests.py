@@ -108,11 +108,16 @@ class MicrotechArtikelServiceProductJobTest(SimpleTestCase):
 
 
 class MicrotechProductPayloadServiceTest(SimpleTestCase):
+    def test_format_price_uses_microtech_decimal_notation(self):
+        self.assertEqual(MicrotechProductPayloadService.format_price(Decimal("10.24")), "10.24")
+        self.assertEqual(MicrotechProductPayloadService.format_price(Decimal("10")), "10.00")
+        self.assertIsNone(MicrotechProductPayloadService.format_price(None))
+
     def test_complete_price_payload_clears_special_fields_when_no_special_exists(self):
         result = MicrotechProductPayloadService.build_complete_price_payload(
-            price="10,25",
+            price="10.25",
             rebate_quantity=5,
-            rebate_price="9,25",
+            rebate_price="9.25",
         )
 
         self.assertEqual(
@@ -120,9 +125,9 @@ class MicrotechProductPayloadServiceTest(SimpleTestCase):
             [
                 {
                     "tree": "Vk0",
-                    "price": "10,25",
+                    "price": "10.25",
                     "rebateQuantity": 5,
-                    "rebatePrice": "9,25",
+                    "rebatePrice": "9.25",
                     "specialPrice": "",
                     "specialStartDate": "",
                     "specialEndDate": "",
@@ -132,17 +137,17 @@ class MicrotechProductPayloadServiceTest(SimpleTestCase):
 
     def test_complete_price_payload_clears_rebate_for_special_price(self):
         result = MicrotechProductPayloadService.build_complete_price_payload(
-            price="10,25",
+            price="10.25",
             rebate_quantity=5,
-            rebate_price="9,25",
-            special_price="8,25",
+            rebate_price="9.25",
+            special_price="8.25",
             special_start_date="2026-07-15T00:00:00+02:00",
             special_end_date="2026-07-31T23:59:59+02:00",
         )
 
         self.assertEqual(result["priceTrees"][0]["rebateQuantity"], "")
         self.assertEqual(result["priceTrees"][0]["rebatePrice"], "")
-        self.assertEqual(result["priceTrees"][0]["specialPrice"], "8,25")
+        self.assertEqual(result["priceTrees"][0]["specialPrice"], "8.25")
 
 
 class MicrotechSyncProductsCommandTest(TestCase):
@@ -599,10 +604,10 @@ class MicrotechSyncProductsCommandTest(TestCase):
             [
                 {
                     "tree": "Vk0",
-                    "price": "10,25",
+                    "price": "10.25",
                     "rebateQuantity": "",
                     "rebatePrice": "",
-                    "specialPrice": "8,25",
+                    "specialPrice": "8.25",
                     "specialStartDate": payload["priceTrees"][0]["specialStartDate"],
                     "specialEndDate": payload["priceTrees"][0]["specialEndDate"],
                 }
@@ -629,9 +634,9 @@ class MicrotechSyncProductsCommandTest(TestCase):
             [
                 {
                     "tree": "Vk0",
-                    "price": "11,25",
+                    "price": "11.25",
                     "rebateQuantity": 10,
-                    "rebatePrice": "10,25",
+                    "rebatePrice": "10.25",
                     "specialPrice": "",
                     "specialStartDate": "",
                     "specialEndDate": "",

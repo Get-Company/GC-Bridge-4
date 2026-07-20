@@ -113,15 +113,10 @@ class Command(MonitoredBaseCommand):
             return {}
 
         return MicrotechProductPayloadService.build_complete_price_payload(
-            price=self._format_price(price_entry.price),
+            price=MicrotechProductPayloadService.format_price(price_entry.price),
             rebate_quantity=price_entry.rebate_quantity,
-            rebate_price=self._format_price(price_entry.rebate_price),
-            special_price=self._format_price(price_entry.special_price),
+            rebate_price=MicrotechProductPayloadService.format_price(price_entry.rebate_price),
+            special_price=MicrotechProductPayloadService.format_price(price_entry.special_price),
             special_start_date=price_entry.special_start_date.isoformat() if price_entry.special_start_date else None,
             special_end_date=price_entry.special_end_date.isoformat() if price_entry.special_end_date else None,
         )
-
-    def _format_price(self, value: Decimal | None) -> str | None:
-        if value is None:
-            return None
-        return str(value).replace(".", ",")

@@ -64,9 +64,9 @@ class MicrotechExpiredSpecialSyncService(BaseService):
                 continue
 
             input_data = MicrotechProductPayloadService.build_complete_price_payload(
-                price=self._format_decimal(price.price),
+                price=MicrotechProductPayloadService.format_price(price.price),
                 rebate_quantity=price.rebate_quantity,
-                rebate_price=self._format_decimal(price.rebate_price),
+                rebate_price=MicrotechProductPayloadService.format_price(price.rebate_price),
             )
             if isinstance(erp, MicrotechGraphQLClientService):
                 erp.update_product(erp_nr, input_data)
@@ -74,12 +74,6 @@ class MicrotechExpiredSpecialSyncService(BaseService):
                 raise RuntimeError("Microtech writes must use the GraphQL client.")
             updated += 1
         return updated, skipped_price_writes
-
-    @staticmethod
-    def _format_decimal(value: Decimal | None) -> str:
-        if value is None:
-            return ""
-        return format(value.quantize(Decimal("0.01")), "f")
 
     @staticmethod
     def _to_decimal(value) -> Decimal | None:
