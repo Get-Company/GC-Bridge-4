@@ -33,3 +33,16 @@ def restore_database_backup(backup_id: int) -> dict[str, int | str]:
         "backup_id": backup.pk,
         "restore_status": backup.restore_status,
     }
+
+
+@shared_task(name="core.cleanup_sync_event_log")
+def cleanup_sync_event_log(max_age_days: int = 30) -> int:
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from core.models import SyncEventLog
+
+    cutoff = timezone.now() - timedelta(days=max_age_days)
+    deleted, _ = SyncEventLog.objects.filter(created_at__lt=cutoff).delete()
+    return deleted
