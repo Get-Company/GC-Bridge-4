@@ -46,7 +46,7 @@ from django_celery_beat.models import (
 )
 
 from core.admin_status import admin_status_bar_api
-from core.celery_admin import celery_tasks_admin_view
+from core.live_events_view import live_events_api, live_events_detail_api, live_events_view
 from core.log_reader import get_allowed_log_files, log_file_info, search_log_file, tail_log_file
 from core.microtech_queue_view import microtech_queue_api, microtech_queue_view
 from core.services import CommandRuntimeService
@@ -402,7 +402,9 @@ _default_admin_get_urls = admin.site.get_urls
 def _admin_get_urls():
     custom_urls = [
         path("status-bar/api/", admin.site.admin_view(admin_status_bar_api), name="core_status_bar_api"),
-        path("celery-tasks/", admin.site.admin_view(celery_tasks_admin_view), name="core_celery_tasks"),
+        path("live-events/", admin.site.admin_view(live_events_view), name="core_live_events"),
+        path("live-events/api/", admin.site.admin_view(live_events_api), name="core_live_events_api"),
+        path("live-events/detail/", admin.site.admin_view(live_events_detail_api), name="core_live_events_detail"),
         path("logs/", admin.site.admin_view(admin_log_reader_view), name="core_log_reader"),
         path("logs/search/", admin.site.admin_view(admin_log_search_api), name="core_log_search"),
         path("logs/download/", admin.site.admin_view(admin_log_download_view), name="core_log_download"),
