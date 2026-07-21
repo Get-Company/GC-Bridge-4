@@ -228,10 +228,16 @@ class ShopwareVariantSyncService(BaseService):
         parent_price = self._parent_price(default_product)
         if parent_price:
             payload["price"] = parent_price
+
+        # Variant-listing settings are stored as one embedded Shopware field.
+        # Sending the values as top-level product properties is silently ignored
+        # by the sync API, leaving Shopware to choose an arbitrary child for
+        # listings and the initial product-detail selection.
+        variant_listing_config = {"displayParent": True}
         if main_variant_id:
-            payload["mainVariantId"] = main_variant_id
+            variant_listing_config["mainVariantId"] = main_variant_id
         if group_ids and resolution:
-            payload["configuratorGroupConfig"] = [
+            variant_listing_config["configuratorGroupConfig"] = [
                 {
                     "id": group_ids[attribute.property_group_id],
                     "expressionForListings": False,
@@ -239,6 +245,7 @@ class ShopwareVariantSyncService(BaseService):
                 }
                 for attribute in resolution.attributes
             ]
+        payload["variantListingConfig"] = variant_listing_config
         self.product_service.bulk_upsert([payload])
         if family.shopware_id != parent_id:
             family.shopware_id = parent_id

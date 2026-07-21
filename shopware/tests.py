@@ -804,6 +804,26 @@ class ShopwareVariantSyncServiceTest(TestCase):
         self.assertEqual(len(parent_payloads), 2)
         self.assertTrue(all(payload["stock"] == 0 for payload in parent_payloads))
         self.assertTrue(all(payload["isCloseout"] is False for payload in parent_payloads))
+        self.assertEqual(parent_payloads[0]["variantListingConfig"], {"displayParent": True})
+        self.assertEqual(
+            parent_payloads[1]["variantListingConfig"],
+            {
+                "displayParent": True,
+                "mainVariantId": "child-shopware-id",
+                "configuratorGroupConfig": [
+                    {
+                        "id": self.size_group.shopware_id,
+                        "expressionForListings": False,
+                        "position": 10,
+                    },
+                    {
+                        "id": self.color_group.shopware_id,
+                        "expressionForListings": False,
+                        "position": 20,
+                    },
+                ],
+            },
+        )
         self.assertTrue(
             any(
                 payload == [
