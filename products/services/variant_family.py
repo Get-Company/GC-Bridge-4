@@ -53,7 +53,7 @@ class ProductVariantFamilyResolverService(BaseService):
 
     def resolve(self, family: ProductVariantFamily) -> VariantFamilyResolution:
         attributes = tuple(
-            family.variant_attributes.select_related("property_group", "fallback_value")
+            family.variant_attributes.select_related("property_group", "fallback_value", "fallback_value__image")
             .order_by("position", "property_group__name", "id")
         )
         if not attributes:
@@ -71,7 +71,9 @@ class ProductVariantFamilyResolverService(BaseService):
             .prefetch_related(
                 Prefetch(
                     "product_properties",
-                    queryset=ProductProperty.objects.select_related("value", "value__group").order_by("value__group_id", "value_id"),
+                    queryset=ProductProperty.objects.select_related("value", "value__group", "value__image").order_by(
+                        "value__group_id", "value_id"
+                    ),
                     to_attr="prefetched_variant_properties",
                 )
             )
@@ -122,6 +124,21 @@ class ProductVariantFamilyResolverService(BaseService):
 
         if family.default_product_id and not any(variant.product.pk == family.default_product_id for variant in variants):
             errors.append("Die konfigurierte Standardvariante ergibt keine vollständige Variantenkombination.")
+
+        image_groups = {
+            attribute.property_group_id: attribute.property_group.name
+            for attribute in attributes
+            if attribute.display_type == ProductVariantAttribute.DisplayType.IMAGE
+        }
+        missing_images: dict[int, set[str]] = defaultdict(set)
+        for variant in variants:
+            for value in variant.option_values:
+                if value.group_id in image_groups and not value.image_id:
+                    missing_images[value.group_id].add(value.name)
+        for group_id, names in sorted(missing_images.items(), key=lambda item: image_groups[item[0]]):
+            errors.append(
+                f"Bilddarstellung für '{image_groups[group_id]}' ohne Auswahlbild: {', '.join(sorted(names))}."
+            )
 
         return VariantFamilyResolution(
             family=family,

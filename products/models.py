@@ -207,6 +207,15 @@ class PropertyValue(BaseModel):
         verbose_name=_("Attributgruppe"),
     )
     name = models.CharField(max_length=255, verbose_name=_("Wert"))
+    image = models.ForeignKey(
+        Image,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="property_values",
+        verbose_name=_("Auswahlbild"),
+        help_text=_("Optionales Bild für Shopware-Variantenoptionen mit Bilddarstellung."),
+    )
 
     class Meta:
         verbose_name = _("Attributwert")

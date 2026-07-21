@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 
 from core.services import BaseService
-from products.models import Price, Product, ProductVariantFamily, PropertyGroup, PropertyValue
+from products.models import Price, Product, ProductVariantAttribute, ProductVariantFamily, PropertyGroup, PropertyValue
 from products.services.variant_family import ProductVariantFamilyResolverService, VariantFamilyResolution
 from shopware.models import ShopwareSettings
 from shopware.services.product import ProductService
@@ -34,6 +34,7 @@ class ShopwareVariantSyncService(BaseService):
 
     def __init__(self, *, product_service: ProductService | None = None) -> None:
         self.product_service = product_service or ProductService()
+        self.media_sync_service = ProductMediaSyncService()
         self.resolver = ProductVariantFamilyResolverService()
 
     def preview(self, family: ProductVariantFamily) -> VariantFamilyResolution:
@@ -112,6 +113,9 @@ class ShopwareVariantSyncService(BaseService):
     def _ensure_attribute_entities(self, resolution: VariantFamilyResolution) -> tuple[dict[int, str], dict[int, str]]:
         group_ids: dict[int, str] = {}
         value_ids: dict[int, str] = {}
+        display_types_by_group_id = {
+            attribute.property_group_id: attribute.display_type for attribute in resolution.attributes
+        }
 
         for attribute in resolution.attributes:
             group_ids[attribute.property_group_id] = self._ensure_property_group(
@@ -128,67 +132,73 @@ class ShopwareVariantSyncService(BaseService):
             value_ids[value.pk] = self._ensure_property_value(
                 value,
                 group_id=group_ids[value.group_id],
+                display_type=display_types_by_group_id[value.group_id],
             )
 
         return group_ids, value_ids
 
     def _ensure_property_group(self, group: PropertyGroup, *, display_type: str) -> str:
-        if group.shopware_id:
-            return group.shopware_id
-
-        result = self.product_service.request_post(
-            "/search/property-group",
-            payload={
-                "filter": [{"type": "equals", "field": "name", "value": group.name}],
-                "limit": 2,
-            },
-        )
-        rows = (result or {}).get("data", []) or []
-        existing_id = self.product_service._entity_id(rows[0]) if rows else ""
-        group_id = existing_id or self._stable_id("property-group", group.external_key or group.name)
-        if not existing_id:
-            self.product_service.bulk_upsert(
-                [
-                    {
-                        "id": group_id,
-                        "name": group.name,
-                        "displayType": self._shopware_group_display_type(display_type),
-                    }
-                ],
-                entity_name="property_group",
+        group_id = group.shopware_id
+        if not group_id:
+            result = self.product_service.request_post(
+                "/search/property-group",
+                payload={
+                    "filter": [{"type": "equals", "field": "name", "value": group.name}],
+                    "limit": 2,
+                },
             )
-        group.shopware_id = group_id
-        group.save(update_fields=("shopware_id", "updated_at"))
+            rows = (result or {}).get("data", []) or []
+            group_id = self.product_service._entity_id(rows[0]) if rows else ""
+            group_id = group_id or self._stable_id("property-group", group.external_key or group.name)
+            group.shopware_id = group_id
+            group.save(update_fields=("shopware_id", "updated_at"))
+        self.product_service.bulk_upsert(
+            [
+                {
+                    "id": group_id,
+                    "name": group.name,
+                    "displayType": self._shopware_group_display_type(display_type),
+                }
+            ],
+            entity_name="property_group",
+        )
         return group_id
 
-    def _ensure_property_value(self, value: PropertyValue, *, group_id: str) -> str:
-        if value.shopware_id:
-            return value.shopware_id
-
-        result = self.product_service.request_post(
-            "/search/property-group-option",
-            payload={
-                "filter": [
-                    {"type": "equals", "field": "groupId", "value": group_id},
-                    {"type": "equals", "field": "name", "value": value.name},
-                ],
-                "limit": 2,
-            },
-        )
-        rows = (result or {}).get("data", []) or []
-        existing_id = self.product_service._entity_id(rows[0]) if rows else ""
-        value_id = existing_id or self._stable_id(
-            "property-value",
-            value.group.external_key or value.group.name,
-            value.external_key or value.name,
-        )
-        if not existing_id:
-            self.product_service.bulk_upsert(
-                [{"id": value_id, "groupId": group_id, "name": value.name}],
-                entity_name="property_group_option",
+    def _ensure_property_value(self, value: PropertyValue, *, group_id: str, display_type: str) -> str:
+        value_id = value.shopware_id
+        if not value_id:
+            result = self.product_service.request_post(
+                "/search/property-group-option",
+                payload={
+                    "filter": [
+                        {"type": "equals", "field": "groupId", "value": group_id},
+                        {"type": "equals", "field": "name", "value": value.name},
+                    ],
+                    "limit": 2,
+                },
             )
-        value.shopware_id = value_id
-        value.save(update_fields=("shopware_id", "updated_at"))
+            rows = (result or {}).get("data", []) or []
+            value_id = self.product_service._entity_id(rows[0]) if rows else ""
+            value_id = value_id or self._stable_id(
+                "property-value",
+                value.group.external_key or value.group.name,
+                value.external_key or value.name,
+            )
+            value.shopware_id = value_id
+            value.save(update_fields=("shopware_id", "updated_at"))
+
+        payload = {"id": value_id, "groupId": group_id, "name": value.name}
+        if display_type == ProductVariantAttribute.DisplayType.IMAGE:
+            if not value.image_id:
+                raise ValueError(f"Attributwert '{value}' hat kein Auswahlbild.")
+            media_id, media_entity, media_upload = self.media_sync_service.get_image_media_payload(image=value.image)
+            self.media_sync_service.sync_media_assets(
+                product_service=self.product_service,
+                media_entities=[media_entity],
+                media_uploads=[media_upload],
+            )
+            payload["mediaId"] = media_id
+        self.product_service.bulk_upsert([payload], entity_name="property_group_option")
         return value_id
 
     def _resolve_child_ids(self, resolution: VariantFamilyResolution) -> dict[int, str]:
@@ -229,7 +239,7 @@ class ShopwareVariantSyncService(BaseService):
         parent_visibilities = self._parent_visibilities(parent_id=parent_id)
         if parent_visibilities:
             payload["visibilities"] = parent_visibilities
-        parent_media, _media_entities, _media_uploads = ProductMediaSyncService().get_product_media_payload(
+        parent_media, _media_entities, _media_uploads = self.media_sync_service.get_product_media_payload(
             product=default_product,
             product_id=parent_id,
         )

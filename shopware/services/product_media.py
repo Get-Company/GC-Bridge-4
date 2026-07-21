@@ -11,7 +11,7 @@ from loguru import logger
 from core.services import BaseService
 
 if TYPE_CHECKING:
-    from products.models import Product
+    from products.models import Image, Product
     from .product import ProductService
 
 
@@ -48,16 +48,9 @@ class ProductMediaSyncService(BaseService):
             if not image:
                 continue
 
-            media_id = self.build_media_id(image.path)
-            media_entities.setdefault(media_id, self.build_media_entity_payload(media_id))
-            media_uploads.setdefault(
-                media_id,
-                {
-                    "media_id": media_id,
-                    "file_name": image.filename,
-                    "source_url": image.url,
-                },
-            )
+            media_id, media_entity, media_upload = self.get_image_media_payload(image=image)
+            media_entities.setdefault(media_id, media_entity)
+            media_uploads.setdefault(media_id, media_upload)
             media_relations.append(
                 {
                     "id": self.build_product_media_id(product_id=product_id, media_id=media_id),
@@ -68,6 +61,19 @@ class ProductMediaSyncService(BaseService):
             )
 
         return media_relations, list(media_entities.values()), list(media_uploads.values())
+
+    def get_image_media_payload(self, *, image: "Image") -> tuple[str, dict, dict]:
+        """Return the deterministic Shopware media asset payload for one Django image."""
+        media_id = self.build_media_id(image.path)
+        return (
+            media_id,
+            self.build_media_entity_payload(media_id),
+            {
+                "media_id": media_id,
+                "file_name": image.filename,
+                "source_url": image.url,
+            },
+        )
 
     def sync_media_assets(
         self,

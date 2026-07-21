@@ -742,7 +742,17 @@ class ShopwareVariantSyncServiceTest(TestCase):
         self.size_group = PropertyGroup.objects.create(name="Tab-Größe", external_key="size")
         self.color_group = PropertyGroup.objects.create(name="Farbe", external_key="color")
         self.size = PropertyValue.objects.create(group=self.size_group, name="6 cm", external_key="6cm")
-        self.color = PropertyValue.objects.create(group=self.color_group, name="Weiß", external_key="white")
+        self.color_image = Image.objects.create(path="quick-tabs-color-white.jpg")
+        self.color = PropertyValue.objects.create(
+            group=self.color_group,
+            name="Weiß",
+            external_key="white",
+            image=self.color_image,
+        )
+        self.color_group.shopware_id = "color-group-id"
+        self.color_group.save(update_fields=("shopware_id", "updated_at"))
+        self.color.shopware_id = "color-option-id"
+        self.color.save(update_fields=("shopware_id", "updated_at"))
         self.product = Product.objects.create(erp_nr="581000", name="Quick-Tabs 6 cm weiß")
         self.product.categories.add(self.source_category)
         self.image = Image.objects.create(path="quick-tabs-default.jpg")
@@ -770,7 +780,12 @@ class ShopwareVariantSyncServiceTest(TestCase):
         )
         self.family.source_categories.add(self.source_category)
         ProductVariantAttribute.objects.create(family=self.family, property_group=self.size_group, position=10)
-        ProductVariantAttribute.objects.create(family=self.family, property_group=self.color_group, position=20)
+        ProductVariantAttribute.objects.create(
+            family=self.family,
+            property_group=self.color_group,
+            position=20,
+            display_type=ProductVariantAttribute.DisplayType.IMAGE,
+        )
 
     def test_dry_run_derives_variant_without_calling_shopware(self):
         product_service = MagicMock()
@@ -779,6 +794,16 @@ class ShopwareVariantSyncServiceTest(TestCase):
 
         self.assertTrue(result.dry_run)
         self.assertEqual(result.variant_count, 1)
+        product_service.method_calls.assert_not_called()
+
+    def test_dry_run_rejects_image_display_without_selection_image(self):
+        self.color.image = None
+        self.color.save(update_fields=("image", "updated_at"))
+        product_service = MagicMock()
+
+        result = ShopwareVariantSyncService(product_service=product_service).sync(self.family, dry_run=True)
+
+        self.assertEqual(result.errors, ("Bilddarstellung für 'Farbe' ohne Auswahlbild: Weiß.",))
         product_service.method_calls.assert_not_called()
 
     def test_apply_creates_parent_attaches_options_and_detaches_previously_managed_child(self):
@@ -831,6 +856,26 @@ class ShopwareVariantSyncServiceTest(TestCase):
         ]
         self.assertTrue(all(payload["media"] == expected_parent_media for payload in parent_payloads))
         self.assertTrue(all(payload["coverId"] == expected_parent_media[0]["id"] for payload in parent_payloads))
+        color_media_id = ProductMediaSyncService.build_media_id(self.color_image.path)
+        product_service.bulk_upsert_media.assert_called_once_with(
+            [ProductMediaSyncService.build_media_entity_payload(color_media_id)]
+        )
+        product_service.upload_media_from_url.assert_called_once_with(
+            media_id=color_media_id,
+            file_name="quick-tabs-color-white.jpg",
+            source_url=self.color_image.url,
+        )
+        product_service.bulk_upsert.assert_any_call(
+            [
+                {
+                    "id": "color-option-id",
+                    "groupId": "color-group-id",
+                    "name": "Weiß",
+                    "mediaId": color_media_id,
+                }
+            ],
+            entity_name="property_group_option",
+        )
         expected_visibilities = [
             {
                 "id": ShopwareVariantSyncService._stable_id(
