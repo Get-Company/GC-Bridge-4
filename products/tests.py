@@ -541,16 +541,72 @@ class PriceIncreaseDocumentRenderingTest(SimpleTestCase):
 
 class ProductCeleryTaskTest(SimpleTestCase):
     @patch("products.tasks.call_command")
-    def test_product_sync_finalization_syncs_stock_to_both_shopware_versions(self, mock_call_command):
+    def test_product_sync_finalization_syncs_products_before_variants(self, mock_call_command):
         product_tasks._finalize_scheduled_product_sync(
             include_images=False,
             erp_nrs=["A-1000", "A-1001"],
         )
 
-        mock_call_command.assert_has_calls(
+        self.assertEqual(
+            mock_call_command.call_args_list,
             [
                 call("shopware_sync_products", "A-1000", "A-1001", skip_images=True),
                 call("shopware5_sync_products", "A-1000", "A-1001"),
+                call(
+                    "shopware_sync_variants",
+                    all=True,
+                    apply=True,
+                    skip_product_sync=True,
+                ),
+            ]
+        )
+
+    @patch("products.tasks.call_command")
+    def test_product_sync_finalization_syncs_images_before_variants(self, mock_call_command):
+        product_tasks._finalize_scheduled_product_sync(
+            include_images=True,
+            erp_nrs=["A-1000", "A-1001"],
+        )
+
+        self.assertEqual(
+            mock_call_command.call_args_list,
+            [
+                call("shopware_sync_products", "A-1000", "A-1001", skip_images=True),
+                call("shopware5_sync_products", "A-1000", "A-1001"),
+                call("shopware_force_product_image_uploads", "A-1000", "A-1001"),
+                call(
+                    "shopware_sync_variants",
+                    all=True,
+                    apply=True,
+                    skip_product_sync=True,
+                ),
+            ]
+        )
+
+    @patch("products.tasks.TaskIssueCollector")
+    @patch("products.tasks.call_command")
+    @patch("microtech.services.MicrotechExpiredSpecialSyncService")
+    def test_legacy_product_sync_finalization_syncs_images_before_variants(
+        self,
+        expired_special_service_cls,
+        mock_call_command,
+        _issue_collector,
+    ):
+        expired_special_service_cls.return_value.clear_expired_specials.return_value = (0, set())
+
+        product_tasks._scheduled_product_sync_finalize.run(limit=50, force_images=True)
+
+        self.assertEqual(
+            mock_call_command.call_args_list,
+            [
+                call("shopware_sync_products", all=True, limit=50, skip_images=True),
+                call("shopware_force_product_image_uploads", all=True, limit=50),
+                call(
+                    "shopware_sync_variants",
+                    all=True,
+                    apply=True,
+                    skip_product_sync=True,
+                ),
             ]
         )
 
@@ -2386,7 +2442,7 @@ class ScheduledProductSyncCommandTest(TestCase):
         self.assertEqual(active.special_percentage, Decimal("5.00"))
 
     @patch("products.management.commands.scheduled_product_sync.call_command")
-    def test_handle_runs_microtech_with_preserve_and_then_shopware5_and_shopware6(self, mock_call_command):
+    def test_handle_syncs_product_images_before_variants(self, mock_call_command):
         cmd = ScheduledProductSyncCommand()
         with (
             patch.object(cmd, "_clear_expired_specials", return_value=(0, set())),
@@ -2396,7 +2452,8 @@ class ScheduledProductSyncCommandTest(TestCase):
 
         mock_sync_microtech.assert_called_once_with(set(), write_base_price_back=False)
         self.assertEqual(mock_call_command.call_count, 5)
-        mock_call_command.assert_has_calls(
+        self.assertEqual(
+            mock_call_command.call_args_list,
             [
                 call(
                     "microtech_sync_products",
@@ -2412,16 +2469,18 @@ class ScheduledProductSyncCommandTest(TestCase):
                     skip_images=True,
                 ),
                 call(
-                    "shopware_sync_variants",
-                    all=True,
-                    apply=True,
-                    skip_product_sync=True,
+                    "shopware5_sync_products", limit=50,
                 ),
-                call("shopware5_sync_products", limit=50),
                 call(
                     "shopware_force_product_image_uploads",
                     all=True,
                     limit=50,
+                ),
+                call(
+                    "shopware_sync_variants",
+                    all=True,
+                    apply=True,
+                    skip_product_sync=True,
                 ),
             ]
         )
@@ -2448,7 +2507,8 @@ class ScheduledProductSyncCommandTest(TestCase):
             cmd.handle(limit=20, exclude_inactive=False, skip_force_images=True)
 
         self.assertEqual(mock_call_command.call_count, 4)
-        mock_call_command.assert_has_calls(
+        self.assertEqual(
+            mock_call_command.call_args_list,
             [
                 call(
                     "microtech_sync_products",
@@ -2464,12 +2524,14 @@ class ScheduledProductSyncCommandTest(TestCase):
                     skip_images=False,
                 ),
                 call(
+                    "shopware5_sync_products", limit=20,
+                ),
+                call(
                     "shopware_sync_variants",
                     all=True,
                     apply=True,
                     skip_product_sync=True,
                 ),
-                call("shopware5_sync_products", limit=20),
             ]
         )
 

@@ -149,16 +149,17 @@ def _scheduled_product_sync_finalize(
 
     logger.info("scheduled_product_sync finalize: Django → Shopware")
     with TaskIssueCollector("products.scheduled_product_sync"):
-        call_command("shopware_sync_products", all=True, limit=limit)
+        call_command("shopware_sync_products", all=True, limit=limit, skip_images=force_images)
+        if force_images:
+            logger.info("scheduled_product_sync finalize: Shopware Bilder force-upload")
+            call_command("shopware_force_product_image_uploads", all=True, limit=limit)
+        logger.info("scheduled_product_sync finalize: Shopware Variantenstruktur")
         call_command(
             "shopware_sync_variants",
             all=True,
             apply=True,
             skip_product_sync=True,
         )
-        if force_images:
-            logger.info("scheduled_product_sync finalize: Shopware Bilder force-upload")
-            call_command("shopware_force_product_image_uploads", all=True, limit=limit)
 
     return {"expired": expired_count, "microtech_updated": mt_updated, "force_images": force_images}
 
@@ -340,12 +341,6 @@ def _finalize_scheduled_product_sync(
                 limit=limit,
                 skip_images=True,
             )
-        call_command(
-            "shopware_sync_variants",
-            all=True,
-            apply=True,
-            skip_product_sync=True,
-        )
         logger.info("scheduled_product_sync: Django -> Shopware5 starten")
         if cleaned_erp_nrs:
             call_command("shopware5_sync_products", *cleaned_erp_nrs)
@@ -361,6 +356,13 @@ def _finalize_scheduled_product_sync(
                     all=True,
                     limit=limit,
                 )
+        logger.info("scheduled_product_sync: Shopware Variantenstruktur starten")
+        call_command(
+            "shopware_sync_variants",
+            all=True,
+            apply=True,
+            skip_product_sync=True,
+        )
 
 
 @shared_task(name="products.microtech_sync_products")

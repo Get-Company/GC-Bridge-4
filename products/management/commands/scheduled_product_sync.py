@@ -91,7 +91,7 @@ class Command(MonitoredBaseCommand):
                 force_images,
                 log_path,
             )
-            total_stages = 5 if force_images else 4
+            total_stages = 6 if force_images else 5
             runtime.update(stage=f"1/{total_stages} microtech_to_django")
             self.stdout.write(f"1/{total_stages} Microtech -> Django import starten")
             call_command(
@@ -131,29 +131,34 @@ class Command(MonitoredBaseCommand):
                 "mit vollständigen Preisbäumen."
             )
 
-            runtime.update(stage=f"4/{total_stages} django_to_shopware")
-            self.stdout.write(f"4/{total_stages} Django -> Shopware 6 und Shopware 5 sync starten")
+            runtime.update(stage=f"4/{total_stages} django_to_shopware_products")
+            self.stdout.write(f"4/{total_stages} Django -> Shopware 6 und Shopware 5 Produktdaten sync starten")
             call_command(
                 "shopware_sync_products",
                 all=True,
                 limit=limit,
                 skip_images=force_images,
             )
+            call_command("shopware5_sync_products", limit=limit)
+
+            if force_images:
+                runtime.update(stage="5/6 force_shopware_images")
+                self.stdout.write("5/6 Shopware-Bilder vollstaendig neu hochladen")
+                call_command(
+                    "shopware_force_product_image_uploads",
+                    all=True,
+                    limit=limit,
+                )
+
+            variant_stage = 6 if force_images else 5
+            runtime.update(stage=f"{variant_stage}/{total_stages} django_to_shopware_variants")
+            self.stdout.write(f"{variant_stage}/{total_stages} Shopware-Variantenstruktur sync starten")
             call_command(
                 "shopware_sync_variants",
                 all=True,
                 apply=True,
                 skip_product_sync=True,
             )
-            call_command("shopware5_sync_products", limit=limit)
-            if force_images:
-                runtime.update(stage="5/5 force_shopware_images")
-                self.stdout.write("5/5 Shopware-Bilder vollstaendig neu hochladen")
-                call_command(
-                    "shopware_force_product_image_uploads",
-                    all=True,
-                    limit=limit,
-                )
             logger.info("Scheduled product sync finished successfully. log_file={}", log_path)
             self.stdout.write(self.style.SUCCESS("Scheduled Product Sync erfolgreich abgeschlossen."))
         except Exception:
