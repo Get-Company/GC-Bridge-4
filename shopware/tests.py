@@ -745,6 +745,17 @@ class ShopwareVariantSyncServiceTest(TestCase):
         self.color = PropertyValue.objects.create(group=self.color_group, name="Weiß", external_key="white")
         self.product = Product.objects.create(erp_nr="581000", name="Quick-Tabs 6 cm weiß")
         self.product.categories.add(self.source_category)
+        ShopwareSettings.objects.create(
+            name="Deutsch",
+            sales_channel_id="sales-channel-de",
+            is_active=True,
+            is_default=True,
+        )
+        ShopwareSettings.objects.create(
+            name="Inaktiver Verkaufskanal",
+            sales_channel_id="sales-channel-inactive",
+            is_active=False,
+        )
         ProductProperty.objects.create(product=self.product, value=self.size)
         ProductProperty.objects.create(product=self.product, value=self.color)
         self.family = ProductVariantFamily.objects.create(
@@ -804,6 +815,16 @@ class ShopwareVariantSyncServiceTest(TestCase):
         self.assertEqual(len(parent_payloads), 2)
         self.assertTrue(all(payload["stock"] == 0 for payload in parent_payloads))
         self.assertTrue(all(payload["isCloseout"] is False for payload in parent_payloads))
+        expected_visibilities = [
+            {
+                "id": ShopwareVariantSyncService._stable_id(
+                    "product-visibility", "parent-shopware-id", "sales-channel-de"
+                ),
+                "salesChannelId": "sales-channel-de",
+                "visibility": 30,
+            }
+        ]
+        self.assertTrue(all(payload["visibilities"] == expected_visibilities for payload in parent_payloads))
         self.assertEqual(parent_payloads[0]["variantListingConfig"], {"displayParent": True})
         self.assertEqual(
             parent_payloads[1]["variantListingConfig"],

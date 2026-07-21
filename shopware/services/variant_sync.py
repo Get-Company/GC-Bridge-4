@@ -225,6 +225,9 @@ class ShopwareVariantSyncService(BaseService):
             "taxId": self._tax_id(default_product),
             "categories": [{"id": family.target_category.sw6_id}],
         }
+        parent_visibilities = self._parent_visibilities(parent_id=parent_id)
+        if parent_visibilities:
+            payload["visibilities"] = parent_visibilities
         parent_price = self._parent_price(default_product)
         if parent_price:
             payload["price"] = parent_price
@@ -322,6 +325,31 @@ class ShopwareVariantSyncService(BaseService):
     def _stable_id(*parts: str) -> str:
         source = "|".join(str(part).strip() for part in parts)
         return hashlib.md5(f"gc-bridge-variant|{source}".encode("utf-8")).hexdigest()
+
+    def _parent_visibilities(self, *, parent_id: str) -> list[dict[str, str | int]]:
+        """Expose a variant parent in every actively configured sales channel.
+
+        The actual child products may already be visible in Shopware, but a new
+        parent has no visibility relation of its own. Without this relation the
+        Storefront and UCP catalog cannot list the parent product.
+        """
+        sales_channel_ids = sorted(
+            {
+                str(sales_channel_id).strip()
+                for sales_channel_id in ShopwareSettings.objects.filter(is_active=True).values_list(
+                    "sales_channel_id", flat=True
+                )
+                if str(sales_channel_id).strip()
+            }
+        )
+        return [
+            {
+                "id": self._stable_id("product-visibility", parent_id, sales_channel_id),
+                "salesChannelId": sales_channel_id,
+                "visibility": 30,
+            }
+            for sales_channel_id in sales_channel_ids
+        ]
 
     @staticmethod
     def _shopware_group_display_type(display_type: str) -> str:
