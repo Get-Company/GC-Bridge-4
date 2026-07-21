@@ -9,6 +9,7 @@ from products.models import Price, Product, ProductVariantFamily, PropertyGroup,
 from products.services.variant_family import ProductVariantFamilyResolverService, VariantFamilyResolution
 from shopware.models import ShopwareSettings
 from shopware.services.product import ProductService
+from shopware.services.product_media import ProductMediaSyncService
 
 
 DEFAULT_TAX_ID = "d391e13bdd95404a885f4ad28ea218e0"
@@ -228,6 +229,16 @@ class ShopwareVariantSyncService(BaseService):
         parent_visibilities = self._parent_visibilities(parent_id=parent_id)
         if parent_visibilities:
             payload["visibilities"] = parent_visibilities
+        parent_media, _media_entities, _media_uploads = ProductMediaSyncService().get_product_media_payload(
+            product=default_product,
+            product_id=parent_id,
+        )
+        if parent_media:
+            # The media asset is already owned by the Django-maintained default
+            # child product. The parent only gets its own Shopware relation and
+            # cover, so --skip-product-sync does not upload or replace images.
+            payload["media"] = parent_media
+            payload["coverId"] = parent_media[0]["id"]
         parent_price = self._parent_price(default_product)
         if parent_price:
             payload["price"] = parent_price

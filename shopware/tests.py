@@ -745,6 +745,8 @@ class ShopwareVariantSyncServiceTest(TestCase):
         self.color = PropertyValue.objects.create(group=self.color_group, name="Weiß", external_key="white")
         self.product = Product.objects.create(erp_nr="581000", name="Quick-Tabs 6 cm weiß")
         self.product.categories.add(self.source_category)
+        self.image = Image.objects.create(path="quick-tabs-default.jpg")
+        ProductImage.objects.create(product=self.product, image=self.image, order=1)
         ShopwareSettings.objects.create(
             name="Deutsch",
             sales_channel_id="sales-channel-de",
@@ -815,6 +817,20 @@ class ShopwareVariantSyncServiceTest(TestCase):
         self.assertEqual(len(parent_payloads), 2)
         self.assertTrue(all(payload["stock"] == 0 for payload in parent_payloads))
         self.assertTrue(all(payload["isCloseout"] is False for payload in parent_payloads))
+        media_id = ProductMediaSyncService.build_media_id(self.image.path)
+        expected_parent_media = [
+            {
+                "id": ProductMediaSyncService.build_product_media_id(
+                    product_id="parent-shopware-id",
+                    media_id=media_id,
+                ),
+                "productId": "parent-shopware-id",
+                "mediaId": media_id,
+                "position": 1,
+            }
+        ]
+        self.assertTrue(all(payload["media"] == expected_parent_media for payload in parent_payloads))
+        self.assertTrue(all(payload["coverId"] == expected_parent_media[0]["id"] for payload in parent_payloads))
         expected_visibilities = [
             {
                 "id": ShopwareVariantSyncService._stable_id(
