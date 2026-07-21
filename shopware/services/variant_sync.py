@@ -217,6 +217,11 @@ class ShopwareVariantSyncService(BaseService):
             "name": family.name,
             "description": family.description or default_product.description or "",
             "active": family.is_active,
+            # Shopware requires stock for every newly created product, including
+            # a non-sellable variant parent. Stock and availability are provided
+            # by the actual child products, so the parent deliberately stays at 0.
+            "stock": 0,
+            "isCloseout": False,
             "taxId": self._tax_id(default_product),
             "categories": [{"id": family.target_category.sw6_id}],
         }

@@ -795,6 +795,15 @@ class ShopwareVariantSyncServiceTest(TestCase):
             for call in product_service.bulk_upsert.call_args_list
             if call.kwargs.get("entity_name", "product") == "product"
         ]
+        parent_payloads = [
+            product
+            for payload in product_payloads
+            for product in payload
+            if product.get("productNumber") == "PARENT-QUICK-TABS"
+        ]
+        self.assertEqual(len(parent_payloads), 2)
+        self.assertTrue(all(payload["stock"] == 0 for payload in parent_payloads))
+        self.assertTrue(all(payload["isCloseout"] is False for payload in parent_payloads))
         self.assertTrue(
             any(
                 payload == [
