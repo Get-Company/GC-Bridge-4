@@ -64,6 +64,11 @@ def emit_event(
             "summary": str(summary or ""),
             "payload": _serialize_payload(payload),
         }
+        if status in ("error", "skipped"):
+            _persist_incident(
+                task=task, run_id=run_id, entity=entity, target=target,
+                step=step, status=status, message=summary, payload=payload,
+            )
         _get_redis().xadd(
             LIVE_EVENTS_STREAM_KEY,
             fields,
@@ -73,6 +78,26 @@ def emit_event(
     except Exception:
         logger.opt(exception=False).warning(
             "emit_event fehlgeschlagen (best-effort): task={} entity={}", task, entity
+        )
+
+
+def _persist_incident(*, task, run_id, entity, target, step, status, message, payload) -> None:
+    try:
+        from core.models import SyncEventLog
+
+        SyncEventLog.objects.create(
+            task=str(task or ""),
+            run_id=str(run_id or ""),
+            entity=str(entity or ""),
+            target=str(target or ""),
+            step=str(step or ""),
+            status=status,
+            message=str(message or ""),
+            payload=payload,
+        )
+    except Exception:
+        logger.opt(exception=False).warning(
+            "SyncEventLog-Persistierung fehlgeschlagen: task={} entity={}", task, entity
         )
 
 
