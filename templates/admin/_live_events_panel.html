@@ -1,0 +1,102 @@
+{# templates/admin/_live_events_panel.html #}
+{# Erwartet keine Kontextvariablen; zieht Daten per JS aus den API-URLs. #}
+<div class="live-events" data-api="{% url 'admin:core_live_events_api' %}"
+     data-detail="{% url 'admin:core_live_events_detail' %}">
+  <div class="live-events-toolbar" style="display:flex;gap:.5rem;align-items:center;margin-bottom:.5rem;">
+    <label>Task:
+      <select class="live-events-task">
+        <option value="">Alle</option>
+      </select>
+    </label>
+    <button type="button" class="live-events-pause">Pause</button>
+    <span class="live-events-status" style="margin-left:auto;color:#888;"></span>
+  </div>
+  <div class="live-events-log" id="live-events-log"
+       style="max-height:60vh;overflow:auto;font-family:monospace;font-size:12px;border:1px solid #ccc;padding:.5rem;background:#111;color:#eee;"></div>
+</div>
+<style>
+  .live-events-log .ev { padding:2px 4px; border-bottom:1px solid #222; cursor:pointer; }
+  .live-events-log .ev-ok { color:#7ee787; }
+  .live-events-log .ev-error { color:#ff7b72; }
+  .live-events-log .ev-skipped { color:#e3b341; }
+  .live-events-log .ev-info { color:#a0a0a0; }
+  .live-events-log .ev-run { font-weight:bold; color:#79c0ff; }
+  .live-events-log pre.ev-payload { white-space:pre-wrap; color:#ddd; background:#000; margin:.25rem 0; padding:.25rem; }
+</style>
+<script>
+(function () {
+  const root = document.currentScript.closest('.live-events') || document.querySelector('.live-events');
+  const logEl = root.querySelector('.live-events-log');
+  const taskSel = root.querySelector('.live-events-task');
+  const pauseBtn = root.querySelector('.live-events-pause');
+  const statusEl = root.querySelector('.live-events-status');
+  const apiUrl = root.dataset.api;
+  const detailUrl = root.dataset.detail;
+  let afterId = null;
+  let paused = false;
+  const seenTasks = new Set();
+
+  pauseBtn.addEventListener('click', () => {
+    paused = !paused;
+    pauseBtn.textContent = paused ? 'Weiter' : 'Pause';
+  });
+
+  function addTaskOption(task) {
+    if (!task || seenTasks.has(task)) return;
+    seenTasks.add(task);
+    const opt = document.createElement('option');
+    opt.value = task; opt.textContent = task;
+    taskSel.appendChild(opt);
+  }
+
+  function render(ev) {
+    const div = document.createElement('div');
+    const isRun = ev.step === 'run:start' || ev.step === 'run:finish';
+    div.className = 'ev ev-' + ev.status + (isRun ? ' ev-run' : '');
+    const time = new Date(parseFloat(ev.ts) * 1000).toLocaleTimeString();
+    const parts = [time];
+    if (ev.entity) parts.push(ev.entity);
+    if (ev.target) parts.push('→' + ev.target);
+    parts.push(ev.summary || ev.step);
+    div.textContent = parts.join('  ');
+    if (ev.has_payload) {
+      div.addEventListener('click', () => togglePayload(div, ev.id));
+      div.title = 'Klicken für Payload';
+    }
+    logEl.appendChild(div);
+  }
+
+  async function togglePayload(div, id) {
+    const existing = div.nextElementSibling;
+    if (existing && existing.classList.contains('ev-payload')) { existing.remove(); return; }
+    const resp = await fetch(detailUrl + '?id=' + encodeURIComponent(id));
+    const data = await resp.json();
+    const pre = document.createElement('pre');
+    pre.className = 'ev-payload';
+    pre.textContent = JSON.stringify(data.payload, null, 2);
+    div.after(pre);
+  }
+
+  async function poll() {
+    if (paused) return;
+    const params = new URLSearchParams();
+    if (afterId) params.set('after', afterId);
+    if (taskSel.value) params.set('task', taskSel.value);
+    try {
+      const resp = await fetch(apiUrl + '?' + params.toString());
+      const data = await resp.json();
+      const atBottom = logEl.scrollTop + logEl.clientHeight >= logEl.scrollHeight - 20;
+      (data.events || []).forEach((ev) => { addTaskOption(ev.task); render(ev); });
+      if (data.next_id) afterId = data.next_id;
+      if (atBottom) logEl.scrollTop = logEl.scrollHeight;
+      statusEl.textContent = 'verbunden';
+    } catch (e) {
+      statusEl.textContent = 'Verbindungsfehler';
+    }
+  }
+
+  taskSel.addEventListener('change', () => { logEl.innerHTML = ''; afterId = null; });
+  setInterval(poll, 1000);
+  poll();
+})();
+</script>

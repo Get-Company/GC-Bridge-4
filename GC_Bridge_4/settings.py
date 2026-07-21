@@ -825,9 +825,9 @@ UNFOLD = {
                         "permission": "core.unfold.superuser_only",
                     },
                     {
-                        "title": _("Celery Tasks"),
-                        "icon": "task_alt",
-                        "link": reverse_lazy("admin:core_celery_tasks"),
+                        "title": _("Live-Sync-Messenger"),
+                        "icon": "sync_alt",
+                        "link": reverse_lazy("admin:core_live_events"),
                         "permission": "core.unfold.superuser_only",
                     },
                     {
