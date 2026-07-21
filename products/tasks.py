@@ -5,6 +5,7 @@ from collections.abc import Sequence
 from celery import shared_task
 from django.core.management import call_command
 
+from core.live_events import emit_event, emit_run_finished, emit_run_started
 from issues.services import TaskIssueCollector
 
 PRODUCT_SYNC_CONTINUATION = "products.scheduled_product_sync_page"
@@ -270,6 +271,9 @@ def _scheduled_product_sync_continuation(job) -> None:
     admin_user_id = _get_admin_user_id()
     content_type_id = ContentType.objects.get_for_model(ProductModel).id if admin_user_id else None
 
+    run_id = str(job.external_job_id)
+    task_name = "products.scheduled_product_sync"
+    emit_run_started(task_name, run_id, f"Microtech-Import gestartet ({len(products)} Datensätze)")
     with TaskIssueCollector("products.scheduled_product_sync"), disable_product_auto_sync():
         for product_data in products:
             if limit and state["processed"] >= limit:
@@ -290,11 +294,29 @@ def _scheduled_product_sync_continuation(job) -> None:
                     skip_images=not include_images,
                 )
                 state["success"] += 1
+                emit_event(
+                    task_name, entity=str(artikel_service.get_erp_nr() or ""),
+                    step="microtech→django", status="ok",
+                    summary=f"Produkt {artikel_service.get_erp_nr()} importiert",
+                    run_id=run_id, target="django",
+                )
             except Exception as exc:
                 logger.warning("scheduled_product_sync: record error - {}", exc)
                 state["errors"] += 1
+                emit_event(
+                    task_name,
+                    entity=str(product_data.get("artNr") or product_data.get("erpNr") or ""),
+                    step="microtech→django", status="skipped",
+                    summary=f"Übersprungen: {exc}", run_id=run_id,
+                    payload={"error": str(exc)},
+                )
             state["processed"] += 1
 
+    emit_run_finished(
+        task_name, run_id,
+        f"{state['processed']} verarbeitet, {state['success']} ok, {state['errors']} übersprungen",
+        stats=state,
+    )
     logger.info(
         "scheduled_product_sync: Microtech import complete (processed={}, success={}, errors={}, include_images={})",
         state["processed"],
