@@ -565,7 +565,7 @@ class ProductVariantAttribute(BaseModel):
         related_name="variant_family_attributes",
         verbose_name=_("Attributgruppe"),
     )
-    position = models.PositiveSmallIntegerField(default=100, verbose_name=_("Position"))
+    position = models.PositiveSmallIntegerField(default=100, db_index=True, verbose_name=_("Position"))
     display_type = models.CharField(
         max_length=16,
         choices=DisplayType.choices,

@@ -12,10 +12,16 @@ class TestMjmlComponentAdminRegistered(SimpleTestCase):
         assert admin.site.is_registered(MjmlComponent)
 
     def test_mjml_component_admin_uses_general_component_info_field(self):
+        from django.contrib.admin.sites import AdminSite
         from emails.admin import MjmlComponentAdmin
+        from emails.models import MjmlComponent
 
         assert "component_info" in MjmlComponentAdmin.readonly_fields
         assert "product_template_variables" not in MjmlComponentAdmin.readonly_fields
+        admin_instance = MjmlComponentAdmin(MjmlComponent, AdminSite())
+        assert admin_instance.ordering_field == "order"
+        assert admin_instance.hide_ordering_field is True
+        assert admin_instance.get_ordering(None) == ("order", "name")
 
     def test_component_info_shows_children_slot_location(self):
         from django.contrib.admin.sites import AdminSite
@@ -119,10 +125,13 @@ class TestEmailCampaignAdmin(SimpleTestCase):
 
 class TestEmailCampaignComponentInline(SimpleTestCase):
     def test_component_inline_uses_unfold_sortable_ordering_field(self):
+        from django.contrib.admin.sites import AdminSite
         from emails.admin import EmailCampaignComponentInline
+        from emails.models import EmailCampaign
 
-        assert EmailCampaignComponentInline.ordering_field == "order"
-        assert EmailCampaignComponentInline.hide_ordering_field is True
+        inline = EmailCampaignComponentInline(EmailCampaign, AdminSite())
+        assert inline.ordering_field == "order"
+        assert inline.hide_ordering_field is True
         assert "order" in EmailCampaignComponentInline.fields
         assert "tree_position" in EmailCampaignComponentInline.fields
         assert "product" in EmailCampaignComponentInline.fields

@@ -146,8 +146,6 @@ class ProductImageInline(BaseTabularInline):
     fields = ("image_preview", "image", "order")
     readonly_fields = BaseTabularInline.readonly_fields + ("image_preview",)
     autocomplete_fields = ("image",)
-    ordering_field = "order"
-    hide_ordering_field = True
 
     def get_queryset(self, request):
         queryset = super().get_queryset(request)

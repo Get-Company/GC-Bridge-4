@@ -30,6 +30,7 @@ from products.admin import (
     ProductAdmin,
     ProductImageInline,
     ProductPropertyInline,
+    ProductVariantAttributeInline,
     ProductVariantFamilyAdminForm,
     PropertyValueAdmin,
     PropertyValueAdminForm,
@@ -2695,8 +2696,15 @@ class ProductImageAdminAndSyncTest(TestCase):
     def test_product_admin_uses_product_image_inline_and_hides_legacy_images_field(self):
         self.assertIn(ProductImageInline, ProductAdmin.inlines)
         self.assertEqual(ProductAdmin.exclude, ("images",))
-        self.assertEqual(ProductImageInline.ordering_field, "order")
-        self.assertTrue(ProductImageInline.hide_ordering_field)
+        image_inline = ProductImageInline(Product, AdminSite())
+        self.assertEqual(image_inline.ordering_field, "order")
+        self.assertTrue(image_inline.hide_ordering_field)
+
+    def test_variant_attribute_inline_inherits_sorting_defaults(self):
+        attribute_inline = ProductVariantAttributeInline(ProductVariantFamily, AdminSite())
+
+        self.assertEqual(attribute_inline.ordering_field, "position")
+        self.assertTrue(attribute_inline.hide_ordering_field)
 
     def test_product_admin_uses_product_property_inline(self):
         self.assertIn(ProductPropertyInline, ProductAdmin.inlines)
