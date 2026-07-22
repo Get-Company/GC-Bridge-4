@@ -532,12 +532,16 @@ class ProductVariantFamily(BaseModel):
     def __str__(self) -> str:
         return self.name
 
-    def candidate_products(self):
-        return Product.objects.filter(categories__in=self.source_categories.all(), is_active=True).distinct()
+    def candidate_products(self, source_categories=None):
+        """Return active candidate products for persisted or pending sources."""
+        if source_categories is None:
+            source_categories = self.source_categories.all() if self.pk else Category.objects.none()
+        return Product.objects.filter(categories__in=source_categories, is_active=True).distinct()
 
     def clean(self):
         super().clean()
-        if self.default_product_id and self.pk and not self.candidate_products().filter(pk=self.default_product_id).exists():
+        source_categories = getattr(self, "_source_categories_for_validation", None)
+        if self.default_product_id and not self.candidate_products(source_categories).filter(pk=self.default_product_id).exists():
             raise ValidationError({"default_product": _("Die Standardvariante muss aus einer Quellkategorie stammen.")})
 
 

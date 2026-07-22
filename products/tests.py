@@ -30,6 +30,7 @@ from products.admin import (
     ProductAdmin,
     ProductImageInline,
     ProductPropertyInline,
+    ProductVariantFamilyAdminForm,
     PropertyValueAdmin,
     PropertyValueAdminForm,
 )
@@ -186,6 +187,34 @@ class CategorySelectionLabelTest(TestCase):
         self.assertEqual(str(germany), "Deutschland")
         self.assertEqual(str(german_strip_tabs), "Deutschland | Strip-Tabs")
         self.assertEqual(str(italian_strip_tabs), "Italien | Strip-Tabs")
+
+
+class ProductVariantFamilyAdminFormTest(TestCase):
+    def test_accepts_default_product_from_source_selected_in_same_submission(self):
+        target_category = Category.objects.create(name="Strip-Tabs", slug="strip-tabs")
+        source_category = Category.objects.create(name="Strip-Tabs 6 cm", slug="strip-tabs-6-cm")
+        default_product = Product.objects.create(erp_nr="601000", name="Strip-Tabs 6 cm")
+        default_product.categories.add(source_category)
+
+        form = ProductVariantFamilyAdminForm(
+            data={
+                "name": "Strip-Tabs",
+                "slug": "strip-tabs",
+                "description": "",
+                "shopware_product_number": "PARENT-STRIP-TABS",
+                "shopware_id": "",
+                "target_category": target_category.pk,
+                "source_categories": [source_category.pk],
+                "default_product": default_product.pk,
+                "seo_path": "",
+                "is_active": "on",
+            }
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+        family = form.save()
+        self.assertEqual(family.default_product, default_product)
+        self.assertEqual(list(family.source_categories.all()), [source_category])
 
 
 class ProductAdminActionConfigurationTest(SimpleTestCase):

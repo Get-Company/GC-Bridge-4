@@ -3494,8 +3494,31 @@ class ProductVariantAttributeInline(BaseTabularInline):
     extra = 0
 
 
+class ProductVariantFamilyAdminForm(forms.ModelForm):
+    """Validate a default variant against source categories selected in this form."""
+
+    class Meta:
+        model = ProductVariantFamily
+        fields = "__all__"
+
+    def clean(self):
+        cleaned_data = super().clean()
+        # ModelForm validates the model before it writes many-to-many values.
+        # Supply the submitted source categories so ProductVariantFamily.clean()
+        # can validate a default product during the first save as well.
+        self.instance._source_categories_for_validation = cleaned_data.get("source_categories")
+        return cleaned_data
+
+    def save(self, commit=True):
+        try:
+            return super().save(commit=commit)
+        finally:
+            self.instance.__dict__.pop("_source_categories_for_validation", None)
+
+
 @admin.register(ProductVariantFamily)
 class ProductVariantFamilyAdmin(BaseAdmin):
+    form = ProductVariantFamilyAdminForm
     list_display = (
         "name",
         "shopware_product_number",
