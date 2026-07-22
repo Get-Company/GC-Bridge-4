@@ -168,6 +168,26 @@ class CategorySyncDefinitionTest(SimpleTestCase):
         self.assertEqual(defaults["name_it_it"], "Carta italiana")
 
 
+class CategorySelectionLabelTest(TestCase):
+    def test_category_string_includes_root_name_for_child_categories(self):
+        germany = Category.objects.create(name="Deutschland", slug="deutschland")
+        italy = Category.objects.create(name="Italien", slug="italien")
+        german_strip_tabs = Category.objects.create(
+            name="Strip-Tabs",
+            slug="deutschland-strip-tabs",
+            parent=germany,
+        )
+        italian_strip_tabs = Category.objects.create(
+            name="Strip-Tabs",
+            slug="italien-strip-tabs",
+            parent=italy,
+        )
+
+        self.assertEqual(str(germany), "Deutschland")
+        self.assertEqual(str(german_strip_tabs), "Deutschland | Strip-Tabs")
+        self.assertEqual(str(italian_strip_tabs), "Italien | Strip-Tabs")
+
+
 class ProductAdminActionConfigurationTest(SimpleTestCase):
     def test_product_admin_displays_sortable_available_stock(self):
         admin_instance = ProductAdmin(Product, AdminSite())

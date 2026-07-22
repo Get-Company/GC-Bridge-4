@@ -106,7 +106,19 @@ class Category(MPTTModel, BaseModel):
         order_insertion_by = ("sort_order", "name")
 
     def __str__(self) -> str:
-        return self.name
+        return self.get_selection_label()
+
+    def get_selection_label(self) -> str:
+        """Return an unambiguous label for category relation fields.
+
+        Category names may occur below multiple sales-channel roots (for
+        example ``Deutschland`` and ``Italien``). Django uses ``__str__`` for
+        both standard and autocomplete relation fields, so keeping the root
+        in this label makes those selections distinguishable everywhere.
+        """
+        if self.is_root_node():
+            return self.name
+        return f"{self.get_root().name} | {self.name}"
 
     def get_category_path(self) -> str:
         """Return the complete category path for prompt templates and displays."""
