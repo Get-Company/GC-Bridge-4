@@ -22,7 +22,7 @@ class MjmlComponent(BaseModel):
         verbose_name=_("Platzierung"),
     )
     is_default = models.BooleanField(default=False, verbose_name=_("Standard"))
-    order = models.PositiveIntegerField(default=0, verbose_name=_("Reihenfolge"))
+    order = models.PositiveIntegerField(default=0, db_index=True, verbose_name=_("Reihenfolge"))
     detected_variables = models.JSONField(
         default=list, blank=True, verbose_name=_("Erkannte Variablen")
     )

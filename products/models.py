@@ -106,7 +106,19 @@ class Category(MPTTModel, BaseModel):
         order_insertion_by = ("sort_order", "name")
 
     def __str__(self) -> str:
-        return self.name
+        return self.get_selection_label()
+
+    def get_selection_label(self) -> str:
+        """Return an unambiguous label for category relation fields.
+
+        Category names may occur below multiple sales-channel roots (for
+        example ``Deutschland`` and ``Italien``). Django uses ``__str__`` for
+        both standard and autocomplete relation fields, so keeping the root
+        in this label makes those selections distinguishable everywhere.
+        """
+        if self.is_root_node():
+            return self.name
+        return f"{self.get_root().name} | {self.name}"
 
     def get_category_path(self) -> str:
         """Return the complete category path for prompt templates and displays."""
@@ -207,6 +219,15 @@ class PropertyValue(BaseModel):
         verbose_name=_("Attributgruppe"),
     )
     name = models.CharField(max_length=255, verbose_name=_("Wert"))
+    image = models.ForeignKey(
+        Image,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="property_values",
+        verbose_name=_("Auswahlbild"),
+        help_text=_("Optionales Bild für Shopware-Variantenoptionen mit Bilddarstellung."),
+    )
 
     class Meta:
         verbose_name = _("Attributwert")
@@ -511,12 +532,16 @@ class ProductVariantFamily(BaseModel):
     def __str__(self) -> str:
         return self.name
 
-    def candidate_products(self):
-        return Product.objects.filter(categories__in=self.source_categories.all()).distinct()
+    def candidate_products(self, source_categories=None):
+        """Return active candidate products for persisted or pending sources."""
+        if source_categories is None:
+            source_categories = self.source_categories.all() if self.pk else Category.objects.none()
+        return Product.objects.filter(categories__in=source_categories, is_active=True).distinct()
 
     def clean(self):
         super().clean()
-        if self.default_product_id and self.pk and not self.candidate_products().filter(pk=self.default_product_id).exists():
+        source_categories = getattr(self, "_source_categories_for_validation", None)
+        if self.default_product_id and not self.candidate_products(source_categories).filter(pk=self.default_product_id).exists():
             raise ValidationError({"default_product": _("Die Standardvariante muss aus einer Quellkategorie stammen.")})
 
 
@@ -540,7 +565,7 @@ class ProductVariantAttribute(BaseModel):
         related_name="variant_family_attributes",
         verbose_name=_("Attributgruppe"),
     )
-    position = models.PositiveSmallIntegerField(default=100, verbose_name=_("Position"))
+    position = models.PositiveSmallIntegerField(default=100, db_index=True, verbose_name=_("Position"))
     display_type = models.CharField(
         max_length=16,
         choices=DisplayType.choices,

@@ -30,6 +30,8 @@ from products.admin import (
     ProductAdmin,
     ProductImageInline,
     ProductPropertyInline,
+    ProductVariantAttributeInline,
+    ProductVariantFamilyAdminForm,
     PropertyValueAdmin,
     PropertyValueAdminForm,
 )
@@ -166,6 +168,54 @@ class CategorySyncDefinitionTest(SimpleTestCase):
         self.assertEqual(defaults["meta_description_ch_de"], "Schweizer Meta-Beschreibung")
         self.assertEqual(defaults["meta_keywords_ch_de"], "papier, schweiz")
         self.assertEqual(defaults["name_it_it"], "Carta italiana")
+
+
+class CategorySelectionLabelTest(TestCase):
+    def test_category_string_includes_root_name_for_child_categories(self):
+        germany = Category.objects.create(name="Deutschland", slug="deutschland")
+        italy = Category.objects.create(name="Italien", slug="italien")
+        german_strip_tabs = Category.objects.create(
+            name="Strip-Tabs",
+            slug="deutschland-strip-tabs",
+            parent=germany,
+        )
+        italian_strip_tabs = Category.objects.create(
+            name="Strip-Tabs",
+            slug="italien-strip-tabs",
+            parent=italy,
+        )
+
+        self.assertEqual(str(germany), "Deutschland")
+        self.assertEqual(str(german_strip_tabs), "Deutschland | Strip-Tabs")
+        self.assertEqual(str(italian_strip_tabs), "Italien | Strip-Tabs")
+
+
+class ProductVariantFamilyAdminFormTest(TestCase):
+    def test_accepts_default_product_from_source_selected_in_same_submission(self):
+        target_category = Category.objects.create(name="Strip-Tabs", slug="strip-tabs")
+        source_category = Category.objects.create(name="Strip-Tabs 6 cm", slug="strip-tabs-6-cm")
+        default_product = Product.objects.create(erp_nr="601000", name="Strip-Tabs 6 cm")
+        default_product.categories.add(source_category)
+
+        form = ProductVariantFamilyAdminForm(
+            data={
+                "name": "Strip-Tabs",
+                "slug": "strip-tabs",
+                "description": "",
+                "shopware_product_number": "PARENT-STRIP-TABS",
+                "shopware_id": "",
+                "target_category": target_category.pk,
+                "source_categories": [source_category.pk],
+                "default_product": default_product.pk,
+                "seo_path": "",
+                "is_active": "on",
+            }
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+        family = form.save()
+        self.assertEqual(family.default_product, default_product)
+        self.assertEqual(list(family.source_categories.all()), [source_category])
 
 
 class ProductAdminActionConfigurationTest(SimpleTestCase):
@@ -541,16 +591,72 @@ class PriceIncreaseDocumentRenderingTest(SimpleTestCase):
 
 class ProductCeleryTaskTest(SimpleTestCase):
     @patch("products.tasks.call_command")
-    def test_product_sync_finalization_syncs_stock_to_both_shopware_versions(self, mock_call_command):
+    def test_product_sync_finalization_syncs_products_before_variants(self, mock_call_command):
         product_tasks._finalize_scheduled_product_sync(
             include_images=False,
             erp_nrs=["A-1000", "A-1001"],
         )
 
-        mock_call_command.assert_has_calls(
+        self.assertEqual(
+            mock_call_command.call_args_list,
             [
                 call("shopware_sync_products", "A-1000", "A-1001", skip_images=True),
                 call("shopware5_sync_products", "A-1000", "A-1001"),
+                call(
+                    "shopware_sync_variants",
+                    all=True,
+                    apply=True,
+                    skip_product_sync=True,
+                ),
+            ]
+        )
+
+    @patch("products.tasks.call_command")
+    def test_product_sync_finalization_syncs_images_before_variants(self, mock_call_command):
+        product_tasks._finalize_scheduled_product_sync(
+            include_images=True,
+            erp_nrs=["A-1000", "A-1001"],
+        )
+
+        self.assertEqual(
+            mock_call_command.call_args_list,
+            [
+                call("shopware_sync_products", "A-1000", "A-1001", skip_images=True),
+                call("shopware5_sync_products", "A-1000", "A-1001"),
+                call("shopware_force_product_image_uploads", "A-1000", "A-1001"),
+                call(
+                    "shopware_sync_variants",
+                    all=True,
+                    apply=True,
+                    skip_product_sync=True,
+                ),
+            ]
+        )
+
+    @patch("products.tasks.TaskIssueCollector")
+    @patch("products.tasks.call_command")
+    @patch("microtech.services.MicrotechExpiredSpecialSyncService")
+    def test_legacy_product_sync_finalization_syncs_images_before_variants(
+        self,
+        expired_special_service_cls,
+        mock_call_command,
+        _issue_collector,
+    ):
+        expired_special_service_cls.return_value.clear_expired_specials.return_value = (0, set())
+
+        product_tasks._scheduled_product_sync_finalize.run(limit=50, force_images=True)
+
+        self.assertEqual(
+            mock_call_command.call_args_list,
+            [
+                call("shopware_sync_products", all=True, limit=50, skip_images=True),
+                call("shopware_force_product_image_uploads", all=True, limit=50),
+                call(
+                    "shopware_sync_variants",
+                    all=True,
+                    apply=True,
+                    skip_product_sync=True,
+                ),
             ]
         )
 
@@ -2386,7 +2492,7 @@ class ScheduledProductSyncCommandTest(TestCase):
         self.assertEqual(active.special_percentage, Decimal("5.00"))
 
     @patch("products.management.commands.scheduled_product_sync.call_command")
-    def test_handle_runs_microtech_with_preserve_and_then_shopware5_and_shopware6(self, mock_call_command):
+    def test_handle_syncs_product_images_before_variants(self, mock_call_command):
         cmd = ScheduledProductSyncCommand()
         with (
             patch.object(cmd, "_clear_expired_specials", return_value=(0, set())),
@@ -2396,7 +2502,8 @@ class ScheduledProductSyncCommandTest(TestCase):
 
         mock_sync_microtech.assert_called_once_with(set(), write_base_price_back=False)
         self.assertEqual(mock_call_command.call_count, 5)
-        mock_call_command.assert_has_calls(
+        self.assertEqual(
+            mock_call_command.call_args_list,
             [
                 call(
                     "microtech_sync_products",
@@ -2412,16 +2519,18 @@ class ScheduledProductSyncCommandTest(TestCase):
                     skip_images=True,
                 ),
                 call(
-                    "shopware_sync_variants",
-                    all=True,
-                    apply=True,
-                    skip_product_sync=True,
+                    "shopware5_sync_products", limit=50,
                 ),
-                call("shopware5_sync_products", limit=50),
                 call(
                     "shopware_force_product_image_uploads",
                     all=True,
                     limit=50,
+                ),
+                call(
+                    "shopware_sync_variants",
+                    all=True,
+                    apply=True,
+                    skip_product_sync=True,
                 ),
             ]
         )
@@ -2448,7 +2557,8 @@ class ScheduledProductSyncCommandTest(TestCase):
             cmd.handle(limit=20, exclude_inactive=False, skip_force_images=True)
 
         self.assertEqual(mock_call_command.call_count, 4)
-        mock_call_command.assert_has_calls(
+        self.assertEqual(
+            mock_call_command.call_args_list,
             [
                 call(
                     "microtech_sync_products",
@@ -2464,12 +2574,14 @@ class ScheduledProductSyncCommandTest(TestCase):
                     skip_images=False,
                 ),
                 call(
+                    "shopware5_sync_products", limit=20,
+                ),
+                call(
                     "shopware_sync_variants",
                     all=True,
                     apply=True,
                     skip_product_sync=True,
                 ),
-                call("shopware5_sync_products", limit=20),
             ]
         )
 
@@ -2584,8 +2696,15 @@ class ProductImageAdminAndSyncTest(TestCase):
     def test_product_admin_uses_product_image_inline_and_hides_legacy_images_field(self):
         self.assertIn(ProductImageInline, ProductAdmin.inlines)
         self.assertEqual(ProductAdmin.exclude, ("images",))
-        self.assertEqual(ProductImageInline.ordering_field, "order")
-        self.assertTrue(ProductImageInline.hide_ordering_field)
+        image_inline = ProductImageInline(Product, AdminSite())
+        self.assertEqual(image_inline.ordering_field, "order")
+        self.assertTrue(image_inline.hide_ordering_field)
+
+    def test_variant_attribute_inline_inherits_sorting_defaults(self):
+        attribute_inline = ProductVariantAttributeInline(ProductVariantFamily, AdminSite())
+
+        self.assertEqual(attribute_inline.ordering_field, "position")
+        self.assertTrue(attribute_inline.hide_ordering_field)
 
     def test_product_admin_uses_product_property_inline(self):
         self.assertIn(ProductPropertyInline, ProductAdmin.inlines)
@@ -3001,6 +3120,16 @@ class ProductVariantFamilyResolverServiceTest(TestCase):
         }
         self.assertEqual(options_by_erp["581000"], ["6 cm", "Weiß", "Ohne Aufdruck"])
         self.assertEqual(options_by_erp["291001"], ["3 cm", "Gelb", "Druck"])
+
+    def test_resolver_excludes_inactive_source_products(self):
+        self.three_cm.is_active = False
+        self.three_cm.save(update_fields=("is_active",))
+
+        resolution = ProductVariantFamilyResolverService().resolve(self.family)
+
+        self.assertTrue(resolution.is_valid)
+        self.assertEqual([variant.product.erp_nr for variant in resolution.variants], ["581000"])
+        self.assertEqual([candidate.product.erp_nr for candidate in resolution.skipped], ["ASSORT-1"])
 
     def test_product_keeps_family_lookup_after_it_is_no_longer_in_a_source_category(self):
         self.family.synced_products.add(self.six_cm)

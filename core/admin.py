@@ -9,7 +9,7 @@ from django.contrib.admin.utils import quote
 from django.contrib.auth.admin import GroupAdmin as BaseGroupAdmin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import Group, User
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import FieldDoesNotExist, PermissionDenied
 from django.db import models
 from django.forms.models import model_to_dict
 from django.http import HttpResponseRedirect
@@ -46,7 +46,7 @@ from django_celery_beat.models import (
 )
 
 from core.admin_status import admin_status_bar_api
-from core.celery_admin import celery_tasks_admin_view
+from core.live_events_view import live_events_api, live_events_detail_api, live_events_view
 from core.log_reader import get_allowed_log_files, log_file_info, search_log_file, tail_log_file
 from core.microtech_queue_view import microtech_queue_api, microtech_queue_view
 from core.services import CommandRuntimeService
@@ -65,7 +65,52 @@ from customer.views import (
 )
 
 
-class BaseAdmin(UnfoldModelAdmin):
+class SortableAdminMixin:
+    """Enable Unfold sorting for conventionally named, safe ordering fields.
+
+    A sortable field must meet Unfold's requirements: it is a positive integer,
+    indexed, and already part of the declared ordering. This keeps sorting
+    opt-in at the model level while eliminating repeated admin configuration.
+    """
+
+    sortable_field_names = ("sort_order", "order", "position")
+    hide_ordering_field = True
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._configure_default_sorting()
+
+    def _configure_default_sorting(self) -> None:
+        if self.ordering_field:
+            return
+
+        declared_ordering = self.__class__.__dict__.get("ordering")
+        uses_model_ordering = declared_ordering is None
+        ordering = self.model._meta.ordering if uses_model_ordering else declared_ordering
+
+        for field_name in self.sortable_field_names:
+            try:
+                field = self.model._meta.get_field(field_name)
+            except FieldDoesNotExist:
+                continue
+
+            if not isinstance(field, (models.PositiveIntegerField, models.PositiveSmallIntegerField)):
+                continue
+            if not field.db_index or field_name in self.readonly_fields:
+                continue
+            if not self._ordering_includes_field(ordering, field_name):
+                continue
+
+            self.ordering_field = field_name
+            self._uses_model_sortable_ordering = uses_model_ordering
+            return
+
+    @staticmethod
+    def _ordering_includes_field(ordering, field_name: str) -> bool:
+        return any(str(value).lstrip("-") == field_name for value in ordering or ())
+
+
+class BaseAdmin(SortableAdminMixin, UnfoldModelAdmin):
     base_actions_row = ("copy_admin_object_row", "delete_admin_object_row")
     copy_source_param = "_copy_from"
     readonly_fields = ("created_at", "updated_at")
@@ -79,6 +124,11 @@ class BaseAdmin(UnfoldModelAdmin):
     formfield_overrides = {
         models.TextField: {"widget": WysiwygWidget},
     }
+
+    def get_ordering(self, request):
+        if getattr(self, "_uses_model_sortable_ordering", False):
+            return self.model._meta.ordering
+        return super().get_ordering(request)
 
     def _get_base_actions_row(self):
         action_names = list(self._extract_action_names(getattr(self, "actions_row", ())))
@@ -190,14 +240,14 @@ class BaseAdmin(UnfoldModelAdmin):
         return HttpResponseRedirect(url)
 
 
-class BaseTabularInline(UnfoldTabularInline):
+class BaseTabularInline(SortableAdminMixin, UnfoldTabularInline):
     readonly_fields = ("created_at", "updated_at")
     extra = 0
     tab = True
     formfield_overrides = BaseAdmin.formfield_overrides
 
 
-class BaseStackedInline(UnfoldStackedInline):
+class BaseStackedInline(SortableAdminMixin, UnfoldStackedInline):
     readonly_fields = ("created_at", "updated_at")
     extra = 0
     tab = True
@@ -402,7 +452,9 @@ _default_admin_get_urls = admin.site.get_urls
 def _admin_get_urls():
     custom_urls = [
         path("status-bar/api/", admin.site.admin_view(admin_status_bar_api), name="core_status_bar_api"),
-        path("celery-tasks/", admin.site.admin_view(celery_tasks_admin_view), name="core_celery_tasks"),
+        path("live-events/", admin.site.admin_view(live_events_view), name="core_live_events"),
+        path("live-events/api/", admin.site.admin_view(live_events_api), name="core_live_events_api"),
+        path("live-events/detail/", admin.site.admin_view(live_events_detail_api), name="core_live_events_detail"),
         path("logs/", admin.site.admin_view(admin_log_reader_view), name="core_log_reader"),
         path("logs/search/", admin.site.admin_view(admin_log_search_api), name="core_log_search"),
         path("logs/download/", admin.site.admin_view(admin_log_download_view), name="core_log_download"),

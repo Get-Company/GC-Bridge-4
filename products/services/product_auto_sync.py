@@ -7,10 +7,17 @@ from django.core.management import call_command
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
+from core.live_events import emit_event
 from core.services import BaseService
 from products.models import Product, ProductSyncJob
 
 _state = local()
+
+_TARGET_LABELS = {
+    ProductSyncJob.Target.SHOPWARE: "shopware6",
+    ProductSyncJob.Target.SHOPWARE5: "shopware5",
+    ProductSyncJob.Target.MICROTECH: "microtech",
+}
 
 
 def is_product_auto_sync_disabled() -> bool:
@@ -83,6 +90,14 @@ class ProductAutoSyncService(BaseService):
             changed_fields = list(job.changed_fields or [])
             target = job.target
 
+        task = "products.auto_sync"
+        run_id = str(job_id)
+        target_label = _TARGET_LABELS.get(target, str(target))
+        emit_event(
+            task, entity=product_erp_nr, step=f"→ {target_label}", status="info",
+            summary=f"Produkt {product_erp_nr} → {target_label}",
+            run_id=run_id, target=target_label,
+        )
         try:
             if target == ProductSyncJob.Target.SHOPWARE:
                 call_command("shopware_sync_products", product_erp_nr, skip_images=True)
@@ -111,6 +126,11 @@ class ProductAutoSyncService(BaseService):
             else:
                 raise ValueError(f"Unsupported product sync target: {target}")
         except Exception as exc:
+            emit_event(
+                task, entity=product_erp_nr, step=f"→ {target_label}", status="error",
+                summary=f"{target_label}-Fehler: {exc}",
+                run_id=run_id, target=target_label, payload={"error": str(exc)},
+            )
             with transaction.atomic():
                 job = ProductSyncJob.objects.select_for_update().get(pk=job_id)
                 job.status = ProductSyncJob.Status.FAILED
@@ -118,6 +138,12 @@ class ProductAutoSyncService(BaseService):
                 job.last_error = str(exc)
                 job.save(update_fields=("status", "finished_at", "last_error", "updated_at"))
             raise
+        else:
+            emit_event(
+                task, entity=product_erp_nr, step=f"→ {target_label}", status="ok",
+                summary=f"Produkt {product_erp_nr} nach {target_label} geschrieben",
+                run_id=run_id, target=target_label,
+            )
 
         with transaction.atomic():
             job = ProductSyncJob.objects.select_for_update().get(pk=job_id)

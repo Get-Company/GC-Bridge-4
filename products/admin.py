@@ -146,8 +146,6 @@ class ProductImageInline(BaseTabularInline):
     fields = ("image_preview", "image", "order")
     readonly_fields = BaseTabularInline.readonly_fields + ("image_preview",)
     autocomplete_fields = ("image",)
-    ordering_field = "order"
-    hide_ordering_field = True
 
     def get_queryset(self, request):
         queryset = super().get_queryset(request)
@@ -3437,7 +3435,7 @@ class PropertyValueAdmin(TabbedTranslationAdmin, BaseAdmin):
         **getattr(TabbedTranslationAdmin, "formfield_overrides", {}),
         **BaseAdmin.formfield_overrides,
     }
-    list_display = ("name", "group", "shopware_id", "external_key", "created_at")
+    list_display = ("name", "group", "image_preview", "shopware_id", "external_key", "created_at")
     search_fields = (
         "name",
         "name_de",
@@ -3448,8 +3446,21 @@ class PropertyValueAdmin(TabbedTranslationAdmin, BaseAdmin):
         "external_key",
     )
     list_filter = [("group", RelatedDropdownFilter), ("created_at", RangeDateTimeFilter)]
-    autocomplete_fields = ("group",)
+    autocomplete_fields = ("group", "image")
     ordering = ("group__name", "name")
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related("group", "image")
+
+    @admin.display(description="Auswahlbild")
+    def image_preview(self, obj: PropertyValue):
+        image = getattr(obj, "image", None)
+        if not image or not image.url:
+            return "-"
+        return format_html(
+            '<img src="{}" loading="lazy" style="width:40px;height:40px;object-fit:cover;border-radius:4px;" />',
+            image.url,
+        )
 
     @staticmethod
     def _save_product_assignments(property_value: PropertyValue, products):
@@ -3481,8 +3492,31 @@ class ProductVariantAttributeInline(BaseTabularInline):
     extra = 0
 
 
+class ProductVariantFamilyAdminForm(forms.ModelForm):
+    """Validate a default variant against source categories selected in this form."""
+
+    class Meta:
+        model = ProductVariantFamily
+        fields = "__all__"
+
+    def clean(self):
+        cleaned_data = super().clean()
+        # ModelForm validates the model before it writes many-to-many values.
+        # Supply the submitted source categories so ProductVariantFamily.clean()
+        # can validate a default product during the first save as well.
+        self.instance._source_categories_for_validation = cleaned_data.get("source_categories")
+        return cleaned_data
+
+    def save(self, commit=True):
+        try:
+            return super().save(commit=commit)
+        finally:
+            self.instance.__dict__.pop("_source_categories_for_validation", None)
+
+
 @admin.register(ProductVariantFamily)
 class ProductVariantFamilyAdmin(BaseAdmin):
+    form = ProductVariantFamilyAdminForm
     list_display = (
         "name",
         "shopware_product_number",

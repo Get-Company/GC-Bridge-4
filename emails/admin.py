@@ -469,8 +469,6 @@ class EmailCampaignComponentInline(BaseStackedInline):
     model = EmailCampaignComponent
     form = EmailCampaignComponentInlineForm
     tab = False
-    ordering_field = "order"
-    hide_ordering_field = True
     fieldsets = (
         (
             None,

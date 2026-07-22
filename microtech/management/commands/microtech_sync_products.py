@@ -11,6 +11,7 @@ from loguru import logger
 from microtech.services.artikel import MicrotechArtikelService
 from microtech.services.lager import MicrotechLagerService
 from core.admin_utils import log_admin_change
+from core.live_events import emit_event
 from microtech.services import microtech_connection
 from products.models import Image, Price, Product, ProductImage, Storage, Tax
 from products.services import disable_product_auto_sync
@@ -141,7 +142,16 @@ class Command(MonitoredBaseCommand):
         price_entry.special_price = special_price
         price_entry.special_start_date = special_start_date
         price_entry.special_end_date = special_end_date
-        price_entry.save(history_tracked_fields=Price.MICROTECH_HISTORY_FIELDS)
+        try:
+            price_entry.save(history_tracked_fields=Price.MICROTECH_HISTORY_FIELDS)
+        except Exception as exc:
+            emit_event(
+                "products.microtech_import", entity=str(product.erp_nr or ""),
+                step="preis→django", status="error",
+                summary=f"Preis konnte nicht gespeichert werden: {exc}",
+                target="django", payload={"price": str(price)},
+            )
+            raise
         return price_entry
 
     @classmethod
