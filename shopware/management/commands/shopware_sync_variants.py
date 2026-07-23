@@ -45,7 +45,13 @@ class Command(MonitoredBaseCommand):
 
         resolutions = {family.pk: service.preview(family) for family in families}
         self._write_preview(resolutions.values())
-        invalid = [resolution for resolution in resolutions.values() if not resolution.is_valid]
+        # A family without axes is a valid cleanup operation: its former child
+        # products and configurator settings need to be detached in Shopware.
+        invalid = [
+            resolution
+            for resolution in resolutions.values()
+            if not resolution.is_valid and resolution.attributes
+        ]
         if invalid:
             raise CommandError("Varianten-Prüfung fehlgeschlagen. Shopware wurde nicht verändert.")
         if not apply_changes:
@@ -54,7 +60,7 @@ class Command(MonitoredBaseCommand):
 
         for family in families:
             resolution = resolutions[family.pk]
-            if not options["skip_product_sync"]:
+            if not options["skip_product_sync"] and resolution.variants:
                 erp_nrs = [variant.product.erp_nr for variant in resolution.variants]
                 call_command("shopware_sync_products", *erp_nrs, skip_images=True)
             result = service.sync(family, dry_run=False)
@@ -84,6 +90,9 @@ class Command(MonitoredBaseCommand):
 
     def _write_preview(self, resolutions) -> None:
         for resolution in resolutions:
+            if not resolution.attributes:
+                self.stdout.write(f"{resolution.family.slug}: Keine Variantenattribute — Shopware-Cleanup.")
+                continue
             self.stdout.write(
                 f"{resolution.family.slug}: Varianten={len(resolution.variants)}, "
                 f"übersprungen={len(resolution.skipped)}, Fehler={len(resolution.errors)}"

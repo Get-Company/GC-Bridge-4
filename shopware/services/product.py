@@ -71,6 +71,59 @@ class ProductService(Shopware6Service):
         mapping = self._extract_sku_map(result)
         return mapping.get(product_number, "")
 
+    def get_product_option_map(self, product_ids: list[str]) -> dict[str, set[str]]:
+        """Return currently assigned variant option IDs keyed by Shopware product ID."""
+        normalized_ids = sorted({str(value).strip() for value in (product_ids or []) if str(value).strip()})
+        if not normalized_ids:
+            return {}
+
+        result = self.request_post(
+            self.search_path,
+            payload={
+                "filter": [
+                    {
+                        "type": "equalsAny",
+                        "field": "id",
+                        "value": "|".join(normalized_ids),
+                    }
+                ],
+                "associations": {"options": {}},
+                "limit": len(normalized_ids),
+            },
+        )
+        option_map: dict[str, set[str]] = {}
+        for row in (result or {}).get("data", []) or []:
+            product_id = self._entity_id(row)
+            if not product_id:
+                continue
+
+            attributes = row.get("attributes") or {}
+            raw_option_ids = row.get("optionIds")
+            if raw_option_ids is None and isinstance(attributes, dict):
+                raw_option_ids = attributes.get("optionIds")
+            option_ids = {
+                str(option_id).strip()
+                for option_id in (raw_option_ids or [])
+                if str(option_id).strip()
+            }
+            if not option_ids:
+                options = row.get("options") or []
+                if not isinstance(options, list):
+                    options = []
+                if not options:
+                    relationships = row.get("relationships") or {}
+                    relationship = relationships.get("options") if isinstance(relationships, dict) else {}
+                    options = relationship.get("data") if isinstance(relationship, dict) else []
+                    if not isinstance(options, list):
+                        options = []
+                option_ids = {
+                    option_id
+                    for option in options
+                    if (option_id := self._entity_id(option))
+                }
+            option_map[product_id] = option_ids
+        return option_map
+
     def bulk_upsert(self, payload: list[dict], *, entity_name: str = "product") -> Any:
         if not payload:
             return None
@@ -85,6 +138,21 @@ class ProductService(Shopware6Service):
 
     def bulk_upsert_media(self, payload: list[dict]) -> Any:
         return self.bulk_upsert(payload, entity_name="media")
+
+    def bulk_delete_product_options(self, payload: list[dict]) -> Any:
+        """Delete explicit ``product_option`` mappings via Shopware's Sync API."""
+        if not payload:
+            return None
+        return self.request_post(
+            self.bulk_sync_path,
+            payload={
+                "product_option-delete": {
+                    "entity": "product_option",
+                    "action": "delete",
+                    "payload": payload,
+                }
+            },
+        )
 
     def purge_product_prices_by_product_and_rule(self, *, product_ids: list[str], rule_ids: list[str]) -> int:
         product_ids = [str(value).strip() for value in (product_ids or []) if str(value).strip()]

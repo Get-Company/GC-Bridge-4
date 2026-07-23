@@ -115,6 +115,34 @@ def process_product_sync_job(job_id: int) -> None:
     ProductAutoSyncService().process_job(job_id=job_id)
 
 
+@shared_task(name="products.sync_variant_family_to_shopware")
+def sync_variant_family_to_shopware(family_id: int) -> dict:
+    """Synchronize one active variant family after an attribute-related save."""
+    from products.models import ProductVariantFamily
+    from shopware.services import ShopwareVariantSyncService
+
+    family = (
+        ProductVariantFamily.objects.select_related("target_category", "default_product")
+        .filter(pk=family_id, is_active=True)
+        .first()
+    )
+    if family is None:
+        return {"family_id": family_id, "status": "skipped"}
+
+    result = ShopwareVariantSyncService().sync(family)
+    if result.errors:
+        raise ValueError("; ".join(result.errors))
+
+    return {
+        "family_id": family.pk,
+        "family_slug": result.family_slug,
+        "parent_id": result.parent_id,
+        "variant_count": result.variant_count,
+        "detached_count": result.detached_count,
+        "status": "succeeded",
+    }
+
+
 # ---------------------------------------------------------------------------
 # Legacy tasks kept for backwards-compatibility with existing Celery beat
 # schedules and any callers that may still reference these task names.

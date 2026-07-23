@@ -3,10 +3,20 @@ from __future__ import annotations
 from decimal import Decimal
 
 from django.db import transaction
-from django.db.models.signals import post_save, pre_save
+from django.db.models.signals import m2m_changed, post_delete, post_save, pre_save
 from django.dispatch import Signal, receiver
+from loguru import logger
 
-from products.models import Price, PriceIncrease, Product, Storage
+from products.models import (
+    Price,
+    PriceIncrease,
+    Product,
+    ProductVariantAttribute,
+    ProductVariantFamily,
+    PropertyGroup,
+    PropertyValue,
+    Storage,
+)
 from products.services import ProductAutoSyncService, is_product_auto_sync_disabled
 from shopware.models import ShopwareSettings
 
@@ -66,6 +76,32 @@ STORAGE_AUTO_SYNC_FIELDS = (
     "virtual_stock",
     "location",
 )
+PROPERTY_GROUP_VARIANT_SYNC_FIELDS = (
+    "external_key",
+    "name",
+)
+PROPERTY_VALUE_VARIANT_SYNC_FIELDS = (
+    "external_key",
+    "group_id",
+    "image_id",
+    "name",
+)
+VARIANT_ATTRIBUTE_SYNC_FIELDS = (
+    "display_type",
+    "fallback_value_id",
+    "family_id",
+    "position",
+    "property_group_id",
+)
+VARIANT_FAMILY_SYNC_FIELDS = (
+    "default_product_id",
+    "description",
+    "is_active",
+    "name",
+    "shopware_product_number",
+    "slug",
+    "target_category_id",
+)
 
 
 def _normalize_price_factor(value) -> Decimal:
@@ -98,6 +134,130 @@ def _enqueue_product_sync_on_commit(*, product_id: int | None, changed_fields: l
         )
 
     transaction.on_commit(enqueue_after_commit)
+
+
+def _watched_fields_for_save(*, watched_fields: tuple[str, ...], update_fields) -> set[str]:
+    """Return watched model attnames that can be affected by this save call."""
+    watched = set(watched_fields)
+    if update_fields is None:
+        return watched
+
+    updated = {str(field) for field in update_fields}
+    return {
+        field
+        for field in watched
+        if field in updated or (field.endswith("_id") and field[:-3] in updated)
+    }
+
+
+def _changed_fields_before_save(*, model, instance, watched_fields: tuple[str, ...], update_fields) -> set[str]:
+    watched = _watched_fields_for_save(watched_fields=watched_fields, update_fields=update_fields)
+    if not watched:
+        return set()
+    if not instance.pk:
+        return watched
+
+    previous = model.objects.filter(pk=instance.pk).values(*watched).first()
+    if previous is None:
+        return watched
+    return {field for field in watched if previous.get(field) != getattr(instance, field)}
+
+
+def _active_variant_family_ids_for_groups(group_ids: set[int | None]) -> set[int]:
+    relevant_group_ids = {group_id for group_id in group_ids if group_id}
+    if not relevant_group_ids:
+        return set()
+    return set(
+        ProductVariantAttribute.objects.filter(
+            family__is_active=True,
+            property_group_id__in=relevant_group_ids,
+        ).values_list("family_id", flat=True)
+    )
+
+
+def _enqueue_variant_family_sync_on_commit(*, family_ids: set[int]) -> None:
+    if not family_ids:
+        return
+
+    for family_id in sorted(family_ids):
+        def enqueue_after_commit(family_id=family_id) -> None:
+            from products.tasks import sync_variant_family_to_shopware
+
+            try:
+                sync_variant_family_to_shopware.delay(family_id)
+            except Exception as exc:
+                logger.warning(
+                    "Could not enqueue automatic Shopware variant sync for family {}: {}",
+                    family_id,
+                    exc,
+                )
+
+        transaction.on_commit(enqueue_after_commit)
+
+
+@receiver(pre_save, sender=ProductVariantFamily, dispatch_uid="products_capture_variant_family_sync_changes")
+def capture_variant_family_sync_changes(
+    sender,
+    instance: ProductVariantFamily,
+    raw: bool = False,
+    update_fields=None,
+    **kwargs,
+):
+    if raw or is_product_auto_sync_disabled():
+        instance._variant_family_sync_ids = set()
+        return
+
+    changed_fields = _changed_fields_before_save(
+        model=ProductVariantFamily,
+        instance=instance,
+        watched_fields=VARIANT_FAMILY_SYNC_FIELDS,
+        update_fields=update_fields,
+    )
+    instance._variant_family_sync_ids = {instance.pk} if changed_fields and instance.pk else set()
+
+
+@receiver(post_save, sender=ProductVariantFamily, dispatch_uid="products_enqueue_variant_family_sync")
+def enqueue_variant_family_sync(
+    sender,
+    instance: ProductVariantFamily,
+    created: bool = False,
+    raw: bool = False,
+    **kwargs,
+):
+    if raw or is_product_auto_sync_disabled():
+        return
+
+    _enqueue_variant_family_sync_on_commit(
+        family_ids=(
+            {instance.pk}
+            if created and instance.pk
+            else set(getattr(instance, "_variant_family_sync_ids", set()) or set())
+        )
+    )
+
+
+@receiver(
+    m2m_changed,
+    sender=ProductVariantFamily.source_categories.through,
+    dispatch_uid="products_enqueue_variant_family_source_categories_sync",
+)
+def enqueue_variant_family_source_categories_sync(
+    sender,
+    instance,
+    action: str,
+    reverse: bool,
+    pk_set,
+    **kwargs,
+):
+    if is_product_auto_sync_disabled() or action not in {"post_add", "post_remove", "post_clear"}:
+        return
+
+    family_ids = set()
+    if reverse:
+        family_ids = {family_id for family_id in (pk_set or set()) if family_id}
+    elif instance.pk:
+        family_ids = {instance.pk}
+    _enqueue_variant_family_sync_on_commit(family_ids=family_ids)
 
 
 @receiver(pre_save, sender=Product, dispatch_uid="products_capture_product_auto_sync_changes")
@@ -221,6 +381,149 @@ def enqueue_storage_auto_sync_jobs(sender, instance: Storage, raw: bool = False,
         product_id=instance.product_id,
         changed_fields=list(getattr(instance, "_auto_sync_changed_fields", []) or []),
         trigger="storage_save",
+    )
+
+
+@receiver(pre_save, sender=ProductVariantAttribute, dispatch_uid="products_capture_variant_attribute_sync_changes")
+def capture_variant_attribute_sync_changes(
+    sender,
+    instance: ProductVariantAttribute,
+    raw: bool = False,
+    update_fields=None,
+    **kwargs,
+):
+    if raw or is_product_auto_sync_disabled():
+        instance._variant_sync_family_ids = set()
+        return
+
+    changed_fields = _changed_fields_before_save(
+        model=ProductVariantAttribute,
+        instance=instance,
+        watched_fields=VARIANT_ATTRIBUTE_SYNC_FIELDS,
+        update_fields=update_fields,
+    )
+    if not changed_fields:
+        instance._variant_sync_family_ids = set()
+        return
+
+    family_ids = {instance.family_id} if instance.family_id else set()
+    if instance.pk and "family_id" in changed_fields:
+        previous_family_id = (
+            ProductVariantAttribute.objects.filter(pk=instance.pk)
+            .values_list("family_id", flat=True)
+            .first()
+        )
+        if previous_family_id:
+            family_ids.add(previous_family_id)
+    instance._variant_sync_family_ids = family_ids
+
+
+@receiver(post_save, sender=ProductVariantAttribute, dispatch_uid="products_enqueue_variant_attribute_sync")
+def enqueue_variant_attribute_sync(sender, instance: ProductVariantAttribute, raw: bool = False, **kwargs):
+    if raw or is_product_auto_sync_disabled():
+        return
+
+    _enqueue_variant_family_sync_on_commit(
+        family_ids=set(getattr(instance, "_variant_sync_family_ids", set()) or set())
+    )
+
+
+@receiver(post_delete, sender=ProductVariantAttribute, dispatch_uid="products_enqueue_deleted_variant_attribute_sync")
+def enqueue_deleted_variant_attribute_sync(sender, instance: ProductVariantAttribute, **kwargs):
+    if is_product_auto_sync_disabled():
+        return
+
+    _enqueue_variant_family_sync_on_commit(
+        family_ids={instance.family_id} if instance.family_id else set()
+    )
+
+
+@receiver(pre_save, sender=PropertyGroup, dispatch_uid="products_capture_property_group_variant_sync_changes")
+def capture_property_group_variant_sync_changes(
+    sender,
+    instance: PropertyGroup,
+    raw: bool = False,
+    update_fields=None,
+    **kwargs,
+):
+    if raw or is_product_auto_sync_disabled():
+        instance._variant_sync_group_ids = set()
+        return
+
+    changed_fields = _changed_fields_before_save(
+        model=PropertyGroup,
+        instance=instance,
+        watched_fields=PROPERTY_GROUP_VARIANT_SYNC_FIELDS,
+        update_fields=update_fields,
+    )
+    instance._variant_sync_group_ids = {instance.pk} if changed_fields and instance.pk else set()
+
+
+@receiver(post_save, sender=PropertyGroup, dispatch_uid="products_enqueue_property_group_variant_sync")
+def enqueue_property_group_variant_sync(sender, instance: PropertyGroup, raw: bool = False, **kwargs):
+    if raw or is_product_auto_sync_disabled():
+        return
+
+    _enqueue_variant_family_sync_on_commit(
+        family_ids=_active_variant_family_ids_for_groups(
+            set(getattr(instance, "_variant_sync_group_ids", set()) or set())
+        )
+    )
+
+
+@receiver(pre_save, sender=PropertyValue, dispatch_uid="products_capture_property_value_variant_sync_changes")
+def capture_property_value_variant_sync_changes(
+    sender,
+    instance: PropertyValue,
+    raw: bool = False,
+    update_fields=None,
+    **kwargs,
+):
+    if raw or is_product_auto_sync_disabled():
+        instance._variant_sync_group_ids = set()
+        return
+
+    changed_fields = _changed_fields_before_save(
+        model=PropertyValue,
+        instance=instance,
+        watched_fields=PROPERTY_VALUE_VARIANT_SYNC_FIELDS,
+        update_fields=update_fields,
+    )
+    if not changed_fields:
+        instance._variant_sync_group_ids = set()
+        return
+
+    group_ids = {instance.group_id} if instance.group_id else set()
+    if instance.pk and "group_id" in changed_fields:
+        previous_group_id = (
+            PropertyValue.objects.filter(pk=instance.pk)
+            .values_list("group_id", flat=True)
+            .first()
+        )
+        if previous_group_id:
+            group_ids.add(previous_group_id)
+    instance._variant_sync_group_ids = group_ids
+
+
+@receiver(post_save, sender=PropertyValue, dispatch_uid="products_enqueue_property_value_variant_sync")
+def enqueue_property_value_variant_sync(sender, instance: PropertyValue, raw: bool = False, **kwargs):
+    if raw or is_product_auto_sync_disabled():
+        return
+
+    _enqueue_variant_family_sync_on_commit(
+        family_ids=_active_variant_family_ids_for_groups(
+            set(getattr(instance, "_variant_sync_group_ids", set()) or set())
+        )
+    )
+
+
+@receiver(post_delete, sender=PropertyValue, dispatch_uid="products_enqueue_deleted_property_value_variant_sync")
+def enqueue_deleted_property_value_variant_sync(sender, instance: PropertyValue, **kwargs):
+    if is_product_auto_sync_disabled():
+        return
+
+    _enqueue_variant_family_sync_on_commit(
+        family_ids=_active_variant_family_ids_for_groups({instance.group_id})
     )
 
 

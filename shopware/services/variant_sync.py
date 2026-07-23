@@ -42,6 +42,9 @@ class ShopwareVariantSyncService(BaseService):
 
     def sync(self, family: ProductVariantFamily, *, dry_run: bool = False) -> ShopwareVariantSyncResult:
         resolution = self.preview(family)
+        if not resolution.attributes:
+            return self._clear_empty_family(family=family, dry_run=dry_run)
+
         if not resolution.is_valid:
             errors = resolution.errors or ("Keine vollständigen Varianten erkannt.",)
             return ShopwareVariantSyncResult(
@@ -70,6 +73,11 @@ class ShopwareVariantSyncService(BaseService):
 
         group_ids, value_ids = self._ensure_attribute_entities(resolution)
         child_ids = self._resolve_child_ids(resolution)
+        self._remove_stale_child_options(
+            resolution=resolution,
+            child_ids=child_ids,
+            value_ids=value_ids,
+        )
         default_product = self._default_product(family=family, resolution=resolution)
         parent_id = self._ensure_parent(
             family=family,
@@ -82,10 +90,14 @@ class ShopwareVariantSyncService(BaseService):
             child_ids=child_ids,
             value_ids=value_ids,
         )
-        self._upsert_configurator_settings(
+        configurator_setting_ids = self._upsert_configurator_settings(
             parent_id=parent_id,
             resolution=resolution,
             value_ids=value_ids,
+        )
+        self._remove_stale_configurator_settings(
+            parent_id=parent_id,
+            expected_setting_ids=configurator_setting_ids,
         )
         self._ensure_parent(
             family=family,
@@ -295,31 +307,155 @@ class ShopwareVariantSyncService(BaseService):
         ]
         self.product_service.bulk_upsert(payload)
 
+    def _remove_stale_child_options(
+        self,
+        *,
+        resolution: VariantFamilyResolution,
+        child_ids: dict[int, str],
+        value_ids: dict[int, str],
+    ) -> int:
+        """Remove option mappings that no longer describe a child variant.
+
+        Shopware's product upsert adds associations but does not reliably replace
+        existing ``product_option`` mappings.  Reconcile those mappings first so
+        a changed axis or option cannot leave an obsolete configuration behind.
+        """
+        expected_option_ids_by_child_id = {
+            child_ids[variant.product.pk]: {value_ids[value.pk] for value in variant.option_values}
+            for variant in resolution.variants
+        }
+        existing_option_ids_by_child_id = self.product_service.get_product_option_map(
+            list(expected_option_ids_by_child_id)
+        )
+        if not isinstance(existing_option_ids_by_child_id, dict):
+            return 0
+
+        payload = [
+            {"productId": child_id, "optionId": option_id}
+            for child_id, expected_option_ids in expected_option_ids_by_child_id.items()
+            for option_id in sorted(existing_option_ids_by_child_id.get(child_id, set()) - expected_option_ids)
+        ]
+        if payload:
+            self.product_service.bulk_delete_product_options(payload)
+        return len(payload)
+
     def _upsert_configurator_settings(
         self,
         *,
         parent_id: str,
         resolution: VariantFamilyResolution,
         value_ids: dict[int, str],
-    ) -> None:
+    ) -> set[str]:
         option_values_by_group: dict[int, set[int]] = {}
         for variant in resolution.variants:
             for value in variant.option_values:
                 option_values_by_group.setdefault(value.group_id, set()).add(value.pk)
 
         payload: list[dict] = []
+        setting_ids: set[str] = set()
         for attribute in resolution.attributes:
             for value_id in sorted(option_values_by_group.get(attribute.property_group_id, set())):
                 shopware_option_id = value_ids[value_id]
+                setting_id = self._stable_id("configurator-setting", parent_id, shopware_option_id)
+                setting_ids.add(setting_id)
                 payload.append(
                     {
-                        "id": self._stable_id("configurator-setting", parent_id, shopware_option_id),
+                        "id": setting_id,
                         "productId": parent_id,
                         "optionId": shopware_option_id,
                         "position": attribute.position,
                     }
                 )
         self.product_service.bulk_upsert(payload, entity_name="product_configurator_setting")
+        return setting_ids
+
+    def _remove_stale_configurator_settings(
+        self,
+        *,
+        parent_id: str,
+        expected_setting_ids: set[str],
+    ) -> int:
+        """Remove parent configurator settings no longer derived from the family.
+
+        Property groups and option values are shared Shopware entities, so they
+        must remain intact.  Only the parent-specific configurator relations
+        are safe to remove here.
+        """
+        stale_setting_ids: set[str] = set()
+        page = 1
+        limit = 500
+        while True:
+            result = self.product_service.request_post(
+                "/search/product-configurator-setting",
+                payload={
+                    "filter": [{"type": "equals", "field": "productId", "value": parent_id}],
+                    "limit": limit,
+                    "page": page,
+                },
+            )
+            rows = (result or {}).get("data", []) or []
+            stale_setting_ids.update(
+                setting_id
+                for row in rows
+                if (setting_id := self.product_service._entity_id(row)) and setting_id not in expected_setting_ids
+            )
+            if len(rows) < limit:
+                break
+            page += 1
+
+        for setting_id in sorted(stale_setting_ids):
+            self.product_service.request_delete(f"/product-configurator-setting/{setting_id}")
+        return len(stale_setting_ids)
+
+    def _clear_empty_family(self, *, family: ProductVariantFamily, dry_run: bool) -> ShopwareVariantSyncResult:
+        """Detach children and remove parent configurator settings after the final axis is deleted."""
+        parent_id = family.shopware_id
+        if dry_run:
+            return ShopwareVariantSyncResult(
+                family_slug=family.slug,
+                parent_id=parent_id,
+                variant_count=0,
+                skipped_count=0,
+                detached_count=0,
+                errors=(),
+                dry_run=dry_run,
+            )
+
+        parent_id = parent_id or self.product_service.find_sku_by_number(family.shopware_product_number)
+        if not parent_id:
+            return ShopwareVariantSyncResult(
+                family_slug=family.slug,
+                parent_id="",
+                variant_count=0,
+                skipped_count=0,
+                detached_count=0,
+                errors=(),
+                dry_run=False,
+            )
+
+        detached_count = self._detach_stale_children(family=family, active_product_ids=set())
+        self._remove_stale_configurator_settings(parent_id=parent_id, expected_setting_ids=set())
+        self.product_service.bulk_upsert(
+            [
+                {
+                    "id": parent_id,
+                    "variantListingConfig": {
+                        "displayParent": True,
+                        "configuratorGroupConfig": [],
+                    },
+                }
+            ]
+        )
+        family.synced_products.clear()
+        return ShopwareVariantSyncResult(
+            family_slug=family.slug,
+            parent_id=parent_id,
+            variant_count=0,
+            skipped_count=0,
+            detached_count=detached_count,
+            errors=(),
+            dry_run=False,
+        )
 
     def _detach_stale_children(self, *, family: ProductVariantFamily, active_product_ids: set[int]) -> int:
         stale_products = list(family.synced_products.exclude(pk__in=active_product_ids).only("id", "erp_nr"))
@@ -329,6 +465,12 @@ class ShopwareVariantSyncService(BaseService):
         shopware_ids_by_number = self.product_service.get_sku_map(
             [product.erp_nr for product in stale_products]
         )
+        stale_child_ids = {
+            shopware_ids_by_number[product.erp_nr]
+            for product in stale_products
+            if shopware_ids_by_number.get(product.erp_nr)
+        }
+        self._remove_all_child_options(child_ids=stale_child_ids)
         payload = [
             {
                 "id": shopware_ids_by_number[product.erp_nr],
@@ -340,6 +482,21 @@ class ShopwareVariantSyncService(BaseService):
             if shopware_ids_by_number.get(product.erp_nr)
         ]
         self.product_service.bulk_upsert(payload)
+        return len(payload)
+
+    def _remove_all_child_options(self, *, child_ids: set[str]) -> int:
+        """Remove every variant option from children detached from this family."""
+        existing_option_ids_by_child_id = self.product_service.get_product_option_map(sorted(child_ids))
+        if not isinstance(existing_option_ids_by_child_id, dict):
+            return 0
+
+        payload = [
+            {"productId": child_id, "optionId": option_id}
+            for child_id in sorted(child_ids)
+            for option_id in sorted(existing_option_ids_by_child_id.get(child_id, set()))
+        ]
+        if payload:
+            self.product_service.bulk_delete_product_options(payload)
         return len(payload)
 
     @staticmethod

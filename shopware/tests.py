@@ -466,6 +466,70 @@ class ProductMediaSyncServiceTest(SimpleTestCase):
         self.assertEqual(result, {"900002": "shopware-product-900002"})
         mock_get_by_number.assert_called_once_with("900002", limit=1)
 
+    @patch.object(ProductService, "request_post")
+    def test_get_product_option_map_reads_flat_and_json_api_option_payloads(self, mock_request_post):
+        mock_request_post.return_value = {
+            "data": [
+                {"id": "product-1", "optionIds": ["option-1", "option-2"]},
+                {"id": "product-2", "options": [{"id": "option-3"}]},
+                {"id": "product-3", "attributes": {"optionIds": ["option-4"]}},
+                {
+                    "id": "product-4",
+                    "relationships": {"options": {"data": [{"id": "option-5"}]}},
+                },
+            ]
+        }
+        service = ProductService.__new__(ProductService)
+
+        result = ProductService.get_product_option_map(
+            service,
+            ["product-4", "product-2", "product-1", "product-3"],
+        )
+
+        self.assertEqual(
+            result,
+            {
+                "product-1": {"option-1", "option-2"},
+                "product-2": {"option-3"},
+                "product-3": {"option-4"},
+                "product-4": {"option-5"},
+            },
+        )
+        mock_request_post.assert_called_once_with(
+            "/search/product",
+            payload={
+                "filter": [
+                    {
+                        "type": "equalsAny",
+                        "field": "id",
+                        "value": "product-1|product-2|product-3|product-4",
+                    }
+                ],
+                "associations": {"options": {}},
+                "limit": 4,
+            },
+        )
+
+    @patch.object(ProductService, "request_post")
+    def test_bulk_delete_product_options_uses_product_option_sync_delete(self, mock_request_post):
+        service = ProductService.__new__(ProductService)
+
+        ProductService.bulk_delete_product_options(
+            service,
+            [{"productId": "product-1", "optionId": "option-1"}],
+        )
+
+        mock_request_post.assert_called_once_with(
+            "/_action/sync",
+            payload={
+                "product_option-delete": {
+                    "entity": "product_option",
+                    "action": "delete",
+                    "payload": [{"productId": "product-1", "optionId": "option-1"}],
+                }
+            },
+        )
+
     def test_split_file_name_extracts_base_name_and_extension(self):
         base_name, extension = ProductMediaSyncService.split_file_name("produkt-bild.JPEG")
 
@@ -932,6 +996,139 @@ class ShopwareVariantSyncServiceTest(TestCase):
                 }
             ],
             product_payloads,
+        )
+
+    def test_apply_removes_stale_parent_configurator_settings(self):
+        product_service = MagicMock()
+        product_service.find_sku_by_number.return_value = "parent-shopware-id"
+        product_service.get_sku_map.return_value = {"581000": "child-shopware-id"}
+        expected_size_option_id = ShopwareVariantSyncService._stable_id(
+            "property-value",
+            self.size_group.external_key,
+            self.size.external_key,
+        )
+        expected_setting_ids = {
+            ShopwareVariantSyncService._stable_id(
+                "configurator-setting",
+                "parent-shopware-id",
+                expected_size_option_id,
+            ),
+            ShopwareVariantSyncService._stable_id(
+                "configurator-setting",
+                "parent-shopware-id",
+                self.color.shopware_id,
+            ),
+        }
+
+        def request_post(path, payload):
+            if path == "/search/product-configurator-setting":
+                return {
+                    "data": [
+                        {"id": setting_id}
+                        for setting_id in sorted({*expected_setting_ids, "stale-configurator-setting"})
+                    ]
+                }
+            return {"data": []}
+
+        product_service.request_post.side_effect = request_post
+
+        ShopwareVariantSyncService(product_service=product_service).sync(self.family)
+
+        product_service.request_delete.assert_called_once_with(
+            "/product-configurator-setting/stale-configurator-setting"
+        )
+
+    def test_apply_removes_stale_child_options_before_upserting_children(self):
+        product_service = MagicMock()
+        product_service.request_post.return_value = {"data": []}
+        product_service.find_sku_by_number.return_value = "parent-shopware-id"
+        product_service.get_sku_map.return_value = {"581000": "child-shopware-id"}
+        product_service.get_product_option_map.return_value = {
+            "child-shopware-id": {"color-option-id", "obsolete-option-id"}
+        }
+
+        ShopwareVariantSyncService(product_service=product_service).sync(self.family)
+
+        product_service.bulk_delete_product_options.assert_called_once_with(
+            [{"productId": "child-shopware-id", "optionId": "obsolete-option-id"}]
+        )
+        delete_call_index = next(
+            index
+            for index, call in enumerate(product_service.mock_calls)
+            if call[0] == "bulk_delete_product_options"
+        )
+        child_upsert_call_index = next(
+            index
+            for index, call in enumerate(product_service.mock_calls)
+            if call[0] == "bulk_upsert"
+            and call.args[0]
+            and call.args[0][0].get("id") == "child-shopware-id"
+        )
+        self.assertLess(
+            delete_call_index,
+            child_upsert_call_index,
+        )
+
+    def test_apply_removes_all_child_options_before_detaching_stale_child(self):
+        stale_product = Product.objects.create(erp_nr="291004W", name="Alte Quick-Tab-Variante")
+        self.family.synced_products.add(stale_product)
+        product_service = MagicMock()
+        product_service.request_post.return_value = {"data": []}
+        product_service.find_sku_by_number.return_value = "parent-shopware-id"
+        product_service.get_sku_map.side_effect = lambda product_numbers: {
+            product_number: {"581000": "child-shopware-id", "291004W": "stale-shopware-id"}[product_number]
+            for product_number in product_numbers
+        }
+        product_service.get_product_option_map.return_value = {
+            "stale-shopware-id": {"obsolete-size-option", "obsolete-color-option"}
+        }
+
+        ShopwareVariantSyncService(product_service=product_service).sync(self.family)
+
+        product_service.bulk_delete_product_options.assert_called_once_with(
+            [
+                {"productId": "stale-shopware-id", "optionId": "obsolete-color-option"},
+                {"productId": "stale-shopware-id", "optionId": "obsolete-size-option"},
+            ]
+        )
+
+    def test_apply_cleans_parent_when_last_variant_attribute_is_deleted(self):
+        stale_product = Product.objects.create(erp_nr="291004W", name="Alte Quick-Tab-Variante")
+        self.family.synced_products.add(stale_product)
+        self.family.variant_attributes.all().delete()
+        product_service = MagicMock()
+        product_service.find_sku_by_number.return_value = "parent-shopware-id"
+        product_service.get_sku_map.return_value = {"291004W": "stale-shopware-id"}
+        product_service.request_post.return_value = {"data": [{"id": "stale-configurator-setting"}]}
+
+        result = ShopwareVariantSyncService(product_service=product_service).sync(self.family)
+
+        self.assertEqual(result.variant_count, 0)
+        self.assertEqual(result.detached_count, 1)
+        self.assertFalse(self.family.synced_products.exists())
+        product_service.request_delete.assert_called_once_with(
+            "/product-configurator-setting/stale-configurator-setting"
+        )
+        product_service.bulk_upsert.assert_any_call(
+            [
+                {
+                    "id": "stale-shopware-id",
+                    "productNumber": "291004W",
+                    "parentId": None,
+                    "options": [],
+                }
+            ]
+        )
+        product_service.bulk_upsert.assert_any_call(
+            [
+                {
+                    "id": "parent-shopware-id",
+                    "variantListingConfig": {
+                        "displayParent": True,
+                        "configuratorGroupConfig": [],
+                    },
+                }
+            ]
         )
 
 

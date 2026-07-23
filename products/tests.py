@@ -417,6 +417,152 @@ class ProductAutoSyncSignalTest(TestCase):
         self.assertEqual({tuple(job.changed_fields) for job in jobs}, {("storage.stock",)})
 
 
+class ProductVariantAutoSyncSignalTest(TestCase):
+    def setUp(self):
+        self.target_category = Category.objects.create(
+            name="Varianten",
+            slug="variant-auto-sync-target",
+            sw6_id="variant-auto-sync-category",
+        )
+        self.family = ProductVariantFamily.objects.create(
+            slug="variant-auto-sync",
+            name="Automatischer Varianten-Sync",
+            shopware_product_number="VARIANT-AUTO-SYNC",
+            target_category=self.target_category,
+        )
+        self.group = PropertyGroup.objects.create(name="Farbe", external_key="color")
+        self.attribute = ProductVariantAttribute.objects.create(
+            family=self.family,
+            property_group=self.group,
+            position=10,
+        )
+        self.value = PropertyValue.objects.create(group=self.group, name="Rot", external_key="red")
+
+    @patch("products.tasks.sync_variant_family_to_shopware.delay")
+    def test_changed_variant_attribute_queues_its_family_after_commit(self, mock_delay):
+        with self.captureOnCommitCallbacks(execute=True):
+            self.attribute.position = 20
+            self.attribute.save(update_fields=["position"])
+
+        mock_delay.assert_called_once_with(self.family.pk)
+
+    @patch("products.tasks.sync_variant_family_to_shopware.delay")
+    def test_changed_property_group_queues_affected_family_after_commit(self, mock_delay):
+        with self.captureOnCommitCallbacks(execute=True):
+            self.group.name = "Grundfarbe"
+            self.group.save(update_fields=["name"])
+
+        mock_delay.assert_called_once_with(self.family.pk)
+
+    @patch("products.tasks.sync_variant_family_to_shopware.delay")
+    def test_changed_property_value_queues_affected_family_after_commit(self, mock_delay):
+        with self.captureOnCommitCallbacks(execute=True):
+            self.value.name = "Dunkelrot"
+            self.value.save(update_fields=["name"])
+
+        mock_delay.assert_called_once_with(self.family.pk)
+
+    @patch("products.tasks.sync_variant_family_to_shopware.delay")
+    def test_selected_property_value_image_queues_affected_family_after_commit(self, mock_delay):
+        image = Image.objects.create(path="variant-color-red.jpg")
+
+        with self.captureOnCommitCallbacks(execute=True):
+            self.value.image = image
+            self.value.save(update_fields=["image"])
+
+        mock_delay.assert_called_once_with(self.family.pk)
+
+    @patch("products.tasks.sync_variant_family_to_shopware.delay")
+    def test_technical_shopware_id_update_does_not_queue_a_variant_sync(self, mock_delay):
+        with self.captureOnCommitCallbacks(execute=True):
+            self.group.shopware_id = "shopware-property-group-id"
+            self.group.save(update_fields=["shopware_id", "updated_at"])
+
+        mock_delay.assert_not_called()
+
+    @patch("products.tasks.sync_variant_family_to_shopware.delay")
+    def test_deleted_variant_attribute_queues_its_family_after_commit(self, mock_delay):
+        with self.captureOnCommitCallbacks(execute=True):
+            self.attribute.delete()
+
+        mock_delay.assert_called_once_with(self.family.pk)
+
+    @patch("products.tasks.sync_variant_family_to_shopware.delay")
+    def test_changed_variant_family_queues_itself_after_commit(self, mock_delay):
+        with self.captureOnCommitCallbacks(execute=True):
+            self.family.name = "Automatischer Varianten-Sync Neu"
+            self.family.save(update_fields=["name"])
+
+        mock_delay.assert_called_once_with(self.family.pk)
+
+    @patch("products.tasks.sync_variant_family_to_shopware.delay")
+    def test_created_variant_family_queues_itself_after_commit(self, mock_delay):
+        with self.captureOnCommitCallbacks(execute=True):
+            family = ProductVariantFamily.objects.create(
+                slug="variant-auto-sync-created",
+                name="Neue Variantenfamilie",
+                shopware_product_number="VARIANT-AUTO-SYNC-CREATED",
+                target_category=self.target_category,
+            )
+
+        mock_delay.assert_called_once_with(family.pk)
+
+    @patch("products.tasks.sync_variant_family_to_shopware.delay")
+    def test_technical_variant_family_shopware_id_update_does_not_queue_a_variant_sync(self, mock_delay):
+        with self.captureOnCommitCallbacks(execute=True):
+            self.family.shopware_id = "shopware-parent-id"
+            self.family.save(update_fields=["shopware_id", "updated_at"])
+
+        mock_delay.assert_not_called()
+
+    @patch("products.tasks.sync_variant_family_to_shopware.delay")
+    def test_changed_variant_family_source_categories_queue_itself_after_commit(self, mock_delay):
+        source_category = Category.objects.create(name="Weitere Quelle", slug="variant-auto-sync-source")
+
+        with self.captureOnCommitCallbacks(execute=True):
+            self.family.source_categories.add(source_category)
+
+        mock_delay.assert_called_once_with(self.family.pk)
+
+
+class ProductVariantAutoSyncTaskTest(TestCase):
+    @patch("shopware.services.ShopwareVariantSyncService")
+    def test_sync_variant_family_task_uses_variant_sync_service(self, mock_service_class):
+        target_category = Category.objects.create(
+            name="Varianten-Task",
+            slug="variant-auto-sync-task-target",
+            sw6_id="variant-auto-sync-task-category",
+        )
+        family = ProductVariantFamily.objects.create(
+            slug="variant-auto-sync-task",
+            name="Varianten-Task",
+            shopware_product_number="VARIANT-AUTO-SYNC-TASK",
+            target_category=target_category,
+        )
+        mock_service_class.return_value.sync.return_value = SimpleNamespace(
+            errors=(),
+            family_slug=family.slug,
+            parent_id="shopware-parent-id",
+            variant_count=2,
+            detached_count=1,
+        )
+
+        result = product_tasks.sync_variant_family_to_shopware(family.pk)
+
+        mock_service_class.return_value.sync.assert_called_once_with(family)
+        self.assertEqual(
+            result,
+            {
+                "family_id": family.pk,
+                "family_slug": family.slug,
+                "parent_id": "shopware-parent-id",
+                "variant_count": 2,
+                "detached_count": 1,
+                "status": "succeeded",
+            },
+        )
+
+
 class ProductAutoSyncServiceTest(TestCase):
     @patch("products.services.product_auto_sync.call_command")
     def test_process_shopware_job_skips_images(self, mock_call_command):
