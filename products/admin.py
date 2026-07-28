@@ -3585,7 +3585,7 @@ class PropertyValueAdmin(TabbedTranslationAdmin, BaseAdmin):
         **getattr(TabbedTranslationAdmin, "formfield_overrides", {}),
         **BaseAdmin.formfield_overrides,
     }
-    list_display = ("name", "group", "image_preview", "shopware_id", "external_key", "created_at")
+    list_display = ("name", "group", "position", "image_preview", "shopware_id", "external_key", "created_at")
     search_fields = (
         "name",
         "name_de",
@@ -3598,6 +3598,7 @@ class PropertyValueAdmin(TabbedTranslationAdmin, BaseAdmin):
     list_filter = [("group", RelatedDropdownFilter), ("created_at", RangeDateTimeFilter)]
     autocomplete_fields = ("group", "image")
     ordering = ("group__name", "position", "name", "id")
+    hide_ordering_field = False
 
     def get_queryset(self, request):
         return super().get_queryset(request).select_related("group", "image")
