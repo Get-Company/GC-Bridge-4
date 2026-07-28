@@ -219,6 +219,12 @@ class PropertyValue(BaseModel):
         verbose_name=_("Attributgruppe"),
     )
     name = models.CharField(max_length=255, verbose_name=_("Wert"))
+    position = models.PositiveIntegerField(
+        default=100,
+        db_index=True,
+        verbose_name=_("Position"),
+        help_text=_("Reihenfolge innerhalb der Attributgruppe und in Shopware."),
+    )
     image = models.ForeignKey(
         Image,
         on_delete=models.SET_NULL,
@@ -232,7 +238,7 @@ class PropertyValue(BaseModel):
     class Meta:
         verbose_name = _("Attributwert")
         verbose_name_plural = _("Attributwerte")
-        ordering = ("group__name", "name")
+        ordering = ("group__name", "position", "name", "id")
         constraints = [
             models.UniqueConstraint(
                 fields=("group", "name"),

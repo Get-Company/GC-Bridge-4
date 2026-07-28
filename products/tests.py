@@ -542,6 +542,14 @@ class ProductVariantAutoSyncSignalTest(TestCase):
         mock_delay.assert_called_once_with(self.family.pk)
 
     @patch("products.tasks.sync_variant_family_to_shopware.delay")
+    def test_changed_property_value_position_queues_affected_family_after_commit(self, mock_delay):
+        with self.captureOnCommitCallbacks(execute=True):
+            self.value.position = 10
+            self.value.save(update_fields=["position"])
+
+        mock_delay.assert_called_once_with(self.family.pk)
+
+    @patch("products.tasks.sync_variant_family_to_shopware.delay")
     def test_selected_property_value_image_queues_affected_family_after_commit(self, mock_delay):
         image = Image.objects.create(path="variant-color-red.jpg")
 
@@ -2930,6 +2938,19 @@ class ProductImageAdminAndSyncTest(TestCase):
 
         self.assertEqual(attribute_inline.ordering_field, "position")
         self.assertTrue(attribute_inline.hide_ordering_field)
+
+    def test_property_value_admin_inherits_sorting_defaults(self):
+        property_value_admin = PropertyValueAdmin(PropertyValue, AdminSite())
+
+        self.assertEqual(property_value_admin.ordering_field, "position")
+        self.assertTrue(property_value_admin.hide_ordering_field)
+
+    def test_property_values_are_ordered_by_position_within_their_group(self):
+        group = PropertyGroup.objects.create(name="Farbe")
+        last = PropertyValue.objects.create(group=group, name="Rot", position=20)
+        first = PropertyValue.objects.create(group=group, name="Blau", position=10)
+
+        self.assertEqual(list(group.values.all()), [first, last])
 
     def test_product_admin_uses_product_property_inline(self):
         self.assertIn(ProductPropertyInline, ProductAdmin.inlines)

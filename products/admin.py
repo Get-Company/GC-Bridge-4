@@ -3597,7 +3597,7 @@ class PropertyValueAdmin(TabbedTranslationAdmin, BaseAdmin):
     )
     list_filter = [("group", RelatedDropdownFilter), ("created_at", RangeDateTimeFilter)]
     autocomplete_fields = ("group", "image")
-    ordering = ("group__name", "name")
+    ordering = ("group__name", "position", "name", "id")
 
     def get_queryset(self, request):
         return super().get_queryset(request).select_related("group", "image")

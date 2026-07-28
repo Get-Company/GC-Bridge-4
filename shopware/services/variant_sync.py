@@ -199,7 +199,12 @@ class ShopwareVariantSyncService(BaseService):
             value.shopware_id = value_id
             value.save(update_fields=("shopware_id", "updated_at"))
 
-        payload = {"id": value_id, "groupId": group_id, "name": value.name}
+        payload = {
+            "id": value_id,
+            "groupId": group_id,
+            "name": value.name,
+            "position": value.position,
+        }
         if display_type == ProductVariantAttribute.DisplayType.IMAGE:
             if not value.image_id:
                 raise ValueError(f"Attributwert '{value}' hat kein Auswahlbild.")

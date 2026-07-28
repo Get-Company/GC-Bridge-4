@@ -812,6 +812,7 @@ class ShopwareVariantSyncServiceTest(TestCase):
             name="Weiß",
             external_key="white",
             image=self.color_image,
+            position=20,
         )
         self.color_group.shopware_id = "color-group-id"
         self.color_group.save(update_fields=("shopware_id", "updated_at"))
@@ -936,6 +937,7 @@ class ShopwareVariantSyncServiceTest(TestCase):
                     "groupId": "color-group-id",
                     "name": "Weiß",
                     "mediaId": color_media_id,
+                    "position": 20,
                 }
             ],
             entity_name="property_group_option",

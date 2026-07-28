@@ -85,6 +85,7 @@ PROPERTY_VALUE_VARIANT_SYNC_FIELDS = (
     "group_id",
     "image_id",
     "name",
+    "position",
 )
 VARIANT_ATTRIBUTE_SYNC_FIELDS = (
     "display_type",
