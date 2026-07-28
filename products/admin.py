@@ -3597,7 +3597,7 @@ class PropertyValueAdmin(TabbedTranslationAdmin, BaseAdmin):
     )
     list_filter = [("group", RelatedDropdownFilter), ("created_at", RangeDateTimeFilter)]
     autocomplete_fields = ("group", "image")
-    ordering = ("group__name", "position", "name", "id")
+    ordering = ("position",)
     hide_ordering_field = False
 
     def get_queryset(self, request):

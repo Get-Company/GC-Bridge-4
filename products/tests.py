@@ -2943,6 +2943,7 @@ class ProductImageAdminAndSyncTest(TestCase):
         property_value_admin = PropertyValueAdmin(PropertyValue, AdminSite())
 
         self.assertEqual(property_value_admin.ordering_field, "position")
+        self.assertEqual(property_value_admin.ordering, ("position",))
         self.assertFalse(property_value_admin.hide_ordering_field)
         self.assertIn("position", property_value_admin.list_display)
 
