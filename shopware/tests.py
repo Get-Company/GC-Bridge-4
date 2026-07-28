@@ -63,6 +63,57 @@ class Shopware6ProductStockPayloadTest(SimpleTestCase):
         self.assertEqual(payload["stock"], 91)
 
 
+class Shopware6CustomSearchKeywordsPayloadTest(SimpleTestCase):
+    def _product(self, mappei_products):
+        prices = MagicMock()
+        prices.select_related.return_value.all.return_value = []
+        mappei_products_manager = MagicMock()
+        mappei_products_manager.all.return_value = mappei_products
+        return SimpleNamespace(
+            erp_nr="581001",
+            is_active=True,
+            tax=None,
+            name="Mappe A4",
+            name_de="",
+            name_en="",
+            description=None,
+            storage=SimpleNamespace(get_shopware_stock=1),
+            prices=prices,
+            mappei_products=mappei_products_manager,
+        )
+
+    def _payload(self, product):
+        return _build_product_sync_payload(
+            product=product,
+            effective_sku="",
+            default_channel=None,
+            channels=[],
+            admin_user_id=None,
+            content_type_id=None,
+        )
+
+    def test_payload_includes_mappei_number_and_name_deduplicated(self):
+        product = self._product(
+            [
+                SimpleNamespace(artikelnr="M-100", name="Mappei Ordner"),
+                SimpleNamespace(artikelnr="M-200", name=""),
+                SimpleNamespace(artikelnr="M-100", name="Mappei Ordner"),
+            ]
+        )
+
+        payload = self._payload(product)
+
+        self.assertEqual(
+            payload["customSearchKeywords"],
+            ["M-100", "Mappei Ordner", "M-200"],
+        )
+
+    def test_payload_omits_keywords_without_mappei_link(self):
+        payload = self._payload(self._product([]))
+
+        self.assertNotIn("customSearchKeywords", payload)
+
+
 class Shopware6ServiceTokenRetryTest(SimpleTestCase):
     @patch("shopware.services.shopware6.Shopware6AdminAPIClientBase")
     def test_request_post_retries_once_on_invalid_token(self, client_factory):

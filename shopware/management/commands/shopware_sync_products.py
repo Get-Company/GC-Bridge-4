@@ -184,6 +184,25 @@ def _resolve_product_name(product: Product) -> str:
     )
 
 
+def _build_custom_search_keywords(product: Product) -> list[str]:
+    """Extra storefront search terms from the linked Mappei products.
+
+    Adds each mapped Mappei article number and Mappei name so a customer can
+    find our article by entering the Mappei number. Shopware indexes these via
+    the ``product.customSearchKeywords`` field on the next search-index build.
+    """
+    keywords: list[str] = []
+    mappei_products = getattr(product, "mappei_products", None)
+    if mappei_products is None:
+        return keywords
+    for mappei_product in mappei_products.all():
+        for value in (mappei_product.artikelnr, mappei_product.name):
+            normalized = str(value or "").strip()
+            if normalized and normalized not in keywords:
+                keywords.append(normalized)
+    return keywords
+
+
 def _prefetch_sync_queryset(products):
     if hasattr(products, "select_related"):
         products = products.select_related("tax", "storage")
@@ -199,6 +218,7 @@ def _prefetch_sync_queryset(products):
                 queryset=Price.objects.select_related("sales_channel").order_by("sales_channel_id", "id"),
                 to_attr="prefetched_prices_for_shopware_sync",
             ),
+            "mappei_products",
         )
     if hasattr(products, "only"):
         products = products.only(
@@ -247,6 +267,9 @@ def _build_product_sync_payload(
         payload["id"] = effective_sku
     if product.description is not None:
         payload["description"] = product.description
+    custom_search_keywords = _build_custom_search_keywords(product)
+    if custom_search_keywords:
+        payload["customSearchKeywords"] = custom_search_keywords
     try:
         storage = product.storage
     except Storage.DoesNotExist:
