@@ -22,6 +22,7 @@ from django.utils import timezone
 from modeltranslation.admin import TabbedTranslationAdmin
 
 from products.admin import (
+    ArchivedProductAdmin,
     CategoryAdmin,
     ImageAdmin,
     PriceActionForm,
@@ -41,6 +42,7 @@ from documents.models import Document
 from products.management.commands.import_legacy_product_properties import Command as ImportLegacyProductPropertiesCommand
 from products.management.commands.scheduled_product_sync import Command as ScheduledProductSyncCommand
 from products.models import (
+    ArchivedProduct,
     Category,
     Image,
     Price,
@@ -256,6 +258,7 @@ class ProductAdminActionConfigurationTest(SimpleTestCase):
                 "sync_product_without_images",
                 "set_special_price_for_channel",
                 "clear_special_price_for_channel",
+                "archive_products",
             ),
         )
 
@@ -299,6 +302,82 @@ class ProductAdminActionConfigurationTest(SimpleTestCase):
         self.assertEqual(result, "redirect")
         mock_delay.assert_called_once_with(erp_nrs=["A-1000"], include_images=False)
         admin_instance.message_user.assert_called_once()
+
+
+class ProductArchiveTest(TestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.product_admin = ProductAdmin(Product, AdminSite())
+        self.archive_admin = ArchivedProductAdmin(ArchivedProduct, AdminSite())
+
+    def _request(self, path="/admin/products/product/"):
+        return self.factory.get(path)
+
+    @patch("products.tasks.process_product_sync_job.delay")
+    def test_archive_action_sets_archived_and_deactivates(self, _mock_delay):
+        product = Product.objects.create(erp_nr="ARCH-1", name="Aktiv", is_active=True)
+        self.product_admin.message_user = Mock()
+
+        self.product_admin.archive_products(self._request(), Product.objects.filter(pk=product.pk))
+
+        product.refresh_from_db()
+        self.assertTrue(product.is_archived)
+        self.assertFalse(product.is_active)
+
+    @patch("products.tasks.process_product_sync_job.delay")
+    def test_restore_action_clears_archive_but_keeps_inactive(self, _mock_delay):
+        product = Product.objects.create(erp_nr="ARCH-2", name="Archiviert", is_active=False, is_archived=True)
+        self.archive_admin.message_user = Mock()
+
+        self.archive_admin.restore_products(self._request(), Product.objects.filter(pk=product.pk))
+
+        product.refresh_from_db()
+        self.assertFalse(product.is_archived)
+        self.assertFalse(product.is_active)
+
+    def test_product_admin_queryset_excludes_archived(self):
+        active = Product.objects.create(erp_nr="ARCH-3", name="Aktiv", is_active=True)
+        archived = Product.objects.create(erp_nr="ARCH-4", name="Alt", is_active=False, is_archived=True)
+
+        product_pks = set(self.product_admin.get_queryset(self._request()).values_list("pk", flat=True))
+        archive_pks = set(self.archive_admin.get_queryset(self._request()).values_list("pk", flat=True))
+
+        self.assertIn(active.pk, product_pks)
+        self.assertNotIn(archived.pk, product_pks)
+        self.assertIn(archived.pk, archive_pks)
+        self.assertNotIn(active.pk, archive_pks)
+
+    def test_autocomplete_search_results_exclude_archived(self):
+        active = Product.objects.create(erp_nr="ARCH-5", name="Aktiv", is_active=True)
+        archived = Product.objects.create(erp_nr="ARCH-6", name="Alt", is_active=False, is_archived=True)
+
+        base_queryset = self.product_admin.get_queryset(self._request("/admin/autocomplete/"))
+        results, _ = self.product_admin.get_search_results(self._request("/admin/autocomplete/"), base_queryset, "")
+
+        result_pks = set(results.values_list("pk", flat=True))
+        self.assertIn(active.pk, result_pks)
+        self.assertNotIn(archived.pk, result_pks)
+
+    @patch("products.tasks.process_product_sync_job.delay")
+    def test_archiving_keeps_relations_intact(self, _mock_delay):
+        channel = ShopwareSettings.objects.create(name="Default", is_default=True, is_active=True)
+        category = Category.objects.create(name="Ordner", slug="arch-ordner")
+        product = Product.objects.create(erp_nr="ARCH-7", name="Mit Relations", is_active=True)
+        product.categories.add(category)
+        price = Price.objects.create(product=product, sales_channel=channel, price=Decimal("9.99"))
+
+        self.product_admin.message_user = Mock()
+        self.product_admin.archive_products(self._request(), Product.objects.filter(pk=product.pk))
+
+        product.refresh_from_db()
+        self.assertTrue(product.is_archived)
+        self.assertEqual(product.categories.count(), 1)
+        self.assertEqual(product.prices.get(pk=price.pk).price, Decimal("9.99"))
+
+    def test_archive_admin_has_no_add_permission(self):
+        self.assertFalse(self.archive_admin.has_add_permission(self._request()))
+        self.assertTrue(self.archive_admin._archived_state)
+        self.assertFalse(self.product_admin._archived_state)
 
 
 class ProductAutoSyncSignalTest(TestCase):

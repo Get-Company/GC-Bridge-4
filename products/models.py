@@ -269,6 +269,12 @@ class Product(BaseModel):
         verbose_name=_("Kurzbeschreibung"),
     )
     is_active = models.BooleanField(default=True, verbose_name=_("Aktiv"))
+    is_archived = models.BooleanField(
+        default=False,
+        db_index=True,
+        verbose_name=_("Archiviert"),
+        help_text=_("Archivierte Produkte sind aus der Arbeitsansicht und allen Autocompletes ausgeblendet."),
+    )
     factor = models.IntegerField(null=True, blank=True, verbose_name=_("Faktor"))
     unit = models.CharField(max_length=255, null=True, blank=True, verbose_name=_("Einheit"))
     min_purchase = models.IntegerField(null=True, blank=True, verbose_name=_("Mindestabnahme"))
@@ -337,6 +343,19 @@ class Product(BaseModel):
     def first_image(self) -> Image | None:
         images = self.get_images()
         return images[0] if images else None
+
+
+class ArchivedProduct(Product):
+    """Proxy view on :class:`Product` restricted to archived rows.
+
+    Uses the same underlying table and relations; only the admin visibility and
+    the sidebar entry differ. Archiving never copies data or touches relations.
+    """
+
+    class Meta:
+        proxy = True
+        verbose_name = _("Archiviertes Produkt")
+        verbose_name_plural = _("Produkt-Archiv")
 
 
 class ProductSyncJob(BaseModel):

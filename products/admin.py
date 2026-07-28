@@ -79,6 +79,7 @@ from .tasks import (
     sync_restored_price_increase as sync_restored_price_increase_task,
 )
 from .models import (
+    ArchivedProduct,
     Category,
     Image,
     Price,
@@ -465,7 +466,9 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
         "sync_product_without_images",
         "set_special_price_for_channel",
         "clear_special_price_for_channel",
+        "archive_products",
     )
+    actions_row = ("archive_product_row",)
     actions_detail = (
         {
             "title": "Synchronisation",
@@ -475,11 +478,24 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
                 "sync_product_without_images_detail",
             ],
         },
+        {
+            "title": "Archiv",
+            "icon": "inventory_2",
+            "items": [
+                "archive_product_detail",
+            ],
+        },
     )
     change_form_after_template = "admin/products/includes/ai_rewrite_field_buttons.html"
 
+    # Non-archived rows for the working view; ArchivedProductAdmin flips this.
+    _archived_state = False
+
     def get_queryset(self, request):
-        queryset = super().get_queryset(request)
+        queryset = super().get_queryset(request).filter(is_archived=self._archived_state)
+        return self._with_list_annotations(queryset)
+
+    def _with_list_annotations(self, queryset):
         return queryset.select_related("storage").annotate(
             available_stock_value=Case(
                 When(storage__virtual_stock__gt=0, then=F("storage__virtual_stock")),
@@ -493,6 +509,24 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
                 to_attr="ordered_product_images",
             )
         )
+
+    @staticmethod
+    def _set_archived(queryset, *, archived: bool) -> int:
+        """Flip the archive flag on each product, keeping relations intact.
+
+        Saving without ``update_fields`` lets the existing product signals fire,
+        so archiving (is_active=False) triggers the normal Shopware deactivation
+        and restoring re-enters the working view without touching prices,
+        categories, sales-channel prices, attributes, images or stock.
+        """
+        count = 0
+        for product in queryset:
+            product.is_archived = archived
+            if archived:
+                product.is_active = False
+            product.save()
+            count += 1
+        return count
 
     def _redirect_to_change_page(self, object_id: str) -> HttpResponseRedirect:
         change_url = reverse("admin:products_product_change", args=(object_id,))
@@ -697,6 +731,122 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
             request,
             f"Sonderpreis fuer {updated} Preis(e) in {sales_channel.name} aufgehoben.",
         )
+
+    @action(
+        description="In Archiv verschieben",
+        icon="inventory_2",
+        variant=ActionVariant.DANGER,
+    )
+    def archive_products(self, request, queryset):
+        archived = self._set_archived(queryset, archived=True)
+        if not archived:
+            self.message_user(request, "Keine Produkte ausgewählt.", level=messages.WARNING)
+            return
+        self.message_user(
+            request,
+            f"{archived} Produkt(e) archiviert und deaktiviert.",
+        )
+
+    @action(
+        description="Archivieren",
+        icon="inventory_2",
+        variant=ActionVariant.DANGER,
+    )
+    def archive_product_row(self, request, object_id: str):
+        product = self.get_object(request, object_id)
+        if not product:
+            self.message_user(request, "Produkt nicht gefunden.", level=messages.ERROR)
+            return self._redirect_to_changelist()
+        self._set_archived([product], archived=True)
+        self.message_user(request, f"Produkt {product.erp_nr} archiviert und deaktiviert.")
+        return self._redirect_to_changelist()
+
+    @action(
+        description="In Archiv verschieben",
+        icon="inventory_2",
+        variant=ActionVariant.DANGER,
+    )
+    def archive_product_detail(self, request, object_id: str):
+        product = self.get_object(request, object_id)
+        if not product:
+            self.message_user(request, "Produkt nicht gefunden.", level=messages.ERROR)
+            return self._redirect_to_changelist()
+        self._set_archived([product], archived=True)
+        self.message_user(request, f"Produkt {product.erp_nr} archiviert und deaktiviert.")
+        return self._redirect_to_changelist()
+
+
+@admin.register(ArchivedProduct)
+class ArchivedProductAdmin(ProductAdmin):
+    """Sidebar-visible archive: only archived products, with restore actions."""
+
+    _archived_state = True
+    list_display = (
+        "image_preview",
+        "erp_nr",
+        "name",
+        "available_stock",
+        "is_active",
+        "updated_at",
+    )
+    # Restore replaces archive; sync/special-price bulk actions stay off here.
+    actions = ("restore_products",)
+    actions_row = ("restore_product_row",)
+    actions_detail = (
+        {
+            "title": "Archiv",
+            "icon": "unarchive",
+            "items": [
+                "restore_product_detail",
+            ],
+        },
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    @action(
+        description="Aus Archiv wiederherstellen",
+        icon="unarchive",
+        variant=ActionVariant.PRIMARY,
+    )
+    def restore_products(self, request, queryset):
+        restored = self._set_archived(queryset, archived=False)
+        if not restored:
+            self.message_user(request, "Keine Produkte ausgewählt.", level=messages.WARNING)
+            return
+        self.message_user(
+            request,
+            f"{restored} Produkt(e) aus dem Archiv wiederhergestellt. Bitte bei Bedarf manuell reaktivieren.",
+        )
+
+    @action(
+        description="Wiederherstellen",
+        icon="unarchive",
+        variant=ActionVariant.PRIMARY,
+    )
+    def restore_product_row(self, request, object_id: str):
+        product = self.get_object(request, object_id)
+        if not product:
+            self.message_user(request, "Produkt nicht gefunden.", level=messages.ERROR)
+            return self._redirect_to_changelist()
+        self._set_archived([product], archived=False)
+        self.message_user(request, f"Produkt {product.erp_nr} aus dem Archiv wiederhergestellt.")
+        return self._redirect_to_changelist()
+
+    @action(
+        description="Aus Archiv wiederherstellen",
+        icon="unarchive",
+        variant=ActionVariant.PRIMARY,
+    )
+    def restore_product_detail(self, request, object_id: str):
+        product = self.get_object(request, object_id)
+        if not product:
+            self.message_user(request, "Produkt nicht gefunden.", level=messages.ERROR)
+            return self._redirect_to_changelist()
+        self._set_archived([product], archived=False)
+        self.message_user(request, f"Produkt {product.erp_nr} aus dem Archiv wiederhergestellt.")
+        return self._redirect_to_changelist()
 
 
 @admin.register(ProductSyncJob)

@@ -494,6 +494,12 @@ UNFOLD = {
                         "permission": sidebar_model_view_permission("products", "Product"),
                     },
                     {
+                        "title": _("Produkt-Archiv"),
+                        "icon": "archive",
+                        "link": reverse_lazy("admin:products_archivedproduct_changelist"),
+                        "permission": sidebar_model_view_permission("products", "Product"),
+                    },
+                    {
                         "title": _("Variantenfamilien"),
                         "icon": "view_in_ar",
                         "link": reverse_lazy("admin:products_productvariantfamily_changelist"),

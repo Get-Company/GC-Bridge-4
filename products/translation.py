@@ -1,6 +1,6 @@
 from modeltranslation.translator import TranslationOptions, register
 
-from .models import Category, Product, PropertyGroup, PropertyValue
+from .models import ArchivedProduct, Category, Product, PropertyGroup, PropertyValue
 
 
 @register(Product)
@@ -11,6 +11,11 @@ class ProductTranslationOptions(TranslationOptions):
         "description_short",
         "unit",
     )
+
+
+@register(ArchivedProduct)
+class ArchivedProductTranslationOptions(ProductTranslationOptions):
+    """The archive proxy shares Product's translated fields."""
 
 
 @register(Category)
