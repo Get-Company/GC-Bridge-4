@@ -817,12 +817,32 @@ class PriceIncreasePdfLayoutTest(SimpleTestCase):
                     "category_heading",
                     "table_header",
                     "table_header_right",
-                    "table_cell",
-                    "table_cell_right",
                     "table_repeat_heading",
                 )
             )
         )
+        self.assertEqual(styles["table_cell"].fontSize, 8.25)
+        self.assertEqual(styles["table_cell_right"].fontSize, 8.25)
+
+    def test_attribute_group_is_marked_bold(self):
+        product = SimpleNamespace(
+            product_properties=SimpleNamespace(
+                all=lambda: [
+                    SimpleNamespace(
+                        value=SimpleNamespace(
+                            group_id=1,
+                            group=SimpleNamespace(name="Farbe"),
+                            name="Schwarz",
+                        )
+                    )
+                ]
+            ),
+            description_short="",
+        )
+
+        summary = PriceIncreaseAdmin._product_attribute_summary(product)
+
+        self.assertEqual(str(summary), "<b>Farbe</b>: Schwarz")
 
 
 class PriceIncreaseDocumentRenderingTest(SimpleTestCase):

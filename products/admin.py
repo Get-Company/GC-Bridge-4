@@ -1505,7 +1505,7 @@ class PriceIncreaseAdmin(BaseAdmin):
                 if size:
                     size_match = re.search(r"\d+(?:\.\d+)?", str(size))
                     if size_match:
-                        tag["size"] = f"{max(9, float(size_match.group())):g}"
+                        tag["size"] = f"{max(8.25, float(size_match.group())):g}"
             elif tag.name not in {"b", "br", "font", "i", "sub", "sup", "u"}:
                 tag.unwrap()
 
@@ -1613,15 +1613,16 @@ class PriceIncreaseAdmin(BaseAdmin):
                 name="PriceListPdfTableCell",
                 parent=sample_styles["Normal"],
                 fontName=regular_font_name,
-                fontSize=9,
-                leading=12,
+                # 11 px: bewusst einen Pixel kleiner als Tabellenkopf und Kategorien.
+                fontSize=8.25,
+                leading=11,
             ),
             "table_cell_right": ParagraphStyle(
                 name="PriceListPdfTableCellRight",
                 parent=sample_styles["Normal"],
                 fontName=regular_font_name,
-                fontSize=9,
-                leading=12,
+                fontSize=8.25,
+                leading=11,
                 alignment=TA_RIGHT,
             ),
             "table_repeat_heading": ParagraphStyle(
@@ -1709,6 +1710,13 @@ class PriceIncreaseAdmin(BaseAdmin):
         try:
             pdfmetrics.getFont(regular_font_name)
             pdfmetrics.getFont(bold_font_name)
+            pdfmetrics.registerFontFamily(
+                regular_font_name,
+                normal=regular_font_name,
+                bold=bold_font_name,
+                italic=regular_font_name,
+                boldItalic=bold_font_name,
+            )
             return regular_font_name, bold_font_name
         except KeyError:
             pass
@@ -1723,8 +1731,22 @@ class PriceIncreaseAdmin(BaseAdmin):
         if regular_font_file:
             pdfmetrics.registerFont(TTFont(regular_font_name, regular_font_file))
             pdfmetrics.registerFont(TTFont(bold_font_name, bold_font_file or regular_font_file))
+            pdfmetrics.registerFontFamily(
+                regular_font_name,
+                normal=regular_font_name,
+                bold=bold_font_name,
+                italic=regular_font_name,
+                boldItalic=bold_font_name,
+            )
             return regular_font_name, bold_font_name
 
+        pdfmetrics.registerFontFamily(
+            "Helvetica",
+            normal="Helvetica",
+            bold="Helvetica-Bold",
+            italic="Helvetica-Oblique",
+            boldItalic="Helvetica-BoldOblique",
+        )
         return "Helvetica", "Helvetica-Bold"
 
     @classmethod
