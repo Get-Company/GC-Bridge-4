@@ -275,7 +275,12 @@ class PropertyValueAdminForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        product_queryset = Product.objects.order_by("erp_nr", "name")
+        # Archivierte Produkte sind nicht auswaehlbar, bereits zugewiesene bleiben
+        # aber sichtbar, damit sie beim Speichern nicht verloren gehen.
+        archived_filter = Q(is_archived=False)
+        if self.instance.pk:
+            archived_filter |= Q(product_properties__value=self.instance)
+        product_queryset = Product.objects.filter(archived_filter).distinct().order_by("erp_nr", "name")
         self.fields["products"].queryset = product_queryset
         if self.instance.pk:
             self.fields["products"].initial = product_queryset.filter(product_properties__value=self.instance)
@@ -3720,6 +3725,7 @@ class CategoryAdmin(TabbedTranslationAdmin, BaseAdmin):
     list_filter_sheet = BaseAdmin.list_filter_sheet
     list_display = (
         "name",
+        "sw5_id",
         "sw6_id",
         "sku",
         "slug",
@@ -3731,7 +3737,7 @@ class CategoryAdmin(TabbedTranslationAdmin, BaseAdmin):
         "created_at",
     )
     list_display_links = ("name",)
-    search_fields = ("name", "sw6_id", "sku", "slug", "legacy_erp_nr", "legacy_api_id", "parent__name")
+    search_fields = ("name", "sw5_id", "sw6_id", "sku", "slug", "legacy_erp_nr", "legacy_api_id", "parent__name")
     list_filter = [
         ("parent", RelatedDropdownFilter),
         ("is_active", BooleanRadioFilter),
@@ -3799,7 +3805,7 @@ class CategoryAdmin(TabbedTranslationAdmin, BaseAdmin):
             "subtitle": "Baumstruktur und Produktzuordnung",
             "category_tree": self._category_tree_payload(),
             "category_count": Category.objects.count(),
-            "product_count": Product.objects.count(),
+            "product_count": Product.objects.filter(is_archived=False).count(),
             "urls": {
                 "tree": reverse("admin:products_category_tree_api"),
                 "move": reverse("admin:products_category_move_api"),
@@ -3882,9 +3888,9 @@ class CategoryAdmin(TabbedTranslationAdmin, BaseAdmin):
     def _category_tree_payload(self) -> list[dict]:
         product_counts = {
             row["category_id"]: row["count"]
-            for row in Product.categories.through.objects.values("category_id").annotate(
-                count=Count("product_id"),
-            )
+            for row in Product.categories.through.objects.filter(product__is_archived=False)
+            .values("category_id")
+            .annotate(count=Count("product_id"))
         }
         child_parent_ids = set(
             Category.objects.exclude(parent_id__isnull=True).values_list("parent_id", flat=True).distinct()
@@ -3892,6 +3898,7 @@ class CategoryAdmin(TabbedTranslationAdmin, BaseAdmin):
         categories = Category.objects.order_by("tree_id", "lft").values(
             "id",
             "name",
+            "sw5_id",
             "sw6_id",
             "sku",
             "slug",
@@ -3906,6 +3913,7 @@ class CategoryAdmin(TabbedTranslationAdmin, BaseAdmin):
             {
                 "id": row["id"],
                 "name": row["name"],
+                "sw5_id": row["sw5_id"] or "",
                 "sw6_id": row["sw6_id"] or "",
                 "sku": row["sku"] or "",
                 "slug": row["slug"],
@@ -3975,6 +3983,7 @@ class CategoryAdmin(TabbedTranslationAdmin, BaseAdmin):
         if len(search_term) >= 2:
             available_queryset = (
                 Product.objects.exclude(categories=category)
+                .filter(is_archived=False)
                 .filter(Q(erp_nr__icontains=search_term) | Q(name__icontains=search_term))
                 .order_by("-is_active", "erp_nr", "name", "pk")
                 .distinct()
@@ -3985,6 +3994,7 @@ class CategoryAdmin(TabbedTranslationAdmin, BaseAdmin):
             "category": {
                 "id": category.pk,
                 "name": category.name,
+                "sw5_id": category.sw5_id or "",
                 "sw6_id": category.sw6_id or "",
                 "sku": category.sku or "",
                 "slug": category.slug,

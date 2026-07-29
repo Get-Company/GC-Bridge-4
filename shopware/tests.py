@@ -31,6 +31,10 @@ from shopware.services.order import OrderService
 from shopware.services.product import ProductService
 from shopware.services.product_media import ProductMediaSyncService
 from shopware.services.shopware5 import Shopware5ProductSyncService
+from shopware.services.shopware5_category_mapping import (
+    Shopware5CategoryMappingService,
+    Shopware5CategoryMappingSnapshot,
+)
 from shopware.services.shopware6 import Criteria, EqualsFilter, InvalidTokenError, Shopware6Service
 from shopware.services.variant_sync import ShopwareVariantSyncService
 
@@ -410,6 +414,217 @@ class Shopware5ProductSyncServiceTest(SimpleTestCase):
         self.assertEqual(payload["name"], "Basis Name")
         self.assertEqual(payload["description"], "Basis Kurztext")
         self.assertEqual(payload["descriptionLong"], "Basis Langtext")
+
+
+class Shopware5CategoryMappingServiceTest(SimpleTestCase):
+    class FakeShopware5Api:
+        categories = [
+            {"id": 1, "parentId": None, "name": "Root", "position": 0, "active": True},
+            {"id": 851, "parentId": 1, "name": "Deutsch", "position": 0, "active": True},
+            {"id": 852, "parentId": 851, "name": "Orga-Mappen", "position": 0, "active": True},
+            {"id": 1006, "parentId": 1, "name": "Schweiz", "position": 1, "active": True},
+            {"id": 1007, "parentId": 1006, "name": "Orga-Mappen", "position": 0, "active": True},
+            {"id": 1074, "parentId": 1, "name": "Italien", "position": 2, "active": True},
+            {"id": 1075, "parentId": 1074, "name": "Orga-Mappen", "position": 0, "active": True},
+        ]
+        article_rows = [{"id": 100}, {"id": 101}, {"id": 102}]
+        article_details = {
+            "100": {
+                "id": 100,
+                "mainDetail": {"number": "100001"},
+                "details": [{"number": "100001-ROT"}],
+                "categories": [{"id": 852}, {"id": 1007}, {"id": 1075}],
+            },
+            "101": {
+                "id": 101,
+                "mainDetail": {"number": "200001"},
+                "details": [],
+                "categories": [{"id": 852}],
+            },
+            "102": {
+                "id": 102,
+                "mainDetail": None,
+                "details": [],
+                "categories": [{"id": 852}],
+            },
+        }
+
+        def __init__(self):
+            self.paths = []
+
+        def get(self, path):
+            self.paths.append(path)
+            if path.startswith("/categories?"):
+                return {"success": True, "total": len(self.categories), "data": self.categories}
+            if path.startswith("/articles?"):
+                return {"success": True, "total": len(self.article_rows), "data": self.article_rows}
+            article_id = path.rsplit("/", 1)[-1]
+            return {"success": True, "data": self.article_details[article_id]}
+
+    def test_collect_snapshot_limits_categories_to_deutsch_and_schweiz(self):
+        api = self.FakeShopware5Api()
+        snapshot = Shopware5CategoryMappingService(api_service=api).collect_snapshot()
+
+        self.assertEqual(set(snapshot.categories), {"1", "851", "852", "1006", "1007"})
+        self.assertEqual(snapshot.root_ids, ("851", "1006"))
+        self.assertEqual(snapshot.product_numbers_by_category["852"], {"100001", "100001-ROT", "200001"})
+        self.assertEqual(snapshot.product_numbers_by_category["1007"], {"100001", "100001-ROT"})
+        self.assertEqual(snapshot.product_numbers_by_category["851"], set())
+        self.assertEqual(snapshot.article_count, 3)
+        self.assertEqual(snapshot.article_detail_count, 3)
+        self.assertIn("/articles/100", api.paths)
+        self.assertIn("/articles/102", api.paths)
+
+    def test_preview_reports_paths_and_assignment_counts_for_every_category(self):
+        snapshot = Shopware5CategoryMappingService(api_service=self.FakeShopware5Api()).collect_snapshot()
+
+        preview = Shopware5CategoryMappingService(api_service=self.FakeShopware5Api()).preview(snapshot)
+
+        self.assertEqual(preview["roots"], ["Deutsch", "Schweiz"])
+        self.assertEqual(preview["categories"], 5)
+        self.assertEqual(preview["assignments"], 5)
+        self.assertEqual(
+            preview["category_reports"],
+            [
+                {
+                    "id": "1",
+                    "name": "Root",
+                    "path": "Root",
+                    "position": 0,
+                    "active": True,
+                    "product_count": 0,
+                },
+                {
+                    "id": "851",
+                    "name": "Deutsch",
+                    "path": "Root > Deutsch",
+                    "position": 0,
+                    "active": True,
+                    "product_count": 0,
+                },
+                {
+                    "id": "852",
+                    "name": "Orga-Mappen",
+                    "path": "Root > Deutsch > Orga-Mappen",
+                    "position": 0,
+                    "active": True,
+                    "product_count": 3,
+                },
+                {
+                    "id": "1006",
+                    "name": "Schweiz",
+                    "path": "Root > Schweiz",
+                    "position": 1,
+                    "active": True,
+                    "product_count": 0,
+                },
+                {
+                    "id": "1007",
+                    "name": "Orga-Mappen",
+                    "path": "Root > Schweiz > Orga-Mappen",
+                    "position": 0,
+                    "active": True,
+                    "product_count": 2,
+                },
+            ],
+        )
+
+
+class Shopware5CategoryMappingApplyTest(TestCase):
+    def test_apply_reuses_matching_tree_and_replaces_stale_assignments_when_requested(self):
+        root = Category.objects.create(name="Root", slug="root", sort_order=0)
+        deutsch = Category.objects.create(name="Deutsch", slug="deutsch", parent=root, sort_order=0)
+        mappen = Category.objects.create(name="Orga-Mappen", slug="orga-mappen", parent=deutsch, sort_order=0)
+        assigned_product = Product.objects.create(erp_nr="100001", name="Zuzuordnender Artikel")
+        stale_product = Product.objects.create(erp_nr="999999", name="Veralteter Artikel")
+        stale_product.categories.add(mappen)
+        snapshot = Shopware5CategoryMappingSnapshot(
+            categories={
+                "1": {"id": "1", "parent_id": "", "name": "Root", "position": 0, "active": True},
+                "851": {"id": "851", "parent_id": "1", "name": "Deutsch", "position": 0, "active": True},
+                "852": {
+                    "id": "852",
+                    "parent_id": "851",
+                    "name": "Orga-Mappen",
+                    "position": 0,
+                    "active": True,
+                },
+            },
+            root_ids=("851",),
+            product_numbers_by_category={"1": set(), "851": set(), "852": {"100001"}},
+            article_count=1,
+            article_detail_count=1,
+        )
+
+        service = Shopware5CategoryMappingService(api_service=MagicMock())
+        comparison = service.preview_category_comparison(
+            snapshot,
+            root_name="Deutsch",
+            category_name="Orga-Mappen",
+        )
+
+        self.assertEqual(comparison["source_category"]["sw5_id"], "852")
+        self.assertEqual(comparison["local_category"]["id"], mappen.pk)
+        self.assertEqual(comparison["missing_assignment"], ["100001"])
+        self.assertEqual(comparison["missing_in_project"], [])
+
+        result = service.apply(
+            snapshot,
+            replace_assignments=True,
+        )
+
+        root.refresh_from_db()
+        deutsch.refresh_from_db()
+        mappen.refresh_from_db()
+        self.assertEqual((root.sw5_id, deutsch.sw5_id, mappen.sw5_id), ("1", "851", "852"))
+        self.assertEqual(deutsch.parent, root)
+        self.assertEqual(mappen.parent, deutsch)
+        self.assertEqual(list(assigned_product.categories.values_list("pk", flat=True)), [mappen.pk])
+        self.assertFalse(stale_product.categories.exists())
+        self.assertEqual(result["created_categories"], 0)
+        self.assertEqual(result["created_assignments"], 1)
+        self.assertEqual(result["removed_assignments"], 1)
+
+    def test_apply_preserves_shopware5_sibling_positions_in_the_mptt_tree(self):
+        snapshot = Shopware5CategoryMappingSnapshot(
+            categories={
+                "1": {"id": "1", "parent_id": "", "name": "Root", "position": 0, "active": True},
+                "851": {"id": "851", "parent_id": "1", "name": "Deutsch", "position": 0, "active": True},
+                "901": {
+                    "id": "901",
+                    "parent_id": "851",
+                    "name": "Zuerst im Namen, zuletzt in SW5",
+                    "position": 30,
+                    "active": True,
+                },
+                "902": {
+                    "id": "902",
+                    "parent_id": "851",
+                    "name": "Mitte",
+                    "position": 20,
+                    "active": True,
+                },
+                "903": {
+                    "id": "903",
+                    "parent_id": "851",
+                    "name": "Zuletzt im Namen, zuerst in SW5",
+                    "position": 10,
+                    "active": True,
+                },
+            },
+            root_ids=("851",),
+            product_numbers_by_category={"1": set(), "851": set(), "901": set(), "902": set(), "903": set()},
+            article_count=0,
+            article_detail_count=0,
+        )
+
+        Shopware5CategoryMappingService(api_service=MagicMock()).apply(snapshot)
+
+        deutsch = Category.objects.get(sw5_id="851")
+        self.assertEqual(
+            list(deutsch.get_children().order_by("lft").values_list("sw5_id", "sort_order")),
+            [("903", 10), ("902", 20), ("901", 30)],
+        )
 
 
 class Shopware5SyncProductsCommandTest(TestCase):

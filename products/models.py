@@ -44,6 +44,14 @@ class Category(MPTTModel, BaseModel):
         db_index=True,
         verbose_name=_("Shopware 6 ID"),
     )
+    sw5_id = models.CharField(
+        max_length=32,
+        unique=True,
+        null=True,
+        blank=True,
+        db_index=True,
+        verbose_name=_("Shopware 5 ID"),
+    )
     sku = models.CharField(
         max_length=64,
         unique=True,

@@ -6,6 +6,7 @@ from .product_media import ProductMediaSyncService
 from .product import ProductService
 from .shopware6 import Shopware6Service, Criteria, EqualsFilter, ContainsFilter
 from .shopware5 import Shopware5ProductSyncService
+from .shopware5_category_mapping import Shopware5CategoryMappingService
 from .variant_sync import ShopwareVariantSyncService
 
 __all__ = [
@@ -17,6 +18,7 @@ __all__ = [
     "OrderService",
     "CustomerService",
     "Shopware5ProductSyncService",
+    "Shopware5CategoryMappingService",
     "ShopwareVariantSyncService",
     "Criteria",
     "EqualsFilter",

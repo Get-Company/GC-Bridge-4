@@ -192,7 +192,10 @@ class Shopware5ProductSyncService(BaseService):
     @staticmethod
     def _load_settings() -> Shopware5Settings | None:
         try:
-            return Shopware5Settings.load()
+            # A read-only preview must not create the singleton settings row.
+            # Environment configuration remains the fallback when no override
+            # was stored in the admin yet.
+            return Shopware5Settings.objects.filter(pk=1).first()
         except Exception as exc:
             logger.warning("Shopware5 settings could not be loaded: {}", exc)
             return None

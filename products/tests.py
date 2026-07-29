@@ -2607,13 +2607,17 @@ class CategoryAdminManagerTest(TestCase):
         self.assertContains(response, "category-manager-data")
         self.assertContains(response, "Produktzuordnung")
 
-    def test_tree_and_products_payload_include_category_sku(self):
+    def test_tree_and_products_payload_include_category_identifiers(self):
+        self.child.sw5_id = "1007"
+        self.child.save(update_fields=("sw5_id",))
+
         tree_response = self.client.get(reverse("admin:products_category_tree_api"))
 
         self.assertEqual(tree_response.status_code, 200)
         tree_payload = tree_response.json()["categories"]
         child_entry = next(item for item in tree_payload if item["id"] == self.child.pk)
         self.assertEqual(child_entry["sku"], "cat-child")
+        self.assertEqual(child_entry["sw5_id"], "1007")
 
         products_response = self.client.get(
             reverse("admin:products_category_products_api", args=(self.child.pk,))
@@ -2621,6 +2625,7 @@ class CategoryAdminManagerTest(TestCase):
 
         self.assertEqual(products_response.status_code, 200)
         self.assertEqual(products_response.json()["category"]["sku"], "cat-child")
+        self.assertEqual(products_response.json()["category"]["sw5_id"], "1007")
 
     def test_move_api_updates_parent_and_sibling_order(self):
         response = self.client.post(
