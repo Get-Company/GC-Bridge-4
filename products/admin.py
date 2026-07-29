@@ -1347,19 +1347,32 @@ class PriceIncreaseAdmin(BaseAdmin):
                 continue
             lead_category = min(matching_categories, key=lambda category: (-category.level, category.lft, category.id))
             category_path = self._category_path_in_subtree(lead_category, subtree_categories)
-            level1_category = category_path[1] if len(category_path) > 1 else root_category
-            level2_category = category_path[2] if len(category_path) > 2 else level1_category
+            # Die oberste Kategorie eines MPTT-Baums kann ein technischer Root sein.
+            # Fuer die Preisliste beginnen wir deshalb erst unterhalb des angeforderten
+            # Root-Knotens und bewahren alle darunterliegenden Ebenen als Pfad.
+            visible_category_path = category_path[1:] or [root_category]
+            level1_category = visible_category_path[0]
+            level2_category = (
+                visible_category_path[1]
+                if len(visible_category_path) > 1
+                else level1_category
+            )
+            group_category_path = visible_category_path[1:] or [level1_category]
+            category_path_sort_key = tuple(
+                (
+                    category.tree_id,
+                    category.lft,
+                    category.sort_order,
+                    category.name.lower(),
+                    category.pk,
+                )
+                for category in visible_category_path
+            )
             entries.append(
                 {
                     "sort_key": (
                         root_category.tree_id,
-                        level1_category.lft,
-                        level1_category.sort_order,
-                        level1_category.name.lower(),
-                        level2_category.tree_id,
-                        level2_category.lft,
-                        level2_category.sort_order,
-                        level2_category.name.lower(),
+                        category_path_sort_key,
                         item.product.sort_order,
                         item.product.erp_nr,
                         item.pk,
@@ -1382,6 +1395,17 @@ class PriceIncreaseAdmin(BaseAdmin):
                         level2_category.sort_order,
                         level2_category.name.lower(),
                         level2_category.pk,
+                    ),
+                    "category_group_path_name": " -> ".join(category.name for category in group_category_path),
+                    "category_group_path_sort_key": tuple(
+                        (
+                            category.tree_id,
+                            category.lft,
+                            category.sort_order,
+                            category.name.lower(),
+                            category.pk,
+                        )
+                        for category in group_category_path
                     ),
                     "erp_nr": item.product.erp_nr,
                     "attributes": self._product_attribute_summary(item.product),
@@ -1876,7 +1900,7 @@ class PriceIncreaseAdmin(BaseAdmin):
         sections_by_key: dict[tuple, dict] = {}
         for row in rows:
             section_key = tuple(row["category_level1_sort_key"])
-            group_key = tuple(row["category_level2_sort_key"])
+            group_key = tuple(row.get("category_group_path_sort_key") or row["category_level2_sort_key"])
             section = sections_by_key.setdefault(
                 section_key,
                 {
@@ -1888,7 +1912,7 @@ class PriceIncreaseAdmin(BaseAdmin):
             group = section["groups_by_key"].setdefault(
                 group_key,
                 {
-                    "category_name": row["category_level2_name"],
+                    "category_name": row.get("category_group_path_name") or row["category_level2_name"],
                     "sort_key": group_key,
                     "rows": [],
                 },

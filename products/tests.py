@@ -763,17 +763,25 @@ class PriceIncreasePdfLayoutTest(SimpleTestCase):
     def test_category_group_is_repeated_in_table_headers(self):
         rows = [
             {
-                "category_level1_sort_key": (1, 1, 1, "ordner", 1),
-                "category_level1_name": "Ordner",
-                "category_level2_sort_key": (1, 2, 2, "standard-mappen", 2),
-                "category_level2_name": "Standard-Mappen",
+                "category_level1_sort_key": (1, 1, 1, "deutsch", 1),
+                "category_level1_name": "Deutsch",
+                "category_level2_sort_key": (1, 2, 2, "orga-mappen", 2),
+                "category_level2_name": "Orga-Mappen",
+                "category_group_path_name": "Orga-Mappen -> Standard-Mappen",
+                "category_group_path_sort_key": (
+                    (1, 2, 2, "orga-mappen", 2),
+                    (1, 3, 3, "standard-mappen", 3),
+                ),
                 "sort_key": (1,),
             }
         ]
 
         sections = PriceIncreaseAdmin._build_price_list_category_sections(rows, None)
 
-        self.assertEqual(sections[0]["groups"][0]["repeat_heading"], "Ordner - Standard-Mappen")
+        self.assertEqual(
+            sections[0]["groups"][0]["repeat_heading"],
+            "Deutsch - Orga-Mappen -> Standard-Mappen",
+        )
 
     def test_price_list_table_repeats_category_and_column_heading(self):
         admin_instance = PriceIncreaseAdmin(PriceIncrease, AdminSite())
@@ -2314,6 +2322,44 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
         self.assertEqual(rows[0]["rebate_quantity"], 10)
         self.assertEqual(rows[0]["rebate_price"], Decimal("10.55"))
         self.assertEqual(rows[0]["price_source"], "Standardkanal aktuell")
+
+    def test_price_list_keeps_all_subcategory_levels_below_technical_root(self):
+        root = Category.objects.create(name="Root", slug="root", sort_order=0)
+        deutsch = Category.objects.create(name="Deutsch", slug="deutsch", parent=root, sort_order=0)
+        orga_mappen = Category.objects.create(
+            name="Orga-Mappen",
+            slug="orga-mappen",
+            parent=deutsch,
+            sort_order=0,
+        )
+        standard_mappen = Category.objects.create(
+            name="Standard-Mappen",
+            slug="standard-mappen",
+            parent=orga_mappen,
+            sort_order=0,
+        )
+        self.product.categories.add(standard_mappen)
+        root.refresh_from_db()
+
+        admin_instance = PriceIncreaseAdmin(PriceIncrease, AdminSite())
+        rows = admin_instance._build_price_list_items(
+            price_increase=self.price_increase,
+            root_category=root,
+        )
+        context = admin_instance._build_price_list_template_context(
+            price_increase=self.price_increase,
+            root_category=root,
+            rows=rows,
+        )
+
+        self.assertEqual(rows[0]["category_level1_name"], "Deutsch")
+        self.assertEqual(rows[0]["category_level2_name"], "Orga-Mappen")
+        self.assertEqual(rows[0]["category_group_path_name"], "Orga-Mappen -> Standard-Mappen")
+        self.assertEqual(context["category_sections"][0]["category_name"], "Deutsch")
+        self.assertEqual(
+            context["category_sections"][0]["groups"][0]["category_name"],
+            "Orga-Mappen -> Standard-Mappen",
+        )
 
     def test_price_list_items_are_sorted_by_category_sort_order(self):
         root_category = Category.objects.create(name="Mappe", slug="mappe", sort_order=10)
