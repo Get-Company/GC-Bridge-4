@@ -25,7 +25,7 @@ from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils.text import slugify
 from django.utils import timezone
-from django.utils.html import format_html, format_html_join
+from django.utils.html import escape, format_html, format_html_join
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
 from modeltranslation.admin import TabbedTranslationAdmin
@@ -1215,7 +1215,7 @@ class PriceIncreaseAdmin(BaseAdmin):
         else:
             price_unit_label = f"Preis pro {unit}"
         return format_html(
-            "{}<br/><font size=\"7\">Min: {} | Schritt: {}</font><br/><font size=\"7\">{}</font>",
+            "{}<br/>Min: {} | Schritt: {}<br/>{}",
             primary_display,
             min_purchase_display,
             purchase_unit_display,
@@ -1308,7 +1308,7 @@ class PriceIncreaseAdmin(BaseAdmin):
             ).order_by("lft", "id")
         )
         items = list(
-            price_increase.items.select_related("product")
+            price_increase.items.select_related("product", "source_price")
             .prefetch_related(
                 Prefetch(
                     "product__categories",
@@ -1333,6 +1333,11 @@ class PriceIncreaseAdmin(BaseAdmin):
 
         entries: list[dict] = []
         for item in items:
+            source_price = item.source_price
+            if source_price.sales_channel_id != price_increase.sales_channel_id:
+                raise ValueError(
+                    "Die Preisposition gehoert nicht zum Standard-Verkaufskanal der Preiserhoehung."
+                )
             matching_categories = [
                 category
                 for category in item.product.categories.all()
@@ -1344,8 +1349,6 @@ class PriceIncreaseAdmin(BaseAdmin):
             category_path = self._category_path_in_subtree(lead_category, subtree_categories)
             level1_category = category_path[1] if len(category_path) > 1 else root_category
             level2_category = category_path[2] if len(category_path) > 2 else level1_category
-            effective_price = item.new_price if item.new_price is not None else item.current_price
-            effective_rebate_price = item.new_rebate_price if item.new_rebate_price is not None else item.current_rebate_price
             entries.append(
                 {
                     "sort_key": (
@@ -1387,10 +1390,10 @@ class PriceIncreaseAdmin(BaseAdmin):
                     "min_purchase": item.product.min_purchase,
                     "purchase_unit": item.product.purchase_unit,
                     "unit": item.unit or item.product.unit or "",
-                    "price": effective_price,
-                    "rebate_quantity": item.current_rebate_quantity,
-                    "rebate_price": effective_rebate_price,
-                    "price_source": self._pdf_price_source(item),
+                    "price": source_price.price,
+                    "rebate_quantity": source_price.rebate_quantity,
+                    "rebate_price": source_price.rebate_price,
+                    "price_source": "Standardkanal aktuell",
                 }
             )
 
@@ -1426,7 +1429,17 @@ class PriceIncreaseAdmin(BaseAdmin):
 
     @staticmethod
     def _clean_pdf_html(html: str) -> str:
-        fragment = BeautifulSoup(unescape(html or ""), "html.parser")
+        decoded_html = html or ""
+        # Trix-Inhalte und importierte Beschreibungen koennen Zeilenumbrueche
+        # mehrfach HTML-kodiert enthalten (&amp;lt;br&amp;gt;). Maximal drei Durchlaeufe
+        # machen daraus wieder ReportLab-kompatible <br/>-Tags.
+        for _ in range(3):
+            unescaped_html = unescape(decoded_html)
+            if unescaped_html == decoded_html:
+                break
+            decoded_html = unescaped_html
+
+        fragment = BeautifulSoup(decoded_html, "html.parser")
         for comment in fragment.find_all(string=lambda text: isinstance(text, Comment)):
             comment.extract()
 
@@ -1463,6 +1476,12 @@ class PriceIncreaseAdmin(BaseAdmin):
                 if tag.get_text(strip=True) or tag.find(True):
                     tag.insert_after(fragment.new_tag("br"))
                 tag.unwrap()
+            elif tag.name == "font":
+                size = tag.get("size")
+                if size:
+                    size_match = re.search(r"\d+(?:\.\d+)?", str(size))
+                    if size_match:
+                        tag["size"] = f"{max(9, float(size_match.group())):g}"
             elif tag.name not in {"b", "br", "font", "i", "sub", "sup", "u"}:
                 tag.unwrap()
 
@@ -1507,8 +1526,8 @@ class PriceIncreaseAdmin(BaseAdmin):
             name="PriceListPdfBody",
             parent=sample_styles["Normal"],
             fontName=regular_font_name,
-            fontSize=5,
-            leading=7,
+            fontSize=9,
+            leading=12,
             spaceAfter=3,
         )
         return {
@@ -1516,32 +1535,32 @@ class PriceIncreaseAdmin(BaseAdmin):
                 name="PriceListPdfHeading1",
                 parent=sample_styles["Heading1"],
                 fontName=bold_font_name,
-                fontSize=13,
-                leading=16,
+                fontSize=15,
+                leading=18,
                 spaceAfter=7,
             ),
             "h2": ParagraphStyle(
                 name="PriceListPdfHeading2",
                 parent=sample_styles["Heading2"],
                 fontName=bold_font_name,
-                fontSize=8,
-                leading=10,
+                fontSize=12,
+                leading=14,
                 spaceAfter=4,
             ),
             "h3": ParagraphStyle(
                 name="PriceListPdfHeading3",
                 parent=sample_styles["Heading3"],
                 fontName=bold_font_name,
-                fontSize=6,
-                leading=8,
+                fontSize=10,
+                leading=12,
                 spaceAfter=3,
             ),
             "category_heading": ParagraphStyle(
                 name="PriceListPdfCategoryHeading",
                 parent=sample_styles["Heading1"],
                 fontName=bold_font_name,
-                fontSize=8,
-                leading=9,
+                fontSize=12,
+                leading=14,
                 spaceAfter=0,
             ),
             "body": body,
@@ -1555,31 +1574,38 @@ class PriceIncreaseAdmin(BaseAdmin):
                 name="PriceListPdfTableHeader",
                 parent=sample_styles["Normal"],
                 fontName=bold_font_name,
-                fontSize=4.5,
-                leading=5.5,
+                fontSize=9,
+                leading=11,
             ),
             "table_header_right": ParagraphStyle(
                 name="PriceListPdfTableHeaderRight",
                 parent=sample_styles["Normal"],
                 fontName=bold_font_name,
-                fontSize=4.5,
-                leading=5.5,
+                fontSize=9,
+                leading=11,
                 alignment=TA_RIGHT,
             ),
             "table_cell": ParagraphStyle(
                 name="PriceListPdfTableCell",
                 parent=sample_styles["Normal"],
                 fontName=regular_font_name,
-                fontSize=7.5,
-                leading=9,
+                fontSize=9,
+                leading=12,
             ),
             "table_cell_right": ParagraphStyle(
                 name="PriceListPdfTableCellRight",
                 parent=sample_styles["Normal"],
                 fontName=regular_font_name,
-                fontSize=7.5,
-                leading=9,
+                fontSize=9,
+                leading=12,
                 alignment=TA_RIGHT,
+            ),
+            "table_repeat_heading": ParagraphStyle(
+                name="PriceListPdfTableRepeatHeading",
+                parent=sample_styles["Normal"],
+                fontName=bold_font_name,
+                fontSize=10,
+                leading=12,
             ),
         }
 
@@ -1834,6 +1860,7 @@ class PriceIncreaseAdmin(BaseAdmin):
                     "groups": [
                         {
                             "category_name": scope_label,
+                            "repeat_heading": scope_label,
                             "sort_key": (
                                 0,
                                 0,
@@ -1873,6 +1900,11 @@ class PriceIncreaseAdmin(BaseAdmin):
             groups = sorted(section["groups_by_key"].values(), key=lambda group: group["sort_key"])
             for group in groups:
                 group["rows"] = sorted(group["rows"], key=lambda row: row["sort_key"])
+                group["repeat_heading"] = (
+                    group["category_name"]
+                    if section["category_name"] == group["category_name"]
+                    else f"{section['category_name']} - {group['category_name']}"
+                )
             section["groups"] = groups
             del section["groups_by_key"]
         return sections
@@ -1960,12 +1992,18 @@ class PriceIncreaseAdmin(BaseAdmin):
         *,
         available_width: float,
         width_ratio: float = 1.0,
+        repeat_heading: Paragraph | None = None,
     ) -> Table | Spacer:
         if not table_rows:
             return Spacer(1, 1)
 
         target_width = available_width * width_ratio
         col_count = max((len(row) for row in table_rows), default=0)
+        rendered_rows = list(table_rows)
+        header_row = 0
+        if repeat_heading is not None and col_count:
+            rendered_rows.insert(0, [repeat_heading, *([""] * (col_count - 1))])
+            header_row = 1
         resolved_widths: list[float] | None = None
         if col_count:
             if any(width is not None for width in column_widths):
@@ -1981,9 +2019,9 @@ class PriceIncreaseAdmin(BaseAdmin):
                 resolved_widths = [target_width / col_count] * col_count
 
         style_commands = [
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f1f3f5")),
-            ("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
-            ("LINEBELOW", (0, 0), (-1, 0), 0.8, colors.HexColor("#adb5bd")),
+            ("BACKGROUND", (0, header_row), (-1, header_row), colors.HexColor("#f1f3f5")),
+            ("TEXTCOLOR", (0, header_row), (-1, header_row), colors.black),
+            ("LINEBELOW", (0, header_row), (-1, header_row), 0.8, colors.HexColor("#adb5bd")),
             ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#dee2e6")),
             ("VALIGN", (0, 0), (-1, -1), "TOP"),
             ("LEFTPADDING", (0, 0), (-1, -1), 2.5),
@@ -1991,13 +2029,23 @@ class PriceIncreaseAdmin(BaseAdmin):
             ("TOPPADDING", (0, 0), (-1, -1), 2),
             ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
         ]
+        if repeat_heading is not None:
+            style_commands.extend(
+                [
+                    ("SPAN", (0, 0), (-1, 0)),
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e9ecef")),
+                    ("LINEBELOW", (0, 0), (-1, 0), 0.8, colors.HexColor("#adb5bd")),
+                    ("TOPPADDING", (0, 0), (-1, 0), 4),
+                    ("BOTTOMPADDING", (0, 0), (-1, 0), 4),
+                ]
+            )
         for column_index, align in enumerate(column_alignments):
             if align in {"center", "left", "right"}:
                 style_commands.append(("ALIGN", (column_index, 0), (column_index, -1), align.upper()))
 
         table = Table(
-            table_rows,
-            repeatRows=1,
+            rendered_rows,
+            repeatRows=header_row + 1,
             colWidths=resolved_widths,
             hAlign="CENTER",
         )
@@ -2012,11 +2060,18 @@ class PriceIncreaseAdmin(BaseAdmin):
         available_width: float,
     ) -> Table | Spacer:
         table_rows, column_widths, column_alignments = self._parse_price_list_pdf_table(table_node, styles)
+        repeat_heading = (table_node.get("data-pdf-repeat-heading") or "").strip()
+        repeat_heading_paragraph = (
+            Paragraph(escape(repeat_heading), styles["table_repeat_heading"])
+            if repeat_heading
+            else None
+        )
         return self._create_price_list_pdf_table(
             table_rows,
             column_widths,
             column_alignments,
             available_width=available_width,
+            repeat_heading=repeat_heading_paragraph,
         )
 
     def _build_price_list_heading_table_block(
@@ -2054,12 +2109,19 @@ class PriceIncreaseAdmin(BaseAdmin):
         first_body_rows: int = 1,
     ) -> tuple[Table | Spacer, Table | Spacer | None]:
         table_rows, column_widths, column_alignments = self._parse_price_list_pdf_table(table_node, styles)
+        repeat_heading = (table_node.get("data-pdf-repeat-heading") or "").strip()
+        repeat_heading_paragraph = (
+            Paragraph(escape(repeat_heading), styles["table_repeat_heading"])
+            if repeat_heading
+            else None
+        )
         if len(table_rows) <= 1:
             table = self._create_price_list_pdf_table(
                 table_rows,
                 column_widths,
                 column_alignments,
                 available_width=available_width,
+                repeat_heading=repeat_heading_paragraph,
             )
             return table, None
 
@@ -2069,6 +2131,7 @@ class PriceIncreaseAdmin(BaseAdmin):
             column_widths,
             column_alignments,
             available_width=available_width,
+            repeat_heading=repeat_heading_paragraph,
         )
         remaining_rows = table_rows[split_index:]
         if not remaining_rows:
@@ -2078,6 +2141,7 @@ class PriceIncreaseAdmin(BaseAdmin):
             column_widths,
             column_alignments,
             available_width=available_width,
+            repeat_heading=repeat_heading_paragraph,
         )
         return first_table, remaining_table
 
@@ -3135,7 +3199,7 @@ class PriceIncreaseAdmin(BaseAdmin):
         )
         return response
 
-    @admin.action(description="PDF Preisliste")
+    @admin.action(description="PDF Preisliste (aktuelle Standardpreise)")
     def export_price_list_pdf(self, request, queryset):
         selected_ids = list(queryset.values_list("pk", flat=True))
         if len(selected_ids) != 1:
@@ -3188,7 +3252,7 @@ class PriceIncreaseAdmin(BaseAdmin):
             return
 
     @action(
-        description="PDF Preisliste",
+        description="PDF Preisliste (aktuelle Standardpreise)",
         icon="picture_as_pdf",
         variant=ActionVariant.PRIMARY,
     )

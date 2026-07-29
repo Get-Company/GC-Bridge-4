@@ -7,9 +7,6 @@ from typing import Any, Iterable
 from urllib.parse import quote
 
 from django.db import transaction
-from django.db.models import Q
-from django.utils.text import slugify
-
 from core.services import BaseService
 from products.models import Category, Product
 from shopware.services.shopware5 import Shopware5APIError, Shopware5ProductSyncService
@@ -174,21 +171,28 @@ class Shopware5CategoryMappingService(BaseService):
         replace_assignments: bool = False,
     ) -> dict[str, Any]:
         """Persist the source hierarchy and its product assignments locally."""
+        categories_by_sw5_id = self._existing_categories(snapshot)
+        unmapped_category_ids = [
+            category_id
+            for category_id in self._category_ids_in_parent_order(snapshot.categories)
+            if category_id not in categories_by_sw5_id
+        ]
+        if unmapped_category_ids:
+            paths = ", ".join(
+                self._category_path(snapshot=snapshot, category_id=category_id)
+                for category_id in unmapped_category_ids
+            )
+            raise Shopware5APIError(
+                "Keine eindeutige lokale Kategorie fuer den vollstaendigen Shopware-5-Pfad gefunden: "
+                f"{paths}. Es wurden keine lokalen Kategorien oder Produktzuordnungen veraendert."
+            )
+
         with transaction.atomic(), Category.objects.disable_mptt_updates():
-            categories_by_sw5_id = self._existing_categories(snapshot)
-            created = 0
             updated = 0
             for sw5_id in self._category_ids_in_parent_order(snapshot.categories):
                 remote_category = snapshot.categories[sw5_id]
-                category = categories_by_sw5_id.get(sw5_id)
-                if category is None:
-                    category = Category(
-                        sw5_id=sw5_id,
-                        slug=self._build_unique_slug(remote_category["name"], sw5_id),
-                    )
-                    created += 1
-                else:
-                    updated += 1
+                category = categories_by_sw5_id[sw5_id]
+                updated += 1
 
                 category.name = remote_category["name"]
                 category.sw5_id = sw5_id
@@ -211,7 +215,7 @@ class Shopware5CategoryMappingService(BaseService):
             replace_assignments=replace_assignments,
         )
         return {
-            "created_categories": created,
+            "created_categories": 0,
             "updated_categories": updated,
             "categories": len(snapshot.categories),
             "articles": snapshot.article_count,
@@ -401,35 +405,35 @@ class Shopware5CategoryMappingService(BaseService):
     @classmethod
     def _existing_categories(cls, snapshot: Shopware5CategoryMappingSnapshot) -> dict[str, Category]:
         remote_ids = set(snapshot.categories)
+        local_categories = list(Category.objects.only("id", "name", "parent_id", "sw5_id", "sku"))
         by_sw5_id = {
             str(category.sw5_id): category
-            for category in Category.objects.filter(sw5_id__in=remote_ids)
+            for category in local_categories
             if category.sw5_id
+            if str(category.sw5_id) in remote_ids
         }
-        legacy_matches = Category.objects.filter(sku__in=remote_ids).filter(Q(sw5_id__isnull=True) | Q(sw5_id=""))
-        for category in legacy_matches:
+        for category in local_categories:
+            if category.sw5_id or not category.sku or category.sku not in remote_ids:
+                continue
             if category.sku:
                 by_sw5_id.setdefault(str(category.sku), category)
 
         claimed_category_ids = {category.pk for category in by_sw5_id.values()}
-        unmatched_categories = Category.objects.filter(Q(sw5_id__isnull=True) | Q(sw5_id=""))
-        candidates_by_parent_and_name: dict[tuple[int | None, str], list[Category]] = defaultdict(list)
-        for category in unmatched_categories:
-            if category.pk not in claimed_category_ids:
-                candidates_by_parent_and_name[(category.parent_id, category.name)].append(category)
+        categories_by_pk = {category.pk: category for category in local_categories}
+        candidates_by_path: dict[tuple[str, ...], list[Category]] = defaultdict(list)
+        for category in local_categories:
+            if not category.sw5_id and category.pk not in claimed_category_ids:
+                candidates_by_path[
+                    cls._local_category_name_path(category=category, categories_by_pk=categories_by_pk)
+                ].append(category)
 
         for sw5_id in cls._category_ids_in_parent_order(snapshot.categories):
             if sw5_id in by_sw5_id:
                 continue
-            remote_category = snapshot.categories[sw5_id]
-            remote_parent_id = remote_category["parent_id"]
-            local_parent = by_sw5_id.get(remote_parent_id)
-            if remote_parent_id and local_parent is None:
-                continue
             candidates = [
                 category
-                for category in candidates_by_parent_and_name.get(
-                    (local_parent.pk if local_parent else None, remote_category["name"]),
+                for category in candidates_by_path.get(
+                    cls._source_category_name_path(snapshot=snapshot, category_id=sw5_id),
                     [],
                 )
                 if category.pk not in claimed_category_ids
@@ -439,6 +443,39 @@ class Shopware5CategoryMappingService(BaseService):
                 by_sw5_id[sw5_id] = category
                 claimed_category_ids.add(category.pk)
         return by_sw5_id
+
+    @classmethod
+    def _source_category_name_path(
+        cls,
+        *,
+        snapshot: Shopware5CategoryMappingSnapshot,
+        category_id: str,
+    ) -> tuple[str, ...]:
+        path: list[str] = []
+        current_id = category_id
+        visited: set[str] = set()
+        while current_id in snapshot.categories and current_id not in visited:
+            visited.add(current_id)
+            category = snapshot.categories[current_id]
+            path.append(cls._normalized_name(category["name"]))
+            current_id = category["parent_id"]
+        return tuple(reversed(path))
+
+    @classmethod
+    def _local_category_name_path(
+        cls,
+        *,
+        category: Category,
+        categories_by_pk: dict[int, Category],
+    ) -> tuple[str, ...]:
+        path: list[str] = []
+        current_category: Category | None = category
+        visited: set[int] = set()
+        while current_category is not None and current_category.pk not in visited:
+            visited.add(current_category.pk)
+            path.append(cls._normalized_name(current_category.name))
+            current_category = categories_by_pk.get(current_category.parent_id)
+        return tuple(reversed(path))
 
     @staticmethod
     def _category_ids_in_parent_order(categories: dict[str, dict[str, Any]]) -> list[str]:
@@ -536,18 +573,6 @@ class Shopware5CategoryMappingService(BaseService):
                 }
             )
         return reports
-
-    @classmethod
-    def _build_unique_slug(cls, name: str, sw5_id: str) -> str:
-        base_slug = slugify(name) or "kategorie"
-        suffix = f"sw5-{sw5_id}"
-        candidate = base_slug[: 160 - len(suffix) - 1] + f"-{suffix}"
-        index = 2
-        while Category.objects.filter(slug=candidate).exists():
-            indexed_suffix = f"-{suffix}-{index}"
-            candidate = base_slug[: 160 - len(indexed_suffix)] + indexed_suffix
-            index += 1
-        return candidate
 
     @classmethod
     def _normalize_page_size(cls, page_size: int) -> int:

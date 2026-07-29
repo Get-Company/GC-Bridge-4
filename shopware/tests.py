@@ -30,7 +30,7 @@ from shopware.models import ShopwareSettings
 from shopware.services.order import OrderService
 from shopware.services.product import ProductService
 from shopware.services.product_media import ProductMediaSyncService
-from shopware.services.shopware5 import Shopware5ProductSyncService
+from shopware.services.shopware5 import Shopware5APIError, Shopware5ProductSyncService
 from shopware.services.shopware5_category_mapping import (
     Shopware5CategoryMappingService,
     Shopware5CategoryMappingSnapshot,
@@ -584,6 +584,126 @@ class Shopware5CategoryMappingApplyTest(TestCase):
         self.assertEqual(result["created_categories"], 0)
         self.assertEqual(result["created_assignments"], 1)
         self.assertEqual(result["removed_assignments"], 1)
+
+    def test_apply_matches_identical_subtrees_by_full_path_and_ignores_sw6_level_four(self):
+        root = Category.objects.create(name="Root", slug="root", sort_order=0)
+        deutsch = Category.objects.create(name="Deutsch", slug="deutsch", parent=root, sort_order=0)
+        schweiz = Category.objects.create(name="Schweiz", slug="schweiz", parent=root, sort_order=1)
+        deutsch_orga = Category.objects.create(
+            name="Orga-Mappen",
+            slug="deutsch-orga-mappen",
+            parent=deutsch,
+            sort_order=0,
+        )
+        schweiz_orga = Category.objects.create(
+            name="Orga-Mappen",
+            slug="schweiz-orga-mappen",
+            parent=schweiz,
+            sort_order=0,
+        )
+        deutsch_standard = Category.objects.create(
+            name="Standard-Mappen",
+            slug="deutsch-standard-mappen",
+            parent=deutsch_orga,
+            sort_order=0,
+        )
+        schweiz_standard = Category.objects.create(
+            name="Standard-Mappen",
+            slug="schweiz-standard-mappen",
+            parent=schweiz_orga,
+            sort_order=0,
+        )
+        sw6_only_child = Category.objects.create(
+            name="SW6-Unterkategorie",
+            slug="sw6-unterkategorie",
+            parent=deutsch_standard,
+            sw6_id="sw6-only-child",
+            sort_order=0,
+        )
+        snapshot = Shopware5CategoryMappingSnapshot(
+            categories={
+                "1": {"id": "1", "parent_id": "", "name": "Root", "position": 0, "active": True},
+                "851": {"id": "851", "parent_id": "1", "name": "Deutsch", "position": 0, "active": True},
+                "852": {
+                    "id": "852",
+                    "parent_id": "851",
+                    "name": "Orga-Mappen",
+                    "position": 0,
+                    "active": True,
+                },
+                "860": {
+                    "id": "860",
+                    "parent_id": "852",
+                    "name": "Standard-Mappen",
+                    "position": 0,
+                    "active": True,
+                },
+                "1006": {"id": "1006", "parent_id": "1", "name": "Schweiz", "position": 1, "active": True},
+                "1007": {
+                    "id": "1007",
+                    "parent_id": "1006",
+                    "name": "Orga-Mappen",
+                    "position": 0,
+                    "active": True,
+                },
+                "1014": {
+                    "id": "1014",
+                    "parent_id": "1007",
+                    "name": "Standard-Mappen",
+                    "position": 0,
+                    "active": True,
+                },
+            },
+            root_ids=("851", "1006"),
+            product_numbers_by_category={
+                "1": set(),
+                "851": set(),
+                "852": set(),
+                "860": set(),
+                "1006": set(),
+                "1007": set(),
+                "1014": set(),
+            },
+            article_count=0,
+            article_detail_count=0,
+        )
+
+        result = Shopware5CategoryMappingService(api_service=MagicMock()).apply(snapshot)
+
+        deutsch_standard.refresh_from_db()
+        schweiz_standard.refresh_from_db()
+        sw6_only_child.refresh_from_db()
+        self.assertEqual(deutsch_standard.sw5_id, "860")
+        self.assertEqual(schweiz_standard.sw5_id, "1014")
+        self.assertEqual(sw6_only_child.sw5_id, None)
+        self.assertEqual(sw6_only_child.parent, deutsch_standard)
+        self.assertEqual(result["created_categories"], 0)
+
+    def test_apply_refuses_to_create_a_category_when_no_full_path_matches(self):
+        root = Category.objects.create(name="Root", slug="root", sort_order=0)
+        Category.objects.create(name="Deutsch", slug="deutsch", parent=root, sort_order=0)
+        snapshot = Shopware5CategoryMappingSnapshot(
+            categories={
+                "1": {"id": "1", "parent_id": "", "name": "Root", "position": 0, "active": True},
+                "851": {"id": "851", "parent_id": "1", "name": "Deutsch", "position": 0, "active": True},
+                "852": {
+                    "id": "852",
+                    "parent_id": "851",
+                    "name": "Orga-Mappen",
+                    "position": 0,
+                    "active": True,
+                },
+            },
+            root_ids=("851",),
+            product_numbers_by_category={"1": set(), "851": set(), "852": set()},
+            article_count=0,
+            article_detail_count=0,
+        )
+
+        with self.assertRaisesMessage(Shopware5APIError, "vollstaendigen Shopware-5-Pfad"):
+            Shopware5CategoryMappingService(api_service=MagicMock()).apply(snapshot)
+
+        self.assertEqual(Category.objects.count(), 2)
 
     def test_apply_preserves_shopware5_sibling_positions_in_the_mptt_tree(self):
         snapshot = Shopware5CategoryMappingSnapshot(

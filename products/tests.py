@@ -9,6 +9,7 @@ from tempfile import TemporaryDirectory
 from tempfile import NamedTemporaryFile
 from unittest.mock import MagicMock, Mock, call, patch
 
+from bs4 import BeautifulSoup
 from django.core.management import call_command
 from django.contrib import messages
 from django.contrib.admin.sites import AdminSite
@@ -751,6 +752,69 @@ class PriceIncreasePdfHtmlCleanupTest(SimpleTestCase):
         self.assertNotIn("</br>", cleaned)
         self.assertIn("<br/>", cleaned)
         self.assertIn("<b>viel Zubeh", cleaned)
+
+    def test_clean_pdf_html_normalizes_double_encoded_line_breaks(self):
+        cleaned = PriceIncreaseAdmin._clean_pdf_html("Erste Zeile&amp;lt;br/&amp;gt;Zweite Zeile")
+
+        self.assertEqual(cleaned, "Erste Zeile<br/>Zweite Zeile")
+
+
+class PriceIncreasePdfLayoutTest(SimpleTestCase):
+    def test_category_group_is_repeated_in_table_headers(self):
+        rows = [
+            {
+                "category_level1_sort_key": (1, 1, 1, "ordner", 1),
+                "category_level1_name": "Ordner",
+                "category_level2_sort_key": (1, 2, 2, "standard-mappen", 2),
+                "category_level2_name": "Standard-Mappen",
+                "sort_key": (1,),
+            }
+        ]
+
+        sections = PriceIncreaseAdmin._build_price_list_category_sections(rows, None)
+
+        self.assertEqual(sections[0]["groups"][0]["repeat_heading"], "Ordner - Standard-Mappen")
+
+    def test_price_list_table_repeats_category_and_column_heading(self):
+        admin_instance = PriceIncreaseAdmin(PriceIncrease, AdminSite())
+        table_node = BeautifulSoup(
+            """
+            <table data-pdf-repeat-heading="Ordner - Standard-Mappen">
+                <tr><th data-width="1">Artikel</th><th data-width="1">Preis</th></tr>
+                <tr><td>12345 Musterartikel</td><td data-align="right">10,00 EUR</td></tr>
+            </table>
+            """,
+            "html.parser",
+        ).find("table")
+
+        table = admin_instance._build_price_list_pdf_table(
+            table_node,
+            admin_instance._price_list_pdf_styles(),
+            available_width=500,
+        )
+
+        self.assertEqual(table.repeatRows, 2)
+
+    def test_price_list_uses_at_least_twelve_pixel_text(self):
+        styles = PriceIncreaseAdmin(PriceIncrease, AdminSite())._price_list_pdf_styles()
+
+        self.assertTrue(
+            all(
+                styles[style_name].fontSize >= 9
+                for style_name in (
+                    "body",
+                    "h1",
+                    "h2",
+                    "h3",
+                    "category_heading",
+                    "table_header",
+                    "table_header_right",
+                    "table_cell",
+                    "table_cell_right",
+                    "table_repeat_heading",
+                )
+            )
+        )
 
 
 class PriceIncreaseDocumentRenderingTest(SimpleTestCase):
@@ -2222,7 +2286,7 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "A-6000")
 
-    def test_price_list_items_use_current_price_as_fallback_without_new_price(self):
+    def test_price_list_items_use_current_standard_channel_prices_after_price_change(self):
         root_category = Category.objects.create(name="Papier", slug="papier", sort_order=10)
         child_category = Category.objects.create(
             name="Register",
@@ -2231,6 +2295,10 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
             sort_order=20,
         )
         self.product.categories.add(child_category)
+        self.price.price = Decimal("11.15")
+        self.price.rebate_quantity = 10
+        self.price.rebate_price = Decimal("10.55")
+        self.price.save()
         # MPTT aktualisiert lft/rght des Parents nur in der DB, nicht auf der Instanz.
         root_category.refresh_from_db()
 
@@ -2242,9 +2310,10 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
 
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["erp_nr"], "A-6000")
-        self.assertEqual(rows[0]["price"], Decimal("10.01"))
-        self.assertEqual(rows[0]["rebate_price"], Decimal("9.01"))
-        self.assertEqual(rows[0]["price_source"], "aktuell")
+        self.assertEqual(rows[0]["price"], Decimal("11.15"))
+        self.assertEqual(rows[0]["rebate_quantity"], 10)
+        self.assertEqual(rows[0]["rebate_price"], Decimal("10.55"))
+        self.assertEqual(rows[0]["price_source"], "Standardkanal aktuell")
 
     def test_price_list_items_are_sorted_by_category_sort_order(self):
         root_category = Category.objects.create(name="Mappe", slug="mappe", sort_order=10)

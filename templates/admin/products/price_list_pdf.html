@@ -30,22 +30,21 @@ Wichtig:
         <h1 data-pdf-full-width-bar="true">{{ section.category_name }}</h1>
 
         {% for group in section.groups %}
-            <h2 data-pdf-full-width-bar="true">{{ group.category_name }}</h2>
-            <table data-pdf-table="price-list">
+            <table data-pdf-table="price-list" data-pdf-repeat-heading="{{ group.repeat_heading }}">
                 <thead>
                     <tr>
-                        <th data-width="68">Artikelnr</th>
-                        <th data-width="216">Attribute</th>
-                        <th data-width="44">VPE</th>
-                        <th data-width="68" data-align="right">Preis</th>
-                        <th data-width="70" data-align="right">Staffelmenge</th>
-                        <th data-width="80" data-align="right">Staffelpreis</th>
+                        <th data-width="135">Artikel</th>
+                        <th data-width="155">Attribute</th>
+                        <th data-width="82">VPE</th>
+                        <th data-width="66" data-align="right">Preis</th>
+                        <th data-width="57" data-align="right">Menge ab</th>
+                        <th data-width="74" data-align="right">Staffelpreis</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for row in group.rows %}
                         <tr>
-                            <td>{{ row.erp_nr }}</td>
+                            <td>{{ row.product_name }}</td>
                             <td>{{ row.attributes|safe }}</td>
                             <td>{{ row.vpe_display|safe }}</td>
                             <td data-align="right">{{ row.price_display }}</td>

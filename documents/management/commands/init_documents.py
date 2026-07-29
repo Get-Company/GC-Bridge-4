@@ -12,12 +12,19 @@ class Command(MonitoredBaseCommand):
             action="store_true",
             help="Vorhandene Dokumente ueberschreiben",
         )
+        parser.add_argument(
+            "--price-list-only",
+            action="store_true",
+            help="Nur die Preisliste aus der Repository-Vorlage aktualisieren",
+        )
 
     def handle(self, *args, **options):
         from documents.models import Document
 
         force = options["force"]
         self._init_price_list(Document, force=force)
+        if options["price_list_only"]:
+            return
         self._init_order_form(Document, force=force)
         self._init_static_documents(Document, force=force)
 
