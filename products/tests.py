@@ -763,13 +763,12 @@ class PriceIncreasePdfLayoutTest(SimpleTestCase):
     def test_category_group_is_repeated_in_table_headers(self):
         rows = [
             {
-                "category_level1_sort_key": (1, 1, 1, "deutsch", 1),
-                "category_level1_name": "Deutsch",
-                "category_level2_sort_key": (1, 2, 2, "orga-mappen", 2),
-                "category_level2_name": "Orga-Mappen",
-                "category_group_path_name": "Orga-Mappen -> Standard-Mappen",
+                "category_level1_sort_key": (1, 2, 2, "orga-mappen", 2),
+                "category_level1_name": "Orga-Mappen",
+                "category_level2_sort_key": (1, 3, 3, "standard-mappen", 3),
+                "category_level2_name": "Standard-Mappen",
+                "category_group_path_name": "Standard-Mappen",
                 "category_group_path_sort_key": (
-                    (1, 2, 2, "orga-mappen", 2),
                     (1, 3, 3, "standard-mappen", 3),
                 ),
                 "sort_key": (1,),
@@ -780,7 +779,7 @@ class PriceIncreasePdfLayoutTest(SimpleTestCase):
 
         self.assertEqual(
             sections[0]["groups"][0]["repeat_heading"],
-            "Deutsch - Orga-Mappen -> Standard-Mappen",
+            "Standard-Mappen",
         )
 
     def test_price_list_table_repeats_category_and_column_heading(self):
@@ -2372,13 +2371,13 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
             rows=rows,
         )
 
-        self.assertEqual(rows[0]["category_level1_name"], "Deutsch")
-        self.assertEqual(rows[0]["category_level2_name"], "Orga-Mappen")
-        self.assertEqual(rows[0]["category_group_path_name"], "Orga-Mappen -> Standard-Mappen")
-        self.assertEqual(context["category_sections"][0]["category_name"], "Deutsch")
+        self.assertEqual(rows[0]["category_level1_name"], "Orga-Mappen")
+        self.assertEqual(rows[0]["category_level2_name"], "Standard-Mappen")
+        self.assertEqual(rows[0]["category_group_path_name"], "Standard-Mappen")
+        self.assertEqual(context["category_sections"][0]["category_name"], "Orga-Mappen")
         self.assertEqual(
             context["category_sections"][0]["groups"][0]["category_name"],
-            "Orga-Mappen -> Standard-Mappen",
+            "Standard-Mappen",
         )
 
     def test_price_list_items_are_sorted_by_category_sort_order(self):

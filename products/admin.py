@@ -1347,10 +1347,15 @@ class PriceIncreaseAdmin(BaseAdmin):
                 continue
             lead_category = min(matching_categories, key=lambda category: (-category.level, category.lft, category.id))
             category_path = self._category_path_in_subtree(lead_category, subtree_categories)
-            # Die oberste Kategorie eines MPTT-Baums kann ein technischer Root sein.
-            # Fuer die Preisliste beginnen wir deshalb erst unterhalb des angeforderten
-            # Root-Knotens und bewahren alle darunterliegenden Ebenen als Pfad.
-            visible_category_path = category_path[1:] or [root_category]
+            # In SW5 ist die logische Root-Kategorie (z. B. Deutsch) unter einem
+            # technischen MPTT-Root abgelegt. Die Preisliste beginnt fachlich erst
+            # bei Ebene 2 (z. B. Orga-Mappen) und zeigt Ebene 3 separat darunter.
+            relative_category_path = category_path[1:]
+            visible_category_path = (
+                relative_category_path[1:]
+                if len(relative_category_path) > 2
+                else relative_category_path or [root_category]
+            )
             level1_category = visible_category_path[0]
             level2_category = (
                 visible_category_path[1]
@@ -1946,11 +1951,9 @@ class PriceIncreaseAdmin(BaseAdmin):
             groups = sorted(section["groups_by_key"].values(), key=lambda group: group["sort_key"])
             for group in groups:
                 group["rows"] = sorted(group["rows"], key=lambda row: row["sort_key"])
-                group["repeat_heading"] = (
-                    group["category_name"]
-                    if section["category_name"] == group["category_name"]
-                    else f"{section['category_name']} - {group['category_name']}"
-                )
+                # Nur die Kategorie der dritten Ebene wird auf Folgeseiten
+                # wiederholt; Ebene 2 steht als eigener Abschnitt darueber.
+                group["repeat_heading"] = group["category_name"]
             section["groups"] = groups
             del section["groups_by_key"]
         return sections
