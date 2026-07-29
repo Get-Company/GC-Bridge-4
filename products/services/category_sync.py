@@ -248,7 +248,10 @@ class ShopwareCategorySyncService(BaseService):
                     "page": page,
                     "limit": page_size,
                     "total-count-mode": 1,
-                    "associations": {"categories": {}},
+                    # An empty association is removed by Shopware6Service's
+                    # payload normalizer. Keep a concrete limit so SW6
+                    # actually returns every product's category assignments.
+                    "associations": {"categories": {"limit": 500}},
                 },
             )
             rows = [row for row in ((response or {}).get("data") or []) if isinstance(row, dict)]

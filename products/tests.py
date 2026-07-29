@@ -65,6 +65,7 @@ from products.services import ProductAutoSyncService, ShopwareCategorySyncServic
 from products import tasks as product_tasks
 from products.tasks import sync_from_microtech, sync_to_shopware, sync_to_microtech
 from shopware.models import ShopwareSettings
+from shopware.services.shopware6 import Shopware6Service
 
 
 class ProductSchemaTest(TestCase):
@@ -204,6 +205,11 @@ class CategorySyncDefinitionTest(SimpleTestCase):
 
         self.assertLess(sort_orders["first"], sort_orders["second"])
 
+    def test_product_category_association_payload_is_not_stripped(self):
+        payload = Shopware6Service._normalize_payload({"associations": {"categories": {"limit": 500}}})
+
+        self.assertEqual(payload, {"associations": {"categories": {"limit": 500}}})
+
 
 class CategorySelectionLabelTest(TestCase):
     def test_category_string_includes_root_name_for_child_categories(self):
@@ -261,8 +267,9 @@ class ShopwareCategorySyncSourceTest(TestCase):
         assigned_product.categories.add(first)
         stale_product.categories.add(first)
 
+        fake_service = self.FakeShopware6Service()
         result = service._sync_product_assignments(
-            service=self.FakeShopware6Service(),
+            service=fake_service,
             category_ids_by_sw6_id={"de": Category.objects.get(sw6_id="de").pk, "first": first.pk, "second": second.pk},
             page_size=100,
         )
@@ -274,6 +281,7 @@ class ShopwareCategorySyncSourceTest(TestCase):
         self.assertFalse(stale_product.categories.exists())
         self.assertEqual(result["created_assignments"], 1)
         self.assertEqual(result["removed_assignments"], 2)
+        self.assertEqual(fake_service.payload["associations"]["categories"]["limit"], 500)
 
 
 class ProductVariantFamilyAdminFormTest(TestCase):
