@@ -210,6 +210,37 @@ class CategorySyncDefinitionTest(SimpleTestCase):
 
         self.assertEqual(payload, {"associations": {"categories": {"limit": 500}}})
 
+    def test_product_category_mappings_are_filtered_to_target_category_ids(self):
+        class MappingService:
+            def __init__(self):
+                self.payload = None
+
+            def request_post(self, path, payload):
+                assert path == "/search/product-category"
+                self.payload = payload
+                return {
+                    "total": 1,
+                    "data": [
+                        {
+                            "productId": "product-1",
+                            "categoryId": "target-category",
+                        }
+                    ],
+                }
+
+        remote_service = MappingService()
+        assignments = ShopwareCategorySyncService()._product_category_mapping_assignments(
+            service=remote_service,
+            category_sw6_ids={"target-category"},
+            page_size=100,
+        )
+
+        self.assertEqual(assignments["product-1"]["category_sw6_ids"], {"target-category"})
+        self.assertEqual(
+            remote_service.payload["filter"],
+            [{"type": "equalsAny", "field": "categoryId", "value": "target-category"}],
+        )
+
 
 class CategorySelectionLabelTest(TestCase):
     def test_category_string_includes_root_name_for_child_categories(self):
@@ -236,6 +267,20 @@ class ShopwareCategorySyncSourceTest(TestCase):
         def request_post(self, path, payload):
             self.path = path
             self.payload = payload
+            if path == "/search/product-category":
+                return {
+                    "total": 1,
+                    "data": [
+                        {
+                            "productId": "remote-product-1",
+                            "categoryId": "second",
+                            "product": {
+                                "id": "remote-product-1",
+                                "productNumber": "SW6-PARENT-ONLY",
+                            },
+                        }
+                    ],
+                }
             return {
                 "total": 1,
                 "data": [
@@ -285,7 +330,8 @@ class ShopwareCategorySyncSourceTest(TestCase):
         self.assertFalse(stale_product.categories.exists())
         self.assertEqual(result["created_assignments"], 1)
         self.assertEqual(result["removed_assignments"], 2)
-        self.assertEqual(fake_service.payload["associations"]["categories"]["limit"], 500)
+        self.assertEqual(fake_service.path, "/search/product-category")
+        self.assertEqual(fake_service.payload["associations"]["product"]["limit"], 1)
 
     def test_sw6_variant_parent_category_maps_to_its_synced_products(self):
         service = ShopwareCategorySyncService()

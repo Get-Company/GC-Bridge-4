@@ -191,11 +191,20 @@ class ShopwareCategorySyncService(BaseService):
         if not category_ids_by_sw6_id:
             return self._empty_product_assignment_summary()
 
-        source_assignments = self._product_category_assignments(
+        source_assignments = self._product_category_mapping_assignments(
             service=service,
             category_sw6_ids=set(category_ids_by_sw6_id),
             page_size=page_size,
         )
+        if not source_assignments:
+            logger.warning(
+                "Shopware6 product-category mapping returned no target assignments; falling back to product categories."
+            )
+            source_assignments = self._product_category_assignments(
+                service=service,
+                category_sw6_ids=set(category_ids_by_sw6_id),
+                page_size=page_size,
+            )
         source_product_ids = set(source_assignments)
         source_product_numbers = {
             assignment["product_number"]
@@ -304,6 +313,60 @@ class ShopwareCategorySyncService(BaseService):
                         "product_number": product_number,
                         "category_sw6_ids": category_ids,
                     }
+            total = self._to_int((response or {}).get("total"))
+            if len(rows) < page_size or (total and page * page_size >= total):
+                break
+            page += 1
+        return assignments
+
+    def _product_category_mapping_assignments(
+        self,
+        *,
+        service: Shopware6Service,
+        category_sw6_ids: set[str],
+        page_size: int,
+    ) -> dict[str, dict[str, Any]]:
+        """Read direct SW6 product/category mapping rows without association truncation."""
+        assignments: dict[str, dict[str, Any]] = {}
+        page = 1
+        while True:
+            response = service.request_post(
+                "/search/product-category",
+                payload={
+                    "page": page,
+                    "limit": page_size,
+                    "total-count-mode": 1,
+                    # Query only mappings below the two selected category
+                    # trees. This prevents pagination over unrelated shop
+                    # categories and keeps a full sync bounded.
+                    "filter": [
+                        {
+                            "type": "equalsAny",
+                            "field": "categoryId",
+                            "value": "|".join(sorted(category_sw6_ids)),
+                        }
+                    ],
+                    "associations": {"product": {"limit": 1}},
+                },
+            )
+            rows = [row for row in ((response or {}).get("data") or []) if isinstance(row, dict)]
+            if not rows:
+                break
+            for row in rows:
+                mapping = self._normalize_entity(row)
+                product_id = self._text(mapping.get("productId"))
+                category_id = self._text(mapping.get("categoryId"))
+                if not product_id or category_id not in category_sw6_ids:
+                    continue
+                product = mapping.get("product") if isinstance(mapping.get("product"), dict) else {}
+                product_number = self._text(product.get("productNumber"))
+                assignment = assignments.setdefault(
+                    product_id,
+                    {"product_number": product_number, "category_sw6_ids": set()},
+                )
+                if product_number and not assignment["product_number"]:
+                    assignment["product_number"] = product_number
+                assignment["category_sw6_ids"].add(category_id)
             total = self._to_int((response or {}).get("total"))
             if len(rows) < page_size or (total and page * page_size >= total):
                 break
