@@ -476,6 +476,21 @@ class Shopware5CategoryMappingServiceTest(SimpleTestCase):
         self.assertIn("/articles/100", api.paths)
         self.assertIn("/articles/102", api.paths)
 
+    def test_collect_snapshot_can_skip_an_inactive_subtree(self):
+        api = self.FakeShopware5Api()
+        api.categories = [
+            *api.categories,
+            {"id": 853, "parentId": 851, "name": "Inaktiv", "position": 1, "active": False},
+            {"id": 854, "parentId": 853, "name": "Aktives Kind", "position": 0, "active": True},
+        ]
+
+        snapshot = Shopware5CategoryMappingService(api_service=api).collect_snapshot(
+            skip_inactive_categories=True
+        )
+
+        self.assertEqual(set(snapshot.categories), {"851", "852", "1006", "1007"})
+        self.assertEqual(snapshot.skipped_inactive_category_count, 2)
+
     def test_preview_reports_paths_and_assignment_counts_for_every_category(self):
         snapshot = Shopware5CategoryMappingService(api_service=self.FakeShopware5Api()).collect_snapshot()
 

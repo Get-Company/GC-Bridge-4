@@ -33,6 +33,11 @@ class Command(MonitoredBaseCommand):
             help="Parallele, rein lesende Shopware-5-Artikelabfragen (1 bis 12; Standard: 6).",
         )
         parser.add_argument(
+            "--skip-inactive-categories",
+            action="store_true",
+            help="Überspringt inaktive SW5-Kategorien einschließlich ihrer Unterkategorien.",
+        )
+        parser.add_argument(
             "--category",
             default="",
             help="Vergleicht eine Kategorie unter der angegebenen einzelnen --root-Kategorie ohne Änderungen zu schreiben.",
@@ -71,6 +76,7 @@ class Command(MonitoredBaseCommand):
             root_names=roots or ("Deutsch", "Schweiz"),
             page_size=options["page_size"],
             article_detail_workers=options["article_detail_workers"],
+            skip_inactive_categories=options["skip_inactive_categories"],
         )
         preview = service.preview(snapshot)
         reconciliation_report = (
@@ -118,7 +124,8 @@ class Command(MonitoredBaseCommand):
             "Shopware-5-Quelle: "
             f"Wurzeln={', '.join(preview['roots'])}; Kategorien={preview['categories']}; "
             f"Artikel={preview['articles']}; Artikeldetails={preview['article_details']}; "
-            f"ERP-Kategoriezuordnungen={preview['assignments']}."
+            f"ERP-Kategoriezuordnungen={preview['assignments']}; "
+            f"inaktive Kategorien übersprungen={preview['skipped_inactive_categories']}."
         )
         if not print_category_report:
             return

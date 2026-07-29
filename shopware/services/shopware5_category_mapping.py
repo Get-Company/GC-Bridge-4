@@ -24,6 +24,7 @@ class Shopware5CategoryMappingSnapshot:
     product_numbers_by_category: dict[str, set[str]]
     article_count: int
     article_detail_count: int
+    skipped_inactive_category_count: int = 0
 
     @property
     def assignment_count(self) -> int:
@@ -46,6 +47,7 @@ class Shopware5CategoryMappingService(BaseService):
         root_names: Iterable[str] = DEFAULT_SHOPWARE5_CATEGORY_ROOTS,
         page_size: int = max_page_size,
         article_detail_workers: int = 6,
+        skip_inactive_categories: bool = False,
     ) -> Shopware5CategoryMappingSnapshot:
         """Read the requested Shopware trees and all article/category assignments.
 
@@ -58,6 +60,19 @@ class Shopware5CategoryMappingService(BaseService):
         categories = self._get_categories(page_size=page_size)
         root_ids = self._find_root_ids(categories=categories, root_names=root_names)
         scoped_categories = self._scoped_categories(categories=categories, root_ids=root_ids)
+        skipped_inactive_category_count = 0
+        if skip_inactive_categories:
+            active_categories = self._without_inactive_subtrees(
+                categories=scoped_categories,
+                root_ids=root_ids,
+            )
+            skipped_inactive_category_count = len(scoped_categories) - len(active_categories)
+            scoped_categories = active_categories
+            root_ids = [root_id for root_id in root_ids if root_id in scoped_categories]
+            if not root_ids:
+                raise Shopware5APIError(
+                    "Alle angeforderten Shopware5-Kategoriewurzeln sind inaktiv und wurden übersprungen."
+                )
 
         product_numbers_by_category = {category_id: set() for category_id in scoped_categories}
         article_rows = self._get_article_rows(page_size=page_size)
@@ -83,6 +98,7 @@ class Shopware5CategoryMappingService(BaseService):
             product_numbers_by_category=product_numbers_by_category,
             article_count=len(article_rows),
             article_detail_count=article_detail_count,
+            skipped_inactive_category_count=skipped_inactive_category_count,
         )
 
     def preview(self, snapshot: Shopware5CategoryMappingSnapshot) -> dict[str, Any]:
@@ -94,6 +110,7 @@ class Shopware5CategoryMappingService(BaseService):
             "articles": snapshot.article_count,
             "article_details": snapshot.article_detail_count,
             "assignments": snapshot.assignment_count,
+            "skipped_inactive_categories": snapshot.skipped_inactive_category_count,
             "category_reports": self._category_reports(snapshot),
         }
 
@@ -478,6 +495,32 @@ class Shopware5CategoryMappingService(BaseService):
 
         return {category_id: categories[category_id] for category_id in selected_ids}
 
+    @staticmethod
+    def _without_inactive_subtrees(
+        *,
+        categories: dict[str, dict[str, Any]],
+        root_ids: Iterable[str],
+    ) -> dict[str, dict[str, Any]]:
+        """Return active categories only when their full path is active."""
+        children_by_parent: dict[str, list[str]] = defaultdict(list)
+        for category_id, category in categories.items():
+            parent_id = category["parent_id"]
+            if parent_id in categories:
+                children_by_parent[parent_id].append(category_id)
+
+        active_ids: set[str] = set()
+        pending = deque(root_ids)
+        while pending:
+            category_id = pending.popleft()
+            if category_id in active_ids or category_id not in categories:
+                continue
+            category = categories[category_id]
+            if not category["active"]:
+                continue
+            active_ids.add(category_id)
+            pending.extend(children_by_parent.get(category_id, []))
+        return {category_id: categories[category_id] for category_id in active_ids}
+
     @classmethod
     def _root_scoped_snapshot(
         cls,
@@ -505,6 +548,7 @@ class Shopware5CategoryMappingService(BaseService):
             },
             article_count=snapshot.article_count,
             article_detail_count=snapshot.article_detail_count,
+            skipped_inactive_category_count=snapshot.skipped_inactive_category_count,
         )
 
     @classmethod
