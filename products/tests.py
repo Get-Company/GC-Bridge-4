@@ -205,39 +205,52 @@ class CategorySyncDefinitionTest(SimpleTestCase):
 
         self.assertLess(sort_orders["first"], sort_orders["second"])
 
-    def test_product_category_association_payload_is_not_stripped(self):
-        payload = Shopware6Service._normalize_payload({"associations": {"categories": {"limit": 500}}})
+    def test_category_product_association_payload_is_not_stripped(self):
+        payload = Shopware6Service._normalize_payload({"associations": {"products": {"limit": 500}}})
 
-        self.assertEqual(payload, {"associations": {"categories": {"limit": 500}}})
+        self.assertEqual(payload, {"associations": {"products": {"limit": 500}}})
 
-    def test_product_category_ids_include_the_target_category_assignments(self):
-        class ProductService:
+    def test_category_product_relations_use_category_and_product_sw6_ids(self):
+        class CategoryService:
             def __init__(self):
                 self.payload = None
 
             def request_post(self, path, payload):
-                assert path == "/search/product"
+                assert path == "/search/category"
                 self.payload = payload
                 return {
                     "total": 1,
                     "data": [
                         {
-                            "id": "product-1",
-                            "productNumber": "100001",
-                            "categoryIds": ["target-category"],
+                            "id": "target-category",
+                            "products": [{"id": "product-1"}],
                         }
                     ],
                 }
 
-        remote_service = ProductService()
-        assignments = ShopwareCategorySyncService()._product_category_assignments(
+        remote_service = CategoryService()
+        assignments = ShopwareCategorySyncService()._category_product_assignments(
             service=remote_service,
             category_sw6_ids={"target-category"},
             page_size=100,
         )
 
-        self.assertEqual(assignments["product-1"]["category_sw6_ids"], {"target-category"})
-        self.assertEqual(remote_service.payload["associations"]["categories"]["limit"], 500)
+        self.assertEqual(assignments["product-1"], {"target-category"})
+        self.assertEqual(remote_service.payload["associations"]["products"]["limit"], 500)
+
+    def test_product_stream_relations_are_mapped_to_their_categories(self):
+        class ProductService:
+            def request_post(self, path, payload):
+                assert path == "/search/product"
+                return {"total": 1, "data": [{"id": "product-1", "streamIds": ["stream-1"]}]}
+
+        assignments = ShopwareCategorySyncService()._product_stream_assignments(
+            service=ProductService(),
+            product_stream_ids_by_category_sw6_id={"target-category": "stream-1"},
+            page_size=100,
+        )
+
+        self.assertEqual(assignments, {"product-1": {"target-category"}})
 
 
 class CategorySelectionLabelTest(TestCase):
@@ -269,10 +282,8 @@ class ShopwareCategorySyncSourceTest(TestCase):
                 "total": 1,
                 "data": [
                     {
-                        "id": "remote-product-1",
-                        "productNumber": "SW6-PARENT-ONLY",
-                        "categoryIds": ["second"],
-                        "categories": [{"id": "second"}],
+                        "id": "second",
+                        "products": [{"id": "remote-product-1"}],
                     }
                 ],
             }
@@ -315,8 +326,8 @@ class ShopwareCategorySyncSourceTest(TestCase):
         self.assertFalse(stale_product.categories.exists())
         self.assertEqual(result["created_assignments"], 1)
         self.assertEqual(result["removed_assignments"], 2)
-        self.assertEqual(fake_service.path, "/search/product")
-        self.assertEqual(fake_service.payload["associations"]["categories"]["limit"], 500)
+        self.assertEqual(fake_service.path, "/search/category")
+        self.assertEqual(fake_service.payload["associations"]["products"]["limit"], 500)
 
     def test_sw6_variant_parent_category_maps_to_its_synced_products(self):
         service = ShopwareCategorySyncService()

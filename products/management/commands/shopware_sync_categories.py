@@ -73,9 +73,11 @@ class Command(MonitoredBaseCommand):
                     f"{summary['created']} neu, "
                     f"{summary['updated']} aktualisiert, "
                     f"{summary['ignored_outside_roots']} außerhalb der Zielbäume ignoriert; "
+                    f"Produktzuordnungen aus {summary['populated_source_categories']}/"
+                    f"{summary['source_categories']} SW6-Kategorien gelesen; "
                     f"Produktzuordnungen neu={summary['created_assignments']}, "
                     f"vorhanden={summary['existing_assignments']}, entfernt={summary['removed_assignments']}; "
-                    f"fehlende ERP-Produkte={summary['missing_products']}."
+                    f"fehlende lokale SW6-Produkte={summary['missing_products']}."
                 )
             )
         except Exception:

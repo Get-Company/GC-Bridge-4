@@ -73,6 +73,12 @@ class ShopwareCategorySyncService(BaseService):
                         for category in Category.objects.filter(sw6_id__in=remote_categories)
                         if category.sw6_id
                     },
+                    product_stream_ids_by_category_sw6_id={
+                        category_sw6_id: product_stream_id
+                        for category_sw6_id, category in remote_categories.items()
+                        if self._text(category.get("productAssignmentType")) == "product_stream"
+                        and (product_stream_id := self._text(category.get("productStreamId")))
+                    },
                     page_size=page_size,
                 )
             )
@@ -187,29 +193,29 @@ class ShopwareCategorySyncService(BaseService):
         service: Shopware6Service,
         category_ids_by_sw6_id: dict[str, int],
         page_size: int,
+        product_stream_ids_by_category_sw6_id: dict[str, str] | None = None,
     ) -> dict[str, int]:
         if not category_ids_by_sw6_id:
             return self._empty_product_assignment_summary()
 
-        source_assignments = self._product_category_assignments(
+        source_assignments = self._category_product_assignments(
             service=service,
             category_sw6_ids=set(category_ids_by_sw6_id),
             page_size=page_size,
         )
+        self._merge_product_assignments(
+            source_assignments,
+            self._product_stream_assignments(
+                service=service,
+                product_stream_ids_by_category_sw6_id=product_stream_ids_by_category_sw6_id or {},
+                page_size=page_size,
+            ),
+        )
         source_product_ids = set(source_assignments)
-        source_product_numbers = {
-            assignment["product_number"]
-            for assignment in source_assignments.values()
-            if assignment["product_number"]
-        }
         products_by_sku = {
             product.sku: product.pk
             for product in Product.objects.filter(sku__in=source_product_ids)
             if product.sku
-        }
-        products_by_erp_nr = {
-            product.erp_nr: product.pk
-            for product in Product.objects.filter(erp_nr__in=source_product_numbers)
         }
         product_ids_by_family_shopware_id: dict[str, set[int]] = defaultdict(set)
         for family in ProductVariantFamily.objects.filter(shopware_id__in=source_product_ids).prefetch_related(
@@ -223,13 +229,11 @@ class ShopwareCategorySyncService(BaseService):
             product_ids = set(product_ids_by_family_shopware_id[source_product_id])
             if source_product_id in products_by_sku:
                 product_ids.add(products_by_sku[source_product_id])
-            elif assignment["product_number"] in products_by_erp_nr:
-                product_ids.add(products_by_erp_nr[assignment["product_number"]])
             resolved_product_ids[source_product_id] = product_ids
         desired_links = {
             (product_id, category_ids_by_sw6_id[category_sw6_id])
             for source_product_id, assignment in source_assignments.items()
-            for category_sw6_id in assignment["category_sw6_ids"]
+            for category_sw6_id in assignment
             for product_id in resolved_product_ids[source_product_id]
         }
         category_ids = set(category_ids_by_sw6_id.values())
@@ -252,6 +256,10 @@ class ShopwareCategorySyncService(BaseService):
                 for product_id, category_id in stale_links:
                     through_model.objects.filter(product_id=product_id, category_id=category_id).delete()
         return {
+            "source_categories": len(category_ids_by_sw6_id),
+            "populated_source_categories": len(
+                {category_sw6_id for assignment in source_assignments.values() for category_sw6_id in assignment}
+            ),
             "source_products": len(source_assignments),
             "matched_products": len(
                 {product_id for product_ids in resolved_product_ids.values() for product_id in product_ids}
@@ -262,14 +270,62 @@ class ShopwareCategorySyncService(BaseService):
             "removed_assignments": len(stale_links),
         }
 
-    def _product_category_assignments(
+    def _category_product_assignments(
         self,
         *,
         service: Shopware6Service,
         category_sw6_ids: set[str],
         page_size: int,
-    ) -> dict[str, dict[str, Any]]:
-        assignments: dict[str, dict[str, Any]] = {}
+    ) -> dict[str, set[str]]:
+        """Read direct product relations from every selected SW6 category."""
+        assignments: dict[str, set[str]] = {}
+        page = 1
+        category_ids_value = "|".join(sorted(category_sw6_ids))
+        while True:
+            response = service.request_post(
+                self.search_path,
+                payload={
+                    "page": page,
+                    "limit": page_size,
+                    "total-count-mode": 1,
+                    "filter": [{"type": "equalsAny", "field": "id", "value": category_ids_value}],
+                    "associations": {"products": {"limit": 500}},
+                },
+            )
+            rows = [row for row in ((response or {}).get("data") or []) if isinstance(row, dict)]
+            if not rows:
+                break
+            for row in rows:
+                category = self._normalize_entity(row)
+                category_id = self._text(category.get("id"))
+                if category_id not in category_sw6_ids:
+                    continue
+                for product_row in category.get("products") or []:
+                    product = self._normalize_entity(product_row) if isinstance(product_row, dict) else {}
+                    product_id = self._text(product.get("id"))
+                    if product_id:
+                        assignments.setdefault(product_id, set()).add(category_id)
+            total = self._to_int((response or {}).get("total"))
+            if len(rows) < page_size or (total and page * page_size >= total):
+                break
+            page += 1
+        return assignments
+
+    def _product_stream_assignments(
+        self,
+        *,
+        service: Shopware6Service,
+        product_stream_ids_by_category_sw6_id: dict[str, str],
+        page_size: int,
+    ) -> dict[str, set[str]]:
+        """Resolve categories configured with a SW6 dynamic product stream."""
+        category_ids_by_stream_id: dict[str, set[str]] = defaultdict(set)
+        for category_id, stream_id in product_stream_ids_by_category_sw6_id.items():
+            category_ids_by_stream_id[stream_id].add(category_id)
+        if not category_ids_by_stream_id:
+            return {}
+
+        assignments: dict[str, set[str]] = {}
         page = 1
         while True:
             response = service.request_post(
@@ -278,10 +334,6 @@ class ShopwareCategorySyncService(BaseService):
                     "page": page,
                     "limit": page_size,
                     "total-count-mode": 1,
-                    # An empty association is removed by Shopware6Service's
-                    # payload normalizer. Keep a concrete limit so SW6
-                    # actually returns every product's category assignments.
-                    "associations": {"categories": {"limit": 500}},
                 },
             )
             rows = [row for row in ((response or {}).get("data") or []) if isinstance(row, dict)]
@@ -290,30 +342,15 @@ class ShopwareCategorySyncService(BaseService):
             for row in rows:
                 product = self._normalize_entity(row)
                 product_id = self._text(product.get("id"))
-                product_number = self._text(product.get("productNumber"))
                 if not product_id:
                     continue
-                # ``categoryIds`` is the API-aware, inherited SW6 field. It
-                # contains the category IDs of a parent on its variants as
-                # well. The older ``categories`` association only exposed
-                # direct rows here, which is why most category products were
-                # missed in this shop.
                 category_ids = {
                     category_id
-                    for category_id in (self._text(value) for value in product.get("categoryIds") or [])
-                    if category_id in category_sw6_ids
+                    for stream_id in (self._text(value) for value in product.get("streamIds") or [])
+                    for category_id in category_ids_by_stream_id.get(stream_id, set())
                 }
-                if not category_ids:
-                    for category in product.get("categories") or []:
-                        category_data = self._normalize_entity(category) if isinstance(category, dict) else {}
-                        category_id = self._text(category_data.get("id"))
-                        if category_id in category_sw6_ids:
-                            category_ids.add(category_id)
                 if category_ids:
-                    assignments[product_id] = {
-                        "product_number": product_number,
-                        "category_sw6_ids": category_ids,
-                    }
+                    assignments.setdefault(product_id, set()).update(category_ids)
             total = self._to_int((response or {}).get("total"))
             if len(rows) < page_size or (total and page * page_size >= total):
                 break
@@ -321,8 +358,18 @@ class ShopwareCategorySyncService(BaseService):
         return assignments
 
     @staticmethod
+    def _merge_product_assignments(
+        target: dict[str, set[str]],
+        additions: dict[str, set[str]],
+    ) -> None:
+        for product_id, category_ids in additions.items():
+            target.setdefault(product_id, set()).update(category_ids)
+
+    @staticmethod
     def _empty_product_assignment_summary() -> dict[str, int]:
         return {
+            "source_categories": 0,
+            "populated_source_categories": 0,
             "source_products": 0,
             "matched_products": 0,
             "missing_products": 0,
