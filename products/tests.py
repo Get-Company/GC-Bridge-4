@@ -241,7 +241,7 @@ class ShopwareCategorySyncSourceTest(TestCase):
                 "data": [
                     {
                         "id": "remote-product-1",
-                        "productNumber": "100001",
+                        "productNumber": "SW6-PARENT-ONLY",
                         "categories": [{"id": "second"}],
                     }
                 ],
@@ -262,7 +262,11 @@ class ShopwareCategorySyncSourceTest(TestCase):
         service._upsert_categories(remote_categories)
         first = Category.objects.get(sw6_id="first")
         second = Category.objects.get(sw6_id="second")
-        assigned_product = Product.objects.create(erp_nr="100001", name="Aus SW6 zugeordnet")
+        assigned_product = Product.objects.create(
+            erp_nr="100001",
+            sku="remote-product-1",
+            name="Aus SW6 zugeordnet",
+        )
         stale_product = Product.objects.create(erp_nr="999999", name="Aus SW6 entfernt")
         assigned_product.categories.add(first)
         stale_product.categories.add(first)
@@ -282,6 +286,35 @@ class ShopwareCategorySyncSourceTest(TestCase):
         self.assertEqual(result["created_assignments"], 1)
         self.assertEqual(result["removed_assignments"], 2)
         self.assertEqual(fake_service.payload["associations"]["categories"]["limit"], 500)
+
+    def test_sw6_variant_parent_category_maps_to_its_synced_products(self):
+        service = ShopwareCategorySyncService()
+        service._upsert_categories(
+            {
+                "de": {"id": "de", "name": "Deutsch", "parentId": "navigation"},
+                "second": {"id": "second", "name": "Danach", "parentId": "de"},
+            }
+        )
+        target_category = Category.objects.get(sw6_id="second")
+        variant = Product.objects.create(erp_nr="100001", name="Variante ohne eigene SW6-Kategorie")
+        family = ProductVariantFamily.objects.create(
+            slug="sw6-parent-family",
+            name="SW6 Parent",
+            shopware_product_number="SW6-PARENT-ONLY",
+            shopware_id="remote-product-1",
+            target_category=target_category,
+        )
+        family.synced_products.add(variant)
+
+        result = service._sync_product_assignments(
+            service=self.FakeShopware6Service(),
+            category_ids_by_sw6_id={"de": Category.objects.get(sw6_id="de").pk, "second": target_category.pk},
+            page_size=100,
+        )
+
+        self.assertEqual(list(variant.categories.values_list("sw6_id", flat=True)), ["second"])
+        self.assertEqual(result["matched_products"], 1)
+        self.assertEqual(result["missing_products"], 0)
 
 
 class ProductVariantFamilyAdminFormTest(TestCase):

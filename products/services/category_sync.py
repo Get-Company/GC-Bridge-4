@@ -8,7 +8,7 @@ from django.utils.text import slugify
 from loguru import logger
 
 from core.services import BaseService
-from products.models import Category, Product
+from products.models import Category, Product, ProductVariantFamily
 from shopware.services.shopware6 import Shopware6Service
 
 
@@ -196,13 +196,41 @@ class ShopwareCategorySyncService(BaseService):
             category_sw6_ids=set(category_ids_by_sw6_id),
             page_size=page_size,
         )
-        source_product_numbers = set(source_assignments)
-        products_by_erp_nr = Product.objects.in_bulk(source_product_numbers, field_name="erp_nr")
+        source_product_ids = set(source_assignments)
+        source_product_numbers = {
+            assignment["product_number"]
+            for assignment in source_assignments.values()
+            if assignment["product_number"]
+        }
+        products_by_sku = {
+            product.sku: product.pk
+            for product in Product.objects.filter(sku__in=source_product_ids)
+            if product.sku
+        }
+        products_by_erp_nr = {
+            product.erp_nr: product.pk
+            for product in Product.objects.filter(erp_nr__in=source_product_numbers)
+        }
+        product_ids_by_family_shopware_id: dict[str, set[int]] = defaultdict(set)
+        for family in ProductVariantFamily.objects.filter(shopware_id__in=source_product_ids).prefetch_related(
+            "synced_products"
+        ):
+            product_ids_by_family_shopware_id[family.shopware_id].update(
+                family.synced_products.values_list("pk", flat=True)
+            )
+        resolved_product_ids: dict[str, set[int]] = {}
+        for source_product_id, assignment in source_assignments.items():
+            product_ids = set(product_ids_by_family_shopware_id[source_product_id])
+            if source_product_id in products_by_sku:
+                product_ids.add(products_by_sku[source_product_id])
+            elif assignment["product_number"] in products_by_erp_nr:
+                product_ids.add(products_by_erp_nr[assignment["product_number"]])
+            resolved_product_ids[source_product_id] = product_ids
         desired_links = {
-            (products_by_erp_nr[product_number].pk, category_ids_by_sw6_id[category_sw6_id])
-            for product_number, category_sw6_ids in source_assignments.items()
-            for category_sw6_id in category_sw6_ids
-            if product_number in products_by_erp_nr
+            (product_id, category_ids_by_sw6_id[category_sw6_id])
+            for source_product_id, assignment in source_assignments.items()
+            for category_sw6_id in assignment["category_sw6_ids"]
+            for product_id in resolved_product_ids[source_product_id]
         }
         category_ids = set(category_ids_by_sw6_id.values())
         through_model = Product.categories.through
@@ -225,8 +253,10 @@ class ShopwareCategorySyncService(BaseService):
                     through_model.objects.filter(product_id=product_id, category_id=category_id).delete()
         return {
             "source_products": len(source_assignments),
-            "matched_products": len(products_by_erp_nr),
-            "missing_products": len(source_product_numbers - set(products_by_erp_nr)),
+            "matched_products": len(
+                {product_id for product_ids in resolved_product_ids.values() for product_id in product_ids}
+            ),
+            "missing_products": sum(not product_ids for product_ids in resolved_product_ids.values()),
             "created_assignments": len(new_links),
             "existing_assignments": len(existing_links & desired_links),
             "removed_assignments": len(stale_links),
@@ -238,8 +268,8 @@ class ShopwareCategorySyncService(BaseService):
         service: Shopware6Service,
         category_sw6_ids: set[str],
         page_size: int,
-    ) -> dict[str, set[str]]:
-        assignments: dict[str, set[str]] = defaultdict(set)
+    ) -> dict[str, dict[str, Any]]:
+        assignments: dict[str, dict[str, Any]] = {}
         page = 1
         while True:
             response = service.request_post(
@@ -259,14 +289,21 @@ class ShopwareCategorySyncService(BaseService):
                 break
             for row in rows:
                 product = self._normalize_entity(row)
+                product_id = self._text(product.get("id"))
                 product_number = self._text(product.get("productNumber"))
-                if not product_number:
+                if not product_id:
                     continue
+                category_ids: set[str] = set()
                 for category in product.get("categories") or []:
                     category_data = self._normalize_entity(category) if isinstance(category, dict) else {}
                     category_id = self._text(category_data.get("id"))
                     if category_id in category_sw6_ids:
-                        assignments[product_number].add(category_id)
+                        category_ids.add(category_id)
+                if category_ids:
+                    assignments[product_id] = {
+                        "product_number": product_number,
+                        "category_sw6_ids": category_ids,
+                    }
             total = self._to_int((response or {}).get("total"))
             if len(rows) < page_size or (total and page * page_size >= total):
                 break
