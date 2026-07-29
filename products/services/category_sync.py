@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import defaultdict, deque
 from typing import Any
 
 from django.db import transaction
@@ -7,8 +8,11 @@ from django.utils.text import slugify
 from loguru import logger
 
 from core.services import BaseService
-from products.models import Category
+from products.models import Category, Product
 from shopware.services.shopware6 import Shopware6Service
+
+
+DEFAULT_SHOPWARE6_CATEGORY_ROOTS = ("Deutsch", "Schweiz")
 
 
 class ShopwareCategorySyncService(BaseService):
@@ -23,6 +27,8 @@ class ShopwareCategorySyncService(BaseService):
         limit: int | None = None,
         page_size: int = 100,
         shopware_service: Shopware6Service | None = None,
+        root_names: tuple[str, ...] = DEFAULT_SHOPWARE6_CATEGORY_ROOTS,
+        sync_product_assignments: bool = True,
     ) -> dict[str, int]:
         page_size = max(1, min(int(page_size or 100), 500))
         service = shopware_service or Shopware6Service()
@@ -49,7 +55,231 @@ class ShopwareCategorySyncService(BaseService):
                 break
             page += 1
 
-        return self._upsert_categories(rows)
+        remote_categories, ignored_outside_roots, skipped = self._scoped_categories(
+            rows=rows,
+            root_names=root_names,
+        )
+        summary = self._upsert_categories(remote_categories)
+        summary["seen"] = len(rows)
+        summary["scoped"] = len(remote_categories)
+        summary["ignored_outside_roots"] = ignored_outside_roots
+        summary["skipped"] += skipped
+        if sync_product_assignments:
+            summary.update(
+                self._sync_product_assignments(
+                    service=service,
+                    category_ids_by_sw6_id={
+                        category.sw6_id: category.pk
+                        for category in Category.objects.filter(sw6_id__in=remote_categories)
+                        if category.sw6_id
+                    },
+                    page_size=page_size,
+                )
+            )
+        else:
+            summary.update(self._empty_product_assignment_summary())
+        return summary
+
+    @classmethod
+    def _scoped_categories(
+        cls,
+        *,
+        rows: list[dict[str, Any]],
+        root_names: tuple[str, ...],
+    ) -> tuple[dict[str, dict[str, Any]], int, int]:
+        """Keep only the requested SW6 category trees."""
+        categories: dict[str, dict[str, Any]] = {}
+        skipped = 0
+        for row in rows:
+            category = cls._normalize_entity(row)
+            sw6_id = cls._text(category.get("id"))
+            name = cls._text(category.get("name"))
+            if not sw6_id or not name:
+                skipped += 1
+                logger.warning("Skipping Shopware category without id or name: {}", row)
+                continue
+            categories[sw6_id] = category
+
+        requested_names = [cls._normalized_name(name) for name in root_names if cls._normalized_name(name)]
+        if not requested_names:
+            raise ValueError("At least one Shopware6 category root is required.")
+        root_ids: list[str] = []
+        missing_roots: list[str] = []
+        for root_name in requested_names:
+            matches = [
+                category_id
+                for category_id, category in categories.items()
+                if cls._normalized_name(category.get("name")) == root_name
+            ]
+            if len(matches) == 1:
+                root_ids.append(matches[0])
+            elif not matches:
+                missing_roots.append(root_name)
+            else:
+                raise ValueError(f"Shopware6 category root '{root_name}' is ambiguous: {', '.join(matches)}.")
+        if missing_roots:
+            raise ValueError("Shopware6 category roots not found: " + ", ".join(missing_roots))
+
+        children_by_parent: dict[str, list[str]] = defaultdict(list)
+        for category_id, category in categories.items():
+            parent_id = cls._text(category.get("parentId"))
+            if parent_id:
+                children_by_parent[parent_id].append(category_id)
+        selected_ids: set[str] = set()
+        pending = deque(root_ids)
+        while pending:
+            category_id = pending.popleft()
+            if category_id in selected_ids or category_id not in categories:
+                continue
+            selected_ids.add(category_id)
+            pending.extend(children_by_parent.get(category_id, []))
+        return (
+            {category_id: categories[category_id] for category_id in selected_ids},
+            len(categories) - len(selected_ids),
+            skipped,
+        )
+
+    @classmethod
+    def _sort_orders(cls, categories: dict[str, dict[str, Any]]) -> dict[str, int]:
+        """Translate SW6's sibling ``afterCategoryId`` chains to local positions."""
+        siblings_by_parent: dict[str, list[str]] = defaultdict(list)
+        for category_id, category in categories.items():
+            parent_id = cls._text(category.get("parentId"))
+            siblings_by_parent[parent_id if parent_id in categories else ""].append(category_id)
+
+        sort_orders: dict[str, int] = {}
+        for sibling_ids in siblings_by_parent.values():
+            sibling_set = set(sibling_ids)
+            followers_by_after: dict[str, list[str]] = defaultdict(list)
+            first_ids: list[str] = []
+            for category_id in sibling_ids:
+                after_id = cls._text(categories[category_id].get("afterCategoryId"))
+                if after_id in sibling_set and after_id != category_id:
+                    followers_by_after[after_id].append(category_id)
+                else:
+                    first_ids.append(category_id)
+
+            def category_key(category_id: str) -> tuple[str, str]:
+                return cls._normalized_name(categories[category_id].get("name")), category_id
+
+            ordered_ids: list[str] = []
+            visited: set[str] = set()
+
+            def append_chain(category_id: str) -> None:
+                if category_id in visited:
+                    return
+                visited.add(category_id)
+                ordered_ids.append(category_id)
+                for follower_id in sorted(followers_by_after.get(category_id, []), key=category_key):
+                    append_chain(follower_id)
+
+            for category_id in sorted(first_ids, key=category_key):
+                append_chain(category_id)
+            for category_id in sorted(sibling_ids, key=category_key):
+                append_chain(category_id)
+            for position, category_id in enumerate(ordered_ids, start=1):
+                sort_orders[category_id] = position * 10
+        return sort_orders
+
+    def _sync_product_assignments(
+        self,
+        *,
+        service: Shopware6Service,
+        category_ids_by_sw6_id: dict[str, int],
+        page_size: int,
+    ) -> dict[str, int]:
+        if not category_ids_by_sw6_id:
+            return self._empty_product_assignment_summary()
+
+        source_assignments = self._product_category_assignments(
+            service=service,
+            category_sw6_ids=set(category_ids_by_sw6_id),
+            page_size=page_size,
+        )
+        source_product_numbers = set(source_assignments)
+        products_by_erp_nr = Product.objects.in_bulk(source_product_numbers, field_name="erp_nr")
+        desired_links = {
+            (products_by_erp_nr[product_number].pk, category_ids_by_sw6_id[category_sw6_id])
+            for product_number, category_sw6_ids in source_assignments.items()
+            for category_sw6_id in category_sw6_ids
+            if product_number in products_by_erp_nr
+        }
+        category_ids = set(category_ids_by_sw6_id.values())
+        through_model = Product.categories.through
+        existing_links = set(
+            through_model.objects.filter(category_id__in=category_ids).values_list("product_id", "category_id")
+        )
+        new_links = desired_links - existing_links
+        stale_links = existing_links - desired_links
+        with transaction.atomic():
+            if new_links:
+                through_model.objects.bulk_create(
+                    [
+                        through_model(product_id=product_id, category_id=category_id)
+                        for product_id, category_id in new_links
+                    ],
+                    ignore_conflicts=True,
+                )
+            if stale_links:
+                for product_id, category_id in stale_links:
+                    through_model.objects.filter(product_id=product_id, category_id=category_id).delete()
+        return {
+            "source_products": len(source_assignments),
+            "matched_products": len(products_by_erp_nr),
+            "missing_products": len(source_product_numbers - set(products_by_erp_nr)),
+            "created_assignments": len(new_links),
+            "existing_assignments": len(existing_links & desired_links),
+            "removed_assignments": len(stale_links),
+        }
+
+    def _product_category_assignments(
+        self,
+        *,
+        service: Shopware6Service,
+        category_sw6_ids: set[str],
+        page_size: int,
+    ) -> dict[str, set[str]]:
+        assignments: dict[str, set[str]] = defaultdict(set)
+        page = 1
+        while True:
+            response = service.request_post(
+                "/search/product",
+                payload={
+                    "page": page,
+                    "limit": page_size,
+                    "total-count-mode": 1,
+                    "associations": {"categories": {}},
+                },
+            )
+            rows = [row for row in ((response or {}).get("data") or []) if isinstance(row, dict)]
+            if not rows:
+                break
+            for row in rows:
+                product = self._normalize_entity(row)
+                product_number = self._text(product.get("productNumber"))
+                if not product_number:
+                    continue
+                for category in product.get("categories") or []:
+                    category_data = self._normalize_entity(category) if isinstance(category, dict) else {}
+                    category_id = self._text(category_data.get("id"))
+                    if category_id in category_sw6_ids:
+                        assignments[product_number].add(category_id)
+            total = self._to_int((response or {}).get("total"))
+            if len(rows) < page_size or (total and page * page_size >= total):
+                break
+            page += 1
+        return assignments
+
+    @staticmethod
+    def _empty_product_assignment_summary() -> dict[str, int]:
+        return {
+            "source_products": 0,
+            "matched_products": 0,
+            "missing_products": 0,
+            "created_assignments": 0,
+            "existing_assignments": 0,
+            "removed_assignments": 0,
+        }
 
     @classmethod
     def _search_payload(cls, *, page: int, limit: int) -> dict[str, Any]:
@@ -70,49 +300,26 @@ class ShopwareCategorySyncService(BaseService):
             },
         }
 
-    def _upsert_categories(self, rows: list[dict[str, Any]]) -> dict[str, int]:
+    def _upsert_categories(self, remote_categories: dict[str, dict[str, Any]]) -> dict[str, int]:
         summary = {
-            "seen": len(rows),
+            "seen": len(remote_categories),
             "created": 0,
             "updated": 0,
             "skipped": 0,
         }
-        remote_categories: dict[str, dict[str, Any]] = {}
-        for row in rows:
-            category = self._normalize_entity(row)
-            sw6_id = self._text(category.get("id"))
-            name = self._text(category.get("name"))
-            if not sw6_id or not name:
-                summary["skipped"] += 1
-                logger.warning("Skipping Shopware category without id or name: {}", row)
-                continue
-            remote_categories[sw6_id] = category
-
         if not remote_categories:
             return summary
 
         remote_ids = set(remote_categories)
-        parent_ids = {
-            self._text(category.get("parentId"))
-            for category in remote_categories.values()
-            if self._text(category.get("parentId"))
-        }
         categories_by_sw6_id = {
             category.sw6_id: category
-            for category in Category.objects.filter(sw6_id__in=remote_ids | parent_ids)
+            for category in Category.objects.filter(sw6_id__in=remote_ids)
             if category.sw6_id
         }
-        categories_by_legacy_sku = {
-            category.sku: category
-            for category in Category.objects.filter(sku__in=remote_ids)
-            if category.sku
-        }
-
+        sort_orders = self._sort_orders(remote_categories)
         with transaction.atomic(), Category.objects.disable_mptt_updates():
             for sw6_id, remote_category in remote_categories.items():
                 category = categories_by_sw6_id.get(sw6_id)
-                if category is None:
-                    category = categories_by_legacy_sku.get(sw6_id)
 
                 defaults = self._category_defaults(remote_category)
                 translations = self._translation_defaults(remote_category)
@@ -129,6 +336,7 @@ class ShopwareCategorySyncService(BaseService):
                     category.sw6_id = sw6_id
                     summary["updated"] += 1
 
+                category.sort_order = sort_orders[sw6_id]
                 for field_name, value in translations.items():
                     setattr(category, field_name, value)
                 category.save()
@@ -137,7 +345,7 @@ class ShopwareCategorySyncService(BaseService):
             for sw6_id, remote_category in remote_categories.items():
                 parent_sw6_id = self._text(remote_category.get("parentId"))
                 category = categories_by_sw6_id[sw6_id]
-                if not parent_sw6_id:
+                if not parent_sw6_id or parent_sw6_id not in remote_categories:
                     Category.objects.filter(pk=category.pk).update(parent_id=None)
                     continue
 
@@ -254,6 +462,10 @@ class ShopwareCategorySyncService(BaseService):
     @staticmethod
     def _text(value: Any) -> str:
         return "" if value is None else str(value).strip()
+
+    @classmethod
+    def _normalized_name(cls, value: Any) -> str:
+        return " ".join(cls._text(value).casefold().split())
 
     @classmethod
     def _truncate(cls, value: Any, max_length: int | None) -> str:

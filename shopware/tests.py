@@ -768,6 +768,60 @@ class Shopware5CategoryMappingApplyTest(TestCase):
         )
 
 
+class Shopware5CategoryIdMappingTest(TestCase):
+    def test_maps_only_sw5_ids_by_complete_path_and_reports_missing_paths(self):
+        deutsch = Category.objects.create(name="Deutsch", slug="sw6-deutsch", sw6_id="sw6-de", sort_order=70)
+        orga = Category.objects.create(
+            name="Orga-Mappen",
+            slug="sw6-deutsch-orga",
+            sw6_id="sw6-orga",
+            parent=deutsch,
+            sort_order=80,
+        )
+        product = Product.objects.create(erp_nr="100001", name="SW6-Zuordnung")
+        product.categories.add(orga)
+        snapshot = Shopware5CategoryMappingSnapshot(
+            categories={
+                "851": {"id": "851", "parent_id": "1", "name": "Deutsch", "position": 0, "active": True},
+                "852": {
+                    "id": "852",
+                    "parent_id": "851",
+                    "name": "Orga-Mappen",
+                    "position": 0,
+                    "active": True,
+                },
+                "853": {
+                    "id": "853",
+                    "parent_id": "851",
+                    "name": "In SW6 entfernt",
+                    "position": 1,
+                    "active": True,
+                },
+            },
+            root_ids=("851",),
+            product_numbers_by_category={"851": set(), "852": set(), "853": set()},
+            article_count=0,
+            article_detail_count=0,
+        )
+        service = Shopware5CategoryMappingService(api_service=MagicMock())
+
+        preview = service.preview_sw5_id_mapping(snapshot)
+        result = service.apply_sw5_ids(snapshot)
+
+        deutsch.refresh_from_db()
+        orga.refresh_from_db()
+        self.assertEqual(result["mapped"], 2)
+        self.assertEqual(result["skipped"], 1)
+        self.assertEqual(deutsch.sw5_id, "851")
+        self.assertEqual(orga.sw5_id, "852")
+        self.assertEqual((deutsch.sort_order, orga.sort_order), (70, 80))
+        self.assertEqual(list(product.categories.values_list("pk", flat=True)), [orga.pk])
+        self.assertEqual(
+            next(report["status"] for report in preview["reports"] if report["sw5_id"] == "853"),
+            "missing_local_category",
+        )
+
+
 class Shopware5DuplicateCategoryTreeMergeServiceTest(TestCase):
     def setUp(self):
         self.technical_root = Category.objects.create(name="Root", slug="technical-root", sw5_id="1", sort_order=0)

@@ -172,6 +172,38 @@ class CategorySyncDefinitionTest(SimpleTestCase):
         self.assertEqual(defaults["meta_keywords_ch_de"], "papier, schweiz")
         self.assertEqual(defaults["name_it_it"], "Carta italiana")
 
+    def test_category_scope_keeps_only_deutsch_and_schweiz_subtrees(self):
+        categories, ignored, skipped = ShopwareCategorySyncService._scoped_categories(
+            rows=[
+                {"id": "de", "name": "Deutsch", "parentId": "navigation"},
+                {"id": "de-child", "name": "Mappen", "parentId": "de"},
+                {"id": "ch", "name": "Schweiz", "parentId": "navigation"},
+                {"id": "ch-child", "name": "Mappen", "parentId": "ch"},
+                {"id": "it", "name": "Italien", "parentId": "navigation"},
+            ],
+            root_names=("Deutsch", "Schweiz"),
+        )
+
+        self.assertEqual(set(categories), {"de", "de-child", "ch", "ch-child"})
+        self.assertEqual(ignored, 1)
+        self.assertEqual(skipped, 0)
+
+    def test_category_sort_order_follows_shopware_after_category_id(self):
+        sort_orders = ShopwareCategorySyncService._sort_orders(
+            {
+                "de": {"id": "de", "name": "Deutsch", "parentId": "navigation"},
+                "first": {"id": "first", "name": "Zuerst", "parentId": "de"},
+                "second": {
+                    "id": "second",
+                    "name": "Danach",
+                    "parentId": "de",
+                    "afterCategoryId": "first",
+                },
+            }
+        )
+
+        self.assertLess(sort_orders["first"], sort_orders["second"])
+
 
 class CategorySelectionLabelTest(TestCase):
     def test_category_string_includes_root_name_for_child_categories(self):
@@ -191,6 +223,57 @@ class CategorySelectionLabelTest(TestCase):
         self.assertEqual(str(germany), "Deutschland")
         self.assertEqual(str(german_strip_tabs), "Deutschland | Strip-Tabs")
         self.assertEqual(str(italian_strip_tabs), "Italien | Strip-Tabs")
+
+
+class ShopwareCategorySyncSourceTest(TestCase):
+    class FakeShopware6Service:
+        def request_post(self, path, payload):
+            self.path = path
+            self.payload = payload
+            return {
+                "total": 1,
+                "data": [
+                    {
+                        "id": "remote-product-1",
+                        "productNumber": "100001",
+                        "categories": [{"id": "second"}],
+                    }
+                ],
+            }
+
+    def test_sw6_is_the_source_for_order_and_product_assignments(self):
+        service = ShopwareCategorySyncService()
+        remote_categories = {
+            "de": {"id": "de", "name": "Deutsch", "parentId": "navigation"},
+            "first": {"id": "first", "name": "Zuerst", "parentId": "de"},
+            "second": {
+                "id": "second",
+                "name": "Danach",
+                "parentId": "de",
+                "afterCategoryId": "first",
+            },
+        }
+        service._upsert_categories(remote_categories)
+        first = Category.objects.get(sw6_id="first")
+        second = Category.objects.get(sw6_id="second")
+        assigned_product = Product.objects.create(erp_nr="100001", name="Aus SW6 zugeordnet")
+        stale_product = Product.objects.create(erp_nr="999999", name="Aus SW6 entfernt")
+        assigned_product.categories.add(first)
+        stale_product.categories.add(first)
+
+        result = service._sync_product_assignments(
+            service=self.FakeShopware6Service(),
+            category_ids_by_sw6_id={"de": Category.objects.get(sw6_id="de").pk, "first": first.pk, "second": second.pk},
+            page_size=100,
+        )
+
+        first.refresh_from_db()
+        second.refresh_from_db()
+        self.assertLess(first.sort_order, second.sort_order)
+        self.assertEqual(list(assigned_product.categories.values_list("sw6_id", flat=True)), ["second"])
+        self.assertFalse(stale_product.categories.exists())
+        self.assertEqual(result["created_assignments"], 1)
+        self.assertEqual(result["removed_assignments"], 2)
 
 
 class ProductVariantFamilyAdminFormTest(TestCase):

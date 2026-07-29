@@ -48,6 +48,7 @@ class Shopware5CategoryMappingService(BaseService):
         page_size: int = max_page_size,
         article_detail_workers: int = 6,
         skip_inactive_categories: bool = False,
+        include_product_assignments: bool = True,
     ) -> Shopware5CategoryMappingSnapshot:
         """Read the requested Shopware trees and all article/category assignments.
 
@@ -75,6 +76,16 @@ class Shopware5CategoryMappingService(BaseService):
                 )
 
         product_numbers_by_category = {category_id: set() for category_id in scoped_categories}
+        if not include_product_assignments:
+            return Shopware5CategoryMappingSnapshot(
+                categories=scoped_categories,
+                root_ids=tuple(root_ids),
+                product_numbers_by_category=product_numbers_by_category,
+                article_count=0,
+                article_detail_count=0,
+                skipped_inactive_category_count=skipped_inactive_category_count,
+            )
+
         article_rows = self._get_article_rows(page_size=page_size)
         article_ids = [self._text(article_row.get("id")) for article_row in article_rows]
         article_ids = [article_id for article_id in article_ids if article_id]
@@ -112,6 +123,80 @@ class Shopware5CategoryMappingService(BaseService):
             "assignments": snapshot.assignment_count,
             "skipped_inactive_categories": snapshot.skipped_inactive_category_count,
             "category_reports": self._category_reports(snapshot),
+        }
+
+    def preview_sw5_id_mapping(self, snapshot: Shopware5CategoryMappingSnapshot) -> dict[str, Any]:
+        """Match SW5 IDs to canonical local categories by complete name path only."""
+        snapshot = self._root_scoped_snapshot(snapshot)
+        local_by_path, local_categories = self._canonical_local_categories_by_path(snapshot)
+        local_by_sw5_id = {
+            self._text(category.sw5_id): category
+            for category in local_categories
+            if self._text(category.sw5_id)
+        }
+        source_paths = {
+            self._source_category_name_path(snapshot=snapshot, category_id=category_id)
+            for category_id in snapshot.categories
+        }
+        reports: list[dict[str, Any]] = []
+        for sw5_id in self._category_ids_in_parent_order(snapshot.categories):
+            path = self._source_category_name_path(snapshot=snapshot, category_id=sw5_id)
+            candidates = local_by_path.get(path, [])
+            local_category = candidates[0] if len(candidates) == 1 else None
+            status = "missing_local_category"
+            if len(candidates) > 1:
+                status = "ambiguous_local_category"
+            elif local_category is not None:
+                local_sw5_id = self._text(local_category.sw5_id)
+                existing_owner = local_by_sw5_id.get(sw5_id)
+                if local_sw5_id and local_sw5_id != sw5_id:
+                    status = "conflicting_local_sw5_id"
+                elif existing_owner is not None and existing_owner.pk != local_category.pk:
+                    status = "sw5_id_owned_by_other_category"
+                elif local_sw5_id == sw5_id:
+                    status = "already_mapped"
+                else:
+                    status = "will_map"
+            reports.append(
+                {
+                    "sw5_id": sw5_id,
+                    "path": " > ".join(path),
+                    "status": status,
+                    "local_category": self._local_category_mapping_report(local_category),
+                }
+            )
+
+        local_without_source = [
+            self._local_category_mapping_report(category)
+            for path, categories in local_by_path.items()
+            if path not in source_paths
+            for category in categories
+        ]
+        return {
+            "roots": [snapshot.categories[root_id]["name"] for root_id in snapshot.root_ids],
+            "source_categories": len(snapshot.categories),
+            "will_map": sum(report["status"] == "will_map" for report in reports),
+            "already_mapped": sum(report["status"] == "already_mapped" for report in reports),
+            "skipped": sum(
+                report["status"] not in {"will_map", "already_mapped"} for report in reports
+            ),
+            "skipped_inactive_categories": snapshot.skipped_inactive_category_count,
+            "reports": reports,
+            "local_without_source": local_without_source,
+        }
+
+    def apply_sw5_ids(self, snapshot: Shopware5CategoryMappingSnapshot) -> dict[str, Any]:
+        """Save only safely matched SW5 IDs; leave all other category data untouched."""
+        report = self.preview_sw5_id_mapping(snapshot)
+        entries_to_map = [entry for entry in report["reports"] if entry["status"] == "will_map"]
+        with transaction.atomic():
+            for entry in entries_to_map:
+                Category.objects.filter(pk=entry["local_category"]["id"]).update(sw5_id=entry["sw5_id"])
+        return {
+            "mapped": len(entries_to_map),
+            "already_mapped": report["already_mapped"],
+            "skipped": report["skipped"],
+            "local_without_source": len(report["local_without_source"]),
         }
 
     def preview_category_comparison(
@@ -601,6 +686,72 @@ class Shopware5CategoryMappingService(BaseService):
                 by_sw5_id[sw5_id] = category
                 claimed_category_ids.add(category.pk)
         return by_sw5_id
+
+    @classmethod
+    def _canonical_local_categories_by_path(
+        cls,
+        snapshot: Shopware5CategoryMappingSnapshot,
+    ) -> tuple[dict[tuple[str, ...], list[Category]], list[Category]]:
+        """Index only the local trees whose roots were requested from SW5."""
+        root_names = {
+            cls._normalized_name(snapshot.categories[root_id]["name"])
+            for root_id in snapshot.root_ids
+        }
+        local_roots_by_name: dict[str, list[Category]] = defaultdict(list)
+        for category in Category.objects.filter(parent__isnull=True).only("id", "name", "parent_id", "sw5_id", "sw6_id"):
+            normalized_name = cls._normalized_name(category.name)
+            if normalized_name in root_names:
+                local_roots_by_name[normalized_name].append(category)
+
+        categories_by_path: dict[tuple[str, ...], list[Category]] = defaultdict(list)
+        local_categories: list[Category] = []
+        for root_name in root_names:
+            roots = local_roots_by_name.get(root_name, [])
+            if len(roots) != 1:
+                continue
+            root = roots[0]
+            nodes = [
+                root,
+                *root.get_descendants().only("id", "name", "parent_id", "sw5_id", "sw6_id"),
+            ]
+            nodes_by_pk = {category.pk: category for category in nodes}
+            for category in nodes:
+                path = cls._relative_local_path(category=category, root=root, categories_by_pk=nodes_by_pk)
+                if path is None:
+                    continue
+                categories_by_path[path].append(category)
+                local_categories.append(category)
+        return categories_by_path, local_categories
+
+    @classmethod
+    def _relative_local_path(
+        cls,
+        *,
+        category: Category,
+        root: Category,
+        categories_by_pk: dict[int, Category],
+    ) -> tuple[str, ...] | None:
+        path: list[str] = []
+        current_category: Category | None = category
+        visited: set[int] = set()
+        while current_category is not None and current_category.pk not in visited:
+            visited.add(current_category.pk)
+            path.append(cls._normalized_name(current_category.name))
+            if current_category.pk == root.pk:
+                return tuple(reversed(path))
+            current_category = categories_by_pk.get(current_category.parent_id)
+        return None
+
+    @classmethod
+    def _local_category_mapping_report(cls, category: Category | None) -> dict[str, Any] | None:
+        if category is None:
+            return None
+        return {
+            "id": category.pk,
+            "name": category.name,
+            "sw5_id": cls._text(category.sw5_id),
+            "sw6_id": cls._text(category.sw6_id),
+        }
 
     @classmethod
     def _source_category_name_path(
