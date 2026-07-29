@@ -35,6 +35,7 @@ from shopware.services.shopware5_category_mapping import (
     Shopware5CategoryMappingService,
     Shopware5CategoryMappingSnapshot,
 )
+from shopware.services.shopware5_duplicate_category_merge import Shopware5DuplicateCategoryTreeMergeService
 from shopware.services.shopware6 import Criteria, EqualsFilter, InvalidTokenError, Shopware6Service
 from shopware.services.variant_sync import ShopwareVariantSyncService
 
@@ -465,7 +466,7 @@ class Shopware5CategoryMappingServiceTest(SimpleTestCase):
         api = self.FakeShopware5Api()
         snapshot = Shopware5CategoryMappingService(api_service=api).collect_snapshot()
 
-        self.assertEqual(set(snapshot.categories), {"1", "851", "852", "1006", "1007"})
+        self.assertEqual(set(snapshot.categories), {"851", "852", "1006", "1007"})
         self.assertEqual(snapshot.root_ids, ("851", "1006"))
         self.assertEqual(snapshot.product_numbers_by_category["852"], {"100001", "100001-ROT", "200001"})
         self.assertEqual(snapshot.product_numbers_by_category["1007"], {"100001", "100001-ROT"})
@@ -481,23 +482,15 @@ class Shopware5CategoryMappingServiceTest(SimpleTestCase):
         preview = Shopware5CategoryMappingService(api_service=self.FakeShopware5Api()).preview(snapshot)
 
         self.assertEqual(preview["roots"], ["Deutsch", "Schweiz"])
-        self.assertEqual(preview["categories"], 5)
+        self.assertEqual(preview["categories"], 4)
         self.assertEqual(preview["assignments"], 5)
         self.assertEqual(
             preview["category_reports"],
             [
                 {
-                    "id": "1",
-                    "name": "Root",
-                    "path": "Root",
-                    "position": 0,
-                    "active": True,
-                    "product_count": 0,
-                },
-                {
                     "id": "851",
                     "name": "Deutsch",
-                    "path": "Root > Deutsch",
+                    "path": "Deutsch",
                     "position": 0,
                     "active": True,
                     "product_count": 0,
@@ -505,7 +498,7 @@ class Shopware5CategoryMappingServiceTest(SimpleTestCase):
                 {
                     "id": "852",
                     "name": "Orga-Mappen",
-                    "path": "Root > Deutsch > Orga-Mappen",
+                    "path": "Deutsch > Orga-Mappen",
                     "position": 0,
                     "active": True,
                     "product_count": 3,
@@ -513,7 +506,7 @@ class Shopware5CategoryMappingServiceTest(SimpleTestCase):
                 {
                     "id": "1006",
                     "name": "Schweiz",
-                    "path": "Root > Schweiz",
+                    "path": "Schweiz",
                     "position": 1,
                     "active": True,
                     "product_count": 0,
@@ -521,7 +514,7 @@ class Shopware5CategoryMappingServiceTest(SimpleTestCase):
                 {
                     "id": "1007",
                     "name": "Orga-Mappen",
-                    "path": "Root > Schweiz > Orga-Mappen",
+                    "path": "Schweiz > Orga-Mappen",
                     "position": 0,
                     "active": True,
                     "product_count": 2,
@@ -532,15 +525,13 @@ class Shopware5CategoryMappingServiceTest(SimpleTestCase):
 
 class Shopware5CategoryMappingApplyTest(TestCase):
     def test_apply_reuses_matching_tree_and_replaces_stale_assignments_when_requested(self):
-        root = Category.objects.create(name="Root", slug="root", sort_order=0)
-        deutsch = Category.objects.create(name="Deutsch", slug="deutsch", parent=root, sort_order=0)
+        deutsch = Category.objects.create(name="Deutsch", slug="deutsch", sort_order=0)
         mappen = Category.objects.create(name="Orga-Mappen", slug="orga-mappen", parent=deutsch, sort_order=0)
         assigned_product = Product.objects.create(erp_nr="100001", name="Zuzuordnender Artikel")
         stale_product = Product.objects.create(erp_nr="999999", name="Veralteter Artikel")
         stale_product.categories.add(mappen)
         snapshot = Shopware5CategoryMappingSnapshot(
             categories={
-                "1": {"id": "1", "parent_id": "", "name": "Root", "position": 0, "active": True},
                 "851": {"id": "851", "parent_id": "1", "name": "Deutsch", "position": 0, "active": True},
                 "852": {
                     "id": "852",
@@ -551,7 +542,7 @@ class Shopware5CategoryMappingApplyTest(TestCase):
                 },
             },
             root_ids=("851",),
-            product_numbers_by_category={"1": set(), "851": set(), "852": {"100001"}},
+            product_numbers_by_category={"851": set(), "852": {"100001"}},
             article_count=1,
             article_detail_count=1,
         )
@@ -573,22 +564,28 @@ class Shopware5CategoryMappingApplyTest(TestCase):
             replace_assignments=True,
         )
 
-        root.refresh_from_db()
         deutsch.refresh_from_db()
         mappen.refresh_from_db()
-        self.assertEqual((root.sw5_id, deutsch.sw5_id, mappen.sw5_id), ("1", "851", "852"))
-        self.assertEqual(deutsch.parent, root)
+        self.assertEqual((deutsch.sw5_id, mappen.sw5_id), ("851", "852"))
+        self.assertIsNone(deutsch.parent)
         self.assertEqual(mappen.parent, deutsch)
         self.assertEqual(list(assigned_product.categories.values_list("pk", flat=True)), [mappen.pk])
         self.assertFalse(stale_product.categories.exists())
         self.assertEqual(result["created_categories"], 0)
         self.assertEqual(result["created_assignments"], 1)
         self.assertEqual(result["removed_assignments"], 1)
+        reconciliation = service.preview_reconciliation_report(snapshot)
+        reports_by_id = {report["id"]: report for report in reconciliation["reports"]}
+        self.assertEqual(reconciliation["recognized_categories"], 2)
+        self.assertTrue(reports_by_id["851"]["parent_matches"])
+        self.assertTrue(reports_by_id["852"]["parent_matches"])
+        self.assertTrue(reports_by_id["852"]["position_matches"])
+        self.assertEqual(reports_by_id["852"]["assigned_products"], 1)
+        self.assertEqual(reports_by_id["852"]["missing_assignment"], [])
 
     def test_apply_matches_identical_subtrees_by_full_path_and_ignores_sw6_level_four(self):
-        root = Category.objects.create(name="Root", slug="root", sort_order=0)
-        deutsch = Category.objects.create(name="Deutsch", slug="deutsch", parent=root, sort_order=0)
-        schweiz = Category.objects.create(name="Schweiz", slug="schweiz", parent=root, sort_order=1)
+        deutsch = Category.objects.create(name="Deutsch", slug="deutsch", sort_order=0)
+        schweiz = Category.objects.create(name="Schweiz", slug="schweiz", sort_order=1)
         deutsch_orga = Category.objects.create(
             name="Orga-Mappen",
             slug="deutsch-orga-mappen",
@@ -622,7 +619,6 @@ class Shopware5CategoryMappingApplyTest(TestCase):
         )
         snapshot = Shopware5CategoryMappingSnapshot(
             categories={
-                "1": {"id": "1", "parent_id": "", "name": "Root", "position": 0, "active": True},
                 "851": {"id": "851", "parent_id": "1", "name": "Deutsch", "position": 0, "active": True},
                 "852": {
                     "id": "852",
@@ -656,7 +652,6 @@ class Shopware5CategoryMappingApplyTest(TestCase):
             },
             root_ids=("851", "1006"),
             product_numbers_by_category={
-                "1": set(),
                 "851": set(),
                 "852": set(),
                 "860": set(),
@@ -680,11 +675,9 @@ class Shopware5CategoryMappingApplyTest(TestCase):
         self.assertEqual(result["created_categories"], 0)
 
     def test_apply_refuses_to_create_a_category_when_no_full_path_matches(self):
-        root = Category.objects.create(name="Root", slug="root", sort_order=0)
-        Category.objects.create(name="Deutsch", slug="deutsch", parent=root, sort_order=0)
+        Category.objects.create(name="Deutsch", slug="deutsch", sort_order=0)
         snapshot = Shopware5CategoryMappingSnapshot(
             categories={
-                "1": {"id": "1", "parent_id": "", "name": "Root", "position": 0, "active": True},
                 "851": {"id": "851", "parent_id": "1", "name": "Deutsch", "position": 0, "active": True},
                 "852": {
                     "id": "852",
@@ -695,7 +688,7 @@ class Shopware5CategoryMappingApplyTest(TestCase):
                 },
             },
             root_ids=("851",),
-            product_numbers_by_category={"1": set(), "851": set(), "852": set()},
+            product_numbers_by_category={"851": set(), "852": set()},
             article_count=0,
             article_detail_count=0,
         )
@@ -703,12 +696,25 @@ class Shopware5CategoryMappingApplyTest(TestCase):
         with self.assertRaisesMessage(Shopware5APIError, "vollstaendigen Shopware-5-Pfad"):
             Shopware5CategoryMappingService(api_service=MagicMock()).apply(snapshot)
 
-        self.assertEqual(Category.objects.count(), 2)
+        self.assertEqual(Category.objects.count(), 1)
 
     def test_apply_preserves_shopware5_sibling_positions_in_the_mptt_tree(self):
+        deutsch = Category.objects.create(name="Deutsch", slug="deutsch", sort_order=0)
+        Category.objects.create(
+            name="Zuerst im Namen, zuletzt in SW5",
+            slug="zuerst-im-namen",
+            parent=deutsch,
+            sort_order=1000,
+        )
+        Category.objects.create(name="Mitte", slug="mitte", parent=deutsch, sort_order=1000)
+        Category.objects.create(
+            name="Zuletzt im Namen, zuerst in SW5",
+            slug="zuletzt-im-namen",
+            parent=deutsch,
+            sort_order=1000,
+        )
         snapshot = Shopware5CategoryMappingSnapshot(
             categories={
-                "1": {"id": "1", "parent_id": "", "name": "Root", "position": 0, "active": True},
                 "851": {"id": "851", "parent_id": "1", "name": "Deutsch", "position": 0, "active": True},
                 "901": {
                     "id": "901",
@@ -733,7 +739,7 @@ class Shopware5CategoryMappingApplyTest(TestCase):
                 },
             },
             root_ids=("851",),
-            product_numbers_by_category={"1": set(), "851": set(), "901": set(), "902": set(), "903": set()},
+            product_numbers_by_category={"851": set(), "901": set(), "902": set(), "903": set()},
             article_count=0,
             article_detail_count=0,
         )
@@ -745,6 +751,69 @@ class Shopware5CategoryMappingApplyTest(TestCase):
             list(deutsch.get_children().order_by("lft").values_list("sw5_id", "sort_order")),
             [("903", 10), ("902", 20), ("901", 30)],
         )
+
+
+class Shopware5DuplicateCategoryTreeMergeServiceTest(TestCase):
+    def setUp(self):
+        self.technical_root = Category.objects.create(name="Root", slug="technical-root", sw5_id="1", sort_order=0)
+        self.duplicate_deutsch = Category.objects.create(
+            name="Deutsch",
+            slug="duplicate-deutsch",
+            parent=self.technical_root,
+            sw5_id="851",
+            sort_order=10,
+        )
+        self.duplicate_orga = Category.objects.create(
+            name="Orga-Mappen",
+            slug="duplicate-deutsch-orga",
+            parent=self.duplicate_deutsch,
+            sw5_id="852",
+            sort_order=20,
+        )
+        self.deutsch = Category.objects.create(name="Deutsch", slug="deutsch", sort_order=30)
+        self.orga = Category.objects.create(
+            name="Orga-Mappen",
+            slug="deutsch-orga",
+            parent=self.deutsch,
+            sort_order=40,
+        )
+        self.product = Product.objects.create(erp_nr="100001", name="Nur im Duplikat")
+        self.product.categories.add(self.duplicate_orga)
+
+    def test_transfers_only_sw5_ids_to_the_matching_canonical_tree(self):
+        service = Shopware5DuplicateCategoryTreeMergeService()
+
+        preview = service.preview(root_names=("Deutsch",))
+        result = service.apply(root_names=("Deutsch",))
+
+        self.assertTrue(preview["can_apply"])
+        self.assertEqual(len(preview["transfers"]), 2)
+        self.assertEqual(result["transferred_sw5_ids"], 2)
+        self.duplicate_deutsch.refresh_from_db()
+        self.duplicate_orga.refresh_from_db()
+        self.deutsch.refresh_from_db()
+        self.orga.refresh_from_db()
+        self.product.refresh_from_db()
+        self.assertIsNone(self.duplicate_deutsch.sw5_id)
+        self.assertIsNone(self.duplicate_orga.sw5_id)
+        self.assertEqual(self.deutsch.sw5_id, "851")
+        self.assertEqual(self.orga.sw5_id, "852")
+        self.assertEqual(self.deutsch.parent, None)
+        self.assertEqual(self.orga.parent, self.deutsch)
+        self.assertEqual((self.deutsch.sort_order, self.orga.sort_order), (30, 40))
+        self.assertEqual(list(self.product.categories.values_list("pk", flat=True)), [self.duplicate_orga.pk])
+
+    def test_deletion_is_an_explicit_second_step(self):
+        service = Shopware5DuplicateCategoryTreeMergeService()
+        service.apply(root_names=("Deutsch",))
+
+        result = service.apply(root_names=("Deutsch",), delete_duplicate_subtrees=True)
+
+        self.assertEqual(result["deleted_categories"], 3)
+        self.assertTrue(result["technical_root_deleted"])
+        self.assertFalse(Category.objects.filter(pk=self.technical_root.pk).exists())
+        self.assertTrue(Category.objects.filter(pk=self.deutsch.pk, sw5_id="851").exists())
+        self.assertTrue(Category.objects.filter(pk=self.orga.pk, sw5_id="852").exists())
 
 
 class Shopware5SyncProductsCommandTest(TestCase):

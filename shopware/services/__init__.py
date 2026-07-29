@@ -7,6 +7,7 @@ from .product import ProductService
 from .shopware6 import Shopware6Service, Criteria, EqualsFilter, ContainsFilter
 from .shopware5 import Shopware5ProductSyncService
 from .shopware5_category_mapping import Shopware5CategoryMappingService
+from .shopware5_duplicate_category_merge import Shopware5DuplicateCategoryTreeMergeService
 from .variant_sync import ShopwareVariantSyncService
 
 __all__ = [
@@ -19,6 +20,7 @@ __all__ = [
     "CustomerService",
     "Shopware5ProductSyncService",
     "Shopware5CategoryMappingService",
+    "Shopware5DuplicateCategoryTreeMergeService",
     "ShopwareVariantSyncService",
     "Criteria",
     "EqualsFilter",

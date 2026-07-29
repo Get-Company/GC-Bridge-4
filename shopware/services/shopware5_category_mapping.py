@@ -87,6 +87,7 @@ class Shopware5CategoryMappingService(BaseService):
 
     def preview(self, snapshot: Shopware5CategoryMappingSnapshot) -> dict[str, Any]:
         """Return a category-by-category source report without touching Django data."""
+        snapshot = self._root_scoped_snapshot(snapshot)
         return {
             "roots": [snapshot.categories[root_id]["name"] for root_id in snapshot.root_ids],
             "categories": len(snapshot.categories),
@@ -104,6 +105,7 @@ class Shopware5CategoryMappingService(BaseService):
         category_name: str,
     ) -> dict[str, Any]:
         """Compare one source category with its local category without writing data."""
+        snapshot = self._root_scoped_snapshot(snapshot)
         root_id = self._snapshot_root_id(snapshot=snapshot, root_name=root_name)
         category_id = self._snapshot_category_id(
             snapshot=snapshot,
@@ -164,6 +166,93 @@ class Shopware5CategoryMappingService(BaseService):
             "missing_assignment": sorted((set(project_products) - local_product_numbers)),
         }
 
+    def preview_reconciliation_report(self, snapshot: Shopware5CategoryMappingSnapshot) -> dict[str, Any]:
+        """Compare the selected SW5 trees with local categories without writing data."""
+        snapshot = self._root_scoped_snapshot(snapshot)
+        categories_by_sw5_id = self._existing_categories(snapshot)
+        local_categories = list(
+            Category.objects.only("id", "name", "parent_id", "sw5_id", "sw6_id", "sort_order", "is_active")
+        )
+        local_categories_by_pk = {category.pk: category for category in local_categories}
+        local_category_ids = {category.pk for category in categories_by_sw5_id.values()}
+
+        source_product_numbers = {
+            product_number
+            for product_numbers in snapshot.product_numbers_by_category.values()
+            for product_number in product_numbers
+        }
+        products_by_erp_nr = Product.objects.in_bulk(source_product_numbers, field_name="erp_nr")
+        local_product_numbers_by_category: dict[int, set[str]] = defaultdict(set)
+        if local_category_ids:
+            product_numbers_by_pk = dict(
+                Product.objects.filter(categories__in=local_category_ids)
+                .values_list("pk", "erp_nr")
+                .distinct()
+            )
+            for product_id, category_id in Product.categories.through.objects.filter(
+                category_id__in=local_category_ids
+            ).values_list("product_id", "category_id"):
+                product_number = product_numbers_by_pk.get(product_id)
+                if product_number:
+                    local_product_numbers_by_category[category_id].add(product_number)
+
+        reports: list[dict[str, Any]] = []
+        for sw5_id in self._category_ids_in_parent_order(snapshot.categories):
+            source_category = snapshot.categories[sw5_id]
+            local_category = categories_by_sw5_id.get(sw5_id)
+            source_numbers = set(snapshot.product_numbers_by_category.get(sw5_id, set()))
+            project_numbers = source_numbers & set(products_by_erp_nr)
+            local_numbers = (
+                local_product_numbers_by_category.get(local_category.pk, set()) if local_category is not None else set()
+            )
+            source_parent_id = source_category["parent_id"]
+            expected_parent_sw5_id = source_parent_id if source_parent_id in snapshot.categories else ""
+            local_parent = local_categories_by_pk.get(local_category.parent_id) if local_category is not None else None
+            actual_parent_sw5_id = self._text(local_parent.sw5_id) if local_parent is not None else ""
+            reports.append(
+                {
+                    "id": sw5_id,
+                    "path": self._category_path(snapshot=snapshot, category_id=sw5_id),
+                    "position": source_category["position"],
+                    "active": source_category["active"],
+                    "local_category": (
+                        {
+                            "id": local_category.pk,
+                            "path": self._local_category_name_path(
+                                category=local_category,
+                                categories_by_pk=local_categories_by_pk,
+                            ),
+                            "sw5_id": self._text(local_category.sw5_id),
+                            "sw6_id": self._text(local_category.sw6_id),
+                            "position": local_category.sort_order,
+                            "active": local_category.is_active,
+                        }
+                        if local_category is not None
+                        else None
+                    ),
+                    "expected_parent_sw5_id": expected_parent_sw5_id,
+                    "actual_parent_sw5_id": actual_parent_sw5_id,
+                    "parent_matches": local_category is not None and expected_parent_sw5_id == actual_parent_sw5_id,
+                    "position_matches": local_category is not None and source_category["position"] == local_category.sort_order,
+                    "active_matches": local_category is not None and source_category["active"] == local_category.is_active,
+                    "source_products": len(source_numbers),
+                    "project_products": len(project_numbers),
+                    "assigned_products": len(source_numbers & local_numbers),
+                    "missing_in_project": sorted(source_numbers - set(products_by_erp_nr)),
+                    "missing_assignment": sorted(project_numbers - local_numbers),
+                    "local_only_product_numbers": sorted(local_numbers - source_numbers),
+                }
+            )
+
+        return {
+            "categories": len(reports),
+            "recognized_categories": sum(report["local_category"] is not None for report in reports),
+            "parent_matches": sum(report["parent_matches"] for report in reports),
+            "position_matches": sum(report["position_matches"] for report in reports),
+            "active_matches": sum(report["active_matches"] for report in reports),
+            "reports": reports,
+        }
+
     def apply(
         self,
         snapshot: Shopware5CategoryMappingSnapshot,
@@ -171,6 +260,7 @@ class Shopware5CategoryMappingService(BaseService):
         replace_assignments: bool = False,
     ) -> dict[str, Any]:
         """Persist the source hierarchy and its product assignments locally."""
+        snapshot = self._root_scoped_snapshot(snapshot)
         categories_by_sw5_id = self._existing_categories(snapshot)
         unmapped_category_ids = [
             category_id
@@ -386,12 +476,36 @@ class Shopware5CategoryMappingService(BaseService):
             selected_ids.add(category_id)
             pending.extend(children_by_parent.get(category_id, []))
 
-        for root_id in root_ids:
-            parent_id = categories.get(root_id, {}).get("parent_id", "")
-            while parent_id and parent_id in categories and parent_id not in selected_ids:
-                selected_ids.add(parent_id)
-                parent_id = categories[parent_id]["parent_id"]
         return {category_id: categories[category_id] for category_id in selected_ids}
+
+    @classmethod
+    def _root_scoped_snapshot(
+        cls,
+        snapshot: Shopware5CategoryMappingSnapshot,
+    ) -> Shopware5CategoryMappingSnapshot:
+        """Exclude technical parents above the explicitly requested SW5 roots.
+
+        Shopware 5 stores ``Deutsch`` and ``Schweiz`` below its internal
+        ``Root`` category.  The local SW6 trees intentionally start at those
+        two sales-channel roots, so the technical parent must never take part
+        in local path matching, hierarchy updates, or reports.
+        """
+        categories = cls._scoped_categories(
+            categories=snapshot.categories,
+            root_ids=snapshot.root_ids,
+        )
+        if len(categories) == len(snapshot.categories):
+            return snapshot
+        return Shopware5CategoryMappingSnapshot(
+            categories=categories,
+            root_ids=tuple(root_id for root_id in snapshot.root_ids if root_id in categories),
+            product_numbers_by_category={
+                category_id: set(snapshot.product_numbers_by_category.get(category_id, set()))
+                for category_id in categories
+            },
+            article_count=snapshot.article_count,
+            article_detail_count=snapshot.article_detail_count,
+        )
 
     @classmethod
     def _article_product_numbers(cls, article: dict[str, Any]) -> set[str]:
