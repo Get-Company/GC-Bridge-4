@@ -339,7 +339,7 @@ def htmx_product_search(request, block_id):
             Q(erp_nr__icontains=query)
             | Q(sku__icontains=query)
             | Q(name__icontains=query)
-        ).order_by("erp_nr", "name")[:15]
+        ).filter(is_archived=False).order_by("erp_nr", "name")[:15]
     return render(request, "email_builder/_product_search_results.html", {
         "block": block,
         "products": products,

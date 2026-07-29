@@ -3975,7 +3975,9 @@ class CategoryAdmin(TabbedTranslationAdmin, BaseAdmin):
 
     def _category_products_payload(self, category: Category, search_term: str = "") -> dict:
         search_term = (search_term or "").strip()
-        assigned_queryset = Product.objects.filter(categories=category).order_by("erp_nr", "name", "pk")
+        assigned_queryset = (
+            Product.objects.filter(categories=category, is_archived=False).order_by("erp_nr", "name", "pk")
+        )
         assigned_total = assigned_queryset.count()
         assigned_products = [self._product_payload(product) for product in assigned_queryset[:200]]
 
