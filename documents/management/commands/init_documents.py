@@ -41,6 +41,9 @@ class Command(MonitoredBaseCommand):
             "html_content": template_path.read_text(encoding="utf-8"),
             "css_content": css_path.read_text(encoding="utf-8") if css_path.exists() else "",
             "is_active": True,
+            # Die Preislisten-Vorlage verwendet Django-Template-Tags wie
+            # {% comment %}; sie ist keine Jinja2-Vorlage.
+            "use_jinja2": False,
         }
         self._upsert(Document, Document.Slug.PRICE_LIST, defaults, force=force)
 

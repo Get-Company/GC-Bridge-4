@@ -8,6 +8,7 @@ from django.test import SimpleTestCase, TestCase, override_settings
 
 from documents.admin import DocumentAdmin
 from documents.jinja2_env import price_list_catalog_sections
+from documents.management.commands.init_documents import Command as InitDocumentsCommand
 from documents.models import Document
 from documents.shopware_upload_service import DocumentShopwareUploadService
 from documents.services import DocumentPdfService
@@ -66,6 +67,25 @@ class DocumentRenderingTest(SimpleTestCase):
         self.assertNotIn("template_preview_link", admin_instance.readonly_fields)
         self.assertNotIn("live_preview_button", admin_instance.readonly_fields)
         self.assertEqual(admin_instance.actions_detail[0]["items"], ["generate_pdf_detail", "preview_template_detail"])
+
+
+class DocumentInitializationCommandTest(SimpleTestCase):
+    def test_price_list_initialization_uses_django_template_engine(self):
+        command = InitDocumentsCommand()
+        command._upsert = MagicMock()
+
+        command._init_price_list(Document, force=True)
+
+        args, _ = command._upsert.call_args
+        self.assertFalse(args[2]["use_jinja2"])
+
+    def test_django_document_template_supports_comment_tag(self):
+        document = Document(
+            use_jinja2=False,
+            html_content="{% comment %}Vorlagenhinweis{% endcomment %}<p>Preisliste</p>",
+        )
+
+        self.assertEqual(document.render(), "<p>Preisliste</p>")
 
 
 class DocumentPriceListCatalogSectionsTest(TestCase):
