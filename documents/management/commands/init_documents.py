@@ -29,8 +29,7 @@ class Command(MonitoredBaseCommand):
         self._init_static_documents(Document, force=force)
 
     def _init_price_list(self, Document, *, force: bool) -> None:
-        template_path = Path("templates/admin/products/price_list_pdf.html")
-        css_path = Path("templates/admin/products/includes/price_list_document_template.css")
+        template_path = Path("documents/templates/preisliste.html")
         if not template_path.exists():
             self.stderr.write(f"Datei nicht gefunden: {template_path}")
             return
@@ -39,11 +38,9 @@ class Command(MonitoredBaseCommand):
             "document_type": Document.DocumentType.PRICE_LIST,
             "title": "Preisliste",
             "html_content": template_path.read_text(encoding="utf-8"),
-            "css_content": css_path.read_text(encoding="utf-8") if css_path.exists() else "",
+            "css_content": "",
             "is_active": True,
-            # Die Preislisten-Vorlage verwendet Django-Template-Tags wie
-            # {% comment %}; sie ist keine Jinja2-Vorlage.
-            "use_jinja2": False,
+            "use_jinja2": True,
         }
         self._upsert(Document, Document.Slug.PRICE_LIST, defaults, force=force)
 

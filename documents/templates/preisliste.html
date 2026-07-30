@@ -3,12 +3,6 @@
         size: A4 portrait;
         margin: 12mm 14mm 18mm;
 
-        @bottom-center {
-            content: "Seite " counter(page) " von " counter(pages);
-            font-family: Arial, Arimo, "Liberation Sans", sans-serif;
-            font-size: 8px;
-            color: #888;
-        }
     }
 
     html, body,
@@ -24,61 +18,42 @@
         margin: 0;
     }
 
-    .price-list-title {
-        border-bottom: 2px solid #222;
-        font-size: 22px;
-        font-weight: 700;
-        margin: 0 0 14px;
-        padding-bottom: 6px;
-    }
-
     .price-list-section {
-        margin: 0 0 20px;
+        margin: 0;
     }
 
-    .price-list-section h2 {
-        background: #e0e0e0;
-        color: #111;
-        font-size: 13px;
-        font-weight: 700;
-        margin: 0 0 6px;
-        padding: 4px 6px;
-    }
-
-    .price-list-section h3 {
-        background: #f0f0f0;
-        color: #333;
-        font-size: 10px;
-        font-weight: 700;
-        margin: 10px 0 4px;
-        padding: 3px 6px;
+    .price-list-section + .price-list-section {
+        break-before: page;
+        page-break-before: always;
     }
 
     .price-list-table {
+        border: 1px solid #dee2e6;
         border-collapse: collapse;
         margin: 0 0 8px;
         table-layout: fixed;
         width: 100%;
     }
 
-    .price-list-table .col-name        { width: 46%; }
-    .price-list-table .col-vpe         { width: 12%; }
-    .price-list-table .col-preis       { width: 18%; }
-    .price-list-table .col-staffelmenge { width: 11%; }
-    .price-list-table .col-staffelpreis { width: 13%; }
+    .price-list-table .col-article      { width: 12%; }
+    .price-list-table .col-attributes   { width: 40%; }
+    .price-list-table .col-vpe          { width: 8%; }
+    .price-list-table .col-price        { width: 13%; }
+    .price-list-table .col-quantity     { width: 13%; }
+    .price-list-table .col-rebate-price { width: 14%; }
 
     .price-list-table th {
         background: #e0e0e0;
         color: #333;
-        font-size: 8px;
+        font-size: 9px;
         font-weight: 700;
         padding: 3px 4px;
         text-align: left;
-        text-transform: uppercase;
+        vertical-align: bottom;
     }
 
     .price-list-table td {
-        border-bottom: 1px solid #ddd;
+        border: 1px solid #dee2e6;
         font-size: 9px;
         padding: 3px 4px;
         vertical-align: top;
@@ -88,8 +63,20 @@
         break-inside: avoid;
     }
 
-    .price-list-table tbody tr:nth-child(even) td {
-        background: #f9f9f9;
+    .price-list-table .section-heading th {
+        background: #e0e0e0;
+        color: #111;
+        font-size: 13px;
+        padding: 5px 6px;
+        text-align: left;
+    }
+
+    .price-list-table .group-heading th {
+        background: #fff;
+        color: #111;
+        font-size: 12px;
+        padding: 9px 0 5px;
+        text-align: left;
     }
 
     .price-list-table .number {
@@ -97,16 +84,13 @@
         white-space: nowrap;
     }
 
-    .price-factor-note {
-        color: #888;
-        display: block;
-        font-size: 8px;
-        line-height: 1.1;
-        margin-bottom: 1px;
+    .product-number {
+        font-weight: 700;
     }
 
     .product-name {
-        font-weight: 600;
+        display: block;
+        margin-top: 1px;
     }
 
     .attr-line {
@@ -122,94 +106,67 @@
 
 {% set sections = price_list_catalog_sections() %}
 
-{% macro price_cell(row, price_display) -%}
-    {% if row.factor and row.factor != 1 %}
-        <span class="price-factor-note">je {{ row.factor }} St.</span>
-    {% endif %}
-    {{ price_display|default("-") }}
+{% macro price_list_table(section_name, group_name, rows) -%}
+    <table class="price-list-table">
+        <colgroup>
+            <col class="col-article">
+            <col class="col-attributes">
+            <col class="col-vpe">
+            <col class="col-price">
+            <col class="col-quantity">
+            <col class="col-rebate-price">
+        </colgroup>
+        <thead>
+            <tr class="section-heading">
+                <th colspan="6">{{ section_name|default("Ohne Kategoriebezeichnung") }}</th>
+            </tr>
+            {% if group_name %}
+                <tr class="group-heading">
+                    <th colspan="6">{{ group_name }}</th>
+                </tr>
+            {% endif %}
+            <tr>
+                <th>Artikelnr</th>
+                <th>Attribute</th>
+                <th>VPE</th>
+                <th class="number">Preis</th>
+                <th class="number">Staffelmenge</th>
+                <th class="number">Staffelpreis</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in rows %}
+                <tr>
+                    <td>
+                        <span class="product-number">{{ row.erp_nr|default("-") }}</span>
+                    </td>
+                    <td>
+                        {% for attribute in row.attributes %}
+                            <span class="attr-line">{% if attribute.group %}<b>{{ attribute.group }}:</b> {% endif %}{{ attribute.value }}</span>
+                        {% else %}
+                            <span class="muted">-</span>
+                        {% endfor %}
+                    </td>
+                    <td>{{ row.vpe_display|default("-") }}</td>
+                    <td class="number">{{ row.price_display|default("-") }}</td>
+                    <td class="number">{{ row.rebate_quantity_display|default("-") }}</td>
+                    <td class="number">{{ row.rebate_price_display|default("-") }}</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
 {%- endmacro %}
-
-<h1 class="price-list-title">{{ document.title|default("Preisliste") }}</h1>
 
 {% if sections %}
     {% for section in sections %}
         <section class="price-list-section">
-            <h2>{{ section.name|default("Ohne Kategoriebezeichnung") }}</h2>
-
             {% if section.direct_rows %}
-                <table class="price-list-table">
-                    <colgroup>
-                        <col class="col-name">
-                        <col class="col-vpe">
-                        <col class="col-preis">
-                        <col class="col-staffelmenge">
-                        <col class="col-staffelpreis">
-                    </colgroup>
-                    <thead>
-                        <tr>
-                            <th>Bezeichnung</th>
-                            <th>VPE</th>
-                            <th class="number">Preis</th>
-                            <th class="number">Staffelmenge</th>
-                            <th class="number">Staffelpreis</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for row in section.direct_rows %}
-                            <tr>
-                                <td>
-                                    <span class="product-name">{{ row.name }}</span>
-                                    {% for attribute in row.attributes %}
-                                        <span class="attr-line">{% if attribute.group %}<b>{{ attribute.group }}:</b> {% endif %}{{ attribute.value }}</span>
-                                    {% endfor %}
-                                </td>
-                                <td>{{ row.vpe_display|default("-") }}</td>
-                                <td class="number">{{ price_cell(row, row.price_display) }}</td>
-                                <td class="number">{{ row.rebate_quantity_display|default("-") }}</td>
-                                <td class="number">{{ price_cell(row, row.rebate_price_display) }}</td>
-                            </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+                {{ price_list_table(section.name, none, section.direct_rows) }}
             {% endif %}
 
             {% for group in section.groups %}
                 {% if group.rows %}
-                <h3>{{ group.name|default("Ohne Kategoriebezeichnung") }}</h3>
-                <table class="price-list-table">
-                    <colgroup>
-                        <col class="col-name">
-                        <col class="col-vpe">
-                        <col class="col-preis">
-                        <col class="col-staffelmenge">
-                        <col class="col-staffelpreis">
-                    </colgroup>
-                    <thead>
-                        <tr>
-                            <th>Bezeichnung</th>
-                            <th>VPE</th>
-                            <th class="number">Preis</th>
-                            <th class="number">Staffelmenge</th>
-                            <th class="number">Staffelpreis</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for row in group.rows %}
-                            <tr>
-                                <td>
-                                    <span class="product-name">{{ row.name }}</span>
-                                    {% for attribute in row.attributes %}
-                                        <span class="attr-line">{% if attribute.group %}<b>{{ attribute.group }}:</b> {% endif %}{{ attribute.value }}</span>
-                                    {% endfor %}
-                                </td>
-                                <td>{{ row.vpe_display|default("-") }}</td>
-                                <td class="number">{{ price_cell(row, row.price_display) }}</td>
-                                <td class="number">{{ row.rebate_quantity_display|default("-") }}</td>
-                                <td class="number">{{ price_cell(row, row.rebate_price_display) }}</td>
-                            </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+                {{ price_list_table(section.name, group.name, group.rows) }}
                 {% endif %}
             {% endfor %}
 

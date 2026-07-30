@@ -1,10 +1,13 @@
 import tempfile
+from io import BytesIO
 from pathlib import Path
 from unittest.mock import MagicMock
 
 from django.contrib.admin.sites import AdminSite
 from django.core.files.base import ContentFile
 from django.test import SimpleTestCase, TestCase, override_settings
+from pypdf import PdfReader, PdfWriter
+from weasyprint import HTML as WeasyHTML
 
 from documents.admin import DocumentAdmin
 from documents.jinja2_env import price_list_catalog_sections
@@ -66,18 +69,21 @@ class DocumentRenderingTest(SimpleTestCase):
         self.assertIn("documents/admin/document_editor.js", media)
         self.assertNotIn("template_preview_link", admin_instance.readonly_fields)
         self.assertNotIn("live_preview_button", admin_instance.readonly_fields)
-        self.assertEqual(admin_instance.actions_detail[0]["items"], ["generate_pdf_detail", "preview_template_detail"])
+        self.assertEqual(
+            admin_instance.actions_detail[0]["items"],
+            ["generate_pdf_detail", "upload_to_shopware_detail", "preview_template_detail"],
+        )
 
 
 class DocumentInitializationCommandTest(SimpleTestCase):
-    def test_price_list_initialization_uses_django_template_engine(self):
+    def test_price_list_initialization_uses_jinja2_template_engine(self):
         command = InitDocumentsCommand()
         command._upsert = MagicMock()
 
         command._init_price_list(Document, force=True)
 
         args, _ = command._upsert.call_args
-        self.assertFalse(args[2]["use_jinja2"])
+        self.assertTrue(args[2]["use_jinja2"])
 
     def test_django_document_template_supports_comment_tag(self):
         document = Document(
@@ -88,14 +94,59 @@ class DocumentInitializationCommandTest(SimpleTestCase):
         self.assertEqual(document.render(), "<p>Preisliste</p>")
 
 
-class DocumentPriceListCatalogSectionsTest(TestCase):
-    def test_price_list_catalog_sections_prefetches_rows_and_formats_missing_values(self):
-        root = Category.objects.create(name="Ordner", slug="ordner", sort_order=10)
-        child = Category.objects.create(name="Hebelordner", slug="hebelordner", parent=root, sort_order=20)
-        product = Product.objects.create(erp_nr="A-1000", name="", unit="", factor=None)
-        product.categories.add(child)
+class DocumentPriceListTemplateTest(SimpleTestCase):
+    def test_repeats_main_and_subcategory_in_table_header_after_page_break(self):
+        from documents.jinja2_env import build_env
 
-        sections = price_list_catalog_sections(root_level=0)
+        rows = [
+            {
+                "erp_nr": f"A-{index:04d}",
+                "attributes": [{"group": "Farbe", "value": "Hellgelb"}],
+                "vpe_display": "10",
+                "price_display": "12,50 €",
+                "rebate_quantity_display": "100",
+                "rebate_price_display": "11,00 €",
+            }
+            for index in range(120)
+        ]
+        environment = build_env()
+        environment.globals["price_list_catalog_sections"] = lambda: [
+            {
+                "name": "Orga-Mappen",
+                "direct_rows": [],
+                "groups": [{"name": "Standard-Mappen", "rows": rows}],
+            }
+        ]
+        template_source = DocumentPdfService().get_default_price_list_template_source()
+        rendered_html = environment.from_string(template_source).render()
+
+        pdf = PdfReader(BytesIO(WeasyHTML(string=rendered_html).write_pdf()))
+
+        self.assertGreater(len(pdf.pages), 1)
+        second_page_text = pdf.pages[1].extract_text()
+        self.assertIn("Orga-Mappen", second_page_text)
+        self.assertIn("Standard-Mappen", second_page_text)
+
+
+class DocumentPriceListCatalogSectionsTest(TestCase):
+    def setUp(self):
+        from shopware.models import ShopwareSettings
+
+        self.default_channel = ShopwareSettings.objects.create(
+            name="Standard",
+            is_active=True,
+            is_default=True,
+        )
+
+    def test_price_list_catalog_sections_omits_technical_root_and_groups_levels_two_and_three(self):
+        root = Category.objects.create(name="Deutsch/Schweiz", slug="deutsch-schweiz", sort_order=10)
+        section = Category.objects.create(name="Ordner", slug="ordner", parent=root, sort_order=20)
+        group = Category.objects.create(name="Hebelordner", slug="hebelordner", parent=section, sort_order=30)
+        product = Product.objects.create(erp_nr="A-1000", name="", unit="", factor=None)
+        product.categories.add(group)
+        Price.objects.create(product=product, sales_channel=self.default_channel, price="10.00")
+
+        sections = price_list_catalog_sections()
 
         self.assertEqual(len(sections), 1)
         self.assertEqual(sections[0]["name"], "Ordner")
@@ -110,22 +161,63 @@ class DocumentPriceListCatalogSectionsTest(TestCase):
         self.assertEqual(row["rebate_price_display"], "-")
 
     def test_price_list_catalog_sections_includes_price_and_attributes(self):
-        root = Category.objects.create(name="Papier", slug="papier", sort_order=10)
+        root = Category.objects.create(name="Deutsch/Schweiz", slug="deutsch-schweiz-2", sort_order=10)
+        section = Category.objects.create(name="Papier", slug="papier", parent=root, sort_order=20)
+        group_category = Category.objects.create(
+            name="Kopierpapier",
+            slug="kopierpapier",
+            parent=section,
+            sort_order=30,
+        )
         product = Product.objects.create(erp_nr="A-2000", name="Kopierpapier", unit="Pack", factor=5)
-        product.categories.add(root)
+        product.categories.add(group_category)
         group = PropertyGroup.objects.create(name="Farbe")
         value = PropertyValue.objects.create(group=group, name="Weiss")
         ProductProperty.objects.create(product=product, value=value)
-        Price.objects.create(product=product, price="12.50", rebate_quantity=10, rebate_price="11.00")
+        Price.objects.create(
+            product=product,
+            sales_channel=self.default_channel,
+            price="12.50",
+            rebate_quantity=10,
+            rebate_price="11.00",
+        )
 
-        sections = price_list_catalog_sections(root_level=0)
+        sections = price_list_catalog_sections()
 
-        row = sections[0]["direct_rows"][0]
+        row = sections[0]["groups"][0]["rows"][0]
         self.assertEqual(row["attributes"], [{"group": "Farbe", "value": "Weiss"}])
         self.assertEqual(row["vpe_display"], "5 Pack")
-        self.assertEqual(row["price_display"], "12,50 EUR")
+        self.assertEqual(row["price_display"], "12,50 €")
         self.assertEqual(row["rebate_quantity_display"], "10")
-        self.assertEqual(row["rebate_price_display"], "11,00 EUR")
+        self.assertEqual(row["rebate_price_display"], "11,00 €")
+
+    def test_price_list_catalog_sections_excludes_prices_from_non_default_channels(self):
+        from shopware.models import ShopwareSettings
+
+        other_channel = ShopwareSettings.objects.create(name="B2B", is_active=True)
+        root = Category.objects.create(name="Deutsch/Schweiz", slug="deutsch-schweiz-3")
+        section = Category.objects.create(name="Papier", slug="papier-3", parent=root)
+        group = Category.objects.create(name="Karton", slug="karton", parent=section)
+        product = Product.objects.create(erp_nr="A-3000", name="Nur B2B")
+        product.categories.add(group)
+        Price.objects.create(product=product, sales_channel=other_channel, price="9.90")
+
+        self.assertEqual(price_list_catalog_sections(), [])
+
+    def test_price_list_catalog_sections_includes_deeper_category_names_in_the_group(self):
+        root = Category.objects.create(name="Deutsch/Schweiz", slug="deutsch-schweiz-4")
+        section = Category.objects.create(name="Mappen", slug="mappen", parent=root)
+        group = Category.objects.create(name="Ringmappen", slug="ringmappen", parent=section)
+        deep_category = Category.objects.create(name="A4", slug="a4", parent=group)
+        product = Product.objects.create(erp_nr="A-4000", name="A4 Ringmappe")
+        product.categories.add(group, deep_category)
+        Price.objects.create(product=product, sales_channel=self.default_channel, price="7.50")
+
+        sections = price_list_catalog_sections()
+
+        self.assertEqual(sections[0]["name"], "Mappen")
+        self.assertEqual(sections[0]["groups"][0]["name"], "Ringmappen - A4")
+        self.assertEqual([row["erp_nr"] for row in sections[0]["groups"][0]["rows"]], ["A-4000"])
 
 
 class DocumentPdfServiceTest(SimpleTestCase):
@@ -163,7 +255,8 @@ class DocumentPdfServiceTest(SimpleTestCase):
 
     def test_build_pdf_html_uses_default_price_list_css_when_empty(self):
         document = Document(
-            slug=Document.Slug.PRICE_LIST,
+            document_type=Document.DocumentType.PRICE_LIST,
+            slug="individuelle-preisliste",
             title="Preisliste",
             html_content="<html><head><style>{{ css }}</style></head><body></body></html>",
             css_content="",
@@ -171,7 +264,51 @@ class DocumentPdfServiceTest(SimpleTestCase):
 
         html = DocumentPdfService().build_pdf_html(document)
 
-        self.assertIn("font-family: Arial, Helvetica, sans-serif", html)
+        self.assertIn("font-family: Arial, Arimo", html)
+
+    def test_legacy_price_increase_template_uses_customer_price_list_template(self):
+        document = Document(
+            document_type=Document.DocumentType.PRICE_LIST,
+            title="Preisliste",
+            html_content='<section data-pdf-section="cover">{{ price_increase.title }}</section>',
+        )
+
+        self.assertTrue(DocumentPdfService().should_use_default_price_list_template(document))
+
+    def test_price_list_uses_default_cover_when_no_cover_is_uploaded(self):
+        document = Document(
+            document_type=Document.DocumentType.PRICE_LIST,
+            title="Preisliste",
+        )
+
+        cover_path = DocumentPdfService().get_cover_pdf_path(document)
+
+        self.assertIsNotNone(cover_path)
+        self.assertEqual(cover_path.name, "cover_pricelist.pdf")
+
+    def test_price_list_cover_date_uses_the_month_from_the_document_title(self):
+        document = Document(
+            document_type=Document.DocumentType.PRICE_LIST,
+            title="Preisliste Mai 2026",
+        )
+
+        self.assertEqual(DocumentPdfService().get_price_list_effective_date_text(document), "ab 05/2026")
+
+    def test_price_list_page_numbers_cover_the_complete_merged_pdf(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            pdf_path = Path(tmpdir) / "preisliste.pdf"
+            writer = PdfWriter()
+            writer.add_blank_page(width=595, height=842)
+            writer.add_blank_page(width=595, height=842)
+            with pdf_path.open("wb") as output_file:
+                writer.write(output_file)
+
+            DocumentPdfService().add_price_list_page_numbers(pdf_path)
+
+            reader = PdfReader(str(pdf_path))
+            self.assertEqual(len(reader.pages), 2)
+            self.assertIn("1/2", reader.pages[0].extract_text())
+            self.assertIn("2/2", reader.pages[1].extract_text())
 
 
 class DocumentShopwareUploadServiceTest(SimpleTestCase):

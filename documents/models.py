@@ -116,7 +116,11 @@ class Document(BaseModel):
         return self.html_content
 
     def render(self, context: dict | None = None) -> str:
-        ctx = {"document": self, "css": self.css_content, **(context or {})}
+        render_context = context or {}
+        # A document's saved CSS is authoritative.  The service can still pass
+        # its default price-list CSS when this field is intentionally empty.
+        css_content = self.css_content or render_context.get("css", "")
+        ctx = {"document": self, **render_context, "css": css_content}
         source = self.get_template_source()
         if self.use_jinja2:
             from documents.jinja2_env import build_env

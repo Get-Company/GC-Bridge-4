@@ -1,6 +1,5 @@
 import json
 import importlib
-from pathlib import Path
 from datetime import datetime, timedelta, timezone as datetime_timezone
 from decimal import Decimal
 from types import SimpleNamespace
@@ -2642,41 +2641,11 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
         self.assertIn("Schritt: 6", vpe_display)
         self.assertIn("Preis pro 12 Stk", vpe_display)
 
-    def test_export_price_list_pdf_action_returns_pdf(self):
-        root_category = Category.objects.create(name="Druck", slug="druck", sort_order=10)
-        child_category = Category.objects.create(
-            name="Druck Sortierung",
-            slug="druck-sortierung",
-            parent=root_category,
-            sort_order=20,
-        )
-        self.product.categories.add(child_category)
-        template_source = (Path("templates/admin/products/price_list_pdf.html")).read_text(encoding="utf-8")
-        Document.objects.create(
-            document_type=Document.DocumentType.PRICE_LIST,
-            slug=Document.Slug.PRICE_LIST,
-            title="Preisliste",
-            html_content=template_source,
-            # Das eingespielte Template ist ein Django-Template ({% comment %} usw.),
-            # daher darf hier nicht die Jinja2-Engine (Default) rendern.
-            use_jinja2=False,
-            is_active=True,
-        )
+    def test_price_list_export_is_not_available_in_price_increase_admin(self):
+        admin_instance = PriceIncreaseAdmin(PriceIncrease, AdminSite())
 
-        response = self.client.post(
-            reverse("admin:products_priceincrease_changelist"),
-            data={
-                "action": "export_price_list_pdf",
-                "_selected_action": [str(self.price_increase.pk)],
-                "index": "0",
-                "select_across": "0",
-            },
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response["Content-Type"], "application/pdf")
-        self.assertIn("admin-view-test-druck-preisliste.pdf", response["Content-Disposition"])
-        self.assertTrue(response.content.startswith(b"%PDF"))
+        self.assertNotIn("export_price_list_pdf", admin_instance.actions)
+        self.assertNotIn("export_price_list_pdf_detail", admin_instance.actions_detail[0]["items"])
 
 
 class ProductAdminSpecialPriceActionTest(TestCase):

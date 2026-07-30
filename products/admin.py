@@ -1074,13 +1074,12 @@ class PriceIncreaseAdmin(BaseAdmin):
         ("created_at", RangeDateTimeFilter),
         ("applied_at", RangeDateTimeFilter),
     ]
-    actions = ("export_price_list_pdf", "export_order_form_pdf")
+    actions = ("export_order_form_pdf",)
     actions_detail = [
         {
             "title": "Aktionen",
             "icon": "more_vert",
             "items": [
-                "export_price_list_pdf_detail",
                 "export_order_form_pdf_detail",
                 "reload_products_detail",
                 "apply_price_increase_detail",
@@ -3248,32 +3247,6 @@ class PriceIncreaseAdmin(BaseAdmin):
         )
         return response
 
-    @admin.action(description="PDF Preisliste (aktuelle Standardpreise)")
-    def export_price_list_pdf(self, request, queryset):
-        selected_ids = list(queryset.values_list("pk", flat=True))
-        if len(selected_ids) != 1:
-            self.message_user(
-                request,
-                "Bitte genau eine Preiserhoehung markieren, damit eine eindeutige PDF erzeugt werden kann.",
-                level=messages.ERROR,
-            )
-            return
-
-        price_increase = (
-            PriceIncrease.objects.filter(pk=selected_ids[0])
-            .select_related("sales_channel")
-            .first()
-        )
-        if not price_increase:
-            self.message_user(request, "Preiserhoehung nicht gefunden.", level=messages.ERROR)
-            return
-
-        try:
-            return self._build_default_price_list_response(price_increase)
-        except ValueError as exc:
-            self.message_user(request, str(exc), level=messages.ERROR)
-            return
-
     @admin.action(description="PDF Bestellschein")
     def export_order_form_pdf(self, request, queryset):
         selected_ids = list(queryset.values_list("pk", flat=True))
@@ -3299,22 +3272,6 @@ class PriceIncreaseAdmin(BaseAdmin):
         except ValueError as exc:
             self.message_user(request, str(exc), level=messages.ERROR)
             return
-
-    @action(
-        description="PDF Preisliste (aktuelle Standardpreise)",
-        icon="picture_as_pdf",
-        variant=ActionVariant.PRIMARY,
-    )
-    def export_price_list_pdf_detail(self, request, object_id: str):
-        obj = self.get_object(request, object_id)
-        if not obj:
-            self.message_user(request, "Preiserhoehung nicht gefunden.", level=messages.ERROR)
-            return HttpResponseRedirect(reverse("admin:products_priceincrease_changelist"))
-        try:
-            return self._build_default_price_list_response(obj)
-        except ValueError as exc:
-            self.message_user(request, str(exc), level=messages.ERROR)
-        return HttpResponseRedirect(reverse("admin:products_priceincrease_change", args=(object_id,)))
 
     @action(
         description="PDF Bestellschein",
