@@ -243,6 +243,66 @@ class DocumentPriceListCatalogSectionsTest(TestCase):
             ["A-6000"],
         )
 
+    def test_price_list_catalog_sections_skips_inactive_categories_but_uses_active_assignments(self):
+        root = Category.objects.create(name="Deutsch/Schweiz", slug="deutsch-schweiz-6")
+        section = Category.objects.create(name="Ordner", slug="ordner-6", parent=root, sort_order=10)
+        active_group = Category.objects.create(
+            name="Hebelordner",
+            slug="hebelordner-6",
+            parent=section,
+            sort_order=10,
+        )
+        inactive_group = Category.objects.create(
+            name="Archiv",
+            slug="archiv-6",
+            parent=section,
+            is_active=False,
+            sort_order=20,
+        )
+        Category.objects.create(
+            name="Leere Unterkategorie",
+            slug="leere-unterkategorie-6",
+            parent=section,
+            sort_order=30,
+        )
+        Category.objects.create(
+            name="Leere Hauptkategorie",
+            slug="leere-hauptkategorie-6",
+            parent=root,
+            sort_order=40,
+        )
+        inactive_section = Category.objects.create(
+            name="Inaktive Hauptkategorie",
+            slug="inaktive-hauptkategorie-6",
+            parent=root,
+            is_active=False,
+            sort_order=50,
+        )
+        child_of_inactive_section = Category.objects.create(
+            name="Unterkategorie",
+            slug="unterkategorie-6",
+            parent=inactive_section,
+        )
+        inactive_only_product = Product.objects.create(erp_nr="A-7000", name="Nur inaktiv")
+        inactive_only_product.categories.add(inactive_group)
+        Price.objects.create(product=inactive_only_product, sales_channel=self.default_channel, price="7.00")
+        active_and_inactive_product = Product.objects.create(erp_nr="A-8000", name="Aktiv und inaktiv")
+        active_and_inactive_product.categories.add(inactive_group, active_group)
+        Price.objects.create(product=active_and_inactive_product, sales_channel=self.default_channel, price="8.00")
+        hidden_section_product = Product.objects.create(erp_nr="A-9000", name="Inaktive Hauptkategorie")
+        hidden_section_product.categories.add(child_of_inactive_section)
+        Price.objects.create(product=hidden_section_product, sales_channel=self.default_channel, price="9.00")
+
+        sections = price_list_catalog_sections()
+
+        self.assertEqual(len(sections), 1)
+        self.assertEqual(sections[0]["name"], "Ordner")
+        self.assertEqual(sections[0]["groups"][0]["name"], "Hebelordner")
+        self.assertEqual(
+            [row["erp_nr"] for row in sections[0]["groups"][0]["rows"]],
+            ["A-8000"],
+        )
+
     def test_price_list_catalog_sections_includes_deeper_category_names_in_the_group(self):
         root = Category.objects.create(name="Deutsch/Schweiz", slug="deutsch-schweiz-4")
         section = Category.objects.create(name="Mappen", slug="mappen", parent=root)

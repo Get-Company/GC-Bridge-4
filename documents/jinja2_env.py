@@ -99,7 +99,8 @@ def price_list_catalog_sections(root_level: int | None = None, active_only: bool
     Products assigned directly to a visible level-2 category are deliberately
     omitted. Every listed product belongs to exactly one visible level-3 group;
     when it is assigned to several groups, the first category in tree order
-    determines its one price-list position.
+    determines its one price-list position. Inactive visible categories are
+    skipped completely.
 
     ``root_level`` is accepted for existing document templates but intentionally
     ignored: the root is always the actual MPTT root so the output structure is
@@ -131,6 +132,7 @@ def price_list_catalog_sections(root_level: int | None = None, active_only: bool
 
     product_queryset = Product.objects.filter(
         categories__in=category_ids,
+        categories__is_active=True,
         prices__sales_channel=default_sales_channel,
     )
     if active_only:
@@ -140,7 +142,7 @@ def price_list_catalog_sections(root_level: int | None = None, active_only: bool
         .prefetch_related(
             Prefetch(
                 "categories",
-                queryset=Category.objects.filter(pk__in=category_ids).order_by(
+                queryset=Category.objects.filter(pk__in=category_ids, is_active=True).order_by(
                     "tree_id", "lft", "sort_order", "name", "id"
                 ),
                 to_attr="price_list_categories",
@@ -177,6 +179,7 @@ def price_list_catalog_sections(root_level: int | None = None, active_only: bool
                     category.tree_id == root.tree_id
                     and category.lft >= root.lft
                     and category.rght <= root.rght
+                    and category.is_active
                 )
             ]
             leaf_categories = [
@@ -191,7 +194,7 @@ def price_list_catalog_sections(root_level: int | None = None, active_only: bool
                 category_path = _category_path_from_root(leaf_category, root, categories_by_id)
                 # Ebene 1 ist der technische Verkaufskanal-Root, Ebene 2 nur
                 # die Hauptüberschrift. Artikel werden erst ab Ebene 3 gelistet.
-                if len(category_path) < 3:
+                if len(category_path) < 3 or not all(category.is_active for category in category_path[1:]):
                     continue
 
                 section_category = category_path[1]
