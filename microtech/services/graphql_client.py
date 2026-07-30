@@ -27,6 +27,7 @@ class MicrotechGraphQLConfig:
     request_timeout: float = 30.0
     poll_timeout: float = 180.0
     poll_interval: float = 2.0
+    maintenance_token: str = ""
 
     @classmethod
     def from_settings(cls) -> "MicrotechGraphQLConfig":
@@ -38,6 +39,7 @@ class MicrotechGraphQLConfig:
             request_timeout=float(getattr(settings, "MICROTECH_GRAPHQL_REQUEST_TIMEOUT", 30.0)),
             poll_timeout=float(getattr(settings, "MICROTECH_GRAPHQL_POLL_TIMEOUT", 180.0)),
             poll_interval=float(getattr(settings, "MICROTECH_GRAPHQL_POLL_INTERVAL", 2.0)),
+            maintenance_token=str(getattr(settings, "MICROTECH_MAINTENANCE_TOKEN", "") or "").strip(),
         )
 
 
@@ -50,11 +52,19 @@ class MicrotechGraphQLClientService(BaseService):
     def __init__(self, *, config: MicrotechGraphQLConfig | None = None) -> None:
         self.config = config or MicrotechGraphQLConfig.from_settings()
 
-    def execute(self, query: str, variables: dict[str, Any] | None = None) -> dict[str, Any]:
+    def execute(
+        self,
+        query: str,
+        variables: dict[str, Any] | None = None,
+        *,
+        headers: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
+        request_headers = {"Content-Type": "application/json"}
+        request_headers.update(headers or {})
         response = requests.post(
             self.config.url,
             json={"query": query, "variables": variables or {}},
-            headers={"Content-Type": "application/json"},
+            headers=request_headers,
             timeout=self.config.request_timeout,
         )
         response.raise_for_status()
@@ -65,8 +75,101 @@ class MicrotechGraphQLClientService(BaseService):
             raise GraphQLMicrotechError(message)
         data = payload.get("data")
         if data is None:
-            raise GraphQLMicrotechError("GraphQL response did not contain data.")
+            raise GraphQLMicrotechError(
+                str(payload.get("errorMessage") or payload.get("message") or "GraphQL response did not contain data.")
+            )
         return data
+
+    def stop_microtech_worker(self) -> dict[str, Any]:
+        """Stop the wrapper worker and require confirmation that COM is closed."""
+        result = self._maintenance_result(
+            self._execute_maintenance(
+                """
+                mutation {
+                  stopMicrotechWorker {
+                    success message errorMessage
+                    worker {
+                      taskName registered running state microtechConnected microtechUser
+                      connectionName mandant lastTaskResult lastRunTime connectionUpdatedAt connectionMessage
+                    }
+                  }
+                }
+                """
+            ),
+            "stopMicrotechWorker",
+        )
+        worker = result.get("worker") or {}
+        if worker.get("running") is not False or worker.get("microtechConnected") is not False:
+            raise GraphQLMicrotechError(
+                "Der Microtech-Worker konnte nicht sicher beendet werden: "
+                "Worker oder COM-Verbindung sind weiterhin aktiv."
+            )
+        return result
+
+    def start_microtech_worker(self) -> dict[str, Any]:
+        """Start the wrapper worker. Use wait_for_microtech_worker_connection afterwards."""
+        return self._maintenance_result(
+            self._execute_maintenance(
+                """
+                mutation {
+                  startMicrotechWorker {
+                    success message errorMessage
+                    worker { running microtechConnected microtechUser connectionMessage }
+                  }
+                }
+                """
+            ),
+            "startMicrotechWorker",
+        )
+
+    def microtech_worker_status(self) -> dict[str, Any]:
+        return self._maintenance_result(
+            self._execute_maintenance(
+                """
+                query {
+                  microtechWorkerStatus {
+                    success errorMessage
+                    worker { running microtechConnected microtechUser connectionMessage }
+                  }
+                }
+                """
+            ),
+            "microtechWorkerStatus",
+        )
+
+    def wait_for_microtech_worker_connection(self, *, timeout: float | None = None) -> dict[str, Any]:
+        """Poll the wrapper until its worker has re-established the COM connection."""
+        timeout = self.config.poll_timeout if timeout is None else timeout
+        deadline = time.monotonic() + timeout
+        latest: dict[str, Any] = {}
+        while True:
+            latest = self.microtech_worker_status()
+            worker = latest.get("worker") or {}
+            if worker.get("microtechConnected") is True:
+                return latest
+            if time.monotonic() >= deadline:
+                detail = str(worker.get("connectionMessage") or "keine Verbindungsdetails")
+                raise GraphQLMicrotechTimeout(
+                    f"Der Microtech-Worker hat innerhalb von {timeout:g}s keine COM-Verbindung aufgebaut: {detail}"
+                )
+            time.sleep(max(self.config.poll_interval, 0.1))
+
+    def _execute_maintenance(self, query: str) -> dict[str, Any]:
+        token = self.config.maintenance_token.strip()
+        if not token:
+            raise GraphQLMicrotechError("MICROTECH_MAINTENANCE_TOKEN ist nicht konfiguriert.")
+        return self.execute(query, headers={"X-Microtech-Maintenance-Token": token})
+
+    @staticmethod
+    def _maintenance_result(data: dict[str, Any], field: str) -> dict[str, Any]:
+        result = data.get(field) or {}
+        if result.get("success") is not True:
+            raise GraphQLMicrotechError(
+                str(result.get("errorMessage") or result.get("message") or f"GraphQL mutation {field} failed.")
+            )
+        if not isinstance(result.get("worker"), dict):
+            raise GraphQLMicrotechError(f"GraphQL mutation {field} did not return worker status.")
+        return result
 
     def health(self) -> str:
         data = self.execute("query { health }")

@@ -152,9 +152,12 @@ SHOPWARE6_SECRET=
 
 MICROTECH_GRAPHQL_HOST=10.0.0.5
 MICROTECH_GRAPHQL_URL=http://10.0.0.5:8888/graphql/
+MICROTECH_MAINTENANCE_TOKEN=
 ```
 
 `MICROTECH_GRAPHQL_URL` has priority. If it is empty, GC-Bridge builds the endpoint from `MICROTECH_GRAPHQL_HOST`, optional `MICROTECH_GRAPHQL_PORT` defaulting to `8888`, optional `MICROTECH_GRAPHQL_SCHEME` defaulting to `http`, and optional `MICROTECH_GRAPHQL_PATH` defaulting to `graphql`.
+
+`MICROTECH_MAINTENANCE_TOKEN` authorizes the protected worker controls under **Microtech → Verbindung**. Keep it only in the server's `.env` file; it is sent to the wrapper as `X-Microtech-Maintenance-Token`.
 
 Entrypoint flags:
 

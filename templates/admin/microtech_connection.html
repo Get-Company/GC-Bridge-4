@@ -79,6 +79,73 @@
     </section>
   </div>
 
+  <section class="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-white dark:bg-gray-900">
+    <div class="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="material-symbols-outlined text-gray-400" style="font-size:20px">settings_power</span>
+          <h2 class="font-semibold text-sm">GraphQL-Microtech-Worker</h2>
+        </div>
+        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          Der Worker muss vor einem Microtech-Backup beendet sein. „Dienst ein“ wartet, bis die COM-Verbindung wieder besteht.
+        </p>
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="text-xs px-2 py-0.5 rounded font-medium
+          {% if not worker_status_known %}bg-gray-100 dark:bg-gray-800 text-gray-500
+          {% elif worker.microtechConnected %}bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300
+          {% elif worker.running %}bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300
+          {% else %}bg-gray-100 dark:bg-gray-800 text-gray-500{% endif %}">
+          {% if not worker_status_known %}unbekannt{% elif worker.microtechConnected %}COM verbunden{% elif worker.running %}startet{% else %}beendet{% endif %}
+        </span>
+      </div>
+    </div>
+
+    {% if maintenance_error %}
+    <div class="mt-4 p-3 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 text-sm">
+      <strong>Worker-Aktion:</strong> {{ maintenance_error }}
+    </div>
+    {% endif %}
+
+    <dl class="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+      <div>
+        <dt class="text-xs uppercase tracking-wide text-gray-400">Worker</dt>
+        <dd class="mt-1 font-semibold text-gray-900 dark:text-gray-100">{% if not worker_status_known %}-{% elif worker.running %}läuft{% else %}beendet{% endif %}</dd>
+      </div>
+      <div>
+        <dt class="text-xs uppercase tracking-wide text-gray-400">COM-Benutzer</dt>
+        <dd class="mt-1 text-gray-900 dark:text-gray-100">{{ worker.microtechUser|default:"-" }}</dd>
+      </div>
+      <div>
+        <dt class="text-xs uppercase tracking-wide text-gray-400">Meldung</dt>
+        <dd class="mt-1 text-gray-900 dark:text-gray-100">{{ worker.connectionMessage|default:"-" }}</dd>
+      </div>
+    </dl>
+
+    {% if can_manage_worker %}
+    <div class="mt-4 flex flex-wrap gap-3">
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="stop_worker">
+        <button type="submit" onclick="return confirm('Microtech-Worker wirklich beenden? Erst danach darf das Backup starten.');" class="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-md bg-red-600 text-white text-sm font-medium">
+          <span class="material-symbols-outlined" style="font-size:18px">stop_circle</span>
+          Dienst aus
+        </button>
+      </form>
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="start_worker">
+        <button type="submit" class="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-md bg-green-600 text-white text-sm font-medium">
+          <span class="material-symbols-outlined" style="font-size:18px">play_circle</span>
+          Dienst ein
+        </button>
+      </form>
+    </div>
+    {% else %}
+    <p class="mt-4 text-xs text-gray-500 dark:text-gray-400">Zum Schalten des Workers ist die Berechtigung zum Ändern der Microtech-Einstellungen erforderlich.</p>
+    {% endif %}
+  </section>
+
   <section class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
     <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
       <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300">Rohdaten</h2>
