@@ -7,10 +7,11 @@ from django.conf import settings
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
 from django.template.response import TemplateResponse
+from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 from django.views.decorators.http import require_http_methods
 
-from microtech.services import GraphQLMicrotechTimeout, MicrotechGraphQLClientService
+from microtech.services import GraphQLMicrotechTimeout, MicrotechGraphQLClientService, MicrotechJobSentinelService
 
 
 class MicrotechMandantSwitchForm(forms.Form):
@@ -70,6 +71,8 @@ def microtech_connection_admin_view(request):
     worker_status_known = False
     error = ""
     maintenance_error = ""
+    maintenance_job = None
+    maintenance_job_url = ""
     timeout = _admin_poll_timeout()
     can_manage_worker = _has_microtech_maintenance_permission(request)
 
@@ -80,21 +83,19 @@ def microtech_connection_admin_view(request):
                 raise PermissionDenied
             form = MicrotechMandantSwitchForm()
             try:
-                client = MicrotechGraphQLClientService()
-                if action == "stop_worker":
-                    result = client.stop_microtech_worker()
-                    worker = result.get("worker") or {}
-                    worker_status_known = True
-                    messages.success(request, result.get("message") or _("Microtech-Worker wurde beendet."))
-                else:
-                    client.start_microtech_worker()
-                    result = client.wait_for_microtech_worker_connection(timeout=timeout)
-                    worker = result.get("worker") or {}
-                    worker_status_known = True
-                    messages.success(request, _("Microtech-Worker wurde gestartet und die COM-Verbindung hergestellt."))
-            except GraphQLMicrotechTimeout as exc:
-                maintenance_error = str(exc)
-                messages.error(request, _("Microtech-Worker wurde gestartet, aber die COM-Verbindung ist noch nicht bereit."))
+                operation = "stopMicrotechWorker" if action == "stop_worker" else "startMicrotechWorker"
+                maintenance_job = MicrotechJobSentinelService().enqueue_microtech_worker_operation(
+                    operation=operation,
+                    context={
+                        "source": "microtech_connection_admin",
+                        "requested_by": str(getattr(request.user, "pk", "") or ""),
+                    },
+                )
+                maintenance_job_url = reverse(
+                    "admin:microtech_microtechgraphqljob_change",
+                    args=(maintenance_job.pk,),
+                )
+                messages.success(request, _("Microtech-Worker-Aktion wurde asynchron eingereiht."))
             except Exception as exc:
                 maintenance_error = str(exc)
                 messages.error(request, _("Microtech-Worker-Aktion fehlgeschlagen."))
@@ -128,13 +129,6 @@ def microtech_connection_admin_view(request):
             except Exception as exc:
                 maintenance_error = str(exc)
 
-    if request.method == "POST" and not worker and can_manage_worker:
-        try:
-            worker = MicrotechGraphQLClientService().microtech_worker_status().get("worker") or {}
-            worker_status_known = True
-        except Exception as exc:
-            maintenance_error = str(exc)
-
     context = admin.site.each_context(request)
     context.update(
         {
@@ -145,6 +139,8 @@ def microtech_connection_admin_view(request):
             "worker": worker or {},
             "worker_status_known": worker_status_known,
             "maintenance_error": maintenance_error,
+            "maintenance_job": maintenance_job,
+            "maintenance_job_url": maintenance_job_url,
             "can_manage_worker": can_manage_worker,
             "form": form,
             "graphql_url": getattr(settings, "MICROTECH_GRAPHQL_URL", ""),

@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from django.test import TestCase
 
 from microtech.models import MicrotechGraphQLJob
@@ -45,3 +47,34 @@ class SubmitWrapperJobTest(TestCase):
         self.assertEqual(job.status, MicrotechGraphQLJob.Status.FAILED)
         self.assertIn("wrapper down", job.error_message)
         self.assertIsNotNone(job.completed_at)
+
+
+class WorkerMaintenanceSentinelTest(TestCase):
+    @patch("microtech.tasks.submit_microtech_worker_operation.delay")
+    def test_enqueue_worker_operation_only_queues_a_celery_task(self, mock_delay):
+        job = MicrotechJobSentinelService().enqueue_microtech_worker_operation(
+            operation="stopMicrotechWorker",
+            context={"source": "test"},
+        )
+
+        self.assertEqual(job.kind, MicrotechGraphQLJob.Kind.MAINTENANCE)
+        self.assertEqual(job.status, MicrotechGraphQLJob.Status.QUEUED)
+        self.assertEqual(job.operation, "stopMicrotechWorker")
+        mock_delay.assert_called_once_with(job.pk)
+
+    @patch("microtech.services.job_sentinel.MicrotechGraphQLClientService")
+    def test_celery_submission_hands_worker_operation_to_graphql_sentinel(self, mock_client_cls):
+        mock_client_cls.return_value.submit_start_microtech_worker.return_value = ("worker-job-1", 45.0)
+        job = MicrotechGraphQLJob.objects.create(
+            kind=MicrotechGraphQLJob.Kind.MAINTENANCE,
+            operation="startMicrotechWorker",
+            status=MicrotechGraphQLJob.Status.QUEUED,
+        )
+
+        submitted = MicrotechJobSentinelService().submit_queued_microtech_worker_operation(job_id=job.pk)
+
+        self.assertIsNotNone(submitted)
+        job.refresh_from_db()
+        self.assertEqual(job.external_job_id, "worker-job-1")
+        self.assertEqual(job.status, MicrotechGraphQLJob.Status.WAITING_WEBHOOK)
+        mock_client_cls.return_value.submit_start_microtech_worker.assert_called_once_with()

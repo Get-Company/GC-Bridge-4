@@ -33,6 +33,8 @@ def register_continuation(name: str, handler: ContinuationHandler) -> None:
 class MicrotechJobSentinelService(BaseService):
     model = MicrotechGraphQLJob
 
+    WORKER_OPERATIONS = frozenset({"stopMicrotechWorker", "startMicrotechWorker"})
+
     REMOTE_SUCCESS = {"DONE", "SUCCEEDED", "SUCCESS"}
     REMOTE_FAILED = {"FAILED", "ERROR"}
     REMOTE_CANCELLED = {"CANCELLED", "CANCELED"}
@@ -278,6 +280,106 @@ class MicrotechJobSentinelService(BaseService):
             )
         )
         return job
+
+    def enqueue_microtech_worker_operation(
+        self,
+        *,
+        operation: str,
+        context: dict[str, Any] | None = None,
+    ) -> MicrotechGraphQLJob:
+        """Create a local maintenance job and submit it from a Celery worker.
+
+        The admin request only writes the local job and queues Celery work. The
+        external GraphQL call is deliberately kept out of the request cycle so
+        COM start/stop work can never cause an admin timeout.
+        """
+        operation = str(operation or "").strip()
+        if operation not in self.WORKER_OPERATIONS:
+            raise ValueError(f"Unsupported Microtech worker operation: {operation or '-'}")
+
+        active_statuses = (MicrotechGraphQLJob.Status.QUEUED, *self.LOCAL_ACTIVE)
+        with transaction.atomic():
+            active_job = (
+                MicrotechGraphQLJob.objects.select_for_update()
+                .filter(
+                    kind=MicrotechGraphQLJob.Kind.MAINTENANCE,
+                    operation__in=self.WORKER_OPERATIONS,
+                    status__in=active_statuses,
+                )
+                .order_by("created_at")
+                .first()
+            )
+            if active_job is not None:
+                raise GraphQLMicrotechError(
+                    f"Worker-Aktion {active_job.operation} (Job {active_job.pk}) läuft bereits."
+                )
+
+            job = MicrotechGraphQLJob.objects.create(
+                kind=MicrotechGraphQLJob.Kind.MAINTENANCE,
+                operation=operation,
+                status=MicrotechGraphQLJob.Status.QUEUED,
+                request_payload={"operation": operation},
+                context=context or {},
+                next_step="Warte auf die asynchrone GraphQL-Übergabe.",
+                delete_after_completion=False,
+            )
+
+        try:
+            from microtech.tasks import submit_microtech_worker_operation
+
+            submit_microtech_worker_operation.delay(job.pk)
+        except Exception as exc:
+            MicrotechGraphQLJob.objects.filter(pk=job.pk).update(
+                status=MicrotechGraphQLJob.Status.FAILED,
+                error_message=str(exc),
+                next_step="Celery-Task konnte nicht eingereiht werden.",
+                completed_at=timezone.now(),
+                updated_at=timezone.now(),
+            )
+            raise
+        return job
+
+    def submit_queued_microtech_worker_operation(self, *, job_id: int) -> MicrotechGraphQLJob | None:
+        """Hand the queued worker operation to GraphQL and start Sentinel polling."""
+        with transaction.atomic():
+            job = MicrotechGraphQLJob.objects.select_for_update().filter(pk=job_id).first()
+            if job is None or job.kind != MicrotechGraphQLJob.Kind.MAINTENANCE:
+                return None
+            if job.operation not in self.WORKER_OPERATIONS or job.status != MicrotechGraphQLJob.Status.QUEUED:
+                return job
+            now = timezone.now()
+            job.status = MicrotechGraphQLJob.Status.SUBMITTED
+            job.submitted_at = now
+            job.started_at = now
+            job.next_step = "Warte auf die asynchrone GraphQL-Job-ID."
+            job.save(update_fields=("status", "submitted_at", "started_at", "next_step", "updated_at"))
+
+        client = MicrotechGraphQLClientService()
+        try:
+            if job.operation == "stopMicrotechWorker":
+                external_job_id, retry_after = client.submit_stop_microtech_worker()
+            else:
+                external_job_id, retry_after = client.submit_start_microtech_worker()
+        except Exception as exc:
+            MicrotechGraphQLJob.objects.filter(pk=job.pk).update(
+                status=MicrotechGraphQLJob.Status.FAILED,
+                error_message=str(exc),
+                next_step="Asynchrone GraphQL-Übergabe fehlgeschlagen.",
+                completed_at=timezone.now(),
+                next_poll_at=None,
+                updated_at=timezone.now(),
+            )
+            raise
+
+        now = timezone.now()
+        MicrotechGraphQLJob.objects.filter(pk=job.pk).update(
+            external_job_id=str(external_job_id),
+            status=MicrotechGraphQLJob.Status.WAITING_WEBHOOK,
+            next_step="Warte auf den GraphQL-Sentinel.",
+            next_poll_at=now + timedelta(seconds=max(int(retry_after), 30)),
+            updated_at=now,
+        )
+        return MicrotechGraphQLJob.objects.filter(pk=job.pk).first()
 
     def handle_webhook(self, payload: dict[str, Any]) -> MicrotechGraphQLJob:
         external_job_id = self._external_job_id_from_payload(payload)

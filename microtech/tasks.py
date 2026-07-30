@@ -7,6 +7,13 @@ from celery import shared_task
 logger = logging.getLogger(__name__)
 
 
+@shared_task(name="microtech.submit_microtech_worker_operation")
+def submit_microtech_worker_operation(job_id: int) -> None:
+    from microtech.services import MicrotechJobSentinelService
+
+    MicrotechJobSentinelService().submit_queued_microtech_worker_operation(job_id=job_id)
+
+
 @shared_task(name="microtech.process_graphql_job_result")
 def process_graphql_job_result(job_id: int) -> None:
     from microtech.services import MicrotechJobSentinelService

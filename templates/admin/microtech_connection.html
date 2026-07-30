@@ -87,7 +87,7 @@
           <h2 class="font-semibold text-sm">GraphQL-Microtech-Worker</h2>
         </div>
         <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-          Der Worker muss vor einem Microtech-Backup beendet sein. „Dienst ein“ wartet, bis die COM-Verbindung wieder besteht.
+          Die Start-/Stopp-Aktionen laufen asynchron über den GraphQL-Sentinel und blockieren den Admin nicht.
         </p>
       </div>
       <div class="flex flex-wrap items-center gap-2">
@@ -104,6 +104,13 @@
     {% if maintenance_error %}
     <div class="mt-4 p-3 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 text-sm">
       <strong>Worker-Aktion:</strong> {{ maintenance_error }}
+    </div>
+    {% endif %}
+
+    {% if maintenance_job %}
+    <div class="mt-4 p-3 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 text-sm">
+      Worker-Aktion <strong>{{ maintenance_job.operation }}</strong> wurde als Job {{ maintenance_job.pk }} eingereiht.
+      {% if maintenance_job_url %}<a class="underline font-medium" href="{{ maintenance_job_url }}">Job öffnen</a>{% endif %}
     </div>
     {% endif %}
 

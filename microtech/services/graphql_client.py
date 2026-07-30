@@ -70,47 +70,31 @@ class MicrotechGraphQLClientService(BaseService):
             )
         return data
 
-    def stop_microtech_worker(self) -> dict[str, Any]:
-        """Stop the wrapper worker and require confirmation that COM is closed."""
-        result = self._maintenance_result(
-            self.execute(
-                """
-                mutation {
-                  stopMicrotechWorker {
-                    success message errorMessage
-                    worker {
-                      taskName registered running state microtechConnected microtechUser
-                      connectionName mandant lastTaskResult lastRunTime connectionUpdatedAt connectionMessage
-                    }
-                  }
-                }
-                """
-            ),
+    def submit_stop_microtech_worker(self) -> tuple[str, float]:
+        """Queue the worker stop operation in the external GraphQL sentinel."""
+        accepted = self._mutation_with_job(
+            """
+            mutation {
+              stopMicrotechWorker { accepted jobId status message retryAfterSeconds }
+            }
+            """,
             "stopMicrotechWorker",
+            {},
         )
-        worker = result.get("worker") or {}
-        if worker.get("running") is not False or worker.get("microtechConnected") is not False:
-            raise GraphQLMicrotechError(
-                "Der Microtech-Worker konnte nicht sicher beendet werden: "
-                "Worker oder COM-Verbindung sind weiterhin aktiv."
-            )
-        return result
+        return self._submit_accepted(accepted)
 
-    def start_microtech_worker(self) -> dict[str, Any]:
-        """Start the wrapper worker. Use wait_for_microtech_worker_connection afterwards."""
-        return self._maintenance_result(
-            self.execute(
-                """
-                mutation {
-                  startMicrotechWorker {
-                    success message errorMessage
-                    worker { running microtechConnected microtechUser connectionMessage }
-                  }
-                }
-                """
-            ),
+    def submit_start_microtech_worker(self) -> tuple[str, float]:
+        """Queue the worker start operation in the external GraphQL sentinel."""
+        accepted = self._mutation_with_job(
+            """
+            mutation {
+              startMicrotechWorker { accepted jobId status message retryAfterSeconds }
+            }
+            """,
             "startMicrotechWorker",
+            {},
         )
+        return self._submit_accepted(accepted)
 
     def microtech_worker_status(self) -> dict[str, Any]:
         return self._maintenance_result(
@@ -126,23 +110,6 @@ class MicrotechGraphQLClientService(BaseService):
             ),
             "microtechWorkerStatus",
         )
-
-    def wait_for_microtech_worker_connection(self, *, timeout: float | None = None) -> dict[str, Any]:
-        """Poll the wrapper until its worker has re-established the COM connection."""
-        timeout = self.config.poll_timeout if timeout is None else timeout
-        deadline = time.monotonic() + timeout
-        latest: dict[str, Any] = {}
-        while True:
-            latest = self.microtech_worker_status()
-            worker = latest.get("worker") or {}
-            if worker.get("microtechConnected") is True:
-                return latest
-            if time.monotonic() >= deadline:
-                detail = str(worker.get("connectionMessage") or "keine Verbindungsdetails")
-                raise GraphQLMicrotechTimeout(
-                    f"Der Microtech-Worker hat innerhalb von {timeout:g}s keine COM-Verbindung aufgebaut: {detail}"
-                )
-            time.sleep(max(self.config.poll_interval, 0.1))
 
     @staticmethod
     def _maintenance_result(data: dict[str, Any], field: str) -> dict[str, Any]:

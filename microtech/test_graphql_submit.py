@@ -1,20 +1,13 @@
-from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.test import SimpleTestCase
 
-from microtech.services.graphql_client import GraphQLMicrotechError, MicrotechGraphQLClientService
+from microtech.services.graphql_client import MicrotechGraphQLClientService
 
 
 class SubmitMutationTest(SimpleTestCase):
     def _accepted(self):
         return {"accepted": True, "jobId": "job-123", "retryAfterSeconds": 42}
-
-    @staticmethod
-    def _worker_client():
-        client = MicrotechGraphQLClientService.__new__(MicrotechGraphQLClientService)
-        client.config = SimpleNamespace(poll_timeout=30.0, poll_interval=0.1)
-        return client
 
     @staticmethod
     def _worker(*, running: bool, connected: bool) -> dict:
@@ -85,33 +78,27 @@ class SubmitMutationTest(SimpleTestCase):
         self.assertEqual(mock_mutation.call_args.args[2], {"mandant": "59"})
         self.assertEqual(mock_poll.call_args.kwargs["timeout"], 5)
 
-    @patch.object(MicrotechGraphQLClientService, "execute")
-    def test_stop_microtech_worker_requires_closed_com(self, mock_execute):
-        mock_execute.return_value = {
-            "stopMicrotechWorker": {
-                "success": True,
-                "message": "stopped",
-                "worker": self._worker(running=False, connected=False),
-            }
-        }
+    @patch.object(MicrotechGraphQLClientService, "_mutation_with_job")
+    def test_submit_stop_microtech_worker_returns_job_id_without_polling(self, mock_mutation):
+        mock_mutation.return_value = self._accepted()
+        client = MicrotechGraphQLClientService.__new__(MicrotechGraphQLClientService)
 
-        result = self._worker_client().stop_microtech_worker()
+        job_id, retry_after = client.submit_stop_microtech_worker()
 
-        self.assertFalse(result["worker"]["running"])
-        self.assertIn("stopMicrotechWorker", mock_execute.call_args.args[0])
+        self.assertEqual((job_id, retry_after), ("job-123", 42.0))
+        self.assertEqual(mock_mutation.call_args.args[1], "stopMicrotechWorker")
+        self.assertEqual(mock_mutation.call_args.args[2], {})
 
-    @patch.object(MicrotechGraphQLClientService, "execute")
-    def test_stop_microtech_worker_rejects_an_active_worker(self, mock_execute):
-        mock_execute.return_value = {
-            "stopMicrotechWorker": {
-                "success": True,
-                "message": "stop requested",
-                "worker": self._worker(running=True, connected=True),
-            }
-        }
+    @patch.object(MicrotechGraphQLClientService, "_mutation_with_job")
+    def test_submit_start_microtech_worker_returns_job_id_without_polling(self, mock_mutation):
+        mock_mutation.return_value = self._accepted()
+        client = MicrotechGraphQLClientService.__new__(MicrotechGraphQLClientService)
 
-        with self.assertRaises(GraphQLMicrotechError):
-            self._worker_client().stop_microtech_worker()
+        job_id, retry_after = client.submit_start_microtech_worker()
+
+        self.assertEqual((job_id, retry_after), ("job-123", 42.0))
+        self.assertEqual(mock_mutation.call_args.args[1], "startMicrotechWorker")
+        self.assertEqual(mock_mutation.call_args.args[2], {})
 
     @patch.object(MicrotechGraphQLClientService, "execute")
     def test_worker_status_uses_status_query(self, mock_execute):
@@ -122,20 +109,8 @@ class SubmitMutationTest(SimpleTestCase):
             }
         }
 
-        result = self._worker_client().microtech_worker_status()
+        client = MicrotechGraphQLClientService.__new__(MicrotechGraphQLClientService)
+        result = client.microtech_worker_status()
 
         self.assertTrue(result["worker"]["microtechConnected"])
         self.assertIn("microtechWorkerStatus", mock_execute.call_args.args[0])
-
-    @patch("microtech.services.graphql_client.time.sleep")
-    @patch.object(MicrotechGraphQLClientService, "microtech_worker_status")
-    def test_wait_for_microtech_worker_connection_polls_until_connected(self, mock_status, _mock_sleep):
-        mock_status.side_effect = [
-            {"success": True, "worker": self._worker(running=True, connected=False)},
-            {"success": True, "worker": self._worker(running=True, connected=True)},
-        ]
-
-        result = self._worker_client().wait_for_microtech_worker_connection(timeout=5)
-
-        self.assertTrue(result["worker"]["microtechConnected"])
-        self.assertEqual(mock_status.call_count, 2)
