@@ -1466,6 +1466,36 @@ class ShopwareVariantSyncServiceTest(TestCase):
             ],
             entity_name="property_group_option",
         )
+        expected_size_option_id = ShopwareVariantSyncService._stable_id(
+            "property-value",
+            self.size_group.external_key,
+            self.size.external_key,
+        )
+        product_service.bulk_upsert.assert_any_call(
+            [
+                {
+                    "id": ShopwareVariantSyncService._stable_id(
+                        "configurator-setting",
+                        "parent-shopware-id",
+                        expected_size_option_id,
+                    ),
+                    "productId": "parent-shopware-id",
+                    "optionId": expected_size_option_id,
+                    "position": self.size.position,
+                },
+                {
+                    "id": ShopwareVariantSyncService._stable_id(
+                        "configurator-setting",
+                        "parent-shopware-id",
+                        self.color.shopware_id,
+                    ),
+                    "productId": "parent-shopware-id",
+                    "optionId": self.color.shopware_id,
+                    "position": self.color.position,
+                },
+            ],
+            entity_name="product_configurator_setting",
+        )
         expected_visibilities = [
             {
                 "id": ShopwareVariantSyncService._stable_id(

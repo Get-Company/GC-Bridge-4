@@ -176,14 +176,31 @@ def _active_variant_family_ids_for_groups(group_ids: set[int | None]) -> set[int
     )
 
 
+def _pending_variant_family_sync_ids() -> set[int] | None:
+    """Return the queued variant-sync batch for the current transaction, if any."""
+    connection = transaction.get_connection()
+    for _savepoint_ids, callback, _robust in connection.run_on_commit:
+        pending_family_ids = getattr(callback, "_variant_family_sync_ids", None)
+        if pending_family_ids is not None:
+            return pending_family_ids
+    return None
+
+
 def _enqueue_variant_family_sync_on_commit(*, family_ids: set[int]) -> None:
     if not family_ids:
         return
 
-    for family_id in sorted(family_ids):
-        def enqueue_after_commit(family_id=family_id) -> None:
-            from products.tasks import sync_variant_family_to_shopware
+    pending_family_ids = _pending_variant_family_sync_ids()
+    if pending_family_ids is not None:
+        pending_family_ids.update(family_ids)
+        return
 
+    pending_family_ids = set(family_ids)
+
+    def enqueue_after_commit() -> None:
+        from products.tasks import sync_variant_family_to_shopware
+
+        for family_id in sorted(pending_family_ids):
             try:
                 sync_variant_family_to_shopware.delay(family_id)
             except Exception as exc:
@@ -193,7 +210,10 @@ def _enqueue_variant_family_sync_on_commit(*, family_ids: set[int]) -> None:
                     exc,
                 )
 
-        transaction.on_commit(enqueue_after_commit)
+    # Store the batch on the callback so every signal in this transaction can
+    # reuse it. Django removes callbacks registered in rolled-back savepoints.
+    enqueue_after_commit._variant_family_sync_ids = pending_family_ids
+    transaction.on_commit(enqueue_after_commit)
 
 
 @receiver(pre_save, sender=ProductVariantFamily, dispatch_uid="products_capture_variant_family_sync_changes")

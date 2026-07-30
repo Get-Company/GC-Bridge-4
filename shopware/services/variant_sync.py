@@ -358,9 +358,18 @@ class ShopwareVariantSyncService(BaseService):
 
         payload: list[dict] = []
         setting_ids: set[str] = set()
+        values_by_id = {
+            value.pk: value
+            for variant in resolution.variants
+            for value in variant.option_values
+        }
         for attribute in resolution.attributes:
-            for value_id in sorted(option_values_by_group.get(attribute.property_group_id, set())):
-                shopware_option_id = value_ids[value_id]
+            values = (
+                values_by_id[value_id]
+                for value_id in option_values_by_group.get(attribute.property_group_id, set())
+            )
+            for value in sorted(values, key=lambda item: (item.position, item.name.casefold(), item.pk)):
+                shopware_option_id = value_ids[value.pk]
                 setting_id = self._stable_id("configurator-setting", parent_id, shopware_option_id)
                 setting_ids.add(setting_id)
                 payload.append(
@@ -368,7 +377,7 @@ class ShopwareVariantSyncService(BaseService):
                         "id": setting_id,
                         "productId": parent_id,
                         "optionId": shopware_option_id,
-                        "position": attribute.position,
+                        "position": value.position,
                     }
                 )
         self.product_service.bulk_upsert(payload, entity_name="product_configurator_setting")

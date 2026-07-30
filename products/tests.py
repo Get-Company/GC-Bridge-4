@@ -15,7 +15,7 @@ from django.contrib.admin.sites import AdminSite
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.core.management.base import CommandError
-from django.db import connection
+from django.db import connection, transaction
 from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -664,24 +664,25 @@ class ProductAutoSyncSignalTest(TestCase):
 
 class ProductVariantAutoSyncSignalTest(TestCase):
     def setUp(self):
-        self.target_category = Category.objects.create(
-            name="Varianten",
-            slug="variant-auto-sync-target",
-            sw6_id="variant-auto-sync-category",
-        )
-        self.family = ProductVariantFamily.objects.create(
-            slug="variant-auto-sync",
-            name="Automatischer Varianten-Sync",
-            shopware_product_number="VARIANT-AUTO-SYNC",
-            target_category=self.target_category,
-        )
-        self.group = PropertyGroup.objects.create(name="Farbe", external_key="color")
-        self.attribute = ProductVariantAttribute.objects.create(
-            family=self.family,
-            property_group=self.group,
-            position=10,
-        )
-        self.value = PropertyValue.objects.create(group=self.group, name="Rot", external_key="red")
+        with disable_product_auto_sync():
+            self.target_category = Category.objects.create(
+                name="Varianten",
+                slug="variant-auto-sync-target",
+                sw6_id="variant-auto-sync-category",
+            )
+            self.family = ProductVariantFamily.objects.create(
+                slug="variant-auto-sync",
+                name="Automatischer Varianten-Sync",
+                shopware_product_number="VARIANT-AUTO-SYNC",
+                target_category=self.target_category,
+            )
+            self.group = PropertyGroup.objects.create(name="Farbe", external_key="color")
+            self.attribute = ProductVariantAttribute.objects.create(
+                family=self.family,
+                property_group=self.group,
+                position=10,
+            )
+            self.value = PropertyValue.objects.create(group=self.group, name="Rot", external_key="red")
 
     @patch("products.tasks.sync_variant_family_to_shopware.delay")
     def test_changed_variant_attribute_queues_its_family_after_commit(self, mock_delay):
@@ -712,6 +713,20 @@ class ProductVariantAutoSyncSignalTest(TestCase):
         with self.captureOnCommitCallbacks(execute=True):
             self.value.position = 10
             self.value.save(update_fields=["position"])
+
+        mock_delay.assert_called_once_with(self.family.pk)
+
+    @patch("products.tasks.sync_variant_family_to_shopware.delay")
+    def test_multiple_property_value_position_changes_queue_family_once_after_commit(self, mock_delay):
+        with disable_product_auto_sync():
+            second_value = PropertyValue.objects.create(group=self.group, name="Gelb", external_key="yellow")
+
+        with self.captureOnCommitCallbacks(execute=True):
+            with transaction.atomic():
+                self.value.position = 20
+                self.value.save(update_fields=["position"])
+                second_value.position = 10
+                second_value.save(update_fields=["position"])
 
         mock_delay.assert_called_once_with(self.family.pk)
 
