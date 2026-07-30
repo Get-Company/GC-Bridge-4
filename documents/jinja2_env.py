@@ -42,24 +42,24 @@ def _build_price_list_attribute_rows(product) -> list[dict[str, str]]:
     return rows
 
 
-def _build_price_list_row(product, *, variant_rows: tuple[dict[str, str], ...] = ()) -> dict:
+def _build_price_list_row(
+    product,
+    *,
+    attributes: list[dict[str, str]] | None = None,
+    sort_key: tuple | None = None,
+) -> dict:
     prices = list(getattr(product, "price_list_prices", []))
     price = prices[0] if prices else None
-    attributes = (
-        [{"group": variant["erp_nr"], "value": variant["label"]} for variant in variant_rows]
-        if variant_rows
-        else _build_price_list_attribute_rows(product)
-    )
     return {
         "erp_nr": (product.erp_nr or "").strip() or "-",
         "name": (product.name or "").strip() or "Ohne Bezeichnung",
-        "attributes": attributes,
+        "attributes": attributes if attributes is not None else _build_price_list_attribute_rows(product),
         "factor": product.factor,
         "vpe_display": _build_price_list_vpe_display(product),
         "price_display": _format_price_list_currency(price.price if price else None),
         "rebate_quantity_display": _format_price_list_quantity(price.rebate_quantity if price else None),
         "rebate_price_display": _format_price_list_currency(price.rebate_price if price else None),
-        "variant_rows": variant_rows,
+        "_price_list_sort_key": sort_key or ((product.erp_nr or ""), 0, (product.name or "")),
     }
 
 
@@ -106,8 +106,27 @@ def _duplicate_category_for_path(category_path: list, duplicate_categories: tupl
     return max(matches, key=lambda category: (category.level, category.lft, category.pk), default=None)
 
 
+def _variant_price_signature(product) -> tuple:
+    """Return every value that is displayed in the price columns for a product."""
+    prices = list(getattr(product, "price_list_prices", []))
+    price = prices[0] if prices else None
+    return (
+        price.price if price else None,
+        price.rebate_quantity if price else None,
+        price.rebate_price if price else None,
+        product.factor,
+        (product.unit or "").strip(),
+    )
+
+
 def _build_price_list_variant_summaries(products: list) -> dict[int, dict]:
-    """Map each displayed child variant to its family's standard product row."""
+    """Map each variant-family member to a single representative price row.
+
+    A family can have many concrete combinations (for example size, colour and
+    print). The price list deliberately does not list those combinations. It
+    emits one representative article per distinct set of displayed price and
+    VPE values and combines the values of each variant attribute in that row.
+    """
     from products.models import ProductVariantFamily
     from products.services import ProductVariantFamilyResolverService
 
@@ -115,6 +134,7 @@ def _build_price_list_variant_summaries(products: list) -> dict[int, dict]:
     if not displayed_product_ids:
         return {}
 
+    products_by_id = {product.pk: product for product in products}
     summaries_by_product_id: dict[int, dict] = {}
     resolver = ProductVariantFamilyResolverService()
     families = ProductVariantFamily.objects.filter(
@@ -123,36 +143,77 @@ def _build_price_list_variant_summaries(products: list) -> dict[int, dict]:
     ).order_by("name", "id")
     for family in families:
         resolution = resolver.resolve(family)
-        if len(resolution.variants) < 2:
+        displayed_variants = tuple(
+            variant for variant in resolution.variants if variant.product.pk in displayed_product_ids
+        )
+        if len(displayed_variants) < 2:
             continue
         default_variant = next(
-            (variant for variant in resolution.variants if variant.product.pk == family.default_product_id),
+            (variant for variant in displayed_variants if variant.product.pk == family.default_product_id),
             None,
         )
         if default_variant is None:
             continue
-        ordered_variants = sorted(
-            resolution.variants,
-            key=lambda variant: (
-                variant.product.pk != family.default_product_id,
-                variant.product.erp_nr,
-                variant.product.pk,
+        family_product_ids = {variant.product.pk for variant in displayed_variants}
+        if family_product_ids & summaries_by_product_id.keys():
+            # A product must not be compressed by two overlapping families.
+            # Families are deterministic by name and ID, so the first one wins.
+            continue
+
+        variants_by_price: dict[tuple, list] = {}
+        for variant in displayed_variants:
+            variants_by_price.setdefault(
+                _variant_price_signature(products_by_id[variant.product.pk]),
+                [],
+            ).append(variant)
+
+        representative_ids: set[int] = set()
+        ordered_price_groups = sorted(
+            variants_by_price.values(),
+            key=lambda price_variants: (
+                not any(variant.product.pk == family.default_product_id for variant in price_variants),
+                min((variant.product.erp_nr, variant.product.pk) for variant in price_variants),
             ),
         )
-        variant_rows = tuple(
-            {
-                "erp_nr": variant.product.erp_nr,
-                "label": " / ".join(value.name for value in variant.option_values) or variant.product.name or "-",
+        for price_group_position, price_variants in enumerate(ordered_price_groups):
+            ordered_variants = sorted(
+                price_variants,
+                key=lambda variant: (
+                    variant.product.pk != family.default_product_id,
+                    variant.product.erp_nr,
+                    variant.product.pk,
+                ),
+            )
+            representative = ordered_variants[0]
+            representative_ids.add(representative.product.pk)
+            attribute_rows = []
+            for attribute_index, attribute in enumerate(resolution.attributes):
+                value_names = []
+                seen_value_ids: set[int] = set()
+                for variant in ordered_variants:
+                    value = variant.option_values[attribute_index]
+                    if value.pk in seen_value_ids:
+                        continue
+                    seen_value_ids.add(value.pk)
+                    value_names.append(value.name)
+                attribute_rows.append(
+                    {
+                        "group": attribute.property_group.name,
+                        "value": " - ".join(value_names),
+                    }
+                )
+            summaries_by_product_id[representative.product.pk] = {
+                "attributes": attribute_rows,
+                "is_representative": True,
+                "sort_key": (
+                    family.default_product.erp_nr,
+                    price_group_position,
+                    representative.product.erp_nr,
+                ),
             }
-            for variant in ordered_variants
-        )
-        summary = {
-            "default_product_id": family.default_product_id,
-            "variant_rows": variant_rows,
-        }
-        for variant in resolution.variants:
-            if variant.product.pk in displayed_product_ids:
-                summaries_by_product_id.setdefault(variant.product.pk, summary)
+
+        for product_id in family_product_ids - representative_ids:
+            summaries_by_product_id[product_id] = {"is_representative": False}
     return summaries_by_product_id
 
 
@@ -250,7 +311,7 @@ def price_list_catalog_sections(
         sections_by_id: dict[int, dict] = {}
         for product in products:
             variant_summary = variant_summaries.get(product.pk)
-            if variant_summary and product.pk != variant_summary["default_product_id"]:
+            if variant_summary and not variant_summary["is_representative"]:
                 continue
             assigned_categories = [
                 category
@@ -311,7 +372,8 @@ def price_list_catalog_sections(
                 group["rows"].append(
                     _build_price_list_row(
                         product,
-                        variant_rows=variant_summary["variant_rows"] if variant_summary else (),
+                        attributes=variant_summary["attributes"] if variant_summary else None,
+                        sort_key=variant_summary["sort_key"] if variant_summary else None,
                     )
                 )
                 if duplicate_category:
@@ -326,7 +388,9 @@ def price_list_catalog_sections(
                 key=lambda item: item["sort_key"],
             )
             for group in section["groups"]:
-                group["rows"].sort(key=lambda row: (row["erp_nr"], row["name"]))
+                group["rows"].sort(key=lambda row: row["_price_list_sort_key"])
+                for row in group["rows"]:
+                    row.pop("_price_list_sort_key")
                 group.pop("sort_key")
             section.pop("sort_key")
             sections.append(section)

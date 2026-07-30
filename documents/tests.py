@@ -369,7 +369,7 @@ class DocumentPriceListCatalogSectionsTest(TestCase):
         }
         self.assertEqual(rows_by_group, {"Ordner": ["A-10000"], "Recycling-Ordner": ["A-10000"]})
 
-    def test_price_list_catalog_sections_uses_variant_default_and_lists_all_variants(self):
+    def test_price_list_catalog_sections_groups_variants_by_displayed_price_values(self):
         root = Category.objects.create(name="Deutsch/Schweiz", slug="deutsch-schweiz-variants")
         section = Category.objects.create(name="Organisation", slug="organisation-variants", parent=root)
         group_category = Category.objects.create(
@@ -390,7 +390,11 @@ class DocumentPriceListCatalogSectionsTest(TestCase):
             (small_product, (size_three, white)),
         ):
             product.categories.add(group_category)
-            Price.objects.create(product=product, sales_channel=self.default_channel, price="10.00")
+            Price.objects.create(
+                product=product,
+                sales_channel=self.default_channel,
+                price="12.00" if product == small_product else "10.00",
+            )
             for value in values:
                 ProductProperty.objects.create(product=product, value=value)
         family = ProductVariantFamily.objects.create(
@@ -407,16 +411,15 @@ class DocumentPriceListCatalogSectionsTest(TestCase):
         sections = price_list_catalog_sections()
 
         rows = sections[0]["groups"][0]["rows"]
-        self.assertEqual([row["erp_nr"] for row in rows], ["581000"])
+        self.assertEqual([row["erp_nr"] for row in rows], ["581000", "291000"])
         self.assertEqual(
-            rows[0]["variant_rows"],
-            (
-                {"erp_nr": "581000", "label": "6 cm / Weiss"},
-                {"erp_nr": "291000", "label": "3 cm / Weiss"},
-                {"erp_nr": "581001", "label": "6 cm / Gelb"},
-            ),
+            rows[0]["attributes"],
+            [{"group": "Groesse", "value": "6 cm"}, {"group": "Farbe", "value": "Weiss - Gelb"}],
         )
-        self.assertEqual(rows[0]["attributes"], list(rows[0]["variant_rows"]))
+        self.assertEqual(
+            rows[1]["attributes"],
+            [{"group": "Groesse", "value": "3 cm"}, {"group": "Farbe", "value": "Weiss"}],
+        )
 
 
 class DocumentPdfServiceTest(SimpleTestCase):

@@ -254,17 +254,16 @@ class DocumentAdmin(BaseAdmin):
                 <h3>Wichtige Zeilenfelder</h3>
                 <p>
                     <code>erp_nr</code>, <code>product_name</code>, <code>attributes</code>,
-                    <code>variant_rows</code>,
                     <code>vpe_display</code>, <code>price_display</code>,
                     <code>rebate_quantity_display</code>, <code>rebate_price_display</code>,
                     <code>category_level1_name</code>, <code>category_level2_name</code>.
                 </p>
                 <p>
-                    Bei Varianten enthält die Preislisten-Zeile nur die konfigurierte
-                    Standardvariante. <code>attributes</code> zeigt dann Artikelnummer und
-                    Variantenwerte; für eine eigene Untertabelle steht zusätzlich
-                    <code>row.variant_rows</code> mit <code>erp_nr</code> und <code>label</code>
-                    bereit.
+                    Varianten werden pro gleicher Preis-, Staffelpreis-, Staffelmengen- und
+                    VPE-Kombination zu einer Preislisten-Zeile zusammengefasst. Die
+                    Standardvariante ist der Repräsentant ihrer Preiszeile; weitere Preiszeilen
+                    verwenden jeweils den ersten passenden Artikel. <code>attributes</code>
+                    enthält die möglichen Werte je Variantenattribut, nicht alle Kombinationen.
                 </p>
                 <h3>Modellfelder</h3>
             """
