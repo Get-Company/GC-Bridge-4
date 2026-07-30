@@ -10,6 +10,24 @@
     {% if form.non_field_errors %}
         <div class="mb-6 text-red-600">{{ form.non_field_errors }}</div>
     {% endif %}
+    {% if fk_edges %}
+        <div class="mb-6 border border-gray-200 p-4">
+            <h2 class="mb-2 font-semibold">Fremdschluessel-Beziehungen</h2>
+            <p class="mb-2 text-sm text-gray-500">
+                Beziehungen der in diesem Backup enthaltenen Tabellen. Zeilen mit
+                „(ausserhalb des Backups)" verweisen auf Tabellen, die nicht mit gesichert wurden.
+            </p>
+            <ul class="text-sm">
+                {% for edge in fk_edges %}
+                    <li>
+                        <code>{{ edge.from_table }}.{{ edge.from_column }}</code>
+                        &rarr; <code>{{ edge.to_table }}</code>
+                        {% if edge.external %}<span class="text-amber-600">(ausserhalb des Backups)</span>{% endif %}
+                    </li>
+                {% endfor %}
+            </ul>
+        </div>
+    {% endif %}
     {% for field in form %}
         <div class="mb-6">
             {{ field.errors }}

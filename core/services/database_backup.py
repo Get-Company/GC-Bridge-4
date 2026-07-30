@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import re
 import subprocess
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable
 
@@ -17,6 +18,36 @@ from .base import BaseService
 
 class DatabaseBackupError(RuntimeError):
     pass
+
+
+@dataclass(frozen=True)
+class ForeignKeyEdge:
+    """Eine gerichtete Fremdschluessel-Beziehung: from_table.from_column -> to_table."""
+
+    from_table: str
+    from_column: str
+    to_table: str
+
+
+@dataclass(frozen=True)
+class RelatedTable:
+    """Eine verwandte Tabelle samt der beteiligten Fremdschluessel-Spalten."""
+
+    table: str
+    columns: tuple[str, ...]
+
+
+@dataclass
+class RestoreDependencyReport:
+    """Ergebnis der Fremdschluessel-Analyse fuer eine geplante Wiederherstellung."""
+
+    prerequisite_tables: list[RelatedTable] = field(default_factory=list)
+    dependent_tables: list[RelatedTable] = field(default_factory=list)
+    problems: list[str] = field(default_factory=list)
+
+    @property
+    def has_warnings(self) -> bool:
+        return bool(self.prerequisite_tables or self.dependent_tables)
 
 
 class DatabaseBackupService(BaseService):
@@ -215,6 +246,98 @@ class DatabaseBackupService(BaseService):
         if selected_tables:
             return selected_tables
         return self.dump_table_names(self.backup_path(backup))
+
+    def foreign_key_edges(self) -> list[ForeignKeyEdge]:
+        """Liest alle Fremdschluessel-Beziehungen des konfigurierten Schemas aus dem Katalog."""
+        connection = connections["default"]
+        if connection.vendor != "postgresql":
+            return []
+
+        schema_name = self.schema_name()
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT src.relname AS from_table,
+                       att.attname AS from_column,
+                       tgt.relname AS to_table
+                FROM pg_catalog.pg_constraint AS c
+                JOIN pg_catalog.pg_class AS src ON src.oid = c.conrelid
+                JOIN pg_catalog.pg_class AS tgt ON tgt.oid = c.confrelid
+                JOIN pg_catalog.pg_namespace AS ns ON ns.oid = c.connamespace
+                JOIN pg_catalog.pg_attribute AS att
+                    ON att.attrelid = c.conrelid AND att.attnum = ANY (c.conkey)
+                WHERE c.contype = 'f' AND ns.nspname = %s
+                ORDER BY from_table, to_table, from_column
+                """,
+                [schema_name],
+            )
+            edges: list[ForeignKeyEdge] = []
+            for from_table, from_column, to_table in cursor.fetchall():
+                from_table = str(from_table)
+                to_table = str(to_table)
+                from_column = str(from_column)
+                if not self._IDENTIFIER_RE.fullmatch(from_table):
+                    continue
+                if not self._IDENTIFIER_RE.fullmatch(to_table):
+                    continue
+                edges.append(ForeignKeyEdge(from_table, from_column, to_table))
+            return edges
+
+    def related_foreign_key_edges(self, table_names: Iterable[str] | None) -> list[ForeignKeyEdge]:
+        """Alle FK-Kanten, die mindestens eine der uebergebenen Tabellen beruehren."""
+        tables = set(self.validate_table_names(table_names))
+        if not tables:
+            return []
+        return [
+            edge
+            for edge in self.foreign_key_edges()
+            if edge.from_table in tables or edge.to_table in tables
+        ]
+
+    def analyze_restore_dependencies(self, table_names: Iterable[str] | None) -> RestoreDependencyReport:
+        """Prueft, welche verwandten Tabellen bei einer Teil-Wiederherstellung fehlen.
+
+        prerequisite_tables: Elterntabellen, auf die die ausgewaehlten per FK verweisen,
+        die aber nicht mit wiederhergestellt werden.
+        dependent_tables: Kindtabellen, die auf die ausgewaehlten verweisen und ebenfalls
+        nicht mit wiederhergestellt werden.
+        """
+        selected = set(self.validate_table_names(table_names))
+        report = RestoreDependencyReport()
+        if not selected:
+            return report
+
+        prerequisites: dict[str, set[str]] = {}
+        dependents: dict[str, set[str]] = {}
+        for edge in self.foreign_key_edges():
+            from_in = edge.from_table in selected
+            to_in = edge.to_table in selected
+            if edge.from_table == edge.to_table:
+                continue
+            if from_in and not to_in:
+                prerequisites.setdefault(edge.to_table, set()).add(f"{edge.from_table}.{edge.from_column}")
+            elif to_in and not from_in:
+                dependents.setdefault(edge.from_table, set()).add(f"{edge.from_table}.{edge.from_column}")
+
+        report.prerequisite_tables = [
+            RelatedTable(table, tuple(sorted(columns))) for table, columns in sorted(prerequisites.items())
+        ]
+        report.dependent_tables = [
+            RelatedTable(table, tuple(sorted(columns))) for table, columns in sorted(dependents.items())
+        ]
+        for related in report.prerequisite_tables:
+            columns = ", ".join(related.columns)
+            report.problems.append(
+                f"Voraussetzung: {columns} verweist auf '{related.table}', das nicht mit "
+                f"wiederhergestellt wird – der Fremdschluessel koennte danach ins Leere zeigen."
+            )
+        for related in report.dependent_tables:
+            columns = ", ".join(related.columns)
+            report.problems.append(
+                f"Abhaengigkeit: '{related.table}' verweist ueber {columns} auf wiederhergestellte "
+                f"Daten und wird nicht mit wiederhergestellt – bestehende Zeilen koennten verwaisen."
+            )
+        return report
 
     def run_backup(self, backup_id: int) -> DatabaseBackup:
         backup = self.get(pk=backup_id)

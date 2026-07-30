@@ -39,6 +39,10 @@ class DatabaseBackupAdminForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # In der Change-Ansicht ist "table_names" readonly und wird von Django aus
+        # dem Formular entfernt, daher hier nicht mehr vorhanden.
+        if "table_names" not in self.fields:
+            return
         if self.instance.pk:
             selected_tables = DatabaseBackupService().validate_table_names(self.instance.table_names)
             self.fields["table_names"].choices = _table_choices(selected_tables)
@@ -63,6 +67,10 @@ class RestoreDatabaseBackupForm(forms.Form):
         widget=forms.CheckboxSelectMultiple,
         label=_("Tabellen"),
         help_text=_("Ohne Auswahl werden alle im Backup enthaltenen Tabellen wiederhergestellt."),
+    )
+    acknowledge_dependencies = forms.BooleanField(
+        required=False,
+        label=_("Fremdschluessel-Warnungen verstanden und trotzdem fortfahren"),
     )
     confirm_restore = forms.BooleanField(
         required=True,
@@ -233,29 +241,56 @@ class DatabaseBackupAdmin(BaseAdmin):
             self.message_user(request, str(exc), level=messages.ERROR)
             return HttpResponseRedirect(reverse("admin:core_databasebackup_change", args=(backup.pk,)))
 
+        service = DatabaseBackupService()
+
         if request.method == "POST":
             form = RestoreDatabaseBackupForm(request.POST, table_names=available_tables)
             if form.is_valid():
-                try:
-                    DatabaseBackupService().request_restore(
-                        backup,
-                        table_names=form.cleaned_data["table_names"],
-                        requested_by=request.user,
+                selected_tables = form.cleaned_data["table_names"]
+                effective_tables = selected_tables or available_tables
+                report = service.analyze_restore_dependencies(effective_tables)
+                if report.has_warnings and not form.cleaned_data["acknowledge_dependencies"]:
+                    for problem in report.problems:
+                        form.add_error(None, problem)
+                    form.add_error(
+                        None,
+                        _("Bitte bestaetige die Fremdschluessel-Warnungen, um fortzufahren."),
                     )
-                except DatabaseBackupError as exc:
-                    form.add_error(None, str(exc))
                 else:
-                    transaction.on_commit(partial(self._enqueue_restore, backup.pk))
-                    self.message_user(request, _("Wiederherstellung wurde eingereiht."))
-                    return HttpResponseRedirect(reverse("admin:core_databasebackup_change", args=(backup.pk,)))
+                    try:
+                        service.request_restore(
+                            backup,
+                            table_names=selected_tables,
+                            requested_by=request.user,
+                        )
+                    except DatabaseBackupError as exc:
+                        form.add_error(None, str(exc))
+                    else:
+                        transaction.on_commit(partial(self._enqueue_restore, backup.pk))
+                        self.message_user(request, _("Wiederherstellung wurde eingereiht."))
+                        return HttpResponseRedirect(
+                            reverse("admin:core_databasebackup_change", args=(backup.pk,))
+                        )
         else:
             form = RestoreDatabaseBackupForm(table_names=available_tables)
+
+        available_set = set(available_tables)
+        fk_edges = [
+            {
+                "from_table": edge.from_table,
+                "from_column": edge.from_column,
+                "to_table": edge.to_table,
+                "external": edge.from_table not in available_set or edge.to_table not in available_set,
+            }
+            for edge in service.related_foreign_key_edges(available_tables)
+        ]
 
         context = {
             **self.admin_site.each_context(request),
             "title": _("Backup wiederherstellen"),
             "backup": backup,
             "form": form,
+            "fk_edges": fk_edges,
             "opts": self.model._meta,
         }
         return TemplateResponse(request, "admin/core/databasebackup_restore.html", context)
