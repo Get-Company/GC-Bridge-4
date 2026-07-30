@@ -709,13 +709,6 @@ UNFOLD = {
                         "link": reverse_lazy("admin:hr_employeeprofile_changelist"),
                         "permission": sidebar_model_view_permission("hr", "EmployeeProfile"),
                     },
-                ],
-            },
-            {
-                "title": _("Abwesenheiten"),
-                "separator": True,
-                "collapsible": True,
-                "items": [
                     {
                         "title": _("Urlaubsantraege"),
                         "icon": "beach_access",
@@ -734,13 +727,6 @@ UNFOLD = {
                         "link": reverse_lazy("admin:hr_companyholiday_changelist"),
                         "permission": sidebar_model_view_permission("hr", "CompanyHoliday"),
                     },
-                ],
-            },
-            {
-                "title": _("Zeiterfassung"),
-                "separator": True,
-                "collapsible": True,
-                "items": [
                     {
                         "title": _("Zeitkonto"),
                         "icon": "schedule",
@@ -753,13 +739,6 @@ UNFOLD = {
                         "link": reverse_lazy("admin:hr_monthlyworksummary_changelist"),
                         "permission": sidebar_model_view_permission("hr", "MonthlyWorkSummary"),
                     },
-                ],
-            },
-            {
-                "title": _("Kalender & Feiertage"),
-                "separator": True,
-                "collapsible": True,
-                "items": [
                     {
                         "title": _("Feiertagskalender"),
                         "icon": "calendar_view_month",
@@ -772,13 +751,6 @@ UNFOLD = {
                         "link": reverse_lazy("admin:hr_publicholiday_openholidays"),
                         "permission": sidebar_model_view_permission("hr", "PublicHoliday"),
                     },
-                ],
-            },
-            {
-                "title": _("Vorlagen"),
-                "separator": True,
-                "collapsible": True,
-                "items": [
                     {
                         "title": _("Arbeitszeitmodelle"),
                         "icon": "edit_calendar",
