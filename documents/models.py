@@ -56,6 +56,17 @@ class Document(BaseModel):
     )
     html_content = models.TextField(blank=True, default="", verbose_name=_("HTML"))
     css_content = models.TextField(blank=True, default="", verbose_name=_("CSS"))
+    price_list_duplicate_categories = models.ManyToManyField(
+        "products.Category",
+        blank=True,
+        limit_choices_to={"is_active": True},
+        related_name="price_list_duplicate_documents",
+        verbose_name=_("Kategorien mit Doppelauflistung"),
+        help_text=_(
+            "Artikel aus diesen Kategorien und ihren Unterkategorien duerfen in einer Preisliste "
+            "zusaetzlich zu ihrer regulaeren Kategorie erscheinen."
+        ),
+    )
     is_active = models.BooleanField(default=True, db_index=True, verbose_name=_("Aktiv"))
     pdf_filename = models.CharField(
         max_length=255,

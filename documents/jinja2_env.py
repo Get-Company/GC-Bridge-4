@@ -42,18 +42,24 @@ def _build_price_list_attribute_rows(product) -> list[dict[str, str]]:
     return rows
 
 
-def _build_price_list_row(product) -> dict:
+def _build_price_list_row(product, *, variant_rows: tuple[dict[str, str], ...] = ()) -> dict:
     prices = list(getattr(product, "price_list_prices", []))
     price = prices[0] if prices else None
+    attributes = (
+        [{"group": variant["erp_nr"], "value": variant["label"]} for variant in variant_rows]
+        if variant_rows
+        else _build_price_list_attribute_rows(product)
+    )
     return {
         "erp_nr": (product.erp_nr or "").strip() or "-",
         "name": (product.name or "").strip() or "Ohne Bezeichnung",
-        "attributes": _build_price_list_attribute_rows(product),
+        "attributes": attributes,
         "factor": product.factor,
         "vpe_display": _build_price_list_vpe_display(product),
         "price_display": _format_price_list_currency(price.price if price else None),
         "rebate_quantity_display": _format_price_list_quantity(price.rebate_quantity if price else None),
         "rebate_price_display": _format_price_list_currency(price.rebate_price if price else None),
+        "variant_rows": variant_rows,
     }
 
 
@@ -86,7 +92,75 @@ def _is_category_below(category, possible_parent) -> bool:
     )
 
 
-def price_list_catalog_sections(root_level: int | None = None, active_only: bool = True) -> list[dict]:
+def _price_list_duplicate_categories(document) -> tuple:
+    if not document or not document.pk or document.document_type != document.DocumentType.PRICE_LIST:
+        return ()
+    return tuple(
+        document.price_list_duplicate_categories.filter(is_active=True).order_by("tree_id", "lft", "id")
+    )
+
+
+def _duplicate_category_for_path(category_path: list, duplicate_categories: tuple):
+    category_ids = {category.pk for category in category_path}
+    matches = [category for category in duplicate_categories if category.pk in category_ids]
+    return max(matches, key=lambda category: (category.level, category.lft, category.pk), default=None)
+
+
+def _build_price_list_variant_summaries(products: list) -> dict[int, dict]:
+    """Map each displayed child variant to its family's standard product row."""
+    from products.models import ProductVariantFamily
+    from products.services import ProductVariantFamilyResolverService
+
+    displayed_product_ids = {product.pk for product in products}
+    if not displayed_product_ids:
+        return {}
+
+    summaries_by_product_id: dict[int, dict] = {}
+    resolver = ProductVariantFamilyResolverService()
+    families = ProductVariantFamily.objects.filter(
+        is_active=True,
+        default_product_id__in=displayed_product_ids,
+    ).order_by("name", "id")
+    for family in families:
+        resolution = resolver.resolve(family)
+        if len(resolution.variants) < 2:
+            continue
+        default_variant = next(
+            (variant for variant in resolution.variants if variant.product.pk == family.default_product_id),
+            None,
+        )
+        if default_variant is None:
+            continue
+        ordered_variants = sorted(
+            resolution.variants,
+            key=lambda variant: (
+                variant.product.pk != family.default_product_id,
+                variant.product.erp_nr,
+                variant.product.pk,
+            ),
+        )
+        variant_rows = tuple(
+            {
+                "erp_nr": variant.product.erp_nr,
+                "label": " / ".join(value.name for value in variant.option_values) or variant.product.name or "-",
+            }
+            for variant in ordered_variants
+        )
+        summary = {
+            "default_product_id": family.default_product_id,
+            "variant_rows": variant_rows,
+        }
+        for variant in resolution.variants:
+            if variant.product.pk in displayed_product_ids:
+                summaries_by_product_id.setdefault(variant.product.pk, summary)
+    return summaries_by_product_id
+
+
+def price_list_catalog_sections(
+    root_level: int | None = None,
+    active_only: bool = True,
+    document=None,
+) -> list[dict]:
     """Build the price list below each technical category root.
 
     The first category level (for example ``Deutsch/Schweiz``) is a technical
@@ -100,7 +174,9 @@ def price_list_catalog_sections(root_level: int | None = None, active_only: bool
     omitted. Every listed product belongs to exactly one visible level-3 group;
     when it is assigned to several groups, the first category in tree order
     determines its one price-list position. Inactive visible categories are
-    skipped completely.
+    skipped completely. Categories selected on the price-list document are
+    explicit exceptions and may additionally list the same article once per
+    selected category subtree.
 
     ``root_level`` is accepted for existing document templates but intentionally
     ignored: the root is always the actual MPTT root so the output structure is
@@ -165,12 +241,16 @@ def price_list_catalog_sections(root_level: int | None = None, active_only: bool
         .distinct()
     )
 
+    duplicate_categories = _price_list_duplicate_categories(document)
+    variant_summaries = _build_price_list_variant_summaries(products)
     sections = []
     listed_product_ids: set[int] = set()
+    listed_duplicate_category_product_ids: set[tuple[int, int]] = set()
     for root in root_categories:
         sections_by_id: dict[int, dict] = {}
         for product in products:
-            if product.pk in listed_product_ids:
+            variant_summary = variant_summaries.get(product.pk)
+            if variant_summary and product.pk != variant_summary["default_product_id"]:
                 continue
             assigned_categories = [
                 category
@@ -197,6 +277,14 @@ def price_list_catalog_sections(root_level: int | None = None, active_only: bool
                 if len(category_path) < 3 or not all(category.is_active for category in category_path[1:]):
                     continue
 
+                duplicate_category = _duplicate_category_for_path(category_path, duplicate_categories)
+                if duplicate_category:
+                    duplicate_key = (product.pk, duplicate_category.pk)
+                    if duplicate_key in listed_duplicate_category_product_ids:
+                        continue
+                elif product.pk in listed_product_ids:
+                    continue
+
                 section_category = category_path[1]
                 section = sections_by_id.setdefault(
                     section_category.pk,
@@ -220,9 +308,16 @@ def price_list_catalog_sections(root_level: int | None = None, active_only: bool
                         "rows": [],
                     },
                 )
-                group["rows"].append(_build_price_list_row(product))
-                listed_product_ids.add(product.pk)
-                break
+                group["rows"].append(
+                    _build_price_list_row(
+                        product,
+                        variant_rows=variant_summary["variant_rows"] if variant_summary else (),
+                    )
+                )
+                if duplicate_category:
+                    listed_duplicate_category_product_ids.add(duplicate_key)
+                else:
+                    listed_product_ids.add(product.pk)
 
         for section in sorted(sections_by_id.values(), key=lambda item: item["sort_key"]):
             section["direct_rows"].sort(key=lambda row: (row["erp_nr"], row["name"]))
@@ -246,12 +341,17 @@ def build_env() -> jinja2.Environment:
         undefined=jinja2.Undefined,
         keep_trailing_newline=True,
     )
+    @jinja2.pass_context
+    def price_list_catalog_sections_for_document(context, *args, **kwargs):
+        kwargs.setdefault("document", context.get("document"))
+        return price_list_catalog_sections(*args, **kwargs)
+
     env.globals.update(
         {
             "Product": Product,
             "Category": Category,
             "Tax": Tax,
-            "price_list_catalog_sections": price_list_catalog_sections,
+            "price_list_catalog_sections": price_list_catalog_sections_for_document,
         }
     )
     return env

@@ -15,7 +15,16 @@ from documents.management.commands.init_documents import Command as InitDocument
 from documents.models import Document
 from documents.shopware_upload_service import DocumentShopwareUploadService
 from documents.services import DocumentPdfService
-from products.models import Category, Price, Product, ProductProperty, PropertyGroup, PropertyValue
+from products.models import (
+    Category,
+    Price,
+    Product,
+    ProductProperty,
+    ProductVariantAttribute,
+    ProductVariantFamily,
+    PropertyGroup,
+    PropertyValue,
+)
 
 
 class DocumentRenderingTest(SimpleTestCase):
@@ -73,6 +82,15 @@ class DocumentRenderingTest(SimpleTestCase):
             admin_instance.actions_detail[0]["items"],
             ["generate_pdf_detail", "upload_to_shopware_detail", "preview_template_detail"],
         )
+
+    def test_duplicate_categories_are_only_shown_for_price_lists(self):
+        admin_instance = DocumentAdmin(Document, AdminSite())
+
+        self.assertEqual(
+            admin_instance.conditional_fields["price_list_duplicate_categories"],
+            "document_type == 'price_list'",
+        )
+        self.assertIn("price_list_duplicate_categories", admin_instance.autocomplete_fields)
 
 
 class DocumentInitializationCommandTest(SimpleTestCase):
@@ -317,6 +335,88 @@ class DocumentPriceListCatalogSectionsTest(TestCase):
         self.assertEqual(sections[0]["name"], "Mappen")
         self.assertEqual(sections[0]["groups"][0]["name"], "Ringmappen - A4")
         self.assertEqual([row["erp_nr"] for row in sections[0]["groups"][0]["rows"]], ["A-4000"])
+
+    def test_price_list_catalog_sections_allows_selected_category_subtree_to_repeat_products(self):
+        root = Category.objects.create(name="Deutsch/Schweiz", slug="deutsch-schweiz-duplicates")
+        standard_section = Category.objects.create(
+            name="Buero", slug="buero-duplicates", parent=root, sort_order=10
+        )
+        standard_group = Category.objects.create(
+            name="Ordner", slug="ordner-duplicates", parent=standard_section, sort_order=10
+        )
+        duplicate_section = Category.objects.create(
+            name="Recycling", slug="recycling-duplicates", parent=root, sort_order=20
+        )
+        duplicate_group = Category.objects.create(
+            name="Recycling-Ordner", slug="recycling-ordner-duplicates", parent=duplicate_section
+        )
+        product = Product.objects.create(erp_nr="A-10000", name="Recycling-Ordner")
+        product.categories.add(standard_group, duplicate_group)
+        Price.objects.create(product=product, sales_channel=self.default_channel, price="10.00")
+        document = Document.objects.create(
+            document_type=Document.DocumentType.PRICE_LIST,
+            slug="preisliste-duplicates",
+            title="Preisliste",
+        )
+        document.price_list_duplicate_categories.add(duplicate_section)
+
+        sections = price_list_catalog_sections(document=document)
+
+        rows_by_group = {
+            group["name"]: [row["erp_nr"] for row in group["rows"]]
+            for section in sections
+            for group in section["groups"]
+        }
+        self.assertEqual(rows_by_group, {"Ordner": ["A-10000"], "Recycling-Ordner": ["A-10000"]})
+
+    def test_price_list_catalog_sections_uses_variant_default_and_lists_all_variants(self):
+        root = Category.objects.create(name="Deutsch/Schweiz", slug="deutsch-schweiz-variants")
+        section = Category.objects.create(name="Organisation", slug="organisation-variants", parent=root)
+        group_category = Category.objects.create(
+            name="Register", slug="register-variants", parent=section
+        )
+        size_group = PropertyGroup.objects.create(name="Groesse")
+        colour_group = PropertyGroup.objects.create(name="Farbe")
+        size_six = PropertyValue.objects.create(group=size_group, name="6 cm")
+        size_three = PropertyValue.objects.create(group=size_group, name="3 cm")
+        white = PropertyValue.objects.create(group=colour_group, name="Weiss")
+        yellow = PropertyValue.objects.create(group=colour_group, name="Gelb")
+        standard_product = Product.objects.create(erp_nr="581000", name="Register 6 cm weiss")
+        yellow_product = Product.objects.create(erp_nr="581001", name="Register 6 cm gelb")
+        small_product = Product.objects.create(erp_nr="291000", name="Register 3 cm weiss")
+        for product, values in (
+            (standard_product, (size_six, white)),
+            (yellow_product, (size_six, yellow)),
+            (small_product, (size_three, white)),
+        ):
+            product.categories.add(group_category)
+            Price.objects.create(product=product, sales_channel=self.default_channel, price="10.00")
+            for value in values:
+                ProductProperty.objects.create(product=product, value=value)
+        family = ProductVariantFamily.objects.create(
+            slug="register-variants",
+            name="Register",
+            shopware_product_number="PARENT-REGISTER",
+            target_category=group_category,
+            default_product=standard_product,
+        )
+        family.source_categories.add(group_category)
+        ProductVariantAttribute.objects.create(family=family, property_group=size_group, position=10)
+        ProductVariantAttribute.objects.create(family=family, property_group=colour_group, position=20)
+
+        sections = price_list_catalog_sections()
+
+        rows = sections[0]["groups"][0]["rows"]
+        self.assertEqual([row["erp_nr"] for row in rows], ["581000"])
+        self.assertEqual(
+            rows[0]["variant_rows"],
+            (
+                {"erp_nr": "581000", "label": "6 cm / Weiss"},
+                {"erp_nr": "291000", "label": "3 cm / Weiss"},
+                {"erp_nr": "581001", "label": "6 cm / Gelb"},
+            ),
+        )
+        self.assertEqual(rows[0]["attributes"], list(rows[0]["variant_rows"]))
 
 
 class DocumentPdfServiceTest(SimpleTestCase):
