@@ -11,9 +11,9 @@ class SubmitMutationTest(SimpleTestCase):
         return {"accepted": True, "jobId": "job-123", "retryAfterSeconds": 42}
 
     @staticmethod
-    def _maintenance_client():
+    def _worker_client():
         client = MicrotechGraphQLClientService.__new__(MicrotechGraphQLClientService)
-        client.config = SimpleNamespace(maintenance_token="maintenance-token", poll_timeout=30.0, poll_interval=0.1)
+        client.config = SimpleNamespace(poll_timeout=30.0, poll_interval=0.1)
         return client
 
     @staticmethod
@@ -86,7 +86,7 @@ class SubmitMutationTest(SimpleTestCase):
         self.assertEqual(mock_poll.call_args.kwargs["timeout"], 5)
 
     @patch.object(MicrotechGraphQLClientService, "execute")
-    def test_stop_microtech_worker_uses_maintenance_token_and_requires_closed_com(self, mock_execute):
+    def test_stop_microtech_worker_requires_closed_com(self, mock_execute):
         mock_execute.return_value = {
             "stopMicrotechWorker": {
                 "success": True,
@@ -95,14 +95,10 @@ class SubmitMutationTest(SimpleTestCase):
             }
         }
 
-        result = self._maintenance_client().stop_microtech_worker()
+        result = self._worker_client().stop_microtech_worker()
 
         self.assertFalse(result["worker"]["running"])
         self.assertIn("stopMicrotechWorker", mock_execute.call_args.args[0])
-        self.assertEqual(
-            mock_execute.call_args.kwargs["headers"],
-            {"X-Microtech-Maintenance-Token": "maintenance-token"},
-        )
 
     @patch.object(MicrotechGraphQLClientService, "execute")
     def test_stop_microtech_worker_rejects_an_active_worker(self, mock_execute):
@@ -115,10 +111,10 @@ class SubmitMutationTest(SimpleTestCase):
         }
 
         with self.assertRaises(GraphQLMicrotechError):
-            self._maintenance_client().stop_microtech_worker()
+            self._worker_client().stop_microtech_worker()
 
     @patch.object(MicrotechGraphQLClientService, "execute")
-    def test_worker_status_uses_status_query_and_maintenance_token(self, mock_execute):
+    def test_worker_status_uses_status_query(self, mock_execute):
         mock_execute.return_value = {
             "microtechWorkerStatus": {
                 "success": True,
@@ -126,14 +122,10 @@ class SubmitMutationTest(SimpleTestCase):
             }
         }
 
-        result = self._maintenance_client().microtech_worker_status()
+        result = self._worker_client().microtech_worker_status()
 
         self.assertTrue(result["worker"]["microtechConnected"])
         self.assertIn("microtechWorkerStatus", mock_execute.call_args.args[0])
-        self.assertEqual(
-            mock_execute.call_args.kwargs["headers"],
-            {"X-Microtech-Maintenance-Token": "maintenance-token"},
-        )
 
     @patch("microtech.services.graphql_client.time.sleep")
     @patch.object(MicrotechGraphQLClientService, "microtech_worker_status")
@@ -143,7 +135,7 @@ class SubmitMutationTest(SimpleTestCase):
             {"success": True, "worker": self._worker(running=True, connected=True)},
         ]
 
-        result = self._maintenance_client().wait_for_microtech_worker_connection(timeout=5)
+        result = self._worker_client().wait_for_microtech_worker_connection(timeout=5)
 
         self.assertTrue(result["worker"]["microtechConnected"])
         self.assertEqual(mock_status.call_count, 2)

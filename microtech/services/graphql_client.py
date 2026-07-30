@@ -27,7 +27,6 @@ class MicrotechGraphQLConfig:
     request_timeout: float = 30.0
     poll_timeout: float = 180.0
     poll_interval: float = 2.0
-    maintenance_token: str = ""
 
     @classmethod
     def from_settings(cls) -> "MicrotechGraphQLConfig":
@@ -39,7 +38,6 @@ class MicrotechGraphQLConfig:
             request_timeout=float(getattr(settings, "MICROTECH_GRAPHQL_REQUEST_TIMEOUT", 30.0)),
             poll_timeout=float(getattr(settings, "MICROTECH_GRAPHQL_POLL_TIMEOUT", 180.0)),
             poll_interval=float(getattr(settings, "MICROTECH_GRAPHQL_POLL_INTERVAL", 2.0)),
-            maintenance_token=str(getattr(settings, "MICROTECH_MAINTENANCE_TOKEN", "") or "").strip(),
         )
 
 
@@ -52,19 +50,11 @@ class MicrotechGraphQLClientService(BaseService):
     def __init__(self, *, config: MicrotechGraphQLConfig | None = None) -> None:
         self.config = config or MicrotechGraphQLConfig.from_settings()
 
-    def execute(
-        self,
-        query: str,
-        variables: dict[str, Any] | None = None,
-        *,
-        headers: dict[str, str] | None = None,
-    ) -> dict[str, Any]:
-        request_headers = {"Content-Type": "application/json"}
-        request_headers.update(headers or {})
+    def execute(self, query: str, variables: dict[str, Any] | None = None) -> dict[str, Any]:
         response = requests.post(
             self.config.url,
             json={"query": query, "variables": variables or {}},
-            headers=request_headers,
+            headers={"Content-Type": "application/json"},
             timeout=self.config.request_timeout,
         )
         response.raise_for_status()
@@ -83,7 +73,7 @@ class MicrotechGraphQLClientService(BaseService):
     def stop_microtech_worker(self) -> dict[str, Any]:
         """Stop the wrapper worker and require confirmation that COM is closed."""
         result = self._maintenance_result(
-            self._execute_maintenance(
+            self.execute(
                 """
                 mutation {
                   stopMicrotechWorker {
@@ -109,7 +99,7 @@ class MicrotechGraphQLClientService(BaseService):
     def start_microtech_worker(self) -> dict[str, Any]:
         """Start the wrapper worker. Use wait_for_microtech_worker_connection afterwards."""
         return self._maintenance_result(
-            self._execute_maintenance(
+            self.execute(
                 """
                 mutation {
                   startMicrotechWorker {
@@ -124,7 +114,7 @@ class MicrotechGraphQLClientService(BaseService):
 
     def microtech_worker_status(self) -> dict[str, Any]:
         return self._maintenance_result(
-            self._execute_maintenance(
+            self.execute(
                 """
                 query {
                   microtechWorkerStatus {
@@ -153,12 +143,6 @@ class MicrotechGraphQLClientService(BaseService):
                     f"Der Microtech-Worker hat innerhalb von {timeout:g}s keine COM-Verbindung aufgebaut: {detail}"
                 )
             time.sleep(max(self.config.poll_interval, 0.1))
-
-    def _execute_maintenance(self, query: str) -> dict[str, Any]:
-        token = self.config.maintenance_token.strip()
-        if not token:
-            raise GraphQLMicrotechError("MICROTECH_MAINTENANCE_TOKEN ist nicht konfiguriert.")
-        return self.execute(query, headers={"X-Microtech-Maintenance-Token": token})
 
     @staticmethod
     def _maintenance_result(data: dict[str, Any], field: str) -> dict[str, Any]:
