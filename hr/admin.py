@@ -99,6 +99,22 @@ class LeaveRequestYearInline(BaseTabularInline):
         return False
 
 
+class PublicHolidayInline(BaseTabularInline):
+    model = PublicHoliday
+    fk_name = "calendar"
+    fields = ("name", "date", "is_half_day", "is_active")
+    ordering = ("-date",)
+    show_change_link = True
+
+
+class SchoolHolidayInline(BaseTabularInline):
+    model = SchoolHoliday
+    fk_name = "calendar"
+    fields = ("name", "start_date", "end_date", "is_active")
+    ordering = ("-start_date",)
+    show_change_link = True
+
+
 class HrScopedAdminMixin:
     employee_lookup = "employee"
     manager_permission_name = "can_manage_master_data"
@@ -182,6 +198,7 @@ class HolidayCalendarAdmin(HrScopedAdminMixin, BaseAdmin):
         ("is_active", BooleanRadioFilter),
         ("created_at", RangeDateTimeFilter),
     ]
+    inlines = (PublicHolidayInline, SchoolHolidayInline)
 
     def has_module_permission(self, request):
         return self.can_manage(request)
@@ -651,7 +668,8 @@ class PublicHolidayAdmin(HrScopedAdminMixin, BaseAdmin):
         return TemplateResponse(request, "admin/hr/openholidays_import.html", context)
 
     def has_module_permission(self, request):
-        return self.can_manage(request)
+        # Wird ueber den Feiertagskalender (Inline) gepflegt, daher nicht im Menue.
+        return False
 
     def has_view_permission(self, request, obj=None):
         return self.can_manage(request)
@@ -679,7 +697,8 @@ class SchoolHolidayAdmin(HrScopedAdminMixin, BaseAdmin):
     date_hierarchy = "start_date"
 
     def has_module_permission(self, request):
-        return self.can_manage(request)
+        # Wird ueber den Feiertagskalender (Inline) gepflegt, daher nicht im Menue.
+        return False
 
     def has_view_permission(self, request, obj=None):
         return self.can_manage(request)
@@ -740,7 +759,8 @@ class EmployeeWorkScheduleAdmin(HrScopedAdminMixin, BaseAdmin):
     autocomplete_fields = ("employee", "schedule")
 
     def has_module_permission(self, request):
-        return self.can_manage(request)
+        # Wird direkt im Mitarbeiter (Inline) gepflegt, daher nicht im Menue.
+        return False
 
     def has_view_permission(self, request, obj=None):
         return self.can_manage(request)

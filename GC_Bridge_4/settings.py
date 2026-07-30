@@ -709,6 +709,13 @@ UNFOLD = {
                         "link": reverse_lazy("admin:hr_employeeprofile_changelist"),
                         "permission": sidebar_model_view_permission("hr", "EmployeeProfile"),
                     },
+                ],
+            },
+            {
+                "title": _("Abwesenheiten"),
+                "separator": True,
+                "collapsible": True,
+                "items": [
                     {
                         "title": _("Urlaubsantraege"),
                         "icon": "beach_access",
@@ -722,6 +729,19 @@ UNFOLD = {
                         "permission": sidebar_model_view_permission("hr", "SickLeave"),
                     },
                     {
+                        "title": _("Betriebsurlaub"),
+                        "icon": "event_busy",
+                        "link": reverse_lazy("admin:hr_companyholiday_changelist"),
+                        "permission": sidebar_model_view_permission("hr", "CompanyHoliday"),
+                    },
+                ],
+            },
+            {
+                "title": _("Zeiterfassung"),
+                "separator": True,
+                "collapsible": True,
+                "items": [
+                    {
                         "title": _("Zeitkonto"),
                         "icon": "schedule",
                         "link": reverse_lazy("admin:hr_timeaccountentry_changelist"),
@@ -733,18 +753,13 @@ UNFOLD = {
                         "link": reverse_lazy("admin:hr_monthlyworksummary_changelist"),
                         "permission": sidebar_model_view_permission("hr", "MonthlyWorkSummary"),
                     },
-                    {
-                        "title": _("Arbeitszeitmodelle"),
-                        "icon": "edit_calendar",
-                        "link": reverse_lazy("admin:hr_workschedule_changelist"),
-                        "permission": sidebar_model_view_permission("hr", "WorkSchedule"),
-                    },
-                    {
-                        "title": _("Arbeitszeit-Zuweisungen"),
-                        "icon": "assignment_ind",
-                        "link": reverse_lazy("admin:hr_employeeworkschedule_changelist"),
-                        "permission": sidebar_model_view_permission("hr", "EmployeeWorkSchedule"),
-                    },
+                ],
+            },
+            {
+                "title": _("Kalender & Feiertage"),
+                "separator": True,
+                "collapsible": True,
+                "items": [
                     {
                         "title": _("Feiertagskalender"),
                         "icon": "calendar_view_month",
@@ -752,22 +767,23 @@ UNFOLD = {
                         "permission": sidebar_model_view_permission("hr", "HolidayCalendar"),
                     },
                     {
-                        "title": _("Feiertage"),
-                        "icon": "event_available",
-                        "link": reverse_lazy("admin:hr_publicholiday_changelist"),
+                        "title": _("Feiertage importieren"),
+                        "icon": "cloud_download",
+                        "link": reverse_lazy("admin:hr_publicholiday_openholidays"),
                         "permission": sidebar_model_view_permission("hr", "PublicHoliday"),
                     },
+                ],
+            },
+            {
+                "title": _("Vorlagen"),
+                "separator": True,
+                "collapsible": True,
+                "items": [
                     {
-                        "title": _("Ferientermine"),
-                        "icon": "family_restroom",
-                        "link": reverse_lazy("admin:hr_schoolholiday_changelist"),
-                        "permission": sidebar_model_view_permission("hr", "SchoolHoliday"),
-                    },
-                    {
-                        "title": _("Betriebsurlaub"),
-                        "icon": "event_busy",
-                        "link": reverse_lazy("admin:hr_companyholiday_changelist"),
-                        "permission": sidebar_model_view_permission("hr", "CompanyHoliday"),
+                        "title": _("Arbeitszeitmodelle"),
+                        "icon": "edit_calendar",
+                        "link": reverse_lazy("admin:hr_workschedule_changelist"),
+                        "permission": sidebar_model_view_permission("hr", "WorkSchedule"),
                     },
                 ],
             },
