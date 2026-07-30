@@ -96,6 +96,11 @@ def price_list_catalog_sections(root_level: int | None = None, active_only: bool
     ``Ringmappen - A4``. This preserves the visible level-3 grouping while
     making every further subcategory explicit in the price list.
 
+    Products assigned directly to a visible level-2 category are deliberately
+    omitted. Every listed product belongs to exactly one visible level-3 group;
+    when it is assigned to several groups, the first category in tree order
+    determines its one price-list position.
+
     ``root_level`` is accepted for existing document templates but intentionally
     ignored: the root is always the actual MPTT root so the output structure is
     consistent for every sales-channel tree.
@@ -159,9 +164,12 @@ def price_list_catalog_sections(root_level: int | None = None, active_only: bool
     )
 
     sections = []
+    listed_product_ids: set[int] = set()
     for root in root_categories:
         sections_by_id: dict[int, dict] = {}
         for product in products:
+            if product.pk in listed_product_ids:
+                continue
             assigned_categories = [
                 category
                 for category in getattr(product, "price_list_categories", [])
@@ -181,7 +189,9 @@ def price_list_catalog_sections(root_level: int | None = None, active_only: bool
             ]
             for leaf_category in leaf_categories:
                 category_path = _category_path_from_root(leaf_category, root, categories_by_id)
-                if len(category_path) < 2:
+                # Ebene 1 ist der technische Verkaufskanal-Root, Ebene 2 nur
+                # die Hauptüberschrift. Artikel werden erst ab Ebene 3 gelistet.
+                if len(category_path) < 3:
                     continue
 
                 section_category = category_path[1]
@@ -194,11 +204,6 @@ def price_list_catalog_sections(root_level: int | None = None, active_only: bool
                         "groups_by_path": {},
                     },
                 )
-                row = _build_price_list_row(product)
-                if len(category_path) == 2:
-                    section["direct_rows"].append(row)
-                    continue
-
                 group_categories = category_path[2:]
                 group_key = tuple(category.pk for category in group_categories)
                 group = section["groups_by_path"].setdefault(
@@ -212,7 +217,9 @@ def price_list_catalog_sections(root_level: int | None = None, active_only: bool
                         "rows": [],
                     },
                 )
-                group["rows"].append(row)
+                group["rows"].append(_build_price_list_row(product))
+                listed_product_ids.add(product.pk)
+                break
 
         for section in sorted(sections_by_id.values(), key=lambda item: item["sort_key"]):
             section["direct_rows"].sort(key=lambda row: (row["erp_nr"], row["name"]))

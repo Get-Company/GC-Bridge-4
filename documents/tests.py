@@ -83,7 +83,13 @@ class DocumentInitializationCommandTest(SimpleTestCase):
         command._init_price_list(Document, force=True)
 
         args, _ = command._upsert.call_args
-        self.assertTrue(args[2]["use_jinja2"])
+        defaults = args[2]
+        self.assertTrue(defaults["use_jinja2"])
+        self.assertEqual(
+            defaults["html_content"],
+            Path("documents/templates/preisliste.html").read_text(encoding="utf-8"),
+        )
+        self.assertIn("price_list_catalog_sections()", defaults["html_content"])
 
     def test_django_document_template_supports_comment_tag(self):
         document = Document(
@@ -203,6 +209,39 @@ class DocumentPriceListCatalogSectionsTest(TestCase):
         Price.objects.create(product=product, sales_channel=other_channel, price="9.90")
 
         self.assertEqual(price_list_catalog_sections(), [])
+
+    def test_price_list_catalog_sections_omits_level_two_products_and_deduplicates_products(self):
+        root = Category.objects.create(name="Deutsch/Schweiz", slug="deutsch-schweiz-5")
+        section = Category.objects.create(name="Ordner", slug="ordner-5", parent=root, sort_order=10)
+        first_group = Category.objects.create(
+            name="Hebelordner",
+            slug="hebelordner-5",
+            parent=section,
+            sort_order=10,
+        )
+        second_group = Category.objects.create(
+            name="Ringordner",
+            slug="ringordner-5",
+            parent=section,
+            sort_order=20,
+        )
+        direct_product = Product.objects.create(erp_nr="A-5000", name="Nur Ebene 2")
+        direct_product.categories.add(section)
+        Price.objects.create(product=direct_product, sales_channel=self.default_channel, price="8.00")
+        duplicate_product = Product.objects.create(erp_nr="A-6000", name="Mehrfach kategorisiert")
+        duplicate_product.categories.add(first_group, second_group)
+        Price.objects.create(product=duplicate_product, sales_channel=self.default_channel, price="9.00")
+
+        sections = price_list_catalog_sections()
+
+        self.assertEqual(len(sections), 1)
+        self.assertEqual(sections[0]["direct_rows"], [])
+        self.assertEqual(len(sections[0]["groups"]), 1)
+        self.assertEqual(sections[0]["groups"][0]["name"], "Hebelordner")
+        self.assertEqual(
+            [row["erp_nr"] for row in sections[0]["groups"][0]["rows"]],
+            ["A-6000"],
+        )
 
     def test_price_list_catalog_sections_includes_deeper_category_names_in_the_group(self):
         root = Category.objects.create(name="Deutsch/Schweiz", slug="deutsch-schweiz-4")

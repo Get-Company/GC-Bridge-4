@@ -160,10 +160,6 @@
 {% if sections %}
     {% for section in sections %}
         <section class="price-list-section">
-            {% if section.direct_rows %}
-                {{ price_list_table(section.name, none, section.direct_rows) }}
-            {% endif %}
-
             {% for group in section.groups %}
                 {% if group.rows %}
                 {{ price_list_table(section.name, group.name, group.rows) }}
