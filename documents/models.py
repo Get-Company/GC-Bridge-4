@@ -2,6 +2,7 @@ from pathlib import Path
 
 from django.core.validators import FileExtensionValidator
 from django.db import models
+from django.db.models import Q
 from django.template import Context, Template
 from django.utils.text import slugify
 from django.utils.translation import gettext_lazy as _
@@ -108,6 +109,15 @@ class Document(BaseModel):
         verbose_name=_("Shopware Media-ID"),
         help_text=_("Wird beim Hochladen automatisch gesetzt und identifiziert die Datei dauerhaft in Shopware."),
     )
+    active_version = models.ForeignKey(
+        "DocumentVersion",
+        on_delete=models.SET_NULL,
+        related_name="active_for_documents",
+        null=True,
+        blank=True,
+        editable=False,
+        verbose_name=_("Aktive Version"),
+    )
 
     class Meta:
         verbose_name = _("Dokument")
@@ -137,6 +147,44 @@ class Document(BaseModel):
             from documents.jinja2_env import build_env
             return build_env().from_string(source).render(**ctx)
         return Template(source).render(Context(ctx))
+
+
+class DocumentVersion(BaseModel):
+    """Immutable template snapshot that can be activated for a document."""
+
+    document = models.ForeignKey(
+        Document,
+        on_delete=models.CASCADE,
+        related_name="versions",
+        verbose_name=_("Dokument"),
+    )
+    version_number = models.PositiveIntegerField(verbose_name=_("Version"))
+    label = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Bezeichnung"))
+    template_source = models.TextField(verbose_name=_("HTML-Vorlage"))
+    css_content = models.TextField(blank=True, default="", verbose_name=_("CSS"))
+    use_jinja2 = models.BooleanField(default=True, verbose_name=_("Jinja2-Engine"))
+    is_active = models.BooleanField(default=False, db_index=True, verbose_name=_("Aktiv"))
+    activated_at = models.DateTimeField(null=True, blank=True, editable=False, verbose_name=_("Aktiviert am"))
+
+    class Meta:
+        verbose_name = _("Dokumentversion")
+        verbose_name_plural = _("Dokumentversionen")
+        ordering = ("document", "-version_number")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("document", "version_number"),
+                name="documents_unique_document_version_number",
+            ),
+            models.UniqueConstraint(
+                fields=("document",),
+                condition=Q(is_active=True),
+                name="documents_one_active_version_per_document",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        label = f" · {self.label}" if self.label else ""
+        return f"{self.document} · V{self.version_number}{label}"
 
 
 class ShopwareCmsPage(BaseModel):

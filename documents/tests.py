@@ -80,7 +80,12 @@ class DocumentRenderingTest(SimpleTestCase):
         self.assertNotIn("live_preview_button", admin_instance.readonly_fields)
         self.assertEqual(
             admin_instance.actions_detail[0]["items"],
-            ["generate_pdf_detail", "upload_to_shopware_detail", "preview_template_detail"],
+            [
+                "create_version_detail",
+                "generate_pdf_detail",
+                "upload_to_shopware_detail",
+                "preview_template_detail",
+            ],
         )
 
     def test_duplicate_categories_are_only_shown_for_price_lists(self):

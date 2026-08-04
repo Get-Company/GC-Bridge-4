@@ -9,8 +9,14 @@ from unfold.contrib.filters.admin import BooleanRadioFilter
 from unfold.decorators import action
 from unfold.enums import ActionVariant
 
-from core.admin import BaseAdmin, BaseStackedInline
-from documents.models import Document, ShopwareCmsPage, ShopwareCmsSlot
+from core.admin import BaseAdmin, BaseStackedInline, BaseTabularInline
+from documents.document_version_service import DocumentVersionService
+from documents.models import (
+    Document,
+    DocumentVersion,
+    ShopwareCmsPage,
+    ShopwareCmsSlot,
+)
 from documents.services import DocumentPdfService, DocumentTemplateContextService
 from documents.shopware_cms_service import ShopwareCmsPageService
 
@@ -39,10 +45,20 @@ class DocumentAdminForm(forms.ModelForm):
         }
 
 
+class DocumentVersionInline(BaseTabularInline):
+    model = DocumentVersion
+    extra = 0
+    can_delete = False
+    show_change_link = True
+    fields = ("version_number", "label", "is_active", "activated_at", "created_at")
+    readonly_fields = BaseTabularInline.readonly_fields + ("version_number", "label", "is_active", "activated_at")
+
+
 @admin.register(Document)
 class DocumentAdmin(BaseAdmin):
     form = DocumentAdminForm
     autocomplete_fields = ("price_list_duplicate_categories",)
+    inlines = (DocumentVersionInline,)
     conditional_fields = {
         "price_list_duplicate_categories": "document_type == 'price_list'",
     }
@@ -71,6 +87,7 @@ class DocumentAdmin(BaseAdmin):
         "cover_pdf_preview",
         "end_pdf_preview",
         "shopware_media_id",
+        "active_version_display",
     )
     actions = ("generate_pdf",)
     actions_detail = (
@@ -78,6 +95,7 @@ class DocumentAdmin(BaseAdmin):
             "title": "Dokument",
             "icon": "more_vert",
             "items": [
+                "create_version_detail",
                 "generate_pdf_detail",
                 "upload_to_shopware_detail",
                 "preview_template_detail",
@@ -101,6 +119,7 @@ class DocumentAdmin(BaseAdmin):
                     "title",
                     "is_active",
                     "price_list_duplicate_categories",
+                    "active_version_display",
                 ),
                 "classes": ("tab",),
             },
@@ -207,6 +226,12 @@ class DocumentAdmin(BaseAdmin):
         if obj.html_content:
             return "Legacy-HTML-Feld"
         return "Keine Vorlage"
+
+    @admin.display(description="Aktive Version")
+    def active_version_display(self, obj: Document | None = None):
+        if not obj or not obj.active_version_id:
+            return "Noch keine Version aktiviert"
+        return obj.active_version
 
     @admin.display(description="PDF")
     def pdf_download_link(self, obj: Document | None = None):
@@ -332,6 +357,24 @@ class DocumentAdmin(BaseAdmin):
         self.message_user(request, f"{created_count} PDF-Datei(en) im Verzeichnis Dokumente gespeichert.")
 
     @action(
+        description="Neue Version anlegen",
+        icon="add",
+        variant=ActionVariant.PRIMARY,
+    )
+    def create_version_detail(self, request, object_id: str):
+        document = self.get_object(request, object_id)
+        if not document:
+            self.message_user(request, "Dokument nicht gefunden.", level=messages.ERROR)
+            return HttpResponseRedirect(reverse("admin:documents_document_changelist"))
+        try:
+            version = DocumentVersionService().create_from_document(document)
+        except Exception as exc:
+            self.message_user(request, f"Dokumentversion konnte nicht angelegt werden: {exc}", level=messages.ERROR)
+            return HttpResponseRedirect(reverse("admin:documents_document_change", args=(object_id,)))
+        self.message_user(request, f"Version {version.version_number} wurde als Entwurf angelegt.")
+        return HttpResponseRedirect(reverse("admin:documents_documentversion_change", args=(version.pk,)))
+
+    @action(
         description="Vorschau",
         icon="visibility",
         variant=ActionVariant.INFO,
@@ -372,6 +415,109 @@ class DocumentAdmin(BaseAdmin):
         return HttpResponseRedirect(reverse("admin:documents_document_change", args=(object_id,)))
 
 
+class DocumentVersionAdminForm(forms.ModelForm):
+    class Meta:
+        model = DocumentVersion
+        fields = "__all__"
+        widgets = {
+            "template_source": forms.Textarea(
+                attrs={
+                    "class": "vLargeTextField font-mono",
+                    "data-document-editor": "html",
+                    "rows": 36,
+                    "spellcheck": "false",
+                }
+            ),
+            "css_content": forms.Textarea(
+                attrs={
+                    "class": "vLargeTextField font-mono",
+                    "data-document-editor": "css",
+                    "rows": 24,
+                    "spellcheck": "false",
+                }
+            ),
+        }
+
+
+@admin.register(DocumentVersion)
+class DocumentVersionAdmin(BaseAdmin):
+    form = DocumentVersionAdminForm
+    list_display = ("document", "version_number", "label", "is_active", "activated_at", "updated_at")
+    list_filter = (("is_active", BooleanRadioFilter),)
+    search_fields = ("document__title", "document__slug", "label", "template_source", "css_content")
+    readonly_fields = BaseAdmin.readonly_fields + ("document", "version_number", "is_active", "activated_at")
+    actions_detail = (
+        {
+            "title": "Veroeffentlichen",
+            "icon": "cloud_upload",
+            "items": ["activate_and_publish_detail"],
+        },
+    )
+    fieldsets = (
+        (
+            "Version",
+            {
+                "fields": ("document", "version_number", "label", "is_active", "activated_at"),
+                "description": (
+                    "Die aktive Version wird als PDF erzeugt und unter derselben Shopware Media-ID aktualisiert."
+                ),
+            },
+        ),
+        (
+            "Template",
+            {
+                "fields": ("use_jinja2", "template_source", "css_content"),
+            },
+        ),
+        (
+            "System",
+            {
+                "fields": ("created_at", "updated_at"),
+            },
+        ),
+    )
+
+    class Media:
+        css = {
+            "all": ("documents/admin/document_editor.css",),
+        }
+        js = ("documents/admin/document_editor.js",)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        if obj and obj.is_active:
+            return False
+        return super().has_delete_permission(request, obj)
+
+    @action(
+        description="Aktivieren und zu Shopware veroeffentlichen",
+        icon="cloud_upload",
+        variant=ActionVariant.PRIMARY,
+        permissions=("change",),
+    )
+    def activate_and_publish_detail(self, request, object_id: str):
+        version = self.get_object(request, object_id)
+        if version is None:
+            self.message_user(request, "Dokumentversion nicht gefunden.", level=messages.ERROR)
+            return HttpResponseRedirect(reverse("admin:documents_documentversion_changelist"))
+        try:
+            result = DocumentVersionService().activate_and_publish(version)
+        except Exception as exc:
+            self.message_user(
+                request,
+                f"Version wurde aktiviert, die Veroeffentlichung ist aber fehlgeschlagen: {exc}",
+                level=messages.ERROR,
+            )
+        else:
+            self.message_user(
+                request,
+                f"Version {version.version_number} aktiviert und PDF unter Media-ID {result['media_id']} aktualisiert.",
+            )
+        return HttpResponseRedirect(reverse("admin:documents_documentversion_change", args=(object_id,)))
+
+
 class ShopwareCmsSlotForm(forms.ModelForm):
     class Meta:
         model = ShopwareCmsSlot
@@ -386,7 +532,6 @@ class ShopwareCmsSlotForm(forms.ModelForm):
                 }
             ),
         }
-
 
 class ShopwareCmsSlotInline(BaseStackedInline):
     model = ShopwareCmsSlot
