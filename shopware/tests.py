@@ -20,6 +20,7 @@ from products.models import (
     ProductVariantFamily,
     PropertyGroup,
     PropertyValue,
+    Storage,
 )
 from shopware.management.commands.shopware_sync_products import (
     Command as ShopwareSyncProductsCommand,
@@ -66,6 +67,57 @@ class Shopware6ProductStockPayloadTest(SimpleTestCase):
         )
 
         self.assertEqual(payload["stock"], 91)
+
+
+class ShopwareVariantStockPayloadTest(SimpleTestCase):
+    def test_child_payload_uses_effective_shopware_stock(self):
+        product_service = MagicMock()
+        resolution = SimpleNamespace(
+            variants=(
+                SimpleNamespace(
+                    product=SimpleNamespace(
+                        pk=1,
+                        erp_nr="581001",
+                        storage=Storage(stock=Decimal("9.59"), virtual_stock=0),
+                    ),
+                    option_values=(SimpleNamespace(pk=10),),
+                ),
+                SimpleNamespace(
+                    product=SimpleNamespace(
+                        pk=2,
+                        erp_nr="581002",
+                        storage=Storage(stock=Decimal("99"), virtual_stock=7),
+                    ),
+                    option_values=(SimpleNamespace(pk=20),),
+                ),
+            )
+        )
+
+        ShopwareVariantSyncService(product_service=product_service)._upsert_children(
+            resolution=resolution,
+            parent_id="parent-shopware-id",
+            child_ids={1: "child-one", 2: "child-two"},
+            value_ids={10: "option-one", 20: "option-two"},
+        )
+
+        product_service.bulk_upsert.assert_called_once_with(
+            [
+                {
+                    "id": "child-one",
+                    "productNumber": "581001",
+                    "parentId": "parent-shopware-id",
+                    "stock": 9,
+                    "options": [{"id": "option-one"}],
+                },
+                {
+                    "id": "child-two",
+                    "productNumber": "581002",
+                    "parentId": "parent-shopware-id",
+                    "stock": 7,
+                    "options": [{"id": "option-two"}],
+                },
+            ]
+        )
 
 
 class Shopware6CustomSearchKeywordsPayloadTest(SimpleTestCase):
@@ -1533,6 +1585,7 @@ class ShopwareVariantSyncServiceTest(TestCase):
                         "id": "child-shopware-id",
                         "productNumber": "581000",
                         "parentId": "parent-shopware-id",
+                        "stock": 0,
                         "options": [
                             {"id": self.size.shopware_id},
                             {"id": self.color.shopware_id},

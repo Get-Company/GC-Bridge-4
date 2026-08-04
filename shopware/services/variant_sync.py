@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 
 from core.services import BaseService
-from products.models import Price, Product, ProductVariantAttribute, ProductVariantFamily, PropertyGroup, PropertyValue
+from products.models import Price, Product, ProductVariantAttribute, ProductVariantFamily, PropertyGroup, PropertyValue, Storage
 from products.services.variant_family import ProductVariantFamilyResolverService, VariantFamilyResolution
 from shopware.models import ShopwareSettings
 from shopware.services.product import ProductService
@@ -306,11 +306,21 @@ class ShopwareVariantSyncService(BaseService):
                 "id": child_ids[variant.product.pk],
                 "productNumber": variant.product.erp_nr,
                 "parentId": parent_id,
+                "stock": self._stock(variant.product),
                 "options": [{"id": value_ids[value.pk]} for value in variant.option_values],
             }
             for variant in resolution.variants
         ]
         self.product_service.bulk_upsert(payload)
+
+    @staticmethod
+    def _stock(product: Product) -> int:
+        """Return the stock Shopware expects, including a configured virtual stock."""
+        try:
+            storage = product.storage
+        except Storage.DoesNotExist:
+            return 0
+        return storage.get_shopware_stock
 
     def _remove_stale_child_options(
         self,
