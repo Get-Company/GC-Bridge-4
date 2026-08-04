@@ -411,14 +411,14 @@ class DocumentPriceListCatalogSectionsTest(TestCase):
         sections = price_list_catalog_sections()
 
         rows = sections[0]["groups"][0]["rows"]
-        self.assertEqual([row["erp_nr"] for row in rows], ["581000", "291000"])
+        self.assertEqual([row["erp_nr"] for row in rows], ["291000", "581000"])
         self.assertEqual(
             rows[0]["attributes"],
-            [{"group": "Groesse", "value": "6 cm"}, {"group": "Farbe", "value": "Weiss - Gelb"}],
+            [{"group": "Groesse", "value": "3 cm"}, {"group": "Farbe", "value": "Weiss"}],
         )
         self.assertEqual(
             rows[1]["attributes"],
-            [{"group": "Groesse", "value": "3 cm"}, {"group": "Farbe", "value": "Weiss"}],
+            [{"group": "Groesse", "value": "6 cm"}, {"group": "Farbe", "value": "Weiss - Gelb"}],
         )
 
 

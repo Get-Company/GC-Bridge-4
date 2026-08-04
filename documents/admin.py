@@ -9,9 +9,10 @@ from unfold.contrib.filters.admin import BooleanRadioFilter
 from unfold.decorators import action
 from unfold.enums import ActionVariant
 
-from core.admin import BaseAdmin
-from documents.models import Document
+from core.admin import BaseAdmin, BaseStackedInline
+from documents.models import Document, ShopwareCmsPage, ShopwareCmsSlot
 from documents.services import DocumentPdfService, DocumentTemplateContextService
+from documents.shopware_cms_service import ShopwareCmsPageService
 
 
 class DocumentAdminForm(forms.ModelForm):
@@ -369,3 +370,204 @@ class DocumentAdmin(BaseAdmin):
         except Exception as exc:
             self.message_user(request, f"Shopware-Upload fehlgeschlagen: {exc}", level=messages.ERROR)
         return HttpResponseRedirect(reverse("admin:documents_document_change", args=(object_id,)))
+
+
+class ShopwareCmsSlotForm(forms.ModelForm):
+    class Meta:
+        model = ShopwareCmsSlot
+        fields = "__all__"
+        widgets = {
+            "html_content": forms.Textarea(
+                attrs={
+                    "class": "vLargeTextField font-mono",
+                    "data-document-editor": "html",
+                    "rows": 28,
+                    "spellcheck": "false",
+                }
+            ),
+        }
+
+
+class ShopwareCmsSlotInline(BaseStackedInline):
+    model = ShopwareCmsSlot
+    form = ShopwareCmsSlotForm
+    extra = 0
+    can_delete = False
+    fields = ("slot_label", "slot_type", "html_content", "sync_status")
+    readonly_fields = BaseStackedInline.readonly_fields + ("slot_label", "slot_type", "sync_status")
+
+    @admin.display(description="Synchronisationsstatus")
+    def sync_status(self, obj: ShopwareCmsSlot | None = None):
+        if not obj or not obj.pk:
+            return "Noch nicht gespeichert"
+        if obj.has_local_changes:
+            return "Lokale HTML-Aenderungen noch nicht hochgeladen"
+        return "Mit Shopware synchron"
+
+
+@admin.register(ShopwareCmsPage)
+class ShopwareCmsPageAdmin(BaseAdmin):
+    list_display = (
+        "title",
+        "page_type",
+        "html_slot_count",
+        "sync_status",
+        "last_fetched_at",
+        "last_synced_at",
+    )
+    list_filter = ("page_type", "is_locked")
+    search_fields = ("title", "shopware_id", "layout_description")
+    readonly_fields = BaseAdmin.readonly_fields + (
+        "shopware_id",
+        "title",
+        "page_type",
+        "is_locked",
+        "layout_description",
+        "last_fetched_at",
+        "last_synced_at",
+    )
+    inlines = (ShopwareCmsSlotInline,)
+    actions = ("refresh_selected_pages", "sync_selected_pages")
+    actions_list = ("fetch_from_shopware",)
+    actions_detail = (
+        {
+            "title": "Shopware",
+            "icon": "sync",
+            "items": ["refresh_page_detail", "sync_page_detail"],
+        },
+    )
+    fieldsets = (
+        (
+            "Shopseite",
+            {
+                "fields": (
+                    "title",
+                    "page_type",
+                    "is_locked",
+                    "shopware_id",
+                    "layout_description",
+                ),
+                "description": (
+                    "Shopware-Erlebniswelten werden abgerufen. Bearbeitbar sind ausschliesslich "
+                    "statische HTML-Inhalte; die Layout-Struktur bleibt in Shopware erhalten."
+                ),
+            },
+        ),
+        (
+            "Synchronisation",
+            {
+                "fields": ("last_fetched_at", "last_synced_at"),
+            },
+        ),
+        (
+            "System",
+            {
+                "fields": ("created_at", "updated_at"),
+            },
+        ),
+    )
+
+    class Media:
+        css = {
+            "all": ("documents/admin/document_editor.css",),
+        }
+        js = ("documents/admin/document_editor.js",)
+
+    def has_add_permission(self, request):
+        return False
+
+    @admin.display(description="HTML-Inhalte")
+    def html_slot_count(self, obj: ShopwareCmsPage):
+        return obj.html_slots.count()
+
+    @admin.display(description="Synchronisation")
+    def sync_status(self, obj: ShopwareCmsPage):
+        return "Lokale Aenderungen" if obj.has_local_changes else "Synchron"
+
+    @action(
+        description="Shopseiten aus Shopware abrufen",
+        icon="cloud_download",
+        variant=ActionVariant.PRIMARY,
+        permissions=("fetch_from_shopware",),
+    )
+    def fetch_from_shopware(self, request):
+        try:
+            result = ShopwareCmsPageService().fetch_pages()
+        except Exception as exc:
+            self.message_user(request, f"Shopseiten konnten nicht abgerufen werden: {exc}", level=messages.ERROR)
+        else:
+            self.message_user(
+                request,
+                f"{result['pages']} Shopseiten mit {result['html_slots']} bearbeitbaren HTML-Inhalten abgerufen.",
+            )
+        return HttpResponseRedirect(reverse("admin:documents_shopwarecmspage_changelist"))
+
+    def has_fetch_from_shopware_permission(self, request):
+        return self.has_change_permission(request)
+
+    @admin.action(description="Ausgewaehlte Shopseiten aus Shopware aktualisieren")
+    def refresh_selected_pages(self, request, queryset):
+        refreshed = 0
+        errors: list[str] = []
+        service = ShopwareCmsPageService()
+        for page in queryset:
+            try:
+                service.fetch_page(shopware_id=page.shopware_id)
+            except Exception as exc:
+                errors.append(f"{page}: {exc}")
+            else:
+                refreshed += 1
+        if refreshed:
+            self.message_user(request, f"{refreshed} Shopseite(n) aus Shopware aktualisiert.")
+        if errors:
+            self.message_user(request, "; ".join(errors), level=messages.ERROR)
+
+    @admin.action(description="Ausgewaehlte HTML-Aenderungen zu Shopware hochladen")
+    def sync_selected_pages(self, request, queryset):
+        self._sync_pages_and_report(request, pages=queryset)
+
+    @action(
+        description="Aus Shopware aktualisieren",
+        icon="cloud_download",
+        variant=ActionVariant.INFO,
+        permissions=("change",),
+    )
+    def refresh_page_detail(self, request, object_id: str):
+        page = self.get_object(request, object_id)
+        if page is None:
+            self.message_user(request, "Shopseite nicht gefunden.", level=messages.ERROR)
+        else:
+            try:
+                ShopwareCmsPageService().fetch_page(shopware_id=page.shopware_id)
+            except Exception as exc:
+                self.message_user(request, f"Shopseite konnte nicht aktualisiert werden: {exc}", level=messages.ERROR)
+            else:
+                self.message_user(request, "Shopseite aus Shopware aktualisiert.")
+        return HttpResponseRedirect(reverse("admin:documents_shopwarecmspage_change", args=(object_id,)))
+
+    @action(
+        description="HTML-Aenderungen hochladen",
+        icon="cloud_upload",
+        variant=ActionVariant.WARNING,
+        permissions=("change",),
+    )
+    def sync_page_detail(self, request, object_id: str):
+        page = self.get_object(request, object_id)
+        if page is None:
+            self.message_user(request, "Shopseite nicht gefunden.", level=messages.ERROR)
+        else:
+            self._sync_pages_and_report(request, pages=[page])
+        return HttpResponseRedirect(reverse("admin:documents_shopwarecmspage_change", args=(object_id,)))
+
+    def _sync_pages_and_report(self, request, *, pages) -> None:
+        try:
+            result = ShopwareCmsPageService().sync_pages(pages)
+        except Exception as exc:
+            self.message_user(request, f"Shopseiten konnten nicht synchronisiert werden: {exc}", level=messages.ERROR)
+            return
+        if result["synced"]:
+            self.message_user(request, f"{result['synced']} HTML-Inhalt(e) zu Shopware hochgeladen.")
+        elif not result["errors"]:
+            self.message_user(request, "Keine lokalen HTML-Aenderungen zum Hochladen vorhanden.")
+        if result["errors"]:
+            self.message_user(request, "; ".join(result["errors"]), level=messages.ERROR)

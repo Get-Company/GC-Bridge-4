@@ -43,3 +43,19 @@ def poll_graphql_job(job_id: int) -> bool:
     from microtech.services import MicrotechJobSentinelService
 
     return MicrotechJobSentinelService().poll_job_once(job_id=job_id)
+
+
+@shared_task(name="microtech.cleanup_old_graphql_jobs")
+def cleanup_old_graphql_jobs(
+    max_age_days: int = 30,
+    limit: int = 100,
+    terminal_only: bool = True,
+) -> dict[str, int]:
+    """Entfernt alte GraphQL-Jobs mit der vorhandenen Remote-Loeschmutation."""
+    from microtech.services import MicrotechJobSentinelService
+
+    return MicrotechJobSentinelService().cleanup_old_jobs(
+        max_age_days=max_age_days,
+        limit=limit,
+        terminal_only=terminal_only,
+    )

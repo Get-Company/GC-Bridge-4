@@ -43,6 +43,22 @@ CELERY_ADMIN_TASKS: tuple[TaskDefinition, ...] = (
         ),
     ),
     TaskDefinition(
+        name="microtech.cleanup_old_graphql_jobs",
+        label="Alte Microtech GraphQL Jobs loeschen",
+        description="Loescht alte, abgeschlossene GraphQL-Jobs remote und lokal.",
+        fields=(
+            TaskField("max_age_days", "Maximales Alter (Tage)", "int", 30),
+            TaskField("limit", "Limit pro Lauf", "int", 100),
+            TaskField(
+                "terminal_only",
+                "Nur abgeschlossene Jobs",
+                "bool",
+                True,
+                "Deaktivieren loescht bewusst auch alte, noch laufende Jobs.",
+            ),
+        ),
+    ),
+    TaskDefinition(
         name="products.scheduled_product_sync",
         label="Produkt-Sync komplett",
         description=(

@@ -44,6 +44,12 @@ class MicrotechJobSentinelService(BaseService):
         MicrotechGraphQLJob.Status.RUNNING,
         MicrotechGraphQLJob.Status.WAITING_WEBHOOK,
     }
+    TERMINAL_STATUSES = {
+        MicrotechGraphQLJob.Status.SUCCEEDED,
+        MicrotechGraphQLJob.Status.FAILED,
+        MicrotechGraphQLJob.Status.CANCELLED,
+        MicrotechGraphQLJob.Status.DELETE_FAILED,
+    }
 
     # Fallback-Poll-Kadenz. retryAfterSeconds vom Wrapper hat Vorrang.
     DEFAULT_POLL_INTERVAL_SECONDS = 60
@@ -579,10 +585,10 @@ class MicrotechJobSentinelService(BaseService):
             )
             raise
 
-    def delete_job(self, *, job_id: int, delete_remote: bool = True) -> None:
+    def delete_job(self, *, job_id: int, delete_remote: bool = True) -> bool:
         job = MicrotechGraphQLJob.objects.filter(pk=job_id).first()
         if job is None:
-            return
+            return False
 
         if delete_remote and job.external_job_id and job.abort_strategy != MicrotechGraphQLJob.AbortStrategy.LOCAL_ONLY:
             try:
@@ -597,6 +603,49 @@ class MicrotechJobSentinelService(BaseService):
 
         self._delete_local_job_references(job)
         job.delete()
+        return True
+
+    def cleanup_old_jobs(
+        self,
+        *,
+        max_age_days: int = 30,
+        limit: int = 100,
+        terminal_only: bool = True,
+    ) -> dict[str, int]:
+        """Loescht alte, lokal verfolgte GraphQL-Jobs remote und lokal.
+
+        Abgeschlossene Jobs werden nach ``completed_at`` bewertet. Fuer alte
+        ``DELETE_FAILED``-Eintraege ohne Abschlusszeitpunkt dient ``created_at``
+        als Fallback. Mit ``terminal_only=False`` koennen bewusst auch alte,
+        noch nicht abgeschlossene Jobs entfernt werden.
+        """
+        if max_age_days < 0:
+            raise ValueError("max_age_days must be greater than or equal to zero.")
+        if limit < 1:
+            raise ValueError("limit must be greater than zero.")
+
+        cutoff = timezone.now() - timedelta(days=max_age_days)
+        jobs = MicrotechGraphQLJob.objects.all()
+        if terminal_only:
+            jobs = jobs.filter(status__in=self.TERMINAL_STATUSES).filter(
+                Q(completed_at__lt=cutoff) | Q(completed_at__isnull=True, created_at__lt=cutoff)
+            )
+            jobs = jobs.order_by("completed_at", "created_at", "pk")
+        else:
+            jobs = jobs.filter(created_at__lt=cutoff).order_by("created_at", "pk")
+
+        deleted = 0
+        failed = 0
+        job_ids = list(jobs.values_list("pk", flat=True)[:limit])
+        for job_id in job_ids:
+            try:
+                if self.delete_job(job_id=job_id, delete_remote=True):
+                    deleted += 1
+            except Exception:
+                failed += 1
+                logger.exception("Alter Microtech GraphQL Job %s konnte nicht geloescht werden.", job_id)
+
+        return {"deleted": deleted, "failed": failed}
 
     @staticmethod
     def _delete_local_job_references(job: MicrotechGraphQLJob) -> None:

@@ -15,6 +15,7 @@ from django.template.response import TemplateResponse
 TASK_LABELS: dict[str, str] = {
     "products.expire_special_prices": "Abgelaufene Sonderpreise bereinigen",
     "microtech.poll_graphql_jobs": "Microtech GraphQL Jobs pruefen",
+    "microtech.cleanup_old_graphql_jobs": "Alte Microtech GraphQL Jobs loeschen",
     "products.scheduled_product_sync": "Produkt-Sync komplett",
     "products.process_product_sync_job": "Produkt Auto-Sync Job",
     "orders.shopware_sync_open_orders": "Offene Bestellungen importieren",

@@ -151,6 +151,43 @@ class TestJobSentinelPoller(TestCase):
         mock_delay.assert_not_called()
 
 
+class TestJobSentinelCleanup(TestCase):
+    @patch.object(MicrotechJobSentinelService, "delete_job", return_value=True)
+    def test_cleanup_removes_only_old_terminal_jobs_by_default(self, mock_delete):
+        old_job = _make_job(
+            status=MicrotechGraphQLJob.Status.FAILED,
+            completed_at=timezone.now() - timedelta(days=31),
+        )
+        _make_job(
+            status=MicrotechGraphQLJob.Status.FAILED,
+            completed_at=timezone.now() - timedelta(days=29),
+        )
+        active_job = _make_job(status=MicrotechGraphQLJob.Status.RUNNING)
+        MicrotechGraphQLJob.objects.filter(pk=active_job.pk).update(
+            created_at=timezone.now() - timedelta(days=31)
+        )
+
+        result = MicrotechJobSentinelService().cleanup_old_jobs(max_age_days=30)
+
+        self.assertEqual(result, {"deleted": 1, "failed": 0})
+        mock_delete.assert_called_once_with(job_id=old_job.pk, delete_remote=True)
+
+    @patch.object(MicrotechJobSentinelService, "delete_job", return_value=True)
+    def test_cleanup_can_include_old_active_jobs(self, mock_delete):
+        old_job = _make_job(status=MicrotechGraphQLJob.Status.RUNNING)
+        MicrotechGraphQLJob.objects.filter(pk=old_job.pk).update(
+            created_at=timezone.now() - timedelta(days=31)
+        )
+
+        result = MicrotechJobSentinelService().cleanup_old_jobs(
+            max_age_days=30,
+            terminal_only=False,
+        )
+
+        self.assertEqual(result, {"deleted": 1, "failed": 0})
+        mock_delete.assert_called_once_with(job_id=old_job.pk, delete_remote=True)
+
+
 class TestJobSentinelContinuations(TestCase):
     @patch(
         "microtech.tasks.process_graphql_job_result.delay",
