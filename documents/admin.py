@@ -134,7 +134,7 @@ class DocumentAdmin(BaseAdmin):
                 ),
                 "classes": ("tab",),
                 "description": (
-                    "DOCX rechts pruefen und den Inhalt links manuell im WYSIWYG-Editor uebernehmen. "
+                    "DOCX oder RTF rechts pruefen und den Inhalt links manuell im WYSIWYG-Editor uebernehmen. "
                     "Das gespeicherte CSS wird im Editor geladen. HTML-Dateien bleiben fuer bestehende Templates verfuegbar."
                 ),
             },
@@ -239,12 +239,12 @@ class DocumentAdmin(BaseAdmin):
             return "Noch keine Version aktiviert"
         return obj.active_version
 
-    @admin.display(description="DOCX-Vorschau")
+    @admin.display(description="DOCX-/RTF-Vorschau")
     def docx_preview(self, obj: Document | None = None):
         if not obj or not obj.pk or not obj.source_docx:
-            return "DOCX-Datei hochladen und speichern, um die Vorschau zu laden."
+            return "DOCX- oder RTF-Datei hochladen und speichern, um die Vorschau zu laden."
         return format_html(
-            '<iframe class="document-docx-preview" title="DOCX-Vorschau" src="{}"></iframe>',
+            '<iframe class="document-docx-preview" title="DOCX-/RTF-Vorschau" src="{}"></iframe>',
             reverse("admin:documents_document_preview_docx", args=(obj.pk,)),
         )
 

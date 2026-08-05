@@ -17,8 +17,13 @@ def document_template_upload_to(instance: "Document", filename: str) -> str:
 
 
 def document_source_docx_upload_to(instance: "Document", filename: str) -> str:
+    """Keep the source format so LibreOffice can reliably detect DOCX and RTF files."""
+
     filename_slug = slugify(instance.slug or instance.title or instance.document_type) or "document-source"
-    return f"documents/sources/{filename_slug}.docx"
+    extension = Path(filename).suffix.lower()
+    if extension not in {".docx", ".rtf"}:
+        extension = ".docx"
+    return f"documents/sources/{filename_slug}{extension}"
 
 
 def document_cover_pdf_upload_to(instance: "Document", filename: str) -> str:
@@ -63,9 +68,9 @@ class Document(BaseModel):
     source_docx = models.FileField(
         upload_to=document_source_docx_upload_to,
         blank=True,
-        validators=[FileExtensionValidator(["docx"])],
-        verbose_name=_("DOCX-Quelldatei"),
-        help_text=_("Wird rechts als schreibgeschuetzte PDF-Vorschau angezeigt."),
+        validators=[FileExtensionValidator(["docx", "rtf"])],
+        verbose_name=_("DOCX-/RTF-Quelldatei"),
+        help_text=_("Wird rechts als schreibgeschuetzte PDF-Vorschau angezeigt. DOCX und RTF werden direkt von LibreOffice konvertiert."),
     )
     html_content = models.TextField(blank=True, default="", verbose_name=_("HTML"))
     css_content = models.TextField(blank=True, default="", verbose_name=_("CSS"))

@@ -37,6 +37,52 @@
     width: 100%;
 }
 
+@media (min-width: 1024px) {
+    /* Keep both source and edited document usable side by side.  The editor
+       content gets its own scroll area, so the controls and Trix toolbar do
+       not disappear with a long HTML document. */
+    .field-html_content,
+    .field-docx_preview {
+        align-self: start;
+    }
+
+    .document-editor-shell {
+        display: flex;
+        flex-direction: column;
+        height: calc(100vh - 12rem);
+        max-height: 52rem;
+        min-height: 32rem;
+    }
+
+    .document-editor-shell trix-toolbar,
+    .document-editor-controls {
+        flex: 0 0 auto;
+        position: relative;
+        z-index: 2;
+    }
+
+    .document-editor-shell > .max-w-4xl,
+    .document-editor-shell > .relative {
+        display: flex;
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: hidden;
+    }
+
+    .document-editor-shell trix-editor {
+        display: block;
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+    }
+
+    .document-docx-preview {
+        height: calc(100vh - 12rem);
+        max-height: 52rem;
+        min-height: 32rem;
+    }
+}
+
 .document-editor-shell > .max-w-4xl,
 .document-editor-shell > .relative {
     max-width: none;

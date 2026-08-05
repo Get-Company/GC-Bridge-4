@@ -20,22 +20,25 @@ from documents.models import Document
 
 
 class DocumentDocxPreviewService(BaseService):
-    """Render a trusted document source file to a browser-displayable PDF preview."""
+    """Render a trusted DOCX or RTF source file to a browser-displayable PDF preview."""
 
     model = Document
     conversion_timeout_seconds = 60
 
     def render_pdf(self, document: Document) -> bytes:
         if not document.source_docx:
-            raise ValueError("Zu diesem Dokument wurde keine DOCX-Quelldatei hochgeladen.")
+            raise ValueError("Zu diesem Dokument wurde keine DOCX-/RTF-Quelldatei hochgeladen.")
 
         command = str(getattr(settings, "DOCUMENT_DOCX_PREVIEW_COMMAND", "libreoffice") or "").strip()
         if not command:
             raise RuntimeError("DOCUMENT_DOCX_PREVIEW_COMMAND ist nicht konfiguriert.")
 
-        with tempfile.TemporaryDirectory(prefix="gc-bridge-docx-preview-") as temp_dir:
+        with tempfile.TemporaryDirectory(prefix="gc-bridge-document-preview-") as temp_dir:
             temp_path = Path(temp_dir)
-            source_path = temp_path / "source.docx"
+            source_extension = Path(document.source_docx.name).suffix.lower()
+            if source_extension not in {".docx", ".rtf"}:
+                source_extension = ".docx"
+            source_path = temp_path / f"source{source_extension}"
             profile_path = temp_path / "profile"
             with document.source_docx.open("rb") as source_file, source_path.open("wb") as target_file:
                 shutil.copyfileobj(source_file, target_file)
@@ -62,12 +65,12 @@ class DocumentDocxPreviewService(BaseService):
                     "LibreOffice wurde nicht gefunden. Bitte DOCUMENT_DOCX_PREVIEW_COMMAND konfigurieren."
                 ) from exc
             except subprocess.TimeoutExpired as exc:
-                raise RuntimeError("Die DOCX-Vorschau hat das Zeitlimit ueberschritten.") from exc
+                raise RuntimeError("Die DOCX-/RTF-Vorschau hat das Zeitlimit ueberschritten.") from exc
 
             pdf_path = source_path.with_suffix(".pdf")
             if result.returncode != 0 or not pdf_path.exists():
                 detail = (result.stderr or result.stdout or "Unbekannter LibreOffice-Fehler").strip()
-                raise RuntimeError(f"DOCX-Vorschau konnte nicht erzeugt werden: {detail}")
+                raise RuntimeError(f"DOCX-/RTF-Vorschau konnte nicht erzeugt werden: {detail}")
             return pdf_path.read_bytes()
 
 

@@ -34,6 +34,13 @@ class DocumentRenderingTest(SimpleTestCase):
 
         self.assertIsInstance(form.fields["html_content"].widget, WysiwygWidget)
 
+    def test_document_editor_keeps_toolbar_visible_while_html_scrolls(self):
+        stylesheet = Path("documents/static/documents/admin/document_editor.css").read_text(encoding="utf-8")
+
+        self.assertIn(".document-editor-shell trix-toolbar", stylesheet)
+        self.assertIn("overflow-y: auto;", stylesheet)
+        self.assertIn("height: calc(100vh - 12rem);", stylesheet)
+
     def test_document_render_uses_saved_css_over_context_css(self):
         document = Document(
             title="Bestellschein",
@@ -67,7 +74,7 @@ class DocumentRenderingTest(SimpleTestCase):
             self.assertNotIn("Fallback", rendered)
 
     @patch("documents.services.subprocess.run")
-    def test_docx_preview_service_renders_pdf_with_libreoffice(self, mock_run):
+    def test_docx_preview_service_renders_docx_pdf_with_libreoffice(self, mock_run):
         with tempfile.TemporaryDirectory() as tmpdir, override_settings(MEDIA_ROOT=tmpdir):
             document = Document(slug="agb", title="AGB")
             document.source_docx.save("agb.docx", ContentFile(b"DOCX"), save=False)
@@ -84,8 +91,26 @@ class DocumentRenderingTest(SimpleTestCase):
         self.assertEqual(pdf, b"%PDF-1.4")
         self.assertIn("--headless", mock_run.call_args.args[0])
 
+    @patch("documents.services.subprocess.run")
+    def test_docx_preview_service_renders_rtf_pdf_with_libreoffice(self, mock_run):
+        with tempfile.TemporaryDirectory() as tmpdir, override_settings(MEDIA_ROOT=tmpdir):
+            document = Document(slug="agb", title="AGB")
+            document.source_docx.save("agb.rtf", ContentFile(b"{\\rtf1\\ansi}"), save=False)
+
+            def write_pdf(command, **kwargs):
+                output_dir = Path(command[command.index("--outdir") + 1])
+                (output_dir / "source.pdf").write_bytes(b"%PDF-1.4")
+                return MagicMock(returncode=0, stdout="", stderr="")
+
+            mock_run.side_effect = write_pdf
+
+            pdf = DocumentDocxPreviewService().render_pdf(document)
+
+        self.assertEqual(pdf, b"%PDF-1.4")
+        self.assertEqual(Path(mock_run.call_args.args[0][-1]).suffix, ".rtf")
+
     def test_docx_preview_service_requires_source_docx(self):
-        with self.assertRaisesMessage(ValueError, "keine DOCX-Quelldatei"):
+        with self.assertRaisesMessage(ValueError, "keine DOCX-/RTF-Quelldatei"):
             DocumentDocxPreviewService().render_pdf(Document(slug="agb", title="AGB"))
 
     def test_document_admin_exposes_template_reference(self):
