@@ -18,6 +18,28 @@
     padding: 18px;
 }
 
+.document-html-source {
+    border: 0;
+    border-radius: 0;
+    display: none;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    min-height: 620px;
+    outline: none;
+    padding: 18px;
+    resize: none;
+    width: 100%;
+}
+
+.document-editor-shell.is-document-source-mode trix-toolbar,
+.document-editor-shell.is-document-source-mode > .max-w-4xl,
+.document-editor-shell.is-document-source-mode > .relative {
+    display: none;
+}
+
+.document-editor-shell.is-document-source-mode .document-html-source {
+    display: block;
+}
+
 .field-html_content {
     min-width: 0;
 }
@@ -61,6 +83,12 @@
         flex: 1 1 auto;
         min-height: 0;
         overflow-y: auto;
+    }
+
+    .document-editor-shell.is-document-source-mode .document-html-source {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: auto;
     }
 }
 

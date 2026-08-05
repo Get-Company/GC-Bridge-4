@@ -36,10 +36,14 @@ class DocumentRenderingTest(SimpleTestCase):
 
     def test_document_editor_keeps_toolbar_visible_while_html_scrolls(self):
         stylesheet = Path("documents/static/documents/admin/document_editor.css").read_text(encoding="utf-8")
+        script = Path("documents/static/documents/admin/document_editor.js").read_text(encoding="utf-8")
 
         self.assertIn(".document-editor-shell trix-toolbar", stylesheet)
         self.assertIn("overflow-y: auto;", stylesheet)
         self.assertIn("height: calc(100vh - 12rem);", stylesheet)
+        self.assertIn("is-document-source-mode", stylesheet)
+        self.assertIn("HTML-Code", script)
+        self.assertIn("editor.editor.loadHTML", script)
 
     def test_document_render_uses_saved_css_over_context_css(self):
         document = Document(

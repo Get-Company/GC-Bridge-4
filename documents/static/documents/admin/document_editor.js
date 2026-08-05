@@ -102,6 +102,45 @@
         return controls;
     }
 
+    function syncHtmlSource(source, input) {
+        input.value = source.value;
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+
+    function setupHtmlSourceToggle(editor, input, shell, controls) {
+        var source = document.createElement("textarea");
+        source.className = "document-html-source";
+        source.setAttribute("aria-label", "HTML-Quellcode");
+        source.setAttribute("spellcheck", "false");
+        shell.appendChild(source);
+
+        source.addEventListener("input", function () {
+            syncHtmlSource(source, input);
+        });
+
+        var toggle = makeButton("HTML-Code", "document-editor-action");
+        toggle.addEventListener("click", function () {
+            var isSourceMode = shell.classList.contains("is-document-source-mode");
+            if (!isSourceMode) {
+                source.value = input.value || editor.value || "";
+                shell.classList.add("is-document-source-mode");
+                toggle.textContent = "Visueller Editor";
+                window.setTimeout(function () { source.focus(); }, 0);
+                return;
+            }
+
+            syncHtmlSource(source, input);
+            if (editor.editor && typeof editor.editor.loadHTML === "function") {
+                editor.editor.loadHTML(source.value);
+            }
+            shell.classList.remove("is-document-source-mode");
+            toggle.textContent = "HTML-Code";
+            editor.focus();
+        });
+        controls.insertBefore(toggle, controls.firstChild);
+    }
+
     function setupTrixEditor(editor) {
         if (editor.dataset.documentEnhanced === "1") {
             return;
@@ -127,6 +166,9 @@
             shell.appendChild(input);
         }
         shell.appendChild(wrapper);
+        if (input) {
+            setupHtmlSourceToggle(editor, input, shell, buildControls(shell));
+        }
 
         editor.addEventListener("focus", function () {
             activeEditor = editor;
