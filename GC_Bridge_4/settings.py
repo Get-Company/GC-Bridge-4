@@ -188,6 +188,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'issues.context_processors.issue_alerts',
             ],
         },
     },
@@ -398,6 +399,12 @@ UNFOLD = {
                         "title": _("Issues"),
                         "icon": "bug_report",
                         "link": reverse_lazy("admin:issues_issue_changelist"),
+                        "permission": sidebar_model_view_permission("issues", "Issue"),
+                    },
+                    {
+                        "title": _("Issue-Archiv"),
+                        "icon": "archive",
+                        "link": reverse_lazy("admin:issues_archivedissue_changelist"),
                         "permission": sidebar_model_view_permission("issues", "Issue"),
                     },
                     {

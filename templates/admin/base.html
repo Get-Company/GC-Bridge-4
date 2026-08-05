@@ -5,6 +5,7 @@
 {% block base %}
     {% if not is_popup %}
         {% include "admin/includes/global_status_bar.html" %}
+        {% include "admin/includes/issue_alerts.html" %}
     {% endif %}
 
     <div id="page" class="flex max-w-full min-h-screen {% element_classes 'page' %}">

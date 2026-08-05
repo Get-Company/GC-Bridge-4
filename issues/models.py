@@ -3,12 +3,16 @@ from __future__ import annotations
 from pathlib import Path
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.core.validators import FileExtensionValidator
 from django.db import models
 from django.utils.text import slugify
 from django.utils.translation import gettext_lazy as _
 
 from core.models import BaseModel
+
+
+DEFAULT_ASSIGNED_USER_ID = 1
 
 
 def issue_error_upload_to(instance: "Issue", filename: str) -> str:
@@ -95,6 +99,7 @@ class Issue(BaseModel):
         related_name="assigned_issues",
         null=True,
         blank=True,
+        default=DEFAULT_ASSIGNED_USER_ID,
         verbose_name=_("Zugewiesen an"),
     )
     description = models.TextField(
@@ -123,6 +128,27 @@ class Issue(BaseModel):
         verbose_name=_("Fehlertext-Datei"),
         help_text=_("Optional: Datei mit Fehlermeldung oder Logauszug."),
     )
+    resolution_note = models.TextField(
+        blank=True,
+        default="",
+        verbose_name=_("Lösungsdokumentation"),
+        help_text=_("Bei Erledigt oder Geschlossen erforderlich: Was wurde gemacht und warum? Zeitpunkt und Bearbeiter werden automatisch festgehalten."),
+    )
+    resolved_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        editable=False,
+        verbose_name=_("Abgeschlossen am"),
+    )
+    resolved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="resolved_issues",
+        null=True,
+        blank=True,
+        editable=False,
+        verbose_name=_("Abgeschlossen von"),
+    )
 
     class Meta:
         verbose_name = _("Issue")
@@ -131,6 +157,46 @@ class Issue(BaseModel):
 
     def __str__(self) -> str:
         return self.title
+
+    def clean(self) -> None:
+        super().clean()
+        if self.status in {self.Status.RESOLVED, self.Status.CLOSED} and not self.resolution_note.strip():
+            raise ValidationError(
+                {
+                    "resolution_note": _(
+                        "Bitte dokumentiere kurz, was gelöst wurde und warum, bevor das Issue archiviert wird."
+                    )
+                }
+            )
+
+
+class ArchivedIssue(Issue):
+    """Proxy view for terminal issues kept outside the working queue."""
+
+    class Meta:
+        proxy = True
+        verbose_name = _("Archiviertes Issue")
+        verbose_name_plural = _("Issue-Archiv")
+
+
+class IssueAlertState(BaseModel):
+    """Per-user cursor for issue alerts displayed after an admin login."""
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="issue_alert_state",
+        verbose_name=_("Benutzer"),
+    )
+    last_notified_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name=_("Letzte Issue-Meldung"),
+    )
+
+    class Meta:
+        verbose_name = _("Issue-Meldestatus")
+        verbose_name_plural = _("Issue-Meldestatus")
 
 
 class IssueAttachment(BaseModel):

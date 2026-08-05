@@ -1,10 +1,16 @@
 from django import forms
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.contrib.auth import get_user_model
+from django.utils import timezone
 from django.utils.html import format_html
+from unfold.decorators import action
+from unfold.enums import ActionVariant
 
 from core.admin import BaseAdmin, BaseTabularInline
-from issues.models import Issue, IssueAttachment, IssueCategory
+from issues.models import ArchivedIssue, DEFAULT_ASSIGNED_USER_ID, Issue, IssueAttachment, IssueCategory
+
+
+ARCHIVED_ISSUE_STATUSES = (Issue.Status.RESOLVED, Issue.Status.CLOSED)
 
 
 class StaffIssueAccessMixin:
@@ -94,7 +100,7 @@ class IssueAdmin(StaffIssueAccessMixin, BaseAdmin):
         "attachment_count",
         "created_at",
     )
-    list_editable = ("status", "priority", "assigned_to")
+    list_editable = ("priority", "assigned_to")
     list_filter = ("status", "priority", "category", "assigned_to", "created_at")
     search_fields = (
         "title",
@@ -108,7 +114,20 @@ class IssueAdmin(StaffIssueAccessMixin, BaseAdmin):
         "assigned_to__first_name",
         "assigned_to__last_name",
     )
-    readonly_fields = BaseAdmin.readonly_fields + ("reported_by", "source_link", "attachment_count")
+    readonly_fields = BaseAdmin.readonly_fields + (
+        "reported_by",
+        "source_link",
+        "attachment_count",
+        "resolved_at",
+        "resolved_by",
+    )
+    _archived_state = False
+
+    def get_queryset(self, request):
+        queryset = super().get_queryset(request)
+        if self._archived_state:
+            return queryset.filter(status__in=ARCHIVED_ISSUE_STATUSES)
+        return queryset.exclude(status__in=ARCHIVED_ISSUE_STATUSES)
 
     def has_add_permission(self, request):
         return request.user.is_active and request.user.is_staff
@@ -155,6 +174,17 @@ class IssueAdmin(StaffIssueAccessMixin, BaseAdmin):
             },
         ),
         (
+            "Abschlussdokumentation",
+            {
+                "fields": (
+                    "resolution_note",
+                    "resolved_at",
+                    "resolved_by",
+                ),
+                "description": "Beim Status Erledigt oder Geschlossen muss kurz festgehalten werden, was gelöst wurde und warum. Zeitpunkt und Bearbeiter werden automatisch gespeichert.",
+            },
+        ),
+        (
             "System",
             {
                 "fields": BaseAdmin.readonly_fields,
@@ -170,7 +200,7 @@ class IssueAdmin(StaffIssueAccessMixin, BaseAdmin):
                 "first_name",
                 "username",
             )
-            kwargs["initial"] = 3
+            kwargs["initial"] = DEFAULT_ASSIGNED_USER_ID
         elif db_field.name == "category":
             kwargs["queryset"] = IssueCategory.objects.filter(is_active=True).order_by("name")
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
@@ -178,6 +208,10 @@ class IssueAdmin(StaffIssueAccessMixin, BaseAdmin):
     def save_model(self, request, obj, form, change):
         if not change and obj.reported_by_id is None and request.user.is_authenticated:
             obj.reported_by = request.user
+        if obj.status in ARCHIVED_ISSUE_STATUSES and obj.resolved_at is None:
+            obj.resolved_at = timezone.now()
+            if request.user.is_authenticated:
+                obj.resolved_by = request.user
         super().save_model(request, obj, form, change)
 
     @admin.display(description="Link")
@@ -191,3 +225,65 @@ class IssueAdmin(StaffIssueAccessMixin, BaseAdmin):
         if obj.pk is None:
             return 0
         return obj.attachments.count()
+
+
+@admin.register(ArchivedIssue)
+class ArchivedIssueAdmin(IssueAdmin):
+    """Dedicated archive for issues with a terminal status."""
+
+    _archived_state = True
+    list_editable = ("priority", "assigned_to")
+    actions = ("restore_issues",)
+    actions_row = ("restore_issue_row",)
+    actions_detail = (
+        {
+            "title": "Archiv",
+            "icon": "unarchive",
+            "items": ["restore_issue_detail"],
+        },
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    @admin.action(description="Aus Archiv wiederherstellen")
+    def restore_issues(self, request, queryset):
+        restored = queryset.update(status=Issue.Status.IN_PROGRESS, updated_at=timezone.now())
+        self.message_user(request, f"{restored} Issue(s) aus dem Archiv wiederhergestellt.")
+
+    @action(
+        description="Wiederherstellen",
+        icon="unarchive",
+        variant=ActionVariant.PRIMARY,
+    )
+    def restore_issue_row(self, request, object_id: str):
+        issue = self.get_object(request, object_id)
+        if issue is None:
+            self.message_user(request, "Issue nicht gefunden.", level=messages.ERROR)
+            return self._redirect_to_changelist()
+        self._restore_issue(issue)
+        return self._redirect_to_working_issue_list()
+
+    @action(
+        description="Aus Archiv wiederherstellen",
+        icon="unarchive",
+        variant=ActionVariant.PRIMARY,
+    )
+    def restore_issue_detail(self, request, object_id: str):
+        issue = self.get_object(request, object_id)
+        if issue is None:
+            self.message_user(request, "Issue nicht gefunden.", level=messages.ERROR)
+            return self._redirect_to_changelist()
+        self._restore_issue(issue)
+        return self._redirect_to_working_issue_list()
+
+    def _restore_issue(self, issue: Issue) -> None:
+        issue.status = Issue.Status.IN_PROGRESS
+        issue.save(update_fields=("status", "updated_at"))
+
+    @staticmethod
+    def _redirect_to_working_issue_list():
+        from django.http import HttpResponseRedirect
+        from django.urls import reverse
+
+        return HttpResponseRedirect(reverse("admin:issues_issue_changelist"))

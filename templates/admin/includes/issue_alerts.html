@@ -1,0 +1,36 @@
+{% if issue_alerts %}
+  <div id="issue-alerts" class="fixed right-4 top-4 z-50 flex w-[min(24rem,calc(100vw-2rem))] flex-col gap-3" aria-live="polite">
+    {% for issue_alert in issue_alerts %}
+      <article class="issue-alert relative rounded-lg border border-amber-300 bg-amber-50 p-4 pr-11 shadow-lg transition-opacity duration-300 dark:border-amber-700 dark:bg-amber-950/90" role="alert">
+        <p class="mb-1 text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-300">Neues Issue</p>
+        <a class="block font-semibold text-amber-950 hover:underline dark:text-amber-100" href="{{ issue_alert.url }}">{{ issue_alert.title }}</a>
+        <button class="absolute right-3 top-3 rounded p-1 text-amber-800 hover:bg-amber-200 focus:outline-none focus:ring-2 focus:ring-amber-500 dark:text-amber-200 dark:hover:bg-amber-900" type="button" aria-label="Issue-Meldung schließen" data-dismiss-issue-alert>
+          <span class="material-symbols-outlined text-lg" aria-hidden="true">close</span>
+        </button>
+      </article>
+    {% endfor %}
+  </div>
+  <script>
+    (function () {
+      "use strict";
+      function dismiss(alert) {
+        if (!alert || alert.dataset.dismissed === "true") {
+          return;
+        }
+        alert.dataset.dismissed = "true";
+        alert.classList.add("opacity-0");
+        window.setTimeout(function () {
+          alert.remove();
+        }, 300);
+      }
+
+      document.querySelectorAll(".issue-alert").forEach(function (alert) {
+        window.setTimeout(function () { dismiss(alert); }, 10000);
+        var closeButton = alert.querySelector("[data-dismiss-issue-alert]");
+        if (closeButton) {
+          closeButton.addEventListener("click", function () { dismiss(alert); });
+        }
+      });
+    })();
+  </script>
+{% endif %}
