@@ -1,4 +1,7 @@
 import re
+import shutil
+import subprocess
+import tempfile
 from io import BytesIO
 from pathlib import Path
 
@@ -14,6 +17,58 @@ from weasyprint import HTML as WeasyHTML
 
 from core.services import BaseService
 from documents.models import Document
+
+
+class DocumentDocxPreviewService(BaseService):
+    """Render a trusted document source file to a browser-displayable PDF preview."""
+
+    model = Document
+    conversion_timeout_seconds = 60
+
+    def render_pdf(self, document: Document) -> bytes:
+        if not document.source_docx:
+            raise ValueError("Zu diesem Dokument wurde keine DOCX-Quelldatei hochgeladen.")
+
+        command = str(getattr(settings, "DOCUMENT_DOCX_PREVIEW_COMMAND", "libreoffice") or "").strip()
+        if not command:
+            raise RuntimeError("DOCUMENT_DOCX_PREVIEW_COMMAND ist nicht konfiguriert.")
+
+        with tempfile.TemporaryDirectory(prefix="gc-bridge-docx-preview-") as temp_dir:
+            temp_path = Path(temp_dir)
+            source_path = temp_path / "source.docx"
+            profile_path = temp_path / "profile"
+            with document.source_docx.open("rb") as source_file, source_path.open("wb") as target_file:
+                shutil.copyfileobj(source_file, target_file)
+
+            try:
+                result = subprocess.run(
+                    [
+                        command,
+                        "--headless",
+                        f"-env:UserInstallation={profile_path.as_uri()}",
+                        "--convert-to",
+                        "pdf",
+                        "--outdir",
+                        str(temp_path),
+                        str(source_path),
+                    ],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    timeout=self.conversion_timeout_seconds,
+                )
+            except FileNotFoundError as exc:
+                raise RuntimeError(
+                    "LibreOffice wurde nicht gefunden. Bitte DOCUMENT_DOCX_PREVIEW_COMMAND konfigurieren."
+                ) from exc
+            except subprocess.TimeoutExpired as exc:
+                raise RuntimeError("Die DOCX-Vorschau hat das Zeitlimit ueberschritten.") from exc
+
+            pdf_path = source_path.with_suffix(".pdf")
+            if result.returncode != 0 or not pdf_path.exists():
+                detail = (result.stderr or result.stdout or "Unbekannter LibreOffice-Fehler").strip()
+                raise RuntimeError(f"DOCX-Vorschau konnte nicht erzeugt werden: {detail}")
+            return pdf_path.read_bytes()
 
 
 class DocumentPdfService(BaseService):

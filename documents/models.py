@@ -16,6 +16,11 @@ def document_template_upload_to(instance: "Document", filename: str) -> str:
     return f"documents/templates/{filename_slug}{extension}"
 
 
+def document_source_docx_upload_to(instance: "Document", filename: str) -> str:
+    filename_slug = slugify(instance.slug or instance.title or instance.document_type) or "document-source"
+    return f"documents/sources/{filename_slug}.docx"
+
+
 def document_cover_pdf_upload_to(instance: "Document", filename: str) -> str:
     slug = slugify(instance.slug or instance.title or "cover") or "cover"
     return f"documents/pdfs/{slug}-cover.pdf"
@@ -54,6 +59,13 @@ class Document(BaseModel):
         validators=[FileExtensionValidator(["html", "htm"])],
         verbose_name=_("HTML-Template-Datei"),
         help_text=_("Primaere Vorlage. Eine neue Datei wird ohne Container-Neustart beim Rendern geladen."),
+    )
+    source_docx = models.FileField(
+        upload_to=document_source_docx_upload_to,
+        blank=True,
+        validators=[FileExtensionValidator(["docx"])],
+        verbose_name=_("DOCX-Quelldatei"),
+        help_text=_("Wird rechts als schreibgeschuetzte PDF-Vorschau angezeigt."),
     )
     html_content = models.TextField(blank=True, default="", verbose_name=_("HTML"))
     css_content = models.TextField(blank=True, default="", verbose_name=_("CSS"))
@@ -185,73 +197,3 @@ class DocumentVersion(BaseModel):
     def __str__(self) -> str:
         label = f" · {self.label}" if self.label else ""
         return f"{self.document} · V{self.version_number}{label}"
-
-
-class ShopwareCmsPage(BaseModel):
-    """Lokaler Spiegel einer Shopware-Erlebniswelt."""
-
-    shopware_id = models.CharField(max_length=64, unique=True, verbose_name=_("Shopware-ID"))
-    title = models.CharField(max_length=255, verbose_name=_("Name"))
-    page_type = models.CharField(max_length=64, blank=True, default="", verbose_name=_("Seitentyp"))
-    is_locked = models.BooleanField(default=False, verbose_name=_("In Shopware gesperrt"))
-    layout_description = models.TextField(blank=True, default="", verbose_name=_("Layoutbeschreibung"))
-    remote_payload = models.JSONField(blank=True, default=dict, editable=False, verbose_name=_("Shopware-Rohdaten"))
-    last_fetched_at = models.DateTimeField(null=True, blank=True, editable=False, verbose_name=_("Zuletzt abgerufen"))
-    last_synced_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        editable=False,
-        verbose_name=_("Zuletzt hochgeladen"),
-    )
-
-    class Meta:
-        verbose_name = _("Shopseite")
-        verbose_name_plural = _("Shopseiten")
-        ordering = ("title", "shopware_id")
-
-    def __str__(self) -> str:
-        return self.title or self.shopware_id
-
-    @property
-    def has_local_changes(self) -> bool:
-        return any(slot.has_local_changes for slot in self.html_slots.all())
-
-
-class ShopwareCmsSlot(BaseModel):
-    """Ein lokal editierbarer HTML-Inhaltsslot einer Shopseite."""
-
-    page = models.ForeignKey(
-        ShopwareCmsPage,
-        on_delete=models.CASCADE,
-        related_name="html_slots",
-        verbose_name=_("Shopseite"),
-    )
-    shopware_id = models.CharField(max_length=64, unique=True, verbose_name=_("Shopware Slot-ID"))
-    slot_type = models.CharField(max_length=100, verbose_name=_("Elementtyp"))
-    slot_label = models.CharField(max_length=255, verbose_name=_("Position"))
-    html_content = models.TextField(blank=True, default="", verbose_name=_("HTML"))
-    remote_html_content = models.TextField(
-        blank=True,
-        default="",
-        editable=False,
-        verbose_name=_("Zuletzt abgerufener HTML-Inhalt"),
-    )
-    slot_config = models.JSONField(blank=True, default=dict, editable=False, verbose_name=_("Slot-Konfiguration"))
-    last_synced_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        editable=False,
-        verbose_name=_("Zuletzt hochgeladen"),
-    )
-
-    class Meta:
-        verbose_name = _("Shopseiten-Inhalt")
-        verbose_name_plural = _("Shopseiten-Inhalte")
-        ordering = ("page", "slot_label", "shopware_id")
-
-    def __str__(self) -> str:
-        return f"{self.page}: {self.slot_label}"
-
-    @property
-    def has_local_changes(self) -> bool:
-        return self.html_content != self.remote_html_content

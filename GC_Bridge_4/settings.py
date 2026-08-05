@@ -303,6 +303,7 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 DOCUMENT_PDF_ROOT = BASE_DIR / 'Dokumente'
+DOCUMENT_DOCX_PREVIEW_COMMAND = os.getenv("DOCUMENT_DOCX_PREVIEW_COMMAND", "libreoffice")
 DB_BACKUP_DIR = os.getenv("DB_BACKUP_DIR", "tmp/backups")
 DB_BACKUP_SCHEMA = os.getenv("DB_BACKUP_SCHEMA", "public")
 
@@ -547,12 +548,6 @@ UNFOLD = {
                         "icon": "description",
                         "link": reverse_lazy("admin:documents_document_changelist"),
                         "permission": sidebar_model_view_permission("documents", "Document"),
-                    },
-                    {
-                        "title": _("Shopseiten"),
-                        "icon": "web",
-                        "link": reverse_lazy("admin:documents_shopwarecmspage_changelist"),
-                        "permission": sidebar_model_view_permission("documents", "ShopwareCmsPage"),
                     },
                     {
                         "title": _("QR-Codes"),
