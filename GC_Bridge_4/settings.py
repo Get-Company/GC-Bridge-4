@@ -304,7 +304,6 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 DOCUMENT_PDF_ROOT = BASE_DIR / 'Dokumente'
-DOCUMENT_DOCX_PREVIEW_COMMAND = os.getenv("DOCUMENT_DOCX_PREVIEW_COMMAND", "libreoffice")
 DB_BACKUP_DIR = os.getenv("DB_BACKUP_DIR", "tmp/backups")
 DB_BACKUP_SCHEMA = os.getenv("DB_BACKUP_SCHEMA", "public")
 

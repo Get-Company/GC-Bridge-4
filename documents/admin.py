@@ -16,7 +16,7 @@ from documents.models import (
     Document,
     DocumentVersion,
 )
-from documents.services import DocumentDocxPreviewService, DocumentPdfService, DocumentTemplateContextService
+from documents.services import DocumentPdfService, DocumentTemplateContextService
 
 
 class DocumentAdminForm(forms.ModelForm):
@@ -76,7 +76,6 @@ class DocumentAdmin(BaseAdmin):
     search_fields = ("title", "slug", "html_content", "css_content", "template_file", "pdf_filename")
     readonly_fields = BaseAdmin.readonly_fields + (
         "template_source_status",
-        "docx_preview",
         "template_help",
         "pdf_filename",
         "pdf_generated_at",
@@ -129,13 +128,13 @@ class DocumentAdmin(BaseAdmin):
                     "template_file",
                     "template_source_status",
                     "source_docx",
-                    ("html_content", "docx_preview"),
+                    "html_content",
                     "css_content",
                 ),
                 "classes": ("tab",),
                 "description": (
-                    "DOCX oder RTF rechts pruefen und den Inhalt links manuell im WYSIWYG-Editor uebernehmen. "
-                    "Das gespeicherte CSS wird im Editor geladen. HTML-Dateien bleiben fuer bestehende Templates verfuegbar."
+                    "DOCX- und RTF-Quelldateien lassen sich nach dem Speichern direkt im passenden Programm oeffnen. "
+                    "HTML wird im WYSIWYG-Editor gepflegt; das gespeicherte CSS wird dort geladen."
                 ),
             },
         ),
@@ -216,11 +215,6 @@ class DocumentAdmin(BaseAdmin):
                 self.admin_site.admin_view(self.preview_template_view),
                 name="documents_document_preview_template",
             ),
-            path(
-                "<path:object_id>/preview-docx/",
-                self.admin_site.admin_view(self.preview_docx_view),
-                name="documents_document_preview_docx",
-            ),
         ] + super().get_urls()
 
     @admin.display(description="Template")
@@ -238,15 +232,6 @@ class DocumentAdmin(BaseAdmin):
         if not obj or not obj.active_version_id:
             return "Noch keine Version aktiviert"
         return obj.active_version
-
-    @admin.display(description="DOCX-/RTF-Vorschau")
-    def docx_preview(self, obj: Document | None = None):
-        if not obj or not obj.pk or not obj.source_docx:
-            return "DOCX- oder RTF-Datei hochladen und speichern, um die Vorschau zu laden."
-        return format_html(
-            '<iframe class="document-docx-preview" title="DOCX-/RTF-Vorschau" src="{}"></iframe>',
-            reverse("admin:documents_document_preview_docx", args=(obj.pk,)),
-        )
 
     @admin.display(description="PDF")
     def pdf_download_link(self, obj: Document | None = None):
@@ -361,20 +346,6 @@ class DocumentAdmin(BaseAdmin):
                 content_type="text/html; charset=utf-8",
             )
         return HttpResponse(html, content_type="text/html; charset=utf-8")
-
-    def preview_docx_view(self, request, object_id: str):
-        document = self.get_object(request, object_id)
-        if not document:
-            raise Http404("Dokument nicht gefunden.")
-        try:
-            pdf = DocumentDocxPreviewService().render_pdf(document)
-        except (RuntimeError, ValueError) as exc:
-            return HttpResponse(str(exc), status=503, content_type="text/plain; charset=utf-8")
-        return HttpResponse(
-            pdf,
-            content_type="application/pdf",
-            headers={"Content-Disposition": 'inline; filename="docx-vorschau.pdf"'},
-        )
 
     @admin.action(description="PDF speichern")
     def generate_pdf(self, request, queryset):

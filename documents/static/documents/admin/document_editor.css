@@ -18,31 +18,18 @@
     padding: 18px;
 }
 
-.field-html_content,
-.field-docx_preview {
+.field-html_content {
     min-width: 0;
 }
 
-.field-html_content .grow,
-.field-docx_preview .grow {
-    width: 100%;
-}
-
-.document-docx-preview {
-    background: #fff;
-    border: 1px solid var(--color-base-200, #e5e7eb);
-    border-radius: 8px;
-    height: 720px;
-    min-height: 520px;
+.field-html_content .grow {
     width: 100%;
 }
 
 @media (min-width: 1024px) {
-    /* Keep both source and edited document usable side by side.  The editor
-       content gets its own scroll area, so the controls and Trix toolbar do
-       not disappear with a long HTML document. */
-    .field-html_content,
-    .field-docx_preview {
+    /* The editor content gets its own scroll area, so the controls and Trix
+       toolbar do not disappear with a long HTML document. */
+    .field-html_content {
         align-self: start;
     }
 
@@ -74,12 +61,6 @@
         flex: 1 1 auto;
         min-height: 0;
         overflow-y: auto;
-    }
-
-    .document-docx-preview {
-        height: calc(100vh - 12rem);
-        max-height: 52rem;
-        min-height: 32rem;
     }
 }
 
@@ -173,12 +154,6 @@ textarea[data-document-editor="css"] {
 
 textarea[data-document-editor="html"] {
     min-height: 720px;
-}
-
-@media (max-width: 1023px) {
-    .document-docx-preview {
-        height: 520px;
-    }
 }
 
 .document-textarea-shell {

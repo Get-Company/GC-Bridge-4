@@ -17,7 +17,7 @@ def document_template_upload_to(instance: "Document", filename: str) -> str:
 
 
 def document_source_docx_upload_to(instance: "Document", filename: str) -> str:
-    """Keep the source format so LibreOffice can reliably detect DOCX and RTF files."""
+    """Store a DOCX or RTF source file with its original format extension."""
 
     filename_slug = slugify(instance.slug or instance.title or instance.document_type) or "document-source"
     extension = Path(filename).suffix.lower()
@@ -70,7 +70,7 @@ class Document(BaseModel):
         blank=True,
         validators=[FileExtensionValidator(["docx", "rtf"])],
         verbose_name=_("DOCX-/RTF-Quelldatei"),
-        help_text=_("Wird rechts als schreibgeschuetzte PDF-Vorschau angezeigt. DOCX und RTF werden direkt von LibreOffice konvertiert."),
+        help_text=_("Optional: zum Herunterladen und Bearbeiten im jeweiligen Programm hinterlegen."),
     )
     html_content = models.TextField(blank=True, default="", verbose_name=_("HTML"))
     css_content = models.TextField(blank=True, default="", verbose_name=_("CSS"))
