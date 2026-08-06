@@ -53,7 +53,13 @@ class ShopwareTranslationService(BaseService):
         field_mapping: Mapping[str, str],
         translation_language_ids: Mapping[str, list[str]] | None,
     ) -> list[dict[str, str]]:
-        """Return non-empty native SW6 translations for an instance."""
+        """Return valid native SW6 translations for an instance.
+
+        Shopware validates a translated entity's name even during an upsert
+        that otherwise only changes description, SEO metadata, or a unit.
+        Therefore a language entry is omitted until its translated name exists.
+        The next sync sends every available field together with that name.
+        """
         if not translation_language_ids:
             return []
 
@@ -65,7 +71,8 @@ class ShopwareTranslationService(BaseService):
                 for source_field, target_field in field_mapping.items()
                 if (value := getattr(instance, f"{source_field}_{suffix}", None)) is not None and str(value).strip()
             }
-            if not values:
+            required_name_field = field_mapping.get("name")
+            if not values or (required_name_field and not values.get(required_name_field)):
                 continue
             for language_id in language_ids:
                 translations.append({"languageId": str(language_id), **values})

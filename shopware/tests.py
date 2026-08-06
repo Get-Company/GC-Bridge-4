@@ -118,6 +118,20 @@ class Shopware6ProductTranslationPayloadTest(SimpleTestCase):
             ],
         )
 
+    def test_payload_omits_translation_without_a_translated_name(self):
+        product = SimpleNamespace(
+            name_en="",
+            description_en="<p>English text</p>",
+            unit_en="piece",
+        )
+
+        translations = _build_product_translations(
+            product=product,
+            translation_language_ids={"en": ["language-en"]},
+        )
+
+        self.assertEqual(translations, [])
+
     def test_language_lookup_maps_shopware_locales_to_django_languages(self):
         service = MagicMock()
         service.request_post.return_value = {
