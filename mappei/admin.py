@@ -85,7 +85,7 @@ class MappeiProductAdmin(BaseAdmin):
         "has_mapping",
     )
     list_filter = ("hat_staffel",)
-    search_fields = ("artikelnr", "name")
+    search_fields = ("artikelnr", "name", "products__erp_nr")
     readonly_fields = ("last_scraped_at", "artikelnr", "url_link", "product_image_display")
     fields = ("artikelnr", "name", "url_link", "product_image_display", "vpe_menge", "vpe_einheit", "hat_staffel", "last_scraped_at")
     inlines = [MappeiPriceSnapshotInline]

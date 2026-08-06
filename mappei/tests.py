@@ -113,6 +113,34 @@ class MappeiProductMappingAutocompleteTest(TestCase):
         self.assertEqual(loaded_mapping.mappei_product.artikelnr, "M-GREEN")
         self.assertEqual(loaded_mapping.product.first_image, image)
 
+    def test_mappei_product_list_searches_mappei_and_internal_article_number(self):
+        mappei_product = MappeiProduct.objects.create(
+            artikelnr="MAPPEI-123",
+            name="Register gruen",
+        )
+        product = Product.objects.create(erp_nr="CLASSEI-456", name="Register gruen")
+        MappeiProductMapping.objects.create(
+            mappei_product=mappei_product,
+            product=product,
+        )
+        model_admin = admin.site._registry[MappeiProduct]
+        request = RequestFactory().get("/admin/mappei/mappeiproduct/")
+
+        mappei_results, _ = model_admin.get_search_results(
+            request,
+            MappeiProduct.objects.all(),
+            "MAPPEI-123",
+        )
+        internal_results, use_distinct = model_admin.get_search_results(
+            request,
+            MappeiProduct.objects.all(),
+            "CLASSEI-456",
+        )
+
+        self.assertEqual(list(mappei_results), [mappei_product])
+        self.assertEqual(list(internal_results), [mappei_product])
+        self.assertTrue(use_distinct)
+
     def test_mapping_combination_is_unique_but_allows_many_to_many_pairs(self):
         mappei_product = MappeiProduct.objects.create(artikelnr="M-M2M", name="Mappei M2M")
         second_mappei_product = MappeiProduct.objects.create(artikelnr="M-M2M-2", name="Mappei M2M 2")
