@@ -16,6 +16,11 @@ Funktionsweise
   Werden Prompt, Sprachhinweise, Quellsprache, Leerwert-Verhalten oder der
   ausgewaehlte Provider bzw. dessen Modell geaendert, werden auch unveraenderte
   Quellwerte beim naechsten Scan erneut uebersetzt.
+- Die Statusliste wird automatisch beim Uebersetzungsscan aufgeraeumt.
+  ``Statusanzeige aufbewahren (Tage)`` in der Konfiguration legt fest, wann
+  erfolgreiche oder abgebrochene Eintraege aus der Liste verschwinden; ``0``
+  deaktiviert das. Die Hashes bleiben intern erhalten, damit keine unnötigen
+  Neuuebersetzungen entstehen.
 - Bei geleertem deutschen Quellwert werden Zielwerte standardmaessig ebenfalls
   geleert. Das Verhalten ist in der Konfiguration abschaltbar.
 - HTML wird nicht vom Modell erzeugt: Tags, technische Attribute, Klassen,
@@ -34,6 +39,10 @@ System-Prompt, eine Benutzer-Prompt-Vorlage und die Sprachvarianten-Hinweise.
 Die Standardvorgabe fuer ``ch-de`` verlangt echten schweizerdeutschen Dialekt;
 die anderen Zielsprachen verwenden die jeweilige Hochsprache. Diese Hinweise
 koennen dort pro Sprachcode angepasst werden.
+Bei ``it-de`` ist Deutsch zwingende Ausgabesprache fuer den suedtirolerischen
+Markt. Da der technische Code von Sprachmodellen als Italienisch missverstanden
+werden kann, wird diese Regel zusaetzlich verbindlich an jeden Modell-Prompt
+angehaengt.
 
 Shopware-Export
 ---------------

@@ -20,7 +20,7 @@ from ai.rewrite_fields import (
     get_rewriteable_category_field_names,
     get_rewriteable_product_field_names,
 )
-from ai.services import AIRewriteService
+from ai.services import AIRewriteService, AITranslationService
 from ai.tasks import queue_ai_translation_scan, run_ai_rewrite_job, run_ai_translation_state
 from products.models import Category, Product
 
@@ -153,17 +153,17 @@ class AIProviderConfigAdmin(BaseAdmin):
 
 @admin.register(AITranslationConfig)
 class AITranslationConfigAdmin(BaseAdmin):
-    list_display = ("name", "provider", "source_language", "batch_size", "is_active", "updated_at")
+    list_display = ("name", "provider", "source_language", "batch_size", "status_retention_days", "is_active", "updated_at")
     search_fields = ("name", "provider__name", "provider__model_name")
     list_filter = ("is_active", "provider")
-    actions_detail = ("queue_translation_scan_detail",)
+    actions_detail = ("queue_translation_scan_detail", "archive_expired_translation_states_detail")
     formfield_overrides = {
         **BaseAdmin.formfield_overrides,
         models.TextField: {"widget": UnfoldAdminTextareaWidget(attrs={"class": "font-mono", "rows": 14})},
     }
     fieldsets = (
         ("Ausfuehrung", {
-            "fields": ("name", "provider", "source_language", "batch_size", "is_active", "clear_target_on_empty_source"),
+            "fields": ("name", "provider", "source_language", "batch_size", "status_retention_days", "is_active", "clear_target_on_empty_source"),
             "description": "Es darf nur eine Konfiguration aktiv sein. Der geplante Celery-Task verwendet diese Konfiguration.",
         }),
         ("Uebersetzungsanweisungen", {
@@ -191,6 +191,16 @@ class AITranslationConfigAdmin(BaseAdmin):
             self.message_user(request, f"Uebersetzungsscan konnte nicht eingeplant werden: {exc}", level=messages.ERROR)
         else:
             self.message_user(request, f"Uebersetzungsscan wurde gestartet ({async_result.id}).")
+        return HttpResponseRedirect(reverse("admin:ai_aitranslationconfig_change", args=(configuration.pk,)))
+
+    @action(description="Abgelaufene Status aus Liste ausblenden", icon="archive")
+    def archive_expired_translation_states_detail(self, request, object_id: str):
+        configuration = self.get_object(request, object_id)
+        if not configuration:
+            self.message_user(request, "Uebersetzungskonfiguration nicht gefunden.", level=messages.ERROR)
+            return HttpResponseRedirect(reverse("admin:ai_aitranslationconfig_changelist"))
+        archived_count = AITranslationService().archive_expired_states(configuration=configuration)
+        self.message_user(request, f"{archived_count} abgelaufene Status wurden aus der Liste ausgeblendet.")
         return HttpResponseRedirect(reverse("admin:ai_aitranslationconfig_change", args=(configuration.pk,)))
 
 
@@ -221,7 +231,7 @@ class AITranslationStateAdmin(BaseAdmin):
         return False
 
     def get_queryset(self, request):
-        return super().get_queryset(request).select_related("configuration", "content_type")
+        return super().get_queryset(request).filter(is_archived=False).select_related("configuration", "content_type")
 
     @admin.display(description="Zielobjekt")
     def target_object(self, obj: AITranslationState):
@@ -241,7 +251,9 @@ class AITranslationStateAdmin(BaseAdmin):
         state.status = AITranslationState.Status.PENDING
         state.celery_task_id = ""
         state.last_error = ""
-        state.save(update_fields=("status", "celery_task_id", "last_error", "updated_at"))
+        state.is_archived = False
+        state.archived_at = None
+        state.save(update_fields=("status", "celery_task_id", "last_error", "is_archived", "archived_at", "updated_at"))
         try:
             async_result = run_ai_translation_state.delay(state.pk)
         except Exception as exc:  # noqa: BLE001 - persist the actionable enqueue failure.

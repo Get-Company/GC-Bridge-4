@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import timedelta
 import hashlib
 import json
 import re
@@ -9,6 +10,7 @@ from typing import Any
 from django.conf import settings
 from django.contrib.contenttypes.models import ContentType
 from django.db import IntegrityError, transaction
+from django.db.models import Q
 from django.template import Context, Engine
 from django.utils import timezone
 from modeltranslation import settings as modeltranslation_settings
@@ -25,6 +27,15 @@ from .provider import AIProviderService
 
 _TRANSLATABLE_FIELD_TYPES = ("CharField", "TextField")
 _RAW_TEXT_TAGS = frozenset({"code", "pre", "script", "style"})
+_TRANSLATION_PIPELINE_VERSION = "2"
+_MANDATORY_OUTPUT_LANGUAGE_RULES = {
+    "it-de": (
+        "VERBINDLICHE AUSGABESPRACHE: Deutsch. Der technische Zielcode 'it-de' steht fuer Deutsch "
+        "im suedtirolerischen/italienischen Markt und NICHT fuer Italienisch. Gib keine italienischen "
+        "Saetze oder italienische Uebersetzung aus; Eigennamen, Marken und technische Bezeichnungen "
+        "bleiben nur unveraendert, wenn sie im Original stehen."
+    ),
+}
 _TAG_NAME_RE = re.compile(r"^<\s*(?P<closing>/)?\s*(?P<name>[A-Za-z][A-Za-z0-9:_-]*)")
 _HUMAN_TEXT_ATTRIBUTE_RE = re.compile(
     r"\s(?:alt|title|aria-label|placeholder)\s*=\s*(?P<quote>['\"])(?P<value>.*?)(?P=quote)",
@@ -88,6 +99,8 @@ class AITranslationService(BaseService):
         if configuration is None:
             return []
 
+        self.archive_expired_states(configuration=configuration)
+
         source_language = str(configuration.source_language or "").strip()
         available_languages = tuple(modeltranslation_settings.AVAILABLE_LANGUAGES)
         if source_language not in available_languages:
@@ -138,6 +151,28 @@ class AITranslationService(BaseService):
                         break
 
         return queued_state_ids
+
+    def archive_expired_states(self, *, configuration: AITranslationConfig) -> int:
+        """Hide terminal state rows while retaining their source/configuration hashes."""
+        retention_days = max(int(configuration.status_retention_days or 0), 0)
+        if not retention_days:
+            return 0
+
+        now = timezone.now()
+        cutoff = now - timedelta(days=retention_days)
+        expired_statuses = (
+            Q(status=self.model.Status.SUCCEEDED, translated_at__lt=cutoff)
+            | Q(status=self.model.Status.SUCCEEDED, translated_at__isnull=True, updated_at__lt=cutoff)
+            | Q(status=self.model.Status.CANCELLED, updated_at__lt=cutoff)
+        )
+        return self.model.objects.filter(
+            configuration=configuration,
+            is_archived=False,
+        ).filter(expired_statuses).update(
+            is_archived=True,
+            archived_at=now,
+            updated_at=now,
+        )
 
     def get_active_configuration(self, *, configuration_id: int | None = None) -> AITranslationConfig | None:
         configurations = AITranslationConfig.objects.filter(is_active=True).select_related("provider")
@@ -266,6 +301,7 @@ class AITranslationService(BaseService):
         """Return the configuration parts that can change a translation result."""
         provider = configuration.provider
         payload = {
+            "translation_pipeline_version": _TRANSLATION_PIPELINE_VERSION,
             "source_language": configuration.source_language,
             "clear_target_on_empty_source": configuration.clear_target_on_empty_source,
             "system_prompt": configuration.system_prompt,
@@ -412,12 +448,14 @@ class AITranslationService(BaseService):
             state.configuration = configuration
             state.source_hash = source_hash
             state.configuration_hash = configuration_hash
+            state.is_archived = False
+            state.archived_at = None
             state.status = self.model.Status.SUCCEEDED
             state.translated_at = timezone.now()
             state.last_error = "Quelltext ist leer; Zieltext wurde gemaess Konfiguration beibehalten."
             state.save(
                 update_fields=(
-                    "configuration", "source_hash", "configuration_hash", "status", "translated_at", "last_error", "updated_at",
+                    "configuration", "source_hash", "configuration_hash", "is_archived", "archived_at", "status", "translated_at", "last_error", "updated_at",
                 )
             )
             return None
@@ -425,12 +463,14 @@ class AITranslationService(BaseService):
         state.configuration = configuration
         state.source_hash = source_hash
         state.configuration_hash = configuration_hash
+        state.is_archived = False
+        state.archived_at = None
         state.status = self.model.Status.PENDING
         state.celery_task_id = ""
         state.last_error = ""
         state.save(
             update_fields=(
-                "configuration", "source_hash", "configuration_hash", "status", "celery_task_id", "last_error", "updated_at",
+                "configuration", "source_hash", "configuration_hash", "is_archived", "archived_at", "status", "celery_task_id", "last_error", "updated_at",
             )
         )
         return state.pk
@@ -448,6 +488,10 @@ class AITranslationService(BaseService):
         context = self._prompt_context(configuration=configuration, target_language=state.target_language, segments=segments)
         system_prompt = self.template_engine.from_string(configuration.system_prompt).render(Context(context)).strip()
         user_prompt = self.template_engine.from_string(configuration.user_prompt_template).render(Context(context)).strip()
+        mandatory_language_rule = self._mandatory_output_language_rule(state.target_language)
+        if mandatory_language_rule:
+            system_prompt = f"{system_prompt}\n\n{mandatory_language_rule}".strip()
+            user_prompt = f"{user_prompt}\n\n{mandatory_language_rule}".strip()
         response, _provider_response = self.provider_service.rewrite_text_with_response(
             provider=configuration.provider,
             system_prompt=system_prompt,
@@ -590,6 +634,10 @@ class AITranslationService(BaseService):
     @staticmethod
     def _language_name(language_code: str) -> str:
         return str(dict(settings.LANGUAGES).get(language_code, language_code))
+
+    @staticmethod
+    def _mandatory_output_language_rule(target_language: str) -> str:
+        return _MANDATORY_OUTPUT_LANGUAGE_RULES.get(target_language, "")
 
     @classmethod
     def _iter_registered_text_models(cls):

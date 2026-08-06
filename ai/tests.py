@@ -1,4 +1,5 @@
 import json
+from datetime import timedelta
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -7,6 +8,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.test import RequestFactory, SimpleTestCase, TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from ai.admin import AIRewriteJobAdmin
 from ai.models import AIProviderConfig, AIRewriteJob, AIRewritePrompt, AITranslationConfig, AITranslationState
@@ -131,6 +133,12 @@ class AITranslationMarkupTest(SimpleTestCase):
             '<img alt="Product image" src="/media/product.jpg" class="preview" title="Large view">',
         )
 
+    def test_it_de_has_a_mandatory_german_output_rule(self):
+        rule = AITranslationService._mandatory_output_language_rule("it-de")
+
+        self.assertIn("AUSGABESPRACHE: Deutsch", rule)
+        self.assertIn("NICHT fuer Italienisch", rule)
+
 
 class AIModelShapeTest(TestCase):
     def test_prompt_has_only_slim_fields(self):
@@ -254,6 +262,21 @@ class AITranslationServiceTest(TestCase):
         self.assertIn(state.pk, queued_again)
         self.assertEqual(state.status, AITranslationState.Status.PENDING)
         self.assertNotEqual(state.configuration_hash, previous_configuration_hash)
+
+    def test_expired_success_status_is_archived_without_losing_its_hash(self):
+        state = self._queue_description_en()
+        state.status = AITranslationState.Status.SUCCEEDED
+        state.translated_at = timezone.now() - timedelta(days=31)
+        state.save(update_fields=("status", "translated_at", "updated_at"))
+
+        archived_count = AITranslationService().archive_expired_states(configuration=self.configuration)
+        queued_again = AITranslationService().queue_pending_translations()
+
+        state.refresh_from_db()
+        self.assertEqual(archived_count, 1)
+        self.assertTrue(state.is_archived)
+        self.assertIsNotNone(state.archived_at)
+        self.assertNotIn(state.pk, queued_again)
 
     @patch(
         "ai.services.translation.AIProviderService.rewrite_text_with_response",

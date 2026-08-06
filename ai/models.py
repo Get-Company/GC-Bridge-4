@@ -39,7 +39,10 @@ def default_translation_locale_instructions() -> dict[str, str]:
             "Verwende echten schweizerdeutschen Dialekt, nicht nur Schweizer Hochdeutsch. "
             "Erfinde dabei keine regionalen Eigenheiten, die im Original nicht angelegt sind."
         ),
-        "it-de": "Verwende die fuer den italienischen Markt passende deutsche Hochsprache.",
+        "it-de": (
+            "Die Ausgabesprache ist zwingend Deutsch, passend fuer den suedtirolerischen Markt. "
+            "Der technische Code it-de bedeutet nicht Italienisch; verwende niemals italienische Saetze."
+        ),
         "it-it": "Verwende die italienische Hochsprache.",
     }
 
@@ -88,6 +91,11 @@ class AITranslationConfig(BaseModel):
         default=100,
         verbose_name=_("Maximale Uebersetzungen pro Lauf"),
         help_text=_("Begrenzt die Anzahl einzelner Feld-/Sprachuebersetzungen je Scan."),
+    )
+    status_retention_days = models.PositiveIntegerField(
+        default=30,
+        verbose_name=_("Statusanzeige aufbewahren (Tage)"),
+        help_text=_("Erfolgreiche und abgebrochene Status verschwinden danach aus der Liste. 0 deaktiviert dies."),
     )
     is_active = models.BooleanField(default=True, verbose_name=_("Aktiv"))
     clear_target_on_empty_source = models.BooleanField(
@@ -280,6 +288,8 @@ class AITranslationState(BaseModel):
         default="",
         verbose_name=_("Konfigurations-Hash"),
     )
+    is_archived = models.BooleanField(default=False, db_index=True, verbose_name=_("Aus Liste ausgeblendet"))
+    archived_at = models.DateTimeField(null=True, blank=True, verbose_name=_("Ausgeblendet am"))
     status = models.CharField(
         max_length=16,
         choices=Status.choices,
