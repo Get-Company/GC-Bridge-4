@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 
 from django.core.management.base import CommandError
@@ -41,6 +42,11 @@ class Command(MonitoredBaseCommand):
             default="",
             help="SW5-Shop-ID der italienischen Übersetzungen; überschreibt die automatische Erkennung.",
         )
+        parser.add_argument(
+            "--list-shops",
+            action="store_true",
+            help="SW5-Shops mit ID, Kategorie und Locale ausgeben, ohne Produktdaten zu ändern.",
+        )
 
     def handle(self, *args, **options):
         erp_nrs = [str(value).strip() for value in options.get("erp_nrs") or [] if str(value).strip()]
@@ -48,6 +54,11 @@ class Command(MonitoredBaseCommand):
         limit = options.get("limit")
         dry_run = options.get("dry_run", False)
         italian_shop_id = str(options.get("shop_id") or "").strip()
+        list_shops = options.get("list_shops", False)
+        if list_shops:
+            shops = Shopware5ItalianTranslationImportService().available_shops()
+            self.stdout.write(json.dumps(shops, ensure_ascii=False, indent=2))
+            return
         if not erp_nrs and not sync_all:
             raise CommandError("Bitte ERP-Nummern angeben oder --all verwenden.")
 
