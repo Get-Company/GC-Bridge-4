@@ -21,7 +21,11 @@ from modeltranslation.utils import build_localized_fieldname
 from ai.models import AITranslationConfig, AITranslationState
 from core.services import BaseService
 from products.models import Category, Product, ProductSyncJob
-from products.services import ProductAutoSyncService, disable_product_auto_sync
+from products.services import (
+    ProductAutoSyncService,
+    disable_category_auto_sync,
+    disable_product_auto_sync,
+)
 
 from .provider import AIProviderService
 
@@ -280,7 +284,12 @@ class AITranslationService(BaseService):
                             target_field=target_field,
                         )
                     elif isinstance(target, Category):
-                        target.save(update_fields=(target_field, "updated_at"))
+                        # AI translations retain their dedicated lightweight
+                        # SW6 write-back below. Suppress the generic category
+                        # content signal so the same translation is not sent
+                        # twice and product assignments are not re-read.
+                        with disable_category_auto_sync():
+                            target.save(update_fields=(target_field, "updated_at"))
                         self._enqueue_category_translation_sync(category_id=target.pk)
                     else:
                         target.save(update_fields=(target_field, "updated_at"))

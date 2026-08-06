@@ -17,6 +17,7 @@ class ProductService(Shopware6Service):
     product_price_base_path = "/product-price"
     product_media_search_path = "/search/product-media"
     product_media_base_path = "/product-media"
+    product_category_search_path = "/search/product-category"
     media_base_path = "/media"
     bulk_sync_path = "/_action/sync"
 
@@ -153,6 +154,65 @@ class ProductService(Shopware6Service):
                 }
             },
         )
+
+    def get_product_ids_in_category(self, category_id: str) -> set[str]:
+        """Return the direct Shopware product IDs assigned to one category."""
+        category_id = str(category_id or "").strip()
+        if not category_id:
+            return set()
+
+        product_ids: set[str] = set()
+        page = 1
+        limit = 500
+        while True:
+            response = self.request_post(
+                self.product_category_search_path,
+                payload={
+                    "page": page,
+                    "limit": limit,
+                    "total-count-mode": 1,
+                    "filter": [{"type": "equals", "field": "categoryId", "value": category_id}],
+                },
+            )
+            rows = (response or {}).get("data", []) if isinstance(response, dict) else []
+            if not isinstance(rows, list) or not rows:
+                break
+            for row in rows:
+                product_id = self._entity_field_value(row, "productId")
+                if product_id:
+                    product_ids.add(product_id)
+            if len(rows) < limit:
+                break
+            page += 1
+        return product_ids
+
+    def bulk_upsert_product_categories(self, payload: list[dict]) -> Any:
+        """Create direct ``product_category`` mappings through the Sync API."""
+        return self.bulk_upsert(payload, entity_name="product_category")
+
+    def bulk_delete_product_categories(self, payload: list[dict]) -> Any:
+        """Delete direct ``product_category`` mappings through the Sync API."""
+        if not payload:
+            return None
+        return self.request_post(
+            self.bulk_sync_path,
+            payload={
+                "product_category-delete": {
+                    "entity": "product_category",
+                    "action": "delete",
+                    "payload": payload,
+                }
+            },
+        )
+
+    @staticmethod
+    def _entity_field_value(entity: Any, field_name: str) -> str:
+        if not isinstance(entity, dict):
+            return ""
+        value = entity.get(field_name)
+        if value is None and isinstance(entity.get("attributes"), dict):
+            value = entity["attributes"].get(field_name)
+        return str(value or "").strip()
 
     def purge_product_prices_by_product_and_rule(self, *, product_ids: list[str], rule_ids: list[str]) -> int:
         product_ids = [str(value).strip() for value in (product_ids or []) if str(value).strip()]

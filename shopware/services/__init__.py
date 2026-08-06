@@ -2,6 +2,7 @@ from .base import ShopwareBaseService
 from .config import ConfShopware6ApiBase
 from .customer import CustomerService
 from .category_translation import ShopwareCategoryTranslationSyncService
+from .category_content import ShopwareCategoryContentSyncService
 from .order import OrderService
 from .product_media import ProductMediaSyncService
 from .product import ProductService
@@ -23,6 +24,7 @@ __all__ = [
     "OrderService",
     "CustomerService",
     "ShopwareCategoryTranslationSyncService",
+    "ShopwareCategoryContentSyncService",
     "Shopware5ProductSyncService",
     "Shopware5ItalianTranslationImportService",
     "Shopware5CategoryMappingService",

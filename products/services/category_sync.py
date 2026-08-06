@@ -9,6 +9,7 @@ from loguru import logger
 
 from core.services import BaseService
 from products.models import Category, Product, ProductVariantFamily
+from products.services.category_auto_sync import disable_category_auto_sync
 from shopware.services.shopware6 import Shopware6Service
 
 
@@ -414,7 +415,9 @@ class ShopwareCategorySyncService(BaseService):
             if category.sw6_id
         }
         sort_orders = self._sort_orders(remote_categories)
-        with transaction.atomic(), Category.objects.disable_mptt_updates():
+        # The import is one-way. Its category saves must never enqueue an
+        # immediate write-back to Shopware through the local change signals.
+        with disable_category_auto_sync(), transaction.atomic(), Category.objects.disable_mptt_updates():
             for sw6_id, remote_category in remote_categories.items():
                 category = categories_by_sw6_id.get(sw6_id)
 

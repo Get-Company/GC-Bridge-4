@@ -143,6 +143,24 @@ def sync_variant_family_to_shopware(family_id: int) -> dict:
     }
 
 
+@shared_task(name="products.sync_category_to_shopware")
+def sync_category_to_shopware(category_id: int) -> dict:
+    """Synchronize one changed category, its translations, and its products to SW6."""
+    from products.models import Category
+    from shopware.services import ShopwareCategoryContentSyncService
+
+    category = Category.objects.filter(pk=category_id).first()
+    if category is None:
+        return {"category_id": category_id, "status": "skipped"}
+
+    result = ShopwareCategoryContentSyncService().sync(category)
+    return {
+        "category_id": category.pk,
+        "shopware_id": category.sw6_id,
+        **result,
+    }
+
+
 @shared_task(name="products.sync_category_translations_to_shopware")
 def sync_category_translations_to_shopware(category_id: int) -> dict:
     """Synchronize only customer-visible category translations to Shopware 6."""

@@ -8,6 +8,7 @@ from django.dispatch import Signal, receiver
 from loguru import logger
 
 from products.models import (
+    Category,
     Price,
     PriceIncrease,
     Product,
@@ -17,7 +18,11 @@ from products.models import (
     PropertyValue,
     Storage,
 )
-from products.services import ProductAutoSyncService, is_product_auto_sync_disabled
+from products.services import (
+    ProductAutoSyncService,
+    is_category_auto_sync_disabled,
+    is_product_auto_sync_disabled,
+)
 from shopware.models import ShopwareSettings
 
 price_increase_applied = Signal()
@@ -120,6 +125,20 @@ VARIANT_FAMILY_SYNC_FIELDS = (
     "slug",
     "target_category_id",
     *_VARIANT_FAMILY_TRANSLATION_SYNC_FIELDS,
+)
+CATEGORY_CONTENT_SYNC_FIELDS = (
+    "name",
+    "description",
+    "meta_title",
+    "meta_description",
+    "meta_keywords",
+    "is_active",
+    "is_visible",
+    *(
+        f"{field}_{suffix}"
+        for field in ("name", "description", "meta_title", "meta_description", "meta_keywords")
+        for suffix in _VARIANT_TRANSLATION_SUFFIXES
+    ),
 )
 
 
@@ -232,6 +251,108 @@ def _enqueue_variant_family_sync_on_commit(*, family_ids: set[int]) -> None:
     # reuse it. Django removes callbacks registered in rolled-back savepoints.
     enqueue_after_commit._variant_family_sync_ids = pending_family_ids
     transaction.on_commit(enqueue_after_commit)
+
+
+def _pending_category_sync_ids() -> set[int] | None:
+    """Return the queued category-sync batch for the current transaction, if any."""
+    connection = transaction.get_connection()
+    for _savepoint_ids, callback, _robust in connection.run_on_commit:
+        pending_category_ids = getattr(callback, "_category_sync_ids", None)
+        if pending_category_ids is not None:
+            return pending_category_ids
+    return None
+
+
+def _enqueue_category_sync_on_commit(*, category_ids: set[int]) -> None:
+    category_ids = {category_id for category_id in category_ids if category_id}
+    if not category_ids:
+        return
+
+    pending_category_ids = _pending_category_sync_ids()
+    if pending_category_ids is not None:
+        pending_category_ids.update(category_ids)
+        return
+
+    pending_category_ids = set(category_ids)
+
+    def enqueue_after_commit() -> None:
+        from products.tasks import sync_category_to_shopware
+
+        for category_id in sorted(pending_category_ids):
+            try:
+                sync_category_to_shopware.delay(category_id)
+            except Exception as exc:
+                logger.warning(
+                    "Could not enqueue automatic Shopware category sync for category {}: {}",
+                    category_id,
+                    exc,
+                )
+
+    enqueue_after_commit._category_sync_ids = pending_category_ids
+    transaction.on_commit(enqueue_after_commit)
+
+
+@receiver(pre_save, sender=Category, dispatch_uid="products_capture_category_content_sync_changes")
+def capture_category_content_sync_changes(
+    sender,
+    instance: Category,
+    raw: bool = False,
+    update_fields=None,
+    **kwargs,
+):
+    if raw or is_category_auto_sync_disabled():
+        instance._category_content_sync_changed = False
+        return
+    instance._category_content_sync_changed = bool(
+        _changed_fields_before_save(
+            model=Category,
+            instance=instance,
+            watched_fields=CATEGORY_CONTENT_SYNC_FIELDS,
+            update_fields=update_fields,
+        )
+    )
+
+
+@receiver(post_save, sender=Category, dispatch_uid="products_enqueue_category_content_sync")
+def enqueue_category_content_sync(
+    sender,
+    instance: Category,
+    created: bool = False,
+    raw: bool = False,
+    **kwargs,
+):
+    if raw or is_category_auto_sync_disabled() or not instance.sw6_id:
+        return
+    if created or getattr(instance, "_category_content_sync_changed", False):
+        _enqueue_category_sync_on_commit(category_ids={instance.pk})
+
+
+@receiver(
+    m2m_changed,
+    sender=Product.categories.through,
+    dispatch_uid="products_enqueue_category_product_assignment_sync",
+)
+def enqueue_category_product_assignment_sync(sender, instance, action: str, reverse: bool, pk_set, **kwargs):
+    """Resync every category whose direct product assignments changed."""
+    if is_category_auto_sync_disabled():
+        return
+    if action == "pre_clear":
+        instance._category_assignment_sync_ids = (
+            {instance.pk} if reverse and instance.pk else set(instance.categories.values_list("pk", flat=True))
+        )
+        return
+    if action not in {"post_add", "post_remove", "post_clear"}:
+        return
+
+    if reverse:
+        category_ids = {instance.pk} if instance.pk else set()
+    elif action == "post_clear":
+        category_ids = set(getattr(instance, "_category_assignment_sync_ids", set()) or set())
+        instance._category_assignment_sync_ids = set()
+    else:
+        category_ids = {category_id for category_id in (pk_set or set()) if category_id}
+
+    _enqueue_category_sync_on_commit(category_ids=category_ids)
 
 
 @receiver(pre_save, sender=ProductVariantFamily, dispatch_uid="products_capture_variant_family_sync_changes")

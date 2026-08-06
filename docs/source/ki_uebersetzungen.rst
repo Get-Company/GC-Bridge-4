@@ -67,8 +67,11 @@ SEO-Beschreibung und SEO-Keywords gescannt. Eine KI-Uebersetzung schreibt die
 SW6-Standardfelder Name, Beschreibung und SEO-Metadaten als nativen
 ``translations``-Payload zurueck. Die Kurzbeschreibung bleibt in Django
 uebersetzt; die Standard-Kategorie von Shopware 6 hat dafuer kein eigenes
-Feld. Kategorienstruktur, Sichtbarkeit und Produktzuordnungen werden dabei
-nicht veraendert.
+Feld. Wird eine vorhandene Kategorie lokal an einem kundenrelevanten Feld oder
+an einer Produktzuordnung geaendert, stellt ein separater SW6-Task den
+Kategorieninhalt samt nativen ``translations`` wieder her. Die direkten
+``product_category``-Zuordnungen werden dabei exakt abgeglichen: neue Produkte
+werden zugeordnet und entfernte Zuordnungen in SW6 geloescht.
 
 Ollama auf dem Arbeits-PC im LAN bereitstellen
 ----------------------------------------------

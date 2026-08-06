@@ -60,7 +60,12 @@ from products.models import (
     Storage,
 )
 from products.services import PriceIncreaseService, ProductVariantFamilyResolverService
-from products.services import ProductAutoSyncService, ShopwareCategorySyncService, disable_product_auto_sync
+from products.services import (
+    ProductAutoSyncService,
+    ShopwareCategorySyncService,
+    disable_category_auto_sync,
+    disable_product_auto_sync,
+)
 from products import tasks as product_tasks
 from products.tasks import sync_from_microtech, sync_to_shopware, sync_to_microtech
 from shopware.models import ShopwareSettings
@@ -272,6 +277,55 @@ class CategorySelectionLabelTest(TestCase):
         self.assertEqual(str(italian_strip_tabs), "Italien | Strip-Tabs")
 
 
+class CategoryAutoSyncSignalTest(TestCase):
+    @patch("products.tasks.sync_category_to_shopware.delay")
+    def test_changed_translated_category_text_queues_one_category_sync(self, mock_delay):
+        with disable_category_auto_sync():
+            category = Category.objects.create(
+                name="Ordner",
+                slug="category-auto-sync-text",
+                sw6_id="category-auto-sync-text-id",
+            )
+
+        with self.captureOnCommitCallbacks(execute=True):
+            category.name_en = "Folders"
+            category.save(update_fields=["name_en", "updated_at"])
+
+        mock_delay.assert_called_once_with(category.pk)
+
+    @patch("products.tasks.sync_category_to_shopware.delay")
+    def test_changed_product_assignment_queues_its_category_sync(self, mock_delay):
+        with disable_category_auto_sync():
+            category = Category.objects.create(
+                name="Ordner",
+                slug="category-auto-sync-assignment",
+                sw6_id="category-auto-sync-assignment-id",
+            )
+        with disable_product_auto_sync():
+            product = Product.objects.create(erp_nr="CATEGORY-AUTO-SYNC", name="Produkt")
+
+        with self.captureOnCommitCallbacks(execute=True):
+            product.categories.add(category)
+
+        mock_delay.assert_called_once_with(category.pk)
+
+    @patch("products.tasks.sync_category_to_shopware.delay")
+    def test_cleared_product_assignments_queue_previously_related_categories(self, mock_delay):
+        with disable_category_auto_sync(), disable_product_auto_sync():
+            category = Category.objects.create(
+                name="Ordner",
+                slug="category-auto-sync-clear",
+                sw6_id="category-auto-sync-clear-id",
+            )
+            product = Product.objects.create(erp_nr="CATEGORY-AUTO-CLEAR", name="Produkt")
+            product.categories.add(category)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            product.categories.clear()
+
+        mock_delay.assert_called_once_with(category.pk)
+
+
 class ShopwareCategorySyncSourceTest(TestCase):
     class FakeShopware6Service:
         def request_post(self, path, payload):
@@ -356,6 +410,66 @@ class ShopwareCategorySyncSourceTest(TestCase):
         self.assertEqual(list(variant.categories.values_list("sw6_id", flat=True)), ["second"])
         self.assertEqual(result["matched_products"], 1)
         self.assertEqual(result["missing_products"], 0)
+
+
+class ShopwareCategoryContentSyncTest(TestCase):
+    def test_sync_writes_content_translations_and_exact_product_assignments(self):
+        from shopware.services import ShopwareCategoryContentSyncService
+
+        with disable_category_auto_sync(), disable_product_auto_sync():
+            category = Category.objects.create(
+                name="Ordner",
+                name_en="Folders",
+                description="Beschreibung",
+                slug="category-content-sync",
+                sw6_id="category-content-sync-id",
+            )
+            product = Product.objects.create(
+                erp_nr="CATEGORY-CONTENT-SYNC",
+                sku="current-product-id",
+                name="Produkt",
+            )
+            product.categories.add(category)
+
+        product_service = MagicMock()
+        product_service.get_product_ids_in_category.return_value = {"stale-product-id"}
+        translation_service = MagicMock()
+        translation_service.language_ids_for.return_value = {"en": ["english-language-id"]}
+        translation_service.build_translations.return_value = [
+            {"languageId": "english-language-id", "name": "Folders"}
+        ]
+
+        result = ShopwareCategoryContentSyncService(
+            product_service=product_service,
+            translation_service=translation_service,
+        ).sync(category)
+
+        self.assertEqual(
+            result,
+            {"status": "succeeded", "created_assignments": 1, "removed_assignments": 1},
+        )
+        product_service.bulk_upsert.assert_called_once_with(
+            [
+                {
+                    "id": "category-content-sync-id",
+                    "name": "Ordner",
+                    "description": "Beschreibung",
+                    "metaTitle": "",
+                    "metaDescription": "",
+                    "keywords": "",
+                    "active": True,
+                    "visible": True,
+                    "translations": [{"languageId": "english-language-id", "name": "Folders"}],
+                }
+            ],
+            entity_name="category",
+        )
+        product_service.bulk_upsert_product_categories.assert_called_once_with(
+            [{"productId": "current-product-id", "categoryId": "category-content-sync-id"}]
+        )
+        product_service.bulk_delete_product_categories.assert_called_once_with(
+            [{"productId": "stale-product-id", "categoryId": "category-content-sync-id"}]
+        )
 
 
 class ProductVariantFamilyAdminFormTest(TestCase):
@@ -851,6 +965,34 @@ class ProductVariantAutoSyncTaskTest(TestCase):
                 "variant_count": 2,
                 "detached_count": 1,
                 "status": "succeeded",
+            },
+        )
+
+    @patch("shopware.services.ShopwareCategoryContentSyncService")
+    def test_category_content_task_uses_category_content_sync(self, mock_service_class):
+        with disable_category_auto_sync():
+            category = Category.objects.create(
+                name="Kategorie",
+                slug="category-content-task",
+                sw6_id="category-content-task-id",
+            )
+        mock_service_class.return_value.sync.return_value = {
+            "status": "succeeded",
+            "created_assignments": 2,
+            "removed_assignments": 1,
+        }
+
+        result = product_tasks.sync_category_to_shopware(category.pk)
+
+        mock_service_class.return_value.sync.assert_called_once_with(category)
+        self.assertEqual(
+            result,
+            {
+                "category_id": category.pk,
+                "shopware_id": "category-content-task-id",
+                "status": "succeeded",
+                "created_assignments": 2,
+                "removed_assignments": 1,
             },
         )
 

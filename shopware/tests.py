@@ -1379,6 +1379,49 @@ class ProductMediaSyncServiceTest(SimpleTestCase):
             },
         )
 
+    @patch.object(ProductService, "request_post")
+    def test_bulk_delete_product_categories_uses_product_category_sync_delete(self, mock_request_post):
+        service = ProductService.__new__(ProductService)
+
+        ProductService.bulk_delete_product_categories(
+            service,
+            [{"productId": "product-1", "categoryId": "category-1"}],
+        )
+
+        mock_request_post.assert_called_once_with(
+            "/_action/sync",
+            payload={
+                "product_category-delete": {
+                    "entity": "product_category",
+                    "action": "delete",
+                    "payload": [{"productId": "product-1", "categoryId": "category-1"}],
+                }
+            },
+        )
+
+    @patch.object(ProductService, "request_post")
+    def test_get_product_ids_in_category_reads_mapping_entity(self, mock_request_post):
+        mock_request_post.return_value = {
+            "data": [
+                {"productId": "product-1", "categoryId": "category-1"},
+                {"attributes": {"productId": "product-2", "categoryId": "category-1"}},
+            ]
+        }
+        service = ProductService.__new__(ProductService)
+
+        result = ProductService.get_product_ids_in_category(service, "category-1")
+
+        self.assertEqual(result, {"product-1", "product-2"})
+        mock_request_post.assert_called_once_with(
+            "/search/product-category",
+            payload={
+                "page": 1,
+                "limit": 500,
+                "total-count-mode": 1,
+                "filter": [{"type": "equals", "field": "categoryId", "value": "category-1"}],
+            },
+        )
+
     def test_split_file_name_extracts_base_name_and_extension(self):
         base_name, extension = ProductMediaSyncService.split_file_name("produkt-bild.JPEG")
 
