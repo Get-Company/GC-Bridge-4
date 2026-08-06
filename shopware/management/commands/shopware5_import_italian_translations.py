@@ -36,12 +36,18 @@ class Command(MonitoredBaseCommand):
             action="store_true",
             help="Übersetzungen lesen und auswerten, aber nicht speichern.",
         )
+        parser.add_argument(
+            "--shop-id",
+            default="",
+            help="SW5-Shop-ID der italienischen Übersetzungen; überschreibt die automatische Erkennung.",
+        )
 
     def handle(self, *args, **options):
         erp_nrs = [str(value).strip() for value in options.get("erp_nrs") or [] if str(value).strip()]
         sync_all = options.get("all", False)
         limit = options.get("limit")
         dry_run = options.get("dry_run", False)
+        italian_shop_id = str(options.get("shop_id") or "").strip()
         if not erp_nrs and not sync_all:
             raise CommandError("Bitte ERP-Nummern angeben oder --all verwenden.")
 
@@ -63,6 +69,7 @@ class Command(MonitoredBaseCommand):
                 summary = Shopware5ItalianTranslationImportService().import_products(
                     products,
                     dry_run=dry_run,
+                    italian_shop_id=italian_shop_id or None,
                 )
             runtime.update(stage="finished", **summary)
             self.stdout.write(

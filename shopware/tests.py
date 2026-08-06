@@ -473,7 +473,7 @@ class Shopware5ProductSyncServiceTest(SimpleTestCase):
 class Shopware5ItalianTranslationImportServiceTest(SimpleTestCase):
     class FakeShopware5Api:
         def get(self, path):
-            if path == "/shops?limit=500":
+            if path == "/shops?limit=500&start=0":
                 return {
                     "data": [
                         {"id": 3, "locale": {"locale": "de_DE"}},
@@ -542,6 +542,37 @@ class Shopware5ItalianTranslationImportServiceTest(SimpleTestCase):
         self.assertEqual(summary["missing_translation"], 1)
         self.assertEqual(product.name_it_it, "Bestehende Übersetzung")
         product.save.assert_not_called()
+
+    def test_import_finds_italian_shop_by_category_root_when_locale_is_missing(self):
+        product = SimpleNamespace(
+            erp_nr="581000",
+            name_it_it="",
+            description_short_it_it="",
+            description_it_it="",
+            unit_it_it="",
+            save=MagicMock(),
+        )
+        api = self.FakeShopware5Api()
+
+        def get(path):
+            if path == "/shops?limit=500&start=0":
+                return {"data": [{"id": 7, "categoryId": 1074}]}
+            if path == "/categories?limit=500&start=0":
+                return {
+                    "data": [
+                        {"id": 1, "name": "Shopware", "parentId": None},
+                        {"id": 1074, "name": "Italien", "parentId": 1},
+                    ]
+                }
+            raise AssertionError(f"Unexpected request: {path}")
+
+        api.get = get
+        service = Shopware5ItalianTranslationImportService(api_service=api)
+
+        summary = service.import_products([product])
+
+        self.assertEqual(summary["updated"], 1)
+        self.assertEqual(product.name_it_it, "Cartella A4")
 
 
 class Shopware5CategoryMappingServiceTest(SimpleTestCase):
