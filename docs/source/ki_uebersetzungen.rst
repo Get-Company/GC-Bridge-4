@@ -12,6 +12,10 @@ Funktionsweise
   Originalwerts gespeichert.
 - Ein naechster Scan uebersetzt nur fehlende, fehlgeschlagene oder geaenderte
   Quellwerte erneut.
+- Zusaetzlich wird ein Fingerprint der Uebersetzungskonfiguration gespeichert.
+  Werden Prompt, Sprachhinweise, Quellsprache, Leerwert-Verhalten oder der
+  ausgewaehlte Provider bzw. dessen Modell geaendert, werden auch unveraenderte
+  Quellwerte beim naechsten Scan erneut uebersetzt.
 - Bei geleertem deutschen Quellwert werden Zielwerte standardmaessig ebenfalls
   geleert. Das Verhalten ist in der Konfiguration abschaltbar.
 - HTML wird nicht vom Modell erzeugt: Tags, technische Attribute, Klassen,
@@ -30,6 +34,17 @@ System-Prompt, eine Benutzer-Prompt-Vorlage und die Sprachvarianten-Hinweise.
 Die Standardvorgabe fuer ``ch-de`` verlangt echten schweizerdeutschen Dialekt;
 die anderen Zielsprachen verwenden die jeweilige Hochsprache. Diese Hinweise
 koennen dort pro Sprachcode angepasst werden.
+
+Shopware-Export
+---------------
+
+Eine erfolgreich geschriebene Produktuebersetzung startet ausschliesslich einen
+Shopware-6-Produktsync. Der SW6-Payload enthaelt fuer jede dort vorhandene,
+passende Locale (``en-*``, ``de-CH``, ``de-IT``, ``it-IT``) einen nativen
+``translations``-Eintrag mit Name, Beschreibung und Verpackungseinheit. SW5
+und Microtech erhalten keine KI-Uebersetzungen. Eine Kurzbeschreibung besitzt
+in der SW6-Produktentitaet kein eigenes Standardfeld und wird deshalb nicht
+exportiert.
 
 Ollama auf dem Arbeits-PC im LAN bereitstellen
 ----------------------------------------------

@@ -274,6 +274,12 @@ class AITranslationState(BaseModel):
     source_field = models.CharField(max_length=120, verbose_name=_("Quellfeld"))
     target_language = models.CharField(max_length=16, verbose_name=_("Zielsprache"))
     source_hash = models.CharField(max_length=64, verbose_name=_("Quell-Hash"))
+    configuration_hash = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        verbose_name=_("Konfigurations-Hash"),
+    )
     status = models.CharField(
         max_length=16,
         choices=Status.choices,

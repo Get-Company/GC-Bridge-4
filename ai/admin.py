@@ -204,7 +204,7 @@ class AITranslationStateAdmin(BaseAdmin):
     list_filter = ("status", "target_language", "configuration", "content_type")
     actions_detail = ("retry_translation_detail",)
     readonly_fields = BaseAdmin.readonly_fields + (
-        "configuration", "content_type", "object_id", "source_field", "target_language", "source_hash", "status",
+        "configuration", "content_type", "object_id", "source_field", "target_language", "source_hash", "configuration_hash", "status",
         "attempt_count", "celery_task_id", "translated_at", "last_error", "target_object",
     )
     fieldsets = (
@@ -212,7 +212,7 @@ class AITranslationStateAdmin(BaseAdmin):
             "fields": ("target_object", "configuration", "source_field", "target_language", "status", "translated_at"),
         }),
         ("Diagnose", {
-            "fields": ("content_type", "object_id", "source_hash", "attempt_count", "celery_task_id", "last_error", "created_at", "updated_at"),
+            "fields": ("content_type", "object_id", "source_hash", "configuration_hash", "attempt_count", "celery_task_id", "last_error", "created_at", "updated_at"),
             "classes": ("collapse",),
         }),
     )

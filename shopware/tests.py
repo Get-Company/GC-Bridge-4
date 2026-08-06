@@ -24,7 +24,9 @@ from products.models import (
 )
 from shopware.management.commands.shopware_sync_products import (
     Command as ShopwareSyncProductsCommand,
+    _build_product_translations,
     _build_product_sync_payload,
+    _shopware_translation_language_ids,
 )
 from shopware.management.commands.shopware_force_product_image_uploads import Command as ForceProductImageUploadsCommand
 from shopware.models import ShopwareSettings
@@ -68,6 +70,75 @@ class Shopware6ProductStockPayloadTest(SimpleTestCase):
         )
 
         self.assertEqual(payload["stock"], 91)
+
+
+class Shopware6ProductTranslationPayloadTest(SimpleTestCase):
+    def test_payload_contains_native_sw6_translations_for_available_locales(self):
+        product = SimpleNamespace(
+            name_en="Folder",
+            description_en="<p>English text</p>",
+            unit_en="piece",
+            name_ch_de="Ordnerli",
+            description_ch_de="",
+            unit_ch_de="",
+            name_it_de="",
+            description_it_de="",
+            unit_it_de="",
+            name_it_it="Cartella",
+            description_it_it="<p>Testo italiano</p>",
+            unit_it_it="pezzo",
+        )
+
+        translations = _build_product_translations(
+            product=product,
+            translation_language_ids={
+                "en": ["language-en"],
+                "ch-de": ["language-ch"],
+                "it-it": ["language-it"],
+            },
+        )
+
+        self.assertEqual(
+            translations,
+            [
+                {
+                    "languageId": "language-en",
+                    "name": "Folder",
+                    "description": "<p>English text</p>",
+                    "packUnit": "piece",
+                },
+                {"languageId": "language-ch", "name": "Ordnerli"},
+                {
+                    "languageId": "language-it",
+                    "name": "Cartella",
+                    "description": "<p>Testo italiano</p>",
+                    "packUnit": "pezzo",
+                },
+            ],
+        )
+
+    def test_language_lookup_maps_shopware_locales_to_django_languages(self):
+        service = MagicMock()
+        service.request_post.return_value = {
+            "data": [
+                {"id": "language-en", "locale": {"code": "en-GB"}},
+                {"id": "language-ch", "locale": {"code": "de-CH"}},
+                {"id": "language-it-de", "locale": {"code": "de-IT"}},
+                {"id": "language-it", "locale": {"code": "it-IT"}},
+            ]
+        }
+
+        language_ids = _shopware_translation_language_ids(service)
+
+        self.assertEqual(
+            language_ids,
+            {
+                "en": ["language-en"],
+                "ch-de": ["language-ch"],
+                "it-de": ["language-it-de"],
+                "it-it": ["language-it"],
+            },
+        )
 
 
 class ShopwareVariantStockPayloadTest(SimpleTestCase):

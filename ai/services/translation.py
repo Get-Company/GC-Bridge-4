@@ -17,6 +17,8 @@ from modeltranslation.utils import build_localized_fieldname
 
 from ai.models import AITranslationConfig, AITranslationState
 from core.services import BaseService
+from products.models import Product, ProductSyncJob
+from products.services import ProductAutoSyncService, disable_product_auto_sync
 
 from .provider import AIProviderService
 
@@ -67,6 +69,9 @@ class AITranslationService(BaseService):
     """Queue and execute deterministic translations for modeltranslation fields."""
 
     model = AITranslationState
+    product_translation_sync_targets = (
+        ProductSyncJob.Target.SHOPWARE,
+    )
 
     def __init__(self) -> None:
         super().__init__()
@@ -91,6 +96,7 @@ class AITranslationService(BaseService):
         target_languages = tuple(language for language in available_languages if language != source_language)
         queued_state_ids: list[int] = []
         batch_size = max(int(configuration.batch_size), 1)
+        configuration_hash = self.configuration_fingerprint(configuration)
 
         for model, source_fields in self._iter_registered_text_models():
             if len(queued_state_ids) >= batch_size:
@@ -123,6 +129,7 @@ class AITranslationService(BaseService):
                             target_language=target_language,
                             source_value=source_value,
                             source_hash=source_hash,
+                            configuration_hash=configuration_hash,
                             state=state,
                         )
                         if state_id is not None:
@@ -160,18 +167,21 @@ class AITranslationService(BaseService):
 
             source_value = self._source_value(target, state)
             current_source_hash = self.source_hash(source_value)
-            if current_source_hash != state.source_hash:
+            current_configuration_hash = self.configuration_fingerprint(state.configuration)
+            if current_source_hash != state.source_hash or current_configuration_hash != state.configuration_hash:
                 state.source_hash = current_source_hash
-                state.status = self.model.Status.PENDING
-                state.last_error = "Quelltext hat sich vor der Verarbeitung geaendert."
-                state.save(update_fields=("source_hash", "status", "last_error", "updated_at"))
-                return state
+                state.configuration_hash = current_configuration_hash
 
             state.status = self.model.Status.RUNNING
             state.attempt_count += 1
             state.last_error = ""
-            state.save(update_fields=("status", "attempt_count", "last_error", "updated_at"))
+            state.save(
+                update_fields=(
+                    "source_hash", "configuration_hash", "status", "attempt_count", "last_error", "updated_at",
+                )
+            )
             processing_source_hash = state.source_hash
+            processing_configuration_hash = state.configuration_hash
 
         try:
             if not source_value:
@@ -195,21 +205,38 @@ class AITranslationService(BaseService):
 
             current_source_value = self._source_value(target, state)
             current_source_hash = self.source_hash(current_source_value)
+            current_configuration_hash = self.configuration_fingerprint(state.configuration)
             if (
                 state.source_hash != processing_source_hash
                 or current_source_hash != processing_source_hash
+                or state.configuration_hash != processing_configuration_hash
+                or current_configuration_hash != processing_configuration_hash
             ):
                 state.source_hash = current_source_hash
+                state.configuration_hash = current_configuration_hash
                 state.status = self.model.Status.PENDING
-                state.last_error = "Quelltext hat sich waehrend der Uebersetzung geaendert."
-                state.save(update_fields=("source_hash", "status", "last_error", "updated_at"))
+                state.last_error = "Quelltext oder Uebersetzungskonfiguration hat sich waehrend der Verarbeitung geaendert."
+                state.save(
+                    update_fields=("source_hash", "configuration_hash", "status", "last_error", "updated_at")
+                )
                 return state
 
             if result is not None:
                 target_field = build_localized_fieldname(state.source_field, state.target_language)
                 if self._field_value(target, target_field) != result:
                     setattr(target, target_field, result)
-                    target.save(update_fields=(target_field, "updated_at"))
+                    if isinstance(target, Product):
+                        # A regular Product.save() queues all default targets.
+                        # Translation fields are SW6-only content, so write them
+                        # to that system explicitly instead.
+                        with disable_product_auto_sync():
+                            target.save(update_fields=(target_field, "updated_at"))
+                        self._enqueue_product_translation_sync(
+                            product_id=target.pk,
+                            target_field=target_field,
+                        )
+                    else:
+                        target.save(update_fields=(target_field, "updated_at"))
 
             state.status = self.model.Status.SUCCEEDED
             state.translated_at = timezone.now()
@@ -217,9 +244,39 @@ class AITranslationService(BaseService):
             state.save(update_fields=("status", "translated_at", "last_error", "updated_at"))
             return state
 
+    def _enqueue_product_translation_sync(self, *, product_id: int, target_field: str) -> None:
+        """Schedule only the Shopware systems after a product translation."""
+
+        def enqueue_after_commit() -> None:
+            ProductAutoSyncService().enqueue_product_sync(
+                product_id=product_id,
+                changed_fields=[target_field],
+                trigger="ai_translation",
+                targets=self.product_translation_sync_targets,
+            )
+
+        transaction.on_commit(enqueue_after_commit)
+
     @classmethod
     def source_hash(cls, source_value: str) -> str:
         return hashlib.sha256(source_value.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def configuration_fingerprint(configuration: AITranslationConfig) -> str:
+        """Return the configuration parts that can change a translation result."""
+        provider = configuration.provider
+        payload = {
+            "source_language": configuration.source_language,
+            "clear_target_on_empty_source": configuration.clear_target_on_empty_source,
+            "system_prompt": configuration.system_prompt,
+            "user_prompt_template": configuration.user_prompt_template,
+            "locale_instructions": configuration.locale_instructions or {},
+            "provider_id": configuration.provider_id,
+            "provider_model_name": provider.model_name,
+            "provider_base_url": provider.base_url,
+        }
+        serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
+        return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
     @classmethod
     def segment_html_text(cls, source_value: str) -> SegmentedText:
@@ -296,12 +353,21 @@ class AITranslationService(BaseService):
         target_language: str,
         source_value: str,
         source_hash: str,
+        configuration_hash: str,
         state: AITranslationState | None,
     ) -> int | None:
         if state is not None:
-            if state.source_hash == source_hash and state.status == self.model.Status.SUCCEEDED:
+            if (
+                state.source_hash == source_hash
+                and state.configuration_hash == configuration_hash
+                and state.status == self.model.Status.SUCCEEDED
+            ):
                 return None
-            if state.source_hash == source_hash and state.status == self.model.Status.RUNNING:
+            if (
+                state.source_hash == source_hash
+                and state.configuration_hash == configuration_hash
+                and state.status == self.model.Status.RUNNING
+            ):
                 return None
 
         if not source_value and state is None:
@@ -317,12 +383,15 @@ class AITranslationService(BaseService):
                     defaults={
                         "configuration": configuration,
                         "source_hash": source_hash,
+                        "configuration_hash": configuration_hash,
                         "status": self.model.Status.PENDING,
                     },
                 )
-                if not created and state.source_hash == source_hash and state.status in (
-                    self.model.Status.SUCCEEDED,
-                    self.model.Status.RUNNING,
+                if (
+                    not created
+                    and state.source_hash == source_hash
+                    and state.configuration_hash == configuration_hash
+                    and state.status in (self.model.Status.SUCCEEDED, self.model.Status.RUNNING)
                 ):
                     return None
             except IntegrityError:
@@ -332,33 +401,36 @@ class AITranslationService(BaseService):
                     source_field=source_field,
                     target_language=target_language,
                 )
-                if state.source_hash == source_hash and state.status in (
-                    self.model.Status.SUCCEEDED,
-                    self.model.Status.RUNNING,
+                if (
+                    state.source_hash == source_hash
+                    and state.configuration_hash == configuration_hash
+                    and state.status in (self.model.Status.SUCCEEDED, self.model.Status.RUNNING)
                 ):
                     return None
 
         if not source_value and not configuration.clear_target_on_empty_source:
             state.configuration = configuration
             state.source_hash = source_hash
+            state.configuration_hash = configuration_hash
             state.status = self.model.Status.SUCCEEDED
             state.translated_at = timezone.now()
             state.last_error = "Quelltext ist leer; Zieltext wurde gemaess Konfiguration beibehalten."
             state.save(
                 update_fields=(
-                    "configuration", "source_hash", "status", "translated_at", "last_error", "updated_at",
+                    "configuration", "source_hash", "configuration_hash", "status", "translated_at", "last_error", "updated_at",
                 )
             )
             return None
 
         state.configuration = configuration
         state.source_hash = source_hash
+        state.configuration_hash = configuration_hash
         state.status = self.model.Status.PENDING
         state.celery_task_id = ""
         state.last_error = ""
         state.save(
             update_fields=(
-                "configuration", "source_hash", "status", "celery_task_id", "last_error", "updated_at",
+                "configuration", "source_hash", "configuration_hash", "status", "celery_task_id", "last_error", "updated_at",
             )
         )
         return state.pk

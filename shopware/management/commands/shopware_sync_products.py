@@ -20,6 +20,15 @@ from shopware.services import ProductMediaSyncService, ProductService
 DEFAULT_TAX_ID = "d391e13bdd95404a885f4ad28ea218e0"
 REDUCED_TAX_ID = "be66a53eae3a49829f4a8c5959535501"
 
+# django-modeltranslation language code -> the locale configured in Shopware 6.
+# English may have a country suffix (for example en-GB), therefore it is matched
+# by language prefix in _translation_language_for_locale().
+_TRANSLATION_LANGUAGES_BY_LOCALE = {
+    "de_ch": "ch-de",
+    "de_it": "it-de",
+    "it_it": "it-it",
+}
+
 
 def _get_admin_user_id() -> int | None:
     user = get_user_model().objects.filter(is_superuser=True).order_by("id").first()
@@ -184,6 +193,89 @@ def _resolve_product_name(product: Product) -> str:
     )
 
 
+def _translation_language_for_locale(locale_code: object) -> str:
+    normalized = str(locale_code or "").strip().lower().replace("-", "_")
+    if normalized == "en" or normalized.startswith("en_"):
+        return "en"
+    return _TRANSLATION_LANGUAGES_BY_LOCALE.get(normalized, "")
+
+
+def _entity_value(entity: object, field_name: str) -> object:
+    if not isinstance(entity, dict):
+        return None
+    if field_name in entity:
+        return entity.get(field_name)
+    attributes = entity.get("attributes")
+    return attributes.get(field_name) if isinstance(attributes, dict) else None
+
+
+def _language_locale_code(entity: object) -> str:
+    locale = _entity_value(entity, "locale")
+    if isinstance(locale, dict):
+        code = _entity_value(locale, "code")
+        if code:
+            return str(code)
+    return str(_entity_value(entity, "localeCode") or "")
+
+
+def _shopware_translation_language_ids(service: ProductService) -> dict[str, list[str]]:
+    """Find Shopware language IDs for the Django translation locales once per run."""
+    language_ids: dict[str, list[str]] = {}
+    page = 1
+    limit = 500
+    while True:
+        response = service.request_post(
+            "/search/language",
+            payload={
+                "page": page,
+                "limit": limit,
+                "total-count-mode": 1,
+                "associations": {"locale": {}},
+            },
+        )
+        rows = response.get("data") if isinstance(response, dict) else []
+        if not isinstance(rows, list):
+            raise ValueError("Shopware6 returned an invalid language response.")
+        for row in rows:
+            language_id = str(_entity_value(row, "id") or "").strip()
+            language = _translation_language_for_locale(_language_locale_code(row))
+            if language and language_id:
+                language_ids.setdefault(language, []).append(language_id)
+        if len(rows) < limit:
+            break
+        page += 1
+    return language_ids
+
+
+def _build_product_translations(
+    *,
+    product: Product,
+    translation_language_ids: dict[str, list[str]] | None,
+) -> list[dict]:
+    """Build native SW6 product translations, keeping only translated values."""
+    if not translation_language_ids:
+        return []
+
+    field_mapping = {
+        "name": "name",
+        "description": "description",
+        "unit": "packUnit",
+    }
+    translations: list[dict] = []
+    for language, language_ids in translation_language_ids.items():
+        suffix = language.replace("-", "_")
+        values = {
+            target_field: str(value)
+            for source_field, target_field in field_mapping.items()
+            if (value := getattr(product, f"{source_field}_{suffix}", None)) is not None and str(value).strip()
+        }
+        if not values:
+            continue
+        for language_id in language_ids:
+            translations.append({"languageId": language_id, **values})
+    return translations
+
+
 def _build_custom_search_keywords(product: Product) -> list[str]:
     """Extra storefront search terms from the linked Mappei products.
 
@@ -228,7 +320,20 @@ def _prefetch_sync_queryset(products):
             "name",
             "name_de",
             "name_en",
+            "name_ch_de",
+            "name_it_de",
+            "name_it_it",
             "description",
+            "description_de",
+            "description_en",
+            "description_ch_de",
+            "description_it_de",
+            "description_it_it",
+            "unit_de",
+            "unit_en",
+            "unit_ch_de",
+            "unit_it_de",
+            "unit_it_it",
             "is_active",
             "factor",
             "unit",
@@ -251,6 +356,7 @@ def _build_product_sync_payload(
     channels: list[ShopwareSettings],
     admin_user_id: int | None,
     content_type_id: int | None,
+    translation_language_ids: dict[str, list[str]] | None = None,
 ) -> dict:
     prices_by_channel = {
         price.sales_channel_id: price
@@ -267,6 +373,12 @@ def _build_product_sync_payload(
         payload["id"] = effective_sku
     if product.description is not None:
         payload["description"] = product.description
+    translations = _build_product_translations(
+        product=product,
+        translation_language_ids=translation_language_ids,
+    )
+    if translations:
+        payload["translations"] = translations
     custom_search_keywords = _build_custom_search_keywords(product)
     if custom_search_keywords:
         payload["customSearchKeywords"] = custom_search_keywords
@@ -454,6 +566,12 @@ class Command(MonitoredBaseCommand):
                 qs = qs[:limit]
 
             service = ProductService()
+            translation_language_ids = _shopware_translation_language_ids(service)
+            if not translation_language_ids:
+                logger.warning(
+                    "Shopware6 has no configured language matching the Django translation locales; "
+                    "the product sync contains no translations.",
+                )
             media_sync_service = ProductMediaSyncService()
             admin_user_id = _get_admin_user_id()
             content_type_id = ContentType.objects.get_for_model(Product).id if admin_user_id else None
@@ -507,6 +625,7 @@ class Command(MonitoredBaseCommand):
                         channels=channels,
                         admin_user_id=admin_user_id,
                         content_type_id=content_type_id,
+                        translation_language_ids=translation_language_ids,
                     )
 
                     if effective_sku:
@@ -669,6 +788,7 @@ class Command(MonitoredBaseCommand):
                                         channels=channels,
                                         admin_user_id=admin_user_id,
                                         content_type_id=content_type_id,
+                                        translation_language_ids=translation_language_ids,
                                     )
                                 )
                                 image_names = []

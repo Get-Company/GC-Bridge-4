@@ -207,6 +207,8 @@ class AITranslationServiceTest(TestCase):
         self.assertEqual(state.status, AITranslationState.Status.SUCCEEDED)
         self.assertEqual(mock_rewrite.call_args.kwargs["temperature"], 0)
         self.assertEqual(mock_rewrite.call_args.kwargs["response_format"], {"type": "json_object"})
+        translation_syncs = ProductSyncJob.objects.filter(trigger="ai_translation")
+        self.assertEqual(list(translation_syncs.values_list("target", flat=True)), [ProductSyncJob.Target.SHOPWARE])
 
     @patch(
         "ai.services.translation.AIProviderService.rewrite_text_with_response",
@@ -226,6 +228,32 @@ class AITranslationServiceTest(TestCase):
 
         self.assertNotIn(state.pk, queued_again)
         mock_rewrite.assert_called_once()
+
+    @patch(
+        "ai.services.translation.AIProviderService.rewrite_text_with_response",
+        return_value=(
+            '{"T0001": "Hello", "T0002": "world"}',
+            '{"choices": [{"message": {"content": "..."}}]}',
+        ),
+    )
+    def test_changed_translation_configuration_requeues_unchanged_source(self, _mock_rewrite):
+        state = self._queue_description_en()
+        with patch("products.tasks.process_product_sync_job.delay") as mock_sync_task:
+            mock_sync_task.return_value.id = "sync-config"
+            with self.captureOnCommitCallbacks(execute=True):
+                AITranslationService().translate_state(state_id=state.pk)
+
+        state.refresh_from_db()
+        previous_configuration_hash = state.configuration_hash
+        self.configuration.system_prompt = f"{self.configuration.system_prompt}\nNeue verbindliche Regel."
+        self.configuration.save(update_fields=("system_prompt", "updated_at"))
+
+        queued_again = AITranslationService().queue_pending_translations()
+
+        state.refresh_from_db()
+        self.assertIn(state.pk, queued_again)
+        self.assertEqual(state.status, AITranslationState.Status.PENDING)
+        self.assertNotEqual(state.configuration_hash, previous_configuration_hash)
 
     @patch(
         "ai.services.translation.AIProviderService.rewrite_text_with_response",
