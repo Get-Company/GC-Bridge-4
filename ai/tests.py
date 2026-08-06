@@ -1,3 +1,5 @@
+import json
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.contrib.admin.sites import AdminSite
@@ -7,8 +9,8 @@ from django.test import RequestFactory, SimpleTestCase, TestCase
 from django.urls import reverse
 
 from ai.admin import AIRewriteJobAdmin
-from ai.models import AIProviderConfig, AIRewriteJob, AIRewritePrompt
-from ai.services import AIRewriteService
+from ai.models import AIProviderConfig, AIRewriteJob, AIRewritePrompt, AITranslationConfig, AITranslationState
+from ai.services import AIRewriteService, AITranslationService
 from ai.services.provider import AIProviderService
 from products.models import (
     Category,
@@ -54,6 +56,81 @@ class AIProviderServiceTest(SimpleTestCase):
 
         self.assertEqual(result, "Teil 1 Teil 2")
 
+    @patch("ai.services.provider.urllib.request.urlopen")
+    def test_local_provider_allows_empty_api_key_and_structured_response(self, mock_urlopen):
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            @staticmethod
+            def read():
+                return b'{"choices": [{"message": {"content": "{}"}}]}'
+
+        mock_urlopen.return_value = Response()
+        provider = SimpleNamespace(
+            name="Ollama im LAN",
+            api_key="",
+            base_url="http://10.0.0.42:11434/v1",
+            model_name="translategemma:12b",
+            temperature=0,
+            timeout_seconds=60,
+        )
+
+        result = AIProviderService().rewrite_text(
+            provider=provider,
+            system_prompt="System",
+            user_prompt="User",
+            response_format={"type": "json_object"},
+        )
+
+        request = mock_urlopen.call_args.args[0]
+        payload = json.loads(request.data.decode("utf-8"))
+        self.assertEqual(result, "{}")
+        self.assertFalse(request.has_header("Authorization"))
+        self.assertEqual(payload["response_format"], {"type": "json_object"})
+
+
+class AITranslationMarkupTest(SimpleTestCase):
+    def test_html_markup_and_non_human_content_stay_unchanged(self):
+        segmented = AITranslationService.segment_html_text(
+            '<p class="lead"> Hallo <a href="/angebot" style="color:red">Welt</a></p><code>SKU-1</code>'
+        )
+
+        self.assertEqual(
+            [(segment.identifier, segment.source_text) for segment in segmented.segments],
+            [("T0001", "Hallo"), ("T0002", "Welt")],
+        )
+        self.assertEqual(
+            segmented.render({"T0001": "Hello", "T0002": "world"}),
+            '<p class="lead"> Hello <a href="/angebot" style="color:red">world</a></p><code>SKU-1</code>',
+        )
+
+    def test_model_response_requires_the_exact_segment_ids(self):
+        segmented = AITranslationService.segment_html_text("Hallo Welt")
+
+        with self.assertRaisesMessage(ValueError, "Segment-IDs"):
+            AITranslationService._parse_translation_response(
+                response='{"T0002": "Hello world"}',
+                expected_segments=segmented.segments,
+            )
+
+    def test_human_readable_html_attributes_are_translated_but_technical_ones_are_preserved(self):
+        segmented = AITranslationService.segment_html_text(
+            '<img alt="Produktbild" src="/media/product.jpg" class="preview" title="Grossansicht">'
+        )
+
+        self.assertEqual(
+            [(segment.identifier, segment.source_text) for segment in segmented.segments],
+            [("T0001", "Produktbild"), ("T0002", "Grossansicht")],
+        )
+        self.assertEqual(
+            segmented.render({"T0001": "Product image", "T0002": "Large view"}),
+            '<img alt="Product image" src="/media/product.jpg" class="preview" title="Large view">',
+        )
+
 
 class AIModelShapeTest(TestCase):
     def test_prompt_has_only_slim_fields(self):
@@ -82,6 +159,99 @@ class AIModelShapeTest(TestCase):
         for removed in ("content_type", "object_id", "object_repr", "approved_by",
                         "approved_at", "is_archived", "source_field", "target_field"):
             self.assertNotIn(removed, field_names)
+
+
+class AITranslationServiceTest(TestCase):
+    def setUp(self):
+        self.provider = AIProviderConfig.objects.create(
+            name="TranslateGemma", model_name="translategemma:12b", api_key=""
+        )
+        self.configuration = AITranslationConfig.objects.create(
+            name="Automatische Uebersetzungen",
+            provider=self.provider,
+            batch_size=100,
+        )
+        self.product = Product.objects.create(
+            erp_nr="TRANS-1",
+            name="Tisch",
+            name_de="Tisch",
+            description_de='<p class="lead">Hallo <strong>Welt</strong></p>',
+        )
+
+    def _queue_description_en(self):
+        AITranslationService().queue_pending_translations()
+        return AITranslationState.objects.get(
+            object_id=self.product.pk,
+            source_field="description",
+            target_language="en",
+        )
+
+    @patch(
+        "ai.services.translation.AIProviderService.rewrite_text_with_response",
+        return_value=(
+            '{"T0001": "Hello", "T0002": "world"}',
+            '{"choices": [{"message": {"content": "..."}}]}',
+        ),
+    )
+    def test_changed_source_is_translated_and_html_markup_is_preserved(self, mock_rewrite):
+        state = self._queue_description_en()
+
+        with patch("products.tasks.process_product_sync_job.delay") as mock_sync_task:
+            mock_sync_task.return_value.id = "sync-1"
+            with self.captureOnCommitCallbacks(execute=True):
+                AITranslationService().translate_state(state_id=state.pk)
+
+        state.refresh_from_db()
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.description_en, '<p class="lead">Hello <strong>world</strong></p>')
+        self.assertEqual(state.status, AITranslationState.Status.SUCCEEDED)
+        self.assertEqual(mock_rewrite.call_args.kwargs["temperature"], 0)
+        self.assertEqual(mock_rewrite.call_args.kwargs["response_format"], {"type": "json_object"})
+
+    @patch(
+        "ai.services.translation.AIProviderService.rewrite_text_with_response",
+        return_value=(
+            '{"T0001": "Hello", "T0002": "world"}',
+            '{"choices": [{"message": {"content": "..."}}]}',
+        ),
+    )
+    def test_unchanged_source_hash_is_not_queued_again(self, mock_rewrite):
+        state = self._queue_description_en()
+        with patch("products.tasks.process_product_sync_job.delay") as mock_sync_task:
+            mock_sync_task.return_value.id = "sync-2"
+            with self.captureOnCommitCallbacks(execute=True):
+                AITranslationService().translate_state(state_id=state.pk)
+
+        queued_again = AITranslationService().queue_pending_translations()
+
+        self.assertNotIn(state.pk, queued_again)
+        mock_rewrite.assert_called_once()
+
+    @patch(
+        "ai.services.translation.AIProviderService.rewrite_text_with_response",
+        return_value=(
+            '{"T0001": "Updated", "T0002": "text"}',
+            '{"choices": [{"message": {"content": "..."}}]}',
+        ),
+    )
+    def test_empty_source_clears_existing_target_when_enabled(self, _mock_rewrite):
+        state = self._queue_description_en()
+        with patch("products.tasks.process_product_sync_job.delay") as mock_sync_task:
+            mock_sync_task.return_value.id = "sync-3"
+            with self.captureOnCommitCallbacks(execute=True):
+                AITranslationService().translate_state(state_id=state.pk)
+
+        self.product.description_de = ""
+        self.product.save(update_fields=("description_de", "updated_at"))
+        queued_again = AITranslationService().queue_pending_translations()
+
+        self.assertIn(state.pk, queued_again)
+        with patch("products.tasks.process_product_sync_job.delay") as mock_sync_task:
+            mock_sync_task.return_value.id = "sync-4"
+            with self.captureOnCommitCallbacks(execute=True):
+                AITranslationService().translate_state(state_id=state.pk)
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.description_en, "")
 
 
 class AIRewriteServiceTest(TestCase):

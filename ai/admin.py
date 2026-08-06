@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from django import forms
 from django.contrib import admin, messages
+from django.db import models
 from django.http import HttpResponseRedirect
 from django.urls import path, reverse
 from django.utils.html import format_html
@@ -14,13 +15,13 @@ from unfold.widgets import UnfoldAdminSelect2Widget, UnfoldAdminTextareaWidget
 
 from core.admin import BaseAdmin
 
-from ai.models import AIProviderConfig, AIRewriteJob, AIRewritePrompt
+from ai.models import AIProviderConfig, AIRewriteJob, AIRewritePrompt, AITranslationConfig, AITranslationState
 from ai.rewrite_fields import (
     get_rewriteable_category_field_names,
     get_rewriteable_product_field_names,
 )
 from ai.services import AIRewriteService
-from ai.tasks import run_ai_rewrite_job
+from ai.tasks import queue_ai_translation_scan, run_ai_rewrite_job, run_ai_translation_state
 from products.models import Category, Product
 
 
@@ -148,6 +149,111 @@ class AIProviderConfigAdmin(BaseAdmin):
     list_display = ("name", "model_name", "base_url", "is_active", "created_at")
     search_fields = ("name", "model_name", "base_url")
     list_filter = ("is_active",)
+
+
+@admin.register(AITranslationConfig)
+class AITranslationConfigAdmin(BaseAdmin):
+    list_display = ("name", "provider", "source_language", "batch_size", "is_active", "updated_at")
+    search_fields = ("name", "provider__name", "provider__model_name")
+    list_filter = ("is_active", "provider")
+    actions_detail = ("queue_translation_scan_detail",)
+    formfield_overrides = {
+        **BaseAdmin.formfield_overrides,
+        models.TextField: {"widget": UnfoldAdminTextareaWidget(attrs={"class": "font-mono", "rows": 14})},
+    }
+    fieldsets = (
+        ("Ausfuehrung", {
+            "fields": ("name", "provider", "source_language", "batch_size", "is_active", "clear_target_on_empty_source"),
+            "description": "Es darf nur eine Konfiguration aktiv sein. Der geplante Celery-Task verwendet diese Konfiguration.",
+        }),
+        ("Uebersetzungsanweisungen", {
+            "fields": ("system_prompt", "user_prompt_template", "locale_instructions"),
+            "description": "Die Prompt-Vorlagen und Sprachvarianten-Hinweise sind direkt hier editierbar.",
+        }),
+        ("Zeitstempel", {
+            "fields": BaseAdmin.readonly_fields,
+            "classes": ("collapse",),
+        }),
+    )
+
+    @action(description="Uebersetzungsscan jetzt starten", icon="translate")
+    def queue_translation_scan_detail(self, request, object_id: str):
+        configuration = self.get_object(request, object_id)
+        if not configuration:
+            self.message_user(request, "Uebersetzungskonfiguration nicht gefunden.", level=messages.ERROR)
+            return HttpResponseRedirect(reverse("admin:ai_aitranslationconfig_changelist"))
+        if not configuration.is_active:
+            self.message_user(request, "Nur eine aktive Konfiguration kann einen Scan starten.", level=messages.WARNING)
+            return HttpResponseRedirect(reverse("admin:ai_aitranslationconfig_change", args=(configuration.pk,)))
+        try:
+            async_result = queue_ai_translation_scan.delay(configuration.pk)
+        except Exception as exc:  # noqa: BLE001 - the user needs the enqueue error in the admin.
+            self.message_user(request, f"Uebersetzungsscan konnte nicht eingeplant werden: {exc}", level=messages.ERROR)
+        else:
+            self.message_user(request, f"Uebersetzungsscan wurde gestartet ({async_result.id}).")
+        return HttpResponseRedirect(reverse("admin:ai_aitranslationconfig_change", args=(configuration.pk,)))
+
+
+@admin.register(AITranslationState)
+class AITranslationStateAdmin(BaseAdmin):
+    list_display = (
+        "target_object", "source_field", "target_language", "configuration", "status",
+        "attempt_count", "translated_at", "updated_at",
+    )
+    search_fields = ("source_field", "target_language", "last_error", "configuration__name")
+    list_filter = ("status", "target_language", "configuration", "content_type")
+    actions_detail = ("retry_translation_detail",)
+    readonly_fields = BaseAdmin.readonly_fields + (
+        "configuration", "content_type", "object_id", "source_field", "target_language", "source_hash", "status",
+        "attempt_count", "celery_task_id", "translated_at", "last_error", "target_object",
+    )
+    fieldsets = (
+        ("Uebersetzung", {
+            "fields": ("target_object", "configuration", "source_field", "target_language", "status", "translated_at"),
+        }),
+        ("Diagnose", {
+            "fields": ("content_type", "object_id", "source_hash", "attempt_count", "celery_task_id", "last_error", "created_at", "updated_at"),
+            "classes": ("collapse",),
+        }),
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related("configuration", "content_type")
+
+    @admin.display(description="Zielobjekt")
+    def target_object(self, obj: AITranslationState):
+        model = obj.content_type.model_class()
+        target = model._default_manager.filter(pk=obj.object_id).first() if model else None
+        return str(target) if target is not None else f"Geloescht ({obj.content_type} #{obj.object_id})"
+
+    @action(description="Erneut einplanen", icon="refresh")
+    def retry_translation_detail(self, request, object_id: str):
+        state = self.get_object(request, object_id)
+        if not state:
+            self.message_user(request, "Uebersetzungsstatus nicht gefunden.", level=messages.ERROR)
+            return HttpResponseRedirect(reverse("admin:ai_aitranslationstate_changelist"))
+        if state.status == AITranslationState.Status.RUNNING:
+            self.message_user(request, "Diese Uebersetzung laeuft bereits.", level=messages.WARNING)
+            return HttpResponseRedirect(reverse("admin:ai_aitranslationstate_change", args=(state.pk,)))
+        state.status = AITranslationState.Status.PENDING
+        state.celery_task_id = ""
+        state.last_error = ""
+        state.save(update_fields=("status", "celery_task_id", "last_error", "updated_at"))
+        try:
+            async_result = run_ai_translation_state.delay(state.pk)
+        except Exception as exc:  # noqa: BLE001 - persist the actionable enqueue failure.
+            state.status = AITranslationState.Status.FAILED
+            state.last_error = f"Celery enqueue failed: {exc}"
+            state.save(update_fields=("status", "last_error", "updated_at"))
+            self.message_user(request, f"Uebersetzung konnte nicht eingeplant werden: {exc}", level=messages.ERROR)
+        else:
+            state.celery_task_id = getattr(async_result, "id", "") or ""
+            state.save(update_fields=("celery_task_id", "updated_at"))
+            self.message_user(request, "Uebersetzung wurde erneut eingeplant.")
+        return HttpResponseRedirect(reverse("admin:ai_aitranslationstate_change", args=(state.pk,)))
 
 
 @admin.register(AIRewritePrompt)

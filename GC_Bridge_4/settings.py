@@ -612,6 +612,18 @@ UNFOLD = {
                         "permission": sidebar_model_view_permission("ai", "AIRewritePrompt"),
                     },
                     {
+                        "title": _("Uebersetzungen"),
+                        "icon": "translate",
+                        "link": reverse_lazy("admin:ai_aitranslationconfig_changelist"),
+                        "permission": sidebar_model_view_permission("ai", "AITranslationConfig"),
+                    },
+                    {
+                        "title": _("Uebersetzungsstatus"),
+                        "icon": "history",
+                        "link": reverse_lazy("admin:ai_aitranslationstate_changelist"),
+                        "permission": sidebar_model_view_permission("ai", "AITranslationState"),
+                    },
+                    {
                         "title": _("Provider"),
                         "icon": "cloud",
                         "link": reverse_lazy("admin:ai_aiproviderconfig_changelist"),

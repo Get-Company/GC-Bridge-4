@@ -20,12 +20,14 @@ class AIProviderService(BaseService):
         system_prompt: str,
         user_prompt: str,
         temperature: float | None = None,
+        response_format: dict[str, Any] | None = None,
     ) -> str:
         result_text, _provider_response = self.rewrite_text_with_response(
             provider=provider,
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             temperature=temperature,
+            response_format=response_format,
         )
         return result_text
 
@@ -36,10 +38,9 @@ class AIProviderService(BaseService):
         system_prompt: str,
         user_prompt: str,
         temperature: float | None = None,
+        response_format: dict[str, Any] | None = None,
     ) -> tuple[str, str]:
         api_key = (provider.api_key or "").strip()
-        if not api_key:
-            raise ValueError(f"AI Provider '{provider.name}' hat keinen API-Key.")
 
         payload = {
             "model": provider.model_name,
@@ -49,15 +50,21 @@ class AIProviderService(BaseService):
             ],
             "temperature": float(temperature if temperature is not None else provider.temperature),
         }
+        if response_format:
+            payload["response_format"] = response_format
+
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        }
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+
         body = json.dumps(payload).encode("utf-8")
         request = urllib.request.Request(
             url=f"{provider.base_url.rstrip('/')}/chat/completions",
             data=body,
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-                "Accept": "application/json",
-            },
+            headers=headers,
             method="POST",
         )
         try:

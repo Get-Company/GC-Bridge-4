@@ -14,6 +14,7 @@ Der Fokus liegt auf einem nachvollziehbaren Tagesbetrieb fuer Admins und Operato
    microtech_rulebuilder_feldkatalog
    operator_checkliste
    workflows
+   ki_uebersetzungen
    betrieb_technik
    stoerung_nicht_erreichbar
    reference/index

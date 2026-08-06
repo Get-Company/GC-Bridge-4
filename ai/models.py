@@ -11,6 +11,39 @@ from django.utils.translation import gettext_lazy as _
 from core.models import BaseModel
 
 
+DEFAULT_TRANSLATION_SYSTEM_PROMPT = """Du bist ein praeziser Fachuebersetzer.
+
+Uebersetze ausschliesslich die Werte des uebergebenen JSON-Objekts. Halte dich eng und vollstaendig an den deutschen Originaltext: keine kreativen Umformulierungen, keine Ergaenzungen, keine Kuerzungen, keine SEO-Optimierung und keine Erklaerungen.
+
+Die JSON-Schluessel sind technische Segment-IDs. Sie muessen unveraendert bleiben. Gib ausschliesslich ein JSON-Objekt mit exakt denselben Schluesseln und den uebersetzten Textwerten zurueck. Gib kein Markdown und keinen weiteren Text aus.
+
+HTML-Markup, technische Attribute, CSS-Klassen, Styles, URLs und IDs werden ausserhalb des Modells erhalten. Menschlich lesbare Attribute wie alt, title, aria-label und placeholder koennen als Textsegmente enthalten sein. Die Segmentwerte duerfen deshalb keine HTML-Tags enthalten. HTML-Entities innerhalb eines Segmentwerts (zum Beispiel &nbsp;) muessen unveraendert erhalten bleiben.
+"""
+
+DEFAULT_TRANSLATION_USER_PROMPT_TEMPLATE = """Uebersetze die Textsegmente eines einzelnen Feldes.
+
+Quellsprache: {{ source_language_name }} ({{ source_language }})
+Zielsprache: {{ target_language_name }} ({{ target_language }})
+Sprachvariante: {{ locale_instruction }}
+
+Textsegmente (JSON):
+{{ segments_json }}
+"""
+
+
+def default_translation_locale_instructions() -> dict[str, str]:
+    """Return editable default instructions for the configured target locales."""
+    return {
+        "en": "Verwende die jeweils passende englische Hochsprache.",
+        "ch-de": (
+            "Verwende echten schweizerdeutschen Dialekt, nicht nur Schweizer Hochdeutsch. "
+            "Erfinde dabei keine regionalen Eigenheiten, die im Original nicht angelegt sind."
+        ),
+        "it-de": "Verwende die fuer den italienischen Markt passende deutsche Hochsprache.",
+        "it-it": "Verwende die italienische Hochsprache.",
+    }
+
+
 class AIProviderConfig(BaseModel):
     external_key = models.CharField(max_length=255, blank=True, default="", db_index=True, verbose_name=_("Externe Referenz"))
     name = models.CharField(max_length=120, unique=True, verbose_name=_("Name"))
@@ -38,6 +71,63 @@ class AIProviderConfig(BaseModel):
 
     def __str__(self) -> str:
         return f"{self.name} ({self.model_name})"
+
+
+class AITranslationConfig(BaseModel):
+    """Editable configuration for the automatic, source-hash based translations."""
+
+    name = models.CharField(max_length=120, unique=True, verbose_name=_("Name"))
+    provider = models.ForeignKey(
+        AIProviderConfig,
+        on_delete=models.PROTECT,
+        related_name="translation_configs",
+        verbose_name=_("KI"),
+    )
+    source_language = models.CharField(max_length=16, default="de", verbose_name=_("Quellsprache"))
+    batch_size = models.PositiveIntegerField(
+        default=100,
+        verbose_name=_("Maximale Uebersetzungen pro Lauf"),
+        help_text=_("Begrenzt die Anzahl einzelner Feld-/Sprachuebersetzungen je Scan."),
+    )
+    is_active = models.BooleanField(default=True, verbose_name=_("Aktiv"))
+    clear_target_on_empty_source = models.BooleanField(
+        default=True,
+        verbose_name=_("Ziel bei leerem Quelltext leeren"),
+        help_text=_("Entfernt vorhandene Zieltexte, wenn der deutsche Quelltext geleert wurde."),
+    )
+    system_prompt = models.TextField(
+        default=DEFAULT_TRANSLATION_SYSTEM_PROMPT,
+        verbose_name=_("System-Prompt"),
+    )
+    user_prompt_template = models.TextField(
+        default=DEFAULT_TRANSLATION_USER_PROMPT_TEMPLATE,
+        verbose_name=_("Benutzer-Prompt-Vorlage"),
+        help_text=_(
+            "Verfuegbare Platzhalter: source_language, source_language_name, "
+            "target_language, target_language_name, locale_instruction und segments_json."
+        ),
+    )
+    locale_instructions = models.JSONField(
+        default=default_translation_locale_instructions,
+        blank=True,
+        verbose_name=_("Sprachvarianten-Hinweise"),
+        help_text=_("JSON-Objekt mit Sprachcode als Schluessel und Uebersetzungshinweis als Wert."),
+    )
+
+    class Meta:
+        verbose_name = _("KI-Uebersetzungskonfiguration")
+        verbose_name_plural = _("KI-Uebersetzungskonfigurationen")
+        ordering = ("name",)
+        constraints = [
+            models.UniqueConstraint(
+                fields=("is_active",),
+                condition=Q(is_active=True),
+                name="ai_translation_single_active_config",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return self.name
 
 
 class AIRewritePrompt(BaseModel):
@@ -156,3 +246,60 @@ class AIRewriteJob(BaseModel):
         if self.category_id:
             return self.category
         raise ValueError("AI Rewrite Job hat kein Zielobjekt.")
+
+
+class AITranslationState(BaseModel):
+    """Persistent change marker and execution state for one translated field."""
+
+    class Status(models.TextChoices):
+        PENDING = "pending", _("Wartend")
+        RUNNING = "running", _("Laufend")
+        SUCCEEDED = "succeeded", _("Erfolgreich")
+        FAILED = "failed", _("Fehlgeschlagen")
+        CANCELLED = "cancelled", _("Abgebrochen")
+
+    configuration = models.ForeignKey(
+        AITranslationConfig,
+        on_delete=models.PROTECT,
+        related_name="translation_states",
+        verbose_name=_("Konfiguration"),
+    )
+    content_type = models.ForeignKey(
+        "contenttypes.ContentType",
+        on_delete=models.CASCADE,
+        related_name="ai_translation_states",
+        verbose_name=_("Objekttyp"),
+    )
+    object_id = models.PositiveBigIntegerField(verbose_name=_("Objekt-ID"))
+    source_field = models.CharField(max_length=120, verbose_name=_("Quellfeld"))
+    target_language = models.CharField(max_length=16, verbose_name=_("Zielsprache"))
+    source_hash = models.CharField(max_length=64, verbose_name=_("Quell-Hash"))
+    status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.PENDING,
+        db_index=True,
+        verbose_name=_("Status"),
+    )
+    attempt_count = models.PositiveIntegerField(default=0, verbose_name=_("Versuche"))
+    celery_task_id = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Celery Task-ID"))
+    translated_at = models.DateTimeField(null=True, blank=True, verbose_name=_("Uebersetzt am"))
+    last_error = models.TextField(blank=True, default="", verbose_name=_("Letzter Fehler"))
+
+    class Meta:
+        verbose_name = _("KI-Uebersetzungsstatus")
+        verbose_name_plural = _("KI-Uebersetzungsstatus")
+        ordering = ("status", "updated_at", "id")
+        indexes = [
+            models.Index(fields=("content_type", "object_id")),
+            models.Index(fields=("status", "updated_at")),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=("content_type", "object_id", "source_field", "target_language"),
+                name="ai_translation_state_unique_target",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.content_type} #{self.object_id} · {self.source_field} → {self.target_language}"

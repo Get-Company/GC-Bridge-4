@@ -184,11 +184,20 @@ The admin sidebar contains `System > Celery Tasks` for superusers. It can enqueu
 - `emails.queue_due_campaigns_before_send`
 - `hr.sync_holidays`
 - `hr.year_transition`
+- `ai.queue_translation_scan`
 
 `System > Celery Scheduler` uses `django-celery-beat` and stores schedules in the database.
 After migrations are applied, create `CrontabSchedule` or `IntervalSchedule` entries and attach them to `PeriodicTask` records.
 The registered Celery task dropdown includes the tasks above.
 No periodic tasks are created automatically from static settings; schedules must be managed explicitly in the database.
+
+## KI-Uebersetzungen mit Ollama im LAN
+
+Die automatische Uebersetzung verarbeitet alle in `django-modeltranslation` registrierten Textfelder. Sie vergleicht den deutschen Quellwert mit einem SHA-256-Hash und uebersetzt nur neue oder geaenderte Inhalte. HTML-Markup, Attribute, Klassen und Styles bleiben unveraendert; das Modell erhaelt ausschliesslich Textsegmente und liefert ein JSON-Ergebnis zurueck.
+
+Auf dem Server wird unter `AI > Provider` ein Ollama-Provider mit `http://<IP-DES-ARBEITS-PC>:11434/v1` als Base-URL und `translategemma:12b` als Modell hinterlegt. Ein API-Key ist fuer eine lokale Ollama-Instanz nicht erforderlich. Unter `AI > Uebersetzungen` wird genau eine aktive Konfiguration angelegt; dort sind System-Prompt, Benutzer-Prompt und Sprachvarianten-Hinweise editierbar.
+
+Der taegliche Lauf wird im Admin unter `System > Celery Scheduler` als `PeriodicTask` mit dem Task-Namen `ai.queue_translation_scan` angelegt. Die vollstaendige und sicherheitsrelevante LAN-Einrichtung steht in [docs/source/ki_uebersetzungen.rst](docs/source/ki_uebersetzungen.rst).
 
 ## Adminer
 
