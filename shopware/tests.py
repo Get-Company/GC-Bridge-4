@@ -32,6 +32,7 @@ from shopware.services.order import OrderService
 from shopware.services.product import ProductService
 from shopware.services.product_media import ProductMediaSyncService
 from shopware.services.shopware5 import Shopware5APIError, Shopware5ProductSyncService
+from shopware.services.shopware5_translation_import import Shopware5ItalianTranslationImportService
 from shopware.services.shopware5_category_mapping import (
     Shopware5CategoryMappingService,
     Shopware5CategoryMappingSnapshot,
@@ -467,6 +468,80 @@ class Shopware5ProductSyncServiceTest(SimpleTestCase):
         self.assertEqual(payload["name"], "Basis Name")
         self.assertEqual(payload["description"], "Basis Kurztext")
         self.assertEqual(payload["descriptionLong"], "Basis Langtext")
+
+
+class Shopware5ItalianTranslationImportServiceTest(SimpleTestCase):
+    class FakeShopware5Api:
+        def get(self, path):
+            if path == "/shops?limit=500":
+                return {
+                    "data": [
+                        {"id": 3, "locale": {"locale": "de_DE"}},
+                        {"id": 7, "locale": {"locale": "it_IT"}},
+                    ]
+                }
+            raise AssertionError(f"Unexpected request: {path}")
+
+        @staticmethod
+        def get_article_by_number(product_number):
+            assert product_number == "581000"
+            return {
+                "translations": [
+                    {
+                        "shopId": 7,
+                        "name": "Cartella A4",
+                        "description": "<p>Testo breve</p>",
+                        "descriptionLong": "<p>Testo lungo</p>",
+                        "packUnit": "Pezzi",
+                    }
+                ]
+            }
+
+    def test_import_saves_italian_translation_fields(self):
+        product = SimpleNamespace(
+            erp_nr="581000",
+            name_it_it="",
+            description_short_it_it="",
+            description_it_it="",
+            unit_it_it="",
+            save=MagicMock(),
+        )
+        service = Shopware5ItalianTranslationImportService(api_service=self.FakeShopware5Api())
+
+        summary = service.import_products([product])
+
+        self.assertEqual(summary["updated"], 1)
+        self.assertEqual(product.name_it_it, "Cartella A4")
+        self.assertEqual(product.description_short_it_it, "<p>Testo breve</p>")
+        self.assertEqual(product.description_it_it, "<p>Testo lungo</p>")
+        self.assertEqual(product.unit_it_it, "Pezzi")
+        product.save.assert_called_once_with(
+            update_fields=[
+                "name_it_it",
+                "description_short_it_it",
+                "description_it_it",
+                "unit_it_it",
+            ]
+        )
+
+    def test_import_keeps_existing_values_when_no_italian_translation_exists(self):
+        product = SimpleNamespace(
+            erp_nr="581000",
+            name_it_it="Bestehende Übersetzung",
+            description_short_it_it="",
+            description_it_it="",
+            unit_it_it="",
+            save=MagicMock(),
+        )
+        api = self.FakeShopware5Api()
+        api.get_article_by_number = lambda _product_number: {"translations": []}
+        service = Shopware5ItalianTranslationImportService(api_service=api)
+
+        summary = service.import_products([product])
+
+        self.assertEqual(summary["missing_translation"], 1)
+        self.assertEqual(product.name_it_it, "Bestehende Übersetzung")
+        product.save.assert_not_called()
 
 
 class Shopware5CategoryMappingServiceTest(SimpleTestCase):
