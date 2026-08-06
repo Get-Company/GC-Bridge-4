@@ -10,6 +10,7 @@ from products.services.variant_family import ProductVariantFamilyResolverService
 from shopware.models import ShopwareSettings
 from shopware.services.product import ProductService
 from shopware.services.product_media import ProductMediaSyncService
+from shopware.services.translations import ShopwareTranslationService
 
 
 DEFAULT_TAX_ID = "d391e13bdd95404a885f4ad28ea218e0"
@@ -36,6 +37,8 @@ class ShopwareVariantSyncService(BaseService):
         self.product_service = product_service or ProductService()
         self.media_sync_service = ProductMediaSyncService()
         self.resolver = ProductVariantFamilyResolverService()
+        self.translation_service = ShopwareTranslationService()
+        self._translation_language_ids: dict[str, list[str]] | None = None
 
     def preview(self, family: ProductVariantFamily) -> VariantFamilyResolution:
         return self.resolver.resolve(family)
@@ -164,16 +167,14 @@ class ShopwareVariantSyncService(BaseService):
             group_id = group_id or self._stable_id("property-group", group.external_key or group.name)
             group.shopware_id = group_id
             group.save(update_fields=("shopware_id", "updated_at"))
-        self.product_service.bulk_upsert(
-            [
-                {
-                    "id": group_id,
-                    "name": group.name,
-                    "displayType": self._shopware_group_display_type(display_type),
-                }
-            ],
-            entity_name="property_group",
-        )
+        payload = {
+            "id": group_id,
+            "name": group.name,
+            "displayType": self._shopware_group_display_type(display_type),
+        }
+        if translations := self._build_translations(group, {"name": "name"}):
+            payload["translations"] = translations
+        self.product_service.bulk_upsert([payload], entity_name="property_group")
         return group_id
 
     def _ensure_property_value(self, value: PropertyValue, *, group_id: str, display_type: str) -> str:
@@ -205,6 +206,8 @@ class ShopwareVariantSyncService(BaseService):
             "name": value.name,
             "position": value.position,
         }
+        if translations := self._build_translations(value, {"name": "name"}):
+            payload["translations"] = translations
         if display_type == ProductVariantAttribute.DisplayType.IMAGE:
             if not value.image_id:
                 raise ValueError(f"Attributwert '{value}' hat kein Auswahlbild.")
@@ -253,6 +256,11 @@ class ShopwareVariantSyncService(BaseService):
             "taxId": self._tax_id(default_product),
             "categories": [{"id": family.target_category.sw6_id}],
         }
+        if translations := self._build_translations(
+            family,
+            {"name": "name", "description": "description"},
+        ):
+            payload["translations"] = translations
         parent_visibilities = self._parent_visibilities(parent_id=parent_id)
         if parent_visibilities:
             payload["visibilities"] = parent_visibilities
@@ -321,6 +329,15 @@ class ShopwareVariantSyncService(BaseService):
         except Storage.DoesNotExist:
             return 0
         return storage.get_shopware_stock
+
+    def _build_translations(self, instance, field_mapping: dict[str, str]) -> list[dict[str, str]]:
+        if self._translation_language_ids is None:
+            self._translation_language_ids = self.translation_service.language_ids_for(self.product_service)
+        return self.translation_service.build_translations(
+            instance=instance,
+            field_mapping=field_mapping,
+            translation_language_ids=self._translation_language_ids,
+        )
 
     def _remove_stale_child_options(
         self,

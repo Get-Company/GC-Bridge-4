@@ -55,6 +55,21 @@ und Microtech erhalten keine KI-Uebersetzungen. Eine Kurzbeschreibung besitzt
 in der SW6-Produktentitaet kein eigenes Standardfeld und wird deshalb nicht
 exportiert.
 
+Auch die kundenrelevanten Varianteninformationen werden uebersetzt: Name und
+Beschreibung der Variantenfamilie sowie Namen von Attributgruppen und ihren
+Werten. Bei einer geaenderten Sprachfassung startet der Varianten-Sync und
+uebergibt diese Inhalte als native SW6-``translations`` fuer Parent-Produkt,
+Property-Group und Property-Group-Option. Technische Felder, Bilder, Klassen
+und die Variantenlogik bleiben unveraendert.
+
+Kategorien werden fuer Name, Beschreibung, Kurzbeschreibung sowie SEO-Titel,
+SEO-Beschreibung und SEO-Keywords gescannt. Eine KI-Uebersetzung schreibt die
+SW6-Standardfelder Name, Beschreibung und SEO-Metadaten als nativen
+``translations``-Payload zurueck. Die Kurzbeschreibung bleibt in Django
+uebersetzt; die Standard-Kategorie von Shopware 6 hat dafuer kein eigenes
+Feld. Kategorienstruktur, Sichtbarkeit und Produktzuordnungen werden dabei
+nicht veraendert.
+
 Ollama auf dem Arbeits-PC im LAN bereitstellen
 ----------------------------------------------
 

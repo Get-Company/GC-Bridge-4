@@ -1,6 +1,6 @@
 from modeltranslation.translator import TranslationOptions, register
 
-from .models import ArchivedProduct, Category, Product, PropertyGroup, PropertyValue
+from .models import ArchivedProduct, Category, Product, ProductVariantFamily, PropertyGroup, PropertyValue
 
 
 @register(Product)
@@ -38,3 +38,13 @@ class PropertyGroupTranslationOptions(TranslationOptions):
 @register(PropertyValue)
 class PropertyValueTranslationOptions(TranslationOptions):
     fields = ("name",)
+
+
+@register(ProductVariantFamily)
+class ProductVariantFamilyTranslationOptions(TranslationOptions):
+    """Customer-visible content of the Shopware variant parent."""
+
+    fields = (
+        "name",
+        "description",
+    )

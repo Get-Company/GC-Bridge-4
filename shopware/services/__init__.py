@@ -1,9 +1,11 @@
 from .base import ShopwareBaseService
 from .config import ConfShopware6ApiBase
 from .customer import CustomerService
+from .category_translation import ShopwareCategoryTranslationSyncService
 from .order import OrderService
 from .product_media import ProductMediaSyncService
 from .product import ProductService
+from .translations import ShopwareTranslationService
 from .shopware6 import Shopware6Service, Criteria, EqualsFilter, ContainsFilter
 from .shopware5 import Shopware5ProductSyncService
 from .shopware5_category_mapping import Shopware5CategoryMappingService
@@ -16,9 +18,11 @@ __all__ = [
     "ConfShopware6ApiBase",
     "Shopware6Service",
     "ProductService",
+    "ShopwareTranslationService",
     "ProductMediaSyncService",
     "OrderService",
     "CustomerService",
+    "ShopwareCategoryTranslationSyncService",
     "Shopware5ProductSyncService",
     "Shopware5ItalianTranslationImportService",
     "Shopware5CategoryMappingService",

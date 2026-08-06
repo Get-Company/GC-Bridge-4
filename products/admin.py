@@ -3741,8 +3741,16 @@ class ProductVariantFamilyAdminForm(forms.ModelForm):
 
 
 @admin.register(ProductVariantFamily)
-class ProductVariantFamilyAdmin(BaseAdmin):
+class ProductVariantFamilyAdmin(TabbedTranslationAdmin, BaseAdmin):
     form = ProductVariantFamilyAdminForm
+    formfield_overrides = {
+        **getattr(TabbedTranslationAdmin, "formfield_overrides", {}),
+        **BaseAdmin.formfield_overrides,
+    }
+    compressed_fields = BaseAdmin.compressed_fields
+    warn_unsaved_form = BaseAdmin.warn_unsaved_form
+    change_form_show_cancel_button = BaseAdmin.change_form_show_cancel_button
+    list_filter_sheet = BaseAdmin.list_filter_sheet
     list_display = (
         "name",
         "shopware_product_number",
@@ -3752,7 +3760,15 @@ class ProductVariantFamilyAdmin(BaseAdmin):
         "created_at",
     )
     list_filter = (("is_active", BooleanRadioFilter), ("target_category", RelatedDropdownFilter))
-    search_fields = ("name", "slug", "shopware_product_number", "shopware_id", "seo_path")
+    search_fields = (
+        "name",
+        "name_de",
+        "name_en",
+        "slug",
+        "shopware_product_number",
+        "shopware_id",
+        "seo_path",
+    )
     ordering = ("name", "id")
     autocomplete_fields = ("target_category", "default_product")
     filter_horizontal = ("source_categories",)

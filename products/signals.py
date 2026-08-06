@@ -76,9 +76,25 @@ STORAGE_AUTO_SYNC_FIELDS = (
     "virtual_stock",
     "location",
 )
+_VARIANT_TRANSLATION_SUFFIXES = (
+    "de",
+    "en",
+    "ch_de",
+    "it_de",
+    "it_it",
+)
+_PROPERTY_GROUP_TRANSLATION_SYNC_FIELDS = tuple(
+    f"name_{suffix}" for suffix in _VARIANT_TRANSLATION_SUFFIXES
+)
+_VARIANT_FAMILY_TRANSLATION_SYNC_FIELDS = tuple(
+    f"{field}_{suffix}"
+    for field in ("name", "description")
+    for suffix in _VARIANT_TRANSLATION_SUFFIXES
+)
 PROPERTY_GROUP_VARIANT_SYNC_FIELDS = (
     "external_key",
     "name",
+    *_PROPERTY_GROUP_TRANSLATION_SYNC_FIELDS,
 )
 PROPERTY_VALUE_VARIANT_SYNC_FIELDS = (
     "external_key",
@@ -86,6 +102,7 @@ PROPERTY_VALUE_VARIANT_SYNC_FIELDS = (
     "image_id",
     "name",
     "position",
+    *_PROPERTY_GROUP_TRANSLATION_SYNC_FIELDS,
 )
 VARIANT_ATTRIBUTE_SYNC_FIELDS = (
     "display_type",
@@ -102,6 +119,7 @@ VARIANT_FAMILY_SYNC_FIELDS = (
     "shopware_product_number",
     "slug",
     "target_category_id",
+    *_VARIANT_FAMILY_TRANSLATION_SYNC_FIELDS,
 )
 
 

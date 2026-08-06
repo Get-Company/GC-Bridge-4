@@ -701,10 +701,26 @@ class ProductVariantAutoSyncSignalTest(TestCase):
         mock_delay.assert_called_once_with(self.family.pk)
 
     @patch("products.tasks.sync_variant_family_to_shopware.delay")
+    def test_changed_translated_property_group_queues_affected_family_after_commit(self, mock_delay):
+        with self.captureOnCommitCallbacks(execute=True):
+            self.group.name_en = "Color"
+            self.group.save(update_fields=["name_en"])
+
+        mock_delay.assert_called_once_with(self.family.pk)
+
+    @patch("products.tasks.sync_variant_family_to_shopware.delay")
     def test_changed_property_value_queues_affected_family_after_commit(self, mock_delay):
         with self.captureOnCommitCallbacks(execute=True):
             self.value.name = "Dunkelrot"
             self.value.save(update_fields=["name"])
+
+        mock_delay.assert_called_once_with(self.family.pk)
+
+    @patch("products.tasks.sync_variant_family_to_shopware.delay")
+    def test_changed_translated_property_value_queues_affected_family_after_commit(self, mock_delay):
+        with self.captureOnCommitCallbacks(execute=True):
+            self.value.name_en = "Red"
+            self.value.save(update_fields=["name_en"])
 
         mock_delay.assert_called_once_with(self.family.pk)
 
@@ -760,6 +776,14 @@ class ProductVariantAutoSyncSignalTest(TestCase):
         with self.captureOnCommitCallbacks(execute=True):
             self.family.name = "Automatischer Varianten-Sync Neu"
             self.family.save(update_fields=["name"])
+
+        mock_delay.assert_called_once_with(self.family.pk)
+
+    @patch("products.tasks.sync_variant_family_to_shopware.delay")
+    def test_changed_translated_variant_family_queues_itself_after_commit(self, mock_delay):
+        with self.captureOnCommitCallbacks(execute=True):
+            self.family.description_en = "Translated variant family description"
+            self.family.save(update_fields=["description_en"])
 
         mock_delay.assert_called_once_with(self.family.pk)
 
@@ -826,6 +850,27 @@ class ProductVariantAutoSyncTaskTest(TestCase):
                 "parent_id": "shopware-parent-id",
                 "variant_count": 2,
                 "detached_count": 1,
+                "status": "succeeded",
+            },
+        )
+
+    @patch("shopware.services.ShopwareCategoryTranslationSyncService")
+    def test_category_translation_task_uses_the_isolated_shopware_sync(self, mock_service_class):
+        category = Category.objects.create(
+            name="Kategorie",
+            slug="category-translation-task",
+            sw6_id="category-translation-task-id",
+        )
+        mock_service_class.return_value.sync.return_value = True
+
+        result = product_tasks.sync_category_translations_to_shopware(category.pk)
+
+        mock_service_class.return_value.sync.assert_called_once_with(category)
+        self.assertEqual(
+            result,
+            {
+                "category_id": category.pk,
+                "shopware_id": "category-translation-task-id",
                 "status": "succeeded",
             },
         )

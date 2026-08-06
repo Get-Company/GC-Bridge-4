@@ -31,6 +31,7 @@ from shopware.management.commands.shopware_sync_products import (
 from shopware.management.commands.shopware_force_product_image_uploads import Command as ForceProductImageUploadsCommand
 from shopware.models import ShopwareSettings
 from shopware.services.order import OrderService
+from shopware.services.category_translation import ShopwareCategoryTranslationSyncService
 from shopware.services.product import ProductService
 from shopware.services.product_media import ProductMediaSyncService
 from shopware.services.shopware5 import Shopware5APIError, Shopware5ProductSyncService
@@ -138,6 +139,63 @@ class Shopware6ProductTranslationPayloadTest(SimpleTestCase):
                 "it-de": ["language-it-de"],
                 "it-it": ["language-it"],
             },
+        )
+
+
+class Shopware6CategoryTranslationPayloadTest(SimpleTestCase):
+    def test_category_payload_contains_customer_visible_native_translations(self):
+        category = SimpleNamespace(
+            sw6_id="category-id",
+            name_en="Folders",
+            description_en="<p>Folders for documents</p>",
+            meta_title_en="Folders",
+            meta_description_en="Document folders",
+            meta_keywords_en="folder, document",
+            name_ch_de="",
+            description_ch_de="",
+            meta_title_ch_de="",
+            meta_description_ch_de="",
+            meta_keywords_ch_de="",
+            name_it_de="",
+            description_it_de="",
+            meta_title_it_de="",
+            meta_description_it_de="",
+            meta_keywords_it_de="",
+            name_it_it="Cartelle",
+            description_it_it="",
+            meta_title_it_it="",
+            meta_description_it_it="",
+            meta_keywords_it_it="",
+        )
+        product_service = MagicMock()
+        product_service.request_post.return_value = {
+            "data": [
+                {"id": "language-en", "locale": {"code": "en-GB"}},
+                {"id": "language-it", "locale": {"code": "it-IT"}},
+            ]
+        }
+
+        synced = ShopwareCategoryTranslationSyncService(product_service=product_service).sync(category)
+
+        self.assertTrue(synced)
+        product_service.bulk_upsert.assert_called_once_with(
+            [
+                {
+                    "id": "category-id",
+                    "translations": [
+                        {
+                            "languageId": "language-en",
+                            "name": "Folders",
+                            "description": "<p>Folders for documents</p>",
+                            "metaTitle": "Folders",
+                            "metaDescription": "Document folders",
+                            "keywords": "folder, document",
+                        },
+                        {"languageId": "language-it", "name": "Cartelle"},
+                    ],
+                }
+            ],
+            entity_name="category",
         )
 
 
@@ -1647,6 +1705,70 @@ class ShopwareVariantSyncServiceTest(TestCase):
 
         self.assertEqual(result.errors, ("Bilddarstellung für 'Farbe' ohne Auswahlbild: Weiß.",))
         product_service.method_calls.assert_not_called()
+
+    def test_customer_visible_variant_content_uses_native_sw6_translations(self):
+        self.family.shopware_id = "parent-shopware-id"
+        self.family.name_en = "Quick Tabs"
+        self.family.description_en = "Parent product for Quick Tabs"
+        self.size_group.shopware_id = "size-group-id"
+        self.size_group.name_en = "Tab size"
+        self.size.shopware_id = "size-option-id"
+        self.size.name_en = "6 cm"
+        product_service = MagicMock()
+        product_service.request_post.return_value = {
+            "data": [
+                {"id": "language-en", "locale": {"code": "en-GB"}},
+                {"id": "language-ch", "locale": {"code": "de-CH"}},
+            ]
+        }
+
+        service = ShopwareVariantSyncService(product_service=product_service)
+        service._ensure_property_group(self.size_group, display_type=ProductVariantAttribute.DisplayType.TEXT)
+        service._ensure_property_value(
+            self.size,
+            group_id=self.size_group.shopware_id,
+            display_type=ProductVariantAttribute.DisplayType.TEXT,
+        )
+        service._ensure_parent(
+            family=self.family,
+            default_product=self.product,
+            main_variant_id="",
+        )
+
+        property_group_payload = next(
+            call.args[0][0]
+            for call in product_service.bulk_upsert.call_args_list
+            if call.kwargs.get("entity_name") == "property_group"
+        )
+        property_value_payload = next(
+            call.args[0][0]
+            for call in product_service.bulk_upsert.call_args_list
+            if call.kwargs.get("entity_name") == "property_group_option"
+        )
+        parent_payload = next(
+            call.args[0][0]
+            for call in product_service.bulk_upsert.call_args_list
+            if call.kwargs.get("entity_name", "product") == "product"
+        )
+
+        self.assertEqual(
+            property_group_payload["translations"],
+            [{"languageId": "language-en", "name": "Tab size"}],
+        )
+        self.assertEqual(
+            property_value_payload["translations"],
+            [{"languageId": "language-en", "name": "6 cm"}],
+        )
+        self.assertEqual(
+            parent_payload["translations"],
+            [
+                {
+                    "languageId": "language-en",
+                    "name": "Quick Tabs",
+                    "description": "Parent product for Quick Tabs",
+                }
+            ],
+        )
 
     def test_apply_creates_parent_attaches_options_and_detaches_previously_managed_child(self):
         stale_product = Product.objects.create(erp_nr="291004W", name="Alte Quick-Tab-Variante")

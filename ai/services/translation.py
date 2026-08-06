@@ -13,13 +13,14 @@ from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.template import Context, Engine
 from django.utils import timezone
+from loguru import logger
 from modeltranslation import settings as modeltranslation_settings
 from modeltranslation.translator import translator
 from modeltranslation.utils import build_localized_fieldname
 
 from ai.models import AITranslationConfig, AITranslationState
 from core.services import BaseService
-from products.models import Product, ProductSyncJob
+from products.models import Category, Product, ProductSyncJob
 from products.services import ProductAutoSyncService, disable_product_auto_sync
 
 from .provider import AIProviderService
@@ -124,11 +125,19 @@ class AITranslationService(BaseService):
                 source_field: build_localized_fieldname(source_field, source_language)
                 for source_field in source_fields
             }
-            queryset = model._default_manager.only("pk", *localized_source_fields.values()).order_by("pk")
+            queryset = model._default_manager.only(
+                "pk",
+                *source_fields,
+                *localized_source_fields.values(),
+            ).order_by("pk")
 
             for instance in queryset.iterator(chunk_size=200):
-                for source_field, localized_source_field in localized_source_fields.items():
-                    source_value = self._field_value(instance, localized_source_field)
+                for source_field in source_fields:
+                    source_value = self._source_value_for_field(
+                        target=instance,
+                        source_field=source_field,
+                        source_language=source_language,
+                    )
                     source_hash = self.source_hash(source_value)
                     for target_language in target_languages:
                         if len(queued_state_ids) >= batch_size:
@@ -270,6 +279,9 @@ class AITranslationService(BaseService):
                             product_id=target.pk,
                             target_field=target_field,
                         )
+                    elif isinstance(target, Category):
+                        target.save(update_fields=(target_field, "updated_at"))
+                        self._enqueue_category_translation_sync(category_id=target.pk)
                     else:
                         target.save(update_fields=(target_field, "updated_at"))
 
@@ -289,6 +301,24 @@ class AITranslationService(BaseService):
                 trigger="ai_translation",
                 targets=self.product_translation_sync_targets,
             )
+
+        transaction.on_commit(enqueue_after_commit)
+
+    @staticmethod
+    def _enqueue_category_translation_sync(*, category_id: int) -> None:
+        """Schedule the isolated SW6 category-translation payload after commit."""
+
+        def enqueue_after_commit() -> None:
+            from products.tasks import sync_category_translations_to_shopware
+
+            try:
+                sync_category_translations_to_shopware.delay(category_id)
+            except Exception as exc:  # noqa: BLE001 - keep the completed translation when dispatch is unavailable.
+                logger.warning(
+                    "Could not enqueue Shopware category translation sync for category {}: {}",
+                    category_id,
+                    exc,
+                )
 
         transaction.on_commit(enqueue_after_commit)
 
@@ -657,12 +687,29 @@ class AITranslationService(BaseService):
 
     @staticmethod
     def _field_value(instance, field_name: str) -> str:
-        value = getattr(instance, field_name, "")
+        value = instance.get(field_name, "") if isinstance(instance, dict) else getattr(instance, field_name, "")
         return "" if value is None else str(value)
 
     def _source_value(self, target, state: AITranslationState) -> str:
-        source_field = build_localized_fieldname(state.source_field, state.configuration.source_language)
-        return self._field_value(target, source_field)
+        return self._source_value_for_field(
+            target=target,
+            source_field=state.source_field,
+            source_language=state.configuration.source_language,
+        )
+
+    @classmethod
+    def _source_value_for_field(cls, *, target, source_field: str, source_language: str) -> str:
+        localized_field = build_localized_fieldname(source_field, source_language)
+        localized_value = cls._field_value(target, localized_field)
+        if localized_value or source_language != settings.MODELTRANSLATION_DEFAULT_LANGUAGE:
+            return localized_value
+
+        # Modeltranslation adds the localized German columns after older rows
+        # may already exist. Their original, non-localized database column still
+        # contains the customer-visible German text. Use it until the German
+        # source column has been filled, otherwise newly registered fields such
+        # as variant-family content would be treated as empty.
+        return cls._field_value(target.__dict__, source_field)
 
     @staticmethod
     def _get_target(state: AITranslationState, *, lock: bool = False):

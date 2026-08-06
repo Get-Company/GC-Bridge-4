@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth import get_user_model
+from django.contrib.contenttypes.models import ContentType
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.test import RequestFactory, SimpleTestCase, TestCase
 from django.urls import reverse
@@ -19,6 +20,7 @@ from products.models import (
     Product,
     ProductProperty,
     ProductSyncJob,
+    ProductVariantFamily,
     PropertyGroup,
     PropertyValue,
 )
@@ -96,6 +98,38 @@ class AIProviderServiceTest(SimpleTestCase):
 
 
 class AITranslationMarkupTest(SimpleTestCase):
+    def test_scan_discovers_all_registered_customer_translation_fields(self):
+        registered_fields = {
+            model: set(fields)
+            for model, fields in AITranslationService._iter_registered_text_models()
+        }
+
+        self.assertTrue({"name", "description"} <= registered_fields[ProductVariantFamily])
+        self.assertTrue(
+            {
+                "name",
+                "description",
+                "description_short",
+                "meta_title",
+                "meta_description",
+                "meta_keywords",
+            }
+            <= registered_fields[Category]
+        )
+        self.assertEqual(registered_fields[PropertyGroup], {"name"})
+        self.assertEqual(registered_fields[PropertyValue], {"name"})
+
+    def test_empty_default_language_column_falls_back_to_legacy_german_source(self):
+        target = SimpleNamespace(name="Bestehender deutscher Name", name_de="")
+        state = SimpleNamespace(
+            source_field="name",
+            configuration=SimpleNamespace(source_language="de"),
+        )
+
+        source = AITranslationService()._source_value(target, state)
+
+        self.assertEqual(source, "Bestehender deutscher Name")
+
     def test_html_markup_and_non_human_content_stay_unchanged(self):
         segmented = AITranslationService.segment_html_text(
             '<p class="lead"> Hallo <a href="/angebot" style="color:red">Welt</a></p><code>SKU-1</code>'
@@ -303,6 +337,36 @@ class AITranslationServiceTest(TestCase):
                 AITranslationService().translate_state(state_id=state.pk)
         self.product.refresh_from_db()
         self.assertEqual(self.product.description_en, "")
+
+    @patch(
+        "ai.services.translation.AIProviderService.rewrite_text_with_response",
+        return_value=(
+            '{"T0001": "Folders"}',
+            '{"choices": [{"message": {"content": "..."}}]}',
+        ),
+    )
+    @patch("products.tasks.sync_category_translations_to_shopware.delay")
+    def test_category_translation_schedules_a_shopware_only_translation_sync(self, mock_sync_task, _mock_rewrite):
+        category = Category.objects.create(
+            name="Ordner",
+            name_de="Ordner",
+            slug="translation-category",
+            sw6_id="translation-category-id",
+        )
+        AITranslationService().queue_pending_translations()
+        state = AITranslationState.objects.get(
+            content_type=ContentType.objects.get_for_model(Category),
+            object_id=category.pk,
+            source_field="name",
+            target_language="en",
+        )
+
+        with self.captureOnCommitCallbacks(execute=True):
+            AITranslationService().translate_state(state_id=state.pk)
+
+        category.refresh_from_db()
+        self.assertEqual(category.name_en, "Folders")
+        mock_sync_task.assert_called_once_with(category.pk)
 
 
 class AIRewriteServiceTest(TestCase):
