@@ -116,7 +116,7 @@ class AITranslationService(BaseService):
         batch_size = max(int(configuration.batch_size), 1)
         configuration_hash = self.configuration_fingerprint(configuration)
 
-        for model, source_fields in self._iter_registered_text_models():
+        for model, source_fields in self._iter_registered_text_models(configuration=configuration):
             if len(queued_state_ids) >= batch_size:
                 break
 
@@ -134,6 +134,7 @@ class AITranslationService(BaseService):
                 *source_fields,
                 *localized_source_fields.values(),
             ).order_by("pk")
+            queryset = configuration.filter_translation_queryset(queryset, model=model)
 
             for instance in queryset.iterator(chunk_size=200):
                 for source_field in source_fields:
@@ -342,6 +343,8 @@ class AITranslationService(BaseService):
         payload = {
             "translation_pipeline_version": _TRANSLATION_PIPELINE_VERSION,
             "source_language": configuration.source_language,
+            "translation_areas": sorted(configuration.selected_translation_areas()),
+            "record_statuses": sorted(configuration.selected_record_statuses()),
             "clear_target_on_empty_source": configuration.clear_target_on_empty_source,
             "system_prompt": configuration.system_prompt,
             "user_prompt_template": configuration.user_prompt_template,
@@ -679,10 +682,12 @@ class AITranslationService(BaseService):
         return _MANDATORY_OUTPUT_LANGUAGE_RULES.get(target_language, "")
 
     @classmethod
-    def _iter_registered_text_models(cls):
+    def _iter_registered_text_models(cls, *, configuration: AITranslationConfig | None = None):
         seen_models: set[type] = set()
         for model in translator.get_registered_models(abstract=False):
             if model._meta.abstract or model._meta.proxy or model in seen_models:
+                continue
+            if configuration is not None and not configuration.includes_translation_model(model):
                 continue
             options = translator.get_options_for_model(model)
             source_fields = []

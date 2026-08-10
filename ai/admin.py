@@ -144,6 +144,32 @@ class AIRewriteJobAdminForm(forms.ModelForm):
         return cleaned_data
 
 
+class AITranslationConfigAdminForm(forms.ModelForm):
+    """Render the JSON-backed translation scope as explicit selections."""
+
+    translation_areas = forms.MultipleChoiceField(
+        choices=AITranslationConfig.TranslationArea.choices,
+        widget=forms.CheckboxSelectMultiple,
+        label="Uebersetzungsbereiche",
+        help_text="Waehle die Inhalte, die der Uebersetzungsscan verarbeiten soll.",
+    )
+    record_statuses = forms.MultipleChoiceField(
+        choices=AITranslationConfig.RecordStatus.choices,
+        widget=forms.CheckboxSelectMultiple,
+        label="Datensatzstatus",
+        help_text="Datensaetze ohne eigenen Status gelten als aktiv.",
+    )
+
+    class Meta:
+        model = AITranslationConfig
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.initial["translation_areas"] = sorted(self.instance.selected_translation_areas())
+        self.initial["record_statuses"] = sorted(self.instance.selected_record_statuses())
+
+
 @admin.register(AIProviderConfig)
 class AIProviderConfigAdmin(BaseAdmin):
     list_display = ("name", "model_name", "base_url", "is_active", "created_at")
@@ -153,6 +179,7 @@ class AIProviderConfigAdmin(BaseAdmin):
 
 @admin.register(AITranslationConfig)
 class AITranslationConfigAdmin(BaseAdmin):
+    form = AITranslationConfigAdminForm
     list_display = ("name", "provider", "source_language", "batch_size", "status_retention_days", "is_active", "updated_at")
     search_fields = ("name", "provider__name", "provider__model_name")
     list_filter = ("is_active", "provider")
@@ -165,6 +192,10 @@ class AITranslationConfigAdmin(BaseAdmin):
         ("Ausfuehrung", {
             "fields": ("name", "provider", "source_language", "batch_size", "status_retention_days", "is_active", "clear_target_on_empty_source"),
             "description": "Es darf nur eine Konfiguration aktiv sein. Der geplante Celery-Task verwendet diese Konfiguration.",
+        }),
+        ("Uebersetzungsumfang", {
+            "fields": ("translation_areas", "record_statuses"),
+            "description": "Der Scan verarbeitet nur die ausgewaehlten Bereiche und Datensatzstatus.",
         }),
         ("Uebersetzungsanweisungen", {
             "fields": ("system_prompt", "user_prompt_template", "locale_instructions"),

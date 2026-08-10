@@ -368,6 +368,61 @@ class AITranslationServiceTest(TestCase):
         self.assertEqual(category.name_en, "Folders")
         mock_sync_task.assert_called_once_with(category.pk)
 
+    def test_selected_category_area_queues_category_descriptions_without_products(self):
+        self.configuration.translation_areas = [AITranslationConfig.TranslationArea.CATEGORIES]
+        self.configuration.record_statuses = [AITranslationConfig.RecordStatus.ACTIVE]
+        self.configuration.save(update_fields=("translation_areas", "record_statuses", "updated_at"))
+        category = Category.objects.create(
+            name="Regale",
+            name_de="Regale",
+            description_de="Regale fuer das Buero.",
+            slug="translation-category-description",
+        )
+
+        AITranslationService().queue_pending_translations()
+
+        self.assertTrue(
+            AITranslationState.objects.filter(
+                content_type=ContentType.objects.get_for_model(Category),
+                object_id=category.pk,
+                source_field="description",
+                target_language="en",
+            ).exists()
+        )
+        self.assertFalse(
+            AITranslationState.objects.filter(
+                content_type=ContentType.objects.get_for_model(Product),
+            ).exists()
+        )
+
+    def test_selected_archived_status_queues_only_archived_products(self):
+        self.configuration.translation_areas = [AITranslationConfig.TranslationArea.PRODUCTS]
+        self.configuration.record_statuses = [AITranslationConfig.RecordStatus.ARCHIVED]
+        self.configuration.save(update_fields=("translation_areas", "record_statuses", "updated_at"))
+        inactive_product = Product.objects.create(
+            erp_nr="TRANS-INACTIVE",
+            name="Inaktiver Tisch",
+            name_de="Inaktiver Tisch",
+            is_active=False,
+        )
+        archived_product = Product.objects.create(
+            erp_nr="TRANS-ARCHIVED",
+            name="Archivierter Tisch",
+            name_de="Archivierter Tisch",
+            is_archived=True,
+        )
+
+        AITranslationService().queue_pending_translations()
+
+        queued_product_ids = set(
+            AITranslationState.objects.filter(
+                content_type=ContentType.objects.get_for_model(Product),
+            ).values_list("object_id", flat=True)
+        )
+        self.assertEqual(queued_product_ids, {archived_product.pk})
+        self.assertNotIn(inactive_product.pk, queued_product_ids)
+        self.assertNotIn(self.product.pk, queued_product_ids)
+
 
 class AIRewriteServiceTest(TestCase):
     def setUp(self):

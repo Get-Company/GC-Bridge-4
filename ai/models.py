@@ -47,6 +47,29 @@ def default_translation_locale_instructions() -> dict[str, str]:
     }
 
 
+DEFAULT_TRANSLATION_AREAS = (
+    "products",
+    "categories",
+    "variant_families",
+    "properties",
+)
+DEFAULT_TRANSLATION_RECORD_STATUSES = (
+    "active",
+    "inactive",
+    "archived",
+)
+
+
+def default_translation_areas() -> list[str]:
+    """Return all currently supported customer-content areas."""
+    return list(DEFAULT_TRANSLATION_AREAS)
+
+
+def default_translation_record_statuses() -> list[str]:
+    """Return all record statuses so existing configurations keep their scope."""
+    return list(DEFAULT_TRANSLATION_RECORD_STATUSES)
+
+
 class AIProviderConfig(BaseModel):
     external_key = models.CharField(max_length=255, blank=True, default="", db_index=True, verbose_name=_("Externe Referenz"))
     name = models.CharField(max_length=120, unique=True, verbose_name=_("Name"))
@@ -79,6 +102,25 @@ class AIProviderConfig(BaseModel):
 class AITranslationConfig(BaseModel):
     """Editable configuration for the automatic, source-hash based translations."""
 
+    class TranslationArea(models.TextChoices):
+        PRODUCTS = "products", _("Produkttexte")
+        CATEGORIES = "categories", _("Kategorietexte")
+        VARIANT_FAMILIES = "variant_families", _("Variantenfamilien")
+        PROPERTIES = "properties", _("Eigenschaftsgruppen und -werte")
+
+    class RecordStatus(models.TextChoices):
+        ACTIVE = "active", _("Aktive Datensaetze")
+        INACTIVE = "inactive", _("Inaktive Datensaetze")
+        ARCHIVED = "archived", _("Archivierte Datensaetze")
+
+    _translation_area_by_model_label = {
+        "products.product": TranslationArea.PRODUCTS,
+        "products.category": TranslationArea.CATEGORIES,
+        "products.productvariantfamily": TranslationArea.VARIANT_FAMILIES,
+        "products.propertygroup": TranslationArea.PROPERTIES,
+        "products.propertyvalue": TranslationArea.PROPERTIES,
+    }
+
     name = models.CharField(max_length=120, unique=True, verbose_name=_("Name"))
     provider = models.ForeignKey(
         AIProviderConfig,
@@ -87,6 +129,19 @@ class AITranslationConfig(BaseModel):
         verbose_name=_("KI"),
     )
     source_language = models.CharField(max_length=16, default="de", verbose_name=_("Quellsprache"))
+    translation_areas = models.JSONField(
+        default=default_translation_areas,
+        verbose_name=_("Uebersetzungsbereiche"),
+        help_text=_("Legt fest, welche Inhalte der Uebersetzungsscan verarbeitet."),
+    )
+    record_statuses = models.JSONField(
+        default=default_translation_record_statuses,
+        verbose_name=_("Datensatzstatus"),
+        help_text=_(
+            "Legt fest, welche aktiven, inaktiven oder archivierten Datensaetze verarbeitet werden. "
+            "Datensaetze ohne eigenen Status gelten als aktiv."
+        ),
+    )
     batch_size = models.PositiveIntegerField(
         default=100,
         verbose_name=_("Maximale Uebersetzungen pro Lauf"),
@@ -136,6 +191,59 @@ class AITranslationConfig(BaseModel):
 
     def __str__(self) -> str:
         return self.name
+
+    def selected_translation_areas(self) -> frozenset[str]:
+        """Return valid configured areas without trusting persisted JSON blindly."""
+        valid_values = set(self.TranslationArea.values)
+        configured_values = self.translation_areas if isinstance(self.translation_areas, list) else []
+        return frozenset(str(value) for value in configured_values if value in valid_values)
+
+    def selected_record_statuses(self) -> frozenset[str]:
+        """Return valid configured record statuses without trusting persisted JSON blindly."""
+        valid_values = set(self.RecordStatus.values)
+        configured_values = self.record_statuses if isinstance(self.record_statuses, list) else []
+        return frozenset(str(value) for value in configured_values if value in valid_values)
+
+    def includes_translation_model(self, model: type[models.Model]) -> bool:
+        """Return whether the model belongs to one of the selected content areas."""
+        area = self._translation_area_by_model_label.get(model._meta.label_lower)
+        return area in self.selected_translation_areas()
+
+    def filter_translation_queryset(self, queryset, *, model: type[models.Model]):
+        """Limit a translated-model queryset to the selected record statuses."""
+        selected_statuses = self.selected_record_statuses()
+        if not selected_statuses:
+            return queryset.none()
+
+        field_names = {field.name for field in model._meta.get_fields()}
+        has_active_flag = "is_active" in field_names
+        has_archive_flag = "is_archived" in field_names
+        filters: list[Q] = []
+
+        if has_archive_flag and self.RecordStatus.ARCHIVED in selected_statuses:
+            filters.append(Q(is_archived=True))
+
+        if self.RecordStatus.ACTIVE in selected_statuses:
+            active_filter = Q()
+            if has_archive_flag:
+                active_filter &= Q(is_archived=False)
+            if has_active_flag:
+                active_filter &= Q(is_active=True)
+            filters.append(active_filter)
+
+        if self.RecordStatus.INACTIVE in selected_statuses and has_active_flag:
+            inactive_filter = Q(is_active=False)
+            if has_archive_flag:
+                inactive_filter &= Q(is_archived=False)
+            filters.append(inactive_filter)
+
+        if not filters:
+            return queryset.none()
+
+        combined_filter = filters[0]
+        for current_filter in filters[1:]:
+            combined_filter |= current_filter
+        return queryset.filter(combined_filter)
 
 
 class AIRewritePrompt(BaseModel):
