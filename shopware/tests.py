@@ -71,6 +71,7 @@ class Shopware6ProductStockPayloadTest(SimpleTestCase):
         )
 
         self.assertEqual(payload["stock"], 91)
+        self.assertEqual(payload["maxPurchase"], 91)
 
 
 class Shopware6ProductTranslationPayloadTest(SimpleTestCase):
@@ -251,6 +252,7 @@ class ShopwareVariantStockPayloadTest(SimpleTestCase):
                     "productNumber": "581001",
                     "parentId": "parent-shopware-id",
                     "stock": 9,
+                    "maxPurchase": 9,
                     "options": [{"id": "option-one"}],
                 },
                 {
@@ -258,6 +260,7 @@ class ShopwareVariantStockPayloadTest(SimpleTestCase):
                     "productNumber": "581002",
                     "parentId": "parent-shopware-id",
                     "stock": 7,
+                    "maxPurchase": 7,
                     "options": [{"id": "option-two"}],
                 },
             ]
@@ -1863,6 +1866,7 @@ class ShopwareVariantSyncServiceTest(TestCase):
         self.assertEqual(len(parent_payloads), 2)
         self.assertTrue(all(payload["stock"] == 0 for payload in parent_payloads))
         self.assertTrue(all(payload["isCloseout"] is False for payload in parent_payloads))
+        self.assertTrue(all(payload["maxPurchase"] is None for payload in parent_payloads))
         media_id = ProductMediaSyncService.build_media_id(self.image.path)
         expected_parent_media = [
             {

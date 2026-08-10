@@ -253,6 +253,7 @@ class ShopwareVariantSyncService(BaseService):
             # by the actual child products, so the parent deliberately stays at 0.
             "stock": 0,
             "isCloseout": False,
+            "maxPurchase": None,
             "taxId": self._tax_id(default_product),
             "categories": [{"id": family.target_category.sw6_id}],
         }
@@ -309,16 +310,19 @@ class ShopwareVariantSyncService(BaseService):
         child_ids: dict[int, str],
         value_ids: dict[int, str],
     ) -> None:
-        payload = [
-            {
-                "id": child_ids[variant.product.pk],
-                "productNumber": variant.product.erp_nr,
-                "parentId": parent_id,
-                "stock": self._stock(variant.product),
-                "options": [{"id": value_ids[value.pk]} for value in variant.option_values],
-            }
-            for variant in resolution.variants
-        ]
+        payload = []
+        for variant in resolution.variants:
+            effective_stock = self._stock(variant.product)
+            payload.append(
+                {
+                    "id": child_ids[variant.product.pk],
+                    "productNumber": variant.product.erp_nr,
+                    "parentId": parent_id,
+                    "stock": effective_stock,
+                    "maxPurchase": effective_stock,
+                    "options": [{"id": value_ids[value.pk]} for value in variant.option_values],
+                }
+            )
         self.product_service.bulk_upsert(payload)
 
     @staticmethod

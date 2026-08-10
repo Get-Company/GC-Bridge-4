@@ -320,7 +320,11 @@ def _build_product_sync_payload(
     except Storage.DoesNotExist:
         storage = None
     if storage:
-        payload["stock"] = storage.get_shopware_stock
+        # There is no business-level order cap. The effective stock is the only
+        # limit and already incorporates virtual stock for made-to-order items.
+        effective_stock = storage.get_shopware_stock
+        payload["stock"] = effective_stock
+        payload["maxPurchase"] = effective_stock
 
     if default_channel:
         default_price = prices_by_channel.get(default_channel.id)
