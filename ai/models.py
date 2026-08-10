@@ -246,6 +246,38 @@ class AITranslationConfig(BaseModel):
         return queryset.filter(combined_filter)
 
 
+class AITranslationGlossaryEntry(BaseModel):
+    """A mandatory translation for one source term and target language."""
+
+    configuration = models.ForeignKey(
+        AITranslationConfig,
+        on_delete=models.CASCADE,
+        related_name="glossary_entries",
+        verbose_name=_("Uebersetzungskonfiguration"),
+    )
+    source_term = models.CharField(max_length=255, verbose_name=_("Quellbegriff"))
+    target_language = models.CharField(max_length=16, verbose_name=_("Zielsprache"))
+    target_term = models.CharField(max_length=255, verbose_name=_("Verbindliche Uebersetzung"))
+    is_active = models.BooleanField(default=True, db_index=True, verbose_name=_("Aktiv"))
+
+    class Meta:
+        verbose_name = _("KI-Uebersetzungsglossareintrag")
+        verbose_name_plural = _("KI-Uebersetzungsglossar")
+        ordering = ("source_term", "target_language")
+        indexes = [
+            models.Index(fields=("configuration", "target_language", "is_active")),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=("configuration", "source_term", "target_language"),
+                name="ai_translation_glossary_unique_term",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.source_term} → {self.target_term} ({self.target_language})"
+
+
 class AIRewritePrompt(BaseModel):
     external_key = models.CharField(max_length=255, blank=True, default="", db_index=True, verbose_name=_("Externe Referenz"))
     name = models.CharField(max_length=255, verbose_name=_("Name"))

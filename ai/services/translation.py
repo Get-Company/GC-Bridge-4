@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import timedelta
+from difflib import SequenceMatcher
+from html import unescape
 import hashlib
 import json
 import re
@@ -18,7 +20,7 @@ from modeltranslation import settings as modeltranslation_settings
 from modeltranslation.translator import translator
 from modeltranslation.utils import build_localized_fieldname
 
-from ai.models import AITranslationConfig, AITranslationState
+from ai.models import AITranslationConfig, AITranslationGlossaryEntry, AITranslationState
 from core.services import BaseService
 from products.models import Category, Product, ProductSyncJob
 from products.services import (
@@ -32,7 +34,10 @@ from .provider import AIProviderService
 
 _TRANSLATABLE_FIELD_TYPES = ("CharField", "TextField")
 _RAW_TEXT_TAGS = frozenset({"code", "pre", "script", "style"})
-_TRANSLATION_PIPELINE_VERSION = "2"
+_TRANSLATION_PIPELINE_VERSION = "3"
+_GLOSSARY_FUZZY_MINIMUM_RATIO = 0.88
+_GLOSSARY_SHORT_TERM_FUZZY_MINIMUM_RATIO = 0.92
+_GLOSSARY_MINIMUM_FUZZY_TERM_LENGTH = 5
 _MANDATORY_OUTPUT_LANGUAGE_RULES = {
     "it-de": (
         "VERBINDLICHE AUSGABESPRACHE: Deutsch. Der technische Zielcode 'it-de' steht fuer Deutsch "
@@ -340,6 +345,11 @@ class AITranslationService(BaseService):
     def configuration_fingerprint(configuration: AITranslationConfig) -> str:
         """Return the configuration parts that can change a translation result."""
         provider = configuration.provider
+        glossary_entries = list(
+            configuration.glossary_entries.filter(is_active=True)
+            .order_by("target_language", "source_term", "pk")
+            .values("source_term", "target_language", "target_term")
+        )
         payload = {
             "translation_pipeline_version": _TRANSLATION_PIPELINE_VERSION,
             "source_language": configuration.source_language,
@@ -349,6 +359,7 @@ class AITranslationService(BaseService):
             "system_prompt": configuration.system_prompt,
             "user_prompt_template": configuration.user_prompt_template,
             "locale_instructions": configuration.locale_instructions or {},
+            "glossary_entries": glossary_entries,
             "provider_id": configuration.provider_id,
             "provider_model_name": provider.model_name,
             "provider_base_url": provider.base_url,
@@ -527,9 +538,17 @@ class AITranslationService(BaseService):
             return {}
 
         configuration = state.configuration
+        glossary_entries = self._relevant_glossary_entries(
+            configuration=configuration,
+            target_language=state.target_language,
+            segments=segments,
+        )
         context = self._prompt_context(configuration=configuration, target_language=state.target_language, segments=segments)
         system_prompt = self.template_engine.from_string(configuration.system_prompt).render(Context(context)).strip()
         user_prompt = self.template_engine.from_string(configuration.user_prompt_template).render(Context(context)).strip()
+        glossary_instruction = self._glossary_instruction(glossary_entries)
+        if glossary_instruction:
+            system_prompt = f"{system_prompt}\n\n{glossary_instruction}".strip()
         mandatory_language_rule = self._mandatory_output_language_rule(state.target_language)
         if mandatory_language_rule:
             system_prompt = f"{system_prompt}\n\n{mandatory_language_rule}".strip()
@@ -542,6 +561,103 @@ class AITranslationService(BaseService):
             response_format={"type": "json_object"},
         )
         return self._parse_translation_response(response=response, expected_segments=segments)
+
+    @classmethod
+    def _relevant_glossary_entries(
+        cls,
+        *,
+        configuration: AITranslationConfig,
+        target_language: str,
+        segments: list[TranslationSegment],
+    ) -> list[AITranslationGlossaryEntry]:
+        """Return only the active terms that occur in this translation request."""
+        source_tokens = cls._glossary_tokens(" ".join(segment.source_text for segment in segments))
+        if not source_tokens:
+            return []
+
+        entries = configuration.glossary_entries.filter(
+            is_active=True,
+            target_language=target_language,
+        ).only("pk", "source_term", "target_language", "target_term")
+        matching_entries = [
+            entry
+            for entry in entries
+            if cls._glossary_entry_matches(entry.source_term, source_tokens)
+        ]
+        return sorted(
+            matching_entries,
+            key=lambda entry: (-len(cls._normalize_glossary_text(entry.source_term)), entry.source_term.casefold()),
+        )
+
+    @staticmethod
+    def _normalize_glossary_text(value: str) -> str:
+        """Normalize punctuation and whitespace so spelling variants still match."""
+        normalized = unescape(str(value)).casefold()
+        normalized = re.sub(r"[^\w]+", " ", normalized, flags=re.UNICODE)
+        return " ".join(normalized.split())
+
+    @classmethod
+    def _glossary_tokens(cls, value: str) -> list[str]:
+        normalized = cls._normalize_glossary_text(value)
+        return normalized.split() if normalized else []
+
+    @classmethod
+    def _glossary_entry_matches(cls, source_term: str, source_tokens: list[str]) -> bool:
+        term_tokens = cls._glossary_tokens(source_term)
+        if not term_tokens:
+            return False
+        if cls._contains_token_sequence(source_tokens, term_tokens):
+            return True
+
+        normalized_term = " ".join(term_tokens)
+        if len(normalized_term) < _GLOSSARY_MINIMUM_FUZZY_TERM_LENGTH:
+            return False
+
+        minimum_ratio = (
+            _GLOSSARY_SHORT_TERM_FUZZY_MINIMUM_RATIO
+            if len(normalized_term) < 10
+            else _GLOSSARY_FUZZY_MINIMUM_RATIO
+        )
+        minimum_window_size = max(1, len(term_tokens) - 1)
+        maximum_window_size = min(len(source_tokens), len(term_tokens) + 1)
+        term_token_set = set(term_tokens)
+
+        for window_size in range(minimum_window_size, maximum_window_size + 1):
+            for start in range(len(source_tokens) - window_size + 1):
+                candidate_tokens = source_tokens[start:start + window_size]
+                if len(term_tokens) > 1 and not term_token_set.intersection(candidate_tokens):
+                    continue
+                candidate = " ".join(candidate_tokens)
+                if SequenceMatcher(None, normalized_term, candidate, autojunk=False).ratio() >= minimum_ratio:
+                    return True
+        return False
+
+    @staticmethod
+    def _contains_token_sequence(source_tokens: list[str], term_tokens: list[str]) -> bool:
+        last_start = len(source_tokens) - len(term_tokens)
+        return any(
+            source_tokens[start:start + len(term_tokens)] == term_tokens
+            for start in range(last_start + 1)
+        )
+
+    @staticmethod
+    def _glossary_instruction(entries: list[AITranslationGlossaryEntry]) -> str:
+        if not entries:
+            return ""
+        glossary_json = json.dumps(
+            [
+                {"Quelle": entry.source_term, "Uebersetzung": entry.target_term}
+                for entry in entries
+            ],
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        return (
+            "VERBINDLICHES GLOSSAR: Die folgenden Eintraege wurden im aktuellen Text erkannt. "
+            "Verwende ihre Uebersetzungen exakt und lasse sie gegenueber allgemeinen Begriffen Vorrang haben. "
+            "Wenn sich Eintraege ueberlappen, hat der spezifischere (laengere) Begriff Vorrang.\n"
+            f"{glossary_json}"
+        )
 
     @staticmethod
     def _parse_translation_response(

@@ -12,7 +12,14 @@ from django.urls import reverse
 from django.utils import timezone
 
 from ai.admin import AIRewriteJobAdmin
-from ai.models import AIProviderConfig, AIRewriteJob, AIRewritePrompt, AITranslationConfig, AITranslationState
+from ai.models import (
+    AIProviderConfig,
+    AIRewriteJob,
+    AIRewritePrompt,
+    AITranslationConfig,
+    AITranslationGlossaryEntry,
+    AITranslationState,
+)
 from ai.services import AIRewriteService, AITranslationService
 from ai.services.provider import AIProviderService
 from products.models import (
@@ -296,6 +303,80 @@ class AITranslationServiceTest(TestCase):
         self.assertIn(state.pk, queued_again)
         self.assertEqual(state.status, AITranslationState.Status.PENDING)
         self.assertNotEqual(state.configuration_hash, previous_configuration_hash)
+
+    def test_glossary_change_updates_the_translation_configuration_fingerprint(self):
+        fingerprint_without_glossary = AITranslationService.configuration_fingerprint(self.configuration)
+
+        AITranslationGlossaryEntry.objects.create(
+            configuration=self.configuration,
+            source_term="Orga-Mappen",
+            target_language="en",
+            target_term="Organizational Folders",
+        )
+
+        fingerprint_with_glossary = AITranslationService.configuration_fingerprint(self.configuration)
+
+        self.assertNotEqual(fingerprint_with_glossary, fingerprint_without_glossary)
+
+    def test_glossary_matches_exact_and_similar_terms_but_excludes_unrelated_entries(self):
+        exact_entry = AITranslationGlossaryEntry.objects.create(
+            configuration=self.configuration,
+            source_term="Orga-Mappen",
+            target_language="en",
+            target_term="Organizational Folders",
+        )
+        similar_entry = AITranslationGlossaryEntry.objects.create(
+            configuration=self.configuration,
+            source_term="Lagerplatz",
+            target_language="en",
+            target_term="Storage Location",
+        )
+        AITranslationGlossaryEntry.objects.create(
+            configuration=self.configuration,
+            source_term="Kundenmappe",
+            target_language="en",
+            target_term="Customer Folder",
+        )
+
+        segmented = AITranslationService.segment_html_text(
+            "Die Orga Mappen liegen beim Lagerplaz."
+        )
+        entries = AITranslationService()._relevant_glossary_entries(
+            configuration=self.configuration,
+            target_language="en",
+            segments=segmented.segments,
+        )
+
+        self.assertEqual(list(entries), [exact_entry, similar_entry])
+
+    @patch(
+        "ai.services.translation.AIProviderService.rewrite_text_with_response",
+        return_value=(
+            '{"T0001": "Organizational Folders"}',
+            '{"choices": [{"message": {"content": "..."}}]}',
+        ),
+    )
+    def test_translation_prompt_contains_only_relevant_glossary_entries(self, mock_rewrite):
+        state = self._queue_description_en()
+        AITranslationGlossaryEntry.objects.create(
+            configuration=self.configuration,
+            source_term="Orga-Mappen",
+            target_language="en",
+            target_term="Organizational Folders",
+        )
+        AITranslationGlossaryEntry.objects.create(
+            configuration=self.configuration,
+            source_term="Kundenmappe",
+            target_language="en",
+            target_term="Customer Folder",
+        )
+        segments = AITranslationService.segment_html_text("Orga-Mappen")
+
+        AITranslationService()._translate_segments(state=state, segments=segments.segments)
+
+        system_prompt = mock_rewrite.call_args.kwargs["system_prompt"]
+        self.assertIn("Organizational Folders", system_prompt)
+        self.assertNotIn("Customer Folder", system_prompt)
 
     def test_expired_success_status_is_archived_without_losing_its_hash(self):
         state = self._queue_description_en()

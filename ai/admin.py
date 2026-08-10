@@ -13,9 +13,16 @@ from unfold.decorators import action
 from unfold.views import UnfoldModelAdminViewMixin
 from unfold.widgets import UnfoldAdminSelect2Widget, UnfoldAdminTextareaWidget
 
-from core.admin import BaseAdmin
+from core.admin import BaseAdmin, BaseTabularInline
 
-from ai.models import AIProviderConfig, AIRewriteJob, AIRewritePrompt, AITranslationConfig, AITranslationState
+from ai.models import (
+    AIProviderConfig,
+    AIRewriteJob,
+    AIRewritePrompt,
+    AITranslationConfig,
+    AITranslationGlossaryEntry,
+    AITranslationState,
+)
 from ai.rewrite_fields import (
     get_rewriteable_category_field_names,
     get_rewriteable_product_field_names,
@@ -177,9 +184,16 @@ class AIProviderConfigAdmin(BaseAdmin):
     list_filter = ("is_active",)
 
 
+class AITranslationGlossaryEntryInline(BaseTabularInline):
+    model = AITranslationGlossaryEntry
+    fields = ("source_term", "target_language", "target_term", "is_active")
+    extra = 1
+
+
 @admin.register(AITranslationConfig)
 class AITranslationConfigAdmin(BaseAdmin):
     form = AITranslationConfigAdminForm
+    inlines = (AITranslationGlossaryEntryInline,)
     list_display = ("name", "provider", "source_language", "batch_size", "status_retention_days", "is_active", "updated_at")
     search_fields = ("name", "provider__name", "provider__model_name")
     list_filter = ("is_active", "provider")
@@ -233,6 +247,13 @@ class AITranslationConfigAdmin(BaseAdmin):
         archived_count = AITranslationService().archive_expired_states(configuration=configuration)
         self.message_user(request, f"{archived_count} abgelaufene Status wurden aus der Liste ausgeblendet.")
         return HttpResponseRedirect(reverse("admin:ai_aitranslationconfig_change", args=(configuration.pk,)))
+
+
+@admin.register(AITranslationGlossaryEntry)
+class AITranslationGlossaryEntryAdmin(BaseAdmin):
+    list_display = ("source_term", "target_language", "target_term", "configuration", "is_active", "updated_at")
+    search_fields = ("source_term", "target_term", "configuration__name")
+    list_filter = ("target_language", "is_active", "configuration")
 
 
 @admin.register(AITranslationState)
