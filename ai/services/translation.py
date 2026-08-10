@@ -346,7 +346,7 @@ class AITranslationService(BaseService):
         """Return the configuration parts that can change a translation result."""
         provider = configuration.provider
         glossary_entries = list(
-            configuration.glossary_entries.filter(is_active=True)
+            AITranslationGlossaryEntry.objects.filter(is_active=True)
             .order_by("target_language", "source_term", "pk")
             .values("source_term", "target_language", "target_term")
         )
@@ -539,7 +539,6 @@ class AITranslationService(BaseService):
 
         configuration = state.configuration
         glossary_entries = self._relevant_glossary_entries(
-            configuration=configuration,
             target_language=state.target_language,
             segments=segments,
         )
@@ -566,7 +565,6 @@ class AITranslationService(BaseService):
     def _relevant_glossary_entries(
         cls,
         *,
-        configuration: AITranslationConfig,
         target_language: str,
         segments: list[TranslationSegment],
     ) -> list[AITranslationGlossaryEntry]:
@@ -575,7 +573,7 @@ class AITranslationService(BaseService):
         if not source_tokens:
             return []
 
-        entries = configuration.glossary_entries.filter(
+        entries = AITranslationGlossaryEntry.objects.filter(
             is_active=True,
             target_language=target_language,
         ).only("pk", "source_term", "target_language", "target_term")

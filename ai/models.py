@@ -247,14 +247,8 @@ class AITranslationConfig(BaseModel):
 
 
 class AITranslationGlossaryEntry(BaseModel):
-    """A mandatory translation for one source term and target language."""
+    """A global mandatory translation for one source term and target language."""
 
-    configuration = models.ForeignKey(
-        AITranslationConfig,
-        on_delete=models.CASCADE,
-        related_name="glossary_entries",
-        verbose_name=_("Uebersetzungskonfiguration"),
-    )
     source_term = models.CharField(max_length=255, verbose_name=_("Quellbegriff"))
     target_language = models.CharField(max_length=16, verbose_name=_("Zielsprache"))
     target_term = models.CharField(max_length=255, verbose_name=_("Verbindliche Uebersetzung"))
@@ -265,11 +259,11 @@ class AITranslationGlossaryEntry(BaseModel):
         verbose_name_plural = _("KI-Uebersetzungsglossar")
         ordering = ("source_term", "target_language")
         indexes = [
-            models.Index(fields=("configuration", "target_language", "is_active")),
+            models.Index(fields=("target_language", "is_active")),
         ]
         constraints = [
             models.UniqueConstraint(
-                fields=("configuration", "source_term", "target_language"),
+                fields=("source_term", "target_language"),
                 name="ai_translation_glossary_unique_term",
             ),
         ]

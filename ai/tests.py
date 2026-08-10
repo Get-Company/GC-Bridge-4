@@ -3,6 +3,7 @@ from datetime import timedelta
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from django.conf import settings
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
@@ -11,7 +12,7 @@ from django.test import RequestFactory, SimpleTestCase, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from ai.admin import AIRewriteJobAdmin
+from ai.admin import AIRewriteJobAdmin, AITranslationGlossaryEntryAdminForm
 from ai.models import (
     AIProviderConfig,
     AIRewriteJob,
@@ -105,6 +106,14 @@ class AIProviderServiceTest(SimpleTestCase):
 
 
 class AITranslationMarkupTest(SimpleTestCase):
+    def test_glossary_target_language_field_shows_configured_languages(self):
+        form = AITranslationGlossaryEntryAdminForm()
+
+        self.assertEqual(
+            list(form.fields["target_language"].choices),
+            list(settings.LANGUAGES),
+        )
+
     def test_scan_discovers_all_registered_customer_translation_fields(self):
         registered_fields = {
             model: set(fields)
@@ -308,7 +317,6 @@ class AITranslationServiceTest(TestCase):
         fingerprint_without_glossary = AITranslationService.configuration_fingerprint(self.configuration)
 
         AITranslationGlossaryEntry.objects.create(
-            configuration=self.configuration,
             source_term="Orga-Mappen",
             target_language="en",
             target_term="Organizational Folders",
@@ -320,19 +328,16 @@ class AITranslationServiceTest(TestCase):
 
     def test_glossary_matches_exact_and_similar_terms_but_excludes_unrelated_entries(self):
         exact_entry = AITranslationGlossaryEntry.objects.create(
-            configuration=self.configuration,
             source_term="Orga-Mappen",
             target_language="en",
             target_term="Organizational Folders",
         )
         similar_entry = AITranslationGlossaryEntry.objects.create(
-            configuration=self.configuration,
             source_term="Lagerplatz",
             target_language="en",
             target_term="Storage Location",
         )
         AITranslationGlossaryEntry.objects.create(
-            configuration=self.configuration,
             source_term="Kundenmappe",
             target_language="en",
             target_term="Customer Folder",
@@ -342,7 +347,6 @@ class AITranslationServiceTest(TestCase):
             "Die Orga Mappen liegen beim Lagerplaz."
         )
         entries = AITranslationService()._relevant_glossary_entries(
-            configuration=self.configuration,
             target_language="en",
             segments=segmented.segments,
         )
@@ -359,13 +363,11 @@ class AITranslationServiceTest(TestCase):
     def test_translation_prompt_contains_only_relevant_glossary_entries(self, mock_rewrite):
         state = self._queue_description_en()
         AITranslationGlossaryEntry.objects.create(
-            configuration=self.configuration,
             source_term="Orga-Mappen",
             target_language="en",
             target_term="Organizational Folders",
         )
         AITranslationGlossaryEntry.objects.create(
-            configuration=self.configuration,
             source_term="Kundenmappe",
             target_language="en",
             target_term="Customer Folder",

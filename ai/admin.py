@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from django import forms
+from django.conf import settings
 from django.contrib import admin, messages
 from django.db import models
 from django.http import HttpResponseRedirect
@@ -13,7 +14,7 @@ from unfold.decorators import action
 from unfold.views import UnfoldModelAdminViewMixin
 from unfold.widgets import UnfoldAdminSelect2Widget, UnfoldAdminTextareaWidget
 
-from core.admin import BaseAdmin, BaseTabularInline
+from core.admin import BaseAdmin
 
 from ai.models import (
     AIProviderConfig,
@@ -177,6 +178,20 @@ class AITranslationConfigAdminForm(forms.ModelForm):
         self.initial["record_statuses"] = sorted(self.instance.selected_record_statuses())
 
 
+class AITranslationGlossaryEntryAdminForm(forms.ModelForm):
+    """Expose the configured target locales as readable select options."""
+
+    target_language = forms.ChoiceField(
+        choices=settings.LANGUAGES,
+        label="Zielsprache",
+        help_text="Waehle die Sprache, in die der Quellbegriff verbindlich uebersetzt wird.",
+    )
+
+    class Meta:
+        model = AITranslationGlossaryEntry
+        fields = "__all__"
+
+
 @admin.register(AIProviderConfig)
 class AIProviderConfigAdmin(BaseAdmin):
     list_display = ("name", "model_name", "base_url", "is_active", "created_at")
@@ -184,16 +199,9 @@ class AIProviderConfigAdmin(BaseAdmin):
     list_filter = ("is_active",)
 
 
-class AITranslationGlossaryEntryInline(BaseTabularInline):
-    model = AITranslationGlossaryEntry
-    fields = ("source_term", "target_language", "target_term", "is_active")
-    extra = 1
-
-
 @admin.register(AITranslationConfig)
 class AITranslationConfigAdmin(BaseAdmin):
     form = AITranslationConfigAdminForm
-    inlines = (AITranslationGlossaryEntryInline,)
     list_display = ("name", "provider", "source_language", "batch_size", "status_retention_days", "is_active", "updated_at")
     search_fields = ("name", "provider__name", "provider__model_name")
     list_filter = ("is_active", "provider")
@@ -251,9 +259,10 @@ class AITranslationConfigAdmin(BaseAdmin):
 
 @admin.register(AITranslationGlossaryEntry)
 class AITranslationGlossaryEntryAdmin(BaseAdmin):
-    list_display = ("source_term", "target_language", "target_term", "configuration", "is_active", "updated_at")
-    search_fields = ("source_term", "target_term", "configuration__name")
-    list_filter = ("target_language", "is_active", "configuration")
+    form = AITranslationGlossaryEntryAdminForm
+    list_display = ("source_term", "target_language", "target_term", "is_active", "updated_at")
+    search_fields = ("source_term", "target_term")
+    list_filter = ("target_language", "is_active")
 
 
 @admin.register(AITranslationState)
