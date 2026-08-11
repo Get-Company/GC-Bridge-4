@@ -12,6 +12,8 @@ from customer.models import Address, Customer
 from orders.models import Order
 
 _UUID_RE = re.compile(r"^[0-9a-f]{32}$|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
+_MICROTECH_SEARCH_SOURCE = "customer_merge_search"
+_MICROTECH_SEARCH_LIMIT = 20
 
 
 def _to_str(value: Any) -> str:
@@ -42,8 +44,80 @@ def _safe_attrs(item: Any) -> dict:
 class CustomerMergeSearchService(BaseService):
     """Searches for customer data across Django, Shopware 6, and Microtech."""
 
+    def resolve_django_erp_numbers(
+        self,
+        *,
+        customer_number: str = "",
+        email: str = "",
+        first_name: str = "",
+        last_name: str = "",
+    ) -> list[str]:
+        """Resolve matching customer numbers from the GC-Bridge database."""
+        customer_number = _to_str(customer_number)
+        email = _to_str(email)
+        first_name = _to_str(first_name)
+        last_name = _to_str(last_name)
+
+        filters = models.Q()
+        if customer_number:
+            filters &= models.Q(erp_nr__iexact=customer_number)
+        if email:
+            filters &= models.Q(email__iexact=email) | models.Q(addresses__email__iexact=email)
+        if first_name:
+            filters &= models.Q(addresses__first_name__icontains=first_name)
+        if last_name:
+            filters &= models.Q(addresses__last_name__icontains=last_name)
+
+        if not any((customer_number, email, first_name, last_name)):
+            return []
+
+        try:
+            return list(
+                Customer.objects.filter(filters)
+                .distinct()
+                .order_by("erp_nr")
+                .values_list("erp_nr", flat=True)[:_MICROTECH_SEARCH_LIMIT]
+            )
+        except Exception as exc:
+            logger.error("GC-Bridge customer resolve failed: {}", exc)
+            return []
+
+    def resolve_shopware_erp_numbers(
+        self,
+        *,
+        customer_number: str = "",
+        email: str = "",
+        first_name: str = "",
+        last_name: str = "",
+    ) -> list[str]:
+        """Resolve matching customer numbers from Shopware 6."""
+        try:
+            from shopware.services import CustomerService
+
+            response = CustomerService().search_by_customer_fields(
+                customer_number=_to_str(customer_number),
+                email=_to_str(email),
+                first_name=_to_str(first_name),
+                last_name=_to_str(last_name),
+                limit=_MICROTECH_SEARCH_LIMIT,
+            )
+        except Exception as exc:
+            logger.warning("Shopware customer resolve failed: {}", exc)
+            return []
+
+        customer_numbers: list[str] = []
+        for item in (response or {}).get("data", []) or []:
+            customer_number = _to_str(_safe_attrs(item).get("customerNumber"))
+            if customer_number and customer_number not in customer_numbers:
+                customer_numbers.append(customer_number)
+        return customer_numbers
+
     def resolve_query(self, term: str) -> list[str]:
-        """Resolve a search term (ERP-Nr, UUID, or name) into a list of ERP numbers."""
+        """Resolve ERP numbers locally and in Shopware.
+
+        Microtech is queried separately through the Sentinel so the admin request
+        never performs a blocking dataset read.
+        """
         term = term.strip()
         if not term:
             return []
@@ -73,26 +147,358 @@ class CustomerMergeSearchService(BaseService):
                 logger.warning("Shopware UUID resolve failed for {}: {}", term, exc)
             return sorted(erp_nrs) if erp_nrs else [term]
 
-        # 3) Name search → Django + Shopware
+        # 3) ERP number, customer name or contact person → Django + Shopware
         erp_nrs: set[str] = set()
-        # Django: name or email icontains
         for cust in Customer.objects.filter(
-            models.Q(name__icontains=term) | models.Q(email__icontains=term)
-        )[:20]:
+            models.Q(erp_nr__iexact=term)
+            | models.Q(name__icontains=term)
+            | models.Q(email__icontains=term)
+            | models.Q(addresses__first_name__icontains=term)
+            | models.Q(addresses__last_name__icontains=term)
+        ).distinct()[:_MICROTECH_SEARCH_LIMIT]:
             erp_nrs.add(cust.erp_nr)
-        # Shopware: name search
+
         try:
             from shopware.services import CustomerService
+
             service = CustomerService()
-            response = service.search_by_name(term, limit=20)
+
+            # Shopware 6 customerNumber is an explicit search key. Resolve it
+            # before performing the fuzzy first-/last-name search.
+            customer_number_response = service.get_by_customer_number(term)
+            for item in (customer_number_response or {}).get("data", []) or []:
+                attrs = _safe_attrs(item)
+                customer_number = _to_str(attrs.get("customerNumber"))
+                if customer_number:
+                    erp_nrs.add(customer_number)
+
+            response = service.search_by_name(term, limit=_MICROTECH_SEARCH_LIMIT)
             for item in (response or {}).get("data", []) or []:
                 attrs = _safe_attrs(item)
-                cn = _to_str(attrs.get("customerNumber"))
-                if cn:
-                    erp_nrs.add(cn)
+                customer_number = _to_str(attrs.get("customerNumber"))
+                if customer_number:
+                    erp_nrs.add(customer_number)
         except Exception as exc:
             logger.warning("Shopware name resolve failed for '{}': {}", term, exc)
         return sorted(erp_nrs)
+
+    def start_microtech_resolution_search(
+        self,
+        term: str = "",
+        *,
+        customer_number: str = "",
+        email: str = "",
+        first_name: str = "",
+        last_name: str = "",
+    ) -> list[dict[str, Any]]:
+        """Queue Microtech field searches through the GraphQL Sentinel.
+
+        ``SuchBeg`` covers customer/company names. The contact-person datasets
+        add ``NNa`` (last name) and ``VNa`` (first name) to the same search.
+
+        ``term`` remains available for the legacy free-text API. Structured
+        fields are used by the customer-merge form.
+        """
+        term = _to_str(term)
+        customer_number = _to_str(customer_number)
+        email = _to_str(email)
+        first_name = _to_str(first_name)
+        last_name = _to_str(last_name)
+        uses_structured_fields = any((customer_number, email, first_name, last_name))
+
+        if uses_structured_fields:
+            requests = self._microtech_field_resolution_requests(
+                email=email,
+                first_name=first_name,
+                last_name=last_name,
+            )
+            search_criteria = {
+                "customer_number": customer_number,
+                "email": email,
+                "first_name": first_name,
+                "last_name": last_name,
+            }
+        else:
+            if not term or term.isdigit() or _UUID_RE.match(term):
+                return []
+            requests = self._microtech_resolution_requests(term)
+            search_criteria = {"term": term}
+
+        if not requests:
+            return []
+
+        from microtech.services import MicrotechJobSentinelService
+
+        sentinel = MicrotechJobSentinelService()
+        jobs: list[dict[str, Any]] = []
+        for search_kind, input_data in requests:
+            try:
+                job = sentinel.submit_dataset_records(
+                    input_data=input_data,
+                    context={
+                        "source": _MICROTECH_SEARCH_SOURCE,
+                        "purpose": "resolve",
+                        "search_kind": search_kind,
+                        "search_criteria": search_criteria,
+                    },
+                    next_step="Warte auf Microtech-Suche.",
+                    delete_after_completion=False,
+                )
+            except Exception as exc:
+                logger.warning("Microtech {} search submit failed: {}", search_kind, exc)
+                continue
+            jobs.append({"job_id": job.pk, "search_kind": search_kind})
+        return jobs
+
+    @staticmethod
+    def _microtech_field_resolution_requests(
+        *,
+        email: str = "",
+        first_name: str = "",
+        last_name: str = "",
+    ) -> list[tuple[str, dict[str, Any]]]:
+        """Return indexed Microtech requests for the structured search form."""
+        requests: list[tuple[str, dict[str, Any]]] = []
+        email = _to_str(email)
+        first_name = _to_str(first_name)
+        last_name = _to_str(last_name)
+
+        if email:
+            quoted_email = email.replace("'", "''")
+            requests.extend(
+                [
+                    (
+                        "email_adresse",
+                        {
+                            "dataset": "Adressen",
+                            "indexField": "Nr",
+                            "range": {
+                                "fromValues": ["0"],
+                                "toValues": ["999999999999"],
+                            },
+                            "filter": f"EMail1 = '{quoted_email}'",
+                            "fields": ["AdrNr", "AdrId", "Na1", "EMail1", "Status"],
+                            "limit": _MICROTECH_SEARCH_LIMIT,
+                        },
+                    ),
+                    (
+                        "email_ansprechpartner",
+                        {
+                            "dataset": "Ansprechpartner",
+                            "indexField": "NNa",
+                            "range": {
+                                "fromValues": ["", ""],
+                                "toValues": ["\uffff", "\uffff"],
+                            },
+                            "filter": f"EMail1 = '{quoted_email}'",
+                            "fields": ["AdrNr", "AnsNr", "AspNr", "VNa", "NNa", "EMail1"],
+                            "limit": _MICROTECH_SEARCH_LIMIT,
+                        },
+                    ),
+                ]
+            )
+
+        if last_name:
+            prefix_end = f"{last_name}\uffff"
+            quoted_first_name = first_name.replace("'", "''")
+            name_request: dict[str, Any] = {
+                "dataset": "Ansprechpartner",
+                "indexField": "NNa",
+                "range": {
+                    "fromValues": [last_name, ""],
+                    "toValues": [prefix_end, "\uffff"],
+                },
+                "fields": ["AdrNr", "AnsNr", "AspNr", "VNa", "NNa", "EMail1"],
+                "limit": _MICROTECH_SEARCH_LIMIT,
+            }
+            if first_name:
+                name_request["filter"] = f"VNa = '{quoted_first_name}'"
+            requests.append(("kundenname", name_request))
+        elif first_name:
+            quoted_first_name = first_name.replace("'", "''")
+            requests.append(
+                (
+                    "vorname",
+                    {
+                        "dataset": "Ansprechpartner",
+                        "indexField": "NNa",
+                        "range": {
+                            "fromValues": ["", ""],
+                            "toValues": ["\uffff", "\uffff"],
+                        },
+                        "filter": f"VNa = '{quoted_first_name}'",
+                        "fields": ["AdrNr", "AnsNr", "AspNr", "VNa", "NNa", "EMail1"],
+                        "limit": _MICROTECH_SEARCH_LIMIT,
+                    },
+                )
+            )
+        return requests
+
+    @staticmethod
+    def _microtech_resolution_requests(term: str) -> list[tuple[str, dict[str, Any]]]:
+        """Return indexed DatasetReadInput payloads for a free-form name search."""
+        prefix_end = f"{term}\uffff"
+        quoted_term = term.replace("'", "''")
+        return [
+            (
+                "suchbegriff",
+                {
+                    "dataset": "Adressen",
+                    "indexField": "SuchBeg",
+                    "range": {
+                        "fromValues": [term, ""],
+                        "toValues": [prefix_end, "\uffff"],
+                    },
+                    "fields": ["AdrNr", "AdrId", "SuchBeg", "Na1", "EMail1", "Status"],
+                    "limit": _MICROTECH_SEARCH_LIMIT,
+                },
+            ),
+            (
+                "nachname",
+                {
+                    "dataset": "Ansprechpartner",
+                    "indexField": "NNa",
+                    "range": {
+                        "fromValues": [term, ""],
+                        "toValues": [prefix_end, "\uffff"],
+                    },
+                    "fields": ["AdrNr", "AnsNr", "AspNr", "VNa", "NNa", "EMail1"],
+                    "limit": _MICROTECH_SEARCH_LIMIT,
+                },
+            ),
+            (
+                "vorname",
+                {
+                    "dataset": "Ansprechpartner",
+                    "indexField": "NNa",
+                    "range": {
+                        "fromValues": ["", ""],
+                        "toValues": ["\uffff", "\uffff"],
+                    },
+                    "filter": f"VNa = '{quoted_term}'",
+                    "fields": ["AdrNr", "AnsNr", "AspNr", "VNa", "NNa", "EMail1"],
+                    "limit": _MICROTECH_SEARCH_LIMIT,
+                },
+            ),
+        ]
+
+    def start_microtech_customer_search(self, erp_nr: str) -> dict[str, Any]:
+        """Queue a typed ``requestCustomer`` read through the Sentinel."""
+        erp_nr = _to_str(erp_nr)
+        if not erp_nr:
+            return {"error": "ERP-Nummer erforderlich."}
+
+        try:
+            from microtech.models import MicrotechGraphQLJob
+            from microtech.services import MicrotechGraphQLClientService, MicrotechJobSentinelService
+
+            client = MicrotechGraphQLClientService()
+            job = MicrotechJobSentinelService().submit_wrapper_job(
+                kind=MicrotechGraphQLJob.Kind.CUSTOMER_READ,
+                operation="requestCustomer",
+                submit=lambda: client.submit_request_customer(erp_nr),
+                request_payload={"customerNumber": erp_nr},
+                context={
+                    "source": _MICROTECH_SEARCH_SOURCE,
+                    "purpose": "customer",
+                    "erp_nr": erp_nr,
+                },
+                continuation="",
+                next_step="Warte auf Microtech-Kundensuche.",
+                delete_after_completion=False,
+            )
+        except Exception as exc:
+            logger.error("Microtech customer search submit failed for {}: {}", erp_nr, exc)
+            return {"error": str(exc)}
+        return {"job_id": job.pk}
+
+    def get_microtech_search_job_status(self, job_id: int) -> dict[str, Any]:
+        """Return a public, merge-search-specific view of a Sentinel job."""
+        from microtech.models import MicrotechGraphQLJob
+
+        job = MicrotechGraphQLJob.objects.filter(pk=job_id).first()
+        if not job or (job.context or {}).get("source") != _MICROTECH_SEARCH_SOURCE:
+            return {"job_id": job_id, "state": "failed", "error": "Microtech-Suchauftrag nicht gefunden."}
+
+        if job.status in {
+            MicrotechGraphQLJob.Status.QUEUED,
+            MicrotechGraphQLJob.Status.SUBMITTED,
+            MicrotechGraphQLJob.Status.RUNNING,
+            MicrotechGraphQLJob.Status.WAITING_WEBHOOK,
+        }:
+            return {"job_id": job.pk, "state": "pending"}
+
+        if job.status != MicrotechGraphQLJob.Status.SUCCEEDED:
+            return {
+                "job_id": job.pk,
+                "state": "failed",
+                "error": job.error_message or "Microtech-Suche fehlgeschlagen.",
+            }
+
+        if job.kind == MicrotechGraphQLJob.Kind.DATASET_RECORDS:
+            return {
+                "job_id": job.pk,
+                "state": "succeeded",
+                "erp_nrs": self._erp_numbers_from_dataset_result(job.result_payload or {}),
+            }
+        if job.kind == MicrotechGraphQLJob.Kind.CUSTOMER_READ:
+            return {
+                "job_id": job.pk,
+                "state": "succeeded",
+                "data": self._microtech_customer_from_result(job.result_payload or {}),
+            }
+        return {"job_id": job.pk, "state": "failed", "error": "Ungültiger Microtech-Suchauftrag."}
+
+    @staticmethod
+    def _erp_numbers_from_dataset_result(result: dict[str, Any]) -> list[str]:
+        erp_nrs: list[str] = []
+        for record in result.get("records") or []:
+            if not isinstance(record, dict):
+                continue
+            erp_nr = _to_str(record.get("AdrNr"))
+            if erp_nr and erp_nr not in erp_nrs:
+                erp_nrs.append(erp_nr)
+        return erp_nrs
+
+    @staticmethod
+    def _microtech_customer_from_result(result: dict[str, Any]) -> dict[str, Any] | None:
+        customer = result.get("customer")
+        if not isinstance(customer, dict):
+            return None
+
+        addresses = []
+        for address in customer.get("addresses") or []:
+            if not isinstance(address, dict):
+                continue
+            contacts = [contact for contact in address.get("contacts") or [] if isinstance(contact, dict)]
+            contact = next((item for item in contacts if item.get("isDefault")), contacts[0] if contacts else {})
+            addresses.append(
+                {
+                    "ans_id": address.get("addressNumber"),
+                    "ans_nr": address.get("addressSubNumber"),
+                    "name1": _to_str(address.get("name1")),
+                    "name2": _to_str(address.get("name2")),
+                    "street": _to_str(address.get("street")),
+                    "postal_code": _to_str(address.get("zipCode")),
+                    "city": _to_str(address.get("city")),
+                    "country_code": _to_str(address.get("country")),
+                    "email": _to_str(address.get("email")) or _to_str(contact.get("email")),
+                    "firstName": _to_str(contact.get("firstName")),
+                    "lastName": _to_str(contact.get("lastName")),
+                    "phone": _to_str(address.get("phone")) or _to_str(contact.get("phone")),
+                }
+            )
+
+        first_name = _to_str(customer.get("firstName"))
+        last_name = _to_str(customer.get("lastName"))
+        return {
+            "erp_nr": _to_str(customer.get("customerNumber")),
+            "name": _to_str(customer.get("name1")) or f"{first_name} {last_name}".strip(),
+            "email": _to_str(customer.get("email")),
+            "erp_id": customer.get("erpAddressNumber"),
+            "status": _to_str(customer.get("source")),
+            "addresses": addresses,
+        }
 
     def search_django(self, erp_nr: str) -> dict[str, Any] | None:
         try:
@@ -170,67 +576,6 @@ class CustomerMergeSearchService(BaseService):
         except Exception as exc:
             logger.error("Shopware search failed for {}: {}", erp_nr, exc)
             return {"error": str(exc)}
-
-    def search_microtech(self, erp_nr: str, *, erp: Any = None) -> dict[str, Any] | None:
-        try:
-            from microtech.services import (
-                MicrotechAdresseService,
-                MicrotechAnschriftService,
-                MicrotechAnsprechpartnerService,
-                microtech_connection,
-            )
-
-            def _fetch(connection):
-                adresse = MicrotechAdresseService(erp=connection)
-                if not adresse.find(erp_nr):
-                    return None
-                result = {
-                    "erp_nr": _to_str(adresse.get_field("AdrNr")),
-                    "name": _to_str(adresse.get_field("Na1")),
-                    "email": _to_str(adresse.get_field("EMail1")),
-                    "erp_id": adresse.get_field("AdrId"),
-                    "status": _to_str(adresse.get_field("Status")),
-                    "addresses": [],
-                }
-                anschrift = MicrotechAnschriftService(erp=connection)
-                ansprechpartner = MicrotechAnsprechpartnerService(erp=connection)
-                if anschrift.set_range(from_range=[erp_nr, 0], to_range=[erp_nr, 999]):
-                    while not anschrift.range_eof():
-                        ans_nr = anschrift.get_field("AnsNr")
-                        contact = {}
-                        if ans_nr is not None and ansprechpartner.set_range(
-                            from_range=[erp_nr, ans_nr, 0],
-                            to_range=[erp_nr, ans_nr, 20],
-                        ):
-                            contact = {
-                                "firstName": _to_str(ansprechpartner.get_field("VNa")),
-                                "lastName": _to_str(ansprechpartner.get_field("NNa")),
-                                "email": _to_str(ansprechpartner.get_field("EMail1")),
-                                "phone": _to_str(ansprechpartner.get_field("Tel1")),
-                            }
-                        result["addresses"].append({
-                            "ans_id": anschrift.get_field("ID"),
-                            "ans_nr": ans_nr,
-                            "name1": _to_str(anschrift.get_field("Na1")),
-                            "name2": _to_str(anschrift.get_field("Na2")),
-                            "street": _to_str(anschrift.get_field("Str")),
-                            "postal_code": _to_str(anschrift.get_field("PLZ")),
-                            "city": _to_str(anschrift.get_field("Ort")),
-                            "country_code": _to_str(anschrift.get_field("Land")),
-                            "email": _to_str(anschrift.get_field("EMail1")) or contact.get("email", ""),
-                            **contact,
-                        })
-                        anschrift.range_next()
-                return result
-
-            if erp is not None:
-                return _fetch(erp)
-            with microtech_connection() as connection:
-                return _fetch(connection)
-        except Exception as exc:
-            logger.error("Microtech search failed for {}: {}", erp_nr, exc)
-            return {"error": str(exc)}
-
 
 class CustomerMergeService(BaseService):
     """Merges two Django customers: moves orders/addresses from source to target."""

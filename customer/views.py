@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from django.contrib import admin
 from django.http import JsonResponse
 from django.template.response import TemplateResponse
+from django.utils import timezone
 from loguru import logger
 
 from customer.services.customer_merge import (
@@ -26,7 +27,46 @@ def customer_merge_view(request):
 
 
 def customer_merge_resolve_api(request):
-    """Phase 1: Resolve search terms (ERP-Nr, UUID, name) into ERP numbers."""
+    """Phase 1: resolve matching ERP numbers and queue Microtech searches."""
+    criteria = {
+        "customer_number": request.GET.get("customer_number", "").strip(),
+        "email": request.GET.get("email", "").strip(),
+        "first_name": request.GET.get("first_name", "").strip(),
+        "last_name": request.GET.get("last_name", "").strip(),
+    }
+    if any(criteria.values()):
+        search_service = CustomerMergeSearchService()
+        resolved_sets: dict[str, list[str]] = {}
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            future_map = {
+                executor.submit(search_service.resolve_shopware_erp_numbers, **criteria): "shopware",
+                executor.submit(search_service.resolve_django_erp_numbers, **criteria): "django",
+            }
+            for future in as_completed(future_map):
+                system = future_map[future]
+                try:
+                    resolved_sets[system] = future.result()
+                except Exception as exc:
+                    logger.error("{} customer resolve error: {}", system, exc)
+                    resolved_sets[system] = []
+
+        erp_nrs: list[str] = []
+        if criteria["customer_number"]:
+            erp_nrs.append(criteria["customer_number"])
+        for system in ("shopware", "django"):
+            for erp_nr in resolved_sets.get(system, []):
+                if erp_nr not in erp_nrs:
+                    erp_nrs.append(erp_nr)
+
+        return JsonResponse(
+            {
+                "erp_nrs": erp_nrs,
+                "resolved_from": resolved_sets,
+                "microtech_jobs": search_service.start_microtech_resolution_search(**criteria),
+            }
+        )
+
+    # Compatibility for callers of the former free-text endpoint.
     query_raw = request.GET.get("q", "")
     terms = [t.strip() for t in query_raw.split(",") if t.strip()]
     if not terms:
@@ -53,7 +93,17 @@ def customer_merge_resolve_api(request):
                 erp_nrs.append(nr)
                 seen.add(nr)
 
-    return JsonResponse({"erp_nrs": erp_nrs, "resolved_from": resolved_sets})
+    microtech_jobs: list[dict] = []
+    for term in terms:
+        microtech_jobs.extend(search_service.start_microtech_resolution_search(term))
+
+    return JsonResponse(
+        {
+            "erp_nrs": erp_nrs,
+            "resolved_from": resolved_sets,
+            "microtech_jobs": microtech_jobs,
+        }
+    )
 
 
 def customer_merge_search_cell_api(request):
@@ -69,15 +119,67 @@ def customer_merge_search_cell_api(request):
     elif system == "shopware":
         data = search_service.search_shopware(erp_nr)
     elif system == "microtech":
-        data = search_service.search_microtech(erp_nr)
+        result = search_service.start_microtech_customer_search(erp_nr)
+        if result.get("error"):
+            return JsonResponse({"erp_nr": erp_nr, "system": system, "data": result})
+        return JsonResponse(
+            {
+                "erp_nr": erp_nr,
+                "system": system,
+                "pending": True,
+                "microtech_job_id": result["job_id"],
+            }
+        )
     else:
         return JsonResponse({"error": f"Unbekanntes System: {system}"}, status=400)
 
     return JsonResponse({"erp_nr": erp_nr, "system": system, "data": data})
 
 
+def customer_merge_microtech_search_status_api(request):
+    """Expose and, if due, poll only customer-merge Sentinel jobs."""
+    raw_job_ids = request.GET.get("job_ids", "")
+    job_ids: list[int] = []
+    for raw_job_id in raw_job_ids.split(","):
+        try:
+            job_id = int(raw_job_id)
+        except (TypeError, ValueError):
+            continue
+        if job_id > 0 and job_id not in job_ids:
+            job_ids.append(job_id)
+    if not job_ids:
+        return JsonResponse({"error": "Mindestens eine gültige Microtech-Job-ID erforderlich."}, status=400)
+
+    # The regular Celery beat performs this polling in production. Polling due
+    # jobs here as well keeps an active admin search responsive if it happens
+    # between two beat ticks, while still using the Sentinel as the sole route
+    # to GraphQL and Microtech.
+    from microtech.models import MicrotechGraphQLJob
+    from microtech.services import MicrotechJobSentinelService
+
+    now = timezone.now()
+    active_statuses = {
+        MicrotechGraphQLJob.Status.QUEUED,
+        MicrotechGraphQLJob.Status.SUBMITTED,
+        MicrotechGraphQLJob.Status.RUNNING,
+        MicrotechGraphQLJob.Status.WAITING_WEBHOOK,
+    }
+    due_jobs = MicrotechGraphQLJob.objects.filter(pk__in=job_ids, status__in=active_statuses).filter(
+        next_poll_at__lte=now
+    )
+    sentinel = MicrotechJobSentinelService()
+    for job in due_jobs:
+        if (job.context or {}).get("source") != "customer_merge_search":
+            continue
+        sentinel.poll_job_once(job_id=job.pk)
+
+    search_service = CustomerMergeSearchService()
+    jobs = [search_service.get_microtech_search_job_status(job_id) for job_id in job_ids]
+    return JsonResponse({"jobs": jobs})
+
+
 def customer_merge_search_api(request):
-    """Legacy: full search across all systems (used by refetchRow)."""
+    """Legacy full-search endpoint; Microtech cells are returned as Sentinel jobs."""
     query_raw = request.GET.get("erp_nrs", "")
     erp_nrs = [nr.strip() for nr in query_raw.split(",") if nr.strip()]
     if not erp_nrs:
@@ -92,7 +194,10 @@ def customer_merge_search_api(request):
         elif system == "shopware":
             return (system, nr, search_service.search_shopware(nr))
         else:
-            return (system, nr, search_service.search_microtech(nr))
+            result = search_service.start_microtech_customer_search(nr)
+            if result.get("error"):
+                return (system, nr, result)
+            return (system, nr, {"pending": True, "microtech_job_id": result["job_id"]})
 
     search_tasks = []
     for nr in erp_nrs:

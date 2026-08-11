@@ -54,6 +54,27 @@ class CustomerService(Shopware6Service):
             criteria.filter.append(EqualsFilter(field="salesChannelId", value=sales_channel_id))
         return self.request_post(self.search_path, payload=criteria)
 
+    def search_by_customer_fields(
+        self,
+        *,
+        customer_number: str = "",
+        email: str = "",
+        first_name: str = "",
+        last_name: str = "",
+        limit: int = 20,
+    ) -> dict[str, Any]:
+        """Search customers with the field-specific merge-search criteria."""
+        criteria = self._base_customer_criteria(limit=limit)
+        if customer_number:
+            criteria.filter.append(EqualsFilter(field="customerNumber", value=customer_number))
+        if email:
+            criteria.filter.append(EqualsFilter(field="email", value=email))
+        if first_name:
+            criteria.filter.append(ContainsFilter(field="firstName", value=first_name))
+        if last_name:
+            criteria.filter.append(ContainsFilter(field="lastName", value=last_name))
+        return self.request_post(self.search_path, payload=criteria)
+
     def update_customer(self, customer_id: str, payload: dict[str, Any]) -> Any:
         customer_id = str(customer_id).strip()
         if not customer_id:
