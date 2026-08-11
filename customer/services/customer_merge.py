@@ -462,7 +462,7 @@ class CustomerMergeSearchService(BaseService):
 
     @staticmethod
     def _microtech_customer_from_result(result: dict[str, Any]) -> dict[str, Any] | None:
-        customer = result.get("customer")
+        customer = CustomerMergeSearchService._find_microtech_customer(result)
         if not isinstance(customer, dict):
             return None
 
@@ -499,6 +499,22 @@ class CustomerMergeSearchService(BaseService):
             "status": _to_str(customer.get("source")),
             "addresses": addresses,
         }
+
+    @staticmethod
+    def _find_microtech_customer(payload: Any) -> dict[str, Any] | None:
+        """Find a customer in a direct poll result or a GraphQL webhook payload."""
+        if not isinstance(payload, dict):
+            return None
+
+        customer = payload.get("customer")
+        if isinstance(customer, dict):
+            return customer
+
+        for value in payload.values():
+            customer = CustomerMergeSearchService._find_microtech_customer(value)
+            if customer is not None:
+                return customer
+        return None
 
     def search_django(self, erp_nr: str) -> dict[str, Any] | None:
         try:

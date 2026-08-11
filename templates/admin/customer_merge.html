@@ -95,6 +95,7 @@
 const CSRF = '{{ csrf_token }}';
 let searchData = {};
 let searchErps = [];
+const SEARCH_BUTTON_IDLE = '<span class="material-symbols-outlined text-base">search</span> Suchen';
 
 const SYSTEMS = [
   { key: 'shopware',  label: 'SW6',        icon: 'shopping_bag',            accent: 'blue'   },
@@ -108,6 +109,13 @@ function toggleSection(btn) { btn.classList.toggle('open'); btn.nextElementSibli
 function spinner() { return '<span class="material-symbols-outlined text-sm animate-spin">progress_activity</span>'; }
 function loaderCell() {
   return `<div class="flex items-center gap-2 text-xs text-gray-400 py-8 justify-center cell-loading rounded">${spinner()} Lade...</div>`;
+}
+function setSearchButtonLoading(isLoading) {
+  const button = document.getElementById('search-btn');
+  button.disabled = isLoading;
+  button.innerHTML = isLoading
+    ? `${spinner()} Suche läuft...`
+    : SEARCH_BUTTON_IDLE;
 }
 
 /* ── Normalize data into common format per system ───── */
@@ -207,7 +215,7 @@ async function doSearch() {
   };
   if (!Object.values(criteria).some(Boolean)) return;
 
-  document.getElementById('search-btn').disabled = true;
+  setSearchButtonLoading(true);
   document.getElementById('results-area').classList.remove('hidden');
   searchData = {};
   searchErps = [];
@@ -239,11 +247,11 @@ async function doSearch() {
     searchData = {};
     erpNrs.forEach(nr => { searchData[nr] = {}; });
     renderRows(true);
-    await loadCells(erpNrs);
+    void loadCells(erpNrs);
   } catch(e) {
     alert('Fehler: ' + e.message);
   } finally {
-    document.getElementById('search-btn').disabled = false;
+    setSearchButtonLoading(false);
   }
 }
 
@@ -822,6 +830,5 @@ async function executeMerge() {
   }
 }
 
-document.getElementById('search-input').addEventListener('keydown', e => { if (e.key==='Enter') doSearch(); });
 </script>
 {% endblock %}

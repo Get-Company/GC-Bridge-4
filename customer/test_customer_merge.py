@@ -65,6 +65,24 @@ class CustomerMergeMicrotechSearchTest(SimpleTestCase):
     def test_missing_customer_in_successful_job_is_not_a_match(self):
         self.assertIsNone(CustomerMergeSearchService._microtech_customer_from_result({"customer": None}))
 
+    def test_customer_job_result_is_unwrapped_from_graphql_webhook_payload(self):
+        customer = CustomerMergeSearchService._microtech_customer_from_result(
+            {
+                "data": {
+                    "customerJob": {
+                        "status": "DONE",
+                        "customer": {
+                            "customerNumber": "10001",
+                            "name1": "Muster GmbH",
+                        },
+                    }
+                }
+            }
+        )
+
+        self.assertEqual(customer["erp_nr"], "10001")
+        self.assertEqual(customer["name"], "Muster GmbH")
+
     def test_customer_job_result_is_normalized_for_merge_column(self):
         result = {
             "customer": {
