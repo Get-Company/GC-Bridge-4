@@ -559,6 +559,37 @@ class MicrotechGraphQLClientService(BaseService):
         )
         return self._submit_accepted(accepted)
 
+    def submit_search_customers(
+        self,
+        *,
+        customer_number: str = "",
+        email: str = "",
+        first_name: str = "",
+        last_name: str = "",
+        limit: int = 20,
+    ) -> tuple[str, float]:
+        """Submit one structured, non-blocking Microtech customer search."""
+        accepted = self._mutation_with_job(
+            """
+            mutation SearchCustomers($input: CustomerSearchInput!) {
+              searchCustomers(input: $input) {
+                accepted jobId status message retryAfterSeconds
+              }
+            }
+            """,
+            "searchCustomers",
+            {
+                "input": {
+                    "adrNr": str(customer_number or "").strip() or None,
+                    "email": str(email or "").strip() or None,
+                    "firstName": str(first_name or "").strip() or None,
+                    "lastName": str(last_name or "").strip() or None,
+                    "limit": int(limit),
+                },
+            },
+        )
+        return self._submit_accepted(accepted)
+
     def submit_create_customer(self, customer_number: str, input_data: dict[str, Any]) -> tuple[str, float]:
         accepted = self._mutation_with_job(
             """
@@ -733,6 +764,33 @@ class MicrotechGraphQLClientService(BaseService):
             {"jobId": job_id},
         )
         return data.get("customerJob") or {}
+
+    def customer_search_job(self, job_id: str) -> dict[str, Any]:
+        """Read the status and complete results of a structured customer search."""
+        data = self.execute(
+            """
+            query CustomerSearchJob($jobId: ID!) {
+              customerSearchJob(jobId: $jobId) {
+                jobId status message limitReached errorMessage
+                customers {
+                  customerNumber erpAddressNumber salutation firstName lastName
+                  name1 name2 name3 street zipCode city email phone department country
+                  defaultShippingAddressNumber defaultBillingAddressNumber source
+                  addresses {
+                    addressNumber addressSubNumber isDefaultShipping isDefaultBilling
+                    name1 name2 name3 street zipCode city email phone department country
+                    contacts {
+                      addressNumber addressSubNumber contactNumber isDefault salutation
+                      firstName lastName displayName department email phone
+                    }
+                  }
+                }
+              }
+            }
+            """,
+            {"jobId": job_id},
+        )
+        return data.get("customerSearchJob") or {}
 
     def vorgang_job(self, job_id: str) -> dict[str, Any]:
         data = self.execute(

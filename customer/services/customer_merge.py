@@ -191,13 +191,11 @@ class CustomerMergeSearchService(BaseService):
         first_name: str = "",
         last_name: str = "",
     ) -> list[dict[str, Any]]:
-        """Queue Microtech field searches through the GraphQL Sentinel.
+        """Queue Microtech searches through the GraphQL Sentinel.
 
-        ``SuchBeg`` covers customer/company names. The contact-person datasets
-        add ``NNa`` (last name) and ``VNa`` (first name) to the same search.
-
-        ``term`` remains available for the legacy free-text API. Structured
-        fields are used by the customer-merge form.
+        Structured requests use the wrapper's dedicated customer search and
+        return complete Microtech customers. ``term`` remains available for
+        the legacy free-text DatasetReadInput API.
         """
         term = _to_str(term)
         customer_number = _to_str(customer_number)
@@ -207,17 +205,42 @@ class CustomerMergeSearchService(BaseService):
         uses_structured_fields = any((customer_number, email, first_name, last_name))
 
         if uses_structured_fields:
-            requests = self._microtech_field_resolution_requests(
-                email=email,
-                first_name=first_name,
-                last_name=last_name,
-            )
             search_criteria = {
                 "customer_number": customer_number,
                 "email": email,
                 "first_name": first_name,
                 "last_name": last_name,
             }
+            try:
+                from microtech.models import MicrotechGraphQLJob
+                from microtech.services import MicrotechGraphQLClientService, MicrotechJobSentinelService
+
+                client = MicrotechGraphQLClientService()
+                job = MicrotechJobSentinelService().submit_wrapper_job(
+                    kind=MicrotechGraphQLJob.Kind.DATASET_RECORDS,
+                    operation="searchCustomers",
+                    submit=lambda: client.submit_search_customers(
+                        customer_number=customer_number,
+                        email=email,
+                        first_name=first_name,
+                        last_name=last_name,
+                        limit=_MICROTECH_SEARCH_LIMIT,
+                    ),
+                    request_payload={**search_criteria, "limit": _MICROTECH_SEARCH_LIMIT},
+                    context={
+                        "source": _MICROTECH_SEARCH_SOURCE,
+                        "purpose": "resolve",
+                        "search_kind": "customers",
+                        "search_criteria": search_criteria,
+                    },
+                    continuation="",
+                    next_step="Warte auf Microtech-Kundensuche.",
+                    delete_after_completion=False,
+                )
+            except Exception as exc:
+                logger.warning("Microtech structured customer search submit failed: {}", exc)
+                return []
+            return [{"job_id": job.pk, "search_kind": "customers"}]
         else:
             if not term or term.isdigit() or _UUID_RE.match(term):
                 return []
@@ -249,90 +272,6 @@ class CustomerMergeSearchService(BaseService):
                 continue
             jobs.append({"job_id": job.pk, "search_kind": search_kind})
         return jobs
-
-    @staticmethod
-    def _microtech_field_resolution_requests(
-        *,
-        email: str = "",
-        first_name: str = "",
-        last_name: str = "",
-    ) -> list[tuple[str, dict[str, Any]]]:
-        """Return indexed Microtech requests for the structured search form."""
-        requests: list[tuple[str, dict[str, Any]]] = []
-        email = _to_str(email)
-        first_name = _to_str(first_name)
-        last_name = _to_str(last_name)
-
-        if email:
-            quoted_email = email.replace("'", "''")
-            requests.extend(
-                [
-                    (
-                        "email_adresse",
-                        {
-                            "dataset": "Adressen",
-                            "indexField": "Nr",
-                            "range": {
-                                "fromValues": ["0"],
-                                "toValues": ["999999999999"],
-                            },
-                            "filter": f"EMail1 = '{quoted_email}'",
-                            "fields": ["AdrNr", "AdrId", "Na1", "EMail1", "Status"],
-                            "limit": _MICROTECH_SEARCH_LIMIT,
-                        },
-                    ),
-                    (
-                        "email_ansprechpartner",
-                        {
-                            "dataset": "Ansprechpartner",
-                            "indexField": "NNa",
-                            "range": {
-                                "fromValues": ["", ""],
-                                "toValues": ["\uffff", "\uffff"],
-                            },
-                            "filter": f"EMail1 = '{quoted_email}'",
-                            "fields": ["AdrNr", "AnsNr", "AspNr", "VNa", "NNa", "EMail1"],
-                            "limit": _MICROTECH_SEARCH_LIMIT,
-                        },
-                    ),
-                ]
-            )
-
-        if last_name:
-            prefix_end = f"{last_name}\uffff"
-            quoted_first_name = first_name.replace("'", "''")
-            name_request: dict[str, Any] = {
-                "dataset": "Ansprechpartner",
-                "indexField": "NNa",
-                "range": {
-                    "fromValues": [last_name, ""],
-                    "toValues": [prefix_end, "\uffff"],
-                },
-                "fields": ["AdrNr", "AnsNr", "AspNr", "VNa", "NNa", "EMail1"],
-                "limit": _MICROTECH_SEARCH_LIMIT,
-            }
-            if first_name:
-                name_request["filter"] = f"VNa = '{quoted_first_name}'"
-            requests.append(("kundenname", name_request))
-        elif first_name:
-            quoted_first_name = first_name.replace("'", "''")
-            requests.append(
-                (
-                    "vorname",
-                    {
-                        "dataset": "Ansprechpartner",
-                        "indexField": "NNa",
-                        "range": {
-                            "fromValues": ["", ""],
-                            "toValues": ["\uffff", "\uffff"],
-                        },
-                        "filter": f"VNa = '{quoted_first_name}'",
-                        "fields": ["AdrNr", "AnsNr", "AspNr", "VNa", "NNa", "EMail1"],
-                        "limit": _MICROTECH_SEARCH_LIMIT,
-                    },
-                )
-            )
-        return requests
 
     @staticmethod
     def _microtech_resolution_requests(term: str) -> list[tuple[str, dict[str, Any]]]:
@@ -436,6 +375,12 @@ class CustomerMergeSearchService(BaseService):
             }
 
         if job.kind == MicrotechGraphQLJob.Kind.DATASET_RECORDS:
+            if job.operation == "searchCustomers":
+                return {
+                    "job_id": job.pk,
+                    "state": "succeeded",
+                    "customers": self._microtech_customers_from_search_result(job.result_payload or {}),
+                }
             return {
                 "job_id": job.pk,
                 "state": "succeeded",
@@ -459,6 +404,19 @@ class CustomerMergeSearchService(BaseService):
             if erp_nr and erp_nr not in erp_nrs:
                 erp_nrs.append(erp_nr)
         return erp_nrs
+
+    @staticmethod
+    def _microtech_customers_from_search_result(result: dict[str, Any]) -> list[dict[str, Any]]:
+        """Normalize all customers from a direct poll or GraphQL webhook payload."""
+        customers: list[dict[str, Any]] = []
+        seen_erp_numbers: set[str] = set()
+        for raw_customer in CustomerMergeSearchService._find_microtech_customers(result):
+            customer = CustomerMergeSearchService._microtech_customer_from_result({"customer": raw_customer})
+            erp_nr = _to_str((customer or {}).get("erp_nr"))
+            if customer is not None and erp_nr and erp_nr not in seen_erp_numbers:
+                customers.append(customer)
+                seen_erp_numbers.add(erp_nr)
+        return customers
 
     @staticmethod
     def _microtech_customer_from_result(result: dict[str, Any]) -> dict[str, Any] | None:
@@ -515,6 +473,22 @@ class CustomerMergeSearchService(BaseService):
             if customer is not None:
                 return customer
         return None
+
+    @staticmethod
+    def _find_microtech_customers(payload: Any) -> list[dict[str, Any]]:
+        """Find a customer list in a direct poll result or GraphQL webhook payload."""
+        if not isinstance(payload, dict):
+            return []
+
+        customers = payload.get("customers")
+        if isinstance(customers, list):
+            return [customer for customer in customers if isinstance(customer, dict)]
+
+        for value in payload.values():
+            found = CustomerMergeSearchService._find_microtech_customers(value)
+            if found:
+                return found
+        return []
 
     def search_django(self, erp_nr: str) -> dict[str, Any] | None:
         try:

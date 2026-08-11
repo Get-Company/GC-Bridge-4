@@ -229,10 +229,20 @@ async function doSearch() {
     if (!resolveResp.ok || resolveJson.error) throw new Error(resolveJson.error || 'Suche konnte nicht gestartet werden.');
 
     let erpNrs = resolveJson.erp_nrs || [];
+    const microtechCustomers = {};
     const microtechJobIds = (resolveJson.microtech_jobs || []).map(job => job.job_id).filter(Boolean);
     if (microtechJobIds.length) {
       const jobs = await waitForMicrotechJobs(microtechJobIds);
-      erpNrs = erpNrs.concat(...jobs.filter(job => job.state === 'succeeded').flatMap(job => job.erp_nrs || []));
+      jobs.filter(job => job.state === 'succeeded').forEach(job => {
+        (job.erp_nrs || []).forEach(erpNr => erpNrs.push(erpNr));
+        (job.customers || []).forEach(customer => {
+          const erpNr = String(customer?.erp_nr || '').trim();
+          if (erpNr) {
+            microtechCustomers[erpNr] = customer;
+            erpNrs.push(erpNr);
+          }
+        });
+      });
     }
     erpNrs = uniqueErpNumbers(erpNrs);
 
@@ -245,7 +255,9 @@ async function doSearch() {
 
     searchErps = erpNrs;
     searchData = {};
-    erpNrs.forEach(nr => { searchData[nr] = {}; });
+    erpNrs.forEach(nr => {
+      searchData[nr] = microtechCustomers[nr] ? { microtech: microtechCustomers[nr] } : {};
+    });
     renderRows(true);
     void loadCells(erpNrs);
   } catch(e) {
@@ -256,7 +268,11 @@ async function doSearch() {
 }
 
 async function loadCells(erpNrs) {
-  await Promise.all(erpNrs.flatMap(nr => SYSTEMS.map(sys => fetchCell(nr, sys.key))));
+  await Promise.all(erpNrs.flatMap(nr =>
+    SYSTEMS
+      .filter(sys => !searchData[nr]?.[sys.key])
+      .map(sys => fetchCell(nr, sys.key))
+  ));
   renderRows(false);
   renderMergeSection();
 }

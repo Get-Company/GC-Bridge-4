@@ -23,29 +23,24 @@ class CustomerMergeMicrotechSearchTest(SimpleTestCase):
 
         self.assertEqual(requests["vorname"]["filter"], "VNa = 'O''Brien'")
 
-    def test_structured_search_uses_email_and_full_name_filters(self):
-        requests = dict(
-            CustomerMergeSearchService._microtech_field_resolution_requests(
-                email="max@example.com",
-                first_name="Max",
-                last_name="Muster",
-            )
+    def test_customer_search_result_unwraps_and_deduplicates_full_customers(self):
+        customers = CustomerMergeSearchService._microtech_customers_from_search_result(
+            {
+                "data": {
+                    "customerSearchJob": {
+                        "customers": [
+                            {"customerNumber": "10001", "name1": "Muster GmbH"},
+                            {"customerNumber": "10001", "name1": "Doppelter Treffer"},
+                            {"customerNumber": "10002", "firstName": "Mia", "lastName": "Muster"},
+                        ]
+                    }
+                }
+            }
         )
 
-        self.assertEqual(requests["email_adresse"]["dataset"], "Adressen")
-        self.assertEqual(requests["email_adresse"]["indexField"], "Nr")
-        self.assertEqual(requests["email_adresse"]["filter"], "EMail1 = 'max@example.com'")
-        self.assertEqual(requests["email_ansprechpartner"]["dataset"], "Ansprechpartner")
-        self.assertEqual(requests["kundenname"]["indexField"], "NNa")
-        self.assertEqual(requests["kundenname"]["filter"], "VNa = 'Max'")
-        self.assertEqual(requests["kundenname"]["range"]["fromValues"], ["Muster", ""])
-
-    def test_structured_first_name_filter_escapes_microtech_filter_quotes(self):
-        requests = dict(
-            CustomerMergeSearchService._microtech_field_resolution_requests(first_name="O'Brien")
-        )
-
-        self.assertEqual(requests["vorname"]["filter"], "VNa = 'O''Brien'")
+        self.assertEqual([customer["erp_nr"] for customer in customers], ["10001", "10002"])
+        self.assertEqual(customers[0]["name"], "Muster GmbH")
+        self.assertEqual(customers[1]["name"], "Mia Muster")
 
     def test_dataset_result_returns_unique_erp_numbers(self):
         result = {

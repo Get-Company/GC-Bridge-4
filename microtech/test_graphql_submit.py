@@ -51,6 +51,45 @@ class SubmitMutationTest(SimpleTestCase):
         self.assertEqual(job_id, "job-123")
         self.assertEqual(mock_mutation.call_args.args[1], "upsertCustomer")
 
+    @patch.object(MicrotechGraphQLClientService, "_mutation_with_job")
+    def test_submit_search_customers_uses_structured_customer_input(self, mock_mutation):
+        mock_mutation.return_value = self._accepted()
+        client = MicrotechGraphQLClientService.__new__(MicrotechGraphQLClientService)
+
+        job_id, retry_after = client.submit_search_customers(
+            customer_number="100012",
+            email="max@example.com",
+            first_name="Max",
+            last_name="Mustermann",
+            limit=20,
+        )
+
+        self.assertEqual((job_id, retry_after), ("job-123", 42.0))
+        self.assertEqual(mock_mutation.call_args.args[1], "searchCustomers")
+        self.assertEqual(
+            mock_mutation.call_args.args[2],
+            {
+                "input": {
+                    "adrNr": "100012",
+                    "email": "max@example.com",
+                    "firstName": "Max",
+                    "lastName": "Mustermann",
+                    "limit": 20,
+                }
+            },
+        )
+
+    @patch.object(MicrotechGraphQLClientService, "execute")
+    def test_customer_search_job_uses_dedicated_query(self, mock_execute):
+        mock_execute.return_value = {"customerSearchJob": {"status": "DONE", "customers": []}}
+        client = MicrotechGraphQLClientService.__new__(MicrotechGraphQLClientService)
+
+        result = client.customer_search_job("job-123")
+
+        self.assertEqual(result["status"], "DONE")
+        self.assertIn("customerSearchJob", mock_execute.call_args.args[0])
+        self.assertEqual(mock_execute.call_args.args[1], {"jobId": "job-123"})
+
     @patch.object(MicrotechGraphQLClientService, "poll_job")
     @patch.object(MicrotechGraphQLClientService, "execute")
     def test_microtech_connection_uses_connection_mutation(self, mock_execute, mock_poll):

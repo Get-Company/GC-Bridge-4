@@ -727,6 +727,8 @@ class MicrotechJobSentinelService(BaseService):
     @classmethod
     def _fetch_remote_job(cls, *, client: MicrotechGraphQLClientService, job: MicrotechGraphQLJob) -> dict[str, Any]:
         if job.kind == MicrotechGraphQLJob.Kind.DATASET_RECORDS:
+            if job.operation == "searchCustomers":
+                return client.customer_search_job(str(job.external_job_id))
             return client.dataset_job(str(job.external_job_id))
         if job.kind == MicrotechGraphQLJob.Kind.PRODUCT_READ:
             return client.product_list_job(str(job.external_job_id))
