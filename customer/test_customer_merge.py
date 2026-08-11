@@ -42,6 +42,14 @@ class CustomerMergeMicrotechSearchTest(SimpleTestCase):
         self.assertEqual(customers[0]["name"], "Muster GmbH")
         self.assertEqual(customers[1]["name"], "Mia Muster")
 
+    def test_running_microtech_search_has_a_non_technical_wait_message(self):
+        message = CustomerMergeSearchService._microtech_wait_message(
+            "waiting_webhook", "searchCustomers"
+        )
+
+        self.assertIn("Microtech durchsucht", message)
+        self.assertIn("automatisch ergänzt", message)
+
     def test_dataset_result_returns_unique_erp_numbers(self):
         result = {
             "records": [

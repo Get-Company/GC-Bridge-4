@@ -86,6 +86,7 @@
 
   {# -- Results area ------------------------------------------------- #}
   <div id="results-area" class="hidden space-y-4">
+    <div id="search-progress" aria-live="polite"></div>
     <div id="results-rows"></div>
     <div id="merge-section"></div>
   </div>
@@ -95,6 +96,8 @@
 const CSRF = '{{ csrf_token }}';
 let searchData = {};
 let searchErps = [];
+let activeSearchId = 0;
+let searchProgress = null;
 const SEARCH_BUTTON_IDLE = '<span class="material-symbols-outlined text-base">search</span> Suchen';
 
 const SYSTEMS = [
@@ -107,8 +110,8 @@ const SYSTEMS = [
 function esc(s) { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; }
 function toggleSection(btn) { btn.classList.toggle('open'); btn.nextElementSibling.classList.toggle('open'); }
 function spinner() { return '<span class="material-symbols-outlined text-sm animate-spin">progress_activity</span>'; }
-function loaderCell() {
-  return `<div class="flex items-center gap-2 text-xs text-gray-400 py-8 justify-center cell-loading rounded">${spinner()} Lade...</div>`;
+function loaderCell(message = 'Lade...') {
+  return `<div class="flex items-center gap-2 text-xs text-gray-400 py-8 justify-center cell-loading rounded">${spinner()} ${esc(message)}</div>`;
 }
 function setSearchButtonLoading(isLoading) {
   const button = document.getElementById('search-btn');
@@ -177,9 +180,116 @@ function normalize(d, sys) {
 
 /* ── search ──────────────────────────────────────────── */
 const MICROTECH_JOB_TIMEOUT_MS = 150000;
-const MICROTECH_JOB_POLL_MS = 1500;
+const MICROTECH_JOB_POLL_MS = 5000;
+const LOCAL_SYSTEM_KEYS = ['shopware', 'django'];
 
 function delay(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+function isCurrentSearch(searchId) { return searchId === activeSearchId; }
+
+function hasCellResult(erpNr, systemKey) {
+  return Object.prototype.hasOwnProperty.call(searchData[erpNr] || {}, systemKey);
+}
+
+function systemProgress(systemKey) {
+  const loaded = searchErps.filter(erpNr => hasCellResult(erpNr, systemKey)).length;
+  const found = searchErps.filter(erpNr => {
+    const value = searchData[erpNr]?.[systemKey];
+    return value && !value.error;
+  }).length;
+  return { loaded, found, expected: searchErps.length };
+}
+
+function isSystemSearchPending(systemKey) {
+  const progress = systemProgress(systemKey);
+  return progress.expected > 0 && progress.loaded < progress.expected;
+}
+
+function localSourceDetail(systemKey, progress) {
+  if (!progress.expected) return 'noch keine Kundennummer zum Abgleich';
+  const preselected = Number(searchProgress?.resolved?.[`${systemKey}_found`] || 0);
+  const resultText = progress.loaded
+    ? `${progress.found} angezeigt`
+    : preselected
+      ? `${preselected} erste Treffer`
+      : 'Suche läuft';
+  return `${progress.loaded}/${progress.expected} geprüft · ${resultText}`;
+}
+
+function renderSearchProgress() {
+  const container = document.getElementById('search-progress');
+  if (!container || !searchProgress) return;
+
+  const microtech = searchProgress.microtech || {};
+  const shopware = systemProgress('shopware');
+  const django = systemProgress('django');
+  const connection = searchProgress.graphql || {};
+  const connectionText = connection.ok === true
+    ? 'Die Verbindung zu Microtech ist bereit.'
+    : connection.ok === false
+      ? 'Die Verbindung zu Microtech ist derzeit nicht verfügbar.'
+      : 'Die Verbindung zu Microtech wird geprüft.';
+
+  let title = 'Erste Ergebnisse werden geladen';
+  let message = 'SW6 und GC-Bridge werden unabhängig voneinander geprüft.';
+  if (microtech.state === 'pending') {
+    title = searchErps.length ? 'Erste Ergebnisse sind bereits sichtbar' : 'Wir suchen weiter';
+    message = `${microtech.message || 'Microtech wird noch durchsucht.'} ${connectionText}`;
+  } else if (microtech.state === 'succeeded') {
+    title = 'Suche abgeschlossen';
+    message = `${microtech.message || 'Alle Suchquellen sind abgeschlossen.'} ${connectionText}`;
+  } else if (microtech.state === 'failed') {
+    title = 'Erste Ergebnisse sind verfügbar';
+    message = microtech.message || 'Die Suche in Microtech konnte nicht abgeschlossen werden.';
+  }
+
+  const sourceCard = (label, detail, accentClass) => `
+    <div class="rounded border border-gray-200 dark:border-gray-700 px-3 py-2 ${accentClass}">
+      <div class="text-[10px] font-semibold uppercase tracking-wider text-gray-400">${esc(label)}</div>
+      <div class="mt-0.5 text-xs text-gray-700 dark:text-gray-200">${detail}</div>
+    </div>`;
+  let microtechDetail;
+  if (microtech.state === 'pending') {
+    microtechDetail = `${spinner()} Suche läuft${microtech.found ? ` · ${microtech.found} gefunden` : ''}`;
+  } else if (microtech.state === 'succeeded') {
+    microtechDetail = `${microtech.found || 0} gefunden`;
+  } else if (microtech.state === 'failed') {
+    microtechDetail = 'derzeit nicht verfügbar';
+  } else {
+    microtechDetail = 'wird vorbereitet';
+  }
+
+  container.innerHTML = `
+    <div class="rounded-lg border border-blue-200 bg-blue-50/70 p-4 text-sm dark:border-blue-900/70 dark:bg-blue-950/20">
+      <div class="flex items-start gap-2">
+        <span class="material-symbols-outlined text-blue-600 dark:text-blue-400">manage_search</span>
+        <div>
+          <div class="font-medium text-blue-900 dark:text-blue-100">${esc(title)}</div>
+          <p class="mt-0.5 text-xs text-blue-800 dark:text-blue-200">${esc(message)}</p>
+        </div>
+      </div>
+      <div class="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+        ${sourceCard('SW6', localSourceDetail('shopware', shopware), 'bg-white/70 dark:bg-gray-900/20')}
+        ${sourceCard('GC-Bridge', localSourceDetail('django', django), 'bg-white/70 dark:bg-gray-900/20')}
+        ${sourceCard('Microtech', microtechDetail, 'bg-white/70 dark:bg-gray-900/20')}
+      </div>
+    </div>`;
+}
+
+async function updateMicrotechConnectionStatus(searchId) {
+  try {
+    const response = await fetch('/admin/status-bar/api/', {
+      headers: {'X-Requested-With': 'XMLHttpRequest'},
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error('Status konnte nicht geladen werden.');
+    if (!isCurrentSearch(searchId) || !searchProgress) return;
+    searchProgress.graphql = data.services?.graphql || { ok: null };
+  } catch (_error) {
+    if (!isCurrentSearch(searchId) || !searchProgress) return;
+    searchProgress.graphql = { ok: null };
+  }
+  renderSearchProgress();
+}
 
 async function getMicrotechJobStatuses(jobIds) {
   const resp = await fetch(
@@ -190,10 +300,11 @@ async function getMicrotechJobStatuses(jobIds) {
   return json.jobs || [];
 }
 
-async function waitForMicrotechJobs(jobIds) {
+async function waitForMicrotechJobs(jobIds, onUpdate = null) {
   const deadline = Date.now() + MICROTECH_JOB_TIMEOUT_MS;
   while (true) {
     const jobs = await getMicrotechJobStatuses(jobIds);
+    if (onUpdate) onUpdate(jobs);
     if (jobs.every(job => job.state !== 'pending')) return jobs;
     if (Date.now() >= deadline) {
       throw new Error('Microtech-Suche dauert zu lange. Bitte die Sentinel-Jobliste prüfen.');
@@ -206,7 +317,89 @@ function uniqueErpNumbers(numbers) {
   return [...new Set(numbers.map(nr => String(nr || '').trim()).filter(Boolean))];
 }
 
+function updateMicrotechProgress(jobs, searchId) {
+  if (!isCurrentSearch(searchId) || !searchProgress) return;
+  const pending = jobs.find(job => job.state === 'pending');
+  const failed = jobs.find(job => job.state === 'failed');
+  const finished = jobs.filter(job => job.state === 'succeeded');
+  const found = finished.reduce(
+    (total, job) => total + Number(job.result_count || job.customers?.length || job.erp_nrs?.length || 0),
+    0,
+  );
+
+  if (pending) {
+    searchProgress.microtech = {
+      state: 'pending',
+      message: pending.message,
+      found,
+    };
+  } else if (failed) {
+    searchProgress.microtech = {
+      state: 'failed',
+      message: failed.message,
+      found,
+    };
+  } else {
+    searchProgress.microtech = {
+      state: 'succeeded',
+      message: finished.map(job => job.message).filter(Boolean).join(' ') || 'Microtech-Suche abgeschlossen.',
+      found,
+    };
+  }
+  renderSearchProgress();
+}
+
+async function addMicrotechResults(jobIds, searchId) {
+  try {
+    const jobs = await waitForMicrotechJobs(jobIds, jobs => updateMicrotechProgress(jobs, searchId));
+    if (!isCurrentSearch(searchId)) return;
+
+    const newErpNumbers = [];
+    jobs.filter(job => job.state === 'succeeded').forEach(job => {
+      (job.erp_nrs || []).forEach(erpNr => {
+        const normalized = String(erpNr || '').trim();
+        if (normalized && !searchErps.includes(normalized)) {
+          searchErps.push(normalized);
+          searchData[normalized] = {};
+          newErpNumbers.push(normalized);
+        }
+      });
+      (job.customers || []).forEach(customer => {
+        const erpNr = String(customer?.erp_nr || '').trim();
+        if (!erpNr) return;
+        if (!searchData[erpNr]) {
+          searchData[erpNr] = {};
+          searchErps.push(erpNr);
+          newErpNumbers.push(erpNr);
+        }
+        searchData[erpNr].microtech = customer;
+      });
+    });
+    searchErps = uniqueErpNumbers(searchErps);
+    renderRows(false);
+    renderSearchProgress();
+    if (newErpNumbers.length) {
+      await loadCells(uniqueErpNumbers(newErpNumbers), LOCAL_SYSTEM_KEYS, searchId);
+    }
+    if (isCurrentSearch(searchId)) {
+      renderRows(false);
+      renderMergeSection();
+      renderSearchProgress();
+    }
+  } catch (_error) {
+    if (!isCurrentSearch(searchId) || !searchProgress) return;
+    searchProgress.microtech = {
+      state: 'failed',
+      message: 'Die Suche in Microtech dauert länger als erwartet. Bereits geladene Ergebnisse bleiben sichtbar.',
+      found: 0,
+    };
+    renderRows(false);
+    renderSearchProgress();
+  }
+}
+
 async function doSearch() {
+  const searchId = ++activeSearchId;
   const criteria = {
     customer_number: document.getElementById('search-customer-number').value.trim(),
     email: document.getElementById('search-email').value.trim(),
@@ -221,6 +414,13 @@ async function doSearch() {
   searchErps = [];
   document.getElementById('results-rows').innerHTML = loaderCell();
   document.getElementById('merge-section').innerHTML = '';
+  searchProgress = {
+    searchId,
+    graphql: { ok: null },
+    microtech: { state: 'preparing', message: '', found: 0 },
+  };
+  renderSearchProgress();
+  void updateMicrotechConnectionStatus(searchId);
 
   try {
     const searchParams = new URLSearchParams(criteria);
@@ -228,56 +428,52 @@ async function doSearch() {
     const resolveJson = await resolveResp.json();
     if (!resolveResp.ok || resolveJson.error) throw new Error(resolveJson.error || 'Suche konnte nicht gestartet werden.');
 
-    let erpNrs = resolveJson.erp_nrs || [];
-    const microtechCustomers = {};
+    const erpNrs = uniqueErpNumbers(resolveJson.erp_nrs || []);
     const microtechJobIds = (resolveJson.microtech_jobs || []).map(job => job.job_id).filter(Boolean);
-    if (microtechJobIds.length) {
-      const jobs = await waitForMicrotechJobs(microtechJobIds);
-      jobs.filter(job => job.state === 'succeeded').forEach(job => {
-        (job.erp_nrs || []).forEach(erpNr => erpNrs.push(erpNr));
-        (job.customers || []).forEach(customer => {
-          const erpNr = String(customer?.erp_nr || '').trim();
-          if (erpNr) {
-            microtechCustomers[erpNr] = customer;
-            erpNrs.push(erpNr);
-          }
-        });
-      });
-    }
-    erpNrs = uniqueErpNumbers(erpNrs);
-
-    if (!erpNrs.length) {
-      document.getElementById('results-rows').innerHTML =
-        '<div class="text-sm text-gray-400 italic p-4">Keine Ergebnisse gefunden.</div>';
-      document.getElementById('merge-section').innerHTML = '';
-      return;
-    }
-
     searchErps = erpNrs;
     searchData = {};
-    erpNrs.forEach(nr => {
-      searchData[nr] = microtechCustomers[nr] ? { microtech: microtechCustomers[nr] } : {};
-    });
+    erpNrs.forEach(nr => { searchData[nr] = {}; });
+    searchProgress.microtech = microtechJobIds.length
+      ? { state: 'pending', message: 'Die Suche in Microtech wurde gestartet.', found: 0 }
+      : { state: 'succeeded', message: 'Für diese Suche wurde keine Microtech-Abfrage gestartet.', found: 0 };
+    searchProgress.resolved = resolveJson.search_summary || {};
     renderRows(true);
-    void loadCells(erpNrs);
+    renderSearchProgress();
+    void loadCells(erpNrs, LOCAL_SYSTEM_KEYS, searchId);
+    if (microtechJobIds.length) {
+      void addMicrotechResults(microtechJobIds, searchId);
+    } else if (!erpNrs.length) {
+      document.getElementById('results-rows').innerHTML =
+        '<div class="text-sm text-gray-400 italic p-4">Keine Ergebnisse gefunden.</div>';
+    }
   } catch(e) {
-    alert('Fehler: ' + e.message);
+    if (!isCurrentSearch(searchId)) return;
+    searchProgress.microtech = {
+      state: 'failed',
+      message: 'Die Suche konnte nicht gestartet werden. Bitte versuchen Sie es erneut.',
+      found: 0,
+    };
+    renderSearchProgress();
+    alert('Die Suche konnte nicht gestartet werden. Bitte versuchen Sie es erneut.');
   } finally {
-    setSearchButtonLoading(false);
+    if (isCurrentSearch(searchId)) setSearchButtonLoading(false);
   }
 }
 
-async function loadCells(erpNrs) {
+async function loadCells(erpNrs, systemKeys = SYSTEMS.map(sys => sys.key), searchId = activeSearchId) {
   await Promise.all(erpNrs.flatMap(nr =>
     SYSTEMS
+      .filter(sys => systemKeys.includes(sys.key))
       .filter(sys => !searchData[nr]?.[sys.key])
-      .map(sys => fetchCell(nr, sys.key))
+      .map(sys => fetchCell(nr, sys.key, searchId))
   ));
+  if (!isCurrentSearch(searchId)) return;
   renderRows(false);
   renderMergeSection();
+  renderSearchProgress();
 }
 
-async function fetchCell(nr, sysKey) {
+async function fetchCell(nr, sysKey, searchId = activeSearchId) {
   try {
     const resp = await fetch(`/admin/customer-merge/api/search-cell/?erp_nr=${encodeURIComponent(nr)}&system=${sysKey}`);
     const json = await resp.json();
@@ -288,15 +484,20 @@ async function fetchCell(nr, sysKey) {
       const [job] = await waitForMicrotechJobs([json.microtech_job_id]);
       data = job.state === 'succeeded' ? job.data : { error: job.error || 'Microtech-Suche fehlgeschlagen.' };
     }
+    if (!isCurrentSearch(searchId)) return;
     if (!searchData[nr]) searchData[nr] = {};
     searchData[nr][sysKey] = data;
   } catch(e) {
+    if (!isCurrentSearch(searchId)) return;
     if (!searchData[nr]) searchData[nr] = {};
     searchData[nr][sysKey] = { error: e.message };
   }
 
+  if (!isCurrentSearch(searchId)) return;
+
   const cell = document.querySelector(`#col-${CSS.escape(nr)}-${sysKey} > div:last-child`);
   if (cell) cell.innerHTML = renderUnifiedCell(nr, sysKey);
+  renderSearchProgress();
 }
 
 /* ── render rows ─────────────────────────────────────── */
@@ -354,7 +555,20 @@ function renderRows(loading) {
 /* ── Unified cell renderer — same structure for all 3 systems ─── */
 function renderUnifiedCell(nr, sysKey) {
   const raw = searchData[nr]?.[sysKey];
-  if (!raw) return `<div class="text-xs text-gray-400 italic py-2">nicht gefunden</div>`;
+  if (!raw) {
+    if (sysKey === 'microtech') {
+      if (searchProgress?.microtech?.state === 'pending') {
+        return loaderCell('Microtech prüft weitere Kundendaten...');
+      }
+      if (searchProgress?.microtech?.state === 'failed') {
+        return `<div class="text-xs text-amber-600 dark:text-amber-400 py-2">Microtech-Ergebnis liegt noch nicht vor.</div>`;
+      }
+    }
+    if (sysKey !== 'microtech' && isSystemSearchPending(sysKey)) {
+      return loaderCell(`${SYSTEMS.find(system => system.key === sysKey)?.label || 'System'} wird geprüft...`);
+    }
+    return `<div class="text-xs text-gray-400 italic py-2">nicht gefunden</div>`;
+  }
   if (raw.error) return `<div class="text-xs text-red-500 py-2">Fehler: ${esc(raw.error)}</div>`;
 
   const d = normalize(raw, sysKey);

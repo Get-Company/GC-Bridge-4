@@ -58,11 +58,17 @@ def customer_merge_resolve_api(request):
                 if erp_nr not in erp_nrs:
                     erp_nrs.append(erp_nr)
 
+        microtech_jobs = search_service.start_microtech_resolution_search(**criteria)
         return JsonResponse(
             {
                 "erp_nrs": erp_nrs,
                 "resolved_from": resolved_sets,
-                "microtech_jobs": search_service.start_microtech_resolution_search(**criteria),
+                "microtech_jobs": microtech_jobs,
+                "search_summary": {
+                    "shopware_found": len(resolved_sets.get("shopware", [])),
+                    "django_found": len(resolved_sets.get("django", [])),
+                    "microtech_search_started": bool(microtech_jobs),
+                },
             }
         )
 

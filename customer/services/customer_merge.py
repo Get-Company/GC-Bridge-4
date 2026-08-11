@@ -365,34 +365,60 @@ class CustomerMergeSearchService(BaseService):
             MicrotechGraphQLJob.Status.RUNNING,
             MicrotechGraphQLJob.Status.WAITING_WEBHOOK,
         }:
-            return {"job_id": job.pk, "state": "pending"}
+            return {
+                "job_id": job.pk,
+                "state": "pending",
+                "message": self._microtech_wait_message(job.status, job.operation),
+            }
 
         if job.status != MicrotechGraphQLJob.Status.SUCCEEDED:
             return {
                 "job_id": job.pk,
                 "state": "failed",
                 "error": job.error_message or "Microtech-Suche fehlgeschlagen.",
+                "message": "Die Suche in Microtech konnte nicht abgeschlossen werden.",
             }
 
         if job.kind == MicrotechGraphQLJob.Kind.DATASET_RECORDS:
             if job.operation == "searchCustomers":
+                customers = self._microtech_customers_from_search_result(job.result_payload or {})
                 return {
                     "job_id": job.pk,
                     "state": "succeeded",
-                    "customers": self._microtech_customers_from_search_result(job.result_payload or {}),
+                    "message": f"{len(customers)} passende Kunden in Microtech gefunden.",
+                    "result_count": len(customers),
+                    "customers": customers,
                 }
+            erp_nrs = self._erp_numbers_from_dataset_result(job.result_payload or {})
             return {
                 "job_id": job.pk,
                 "state": "succeeded",
-                "erp_nrs": self._erp_numbers_from_dataset_result(job.result_payload or {}),
+                "message": f"{len(erp_nrs)} passende Kundennummern in Microtech gefunden.",
+                "result_count": len(erp_nrs),
+                "erp_nrs": erp_nrs,
             }
         if job.kind == MicrotechGraphQLJob.Kind.CUSTOMER_READ:
             return {
                 "job_id": job.pk,
                 "state": "succeeded",
+                "message": "Kundendaten aus Microtech geladen.",
                 "data": self._microtech_customer_from_result(job.result_payload or {}),
             }
         return {"job_id": job.pk, "state": "failed", "error": "Ungültiger Microtech-Suchauftrag."}
+
+    @staticmethod
+    def _microtech_wait_message(status: str, operation: str) -> str:
+        """Explain a running Microtech job without exposing internal job jargon."""
+        if operation == "searchCustomers":
+            if status == "queued":
+                return "Die Suche in Microtech wird vorbereitet."
+            if status in {"submitted", "running"}:
+                return "Microtech prüft Kundennummer, E-Mail und Namen."
+            return (
+                "Microtech durchsucht die Kundendaten. Weitere passende Kunden "
+                "werden automatisch ergänzt."
+            )
+        return "Die Kundendaten aus Microtech werden noch geladen."
 
     @staticmethod
     def _erp_numbers_from_dataset_result(result: dict[str, Any]) -> list[str]:
