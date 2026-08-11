@@ -191,7 +191,9 @@ function hasCellResult(erpNr, systemKey) {
 }
 
 function systemProgress(systemKey) {
-  const loaded = searchErps.filter(erpNr => hasCellResult(erpNr, systemKey)).length;
+  const loaded = searchErps.filter(erpNr =>
+    hasCellResult(erpNr, systemKey) || ['found', 'not_found', 'failed'].includes(getCellState(erpNr, systemKey))
+  ).length;
   const found = searchErps.filter(erpNr => {
     const value = searchData[erpNr]?.[systemKey];
     return value && !value.error;
@@ -199,9 +201,59 @@ function systemProgress(systemKey) {
   return { loaded, found, expected: searchErps.length };
 }
 
-function isSystemSearchPending(systemKey) {
-  const progress = systemProgress(systemKey);
-  return progress.expected > 0 && progress.loaded < progress.expected;
+function getCellState(erpNr, systemKey) {
+  return searchProgress?.cellStates?.[erpNr]?.[systemKey] || 'idle';
+}
+
+function setCellState(erpNr, systemKey, state) {
+  if (!searchProgress) return;
+  searchProgress.cellStates ||= {};
+  searchProgress.cellStates[erpNr] ||= {};
+  searchProgress.cellStates[erpNr][systemKey] = state;
+}
+
+function initializeRowStates(erpNrs, { microtechState = 'pending' } = {}) {
+  erpNrs.forEach(erpNr => {
+    setCellState(erpNr, 'shopware', 'loading');
+    setCellState(erpNr, 'django', 'loading');
+    setCellState(erpNr, 'microtech', microtechState);
+  });
+}
+
+function isRowLoading(erpNr) {
+  return SYSTEMS.some(system => ['loading', 'pending'].includes(getCellState(erpNr, system.key)));
+}
+
+function columnStatusLabel(erpNr, systemKey) {
+  const state = getCellState(erpNr, systemKey);
+  const labels = {
+    loading: 'wird geprüft',
+    pending: systemKey === 'microtech' ? 'Suche läuft' : 'wartet',
+    found: 'geladen',
+    not_found: 'kein Treffer',
+    failed: 'nicht verfügbar',
+    idle: 'bereit',
+  };
+  const isBusy = ['loading', 'pending'].includes(state);
+  const color = state === 'failed'
+    ? 'text-red-500'
+    : state === 'not_found'
+      ? 'text-gray-400'
+      : state === 'found'
+        ? 'text-green-600 dark:text-green-400'
+        : 'text-blue-600 dark:text-blue-400';
+  return `<span class="ml-auto inline-flex items-center gap-1 normal-case tracking-normal font-normal ${color}">
+    ${isBusy ? spinner() : ''}${esc(labels[state] || labels.idle)}
+  </span>`;
+}
+
+function refreshCellPresentation(erpNr, systemKey) {
+  const cell = document.querySelector(`#col-${CSS.escape(erpNr)}-${systemKey} > div:last-child`);
+  if (cell) cell.innerHTML = renderUnifiedCell(erpNr, systemKey);
+  const status = document.getElementById(`column-status-${erpNr}-${systemKey}`);
+  if (status) status.innerHTML = columnStatusLabel(erpNr, systemKey);
+  const rowSpinner = document.getElementById(`row-spinner-${erpNr}`);
+  if (rowSpinner) rowSpinner.classList.toggle('hidden', !isRowLoading(erpNr));
 }
 
 function localSourceDetail(systemKey, progress) {
@@ -371,11 +423,16 @@ async function addMicrotechResults(jobIds, searchId) {
           searchData[erpNr] = {};
           searchErps.push(erpNr);
           newErpNumbers.push(erpNr);
+          initializeRowStates([erpNr], { microtechState: 'found' });
         }
         searchData[erpNr].microtech = customer;
+        setCellState(erpNr, 'microtech', 'found');
       });
     });
     searchErps = uniqueErpNumbers(searchErps);
+    searchErps.forEach(erpNr => {
+      if (!searchData[erpNr]?.microtech) setCellState(erpNr, 'microtech', 'not_found');
+    });
     renderRows(false);
     renderSearchProgress();
     if (newErpNumbers.length) {
@@ -393,6 +450,9 @@ async function addMicrotechResults(jobIds, searchId) {
       message: 'Die Suche in Microtech dauert länger als erwartet. Bereits geladene Ergebnisse bleiben sichtbar.',
       found: 0,
     };
+    searchErps.forEach(erpNr => {
+      if (getCellState(erpNr, 'microtech') === 'pending') setCellState(erpNr, 'microtech', 'failed');
+    });
     renderRows(false);
     renderSearchProgress();
   }
@@ -418,6 +478,7 @@ async function doSearch() {
     searchId,
     graphql: { ok: null },
     microtech: { state: 'preparing', message: '', found: 0 },
+    cellStates: {},
   };
   renderSearchProgress();
   void updateMicrotechConnectionStatus(searchId);
@@ -433,11 +494,12 @@ async function doSearch() {
     searchErps = erpNrs;
     searchData = {};
     erpNrs.forEach(nr => { searchData[nr] = {}; });
+    initializeRowStates(erpNrs, { microtechState: microtechJobIds.length ? 'pending' : 'idle' });
     searchProgress.microtech = microtechJobIds.length
       ? { state: 'pending', message: 'Die Suche in Microtech wurde gestartet.', found: 0 }
       : { state: 'succeeded', message: 'Für diese Suche wurde keine Microtech-Abfrage gestartet.', found: 0 };
     searchProgress.resolved = resolveJson.search_summary || {};
-    renderRows(true);
+    renderRows(false);
     renderSearchProgress();
     void loadCells(erpNrs, LOCAL_SYSTEM_KEYS, searchId);
     if (microtechJobIds.length) {
@@ -453,6 +515,9 @@ async function doSearch() {
       message: 'Die Suche konnte nicht gestartet werden. Bitte versuchen Sie es erneut.',
       found: 0,
     };
+    searchErps.forEach(erpNr => {
+      if (getCellState(erpNr, 'microtech') === 'pending') setCellState(erpNr, 'microtech', 'failed');
+    });
     renderSearchProgress();
     alert('Die Suche konnte nicht gestartet werden. Bitte versuchen Sie es erneut.');
   } finally {
@@ -461,12 +526,17 @@ async function doSearch() {
 }
 
 async function loadCells(erpNrs, systemKeys = SYSTEMS.map(sys => sys.key), searchId = activeSearchId) {
-  await Promise.all(erpNrs.flatMap(nr =>
+  const requests = erpNrs.flatMap(nr =>
     SYSTEMS
       .filter(sys => systemKeys.includes(sys.key))
-      .filter(sys => !searchData[nr]?.[sys.key])
-      .map(sys => fetchCell(nr, sys.key, searchId))
-  ));
+      .filter(sys => !hasCellResult(nr, sys.key))
+      .map(sys => {
+        setCellState(nr, sys.key, 'loading');
+        return fetchCell(nr, sys.key, searchId);
+      })
+  );
+  if (requests.length && isCurrentSearch(searchId)) renderRows(false);
+  await Promise.all(requests);
   if (!isCurrentSearch(searchId)) return;
   renderRows(false);
   renderMergeSection();
@@ -481,22 +551,25 @@ async function fetchCell(nr, sysKey, searchId = activeSearchId) {
 
     let data = json.data;
     if (json.pending && json.microtech_job_id) {
+      setCellState(nr, sysKey, 'pending');
+      if (isCurrentSearch(searchId)) refreshCellPresentation(nr, sysKey);
       const [job] = await waitForMicrotechJobs([json.microtech_job_id]);
       data = job.state === 'succeeded' ? job.data : { error: job.error || 'Microtech-Suche fehlgeschlagen.' };
     }
     if (!isCurrentSearch(searchId)) return;
     if (!searchData[nr]) searchData[nr] = {};
     searchData[nr][sysKey] = data;
+    setCellState(nr, sysKey, data ? 'found' : 'not_found');
   } catch(e) {
     if (!isCurrentSearch(searchId)) return;
     if (!searchData[nr]) searchData[nr] = {};
     searchData[nr][sysKey] = { error: e.message };
+    setCellState(nr, sysKey, 'failed');
   }
 
   if (!isCurrentSearch(searchId)) return;
 
-  const cell = document.querySelector(`#col-${CSS.escape(nr)}-${sysKey} > div:last-child`);
-  if (cell) cell.innerHTML = renderUnifiedCell(nr, sysKey);
+  refreshCellPresentation(nr, sysKey);
   renderSearchProgress();
 }
 
@@ -511,7 +584,7 @@ function renderRows(loading) {
     // Row header
     html += `<div class="bg-gray-50 dark:bg-gray-800 px-4 py-2 border-b border-gray-200 dark:border-gray-700 flex items-center gap-3">
       <span class="font-mono font-semibold text-sm">${esc(nr)}</span>
-      <span id="row-spinner-${esc(nr)}" class="${loading ? '' : 'hidden'}">${spinner()}</span>
+      <span id="row-spinner-${esc(nr)}" class="${loading || isRowLoading(nr) ? '' : 'hidden'}">${spinner()}</span>
     </div>`;
 
     // 3 columns with sync arrows between them (CSS grid: 1fr 32px 1fr 32px 1fr)
@@ -522,14 +595,11 @@ function renderRows(loading) {
       html += `<div class="px-3 py-1.5 bg-gray-50/60 dark:bg-gray-800/60 border-b border-gray-100 dark:border-gray-700/50">
         <span class="text-[10px] font-semibold uppercase tracking-wider text-gray-400 flex items-center gap-1">
           <span class="material-symbols-outlined" style="font-size:12px">${sys.icon}</span> ${sys.label}
+          <span id="column-status-${esc(nr)}-${sys.key}">${columnStatusLabel(nr, sys.key)}</span>
         </span>
       </div>`;
       html += `<div class="p-3 flex-1">`;
-      if (loading) {
-        html += loaderCell();
-      } else {
-        html += renderUnifiedCell(nr, sys.key);
-      }
+      html += renderUnifiedCell(nr, sys.key);
       html += `</div></div>`;
 
       // Sync arrows between columns
@@ -555,17 +625,19 @@ function renderRows(loading) {
 /* ── Unified cell renderer — same structure for all 3 systems ─── */
 function renderUnifiedCell(nr, sysKey) {
   const raw = searchData[nr]?.[sysKey];
+  const state = getCellState(nr, sysKey);
   if (!raw) {
-    if (sysKey === 'microtech') {
-      if (searchProgress?.microtech?.state === 'pending') {
-        return loaderCell('Microtech prüft weitere Kundendaten...');
-      }
-      if (searchProgress?.microtech?.state === 'failed') {
-        return `<div class="text-xs text-amber-600 dark:text-amber-400 py-2">Microtech-Ergebnis liegt noch nicht vor.</div>`;
-      }
+    if (state === 'loading') {
+      const label = SYSTEMS.find(system => system.key === sysKey)?.label || 'System';
+      return loaderCell(`${label} wird geprüft...`);
     }
-    if (sysKey !== 'microtech' && isSystemSearchPending(sysKey)) {
-      return loaderCell(`${SYSTEMS.find(system => system.key === sysKey)?.label || 'System'} wird geprüft...`);
+    if (state === 'pending') {
+      return loaderCell(sysKey === 'microtech'
+        ? 'Microtech durchsucht die Kundendaten...'
+        : 'Die Abfrage wartet noch...');
+    }
+    if (state === 'failed') {
+      return `<div class="text-xs text-amber-600 dark:text-amber-400 py-2">Ergebnis derzeit nicht verfügbar.</div>`;
     }
     return `<div class="text-xs text-gray-400 italic py-2">nicht gefunden</div>`;
   }
@@ -763,7 +835,8 @@ async function refetchRow(oldNr, newNr) {
     if (idx >= 0) searchErps[idx] = newNr;
   }
   searchData[newNr] = {};
-  renderRows(true);
+  initializeRowStates([newNr], { microtechState: 'loading' });
+  renderRows(false);
   await loadCells([newNr]);
 }
 
