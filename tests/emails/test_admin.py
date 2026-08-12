@@ -1,4 +1,5 @@
 from decimal import Decimal
+from pathlib import Path
 import pytest
 from django.test import SimpleTestCase
 from types import SimpleNamespace
@@ -51,6 +52,15 @@ class TestEmailCampaignAdmin(SimpleTestCase):
         from emails.admin import EmailCampaignAdmin, EmailCampaignComponentInline
 
         assert EmailCampaignAdmin.inlines == (EmailCampaignComponentInline,)
+
+    def test_campaign_export_modal_has_copyable_mjml_output(self):
+        template = Path("templates/admin/emails/emailcampaign/change_form.html").read_text(
+            encoding="utf-8"
+        )
+
+        assert 'id="mjml-output"' in template
+        assert "data.mjml" in template
+        assert "function copyMjml()" in template
 
     def test_campaign_admin_shows_recipient_customer_context_info(self):
         from django.contrib.admin.sites import AdminSite
