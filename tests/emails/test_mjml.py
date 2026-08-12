@@ -329,6 +329,49 @@ class TestCampaignComponentRendering:
         assert "Hol den Sommer ins Büro" in mjml
         assert "...alles aus langweilig" in mjml
 
+    def test_render_campaign_preserves_shopware_component_markup(self, monkeypatch):
+        def fake_render_to_string(template_name, context):
+            if template_name == "emails/newsletter_base.mjml":
+                return context["body_mjml"]
+            return ""
+
+        monkeypatch.setattr("emails.mjml.render_to_string", fake_render_to_string)
+        monkeypatch.setattr("emails.mjml._campaign_sales_channel_ids", lambda campaign: ())
+
+        shopware_markup = "<mj-text>{{ product. }}</mj-text>"
+        jinja_component = SimpleNamespace(
+            library_component=SimpleNamespace(
+                placement="body",
+                name="Django",
+                mjml_markup="<mj-text>{{ greeting }}</mj-text>",
+            ),
+            library_component_id=True,
+            variables={"greeting": "Hallo aus Django"},
+            order=0,
+            enabled=True,
+        )
+        shopware_component = SimpleNamespace(
+            library_component=SimpleNamespace(
+                placement="body",
+                name="Shopware",
+                mjml_markup=shopware_markup,
+                rendering_mode="shopware",
+            ),
+            library_component_id=True,
+            variables={"product": "Django darf das nicht rendern"},
+            order=10,
+            enabled=True,
+        )
+        campaign = SimpleNamespace(
+            campaign_products=FakeQuerySet(),
+            components=FakeQuerySet([jinja_component, shopware_component]),
+        )
+
+        mjml = render_campaign_mjml(campaign)
+
+        assert "Hallo aus Django" in mjml
+        assert shopware_markup in mjml
+
     def test_render_campaign_uses_library_component_default_variables(self, monkeypatch):
         def fake_render_to_string(template_name, context):
             if template_name == "emails/newsletter_base.mjml":
@@ -508,6 +551,13 @@ class TestMjmlComponent:
         from emails.models import MjmlComponent
         component = MjmlComponent(name="Test")
         assert component.placement == "body"
+
+    def test_default_rendering_mode_is_django_jinja(self):
+        from emails.models import MjmlComponent
+
+        component = MjmlComponent(name="Test")
+
+        assert component.rendering_mode == MjmlComponent.RenderingMode.DJANGO_JINJA
 
     def test_default_variables_defaults_to_dict(self):
         from emails.models import MjmlComponent

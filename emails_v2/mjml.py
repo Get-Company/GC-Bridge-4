@@ -56,6 +56,8 @@ def _render_block(
     block_context = _block_context(block, context, product_map)
     if block.component_id and block.component:
         markup = block.component.mjml_markup
+        if getattr(block.component, "rendering_mode", "jinja") == "shopware":
+            return markup
         try:
             return _jinja_env.from_string(markup).render(block_context)
         except Exception:

@@ -323,7 +323,7 @@ def _clean_json_object(value, *, field_name: str):
 class MjmlComponentAdminForm(forms.ModelForm):
     default_variables = _json_variables_field(
         label=_("Standard-Variablen"),
-        help_text=_("JSON-Objekt mit Standardwerten fuer Platzhalter."),
+        help_text=_("JSON-Objekt mit Standardwerten fuer Django/Jinja-Platzhalter."),
     )
 
     class Meta:
@@ -336,18 +336,28 @@ class MjmlComponentAdminForm(forms.ModelForm):
             field_name=_("Standard-Variablen"),
         )
 
-    def clean_mjml_markup(self):
-        markup = self.cleaned_data.get("mjml_markup", "")
+    def clean(self):
+        cleaned_data = super().clean()
+        markup = cleaned_data.get("mjml_markup", "")
+        rendering_mode = cleaned_data.get(
+            "rendering_mode", MjmlComponent.RenderingMode.DJANGO_JINJA
+        )
+
+        if rendering_mode == MjmlComponent.RenderingMode.SHOPWARE:
+            return cleaned_data
 
         try:
             extract_variables(markup)
         except TemplateSyntaxError as error:
-            raise forms.ValidationError(
-                _("Ungültige Jinja-Template-Syntax in Zeile %(line)s: %(message)s"),
-                params={"line": error.lineno, "message": error.message},
-            ) from error
+            self.add_error(
+                "mjml_markup",
+                forms.ValidationError(
+                    _("Ungültige Jinja-Template-Syntax in Zeile %(line)s: %(message)s"),
+                    params={"line": error.lineno, "message": error.message},
+                ),
+            )
 
-        return markup
+        return cleaned_data
 
 
 class EmailCampaignComponentInlineForm(forms.ModelForm):
@@ -378,8 +388,8 @@ class EmailCampaignComponentInlineForm(forms.ModelForm):
 @admin.register(MjmlComponent)
 class MjmlComponentAdmin(BaseAdmin):
     form = MjmlComponentAdminForm
-    list_display = ("name", "placement", "is_default", "order")
-    list_filter = ("placement", "is_default")
+    list_display = ("name", "rendering_mode", "placement", "is_default", "order")
+    list_filter = ("rendering_mode", "placement", "is_default")
     list_editable = ("is_default", "order")
     search_fields = ("name",)
     readonly_fields = BaseAdmin.readonly_fields + ("component_info",)
@@ -400,7 +410,7 @@ class MjmlComponentAdmin(BaseAdmin):
         (
             _("MJML-Markup"),
             {
-                "fields": ("mjml_markup", "default_variables"),
+                "fields": ("rendering_mode", "mjml_markup", "default_variables"),
             },
         ),
         (

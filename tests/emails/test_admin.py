@@ -320,14 +320,39 @@ class TestEmailVariableJSONForms(SimpleTestCase):
             field.clean('{"description": "<p>ungeschlossene JSON-Struktur"')
 
     def test_component_markup_reports_jinja_syntax_errors(self):
-        from django import forms
         from emails.admin import MjmlComponentAdminForm
 
-        form = MjmlComponentAdminForm()
-        form.cleaned_data = {"mjml_markup": "{{ product. }}"}
+        form = MjmlComponentAdminForm(
+            data={
+                "name": "Ungültig",
+                "description": "",
+                "mjml_markup": "{{ product. }}",
+                "rendering_mode": "jinja",
+                "placement": "body",
+                "order": "0",
+                "default_variables": "{}",
+            }
+        )
 
-        with self.assertRaisesMessage(forms.ValidationError, "Jinja-Template-Syntax in Zeile 1"):
-            form.clean_mjml_markup()
+        assert not form.is_valid()
+        assert "Jinja-Template-Syntax in Zeile 1" in str(form.errors["mjml_markup"])
+
+    def test_component_markup_allows_shopware_syntax_in_passthrough_mode(self):
+        from emails.admin import MjmlComponentAdminForm
+
+        form = MjmlComponentAdminForm(
+            data={
+                "name": "Shopware",
+                "description": "",
+                "mjml_markup": "{{ product. }}",
+                "rendering_mode": "shopware",
+                "placement": "body",
+                "order": "0",
+                "default_variables": "{}",
+            }
+        )
+
+        assert form.is_valid(), form.errors
 
 
 class TestEmailCampaignQueueEntryAdmin(SimpleTestCase):

@@ -1,5 +1,6 @@
 import logging
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 from jinja2 import TemplateSyntaxError
@@ -40,6 +41,22 @@ def test_signal_ignores_invalid_jinja_syntax(caplog):
         update_detected_variables(sender=None, instance=component)
 
     assert "Detected variables were not updated for MJML component 42" in caplog.text
+
+
+def test_signal_clears_detected_variables_for_shopware_components():
+    component = SimpleNamespace(
+        pk=42,
+        rendering_mode="shopware",
+        mjml_markup="{{ product. }}",
+        detected_variables=["old_variable"],
+    )
+    queryset = Mock()
+    sender = SimpleNamespace(objects=SimpleNamespace(filter=Mock(return_value=queryset)))
+
+    update_detected_variables(sender=sender, instance=component)
+
+    sender.objects.filter.assert_called_once_with(pk=42)
+    queryset.update.assert_called_once_with(detected_variables=[])
 
 
 def test_extract_empty():

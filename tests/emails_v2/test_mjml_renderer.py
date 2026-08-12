@@ -85,6 +85,41 @@ def test_custom_component_rendered_via_jinja(db):
 
 
 @pytest.mark.django_db
+def test_custom_components_mix_django_and_shopware_rendering():
+    from emails.models import MjmlComponent
+
+    shopware_markup = "<mj-text>{{ product. }}</mj-text>"
+    django_component = MjmlComponent.objects.create(
+        name="Django",
+        mjml_markup="<mj-text>{{ greeting }}</mj-text>",
+    )
+    shopware_component = MjmlComponent.objects.create(
+        name="Shopware",
+        mjml_markup=shopware_markup,
+        rendering_mode=MjmlComponent.RenderingMode.SHOPWARE,
+    )
+    campaign = EmailBuilderCampaign.objects.create(internal_title="Shopware")
+    EmailBlock.objects.create(
+        campaign=campaign,
+        tag="mj-section",
+        order=0,
+        component=django_component,
+        variables={"greeting": "Hallo aus Django"},
+    )
+    EmailBlock.objects.create(
+        campaign=campaign,
+        tag="mj-section",
+        order=1,
+        component=shopware_component,
+    )
+
+    result = build_mjml_from_blocks(campaign)
+
+    assert "Hallo aus Django" in result
+    assert shopware_markup in result
+
+
+@pytest.mark.django_db
 def test_ordering_respected():
     campaign = EmailBuilderCampaign.objects.create(internal_title="Order")
     EmailBlock.objects.create(campaign=campaign, tag="mj-section", order=1, attributes={"css-class": "second"})

@@ -12,9 +12,23 @@ class MjmlComponent(BaseModel):
         HEAD = "head", _("Head (Kopfbereich)")
         BODY = "body", _("Body (Inhaltsbereich)")
 
+    class RenderingMode(models.TextChoices):
+        DJANGO_JINJA = "jinja", _("Django/Jinja rendern")
+        SHOPWARE = "shopware", _("Unverändert an Shopware weitergeben")
+
     name = models.CharField(max_length=255, verbose_name=_("Name"))
     description = models.TextField(blank=True, default="", verbose_name=_("Beschreibung"))
     mjml_markup = models.TextField(blank=True, default="", verbose_name=_("MJML-Markup"))
+    rendering_mode = models.CharField(
+        max_length=20,
+        choices=RenderingMode.choices,
+        default=RenderingMode.DJANGO_JINJA,
+        verbose_name=_("Rendering-Modus"),
+        help_text=_(
+            "Django/Jinja rendert Standard-Variablen. Der Shopware-Modus gibt das Markup "
+            "einschließlich Shopware-Platzhaltern unverändert weiter."
+        ),
+    )
     placement = models.CharField(
         max_length=10,
         choices=Placement.choices,
@@ -33,7 +47,10 @@ class MjmlComponent(BaseModel):
         default=dict,
         blank=True,
         verbose_name=_("Standard-Variablen"),
-        help_text=_("Key-Value-Paare fuer Platzhalter. Werden in Kampagnen ueberschrieben."),
+        help_text=_(
+            "Key-Value-Paare fuer Django/Jinja-Platzhalter. Werden in Kampagnen "
+            "ueberschrieben und im Shopware-Modus nicht verwendet."
+        ),
     )
 
     class Meta:

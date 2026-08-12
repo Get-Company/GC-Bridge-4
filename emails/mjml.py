@@ -51,6 +51,7 @@ _jinja_env.filters["urlencode"] = lambda value: quote_plus(str(value or ""))
 _HYPHENATED_PLACEHOLDER_RE = re.compile(
     r"(\{\{\s*)([A-Za-z_][A-Za-z0-9_]*(?:-[A-Za-z0-9_]+)+)(?=\s*(?:\||\}\}))"
 )
+_CHILDREN_PLACEHOLDER_RE = re.compile(r"\{\{\s*children\s*\}\}")
 
 
 class ProductEmailProxy:
@@ -268,6 +269,11 @@ def normalize_hyphenated_placeholders(markup: str) -> str:
     )
 
 
+def insert_rendered_children(markup: str, children: str) -> str:
+    """Insert rendered children without evaluating the surrounding markup as Jinja."""
+    return _CHILDREN_PLACEHOLDER_RE.sub(lambda _match: children, markup)
+
+
 def _component_identity(component: "EmailCampaignComponent") -> int:
     return getattr(component, "pk", None) or getattr(component, "id", None) or id(component)
 
@@ -326,7 +332,12 @@ def _render_component_mjml(
         return ""
 
     library_component = getattr(component, "library_component", None)
-    default_variables = getattr(library_component, "default_variables", None) or {}
+    rendering_mode = getattr(library_component, "rendering_mode", "jinja")
+    default_variables = (
+        getattr(library_component, "default_variables", None) or {}
+        if rendering_mode == "jinja"
+        else {}
+    )
     component_variables = {
         **default_variables,
         **(getattr(component, "variables", None) or {}),
@@ -358,6 +369,9 @@ def _render_component_mjml(
         child_map,
         seen,
     )
+
+    if rendering_mode == "shopware":
+        return insert_rendered_children(markup, component_context["children"])
 
     try:
         return _jinja_env.from_string(normalize_hyphenated_placeholders(markup)).render(
