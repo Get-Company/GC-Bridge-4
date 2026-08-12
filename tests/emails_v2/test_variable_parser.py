@@ -1,4 +1,10 @@
+import logging
+from types import SimpleNamespace
+
 import pytest
+from jinja2 import TemplateSyntaxError
+
+from emails_v2.signals import update_detected_variables
 from emails_v2.variable_parser import extract_variables, infer_field_type
 
 
@@ -12,6 +18,28 @@ def test_extract_multiple_variables():
 
 def test_extract_variable_in_if_block():
     assert extract_variables("{% if show %}{{ label }}{% endif %}") == ["label", "show"]
+
+
+def test_extract_hyphenated_component_variables():
+    assert extract_variables("{{ h1-title }} {{ h1-small }}") == ["h1-small", "h1-title"]
+
+
+def test_extract_invalid_jinja_syntax_raises_error():
+    with pytest.raises(TemplateSyntaxError):
+        extract_variables("{{ product. }}")
+
+
+def test_signal_ignores_invalid_jinja_syntax(caplog):
+    component = SimpleNamespace(
+        pk=42,
+        mjml_markup="{{ product. }}",
+        detected_variables=[],
+    )
+
+    with caplog.at_level(logging.WARNING):
+        update_detected_variables(sender=None, instance=component)
+
+    assert "Detected variables were not updated for MJML component 42" in caplog.text
 
 
 def test_extract_empty():

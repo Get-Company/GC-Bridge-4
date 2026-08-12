@@ -319,6 +319,16 @@ class TestEmailVariableJSONForms(SimpleTestCase):
         with self.assertRaisesMessage(Exception, "gültiges JSON"):
             field.clean('{"description": "<p>ungeschlossene JSON-Struktur"')
 
+    def test_component_markup_reports_jinja_syntax_errors(self):
+        from django import forms
+        from emails.admin import MjmlComponentAdminForm
+
+        form = MjmlComponentAdminForm()
+        form.cleaned_data = {"mjml_markup": "{{ product. }}"}
+
+        with self.assertRaisesMessage(forms.ValidationError, "Jinja-Template-Syntax in Zeile 1"):
+            form.clean_mjml_markup()
+
 
 class TestEmailCampaignQueueEntryAdmin(SimpleTestCase):
     def test_queue_admin_shows_rendered_html_preview_only(self):

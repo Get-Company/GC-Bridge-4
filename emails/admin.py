@@ -15,6 +15,7 @@ from django.urls import path
 from django.utils.html import format_html, format_html_join
 from django.utils.translation import gettext_lazy as _
 from django_json_widget.widgets import JSONEditorWidget
+from jinja2 import TemplateSyntaxError
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,7 @@ from emails.models import (
     EmailCampaignQueueEntry,
     MjmlComponent,
 )
+from emails_v2.variable_parser import extract_variables
 
 _MONOSPACE_STYLE = "font-family: monospace; width: 100%; min-height: 300px;"
 _PRODUCT_FIELD_EXCLUDES = {
@@ -333,6 +335,19 @@ class MjmlComponentAdminForm(forms.ModelForm):
             self.cleaned_data.get("default_variables"),
             field_name=_("Standard-Variablen"),
         )
+
+    def clean_mjml_markup(self):
+        markup = self.cleaned_data.get("mjml_markup", "")
+
+        try:
+            extract_variables(markup)
+        except TemplateSyntaxError as error:
+            raise forms.ValidationError(
+                _("Ungültige Jinja-Template-Syntax in Zeile %(line)s: %(message)s"),
+                params={"line": error.lineno, "message": error.message},
+            ) from error
+
+        return markup
 
 
 class EmailCampaignComponentInlineForm(forms.ModelForm):

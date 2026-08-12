@@ -256,7 +256,12 @@ def _campaign_components(campaign: "EmailCampaign") -> list["EmailCampaignCompon
     )
 
 
-def _normalize_hyphenated_placeholders(markup: str) -> str:
+def find_hyphenated_placeholders(markup: str) -> set[str]:
+    """Return component-variable names that require Jinja normalization."""
+    return {match.group(2) for match in _HYPHENATED_PLACEHOLDER_RE.finditer(markup)}
+
+
+def normalize_hyphenated_placeholders(markup: str) -> str:
     return _HYPHENATED_PLACEHOLDER_RE.sub(
         lambda match: f'{match.group(1)}__component_variables["{match.group(2)}"]',
         markup,
@@ -355,7 +360,7 @@ def _render_component_mjml(
     )
 
     try:
-        return _jinja_env.from_string(_normalize_hyphenated_placeholders(markup)).render(
+        return _jinja_env.from_string(normalize_hyphenated_placeholders(markup)).render(
             component_context
         )
     except Exception:
