@@ -571,6 +571,12 @@ UNFOLD = {
                         "permission": sidebar_model_view_permission("documents", "Document"),
                     },
                     {
+                        "title": _("Dokumenttypen"),
+                        "icon": "category",
+                        "link": reverse_lazy("admin:documents_documenttype_changelist"),
+                        "permission": sidebar_model_view_permission("documents", "DocumentType"),
+                    },
+                    {
                         "title": _("QR-Codes"),
                         "icon": "qr_code_2",
                         "link": reverse_lazy("admin:qrcodes_qrcode_changelist"),

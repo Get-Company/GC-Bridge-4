@@ -36,6 +36,45 @@ def document_end_pdf_upload_to(instance: "Document", filename: str) -> str:
     return f"documents/pdfs/{slug}-end.pdf"
 
 
+class DocumentType(BaseModel):
+    """Configurable document type identified by the code stored on documents."""
+
+    DEFAULT_DEFINITIONS = (
+        ("price_list", _("Preisliste")),
+        ("order_form", _("Bestellschein")),
+        ("terms", _("AGB")),
+        ("privacy", _("Datenschutzerklaerung")),
+        ("imprint", _("Impressum")),
+        ("other", _("Sonstiges")),
+    )
+
+    code = models.SlugField(max_length=40, unique=True, verbose_name=_("Kennung"))
+    name = models.CharField(max_length=120, verbose_name=_("Name"))
+    settings = models.JSONField(
+        blank=True,
+        default=dict,
+        verbose_name=_("Einstellungen"),
+        help_text=_("Freie Einstellungen dieses Dokumenttyps als JSON-Objekt."),
+    )
+    is_active = models.BooleanField(default=True, db_index=True, verbose_name=_("Aktiv"))
+
+    class Meta:
+        verbose_name = _("Dokumenttyp")
+        verbose_name_plural = _("Dokumenttypen")
+        ordering = ("name", "code")
+
+    def __str__(self) -> str:
+        return self.name
+
+    @classmethod
+    def ensure_defaults(cls) -> None:
+        for code, name in cls.DEFAULT_DEFINITIONS:
+            cls.objects.get_or_create(
+                code=code,
+                defaults={"name": name, "settings": {}, "is_active": True},
+            )
+
+
 class Document(BaseModel):
     class DocumentType(models.TextChoices):
         PRICE_LIST = "price_list", _("Preisliste")
@@ -51,10 +90,10 @@ class Document(BaseModel):
 
     document_type = models.CharField(
         max_length=40,
-        choices=DocumentType.choices,
         default=DocumentType.OTHER,
         db_index=True,
         verbose_name=_("Dokumenttyp"),
+        help_text=_("Wird im Dokument-Admin aus den gepflegten Dokumenttypen ausgewählt."),
     )
     slug = models.SlugField(max_length=120, unique=True, verbose_name=_("Slug"))
     title = models.CharField(max_length=255, verbose_name=_("Titel"))
@@ -166,12 +205,29 @@ class Document(BaseModel):
                 self.template_file.close()
         return self.html_content
 
+    def get_document_type_settings(self) -> dict:
+        """Return a copy of the selected type's configurable settings."""
+
+        if not self.pk or not self.document_type:
+            return {}
+        settings = (
+            DocumentType.objects.filter(code=self.document_type)
+            .values_list("settings", flat=True)
+            .first()
+        )
+        return dict(settings) if isinstance(settings, dict) else {}
+
     def render(self, context: dict | None = None) -> str:
         render_context = context or {}
         # A document's saved CSS is authoritative.  The service can still pass
         # its default price-list CSS when this field is intentionally empty.
         css_content = self.css_content or render_context.get("css", "")
-        ctx = {"document": self, **render_context, "css": css_content}
+        ctx = {
+            "document": self,
+            "document_type_settings": self.get_document_type_settings(),
+            **render_context,
+            "css": css_content,
+        }
         source = self.get_template_source()
         if self.use_jinja2:
             from documents.jinja2_env import build_env

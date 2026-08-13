@@ -7,13 +7,14 @@ from django import forms
 from django.contrib.admin.sites import AdminSite
 from django.core.files.base import ContentFile
 from django.test import SimpleTestCase, TestCase, override_settings
+from django_json_widget.widgets import JSONEditorWidget
 from pypdf import PdfReader, PdfWriter
 from weasyprint import HTML as WeasyHTML
 
-from documents.admin import DocumentAdmin, DocumentAdminForm
+from documents.admin import DocumentAdmin, DocumentAdminForm, DocumentTypeAdminForm
 from documents.jinja2_env import price_list_catalog_sections
 from documents.management.commands.init_documents import Command as InitDocumentsCommand
-from documents.models import Document
+from documents.models import Document, DocumentType
 from documents.shopware_upload_service import DocumentShopwareUploadService
 from documents.services import DocumentPdfService
 from unfold.contrib.forms.widgets import WysiwygWidget
@@ -40,6 +41,7 @@ class DocumentRenderingTest(SimpleTestCase):
             "ShopwareLinkedDocumentAdminForm",
             (DocumentAdminForm,),
             {
+                "document_type_choices": [("terms", "AGB")],
                 "shopware_layout_choices": [("layout-id", "AGB (page)")],
                 "shopware_pdf_choices": [("media-id", "agb.pdf")],
                 "shopware_media_folder_choices": [("folder-id", "Dokumente / Rechtliches")],
@@ -48,6 +50,7 @@ class DocumentRenderingTest(SimpleTestCase):
 
         form = form_class(
             instance=Document(
+                document_type="terms",
                 shopware_cms_page_id="layout-id",
                 shopware_media_id="media-id",
                 shopware_media_folder_id="folder-id",
@@ -55,9 +58,11 @@ class DocumentRenderingTest(SimpleTestCase):
         )
 
         self.assertIsInstance(form.fields["shopware_cms_page_id"], forms.ChoiceField)
+        self.assertIsInstance(form.fields["document_type"], forms.ChoiceField)
         self.assertIsInstance(form.fields["shopware_media_id"], forms.ChoiceField)
         self.assertIsInstance(form.fields["shopware_media_folder_id"], forms.ChoiceField)
         self.assertIn(("layout-id", "AGB (page)"), list(form.fields["shopware_cms_page_id"].choices))
+        self.assertIn(("terms", "AGB"), list(form.fields["document_type"].choices))
         self.assertIn(("media-id", "agb.pdf"), list(form.fields["shopware_media_id"].choices))
         self.assertIn(
             ("folder-id", "Dokumente / Rechtliches"),
@@ -116,6 +121,7 @@ class DocumentRenderingTest(SimpleTestCase):
         self.assertIn("category_sections", help_html)
         self.assertIn("row.price_display", help_html)
         self.assertIn("{{ document.title }}", help_html)
+        self.assertIn("document_type_settings", help_html)
         self.assertIn("documents_document", help_html)
         self.assertIn("document_type", help_html)
         self.assertNotIn("Live-Vorschau", help_html)
@@ -156,6 +162,43 @@ class DocumentRenderingTest(SimpleTestCase):
             "document_type == 'price_list'",
         )
         self.assertIn("price_list_duplicate_categories", admin_instance.autocomplete_fields)
+
+    def test_document_type_admin_uses_a_json_editor_for_settings(self):
+        settings_field = DocumentTypeAdminForm.base_fields["settings"]
+
+        self.assertIsInstance(settings_field.widget, JSONEditorWidget)
+        self.assertEqual(
+            settings_field.clean('{"shopware_folder": "Dokumente"}'),
+            {"shopware_folder": "Dokumente"},
+        )
+
+    def test_unsaved_document_has_no_document_type_settings(self):
+        document = Document(document_type="terms")
+
+        self.assertEqual(document.get_document_type_settings(), {})
+
+    @patch("documents.models.DocumentType.objects")
+    def test_document_type_settings_are_available_in_the_template(self, objects):
+        query = objects.filter.return_value
+        query.values_list.return_value.first.return_value = {"shopware_folder": "Dokumente"}
+        document = Document(
+            pk=1,
+            document_type="terms",
+            html_content="<p>{{ document_type_settings.shopware_folder }}</p>",
+        )
+
+        self.assertEqual(document.render(), "<p>Dokumente</p>")
+        objects.filter.assert_called_once_with(code="terms")
+
+    def test_document_type_defines_configurable_settings(self):
+        document_type = DocumentType(
+            code="brochure",
+            name="Broschüre",
+            settings={"shopware_folder": "Dokumente"},
+        )
+
+        self.assertEqual(str(document_type), "Broschüre")
+        self.assertEqual(document_type.settings["shopware_folder"], "Dokumente")
 
 
 class DocumentInitializationCommandTest(SimpleTestCase):

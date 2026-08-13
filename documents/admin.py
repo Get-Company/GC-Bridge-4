@@ -5,6 +5,8 @@ from django.http import FileResponse, Http404, HttpResponse, HttpResponseRedirec
 from django.urls import path, reverse
 from django.utils.html import escape, format_html
 from django.utils.safestring import mark_safe
+from django.utils.translation import gettext_lazy as _
+from django_json_widget.widgets import JSONEditorWidget
 from unfold.contrib.filters.admin import BooleanRadioFilter
 from unfold.contrib.forms.widgets import WysiwygWidget
 from unfold.decorators import action
@@ -14,12 +16,15 @@ from core.admin import BaseAdmin, BaseTabularInline
 from documents.document_version_service import DocumentVersionService
 from documents.models import (
     Document,
+    DocumentType,
     DocumentVersion,
 )
 from documents.services import DocumentPdfService, DocumentTemplateContextService
 
 
 class DocumentAdminForm(forms.ModelForm):
+    document_type_choices: list[tuple[str, str]] | None = None
+    document_type_choices_error = ""
     shopware_layout_choices: list[tuple[str, str]] | None = None
     shopware_pdf_choices: list[tuple[str, str]] | None = None
     shopware_media_folder_choices: list[tuple[str, str]] | None = None
@@ -47,6 +52,7 @@ class DocumentAdminForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self._configure_document_type_select()
         self._configure_shopware_select(
             "shopware_cms_page_id",
             self.shopware_layout_choices,
@@ -69,6 +75,31 @@ class DocumentAdminForm(forms.ModelForm):
             "Optional: Beim Veröffentlichen wird die PDF in diesen Ordner verschoben. Ohne Auswahl bleibt ihr "
             "aktueller Shopware-Ordner unverändert.",
             empty_label="Ordner der ausgewählten Datei beibehalten",
+        )
+
+    def _configure_document_type_select(self) -> None:
+        if self.document_type_choices is None:
+            if self.document_type_choices_error:
+                self.fields["document_type"].help_text = (
+                    "Dokumenttypen konnten nicht geladen werden: "
+                    f"{self.document_type_choices_error}"
+                )
+            return
+
+        current_value = str(
+            self.initial.get("document_type") or getattr(self.instance, "document_type", "") or ""
+        ).strip()
+        choices = list(self.document_type_choices)
+        choice_map = dict(choices)
+        if current_value and current_value not in choice_map:
+            choices.insert(0, (current_value, f"Gespeicherte Kennung: {current_value}"))
+
+        self.fields["document_type"] = forms.ChoiceField(
+            required=True,
+            choices=choices,
+            label=_("Dokumenttyp"),
+            help_text=_("Dokumenttypen werden unter Dokumente → Dokumenttypen gepflegt."),
+            widget=forms.Select(attrs={"class": "vSelect2"}),
         )
 
     def _configure_shopware_select(
@@ -110,6 +141,65 @@ class DocumentVersionInline(BaseTabularInline):
     show_change_link = True
     fields = ("version_number", "label", "is_active", "activated_at", "created_at")
     readonly_fields = BaseTabularInline.readonly_fields + ("version_number", "label", "is_active", "activated_at")
+
+
+class DocumentTypeAdminForm(forms.ModelForm):
+    settings = forms.JSONField(
+        required=False,
+        label=_("Einstellungen"),
+        help_text=_(
+            "Freies JSON-Objekt für diesen Typ, z. B. {\"shopware_folder\": \"Dokumente\"}. "
+            "Im Template steht es als document_type_settings zur Verfügung."
+        ),
+        widget=JSONEditorWidget(
+            width="100%",
+            height="320px",
+            options={"modes": ["code", "tree"]},
+        ),
+    )
+
+    class Meta:
+        model = DocumentType
+        fields = "__all__"
+
+    def clean_settings(self) -> dict:
+        settings = self.cleaned_data.get("settings")
+        if settings in (None, ""):
+            return {}
+        if not isinstance(settings, dict):
+            raise forms.ValidationError(_("Einstellungen müssen ein JSON-Objekt sein."))
+        return settings
+
+
+@admin.register(DocumentType)
+class DocumentTypeAdmin(BaseAdmin):
+    form = DocumentTypeAdminForm
+    list_display = ("name", "code", "is_active", "updated_at")
+    list_editable = ("is_active",)
+    list_filter = (("is_active", BooleanRadioFilter),)
+    search_fields = ("name", "code", "settings")
+    ordering = ("name", "code")
+    fieldsets = (
+        (
+            _("Dokumenttyp"),
+            {
+                "fields": ("name", "code", "is_active"),
+                "description": _(
+                    "Die Kennung wird in bestehenden Dokumenten gespeichert und sollte nach der Verwendung nicht mehr geändert werden."
+                ),
+            },
+        ),
+        (
+            _("Einstellungen"),
+            {
+                "fields": ("settings",),
+                "description": _(
+                    "Diese Einstellungen gehören zum Typ und können in Vorlagen über document_type_settings verwendet werden."
+                ),
+            },
+        ),
+        (_("System"), {"fields": BaseAdmin.readonly_fields}),
+    )
 
 
 @admin.register(Document)
@@ -278,6 +368,17 @@ class DocumentAdmin(BaseAdmin):
         from documents.shopware_publication_service import DocumentShopwarePublicationService
 
         try:
+            document_type_choices = list(
+                DocumentType.objects.filter(is_active=True)
+                .order_by("name", "code")
+                .values_list("code", "name")
+            )
+            document_type_choices_error = ""
+        except Exception as exc:
+            document_type_choices = None
+            document_type_choices_error = str(exc)
+
+        try:
             service = DocumentShopwarePublicationService()
             layout_choices = service.list_layout_choices()
             pdf_choices = service.list_pdf_media_choices()
@@ -293,6 +394,8 @@ class DocumentAdmin(BaseAdmin):
             "ShopwareLinkedDocumentAdminForm",
             (form_class,),
             {
+                "document_type_choices": document_type_choices,
+                "document_type_choices_error": document_type_choices_error,
                 "shopware_layout_choices": layout_choices,
                 "shopware_pdf_choices": pdf_choices,
                 "shopware_media_folder_choices": media_folder_choices,
@@ -393,7 +496,9 @@ class DocumentAdmin(BaseAdmin):
                 <p>
                     Standard ist <strong>Jinja2</strong>. Immer verfuegbar sind
                     <code>document</code>, <code>css</code>, <code>created_at_display</code>,
-                    <code>rows</code>, <code>category_sections</code> und <code>row_count</code>.
+                    <code>rows</code>, <code>category_sections</code>, <code>row_count</code> und
+                    <code>document_type_settings</code>. Letzteres enthält die JSON-Einstellungen des
+                    ausgewählten Dokumenttyps, z. B. <code>{{ document_type_settings.shopware_folder }}</code>.
                     Fuer direkte Abfragen stehen <code>Product</code>, <code>Category</code>,
                     <code>Tax</code> und <code>price_list_catalog_sections()</code> bereit.
                 </p>
