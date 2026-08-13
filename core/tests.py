@@ -224,6 +224,32 @@ class AdminSidebarPermissionTest(SimpleTestCase):
         )
         self.assertTrue(item["has_permission"])
 
+    def test_email_category_sidebar_entry_requires_view_permission(self):
+        request = self.factory.get(reverse("admin:index"))
+        request.user = _SidebarUser(set())
+        items = [
+            item
+            for group in admin.site.get_sidebar_list(request)
+            for item in group.get("items", [])
+            if str(item.get("link"))
+            == reverse("admin:emails_emailcampaigncategory_changelist")
+        ]
+
+        self.assertEqual(len(items), 1)
+        self.assertEqual(str(items[0]["title"]), "Kategorien")
+        self.assertFalse(items[0]["has_permission"])
+
+        request.user = _SidebarUser({"emails.view_emailcampaigncategory"})
+        items = [
+            item
+            for group in admin.site.get_sidebar_list(request)
+            for item in group.get("items", [])
+            if str(item.get("link"))
+            == reverse("admin:emails_emailcampaigncategory_changelist")
+        ]
+        self.assertEqual(len(items), 1)
+        self.assertTrue(items[0]["has_permission"])
+
     def test_hr_calendar_sidebar_entry_requires_employee_profile_view_permission(self):
         item = self._sidebar_item(permissions=set(), title="Kalender")
         self.assertFalse(item["has_permission"])

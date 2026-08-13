@@ -69,7 +69,10 @@ class TestEmailCampaignAdmin(SimpleTestCase):
         )
 
         assert "categories" in campaign_admin.list_filter
+        assert "categories" in campaign_admin.autocomplete_fields
+        assert "categories" not in campaign_admin.filter_horizontal
         assert campaign_admin.category_list(campaign) == "Shop, Newsletter"
+        assert category_admin.search_fields == ("name",)
         assert category_admin.get_ordering(None) == ("name",)
 
     def test_campaign_export_modal_has_copyable_mjml_output(self):

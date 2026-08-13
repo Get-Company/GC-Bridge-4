@@ -680,7 +680,7 @@ class EmailCampaignAdmin(BaseAdmin):
     search_fields = ("internal_title",)
     list_editable = ("status",)
     inlines = (EmailCampaignComponentInline,)
-    filter_horizontal = ("categories",)
+    autocomplete_fields = ("categories",)
 
     fieldsets = (
         (

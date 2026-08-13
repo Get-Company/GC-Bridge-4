@@ -438,6 +438,14 @@ UNFOLD = {
                         "permission": sidebar_model_view_permission("emails", "MjmlComponent"),
                     },
                     {
+                        "title": _("Kategorien"),
+                        "icon": "label",
+                        "link": reverse_lazy("admin:emails_emailcampaigncategory_changelist"),
+                        "permission": sidebar_model_view_permission(
+                            "emails", "EmailCampaignCategory"
+                        ),
+                    },
+                    {
                         "title": _("Newsletter Empfänger"),
                         "icon": "mark_email_read",
                         "link": reverse_lazy("admin:newsletter_newsletterrecipient_changelist"),
