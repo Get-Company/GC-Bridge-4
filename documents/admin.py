@@ -50,7 +50,9 @@ class DocumentAdminForm(forms.ModelForm):
             "shopware_cms_page_id",
             self.shopware_layout_choices,
             "Shopware Erlebniswelt",
-            "Die Seite, deren einzelnes statisches Text-Element beim Veröffentlichen ersetzt wird.",
+            "Diese Seite nimmt das Dokument auf. Enthält sie genau ein Text-Element, wird nur "
+            "dessen Inhalt ersetzt - sonst wird ihr Aufbau durch ein einzelnes Text-Element "
+            "mit dem Dokument ersetzt. Nur für Seiten verwenden, die allein dem Dokument dienen.",
         )
         self._configure_shopware_select(
             "shopware_media_id",
@@ -199,7 +201,9 @@ class DocumentAdmin(BaseAdmin):
                     "Erlebniswelt und vorhandene PDF-Datei auswählen, speichern und anschließend "
                     "„In Shopware veröffentlichen“ ausführen. Die Aktion ersetzt den HTML-Inhalt der "
                     "Erlebniswelt, erzeugt bei jedem Klick ein aktuelles PDF und überschreibt genau die "
-                    "ausgewählte Mediendatei."
+                    "ausgewählte Mediendatei. Bringt die Erlebniswelt nicht genau ein Text-Element mit, "
+                    "wird ihr gesamter Aufbau durch ein einzelnes Text-Element ersetzt - vorhandene "
+                    "Bilder, Videos und weitere Blöcke gehen dabei verloren."
                 ),
             },
         ),

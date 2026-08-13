@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from typing import Any
+from uuid import uuid4
 
 from documents.models import Document
 from documents.services import DocumentPdfService
@@ -94,32 +95,101 @@ class DocumentShopwarePublicationService(Shopware6Service):
             for slot in self._iter_slots(page)
             if self._static_html_content(slot["config"]) is not None
         ]
-        if not html_slots:
-            raise ValueError(
-                "Die ausgewählte Erlebniswelt enthält keinen statischen HTML- oder Textinhalt. "
-                "Bitte dort ein statisches Text-Element anlegen."
-            )
-        if len(html_slots) > 1:
-            raise ValueError(
-                "Die ausgewählte Erlebniswelt enthält mehrere statische HTML- oder Textinhalte. "
-                "Für die einfache Veröffentlichung muss sie genau ein solches Element enthalten."
-            )
 
-        slot = html_slots[0]
-        config = deepcopy(slot["config"])
-        content = config["content"]
-        config["content"] = {**content, "source": "static", "value": rendered_html}
-        self.request_post(
-            "/_action/sync",
-            payload={
-                "document-cms-slot-upsert": {
-                    "entity": "cms_slot",
-                    "action": "upsert",
-                    "payload": [{"id": slot["id"], "config": config}],
-                }
-            },
-        )
-        return slot["id"]
+        # A page that already offers exactly one text element is updated in place,
+        # which leaves everything else on that page untouched.
+        if len(html_slots) == 1:
+            slot = html_slots[0]
+            config = deepcopy(slot["config"])
+            content = config["content"]
+            config["content"] = {**content, "source": "static", "value": rendered_html}
+            self.request_post(
+                "/_action/sync",
+                payload={
+                    "document-cms-slot-upsert": {
+                        "entity": "cms_slot",
+                        "action": "upsert",
+                        "payload": [{"id": slot["id"], "config": config}],
+                    }
+                },
+            )
+            return slot["id"]
+
+        # No text element at all, or several of them: Shopware has no "page HTML"
+        # to overwrite, so the layout is rebuilt as a single text element that
+        # holds the rendered document. Everything else on the page is discarded.
+        return self._rebuild_layout(page, rendered_html=rendered_html)
+
+    def _rebuild_layout(self, page: dict[str, Any], *, rendered_html: str) -> str:
+        page_id = str(self._value(page, "id"))
+        obsolete_section_ids = [
+            str(self._value(section, "id"))
+            for section in self._association(page, "sections")
+            if self._value(section, "id")
+        ]
+
+        section_id = uuid4().hex
+        block_id = uuid4().hex
+        slot_id = uuid4().hex
+        operations: dict[str, Any] = {
+            "document-cms-page-upsert": {
+                "entity": "cms_page",
+                "action": "upsert",
+                "payload": [
+                    {
+                        "id": page_id,
+                        "sections": [
+                            {
+                                "id": section_id,
+                                "type": "default",
+                                "position": 0,
+                                "sizingMode": "boxed",
+                                "mobileBehavior": "wrap",
+                                "blocks": [
+                                    {
+                                        "id": block_id,
+                                        "type": "text",
+                                        "position": 0,
+                                        "sectionPosition": "main",
+                                        "marginTop": "20px",
+                                        "marginBottom": "20px",
+                                        "marginLeft": "20px",
+                                        "marginRight": "20px",
+                                        "slots": [
+                                            {
+                                                "id": slot_id,
+                                                "type": "text",
+                                                "slot": "content",
+                                                # Only "content" is set: the client strips None
+                                                # values, and Shopware rejects a field config
+                                                # that carries a source without a value.
+                                                "config": {
+                                                    "content": {
+                                                        "source": "static",
+                                                        "value": rendered_html,
+                                                    },
+                                                },
+                                            }
+                                        ],
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                ],
+            }
+        }
+        # Upserting sections does not remove the previous ones, so they are
+        # deleted explicitly - after the new section exists, never before.
+        if obsolete_section_ids:
+            operations["document-cms-section-delete"] = {
+                "entity": "cms_section",
+                "action": "delete",
+                "payload": [{"id": obsolete_id} for obsolete_id in obsolete_section_ids],
+            }
+
+        self.request_post("/_action/sync", payload=operations)
+        return slot_id
 
     def _fetch_cms_page(self, cms_page_id: str) -> dict[str, Any]:
         result = self.request_post(
