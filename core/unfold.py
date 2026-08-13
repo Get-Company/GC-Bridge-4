@@ -35,3 +35,7 @@ def admin_button_loader_style(_request):
 
 def admin_button_loader_script(_request):
     return static("core/admin/admin_button_loader.js")
+
+
+def favicon(_request):
+    return static("core/favicon.svg")

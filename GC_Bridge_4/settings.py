@@ -324,6 +324,13 @@ UNFOLD = {
     "SITE_SUBHEADER": "core.version.site_subheader_callback",
     "SITE_SYMBOL": "hub",
     "SITE_URL": "/",
+    "SITE_FAVICONS": [
+        {
+            "rel": "icon",
+            "href": "core.unfold.favicon",
+            "type": "image/svg+xml",
+        },
+    ],
     "SITE_DROPDOWN": [
         {
             "title": _("Handbuch"),
