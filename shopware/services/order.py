@@ -59,11 +59,13 @@ class OrderService(Shopware6Service):
 
         criteria.associations["deliveries"] = Criteria()
         criteria.associations["deliveries"].associations["shippingMethod"] = Criteria()
+        criteria.associations["deliveries"].associations["stateMachineState"] = Criteria()
         criteria.associations["deliveries"].associations["shippingOrderAddress"] = Criteria()
         criteria.associations["deliveries"].associations["shippingOrderAddress"].associations["country"] = Criteria()
 
         criteria.associations["transactions"] = Criteria()
         criteria.associations["transactions"].associations["paymentMethod"] = Criteria()
+        criteria.associations["transactions"].associations["stateMachineState"] = Criteria()
         criteria.associations["stateMachineState"] = Criteria()
         criteria.associations["lineItems"] = Criteria()
 
@@ -383,7 +385,10 @@ class OrderService(Shopware6Service):
                 or item.get("actionName")
                 or action
             )
-            result.append({"action": action, "label": label})
+            # Shopware reports the state the transition starts from, which is the
+            # current state of the entity - used to repair a stale local value.
+            from_state = _to_str(item.get("fromStateName") or item.get("from_state"))
+            result.append({"action": action, "label": label, "from_state": from_state})
             seen.add(action)
 
         return result

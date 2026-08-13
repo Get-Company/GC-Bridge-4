@@ -215,15 +215,86 @@
   function populateSelect(control, select) {
     var actions = getActionsForControl(control);
     clearOptions(select);
+
     if (actions.length === 0) {
+      // No local match — usually a missing or stale current state. Offer to ask
+      // Shopware directly instead of locking the control.
+      if (control.dataset.optionsUrl && control.dataset.optionsLoaded !== "1") {
+        appendOption(select, "", "Optionen laden…");
+        select.disabled = false;
+        select.classList.remove("js-sw-state-disabled");
+        armLazyLoad(control, select);
+        return;
+      }
       appendOption(select, "", "Keine Optionen verfügbar");
       select.disabled = true;
       select.classList.add("js-sw-state-disabled");
-    } else {
+      return;
+    }
+
+    select.disabled = false;
+    select.classList.remove("js-sw-state-disabled");
+    appendOption(select, "", "Status wählen…");
+    actions.forEach(function (a) {
+      appendOption(select, a, label(a));
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // On-demand fallback: fetch the options for a single entity from Shopware.
+  // Bound lazily so a changelist with many rows does not fire one request per row.
+  // ---------------------------------------------------------------------------
+
+  function armLazyLoad(control, select) {
+    if (control.dataset.lazyArmed === "1") return;
+    control.dataset.lazyArmed = "1";
+
+    var trigger = function () {
+      select.removeEventListener("focus", trigger);
+      select.removeEventListener("mousedown", trigger);
+      loadOptionsFromServer(control, select);
+    };
+    select.addEventListener("focus", trigger);
+    select.addEventListener("mousedown", trigger);
+  }
+
+  async function loadOptionsFromServer(control, select) {
+    if (control.dataset.optionsLoaded === "1") return;
+    control.dataset.optionsLoaded = "1";
+
+    var scope = control.dataset.scope;
+    setFeedback(control, "Optionen werden von Shopware geladen…", "info");
+    try {
+      var url = control.dataset.optionsUrl + "?scope=" + encodeURIComponent(scope);
+      var response = await fetch(url, { headers: { "X-Requested-With": "XMLHttpRequest" } });
+      var data = await response.json();
+      if (!data.ok || !(data.actions || []).length) {
+        throw new Error(data.error || "Keine Optionen erhalten.");
+      }
+
+      // Shopware also reports the state the transitions start from, so a stale
+      // or empty local state can be corrected here.
+      if (data.current_state) {
+        control.dataset.currentState = data.current_state;
+        var currentEl = control.querySelector(".js-sw-state-current");
+        if (currentEl) currentEl.textContent = label(data.current_state);
+      }
+
+      clearOptions(select);
+      select.disabled = false;
+      select.classList.remove("js-sw-state-disabled");
       appendOption(select, "", "Status wählen…");
-      actions.forEach(function (a) {
-        appendOption(select, a, label(a));
+      data.actions.forEach(function (a) {
+        appendOption(select, a.action, label(a.action) || a.label);
       });
+      setFeedback(control, "Bereit. Status wählen.", "info");
+    } catch (e) {
+      control.dataset.optionsLoaded = "";
+      clearOptions(select);
+      appendOption(select, "", "Keine Optionen verfügbar");
+      select.disabled = true;
+      select.classList.add("js-sw-state-disabled");
+      setFeedback(control, "Optionen konnten nicht geladen werden.", "error");
     }
   }
 

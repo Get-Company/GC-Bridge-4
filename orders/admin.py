@@ -420,7 +420,10 @@ class OrderAdmin(BaseAdmin):
             )
 
         actions = OrderService().get_available_transition_actions(scope=scope, entity_id=entity_id)
-        return JsonResponse({"ok": True, "scope": scope, "actions": actions})
+        current_state = next((_to_str(a.get("from_state")) for a in actions if a.get("from_state")), "")
+        return JsonResponse(
+            {"ok": True, "scope": scope, "actions": actions, "current_state": current_state}
+        )
 
     def shopware_set_state_view(self, request, object_id: str, **kwargs):
         if request.method != "POST":
