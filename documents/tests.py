@@ -607,6 +607,7 @@ class DocumentShopwareUploadServiceTest(SimpleTestCase):
                             "payload": [
                                 {
                                     "id": "existing-media-id",
+                                    "title": "AGB",
                                 }
                         ],
                     }
@@ -645,7 +646,13 @@ class DocumentShopwareUploadServiceTest(SimpleTestCase):
                     "document-media-upsert": {
                         "entity": "media",
                         "action": "upsert",
-                        "payload": [{"id": "existing-media-id", "mediaFolderId": "selected-folder-id"}],
+                        "payload": [
+                            {
+                                "id": "existing-media-id",
+                                "mediaFolderId": "selected-folder-id",
+                                "title": "AGB",
+                            }
+                        ],
                     }
                 },
             )

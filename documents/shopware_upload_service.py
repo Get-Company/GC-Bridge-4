@@ -32,11 +32,16 @@ class DocumentShopwareUploadService(Shopware6Service):
 
         media_id = self.resolve_media_id(document)
         media_folder_id = (document.shopware_media_folder_id or "").strip()
+        media_title = (document.title or "").strip()
 
         if not self.access_token:
             self.access_token = self.authenticate()
 
-        self.ensure_media_entity(media_id, media_folder_id=media_folder_id)
+        self.ensure_media_entity(
+            media_id,
+            media_folder_id=media_folder_id,
+            media_title=media_title,
+        )
 
         file_name = pdf_path.stem
         self.delete_conflicting_media_by_filename(
@@ -60,10 +65,18 @@ class DocumentShopwareUploadService(Shopware6Service):
         document.save(update_fields=["shopware_media_id", "updated_at"])
         return media_id
 
-    def ensure_media_entity(self, media_id: str, *, media_folder_id: str = "") -> None:
+    def ensure_media_entity(
+        self,
+        media_id: str,
+        *,
+        media_folder_id: str = "",
+        media_title: str = "",
+    ) -> None:
         media_payload: dict[str, str] = {"id": media_id}
         if media_folder_id:
             media_payload["mediaFolderId"] = media_folder_id
+        if media_title:
+            media_payload["title"] = media_title
         self.request_post(
             "/_action/sync",
             payload={
