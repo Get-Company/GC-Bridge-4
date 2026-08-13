@@ -118,13 +118,19 @@ class Document(BaseModel):
         verbose_name=_("Jinja2-Engine"),
         help_text=_("Jinja2 erlaubt DB-Zugriff im Template, z. B. Product.objects.get(erp_nr='123')."),
     )
+    shopware_cms_page_id = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        verbose_name=_("Shopware Erlebniswelt-ID"),
+        help_text=_("Die Erlebniswelt wird im Dokument-Admin aus Shopware ausgewählt."),
+    )
     shopware_media_id = models.CharField(
         max_length=64,
         blank=True,
         default="",
-        editable=False,
         verbose_name=_("Shopware Media-ID"),
-        help_text=_("Wird beim Hochladen automatisch gesetzt und identifiziert die Datei dauerhaft in Shopware."),
+        help_text=_("Die PDF-Mediendatei wird im Dokument-Admin aus Shopware ausgewählt."),
     )
     active_version = models.ForeignKey(
         "DocumentVersion",

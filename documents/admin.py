@@ -20,6 +20,10 @@ from documents.services import DocumentPdfService, DocumentTemplateContextServic
 
 
 class DocumentAdminForm(forms.ModelForm):
+    shopware_layout_choices: list[tuple[str, str]] | None = None
+    shopware_pdf_choices: list[tuple[str, str]] | None = None
+    shopware_choices_error = ""
+
     class Meta:
         model = Document
         fields = "__all__"
@@ -39,6 +43,50 @@ class DocumentAdminForm(forms.ModelForm):
                 }
             ),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._configure_shopware_select(
+            "shopware_cms_page_id",
+            self.shopware_layout_choices,
+            "Shopware Erlebniswelt",
+            "Die Seite, deren einzelnes statisches Text-Element beim Veröffentlichen ersetzt wird.",
+        )
+        self._configure_shopware_select(
+            "shopware_media_id",
+            self.shopware_pdf_choices,
+            "Shopware PDF-Datei",
+            "Diese vorhandene Shopware-Mediendatei wird beim Veröffentlichen ersetzt.",
+        )
+
+    def _configure_shopware_select(
+        self,
+        field_name: str,
+        choices: list[tuple[str, str]] | None,
+        label: str,
+        help_text: str,
+    ) -> None:
+        if choices is None:
+            if self.shopware_choices_error:
+                self.fields[field_name].help_text = (
+                    f"{help_text} Auswahl konnte nicht geladen werden: {self.shopware_choices_error}"
+                )
+            return
+
+        current_value = str(
+            self.initial.get(field_name) or getattr(self.instance, field_name, "") or ""
+        ).strip()
+        choice_map = dict(choices)
+        if current_value and current_value not in choice_map:
+            choices = [(current_value, f"Gespeicherte ID: {current_value}"), *choices]
+
+        self.fields[field_name] = forms.ChoiceField(
+            required=False,
+            choices=[("", "---------"), *choices],
+            label=label,
+            help_text=help_text,
+            widget=forms.Select(attrs={"class": "vSelect2"}),
+        )
 
 
 class DocumentVersionInline(BaseTabularInline):
@@ -82,7 +130,7 @@ class DocumentAdmin(BaseAdmin):
         "pdf_download_link",
         "cover_pdf_preview",
         "end_pdf_preview",
-        "shopware_media_id",
+        "shopware_link_ids",
         "active_version_display",
     )
     actions = ("generate_pdf",)
@@ -93,7 +141,7 @@ class DocumentAdmin(BaseAdmin):
             "items": [
                 "create_version_detail",
                 "generate_pdf_detail",
-                "upload_to_shopware_detail",
+                "publish_to_shopware_detail",
                 "preview_template_detail",
             ],
         },
@@ -139,6 +187,23 @@ class DocumentAdmin(BaseAdmin):
             },
         ),
         (
+            "Shopware-Verknüpfung",
+            {
+                "fields": (
+                    "shopware_cms_page_id",
+                    "shopware_media_id",
+                    "shopware_link_ids",
+                ),
+                "classes": ("tab",),
+                "description": (
+                    "Erlebniswelt und vorhandene PDF-Datei auswählen, speichern und anschließend "
+                    "„In Shopware veröffentlichen“ ausführen. Die Aktion ersetzt den HTML-Inhalt der "
+                    "Erlebniswelt, erzeugt bei jedem Klick ein aktuelles PDF und überschreibt genau die "
+                    "ausgewählte Mediendatei."
+                ),
+            },
+        ),
+        (
             "PDF",
             {
                 "fields": (
@@ -149,7 +214,6 @@ class DocumentAdmin(BaseAdmin):
                     "cover_pdf_preview",
                     "end_pdf",
                     "end_pdf_preview",
-                    "shopware_media_id",
                 ),
                 "classes": ("tab",),
             },
@@ -190,6 +254,30 @@ class DocumentAdmin(BaseAdmin):
             obj.html_content = uploaded.read().decode("utf-8")
             uploaded.seek(0)
         super().save_model(request, obj, form, change)
+
+    def get_form(self, request, obj=None, change=False, **kwargs):
+        form_class = super().get_form(request, obj, change=change, **kwargs)
+        from documents.shopware_publication_service import DocumentShopwarePublicationService
+
+        try:
+            service = DocumentShopwarePublicationService()
+            layout_choices = service.list_layout_choices()
+            pdf_choices = service.list_pdf_media_choices()
+            choices_error = ""
+        except Exception as exc:
+            layout_choices = None
+            pdf_choices = None
+            choices_error = str(exc)
+
+        return type(
+            "ShopwareLinkedDocumentAdminForm",
+            (form_class,),
+            {
+                "shopware_layout_choices": layout_choices,
+                "shopware_pdf_choices": pdf_choices,
+                "shopware_choices_error": choices_error,
+            },
+        )
 
     @admin.display(description="Cover-PDF Vorschau")
     def cover_pdf_preview(self, obj: Document | None = None):
@@ -232,6 +320,30 @@ class DocumentAdmin(BaseAdmin):
         if not obj or not obj.active_version_id:
             return "Noch keine Version aktiviert"
         return obj.active_version
+
+    @admin.display(description="Shopware IDs")
+    def shopware_link_ids(self, obj: Document | None = None):
+        if not obj:
+            return "Nach dem Speichern verfügbar"
+        missing_links = []
+        if not obj.shopware_cms_page_id:
+            missing_links.append("Erlebniswelt")
+        if not obj.shopware_media_id:
+            missing_links.append("PDF-Datei")
+        notice = ""
+        if missing_links:
+            notice = format_html(
+                '<span class="text-red-600 dark:text-red-400">Nicht veröffentlichbar: {} auswählen und speichern.</span><br>',
+                ", ".join(missing_links),
+            )
+        layout_id = obj.shopware_cms_page_id or "nicht ausgewählt"
+        media_id = obj.shopware_media_id or "nicht ausgewählt"
+        return format_html(
+            "{}<code>Erlebniswelt: {}</code><br><code>PDF: {}</code>",
+            notice,
+            layout_id,
+            media_id,
+        )
 
     @admin.display(description="PDF")
     def pdf_download_link(self, obj: Document | None = None):
@@ -397,21 +509,26 @@ class DocumentAdmin(BaseAdmin):
         return HttpResponseRedirect(reverse("admin:documents_document_change", args=(object_id,)))
 
     @action(
-        description="Hochladen",
+        description="In Shopware veröffentlichen (HTML + aktuelle PDF)",
         icon="cloud_upload",
-        variant=ActionVariant.WARNING,
+        variant=ActionVariant.PRIMARY,
     )
-    def upload_to_shopware_detail(self, request, object_id: str):
-        from documents.shopware_upload_service import DocumentShopwareUploadService
+    def publish_to_shopware_detail(self, request, object_id: str):
+        from documents.shopware_publication_service import DocumentShopwarePublicationService
+
         document = self.get_object(request, object_id)
         if not document:
             self.message_user(request, "Dokument nicht gefunden.", level=messages.ERROR)
             return HttpResponseRedirect(reverse("admin:documents_document_changelist"))
         try:
-            media_id = DocumentShopwareUploadService().upload_pdf(document)
-            self.message_user(request, f"PDF erfolgreich zu Shopware hochgeladen (Media-ID: {media_id}).")
+            result = DocumentShopwarePublicationService().publish(document)
+            self.message_user(
+                request,
+                "Erlebniswelt (Slot-ID: {cms_slot_id}) aktualisiert und die aktuelle PDF unter "
+                "Media-ID {media_id} überschrieben.".format(**result),
+            )
         except Exception as exc:
-            self.message_user(request, f"Shopware-Upload fehlgeschlagen: {exc}", level=messages.ERROR)
+            self.message_user(request, f"Shopware-Veröffentlichung fehlgeschlagen: {exc}", level=messages.ERROR)
         return HttpResponseRedirect(reverse("admin:documents_document_change", args=(object_id,)))
 
 
@@ -457,7 +574,7 @@ class DocumentVersionAdmin(BaseAdmin):
             {
                 "fields": ("document", "version_number", "label", "is_active", "activated_at"),
                 "description": (
-                    "Die aktive Version wird als PDF erzeugt und unter derselben Shopware Media-ID aktualisiert."
+                    "Die aktive Version aktualisiert die verknüpfte Erlebniswelt und die verknüpfte PDF-Datei."
                 ),
             },
         ),
@@ -505,12 +622,13 @@ class DocumentVersionAdmin(BaseAdmin):
         except Exception as exc:
             self.message_user(
                 request,
-                f"Version wurde aktiviert, die Veroeffentlichung ist aber fehlgeschlagen: {exc}",
+                f"Aktivierung oder Shopware-Veröffentlichung fehlgeschlagen: {exc}",
                 level=messages.ERROR,
             )
         else:
             self.message_user(
                 request,
-                f"Version {version.version_number} aktiviert und PDF unter Media-ID {result['media_id']} aktualisiert.",
+                f"Version {version.version_number} aktiviert, Erlebniswelt aktualisiert und PDF unter "
+                f"Media-ID {result['media_id']} überschrieben.",
             )
         return HttpResponseRedirect(reverse("admin:documents_documentversion_change", args=(object_id,)))

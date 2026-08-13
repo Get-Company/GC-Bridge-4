@@ -4,8 +4,7 @@ from django.utils import timezone
 
 from core.services import BaseService
 from documents.models import Document, DocumentVersion
-from documents.services import DocumentPdfService
-from documents.shopware_upload_service import DocumentShopwareUploadService
+from documents.shopware_publication_service import DocumentShopwarePublicationService
 
 
 class DocumentVersionService(BaseService):
@@ -62,7 +61,8 @@ class DocumentVersionService(BaseService):
         return document
 
     def activate_and_publish(self, version: DocumentVersion) -> dict[str, object]:
+        # Do not activate a version if the document cannot be published at all
+        # because its required Shopware links have not been selected yet.
+        DocumentShopwarePublicationService.validate_links(version.document)
         document = self.activate(version)
-        DocumentPdfService().generate_pdf(document)
-        media_id = DocumentShopwareUploadService().upload_pdf(document)
-        return {"media_id": media_id}
+        return DocumentShopwarePublicationService().publish(document)

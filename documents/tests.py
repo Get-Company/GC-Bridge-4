@@ -3,6 +3,7 @@ from io import BytesIO
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from django import forms
 from django.contrib.admin.sites import AdminSite
 from django.core.files.base import ContentFile
 from django.test import SimpleTestCase, TestCase, override_settings
@@ -33,6 +34,23 @@ class DocumentRenderingTest(SimpleTestCase):
         form = DocumentAdminForm()
 
         self.assertIsInstance(form.fields["html_content"].widget, WysiwygWidget)
+
+    def test_document_admin_uses_selects_for_shopware_links(self):
+        form_class = type(
+            "ShopwareLinkedDocumentAdminForm",
+            (DocumentAdminForm,),
+            {
+                "shopware_layout_choices": [("layout-id", "AGB (page)")],
+                "shopware_pdf_choices": [("media-id", "agb.pdf")],
+            },
+        )
+
+        form = form_class(instance=Document(shopware_cms_page_id="layout-id", shopware_media_id="media-id"))
+
+        self.assertIsInstance(form.fields["shopware_cms_page_id"], forms.ChoiceField)
+        self.assertIsInstance(form.fields["shopware_media_id"], forms.ChoiceField)
+        self.assertIn(("layout-id", "AGB (page)"), list(form.fields["shopware_cms_page_id"].choices))
+        self.assertIn(("media-id", "agb.pdf"), list(form.fields["shopware_media_id"].choices))
 
     def test_document_editor_keeps_toolbar_visible_while_html_scrolls(self):
         stylesheet = Path("documents/static/documents/admin/document_editor.css").read_text(encoding="utf-8")
@@ -100,10 +118,15 @@ class DocumentRenderingTest(SimpleTestCase):
             [
                 "create_version_detail",
                 "generate_pdf_detail",
-                "upload_to_shopware_detail",
+                "publish_to_shopware_detail",
                 "preview_template_detail",
             ],
         )
+
+    def test_document_admin_marks_missing_shopware_links_as_not_publishable(self):
+        admin_instance = DocumentAdmin(Document, AdminSite())
+
+        self.assertIn("Nicht veröffentlichbar", str(admin_instance.shopware_link_ids(Document())))
 
     def test_duplicate_categories_are_only_shown_for_price_lists(self):
         admin_instance = DocumentAdmin(Document, AdminSite())
