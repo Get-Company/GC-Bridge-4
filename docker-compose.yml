@@ -65,6 +65,7 @@ services:
     volumes:
       - staticfiles:/app/staticfiles
       - media:/app/media
+      - documents:/app/Dokumente
       - applogs:/app/tmp/logs
       - backups:/app/tmp/backups
     depends_on:
@@ -100,6 +101,7 @@ services:
     command: celery -A GC_Bridge_4 worker --loglevel=INFO --concurrency=${CELERY_WORKER_CONCURRENCY:-2} -E
     volumes:
       - media:/app/media
+      - documents:/app/Dokumente
       - applogs:/app/tmp/logs
       - backups:/app/tmp/backups
     depends_on:
@@ -197,6 +199,7 @@ volumes:
   redisdata:
   staticfiles:
   media:
+  documents:
   applogs:
   celerybeat:
   backups:
