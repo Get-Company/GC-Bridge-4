@@ -22,6 +22,7 @@ from documents.services import DocumentPdfService, DocumentTemplateContextServic
 class DocumentAdminForm(forms.ModelForm):
     shopware_layout_choices: list[tuple[str, str]] | None = None
     shopware_pdf_choices: list[tuple[str, str]] | None = None
+    shopware_media_folder_choices: list[tuple[str, str]] | None = None
     shopware_choices_error = ""
 
     class Meta:
@@ -49,16 +50,25 @@ class DocumentAdminForm(forms.ModelForm):
         self._configure_shopware_select(
             "shopware_cms_page_id",
             self.shopware_layout_choices,
-            "Shopware Erlebniswelt",
-            "Diese Seite nimmt das Dokument auf. Enthält sie genau ein Text-Element, wird nur "
+            "Shopware Erlebniswelt (optional)",
+            "Optional: Diese Seite nimmt das Dokument auf. Enthält sie genau ein Text-Element, wird nur "
             "dessen Inhalt ersetzt - sonst wird ihr Aufbau durch ein einzelnes Text-Element "
             "mit dem Dokument ersetzt. Nur für Seiten verwenden, die allein dem Dokument dienen.",
+            empty_label="Keine Erlebniswelt aktualisieren (nur PDF hochladen)",
         )
         self._configure_shopware_select(
             "shopware_media_id",
             self.shopware_pdf_choices,
             "Shopware PDF-Datei",
             "Diese vorhandene Shopware-Mediendatei wird beim Veröffentlichen ersetzt.",
+        )
+        self._configure_shopware_select(
+            "shopware_media_folder_id",
+            self.shopware_media_folder_choices,
+            "Shopware Medienordner",
+            "Optional: Beim Veröffentlichen wird die PDF in diesen Ordner verschoben. Ohne Auswahl bleibt ihr "
+            "aktueller Shopware-Ordner unverändert.",
+            empty_label="Ordner der ausgewählten Datei beibehalten",
         )
 
     def _configure_shopware_select(
@@ -67,6 +77,8 @@ class DocumentAdminForm(forms.ModelForm):
         choices: list[tuple[str, str]] | None,
         label: str,
         help_text: str,
+        *,
+        empty_label: str = "---------",
     ) -> None:
         if choices is None:
             if self.shopware_choices_error:
@@ -84,7 +96,7 @@ class DocumentAdminForm(forms.ModelForm):
 
         self.fields[field_name] = forms.ChoiceField(
             required=False,
-            choices=[("", "---------"), *choices],
+            choices=[("", empty_label), *choices],
             label=label,
             help_text=help_text,
             widget=forms.Select(attrs={"class": "vSelect2"}),
@@ -194,14 +206,16 @@ class DocumentAdmin(BaseAdmin):
                 "fields": (
                     "shopware_cms_page_id",
                     "shopware_media_id",
+                    "shopware_media_folder_id",
                     "shopware_link_ids",
                 ),
                 "classes": ("tab",),
                 "description": (
-                    "Erlebniswelt und vorhandene PDF-Datei auswählen, speichern und anschließend "
-                    "„In Shopware veröffentlichen“ ausführen. Die Aktion ersetzt den HTML-Inhalt der "
-                    "Erlebniswelt, erzeugt bei jedem Klick ein aktuelles PDF und überschreibt genau die "
-                    "ausgewählte Mediendatei. Bringt die Erlebniswelt nicht genau ein Text-Element mit, "
+                    "Die vorhandene PDF-Datei auswählen und speichern. Optional kann eine Erlebniswelt "
+                    "ausgewählt werden. „In Shopware veröffentlichen“ erzeugt bei jedem Klick ein aktuelles PDF "
+                    "und überschreibt genau die ausgewählte Mediendatei. Ist eine Erlebniswelt ausgewählt, wird "
+                    "auch deren HTML-Inhalt aktualisiert. Optional kann ein Zielordner für die PDF ausgewählt werden; ohne "
+                    "Auswahl bleibt ihr Ordner in Shopware erhalten. Bringt die Erlebniswelt nicht genau ein Text-Element mit, "
                     "wird ihr gesamter Aufbau durch ein einzelnes Text-Element ersetzt - vorhandene "
                     "Bilder, Videos und weitere Blöcke gehen dabei verloren."
                 ),
@@ -267,10 +281,12 @@ class DocumentAdmin(BaseAdmin):
             service = DocumentShopwarePublicationService()
             layout_choices = service.list_layout_choices()
             pdf_choices = service.list_pdf_media_choices()
+            media_folder_choices = service.list_media_folder_choices()
             choices_error = ""
         except Exception as exc:
             layout_choices = None
             pdf_choices = None
+            media_folder_choices = None
             choices_error = str(exc)
 
         return type(
@@ -279,6 +295,7 @@ class DocumentAdmin(BaseAdmin):
             {
                 "shopware_layout_choices": layout_choices,
                 "shopware_pdf_choices": pdf_choices,
+                "shopware_media_folder_choices": media_folder_choices,
                 "shopware_choices_error": choices_error,
             },
         )
@@ -330,8 +347,6 @@ class DocumentAdmin(BaseAdmin):
         if not obj:
             return "Nach dem Speichern verfügbar"
         missing_links = []
-        if not obj.shopware_cms_page_id:
-            missing_links.append("Erlebniswelt")
         if not obj.shopware_media_id:
             missing_links.append("PDF-Datei")
         notice = ""
@@ -340,13 +355,20 @@ class DocumentAdmin(BaseAdmin):
                 '<span class="text-red-600 dark:text-red-400">Nicht veröffentlichbar: {} auswählen und speichern.</span><br>',
                 ", ".join(missing_links),
             )
+        elif not obj.shopware_cms_page_id:
+            notice = mark_safe(
+                '<span class="text-amber-600 dark:text-amber-400">'
+                "Nur die PDF wird veröffentlicht; es ist keine Erlebniswelt verknüpft.</span><br>"
+            )
         layout_id = obj.shopware_cms_page_id or "nicht ausgewählt"
         media_id = obj.shopware_media_id or "nicht ausgewählt"
+        folder_id = obj.shopware_media_folder_id or "Ordner der ausgewählten Datei beibehalten"
         return format_html(
-            "{}<code>Erlebniswelt: {}</code><br><code>PDF: {}</code>",
+            "{}<code>Erlebniswelt: {}</code><br><code>PDF: {}</code><br><code>Medienordner: {}</code>",
             notice,
             layout_id,
             media_id,
+            folder_id,
         )
 
     @admin.display(description="PDF")
@@ -513,7 +535,7 @@ class DocumentAdmin(BaseAdmin):
         return HttpResponseRedirect(reverse("admin:documents_document_change", args=(object_id,)))
 
     @action(
-        description="In Shopware veröffentlichen (HTML + aktuelle PDF)",
+        description="In Shopware veröffentlichen",
         icon="cloud_upload",
         variant=ActionVariant.PRIMARY,
     )
@@ -526,11 +548,14 @@ class DocumentAdmin(BaseAdmin):
             return HttpResponseRedirect(reverse("admin:documents_document_changelist"))
         try:
             result = DocumentShopwarePublicationService().publish(document)
-            self.message_user(
-                request,
-                "Erlebniswelt (Slot-ID: {cms_slot_id}) aktualisiert und die aktuelle PDF unter "
-                "Media-ID {media_id} überschrieben.".format(**result),
-            )
+            if result["cms_page_id"]:
+                message = (
+                    "Erlebniswelt (Slot-ID: {cms_slot_id}) aktualisiert und die aktuelle PDF unter "
+                    "Media-ID {media_id} überschrieben."
+                ).format(**result)
+            else:
+                message = "Aktuelle PDF unter Media-ID {media_id} überschrieben.".format(**result)
+            self.message_user(request, message)
         except Exception as exc:
             self.message_user(request, f"Shopware-Veröffentlichung fehlgeschlagen: {exc}", level=messages.ERROR)
         return HttpResponseRedirect(reverse("admin:documents_document_change", args=(object_id,)))
@@ -578,7 +603,8 @@ class DocumentVersionAdmin(BaseAdmin):
             {
                 "fields": ("document", "version_number", "label", "is_active", "activated_at"),
                 "description": (
-                    "Die aktive Version aktualisiert die verknüpfte Erlebniswelt und die verknüpfte PDF-Datei."
+                    "Die aktive Version aktualisiert die verknüpfte PDF-Datei und zusätzlich die Erlebniswelt, "
+                    "wenn diese am Dokument ausgewählt ist."
                 ),
             },
         ),
@@ -630,9 +656,13 @@ class DocumentVersionAdmin(BaseAdmin):
                 level=messages.ERROR,
             )
         else:
+            publication_message = (
+                f"Version {version.version_number} aktiviert, Erlebniswelt aktualisiert und PDF unter "
+                if result["cms_page_id"]
+                else f"Version {version.version_number} aktiviert und die PDF unter "
+            )
             self.message_user(
                 request,
-                f"Version {version.version_number} aktiviert, Erlebniswelt aktualisiert und PDF unter "
-                f"Media-ID {result['media_id']} überschrieben.",
+                f"{publication_message}Media-ID {result['media_id']} überschrieben.",
             )
         return HttpResponseRedirect(reverse("admin:documents_documentversion_change", args=(object_id,)))

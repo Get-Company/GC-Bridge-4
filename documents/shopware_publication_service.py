@@ -11,7 +11,7 @@ from shopware.services.shopware6 import Shopware6Service
 
 
 class DocumentShopwarePublicationService(Shopware6Service):
-    """Publish one document to its selected Shopware CMS page and PDF media."""
+    """Publish one document to its optional CMS page and required PDF media."""
 
     CMS_PAGE_SEARCH_PATH = "/search/cms-page"
     CMS_PAGE_ASSOCIATIONS = {
@@ -68,19 +68,50 @@ class DocumentShopwarePublicationService(Shopware6Service):
             choices.append((str(media_id), f"{file_name}.{extension}"))
         return choices
 
+    def list_media_folder_choices(self) -> list[tuple[str, str]]:
+        """Return media folders as readable hierarchical choices for the admin."""
+
+        folders: dict[str, tuple[str, str]] = {}
+        for folder in self._search_all(
+            "/search/media-folder",
+            payload={"sort": [{"field": "name", "order": "ASC"}]},
+        ):
+            folder_id = _to_str(self._value(folder, "id"))
+            if not folder_id:
+                continue
+            folders[folder_id] = (
+                _to_str(self._value(folder, "name")) or folder_id,
+                _to_str(self._value(folder, "parentId")),
+            )
+
+        def path_for(folder_id: str, ancestors: tuple[str, ...] = ()) -> str:
+            name, parent_id = folders[folder_id]
+            if not parent_id or parent_id not in folders or parent_id in ancestors:
+                return name
+            return f"{path_for(parent_id, (*ancestors, folder_id))} / {name}"
+
+        return sorted(
+            ((folder_id, path_for(folder_id)) for folder_id in folders),
+            key=lambda choice: choice[1].casefold(),
+        )
+
     def publish(self, document: Document) -> dict[str, str]:
-        """Publish the current document HTML and a newly generated PDF to Shopware."""
+        """Publish the current PDF and, when linked, the document HTML to Shopware."""
 
         self.validate_links(document)
         self._fetch_pdf_media(document.shopware_media_id)
+        if document.shopware_media_folder_id:
+            self._fetch_media_folder(document.shopware_media_folder_id)
 
         # The local file is intentionally recreated for every publication.  This
         # makes a separate content hash unnecessary and guarantees that the PDF
         # uploaded below represents the currently saved document HTML.
         pdf_service = DocumentPdfService()
-        rendered_html = pdf_service.render_document_html(document)
         pdf_service.generate_pdf(document)
-        slot_id = self.publish_layout(document, rendered_html=rendered_html)
+        slot_id = ""
+        if document.shopware_cms_page_id:
+            rendered_html = pdf_service.render_document_html(document)
+            slot_id = self.publish_layout(document, rendered_html=rendered_html)
         media_id = DocumentShopwareUploadService().upload_pdf(document)
         return {
             "cms_page_id": document.shopware_cms_page_id,
@@ -227,6 +258,22 @@ class DocumentShopwarePublicationService(Shopware6Service):
             )
         return rows[0]
 
+    def _fetch_media_folder(self, media_folder_id: str) -> dict[str, Any]:
+        result = self.request_post(
+            "/search/media-folder",
+            payload={
+                "filter": [{"type": "equals", "field": "id", "value": media_folder_id}],
+                "limit": 1,
+            },
+        )
+        rows = self._rows(result)
+        if not rows:
+            raise ValueError(
+                f"Der ausgewählte Shopware-Medienordner {media_folder_id} wurde nicht gefunden. "
+                "Bitte einen vorhandenen Ordner auswählen und speichern."
+            )
+        return rows[0]
+
     def _search_all(self, path: str, *, payload: dict[str, Any]) -> list[dict[str, Any]]:
         page_number = 1
         page_size = 100
@@ -242,8 +289,6 @@ class DocumentShopwarePublicationService(Shopware6Service):
 
     @staticmethod
     def validate_links(document: Document) -> None:
-        if not document.shopware_cms_page_id:
-            raise ValueError("Bitte zuerst eine Shopware-Erlebniswelt auswählen und speichern.")
         if not document.shopware_media_id:
             raise ValueError("Bitte zuerst eine Shopware-PDF-Datei auswählen und speichern.")
 
@@ -291,3 +336,7 @@ class DocumentShopwarePublicationService(Shopware6Service):
             return row[name]
         attributes = row.get("attributes") or {}
         return attributes.get(name) if isinstance(attributes, dict) else None
+
+
+def _to_str(value: Any) -> str:
+    return "" if value is None else str(value).strip()

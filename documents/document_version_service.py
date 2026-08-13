@@ -62,7 +62,7 @@ class DocumentVersionService(BaseService):
 
     def activate_and_publish(self, version: DocumentVersion) -> dict[str, object]:
         # Do not activate a version if the document cannot be published at all
-        # because its required Shopware links have not been selected yet.
+        # because its required Shopware PDF media has not been selected yet.
         DocumentShopwarePublicationService.validate_links(version.document)
         document = self.activate(version)
         return DocumentShopwarePublicationService().publish(document)

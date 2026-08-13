@@ -42,15 +42,27 @@ class DocumentRenderingTest(SimpleTestCase):
             {
                 "shopware_layout_choices": [("layout-id", "AGB (page)")],
                 "shopware_pdf_choices": [("media-id", "agb.pdf")],
+                "shopware_media_folder_choices": [("folder-id", "Dokumente / Rechtliches")],
             },
         )
 
-        form = form_class(instance=Document(shopware_cms_page_id="layout-id", shopware_media_id="media-id"))
+        form = form_class(
+            instance=Document(
+                shopware_cms_page_id="layout-id",
+                shopware_media_id="media-id",
+                shopware_media_folder_id="folder-id",
+            )
+        )
 
         self.assertIsInstance(form.fields["shopware_cms_page_id"], forms.ChoiceField)
         self.assertIsInstance(form.fields["shopware_media_id"], forms.ChoiceField)
+        self.assertIsInstance(form.fields["shopware_media_folder_id"], forms.ChoiceField)
         self.assertIn(("layout-id", "AGB (page)"), list(form.fields["shopware_cms_page_id"].choices))
         self.assertIn(("media-id", "agb.pdf"), list(form.fields["shopware_media_id"].choices))
+        self.assertIn(
+            ("folder-id", "Dokumente / Rechtliches"),
+            list(form.fields["shopware_media_folder_id"].choices),
+        )
 
     def test_document_editor_keeps_toolbar_visible_while_html_scrolls(self):
         stylesheet = Path("documents/static/documents/admin/document_editor.css").read_text(encoding="utf-8")
@@ -123,10 +135,18 @@ class DocumentRenderingTest(SimpleTestCase):
             ],
         )
 
-    def test_document_admin_marks_missing_shopware_links_as_not_publishable(self):
+    def test_document_admin_marks_missing_shopware_pdf_as_not_publishable(self):
         admin_instance = DocumentAdmin(Document, AdminSite())
 
         self.assertIn("Nicht veröffentlichbar", str(admin_instance.shopware_link_ids(Document())))
+
+    def test_document_admin_marks_pdf_only_publication_as_valid(self):
+        admin_instance = DocumentAdmin(Document, AdminSite())
+
+        status = str(admin_instance.shopware_link_ids(Document(shopware_media_id="media-id")))
+
+        self.assertNotIn("Nicht veröffentlichbar", status)
+        self.assertIn("Nur die PDF wird veröffentlicht", status)
 
     def test_duplicate_categories_are_only_shown_for_price_lists(self):
         admin_instance = DocumentAdmin(Document, AdminSite())
@@ -559,7 +579,7 @@ class DocumentPdfServiceTest(SimpleTestCase):
 
 
 class DocumentShopwareUploadServiceTest(SimpleTestCase):
-    def test_upload_pdf_reuses_existing_shopware_media_id(self):
+    def test_upload_pdf_keeps_the_existing_shopware_media_folder_without_a_selection(self):
         with tempfile.TemporaryDirectory() as tmpdir, override_settings(DOCUMENT_PDF_ROOT=tmpdir):
             Path(tmpdir, "agb.pdf").write_bytes(b"%PDF-1.4")
             document = Document(
@@ -584,11 +604,10 @@ class DocumentShopwareUploadServiceTest(SimpleTestCase):
                     "document-media-upsert": {
                         "entity": "media",
                         "action": "upsert",
-                        "payload": [
-                            {
-                                "id": "existing-media-id",
-                                "mediaFolderId": "d6460afa064f4c8196ed5bd0f6ccbcb5",
-                            }
+                            "payload": [
+                                {
+                                    "id": "existing-media-id",
+                                }
                         ],
                     }
                 },
@@ -600,6 +619,36 @@ class DocumentShopwareUploadServiceTest(SimpleTestCase):
             )
             service._upload_pdf_file.assert_called_once()
             document.save.assert_called_once_with(update_fields=["shopware_media_id", "updated_at"])
+
+    def test_upload_pdf_moves_the_file_to_the_selected_shopware_media_folder(self):
+        with tempfile.TemporaryDirectory() as tmpdir, override_settings(DOCUMENT_PDF_ROOT=tmpdir):
+            Path(tmpdir, "agb.pdf").write_bytes(b"%PDF-1.4")
+            document = Document(
+                slug="agb",
+                title="AGB",
+                pdf_filename="agb.pdf",
+                shopware_media_id="existing-media-id",
+                shopware_media_folder_id="selected-folder-id",
+            )
+            document.save = MagicMock()
+            service = DocumentShopwareUploadService.__new__(DocumentShopwareUploadService)
+            service.access_token = "token"
+            service.request_post = MagicMock()
+            service.delete_conflicting_media_by_filename = MagicMock(return_value=0)
+            service._upload_pdf_file = MagicMock()
+
+            DocumentShopwareUploadService.upload_pdf(service, document)
+
+            service.request_post.assert_called_once_with(
+                "/_action/sync",
+                payload={
+                    "document-media-upsert": {
+                        "entity": "media",
+                        "action": "upsert",
+                        "payload": [{"id": "existing-media-id", "mediaFolderId": "selected-folder-id"}],
+                    }
+                },
+            )
 
     def test_upload_pdf_retries_after_duplicate_filename_conflict(self):
         with tempfile.TemporaryDirectory() as tmpdir, override_settings(DOCUMENT_PDF_ROOT=tmpdir):

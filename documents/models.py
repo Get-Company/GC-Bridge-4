@@ -123,7 +123,7 @@ class Document(BaseModel):
         blank=True,
         default="",
         verbose_name=_("Shopware Erlebniswelt-ID"),
-        help_text=_("Die Erlebniswelt wird im Dokument-Admin aus Shopware ausgewählt."),
+        help_text=_("Optional: Die Erlebniswelt wird im Dokument-Admin aus Shopware ausgewählt."),
     )
     shopware_media_id = models.CharField(
         max_length=64,
@@ -131,6 +131,13 @@ class Document(BaseModel):
         default="",
         verbose_name=_("Shopware Media-ID"),
         help_text=_("Die PDF-Mediendatei wird im Dokument-Admin aus Shopware ausgewählt."),
+    )
+    shopware_media_folder_id = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        verbose_name=_("Shopware Medienordner-ID"),
+        help_text=_("Optionaler Zielordner der PDF-Datei. Ohne Auswahl bleibt der Ordner in Shopware unverändert."),
     )
     active_version = models.ForeignKey(
         "DocumentVersion",
