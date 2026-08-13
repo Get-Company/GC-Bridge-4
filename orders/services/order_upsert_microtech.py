@@ -260,12 +260,13 @@ class OrderUpsertMicrotechService(BaseService):
         if not order_number:
             return ""
 
+        quoted_order_number = order_number.replace("'", "''")
         result = client.poll_dataset_records(
             {
                 "dataset": "Vorgang",
                 "indexField": "BelegNr",
                 "range": {"fromValues": [""], "toValues": ["ZZZZZZZZZZZZZZ"]},
-                "filters": [{"field": "AuftrNr", "op": "EQ", "value": order_number}],
+                "filter": f"AuftrNr = '{quoted_order_number}'",
                 "fields": ["BelegNr", "AuftrNr", "AdrNr"],
                 "limit": 20,
             },

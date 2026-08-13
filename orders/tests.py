@@ -28,6 +28,22 @@ class OrderGraphQLPayloadTest(SimpleTestCase):
         self.assertEqual(OrderUpsertMicrotechService._format_graphql_decimal(Decimal("1.235")), "1,24")
         self.assertEqual(OrderUpsertMicrotechService._format_graphql_decimal(None), "")
 
+    def test_erp_order_id_fallback_uses_graphql_filter_string(self):
+        customer = Customer(erp_nr="1000")
+        order = Order(api_id="order-1", order_number="SW-'10001", customer=customer)
+        client = MagicMock()
+        client.poll_dataset_records.return_value = {
+            "records": [{"BelegNr": "BN-2000", "AuftrNr": "SW-'10001", "AdrNr": "1000"}]
+        }
+
+        with patch.object(OrderUpsertMicrotechService, "_persist_erp_order_id"):
+            result = OrderUpsertMicrotechService()._refresh_erp_order_id_graphql(order=order, client=client)
+
+        self.assertEqual(result, "BN-2000")
+        request_payload = client.poll_dataset_records.call_args.args[0]
+        self.assertEqual(request_payload["filter"], "AuftrNr = 'SW-''10001'")
+        self.assertNotIn("filters", request_payload)
+
 
 class OrderSyncTaxModeTest(TestCase):
     def test_eu_customer_with_vat_id_uses_net_prices_for_microtech(self):

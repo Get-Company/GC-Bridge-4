@@ -1,6 +1,7 @@
 import json
 from typing import Any
 
+from django import forms
 from django.contrib import admin, messages
 from django.http import HttpResponseRedirect
 from django.http import HttpResponse
@@ -15,6 +16,7 @@ from unfold.contrib.filters.admin import (
 )
 from unfold.decorators import action
 from unfold.enums import ActionVariant
+from unfold.forms import BaseDialogForm
 from unfold.sections import TemplateSection
 
 from core.admin import BaseAdmin, BaseTabularInline
@@ -22,10 +24,12 @@ from microtech.services import microtech_connection
 from orders.models import MicrotechOrderSyncWorkflow, Order, OrderDetail
 from orders.services import (
     OrderSyncService,
+    OrderCustomerChangeService,
     OrderSyncWorkflowService,
     OrderUpsertMicrotechService,
     SwissCustomsCsvExportService,
 )
+from microtech.models import MicrotechGraphQLJob
 from shopware.services import OrderService
 from shopware.services.order import DEFAULT_TRANSITION_ACTIONS
 
@@ -112,6 +116,28 @@ class OrderDetailInline(BaseTabularInline):
     )
 
 
+class OrderCustomerChangeForm(BaseDialogForm):
+    erp_nr = forms.CharField(
+        label="Neue AdrNr",
+        max_length=64,
+        help_text="Die Kundendaten sowie Standard-Rechnungs- und Lieferanschrift werden im Hintergrund aus Microtech geladen.",
+        widget=forms.TextInput(attrs={"inputmode": "numeric", "autocomplete": "off"}),
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not self.is_bound and self.object_id:
+            order = Order.objects.select_related("customer").filter(pk=self.object_id).first()
+            if order and order.customer_id:
+                self.initial["erp_nr"] = order.customer.erp_nr
+
+    def clean_erp_nr(self):
+        try:
+            return OrderCustomerChangeService._clean_erp_nr(self.cleaned_data["erp_nr"])
+        except ValueError as exc:
+            raise forms.ValidationError(str(exc)) from exc
+
+
 @admin.register(Order)
 class OrderAdmin(BaseAdmin):
     list_display = (
@@ -124,7 +150,15 @@ class OrderAdmin(BaseAdmin):
     )
     list_sections = [OrderExpandSection]
     list_sections_classes = "grid-cols-1"
-    search_fields = ("order_number", "api_id", "customer__erp_nr", "customer__email")
+    search_fields = (
+        "order_number",
+        "api_id",
+        "customer__erp_nr",
+        "customer__name",
+        "customer__email",
+        "customer__addresses__first_name",
+        "customer__addresses__last_name",
+    )
     list_filter = [
         ("order_state", FieldTextFilter),
         ("payment_state", FieldTextFilter),
@@ -136,9 +170,14 @@ class OrderAdmin(BaseAdmin):
     actions_list = ("sync_open_orders_from_shopware_list",)
     actions = ("sync_open_orders_from_shopware",)
     actions_row = ("upsert_to_microtech_row", "export_swiss_customs_csv_row")
-    actions_detail = ("upsert_to_microtech_detail", "resume_microtech_sync_detail", "export_swiss_customs_csv_detail")
+    actions_detail = (
+        "request_customer_change_detail",
+        "upsert_to_microtech_detail",
+        "resume_microtech_sync_detail",
+        "export_swiss_customs_csv_detail",
+    )
     list_fullwidth = True
-    readonly_fields = ("microtech_sync_status",)
+    readonly_fields = ("customer", "customer_change_status", "microtech_sync_status")
 
     def get_queryset(self, request):
         return super().get_queryset(request).select_related(
@@ -180,6 +219,21 @@ class OrderAdmin(BaseAdmin):
     def microtech_sync_status(self, obj):
         return self.microtech_sync_status_for_order(obj)
 
+    @admin.display(description="AdrNr-Änderung")
+    def customer_change_status(self, obj: Order):
+        job = (
+            MicrotechGraphQLJob.objects.filter(
+                context__source="order_customer_change",
+                context__order_id=obj.pk,
+            )
+            .order_by("-created_at")
+            .first()
+        )
+        if job is None:
+            return "-"
+        target_erp_nr = _to_str((job.context or {}).get("erp_nr"))
+        return f"{job.get_status_display()} · AdrNr {target_erp_nr} · {job.next_step or '-'}"
+
     @staticmethod
     def microtech_sync_status_for_order(obj):
         workflow = obj.microtech_sync_workflows.order_by("-created_at").first()
@@ -219,6 +273,41 @@ class OrderAdmin(BaseAdmin):
         response = HttpResponse(export.content.encode("utf-8-sig"), content_type="text/csv; charset=utf-8")
         response["Content-Disposition"] = f'attachment; filename="{export.filename}"'
         return response
+
+    @action(
+        description="AdrNr ändern",
+        icon="person_search",
+        variant=ActionVariant.WARNING,
+        permissions=("change",),
+        dialog={
+            "title": "AdrNr der Bestellung ändern",
+            "description": (
+                "Die AdrNr wird über den Sentinel in Microtech geprüft. Nach erfolgreicher Antwort "
+                "übernimmt die Bestellung automatisch den Kunden sowie dessen Standard-Rechnungs- und Lieferanschrift."
+            ),
+            "form_class": OrderCustomerChangeForm,
+            "form_submit_text": "Im Hintergrund laden",
+        },
+    )
+    def request_customer_change_detail(self, request, form: OrderCustomerChangeForm, object_id: str):
+        order = self.get_object(request, object_id)
+        if order is None:
+            self.message_user(request, "Bestellung nicht gefunden.", level=messages.ERROR)
+            return self._redirect_to_changelist()
+        try:
+            job = OrderCustomerChangeService().request_change(
+                order=order,
+                erp_nr=form.cleaned_data["erp_nr"],
+            )
+        except Exception as exc:
+            self.message_user(request, f"AdrNr konnte nicht angefordert werden: {exc}", level=messages.ERROR)
+        else:
+            self.message_user(
+                request,
+                f"AdrNr {form.cleaned_data['erp_nr']} wird im Hintergrund geladen (Sentinel-Job #{job.pk}).",
+                level=messages.SUCCESS,
+            )
+        return self._redirect_to_change_page(object_id)
 
     def get_custom_urls(self):
         urls = super().get_custom_urls()

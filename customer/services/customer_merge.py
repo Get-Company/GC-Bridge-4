@@ -193,9 +193,9 @@ class CustomerMergeSearchService(BaseService):
     ) -> list[dict[str, Any]]:
         """Queue Microtech searches through the GraphQL Sentinel.
 
-        Structured requests use the wrapper's dedicated customer search and
-        return complete Microtech customers. ``term`` remains available for
-        the legacy free-text DatasetReadInput API.
+        An AdrNr uses the exact ``requestCustomer`` lookup; the remaining
+        structured fields use the wrapper's dedicated customer search. ``term``
+        remains available for the legacy free-text DatasetReadInput API.
         """
         term = _to_str(term)
         customer_number = _to_str(customer_number)
@@ -205,6 +205,15 @@ class CustomerMergeSearchService(BaseService):
         uses_structured_fields = any((customer_number, email, first_name, last_name))
 
         if uses_structured_fields:
+            # ``requestCustomer`` is the exact, established lookup for an AdrNr.
+            # Do not route it through the broader ``searchCustomers`` query: the
+            # merge UI needs the complete customer object for its Microtech cell.
+            if customer_number:
+                result = self.start_microtech_customer_search(customer_number, purpose="resolve")
+                if result.get("error"):
+                    return []
+                return [{"job_id": result["job_id"], "search_kind": "customer"}]
+
             search_criteria = {
                 "customer_number": customer_number,
                 "email": email,
@@ -321,7 +330,12 @@ class CustomerMergeSearchService(BaseService):
             ),
         ]
 
-    def start_microtech_customer_search(self, erp_nr: str) -> dict[str, Any]:
+    def start_microtech_customer_search(
+        self,
+        erp_nr: str,
+        *,
+        purpose: str = "customer",
+    ) -> dict[str, Any]:
         """Queue a typed ``requestCustomer`` read through the Sentinel."""
         erp_nr = _to_str(erp_nr)
         if not erp_nr:
@@ -339,7 +353,7 @@ class CustomerMergeSearchService(BaseService):
                 request_payload={"customerNumber": erp_nr},
                 context={
                     "source": _MICROTECH_SEARCH_SOURCE,
-                    "purpose": "customer",
+                    "purpose": purpose,
                     "erp_nr": erp_nr,
                 },
                 continuation="",
@@ -398,11 +412,20 @@ class CustomerMergeSearchService(BaseService):
                 "erp_nrs": erp_nrs,
             }
         if job.kind == MicrotechGraphQLJob.Kind.CUSTOMER_READ:
+            customer = self._microtech_customer_from_result(job.result_payload or {})
+            if (job.context or {}).get("purpose") == "resolve":
+                return {
+                    "job_id": job.pk,
+                    "state": "succeeded",
+                    "message": f"{1 if customer else 0} passende Kunden in Microtech gefunden.",
+                    "result_count": 1 if customer else 0,
+                    "customers": [customer] if customer else [],
+                }
             return {
                 "job_id": job.pk,
                 "state": "succeeded",
                 "message": "Kundendaten aus Microtech geladen.",
-                "data": self._microtech_customer_from_result(job.result_payload or {}),
+                "data": customer,
             }
         return {"job_id": job.pk, "state": "failed", "error": "Ungültiger Microtech-Suchauftrag."}
 

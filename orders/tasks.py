@@ -21,9 +21,12 @@ def reconcile_order_sync_workflows() -> int:
 
 def register_order_sync_continuations() -> None:
     from microtech.services import register_continuation
+    from orders.services.order_customer_change import CONTINUATION_NAME as customer_change_continuation
+    from orders.services.order_customer_change import OrderCustomerChangeService
     from orders.services.order_sync_workflow import CONTINUATION_NAME, OrderSyncWorkflowService
 
     register_continuation(CONTINUATION_NAME, OrderSyncWorkflowService().advance)
+    register_continuation(customer_change_continuation, OrderCustomerChangeService().apply_result)
 
 
 register_order_sync_continuations()

@@ -509,18 +509,6 @@ UNFOLD = {
                         "permission": sidebar_model_view_permission("products", "Product"),
                     },
                     {
-                        "title": _("Produkt-Archiv"),
-                        "icon": "archive",
-                        "link": reverse_lazy("admin:products_archivedproduct_changelist"),
-                        "permission": sidebar_model_view_permission("products", "Product"),
-                    },
-                    {
-                        "title": _("Variantenfamilien"),
-                        "icon": "view_in_ar",
-                        "link": reverse_lazy("admin:products_productvariantfamily_changelist"),
-                        "permission": sidebar_model_view_permission("products", "ProductVariantFamily"),
-                    },
-                    {
                         "title": _("Preise"),
                         "icon": "sell",
                         "link": reverse_lazy("admin:products_price_changelist"),
@@ -537,6 +525,18 @@ UNFOLD = {
                         "icon": "account_tree",
                         "link": reverse_lazy("admin:products_category_manager"),
                         "permission": sidebar_model_view_permission("products", "Category"),
+                    },
+                    {
+                        "title": _("Produkt-Archiv"),
+                        "icon": "archive",
+                        "link": reverse_lazy("admin:products_archivedproduct_changelist"),
+                        "permission": sidebar_model_view_permission("products", "Product"),
+                    },
+                    {
+                        "title": _("Variantenfamilien"),
+                        "icon": "view_in_ar",
+                        "link": reverse_lazy("admin:products_productvariantfamily_changelist"),
+                        "permission": sidebar_model_view_permission("products", "ProductVariantFamily"),
                     },
                     {
                         "title": _("Attributgruppen"),

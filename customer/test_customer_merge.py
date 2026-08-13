@@ -1,9 +1,22 @@
+from unittest.mock import patch
+
 from django.test import SimpleTestCase
 
 from customer.services.customer_merge import CustomerMergeSearchService
 
 
 class CustomerMergeMicrotechSearchTest(SimpleTestCase):
+    @patch.object(CustomerMergeSearchService, "start_microtech_customer_search")
+    def test_customer_number_search_uses_exact_microtech_lookup(self, mock_search):
+        mock_search.return_value = {"job_id": 123}
+
+        jobs = CustomerMergeSearchService().start_microtech_resolution_search(
+            customer_number="10001",
+        )
+
+        mock_search.assert_called_once_with("10001", purpose="resolve")
+        self.assertEqual(jobs, [{"job_id": 123, "search_kind": "customer"}])
+
     def test_name_search_uses_microtech_customer_and_contact_indexes(self):
         requests = dict(CustomerMergeSearchService._microtech_resolution_requests("Müller"))
 

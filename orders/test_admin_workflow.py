@@ -1,11 +1,27 @@
 from unittest.mock import patch
 
 from django.contrib import admin as django_admin
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 
 from orders.admin import OrderAdmin
 from orders.models import Order
 from orders.test_order_sync_workflow import make_order
+
+
+class OrderAdminSearchTest(SimpleTestCase):
+    def test_search_includes_customer_first_and_last_name(self):
+        model_admin = OrderAdmin(Order, django_admin.site)
+
+        self.assertIn("customer__addresses__first_name", model_admin.search_fields)
+        self.assertIn("customer__addresses__last_name", model_admin.search_fields)
+        self.assertIn("customer__name", model_admin.search_fields)
+
+    def test_customer_change_uses_a_native_unfold_dialog(self):
+        model_admin = OrderAdmin(Order, django_admin.site)
+
+        self.assertIn("request_customer_change_detail", model_admin.actions_detail)
+        self.assertIn("customer", model_admin.readonly_fields)
+        self.assertIsNotNone(model_admin.request_customer_change_detail.dialog)
 
 
 class AdminTriggerTest(TestCase):
