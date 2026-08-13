@@ -8,6 +8,7 @@ from emails.mjml import (
     ProductEmailProxy,
     campaign_offer_context,
     compile_mjml_to_html,
+    html_to_plain_text,
     render_campaign_mjml,
 )
 
@@ -258,6 +259,25 @@ class TestCompileMjmlToHtml:
 
         assert html == "<html>compiled</html>"
         assert calls[0][:2] == ["npx", "mjml"]
+
+
+class TestHtmlToPlainText:
+    def test_creates_readable_text_and_preserves_links(self):
+        html = (
+            "<html><head><style>.hidden{display:none}</style></head><body>"
+            "<h1>Sommerangebot</h1><p>Hallo <strong>Welt</strong><br>heute sparen.</p>"
+            '<p><a href="https://example.com/shop">Zum Shop</a></p>'
+            '<img alt="Produktbild" src="product.jpg"><script>ignored()</script>'
+            "</body></html>"
+        )
+
+        assert html_to_plain_text(html) == (
+            "Sommerangebot\n\nHallo Welt\nheute sparen.\n\nZum Shop (https://example.com/shop)"
+            "\nProduktbild"
+        )
+
+    def test_returns_empty_text_for_empty_html(self):
+        assert html_to_plain_text("") == ""
 
 
 class TestCampaignComponentRendering:

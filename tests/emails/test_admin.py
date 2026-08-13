@@ -1,3 +1,4 @@
+import json
 from decimal import Decimal
 from pathlib import Path
 import pytest
@@ -53,6 +54,24 @@ class TestEmailCampaignAdmin(SimpleTestCase):
 
         assert EmailCampaignAdmin.inlines == (EmailCampaignComponentInline,)
 
+    def test_campaign_admin_displays_and_filters_categories(self):
+        from django.contrib.admin.sites import AdminSite
+
+        from emails.admin import EmailCampaignAdmin, EmailCampaignCategoryAdmin
+        from emails.models import EmailCampaign, EmailCampaignCategory
+
+        campaign_admin = EmailCampaignAdmin(EmailCampaign, AdminSite())
+        category_admin = EmailCampaignCategoryAdmin(EmailCampaignCategory, AdminSite())
+        campaign = SimpleNamespace(
+            categories=SimpleNamespace(
+                all=lambda: [SimpleNamespace(name="Shop"), SimpleNamespace(name="Newsletter")]
+            )
+        )
+
+        assert "categories" in campaign_admin.list_filter
+        assert campaign_admin.category_list(campaign) == "Shop, Newsletter"
+        assert category_admin.get_ordering(None) == ("name",)
+
     def test_campaign_export_modal_has_copyable_mjml_output(self):
         template = Path("templates/admin/emails/emailcampaign/change_form.html").read_text(
             encoding="utf-8"
@@ -61,6 +80,9 @@ class TestEmailCampaignAdmin(SimpleTestCase):
         assert 'id="mjml-output"' in template
         assert "data.mjml" in template
         assert "function copyMjml()" in template
+        assert 'id="text-output"' in template
+        assert "data.text" in template
+        assert "function copyText()" in template
 
     def test_campaign_admin_shows_recipient_customer_context_info(self):
         from django.contrib.admin.sites import AdminSite
@@ -102,6 +124,7 @@ class TestEmailCampaignAdmin(SimpleTestCase):
             "-pk",
         )
 
+    @patch("emails.admin.html_to_plain_text", return_value="Preview text")
     @patch("emails.admin.compile_mjml_to_html", return_value="<html>Preview</html>")
     @patch("emails.admin.render_campaign_mjml", return_value="<mjml>Preview</mjml>")
     @patch("emails.admin._latest_active_preview_recipient")
@@ -112,6 +135,7 @@ class TestEmailCampaignAdmin(SimpleTestCase):
         latest_active_preview_recipient,
         render_campaign_mjml,
         compile_mjml_to_html,
+        html_to_plain_text,
     ):
         from django.contrib.admin.sites import AdminSite
         from django.test import RequestFactory
@@ -131,6 +155,12 @@ class TestEmailCampaignAdmin(SimpleTestCase):
         assert response.status_code == 200
         render_campaign_mjml.assert_called_once_with(campaign, recipient=preview_recipient)
         compile_mjml_to_html.assert_called_once_with("<mjml>Preview</mjml>")
+        html_to_plain_text.assert_called_once_with("<html>Preview</html>")
+        assert json.loads(response.content) == {
+            "html": "<html>Preview</html>",
+            "mjml": "<mjml>Preview</mjml>",
+            "text": "Preview text",
+        }
 
 
 class TestEmailCampaignComponentInline(SimpleTestCase):

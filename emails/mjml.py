@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Iterable
 from urllib.parse import quote_plus
 
 import jinja2
+from bs4 import BeautifulSoup
 from django.template.loader import render_to_string
 
 if TYPE_CHECKING:
@@ -52,6 +53,37 @@ _HYPHENATED_PLACEHOLDER_RE = re.compile(
     r"(\{\{\s*)([A-Za-z_][A-Za-z0-9_]*(?:-[A-Za-z0-9_]+)+)(?=\s*(?:\||\}\}))"
 )
 _CHILDREN_PLACEHOLDER_RE = re.compile(r"\{\{\s*children\s*\}\}")
+_TEXT_LINE_BREAK_MARKER = "\ue000"
+_TEXT_BLOCK_TAGS = {
+    "address",
+    "article",
+    "aside",
+    "blockquote",
+    "div",
+    "dl",
+    "dt",
+    "dd",
+    "figcaption",
+    "figure",
+    "footer",
+    "header",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "li",
+    "main",
+    "nav",
+    "ol",
+    "p",
+    "pre",
+    "section",
+    "table",
+    "tr",
+    "ul",
+}
 
 
 class ProductEmailProxy:
@@ -272,6 +304,50 @@ def normalize_hyphenated_placeholders(markup: str) -> str:
 def insert_rendered_children(markup: str, children: str) -> str:
     """Insert rendered children without evaluating the surrounding markup as Jinja."""
     return _CHILDREN_PLACEHOLDER_RE.sub(lambda _match: children, markup)
+
+
+def html_to_plain_text(html: str) -> str:
+    """Create a readable plain-text alternative from rendered email HTML."""
+    if not html:
+        return ""
+
+    soup = BeautifulSoup(html, "html.parser")
+    for element in soup(["head", "noscript", "script", "style", "template", "title"]):
+        element.decompose()
+
+    for image in soup.find_all("img"):
+        alt_text = image.get("alt", "").strip()
+        image.replace_with(alt_text) if alt_text else image.decompose()
+
+    for link in soup.find_all("a"):
+        href = link.get("href", "").strip()
+        label = link.get_text(" ", strip=True)
+        if href:
+            link.replace_with(href if not label or label == href else f"{label} ({href})")
+
+    for line_break in soup.find_all("br"):
+        line_break.replace_with(_TEXT_LINE_BREAK_MARKER)
+
+    for element in soup.find_all(_TEXT_BLOCK_TAGS):
+        if element.name == "li":
+            element.insert(0, "• ")
+        element.insert_before(_TEXT_LINE_BREAK_MARKER)
+        element.insert_after(_TEXT_LINE_BREAK_MARKER)
+
+    text = soup.get_text(" ", strip=True)
+    text = re.sub(rf"\s*{_TEXT_LINE_BREAK_MARKER}\s*", "\n", text)
+    lines = [re.sub(r"[ \t]+", " ", line).strip() for line in text.splitlines()]
+
+    result: list[str] = []
+    previous_blank = False
+    for line in lines:
+        is_blank = not line
+        if is_blank and (previous_blank or not result):
+            continue
+        result.append(line)
+        previous_blank = is_blank
+
+    return "\n".join(result).strip()
 
 
 def _component_identity(component: "EmailCampaignComponent") -> int:

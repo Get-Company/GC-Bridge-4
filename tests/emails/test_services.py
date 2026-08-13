@@ -89,6 +89,7 @@ class TestEmailCampaignQueueService:
         assert queued_entry.status == EmailCampaignQueueEntry.Status.QUEUED
         assert queued_entry.rendered_mjml == "<mjml>neu</mjml>"
         assert queued_entry.rendered_html == "<html>neu</html>"
+        assert queued_entry.rendered_text == "neu"
         assert queued_entry.error_message == ""
         assert queued_entry.sent_at is None
         render_campaign_mjml.assert_called_once_with(campaign, recipient=recipient)
@@ -144,6 +145,7 @@ class TestEmailCampaignQueueService:
         assert queued_entry.customer == customer
         assert queued_entry.email == "neu@example.com"
         assert queued_entry.status == EmailCampaignQueueEntry.Status.QUEUED
+        assert queued_entry.rendered_text == "neu"
         render_campaign_mjml.assert_called_once_with(campaign, recipient=recipient)
         compile_mjml_to_html.assert_called_once_with("<mjml>neu</mjml>")
 
@@ -203,5 +205,6 @@ class TestEmailCampaignQueueService:
         assert entry.recipient == active_recipient
         assert entry.rendered_mjml == "<mjml>queued</mjml>"
         assert entry.rendered_html == "<html>queued</html>"
+        assert entry.rendered_text == "queued"
         render_campaign_mjml.assert_called_once_with(due_campaign, recipient=active_recipient)
         compile_mjml_to_html.assert_called_once_with("<mjml>queued</mjml>")

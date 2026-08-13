@@ -20,9 +20,10 @@ from jinja2 import TemplateSyntaxError
 logger = logging.getLogger(__name__)
 
 from core.admin import BaseAdmin, BaseStackedInline
-from emails.mjml import compile_mjml_to_html, render_campaign_mjml
+from emails.mjml import compile_mjml_to_html, html_to_plain_text, render_campaign_mjml
 from emails.models import (
     EmailCampaign,
+    EmailCampaignCategory,
     EmailCampaignComponent,
     EmailCampaignProduct,
     EmailCampaignQueueEntry,
@@ -666,17 +667,26 @@ class EmailCampaignComponentInline(BaseStackedInline):
 
 @admin.register(EmailCampaign)
 class EmailCampaignAdmin(BaseAdmin):
-    list_display = ("internal_title", "send_at", "component_count", "product_count", "status", "created_at")
-    list_filter = ("status", "send_at", "created_at")
+    list_display = (
+        "internal_title",
+        "category_list",
+        "send_at",
+        "component_count",
+        "product_count",
+        "status",
+        "created_at",
+    )
+    list_filter = ("categories", "status", "send_at", "created_at")
     search_fields = ("internal_title",)
     list_editable = ("status",)
     inlines = (EmailCampaignComponentInline,)
+    filter_horizontal = ("categories",)
 
     fieldsets = (
         (
             _("Kampagne"),
             {
-                "fields": ("internal_title", "status", "send_at"),
+                "fields": ("internal_title", "categories", "status", "send_at"),
             },
         ),
         (
@@ -695,6 +705,13 @@ class EmailCampaignAdmin(BaseAdmin):
         ),
     )
     readonly_fields = BaseAdmin.readonly_fields + ("campaign_context_info",)
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).prefetch_related("categories")
+
+    @admin.display(description=_("Kategorien"))
+    def category_list(self, obj: EmailCampaign) -> str:
+        return ", ".join(category.name for category in obj.categories.all()) or "—"
 
     @admin.display(description=_("Produkte"))
     def product_count(self, obj: EmailCampaign) -> int:
@@ -791,6 +808,7 @@ class EmailCampaignAdmin(BaseAdmin):
             preview_recipient = _latest_active_preview_recipient()
             mjml = render_campaign_mjml(campaign, recipient=preview_recipient)
             html = compile_mjml_to_html(mjml)
+            text = html_to_plain_text(html)
         except Exception:
             logger.exception("MJML export failed for campaign %s", campaign_id)
             return JsonResponse({"error": "Fehler beim Rendern der Kampagne."}, status=500)
@@ -802,7 +820,14 @@ class EmailCampaignAdmin(BaseAdmin):
             response["Content-Disposition"] = f'attachment; filename="{filename}"'
             return response
 
-        return JsonResponse({"html": html, "mjml": mjml})
+        return JsonResponse({"html": html, "mjml": mjml, "text": text})
+
+
+@admin.register(EmailCampaignCategory)
+class EmailCampaignCategoryAdmin(BaseAdmin):
+    list_display = ("name", "created_at", "updated_at")
+    search_fields = ("name",)
+    ordering = ("name",)
 
 
 @admin.register(EmailCampaignQueueEntry)

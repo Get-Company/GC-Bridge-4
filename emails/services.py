@@ -9,7 +9,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from core.services import BaseService
-from emails.mjml import compile_mjml_to_html, render_campaign_mjml
+from emails.mjml import compile_mjml_to_html, html_to_plain_text, render_campaign_mjml
 from emails.models import EmailCampaign, EmailCampaignQueueEntry
 
 logger = logging.getLogger(__name__)
@@ -132,6 +132,7 @@ class EmailCampaignQueueService(BaseService):
 
         mjml = render_campaign_mjml(campaign, recipient=recipient)
         html = compile_mjml_to_html(mjml)
+        text = html_to_plain_text(html)
 
         entry = (
             self.model.objects.select_for_update()
@@ -149,6 +150,7 @@ class EmailCampaignQueueService(BaseService):
         entry.status = self.model.Status.QUEUED
         entry.rendered_mjml = mjml
         entry.rendered_html = html
+        entry.rendered_text = text
         entry.error_message = ""
         entry.sent_at = None
         entry.queued_at = timezone.now()

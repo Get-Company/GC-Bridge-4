@@ -62,6 +62,18 @@ class MjmlComponent(BaseModel):
         return self.name
 
 
+class EmailCampaignCategory(BaseModel):
+    name = models.CharField(max_length=100, unique=True, verbose_name=_("Name"))
+
+    class Meta:
+        verbose_name = _("E-Mail Kategorie")
+        verbose_name_plural = _("E-Mail Kategorien")
+        ordering = ("name",)
+
+    def __str__(self) -> str:
+        return self.name
+
+
 class EmailCampaign(BaseModel):
     class Status(models.TextChoices):
         DRAFT = "draft", _("Entwurf")
@@ -85,6 +97,12 @@ class EmailCampaign(BaseModel):
         blank=True,
         db_index=True,
         verbose_name=_("Sendedatum"),
+    )
+    categories = models.ManyToManyField(
+        EmailCampaignCategory,
+        blank=True,
+        related_name="campaigns",
+        verbose_name=_("Kategorien"),
     )
 
     class Meta:
@@ -135,6 +153,7 @@ class EmailCampaignQueueEntry(BaseModel):
     )
     rendered_mjml = models.TextField(blank=True, default="", verbose_name=_("Gerendertes MJML"))
     rendered_html = models.TextField(blank=True, default="", verbose_name=_("Gerendertes HTML"))
+    rendered_text = models.TextField(blank=True, default="", verbose_name=_("Gerenderter Text"))
     error_message = models.TextField(blank=True, default="", verbose_name=_("Fehlermeldung"))
     queued_at = models.DateTimeField(auto_now_add=True, db_index=True, verbose_name=_("Eingereiht am"))
     sent_at = models.DateTimeField(null=True, blank=True, verbose_name=_("Gesendet am"))
