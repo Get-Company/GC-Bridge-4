@@ -66,6 +66,12 @@ def _to_int(value: Any) -> int:
         return 0
 
 
+# Transition applied to orders that the autosync just created.
+NEW_ORDER_FROM_STATE = "open"
+NEW_ORDER_TRANSITION = "process"
+NEW_ORDER_TO_STATE = "in_progress"
+
+
 class OrderSyncService(BaseService):
     model = Order
 
@@ -85,6 +91,7 @@ class OrderSyncService(BaseService):
             "orders_created": 0,
             "orders_updated": 0,
             "orders_failed": 0,
+            "orders_promoted": 0,
             "customers_upserted": 0,
             "addresses_upserted": 0,
             "details_upserted": 0,
@@ -116,6 +123,8 @@ class OrderSyncService(BaseService):
 
                 if result["created"]:
                     summary["orders_created"] += 1
+                    if self.promote_new_order_to_in_progress(order=result["order"], service=service):
+                        summary["orders_promoted"] += 1
                 else:
                     summary["orders_updated"] += 1
                 summary["customers_upserted"] += 1 if result["customer_upserted"] else 0
@@ -185,6 +194,44 @@ class OrderSyncService(BaseService):
             "addresses_upserted": addresses_count,
             "details_upserted": details_count,
         }
+
+    def promote_new_order_to_in_progress(
+        self,
+        *,
+        order: Order,
+        service: OrderService | None = None,
+    ) -> bool:
+        """
+        Moves a freshly synced order from "open" to "in_progress" in Shopware.
+
+        Only orders that are still in the state the transition starts from are
+        touched, and a failing transition never aborts the running sync.
+        """
+        if _to_str(order.order_state) != NEW_ORDER_FROM_STATE:
+            return False
+        if not _to_str(order.api_id):
+            return False
+
+        service = service or OrderService()
+        try:
+            service.set_order_state(order_id=order.api_id, action_name=NEW_ORDER_TRANSITION)
+        except Exception as exc:
+            logger.error(
+                "Bestellung {} konnte nicht auf '{}' gesetzt werden: {}",
+                order.order_number or order.api_id,
+                NEW_ORDER_TO_STATE,
+                exc,
+            )
+            return False
+
+        order.order_state = NEW_ORDER_TO_STATE
+        order.save(update_fields=["order_state"])
+        logger.info(
+            "Bestellung {} nach dem Anlegen auf '{}' gesetzt.",
+            order.order_number or order.api_id,
+            NEW_ORDER_TO_STATE,
+        )
+        return True
 
     def _upsert_customer_block(
         self,

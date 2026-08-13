@@ -164,21 +164,23 @@ class OrderService(Shopware6Service):
         action_name = _to_str(action_name)
         if not order_id or not action_name:
             raise ValueError("order_id and action_name are required.")
-        return self.request_post(f"/_action/order/{order_id}/state/{action_name}")
+        return self.request_post(f"/_action/state-machine/order/{order_id}/state/{action_name}")
 
     def set_delivery_state(self, delivery_id: str, action_name: str) -> Any:
         delivery_id = _to_str(delivery_id)
         action_name = _to_str(action_name)
         if not delivery_id or not action_name:
             raise ValueError("delivery_id and action_name are required.")
-        return self.request_post(f"/_action/order_delivery/{delivery_id}/state/{action_name}")
+        return self.request_post(f"/_action/state-machine/order_delivery/{delivery_id}/state/{action_name}")
 
     def set_transaction_state(self, transaction_id: str, action_name: str) -> Any:
         transaction_id = _to_str(transaction_id)
         action_name = _to_str(action_name)
         if not transaction_id or not action_name:
             raise ValueError("transaction_id and action_name are required.")
-        return self.request_post(f"/_action/order_transaction/{transaction_id}/state/{action_name}")
+        return self.request_post(
+            f"/_action/state-machine/order_transaction/{transaction_id}/state/{action_name}"
+        )
 
     def get_available_transition_actions(self, *, scope: str, entity_id: str) -> list[dict[str, str]]:
         scope = _to_str(scope).lower()
@@ -190,40 +192,34 @@ class OrderService(Shopware6Service):
 
         endpoints = self._transition_endpoints(scope=scope, entity_id=entity_id)
         for endpoint in endpoints:
-            for method in (self.request_get, self.request_post):
-                try:
-                    response = method(endpoint)
-                except Exception as exc:  # pragma: no cover - remote runtime behavior
-                    logger.debug(
-                        "Could not fetch transition actions via {} {}: {}",
-                        method.__name__,
-                        endpoint,
-                        exc,
-                    )
-                    continue
+            try:
+                response = self.request_get(endpoint)
+            except Exception as exc:  # pragma: no cover - remote runtime behavior
+                logger.debug("Could not fetch transition actions via GET {}: {}", endpoint, exc)
+                continue
 
-                actions = self._extract_transition_actions(response)
-                if actions:
-                    return actions
+            actions = self._extract_transition_actions(response)
+            if actions:
+                return actions
 
         fallback = DEFAULT_TRANSITION_ACTIONS.get(scope, [])
         return [{"action": value, "label": value.replace("_", " ")} for value in fallback]
 
-    @staticmethod
-    def _transition_endpoints(*, scope: str, entity_id: str) -> list[str]:
-        if scope == "order":
-            return [
-                f"/_action/order/{entity_id}/state",
-                f"/_action/state-machine/order/{entity_id}/state",
-            ]
-        if scope == "delivery":
-            return [
-                f"/_action/order_delivery/{entity_id}/state",
-                f"/_action/state-machine/order_delivery/{entity_id}/state",
-            ]
+    # Shopware entity name per app scope, used in the state-machine routes.
+    _SCOPE_TO_ENTITY: dict[str, str] = {
+        "order": "order",
+        "delivery": "order_delivery",
+        "payment": "order_transaction",
+    }
+
+    @classmethod
+    def _transition_endpoints(cls, *, scope: str, entity_id: str) -> list[str]:
+        entity = cls._SCOPE_TO_ENTITY.get(scope, "order_transaction")
+        # Since Shopware 6.7 only the generic state-machine route answers GET requests;
+        # the entity specific route is kept as a fallback for older shops.
         return [
-            f"/_action/order_transaction/{entity_id}/state",
-            f"/_action/state-machine/order_transaction/{entity_id}/state",
+            f"/_action/state-machine/{entity}/{entity_id}/state",
+            f"/_action/{entity}/{entity_id}/state",
         ]
 
     # Maps Shopware state machine technicalName → scope key used in this app.
@@ -257,7 +253,8 @@ class OrderService(Shopware6Service):
                 }
             ],
         }
-        response = self.request_post("/api/search/state-machine-transition", payload=payload)
+        # The client already points at ".../api", so the path must not repeat it.
+        response = self.request_post("/search/state-machine-transition", payload=payload)
         return self._parse_transition_graph(response)
 
     def _parse_transition_graph(self, response: Any) -> dict[str, dict[str, list[str]]]:

@@ -370,7 +370,7 @@ class OrderAdmin(BaseAdmin):
             (
                 f"Orders gesehen: {summary['orders_seen']}, erstellt: {summary['orders_created']}, "
                 f"aktualisiert: {summary['orders_updated']}, Details: {summary['details_upserted']}, "
-                f"Fehler: {summary['orders_failed']}"
+                f"auf 'In Bearbeitung': {summary['orders_promoted']}, Fehler: {summary['orders_failed']}"
             ),
         )
 
