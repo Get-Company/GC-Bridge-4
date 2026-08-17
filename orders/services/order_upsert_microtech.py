@@ -81,6 +81,7 @@ class OrderUpsertMicrotechService(BaseService):
     model = Order
 
     _SWISS_COUNTRY_CODES = {"CH", "CHE", "SCHWEIZ", "SWITZERLAND", "SUISSE", "SVIZZERA"}
+    _UNIT_LESS_SPECIAL_POSITION_ERP_NRS = frozenset({"P"})
     _INTEGER_FIELD_TYPES = frozenset({"Integer", "Byte", "AutoInc", "Boolean", "SmallInt"})
     _FLOAT_FIELD_TYPES = frozenset({"Float", "Double", "Currency"})
     _TEXT_FIELD_TYPES = frozenset({"Blob", "Info", "Memo"})
@@ -406,7 +407,7 @@ class OrderUpsertMicrotechService(BaseService):
             erp_nr = (action.target_value or "").strip()
             if not erp_nr or erp_nr in extra_created:
                 continue
-            positions.append({"erpNumber": erp_nr, "quantity": "1", "unit": DEFAULT_UNIT})
+            positions.append(self._build_graphql_special_position(erp_nr=erp_nr))
             extra_created.append(erp_nr)
 
         payment_info = self._build_graphql_payment_position(order=order, resolved_rule=resolved_rule, positions=positions)
@@ -453,7 +454,7 @@ class OrderUpsertMicrotechService(BaseService):
                 payment_position_erp_nr="",
             )
         amount = self._resolve_payment_position_amount(order=order, resolved_rule=resolved_rule)
-        position = {"erpNumber": erp_nr, "quantity": "1", "unit": DEFAULT_UNIT}
+        position = self._build_graphql_special_position(erp_nr=erp_nr)
         if amount is not None:
             position["price"] = self._format_graphql_decimal(amount)
         positions.append(position)
@@ -466,6 +467,14 @@ class OrderUpsertMicrotechService(BaseService):
             payment_position_erp_nr=erp_nr,
             payment_position_amount=amount,
         )
+
+    @classmethod
+    def _build_graphql_special_position(cls, *, erp_nr: str) -> dict[str, str]:
+        """Build a rule-generated position, preserving configured unit-less special articles."""
+        position = {"erpNumber": erp_nr, "quantity": "1"}
+        if erp_nr.upper() not in cls._UNIT_LESS_SPECIAL_POSITION_ERP_NRS:
+            position["unit"] = DEFAULT_UNIT
+        return position
 
     @staticmethod
     def _format_graphql_decimal(value: Decimal | None) -> str:

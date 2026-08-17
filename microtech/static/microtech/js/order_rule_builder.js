@@ -628,20 +628,27 @@
   }
 
   function observeInlineRows() {
+    const inlineGroups = Array.from(document.querySelectorAll(".inline-group"));
+    if (!inlineGroups.length) return;
+
     const observer = new MutationObserver((mutations) => {
+      const addedRows = new Set();
       mutations.forEach((mutation) => {
         mutation.addedNodes.forEach((node) => {
           if (!(node instanceof HTMLElement)) return;
 
           if (node.matches("tr.form-row, .inline-related")) {
-            bindRow(node);
+            addedRows.add(node);
           }
-          node.querySelectorAll("tr.form-row, .inline-related").forEach(bindRow);
+          node.querySelectorAll("tr.form-row, .inline-related").forEach((row) => addedRows.add(row));
         });
       });
+
+      if (!addedRows.size) return;
+      addedRows.forEach(bindRow);
       refreshRuleSummary();
     });
-    observer.observe(document.body, { childList: true, subtree: true });
+    inlineGroups.forEach((group) => observer.observe(group, { childList: true, subtree: true }));
   }
 
   async function loadMeta() {

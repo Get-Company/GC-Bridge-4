@@ -28,6 +28,37 @@ class OrderGraphQLPayloadTest(SimpleTestCase):
         self.assertEqual(OrderUpsertMicrotechService._format_graphql_decimal(Decimal("1.235")), "1,24")
         self.assertEqual(OrderUpsertMicrotechService._format_graphql_decimal(None), "")
 
+    def test_unitless_special_position_omits_optional_graphql_unit(self):
+        positions: list[dict[str, str]] = []
+        resolved_rule = ResolvedOrderRule(
+            rule_id=6,
+            rule_name="P fuer PayPal",
+            dataset_actions=(
+                ResolvedDatasetAction(
+                    action_type=MicrotechOrderRuleAction.ActionType.CREATE_EXTRA_POSITION,
+                    target_value="P",
+                ),
+                ResolvedDatasetAction(
+                    action_type=MicrotechOrderRuleAction.ActionType.CREATE_EXTRA_POSITION,
+                    target_value="Q",
+                ),
+            ),
+        )
+
+        OrderUpsertMicrotechService()._build_graphql_rule_debug(
+            order=SimpleNamespace(order_number="ORDER-TRACE"),
+            resolved_rule=resolved_rule,
+            positions=positions,
+        )
+
+        self.assertEqual(
+            positions,
+            [
+                {"erpNumber": "P", "quantity": "1"},
+                {"erpNumber": "Q", "quantity": "1", "unit": "Stück"},
+            ],
+        )
+
     def test_erp_order_id_fallback_uses_graphql_filter_string(self):
         customer = Customer(erp_nr="1000")
         order = Order(api_id="order-1", order_number="SW-'10001", customer=customer)
