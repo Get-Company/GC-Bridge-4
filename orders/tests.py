@@ -28,7 +28,7 @@ class OrderGraphQLPayloadTest(SimpleTestCase):
         self.assertEqual(OrderUpsertMicrotechService._format_graphql_decimal(Decimal("1.235")), "1,24")
         self.assertEqual(OrderUpsertMicrotechService._format_graphql_decimal(None), "")
 
-    def test_unitless_special_position_omits_optional_graphql_unit(self):
+    def test_special_positions_always_include_a_vorgang_unit(self):
         positions: list[dict[str, str]] = []
         resolved_rule = ResolvedOrderRule(
             rule_id=6,
@@ -54,7 +54,7 @@ class OrderGraphQLPayloadTest(SimpleTestCase):
         self.assertEqual(
             positions,
             [
-                {"erpNumber": "P", "quantity": "1"},
+                {"erpNumber": "P", "quantity": "1", "unit": "Stück"},
                 {"erpNumber": "Q", "quantity": "1", "unit": "Stück"},
             ],
         )

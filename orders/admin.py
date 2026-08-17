@@ -205,12 +205,18 @@ class OrderAdmin(BaseAdmin):
     actions = ("sync_open_orders_from_shopware",)
     actions_row = ("upsert_to_microtech_row", "export_swiss_customs_csv_row")
     actions_detail = (
-        "request_customer_change_detail",
-        "upsert_to_microtech_detail",
-        "resume_microtech_sync_detail",
-        "abort_microtech_sync_detail",
-        "restart_microtech_sync_detail",
-        "export_swiss_customs_csv_detail",
+        {
+            "title": "Aktionen",
+            "icon": "more_vert",
+            "items": (
+                "request_customer_change_detail",
+                "upsert_to_microtech_detail",
+                "resume_microtech_sync_detail",
+                "abort_microtech_sync_detail",
+                "restart_microtech_sync_detail",
+                "export_swiss_customs_csv_detail",
+            ),
+        },
     )
     list_fullwidth = True
     readonly_fields = ("customer", "customer_change_status", "microtech_sync_status")

@@ -50,6 +50,28 @@ class TestJobSentinelSubmission(TestCase):
         self.assertIsNotNone(job.next_poll_at)
 
 
+class TestJobSentinelWebhook(TestCase):
+    def test_success_webhook_schedules_result_poll_before_continuation(self):
+        job = _make_job(
+            kind=MicrotechGraphQLJob.Kind.ORDER_UPSERT,
+            operation="createVorgang",
+            continuation="orders.microtech_sync",
+        )
+
+        result = MicrotechJobSentinelService().handle_webhook(
+            {"jobId": job.external_job_id, "status": "DONE", "message": "Erfolgreich"}
+        )
+
+        job.refresh_from_db()
+        self.assertEqual(result.pk, job.pk)
+        self.assertEqual(job.status, MicrotechGraphQLJob.Status.WAITING_WEBHOOK)
+        self.assertEqual(job.result_payload["status"], "DONE")
+        self.assertIsNotNone(job.webhook_received_at)
+        self.assertIsNotNone(job.next_poll_at)
+        self.assertLessEqual(job.next_poll_at, timezone.now())
+        self.assertIn("Ergebnis", job.next_step)
+
+
 @patch("microtech.services.job_sentinel.MicrotechGraphQLClientService")
 class TestJobSentinelLoopSafety(TestCase):
     """Punkt 2 - der Poller darf niemals endlos laufen."""

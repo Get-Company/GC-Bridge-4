@@ -415,6 +415,27 @@ class MicrotechJobSentinelService(BaseService):
             now = timezone.now()
             job.webhook_received_at = now
             job.result_payload = payload
+            remote_status = str(self._payload_value(payload, "status") or "").upper()
+            if remote_status in self.REMOTE_SUCCESS:
+                # Der Wrapper meldet per Webhook nur den Status. Das Ergebnis
+                # (beispielsweise die BelegNr eines neu angelegten Vorgangs)
+                # muss daher vor einer Continuation über die Job-Abfrage geladen
+                # werden; andernfalls geht es beim Workflow verloren.
+                job.status = MicrotechGraphQLJob.Status.WAITING_WEBHOOK
+                job.next_step = "Webhook empfangen; vollstaendiges Ergebnis wird geladen."
+                job.next_poll_at = now
+                job.save(
+                    update_fields=(
+                        "status",
+                        "webhook_received_at",
+                        "result_payload",
+                        "next_step",
+                        "next_poll_at",
+                        "updated_at",
+                    )
+                )
+                return job
+
             self._apply_remote_status(job, payload)
             job.save()
 

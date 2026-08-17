@@ -18,10 +18,13 @@ class OrderAdminSearchTest(SimpleTestCase):
 
     def test_customer_change_uses_a_native_unfold_dialog(self):
         model_admin = OrderAdmin(Order, django_admin.site)
+        detail_action_dropdown = model_admin.actions_detail[0]
 
-        self.assertIn("request_customer_change_detail", model_admin.actions_detail)
-        self.assertIn("abort_microtech_sync_detail", model_admin.actions_detail)
-        self.assertIn("restart_microtech_sync_detail", model_admin.actions_detail)
+        self.assertEqual(detail_action_dropdown["title"], "Aktionen")
+        self.assertEqual(detail_action_dropdown["icon"], "more_vert")
+        self.assertIn("request_customer_change_detail", detail_action_dropdown["items"])
+        self.assertIn("abort_microtech_sync_detail", detail_action_dropdown["items"])
+        self.assertIn("restart_microtech_sync_detail", detail_action_dropdown["items"])
         self.assertIn("customer", model_admin.readonly_fields)
         self.assertIsNotNone(model_admin.request_customer_change_detail.dialog)
         self.assertIsNotNone(model_admin.abort_microtech_sync_detail.dialog)
