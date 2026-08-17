@@ -8,6 +8,30 @@ from .shopware6 import ContainsFilter, Criteria, EqualsFilter, Shopware6Service
 class CustomerService(Shopware6Service):
     search_path = "/search/customer"
 
+    def count_active_accounts(self) -> int:
+        """Return the number of enabled customer accounts in Shopware 6."""
+        response = self.request_post(
+            self.search_path,
+            payload={
+                "filter": [
+                    {
+                        "type": "equals",
+                        "field": "active",
+                        "value": True,
+                    }
+                ],
+                "limit": 1,
+                "total-count-mode": 1,
+            },
+        )
+        total = (response or {}).get("total")
+        if total is None:
+            raise RuntimeError("Shopware did not return an active-customer count.")
+        try:
+            return max(0, int(total))
+        except (TypeError, ValueError) as exc:
+            raise RuntimeError("Shopware returned an invalid active-customer count.") from exc
+
     def _base_customer_criteria(self, *, limit: int = 1) -> Criteria:
         criteria = Criteria(limit=limit)
         criteria.associations["salutation"] = Criteria()

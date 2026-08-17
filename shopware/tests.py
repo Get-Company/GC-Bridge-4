@@ -30,6 +30,7 @@ from shopware.management.commands.shopware_sync_products import (
 )
 from shopware.management.commands.shopware_force_product_image_uploads import Command as ForceProductImageUploadsCommand
 from shopware.models import ShopwareSettings
+from shopware.services.customer import CustomerService
 from shopware.services.order import OrderService
 from shopware.services.category_translation import ShopwareCategoryTranslationSyncService
 from shopware.services.product import ProductService
@@ -1259,6 +1260,51 @@ class OrderServiceMicrotechWritebackTest(SimpleTestCase):
                     "microtech_beleg_nr": "WB26/324",
                     "microtech_erp_order_id": "WB26/324",
                 }
+            },
+        )
+
+
+class Shopware6DashboardMetricServiceTest(SimpleTestCase):
+    @patch.object(CustomerService, "request_post")
+    def test_count_active_customer_accounts_uses_total_count_mode(self, mock_request_post):
+        mock_request_post.return_value = {"total": 17}
+        service = CustomerService.__new__(CustomerService)
+        service.search_path = "/search/customer"
+
+        result = CustomerService.count_active_accounts(service)
+
+        self.assertEqual(result, 17)
+        mock_request_post.assert_called_once_with(
+            "/search/customer",
+            payload={
+                "filter": [{"type": "equals", "field": "active", "value": True}],
+                "limit": 1,
+                "total-count-mode": 1,
+            },
+        )
+
+    @patch.object(ProductService, "request_post")
+    def test_count_active_products_filters_by_sales_channel_visibility(self, mock_request_post):
+        mock_request_post.return_value = {"total": 23}
+        service = ProductService.__new__(ProductService)
+        service.search_path = "/search/product"
+
+        result = ProductService.count_active_by_sales_channel(service, "channel-1")
+
+        self.assertEqual(result, 23)
+        mock_request_post.assert_called_once_with(
+            "/search/product",
+            payload={
+                "filter": [
+                    {"type": "equals", "field": "active", "value": True},
+                    {
+                        "type": "equals",
+                        "field": "visibilities.salesChannelId",
+                        "value": "channel-1",
+                    },
+                ],
+                "limit": 1,
+                "total-count-mode": 1,
             },
         )
 

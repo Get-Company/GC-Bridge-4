@@ -24,6 +24,39 @@ class ProductService(Shopware6Service):
     def get(self, product_id: str) -> Any:
         return self.request_get(f"{self.base_path}/{product_id}")
 
+    def count_active_by_sales_channel(self, sales_channel_id: str) -> int:
+        """Return active products visible in one Shopware sales channel."""
+        sales_channel_id = str(sales_channel_id or "").strip()
+        if not sales_channel_id:
+            raise ValueError("sales_channel_id is required.")
+
+        response = self.request_post(
+            self.search_path,
+            payload={
+                "filter": [
+                    {
+                        "type": "equals",
+                        "field": "active",
+                        "value": True,
+                    },
+                    {
+                        "type": "equals",
+                        "field": "visibilities.salesChannelId",
+                        "value": sales_channel_id,
+                    },
+                ],
+                "limit": 1,
+                "total-count-mode": 1,
+            },
+        )
+        total = (response or {}).get("total")
+        if total is None:
+            raise RuntimeError("Shopware did not return an active-product count.")
+        try:
+            return max(0, int(total))
+        except (TypeError, ValueError) as exc:
+            raise RuntimeError("Shopware returned an invalid active-product count.") from exc
+
     def list(self, criteria: dict | Any | None = None) -> Any:
         payload = self._criteria_payload(criteria)
         return self.request_post(self.search_path, payload=payload)

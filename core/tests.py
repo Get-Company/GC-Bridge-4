@@ -10,13 +10,16 @@ from django.contrib import admin
 from django.test import RequestFactory
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 
-from core.dashboard import dashboard_callback
+from core.dashboard import _fetch_price_anomaly_rows, dashboard_callback
 from core.logging import build_managed_log_path, cleanup_old_log_files, get_retention
 from core.log_reader import get_allowed_log_files, tail_log_file
 from core.services import CommandRuntimeService
 from customer.models import Customer
 from orders.models import Order
+from products.models import Price, PriceIncrease, PriceIncreaseItem, Product
+from shopware.models import ShopwareSettings
 
 
 class ManagedLoggingTest(SimpleTestCase):
@@ -324,7 +327,31 @@ class DashboardCallbackTest(TestCase):
             ],
         }
 
-        with patch("core.dashboard._detect_price_column", return_value=(None, None)):
+        with (
+            patch("core.dashboard._detect_price_column", return_value=(None, None)),
+            patch(
+                "core.admin_status.shopware_health_check",
+                return_value={"ok": True, "detail": "shop.example", "latency_ms": 42},
+            ),
+            patch(
+                "core.dashboard._get_remote_shopware_metrics",
+                return_value={
+                    "customer_count": 12,
+                    "customer_error": None,
+                    "product_rows": [
+                        {
+                            "sales_channel": "B2B",
+                            "bridge_count": 4,
+                            "shopware_count": 5,
+                            "difference": 1,
+                            "ok": False,
+                            "detail": "",
+                        }
+                    ],
+                    "product_error": None,
+                },
+            ),
+        ):
             result = dashboard_callback(request=None, context=context)
 
         self.assertEqual([app["app_label"] for app in result["app_list"]], ["core"])
@@ -334,3 +361,46 @@ class DashboardCallbackTest(TestCase):
         self.assertEqual(result["open_orders_table"]["rows"][0][0], "10001")
         self.assertEqual(result["open_orders_table"]["rows"][0][1], "K-1000 | Musterkunde")
         self.assertEqual(result["open_orders_table"]["rows"][0][2], "49.90 EUR")
+        self.assertEqual(result["shopware_customer_count"], 12)
+        self.assertEqual(result["product_balance_count"], 1)
+
+
+class DashboardPriceAnomalyTest(TestCase):
+    def test_lists_current_normal_and_tier_prices_below_last_increase_targets(self):
+        sales_channel = ShopwareSettings.objects.create(
+            name="Standard",
+            sales_channel_id="channel-standard",
+            is_default=True,
+        )
+        product = Product.objects.create(erp_nr="P-1000", name="Musterprodukt")
+        source_price = Price.objects.create(
+            product=product,
+            sales_channel=sales_channel,
+            price=Decimal("10.00"),
+            rebate_quantity=10,
+            rebate_price=Decimal("8.00"),
+        )
+        price_increase = PriceIncrease.objects.create(
+            title="Preiserhöhung August",
+            status=PriceIncrease.Status.APPLIED,
+            sales_channel=sales_channel,
+            applied_at=timezone.now(),
+        )
+        PriceIncreaseItem.objects.create(
+            price_increase=price_increase,
+            product=product,
+            source_price=source_price,
+            current_price=Decimal("10.00"),
+            current_rebate_quantity=10,
+            current_rebate_price=Decimal("8.00"),
+            new_price=Decimal("12.00"),
+            new_rebate_price=Decimal("10.00"),
+        )
+
+        count, rows, warning, latest = _fetch_price_anomaly_rows()
+
+        self.assertIsNone(warning)
+        self.assertTrue(latest.startswith("Preiserhöhung August ("))
+        self.assertGreaterEqual(count, 2)
+        self.assertTrue(any("Normalpreis seit der letzten Preiserhöhung zu niedrig" in row[2] for row in rows))
+        self.assertTrue(any("Staffelpreis" in row[2] and "zu niedrig" in row[2] for row in rows))
