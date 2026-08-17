@@ -566,6 +566,43 @@ class ReconcileTest(TestCase):
         self.assertEqual(wf.status, MicrotechOrderSyncWorkflow.Status.FAILED)
         self.assertIn("boom", wf.error_message)
 
+    def test_waiting_workflow_without_job_is_marked_failed(self):
+        workflow = MicrotechOrderSyncWorkflow.objects.create(
+            order=make_order(),
+            status=MicrotechOrderSyncWorkflow.Status.WAITING,
+            current_step="write_vorgang",
+        )
+
+        changed = OrderSyncWorkflowService().reconcile_failures()
+
+        workflow.refresh_from_db()
+        self.assertEqual(changed, 1)
+        self.assertEqual(workflow.status, MicrotechOrderSyncWorkflow.Status.FAILED)
+        self.assertIn("Microtech-Job fehlt", workflow.error_message)
+
+    def test_waiting_job_without_external_id_is_marked_failed(self):
+        order = make_order()
+        job = MicrotechGraphQLJob.objects.create(
+            kind=MicrotechGraphQLJob.Kind.ORDER_UPSERT,
+            operation="createVorgang",
+            status=MicrotechGraphQLJob.Status.WAITING_WEBHOOK,
+        )
+        workflow = MicrotechOrderSyncWorkflow.objects.create(
+            order=order,
+            status=MicrotechOrderSyncWorkflow.Status.WAITING,
+            current_step="write_vorgang",
+            current_job=job,
+        )
+
+        changed = OrderSyncWorkflowService().reconcile_failures()
+
+        workflow.refresh_from_db()
+        job.refresh_from_db()
+        self.assertEqual(changed, 1)
+        self.assertEqual(workflow.status, MicrotechOrderSyncWorkflow.Status.FAILED)
+        self.assertEqual(job.status, MicrotechGraphQLJob.Status.FAILED)
+        self.assertIn("keine externe GraphQL-Job-ID", workflow.error_message)
+
     @patch("orders.services.order_sync_workflow.OrderSyncWorkflowService.submit_step")
     def test_failed_probe_customer_treated_as_new(self, mock_submit):
         wf = self._waiting_wf("probe_customer", MicrotechGraphQLJob.Status.FAILED, error="not found")
@@ -688,6 +725,37 @@ class SubmitFailureTest(TestCase):
         wf.refresh_from_db()
         self.assertEqual(wf.status, MicrotechOrderSyncWorkflow.Status.WAITING)
         self.assertEqual(wf.current_step, "probe_customer")
+
+
+class AbortAndRestartTest(TestCase):
+    @patch("orders.services.order_sync_workflow.MicrotechGraphQLClientService")
+    @patch("orders.services.order_sync_workflow.MicrotechJobSentinelService.submit_wrapper_job")
+    def test_restart_abandons_stalled_workflow_and_starts_a_new_one(self, mock_submit, mock_client):
+        mock_submit.return_value = MagicMock(pk=99)
+        order = make_order()
+        job = MicrotechGraphQLJob.objects.create(
+            kind=MicrotechGraphQLJob.Kind.ORDER_UPSERT,
+            operation="createVorgang",
+            status=MicrotechGraphQLJob.Status.WAITING_WEBHOOK,
+            external_job_id="stalled-job",
+        )
+        workflow = MicrotechOrderSyncWorkflow.objects.create(
+            order=order,
+            status=MicrotechOrderSyncWorkflow.Status.WAITING,
+            current_step="write_vorgang",
+            current_job=job,
+        )
+
+        restarted = OrderSyncWorkflowService().restart(workflow)
+
+        workflow.refresh_from_db()
+        job.refresh_from_db()
+        self.assertIsNotNone(restarted)
+        self.assertNotEqual(restarted.pk, workflow.pk)
+        self.assertEqual(workflow.status, MicrotechOrderSyncWorkflow.Status.CANCELLED)
+        self.assertIsNone(workflow.current_job)
+        self.assertEqual(job.status, MicrotechGraphQLJob.Status.CANCELLED)
+        self.assertEqual(restarted.status, MicrotechOrderSyncWorkflow.Status.WAITING)
 
 
 class LogStepDedupeTest(TestCase):

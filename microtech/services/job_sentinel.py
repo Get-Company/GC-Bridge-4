@@ -269,6 +269,15 @@ class MicrotechJobSentinelService(BaseService):
             job.save(update_fields=("status", "error_message", "completed_at", "updated_at"))
             raise
 
+        external_job_id = str(external_job_id or "").strip()
+        if not external_job_id:
+            error_message = f"Microtech GraphQL {operation} hat keine externe Job-ID zurueckgegeben."
+            job.status = MicrotechGraphQLJob.Status.FAILED
+            job.error_message = error_message
+            job.completed_at = timezone.now()
+            job.save(update_fields=("status", "error_message", "completed_at", "updated_at"))
+            raise GraphQLMicrotechError(error_message)
+
         now = timezone.now()
         job.external_job_id = external_job_id
         job.status = MicrotechGraphQLJob.Status.WAITING_WEBHOOK

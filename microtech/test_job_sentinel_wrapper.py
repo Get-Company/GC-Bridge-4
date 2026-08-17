@@ -3,6 +3,7 @@ from unittest.mock import patch
 from django.test import TestCase
 
 from microtech.models import MicrotechGraphQLJob
+from microtech.services.graphql_client import GraphQLMicrotechError
 from microtech.services.job_sentinel import MicrotechJobSentinelService
 
 
@@ -47,6 +48,24 @@ class SubmitWrapperJobTest(TestCase):
         self.assertEqual(job.status, MicrotechGraphQLJob.Status.FAILED)
         self.assertIn("wrapper down", job.error_message)
         self.assertIsNotNone(job.completed_at)
+
+    def test_submit_wrapper_job_rejects_missing_external_job_id(self):
+        sentinel = MicrotechJobSentinelService()
+
+        with self.assertRaises(GraphQLMicrotechError):
+            sentinel.submit_wrapper_job(
+                kind=MicrotechGraphQLJob.Kind.ORDER_UPSERT,
+                operation="createVorgang",
+                submit=lambda: ("", 30.0),
+                request_payload={},
+                context={"workflow_id": 18, "step": "write_vorgang"},
+                continuation="microtech_order_sync_advance",
+                next_step="Vorgang schreiben.",
+            )
+
+        job = MicrotechGraphQLJob.objects.get(context__workflow_id=18)
+        self.assertEqual(job.status, MicrotechGraphQLJob.Status.FAILED)
+        self.assertIn("keine externe Job-ID", job.error_message)
 
 
 class WorkerMaintenanceSentinelTest(TestCase):

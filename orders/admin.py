@@ -87,6 +87,7 @@ class OrderExpandSection(TemplateSection):
 
     def render(self) -> str:
         obj = self.instance
+        workflow = obj.microtech_sync_workflows.order_by("-created_at").first()
         return render_to_string(
             self.template_name,
             context={
@@ -98,6 +99,12 @@ class OrderExpandSection(TemplateSection):
                 "transitions_meta_url": reverse("admin:orders_order_transitions_meta"),
                 "microtech_sync_status_url": reverse("admin:orders_order_microtech_sync_status", args=(obj.pk,)),
                 "microtech_sync_status_text": OrderAdmin.microtech_sync_status_for_order(obj),
+                "microtech_sync_workflow_url": (
+                    reverse("admin:orders_microtechordersyncworkflow_change", args=(workflow.pk,))
+                    if workflow
+                    else ""
+                ),
+                "microtech_sync_workflow_id": workflow.pk if workflow else "",
             },
         )
 
@@ -138,6 +145,33 @@ class OrderCustomerChangeForm(BaseDialogForm):
             raise forms.ValidationError(str(exc)) from exc
 
 
+@admin.register(MicrotechOrderSyncWorkflow)
+class MicrotechOrderSyncWorkflowAdmin(BaseAdmin):
+    list_display = ("id", "order", "status", "current_step", "current_job", "updated_at")
+    list_filter = ("status", "current_step")
+    search_fields = ("order__order_number", "order__customer__erp_nr", "current_step", "error_message")
+    readonly_fields = BaseAdmin.readonly_fields + (
+        "order",
+        "status",
+        "current_step",
+        "current_job",
+        "state",
+        "step_log",
+        "error_message",
+    )
+    fieldsets = (
+        ("Workflow", {"fields": ("order", "status", "current_step", "current_job")}),
+        ("Zustand", {"fields": ("state", "step_log", "error_message")}),
+        ("System", {"fields": ("created_at", "updated_at")}),
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
 @admin.register(Order)
 class OrderAdmin(BaseAdmin):
     list_display = (
@@ -174,6 +208,8 @@ class OrderAdmin(BaseAdmin):
         "request_customer_change_detail",
         "upsert_to_microtech_detail",
         "resume_microtech_sync_detail",
+        "abort_microtech_sync_detail",
+        "restart_microtech_sync_detail",
         "export_swiss_customs_csv_detail",
     )
     list_fullwidth = True
@@ -353,6 +389,12 @@ class OrderAdmin(BaseAdmin):
             "order_number": order.order_number,
             "erp_order_id": order.erp_order_id,
             "has_workflow": workflow is not None,
+            "workflow_id": workflow.pk if workflow else None,
+            "workflow_url": (
+                reverse("admin:orders_microtechordersyncworkflow_change", args=(workflow.pk,))
+                if workflow
+                else ""
+            ),
             "is_active": False,
             "status": "",
             "status_display": "-",
@@ -423,6 +465,89 @@ class OrderAdmin(BaseAdmin):
                 f"Workflow #{workflow.pk} bei Schritt '{workflow.current_step}' fortgesetzt.",
                 level=messages.SUCCESS,
             )
+        return self._redirect_to_change_page(object_id)
+
+    @action(
+        description="Hängenden Microtech-Sync abbrechen",
+        icon="stop_circle",
+        variant=ActionVariant.WARNING,
+        permissions=("change",),
+        dialog={
+            "title": "Microtech-Sync lokal abbrechen",
+            "description": (
+                "Die lokale Workflow- und Job-Verfolgung wird beendet. Falls der Remote-Job doch noch läuft, "
+                "wird ein späterer Status ignoriert."
+            ),
+            "form_submit_text": "Lokal abbrechen",
+        },
+    )
+    def abort_microtech_sync_detail(self, request, form: BaseDialogForm, object_id: str):
+        order = self.get_object(request, object_id)
+        workflow = (
+            MicrotechOrderSyncWorkflow.objects.filter(
+                order=order,
+                status__in=MicrotechOrderSyncWorkflow.ACTIVE_STATUSES,
+            )
+            .order_by("-created_at")
+            .first()
+            if order
+            else None
+        )
+        if workflow is None:
+            self.message_user(request, "Kein aktiver Microtech-Sync zum Abbrechen.", level=messages.WARNING)
+        elif OrderSyncWorkflowService().abort(workflow):
+            self.message_user(request, f"Workflow #{workflow.pk} wurde lokal abgebrochen.", level=messages.SUCCESS)
+        else:
+            self.message_user(request, "Der Microtech-Sync konnte nicht abgebrochen werden.", level=messages.WARNING)
+        return self._redirect_to_change_page(object_id)
+
+    @action(
+        description="Hängenden Microtech-Sync neu starten",
+        icon="restart_alt",
+        variant=ActionVariant.WARNING,
+        permissions=("change",),
+        dialog={
+            "title": "Hängenden Microtech-Sync neu starten",
+            "description": (
+                "Der bisherige lokale Workflow wird abgebrochen und eine neue Synchronisation gestartet. "
+                "Ein nicht mehr erreichbarer Remote-Job könnte trotzdem noch ausgeführt werden."
+            ),
+            "form_submit_text": "Neu starten",
+        },
+    )
+    def restart_microtech_sync_detail(self, request, form: BaseDialogForm, object_id: str):
+        order = self.get_object(request, object_id)
+        workflow = (
+            MicrotechOrderSyncWorkflow.objects.filter(
+                order=order,
+                status__in=MicrotechOrderSyncWorkflow.ACTIVE_STATUSES,
+            )
+            .order_by("-created_at")
+            .first()
+            if order
+            else None
+        )
+        if workflow is None:
+            self.message_user(request, "Kein aktiver Microtech-Sync zum Neustarten.", level=messages.WARNING)
+            return self._redirect_to_change_page(object_id)
+
+        try:
+            restarted = OrderSyncWorkflowService().restart(workflow)
+        except Exception as exc:
+            self.message_user(request, f"Microtech-Sync konnte nicht neu gestartet werden: {exc}", level=messages.ERROR)
+        else:
+            if restarted is None:
+                self.message_user(
+                    request,
+                    "Der Microtech-Sync wurde inzwischen geändert und konnte nicht neu gestartet werden.",
+                    level=messages.WARNING,
+                )
+            else:
+                self.message_user(
+                    request,
+                    f"Workflow #{workflow.pk} wurde abgebrochen; Workflow #{restarted.pk} wurde gestartet.",
+                    level=messages.SUCCESS,
+                )
         return self._redirect_to_change_page(object_id)
 
     @action(

@@ -43,6 +43,10 @@
                 BelegNr:
                 <span class="js-microtech-sync-beleg">{{ instance.erp_order_id|default:"-" }}</span>
             </div>
+            <a class="js-microtech-sync-workflow-link mt-1 inline-block text-xs text-primary-600 hover:underline dark:text-primary-400{% if not microtech_sync_workflow_url %} hidden{% endif %}"
+               href="{{ microtech_sync_workflow_url }}">
+                Workflow{% if microtech_sync_workflow_id %} #{{ microtech_sync_workflow_id }}{% endif %}
+            </a>
             <div class="js-microtech-sync-error text-xs text-red-600 dark:text-red-400 mt-1"></div>
         </div>
     </div>

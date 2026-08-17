@@ -27,6 +27,7 @@
     var beleg = container.querySelector(".js-microtech-sync-beleg");
     var error = container.querySelector(".js-microtech-sync-error");
     var spinner = container.querySelector(".js-microtech-sync-spinner");
+    var workflowLink = container.querySelector(".js-microtech-sync-workflow-link");
 
     var status = text(payload.status_display, "-");
     var step = text(payload.current_step, "");
@@ -40,6 +41,15 @@
     }
     if (error) {
       error.textContent = errorMessage;
+    }
+    if (workflowLink) {
+      if (payload.workflow_url) {
+        workflowLink.href = payload.workflow_url;
+        workflowLink.textContent = "Workflow #" + text(payload.workflow_id, "");
+        setHidden(workflowLink, false);
+      } else {
+        setHidden(workflowLink, true);
+      }
     }
     setHidden(spinner, !payload.is_active && !ACTIVE_STATUSES[payload.status]);
   }

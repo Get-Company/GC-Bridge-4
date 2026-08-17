@@ -20,8 +20,12 @@ class OrderAdminSearchTest(SimpleTestCase):
         model_admin = OrderAdmin(Order, django_admin.site)
 
         self.assertIn("request_customer_change_detail", model_admin.actions_detail)
+        self.assertIn("abort_microtech_sync_detail", model_admin.actions_detail)
+        self.assertIn("restart_microtech_sync_detail", model_admin.actions_detail)
         self.assertIn("customer", model_admin.readonly_fields)
         self.assertIsNotNone(model_admin.request_customer_change_detail.dialog)
+        self.assertIsNotNone(model_admin.abort_microtech_sync_detail.dialog)
+        self.assertIsNotNone(model_admin.restart_microtech_sync_detail.dialog)
 
 
 class AdminTriggerTest(TestCase):

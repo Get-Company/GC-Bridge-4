@@ -170,6 +170,7 @@ class MicrotechOrderSyncWorkflow(BaseModel):
         WAITING = "waiting", _("Wartet auf Microtech")
         FAILED = "failed", _("Fehlgeschlagen")
         SUCCEEDED = "succeeded", _("Erfolgreich")
+        CANCELLED = "cancelled", _("Abgebrochen")
 
     ACTIVE_STATUSES = (Status.PENDING, Status.RUNNING, Status.WAITING, Status.FAILED)
 

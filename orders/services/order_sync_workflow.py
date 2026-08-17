@@ -186,6 +186,59 @@ class OrderSyncWorkflowService(BaseService):
         self._advance(workflow)
         return workflow
 
+    def abort(self, workflow: MicrotechOrderSyncWorkflow, *, reason: str = "") -> bool:
+        """Bricht einen hängenden Workflow lokal ab, ohne auf den Remote-Job zu warten."""
+        from django.db import transaction
+        from django.utils import timezone
+
+        reason = reason or "Microtech-Sync wurde manuell abgebrochen."
+        with transaction.atomic():
+            locked = (
+                MicrotechOrderSyncWorkflow.objects.select_for_update()
+                .select_related("current_job")
+                .filter(pk=workflow.pk)
+                .first()
+            )
+            if locked is None or not locked.is_active:
+                return False
+
+            job = locked.current_job
+            if job is not None and not job.is_terminal:
+                job.status = MicrotechGraphQLJob.Status.CANCELLED
+                job.error_message = reason
+                job.next_step = "Workflow lokal abgebrochen; Remote-Status wird nicht weiter verfolgt."
+                job.next_poll_at = None
+                job.completed_at = timezone.now()
+                job.save(
+                    update_fields=(
+                        "status",
+                        "error_message",
+                        "next_step",
+                        "next_poll_at",
+                        "completed_at",
+                        "updated_at",
+                    )
+                )
+
+            locked.status = MicrotechOrderSyncWorkflow.Status.CANCELLED
+            locked.current_job = None
+            locked.error_message = reason
+            self._log_step(locked, locked.current_step, "cancelled", error=reason)
+            locked.save(
+                update_fields=("status", "current_job", "error_message", "step_log", "updated_at")
+            )
+        logger.warning("Order-Sync-Workflow #%s wurde manuell abgebrochen: %s", workflow.pk, reason)
+        return True
+
+    def restart(self, workflow: MicrotechOrderSyncWorkflow) -> MicrotechOrderSyncWorkflow | None:
+        """Bricht den aktiven Workflow lokal ab und startet eine neue Kette für dieselbe Bestellung."""
+        if not self.abort(
+            workflow,
+            reason="Microtech-Sync wurde manuell neu gestartet, weil kein Remote-Status verfuegbar war.",
+        ):
+            return None
+        return self.start_for_order(workflow.order)
+
     # --- Ergebnis-Anwendung -------------------------------------------------
 
     def _apply_result(
@@ -673,19 +726,59 @@ class OrderSyncWorkflowService(BaseService):
         return any(fragment in lowered for fragment in NOT_FOUND_FRAGMENTS)
 
     def reconcile_failures(self) -> int:
-        """Verarbeitet terminale fehlgeschlagene Jobs wartender Workflows."""
+        """Verarbeitet fehlgeschlagene Jobs und erkennt verwaiste wartende Workflows."""
         from django.db import transaction
+        from django.utils import timezone
 
         changed = 0
         waiting = list(
             MicrotechOrderSyncWorkflow.objects.filter(
                 status=MicrotechOrderSyncWorkflow.Status.WAITING,
-                current_job__isnull=False,
             ).select_related("current_job")
         )
         for workflow in waiting:
             job = workflow.current_job
-            if job is None or not job.is_terminal:
+            if job is None:
+                error_message = "Microtech-Job fehlt; der Workflow kann keinen Status mehr erhalten."
+                with transaction.atomic():
+                    wf = MicrotechOrderSyncWorkflow.objects.select_for_update().get(pk=workflow.pk)
+                    wf.status = MicrotechOrderSyncWorkflow.Status.FAILED
+                    wf.error_message = error_message
+                    self._log_step(wf, wf.current_step, "failed", error=error_message)
+                    wf.save(update_fields=("status", "error_message", "step_log", "updated_at"))
+                logger.error("Order-Sync-Workflow #%s: %s", workflow.pk, error_message)
+                changed += 1
+                continue
+
+            if not job.external_job_id:
+                error_message = "Microtech-Job hat keine externe GraphQL-Job-ID und kann nicht abgefragt werden."
+                if not job.is_terminal:
+                    job.status = MicrotechGraphQLJob.Status.FAILED
+                    job.error_message = error_message
+                    job.next_step = "Keine externe Job-ID erhalten."
+                    job.next_poll_at = None
+                    job.completed_at = timezone.now()
+                    job.save(
+                        update_fields=(
+                            "status",
+                            "error_message",
+                            "next_step",
+                            "next_poll_at",
+                            "completed_at",
+                            "updated_at",
+                        )
+                    )
+                with transaction.atomic():
+                    wf = MicrotechOrderSyncWorkflow.objects.select_for_update().get(pk=workflow.pk)
+                    wf.status = MicrotechOrderSyncWorkflow.Status.FAILED
+                    wf.error_message = error_message
+                    self._log_step(wf, wf.current_step, "failed", error=error_message)
+                    wf.save(update_fields=("status", "error_message", "step_log", "updated_at"))
+                logger.error("Order-Sync-Workflow #%s: %s", workflow.pk, error_message)
+                changed += 1
+                continue
+
+            if not job.is_terminal:
                 continue
             if job.status == MicrotechGraphQLJob.Status.SUCCEEDED:
                 continue
