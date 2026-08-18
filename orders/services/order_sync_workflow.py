@@ -214,9 +214,12 @@ class OrderSyncWorkflowService(BaseService):
 
         reason = reason or "Microtech-Sync wurde manuell abgebrochen."
         with transaction.atomic():
+            # ``current_job`` is nullable.  Combining select_related() with
+            # FOR UPDATE would produce a LEFT OUTER JOIN, which PostgreSQL
+            # rejects because it cannot lock the nullable side of that join.
+            # Load the job lazily after locking the workflow instead.
             locked = (
                 MicrotechOrderSyncWorkflow.objects.select_for_update()
-                .select_related("current_job")
                 .filter(pk=workflow.pk)
                 .first()
             )

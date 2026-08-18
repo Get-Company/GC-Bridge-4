@@ -728,6 +728,29 @@ class SubmitFailureTest(TestCase):
 
 
 class AbortAndRestartTest(TestCase):
+    def test_abort_cancels_workflow_with_nullable_current_job(self):
+        order = make_order()
+        job = MicrotechGraphQLJob.objects.create(
+            kind=MicrotechGraphQLJob.Kind.ORDER_UPSERT,
+            operation="createVorgang",
+            status=MicrotechGraphQLJob.Status.WAITING_WEBHOOK,
+            external_job_id="stalled-job",
+        )
+        workflow = MicrotechOrderSyncWorkflow.objects.create(
+            order=order,
+            status=MicrotechOrderSyncWorkflow.Status.WAITING,
+            current_step="probe_customer",
+            current_job=job,
+        )
+
+        self.assertTrue(OrderSyncWorkflowService().abort(workflow))
+
+        workflow.refresh_from_db()
+        job.refresh_from_db()
+        self.assertEqual(workflow.status, MicrotechOrderSyncWorkflow.Status.CANCELLED)
+        self.assertIsNone(workflow.current_job)
+        self.assertEqual(job.status, MicrotechGraphQLJob.Status.CANCELLED)
+
     @patch("orders.services.order_sync_workflow.MicrotechGraphQLClientService")
     @patch("orders.services.order_sync_workflow.MicrotechJobSentinelService.submit_wrapper_job")
     def test_restart_abandons_stalled_workflow_and_starts_a_new_one(self, mock_submit, mock_client):
