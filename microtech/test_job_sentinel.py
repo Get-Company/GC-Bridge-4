@@ -51,7 +51,8 @@ class TestJobSentinelSubmission(TestCase):
 
 
 class TestJobSentinelWebhook(TestCase):
-    def test_success_webhook_schedules_result_poll_before_continuation(self):
+    @patch("microtech.tasks.poll_graphql_job.delay")
+    def test_success_webhook_schedules_result_poll_before_continuation(self, mock_delay):
         job = _make_job(
             kind=MicrotechGraphQLJob.Kind.ORDER_UPSERT,
             operation="createVorgang",
@@ -70,6 +71,7 @@ class TestJobSentinelWebhook(TestCase):
         self.assertIsNotNone(job.next_poll_at)
         self.assertLessEqual(job.next_poll_at, timezone.now())
         self.assertIn("Ergebnis", job.next_step)
+        mock_delay.assert_called_once_with(job.pk)
 
 
 @patch("microtech.services.job_sentinel.MicrotechGraphQLClientService")
