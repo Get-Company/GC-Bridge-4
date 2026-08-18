@@ -20,6 +20,8 @@ logger = logging.getLogger(__name__)
 # Fehlermeldungs-Fragmente, die einen Probe-Fehlschlag als fachliches
 # "nicht gefunden" (Branch) statt als technischen Fehler kennzeichnen.
 NOT_FOUND_FRAGMENTS = ("nicht gefunden", "not found", "wurde nicht gefunden")
+NEW_CUSTOMER_NUMBER_MIN = 950_000
+NEW_CUSTOMER_NUMBER_MAX = 999_999
 
 
 class OrderSyncWorkflowService(BaseService):
@@ -53,6 +55,12 @@ class OrderSyncWorkflowService(BaseService):
     def _is_step_applicable(self, workflow: MicrotechOrderSyncWorkflow, step: str) -> bool:
         """Prüft anhand des Workflow-Zustands, ob ein Step ausgeführt werden soll."""
         state = workflow.state or {}
+        if step == "probe_customer":
+            # Six-digit numbers in this range are provisional Shopware numbers.
+            # The wrapper's upsert resolves them through the e-mail in CustomerInput;
+            # probing their (not yet existing) AdrNr would only create a known
+            # "not found" error before the actual upsert can run.
+            return not bool(state.get("email_upsert_customer"))
         if step in ("billing_address", "billing_contact"):
             # Rechnungsadresse identisch mit Lieferadresse → überspringen
             return not bool(state.get("billing_same_as_shipping"))
@@ -71,6 +79,14 @@ class OrderSyncWorkflowService(BaseService):
             _shipping_ans_nr, billing_ans_nr = self._target_default_ans_nrs(workflow)
             return old_billing > 0 and old_billing != billing_ans_nr
         return True
+
+    @staticmethod
+    def _is_email_upsert_customer_number(customer_number: object) -> bool:
+        """Return whether a provisional six-digit customer number needs an e-mail upsert."""
+        number_text = str(customer_number or "").strip()
+        if len(number_text) != 6 or not number_text.isascii() or not number_text.isdigit():
+            return False
+        return NEW_CUSTOMER_NUMBER_MIN <= int(number_text) <= NEW_CUSTOMER_NUMBER_MAX
 
     def next_step(self, workflow: MicrotechOrderSyncWorkflow) -> str | None:
         """Liefert den nächsten ausstehenden und anwendbaren Step-Key, oder None wenn fertig."""
@@ -176,6 +192,11 @@ class OrderSyncWorkflowService(BaseService):
             state={
                 "erp_nr": erp_nr,
                 "address_number": address_number,
+                # A new Shopware number is not an AdrNr in Microtech yet.  Send
+                # it directly to upsertCustomer, which resolves input.email
+                # before creating or updating the Microtech customer.
+                "email_upsert_customer": self._is_email_upsert_customer_number(erp_nr),
+                "is_new_customer": self._is_email_upsert_customer_number(erp_nr),
                 "billing_same_as_shipping": billing.pk == shipping.pk,
                 "erp_order_id": (order.erp_order_id or "").strip(),
             },
@@ -261,6 +282,12 @@ class OrderSyncWorkflowService(BaseService):
                 self._remember_existing_default_ans_nrs(state, customer)
         elif step == "write_customer":
             customer = (result or {}).get("customer") or {}
+            # An e-mail upsert may resolve the provisional Shopware number to an
+            # existing Microtech customer.  All following mutations, as well as
+            # the Shopware write-back, must use that resolved customer number.
+            customer_number = str(customer.get("customerNumber") or "").strip()
+            if customer_number:
+                state["erp_nr"] = customer_number
             state["address_number"] = _to_int(customer.get("erpAddressNumber")) or state.get("address_number")
         elif step in ("shipping_address", "billing_address"):
             shipping, billing = self._resolve_addresses(workflow.order)
