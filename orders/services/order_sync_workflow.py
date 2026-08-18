@@ -54,8 +54,8 @@ class OrderSyncWorkflowService(BaseService):
         return True
 
     @staticmethod
-    def _is_email_upsert_customer_number(customer_number: object) -> bool:
-        """Return whether a provisional six-digit customer number needs an e-mail upsert."""
+    def _is_provisional_customer_number(customer_number: object) -> bool:
+        """Return whether a six-digit Shopware number needs a Microtech AdrNr allocation."""
         number_text = str(customer_number or "").strip()
         if len(number_text) != 6 or not number_text.isascii() or not number_text.isdigit():
             return False
@@ -167,9 +167,9 @@ class OrderSyncWorkflowService(BaseService):
                 "address_number": address_number,
                 "requested_customer_number": erp_nr,
                 # A six-digit Shopware number is only a placeholder.  The
-                # GraphQL upsert resolves the customer by e-mail or allocates
-                # the next free AdrNr, which is written back before the order.
-                "is_new_customer": self._is_email_upsert_customer_number(erp_nr),
+                # GraphQL allocates a new Microtech AdrNr for this Shopware
+                # placeholder. It is written back before the order is created.
+                "is_new_customer": self._is_provisional_customer_number(erp_nr),
             },
         )
         logger.info(
@@ -264,10 +264,10 @@ class OrderSyncWorkflowService(BaseService):
             resolved_number = str(resolved_address_number or resolved_customer_number).strip()
             if not resolved_number:
                 raise ValueError("GraphQL upsertCustomer lieferte keine aufgelöste Microtech-Adressnummer.")
-            if self._is_email_upsert_customer_number(requested_number) and resolved_number == requested_number:
+            if self._is_provisional_customer_number(requested_number) and resolved_number == requested_number:
                 raise ValueError(
                     "GraphQL upsertCustomer hat die vorläufige Shopware-Kundennummer "
-                    f"'{requested_number}' unverändert zurückgegeben statt sie per E-Mail aufzulösen."
+                    f"'{requested_number}' unverändert zurückgegeben statt eine freie AdrNr zu vergeben."
                 )
 
             # The resolved AdrNr is the sole customer number for every
@@ -402,9 +402,6 @@ class OrderSyncWorkflowService(BaseService):
         elif step == "write_customer":
             operation = "upsertCustomer"
             input_data = customer_service._build_customer_input(customer=order.customer, address=shipping)
-            if self._is_email_upsert_customer_number(state.get("requested_customer_number") or state.get("erp_nr")):
-                if not str(input_data.get("email") or "").strip():
-                    raise ValueError("Neukunden-Upsert benötigt eine E-Mail-Adresse für die GraphQL-Auflösung.")
             submit = lambda: client.submit_upsert_customer(state["erp_nr"], input_data)
             payload = {"customerNumber": state["erp_nr"], "input": input_data}
         elif step in ("shipping_address", "billing_address"):
