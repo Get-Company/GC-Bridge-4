@@ -235,6 +235,15 @@ class OrderAdmin(BaseAdmin):
     def _redirect_to_change_page(self, object_id: str) -> HttpResponseRedirect:
         return HttpResponseRedirect(reverse("admin:orders_order_change", args=(object_id,)))
 
+    def _redirect_after_dialog(self, request, object_id: str) -> HttpResponse:
+        """Close an Unfold/htmx action dialog and reload the order change page."""
+        target = reverse("admin:orders_order_change", args=(object_id,))
+        if request.headers.get("HX-Request") == "true":
+            response = HttpResponse(status=200)
+            response["HX-Redirect"] = target
+            return response
+        return HttpResponseRedirect(target)
+
     def _run_microtech_upsert(self, request, object_id: str) -> None:
         order = self.get_object(request, object_id)
         if not order:
@@ -335,7 +344,7 @@ class OrderAdmin(BaseAdmin):
         order = self.get_object(request, object_id)
         if order is None:
             self.message_user(request, "Bestellung nicht gefunden.", level=messages.ERROR)
-            return self._redirect_to_changelist()
+            return self._redirect_after_dialog(request, object_id)
         try:
             job = OrderCustomerChangeService().request_change(
                 order=order,
@@ -349,7 +358,7 @@ class OrderAdmin(BaseAdmin):
                 f"AdrNr {form.cleaned_data['erp_nr']} wird im Hintergrund geladen (Sentinel-Job #{job.pk}).",
                 level=messages.SUCCESS,
             )
-        return self._redirect_to_change_page(object_id)
+        return self._redirect_after_dialog(request, object_id)
 
     def get_custom_urls(self):
         urls = super().get_custom_urls()
@@ -505,7 +514,7 @@ class OrderAdmin(BaseAdmin):
             self.message_user(request, f"Workflow #{workflow.pk} wurde lokal abgebrochen.", level=messages.SUCCESS)
         else:
             self.message_user(request, "Der Microtech-Sync konnte nicht abgebrochen werden.", level=messages.WARNING)
-        return self._redirect_to_change_page(object_id)
+        return self._redirect_after_dialog(request, object_id)
 
     @action(
         description="Hängenden Microtech-Sync neu starten",
@@ -535,7 +544,7 @@ class OrderAdmin(BaseAdmin):
         )
         if workflow is None:
             self.message_user(request, "Kein aktiver Microtech-Sync zum Neustarten.", level=messages.WARNING)
-            return self._redirect_to_change_page(object_id)
+            return self._redirect_after_dialog(request, object_id)
 
         try:
             restarted = OrderSyncWorkflowService().restart(workflow)
@@ -554,7 +563,7 @@ class OrderAdmin(BaseAdmin):
                     f"Workflow #{workflow.pk} wurde abgebrochen; Workflow #{restarted.pk} wurde gestartet.",
                     level=messages.SUCCESS,
                 )
-        return self._redirect_to_change_page(object_id)
+        return self._redirect_after_dialog(request, object_id)
 
     @action(
         description="Zoll-CSV exportieren",

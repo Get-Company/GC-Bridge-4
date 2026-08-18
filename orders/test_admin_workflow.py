@@ -1,6 +1,7 @@
 from unittest.mock import patch
 
 from django.contrib import admin as django_admin
+from django.test import RequestFactory
 from django.test import SimpleTestCase, TestCase
 
 from orders.admin import OrderAdmin
@@ -32,6 +33,15 @@ class OrderAdminSearchTest(SimpleTestCase):
 
 
 class AdminTriggerTest(TestCase):
+    def test_dialog_action_uses_hx_redirect_to_close_the_modal(self):
+        model_admin = OrderAdmin(Order, django_admin.site)
+        request = RequestFactory().post("/", HTTP_HX_REQUEST="true")
+
+        response = model_admin._redirect_after_dialog(request, "71")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["HX-Redirect"], "/admin/orders/order/71/change/")
+
     @patch("orders.admin.OrderSyncWorkflowService.start_for_order")
     def test_run_upsert_starts_workflow(self, mock_start):
         order = make_order()

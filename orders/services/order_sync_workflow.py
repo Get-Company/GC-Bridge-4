@@ -30,17 +30,8 @@ class OrderSyncWorkflowService(BaseService):
     model = MicrotechOrderSyncWorkflow
 
     STEP_ORDER = (
-        "probe_customer",
         "write_customer",
-        "shipping_address",
-        "shipping_contact",
-        "billing_address",
-        "billing_contact",
-        "clear_default_shipping_address",
-        "clear_default_billing_address",
-        "set_default_addresses",
         "writeback_adrnr",
-        "probe_vorgang",
         "write_vorgang",
     )
 
@@ -55,29 +46,11 @@ class OrderSyncWorkflowService(BaseService):
     def _is_step_applicable(self, workflow: MicrotechOrderSyncWorkflow, step: str) -> bool:
         """Prüft anhand des Workflow-Zustands, ob ein Step ausgeführt werden soll."""
         state = workflow.state or {}
-        if step == "probe_customer":
-            # Six-digit numbers in this range are provisional Shopware numbers.
-            # The wrapper's upsert resolves them through the e-mail in CustomerInput;
-            # probing their (not yet existing) AdrNr would only create a known
-            # "not found" error before the actual upsert can run.
-            return not bool(state.get("email_upsert_customer"))
-        if step in ("billing_address", "billing_contact"):
-            # Rechnungsadresse identisch mit Lieferadresse → überspringen
-            return not bool(state.get("billing_same_as_shipping"))
         if step == "writeback_adrnr":
-            # Adressnummer-Rückschreiben nur bei Neukunden
+            # Die GraphQL-Resolution liefert für einen Shopware-Neukunden die
+            # echte Microtech-Adressnummer zurück. Diese muss vor der
+            # Vorgangsanlage nach Shopware geschrieben werden.
             return bool(state.get("is_new_customer"))
-        if step == "probe_vorgang":
-            # Vorgang sondieren nur wenn bereits eine ERP-Auftragsnummer vorhanden
-            return bool(str(state.get("erp_order_id") or "").strip())
-        if step == "clear_default_shipping_address":
-            old_shipping = _to_int(state.get("existing_default_shipping_ans_nr")) or 0
-            shipping_ans_nr, _billing_ans_nr = self._target_default_ans_nrs(workflow)
-            return old_shipping > 0 and old_shipping != shipping_ans_nr
-        if step == "clear_default_billing_address":
-            old_billing = _to_int(state.get("existing_default_billing_ans_nr")) or 0
-            _shipping_ans_nr, billing_ans_nr = self._target_default_ans_nrs(workflow)
-            return old_billing > 0 and old_billing != billing_ans_nr
         return True
 
     @staticmethod
@@ -180,7 +153,7 @@ class OrderSyncWorkflowService(BaseService):
         if order.customer is None:
             raise ValueError("Order hat keinen Kunden zum Synchronisieren.")
 
-        shipping, billing = self._resolve_addresses(order)
+        shipping, _billing = self._resolve_addresses(order)
         erp_nr = (order.customer.erp_nr or "").strip()
         address_number = _to_int(erp_nr)
         if address_number is None:
@@ -192,13 +165,11 @@ class OrderSyncWorkflowService(BaseService):
             state={
                 "erp_nr": erp_nr,
                 "address_number": address_number,
-                # A new Shopware number is not an AdrNr in Microtech yet.  Send
-                # it directly to upsertCustomer, which resolves input.email
-                # before creating or updating the Microtech customer.
-                "email_upsert_customer": self._is_email_upsert_customer_number(erp_nr),
+                "requested_customer_number": erp_nr,
+                # A six-digit Shopware number is only a placeholder.  The
+                # GraphQL upsert resolves the customer by e-mail or allocates
+                # the next free AdrNr, which is written back before the order.
                 "is_new_customer": self._is_email_upsert_customer_number(erp_nr),
-                "billing_same_as_shipping": billing.pk == shipping.pk,
-                "erp_order_id": (order.erp_order_id or "").strip(),
             },
         )
         logger.info(
@@ -285,13 +256,24 @@ class OrderSyncWorkflowService(BaseService):
                 self._remember_existing_default_ans_nrs(state, customer)
         elif step == "write_customer":
             customer = (result or {}).get("customer") or {}
-            # An e-mail upsert may resolve the provisional Shopware number to an
-            # existing Microtech customer.  All following mutations, as well as
-            # the Shopware write-back, must use that resolved customer number.
-            customer_number = str(customer.get("customerNumber") or "").strip()
-            if customer_number:
-                state["erp_nr"] = customer_number
-            state["address_number"] = _to_int(customer.get("erpAddressNumber")) or state.get("address_number")
+            requested_number = str(
+                state.get("requested_customer_number") or state.get("erp_nr") or ""
+            ).strip()
+            resolved_address_number = _to_int(customer.get("erpAddressNumber"))
+            resolved_customer_number = str(customer.get("customerNumber") or "").strip()
+            resolved_number = str(resolved_address_number or resolved_customer_number).strip()
+            if not resolved_number:
+                raise ValueError("GraphQL upsertCustomer lieferte keine aufgelöste Microtech-Adressnummer.")
+            if self._is_email_upsert_customer_number(requested_number) and resolved_number == requested_number:
+                raise ValueError(
+                    "GraphQL upsertCustomer hat die vorläufige Shopware-Kundennummer "
+                    f"'{requested_number}' unverändert zurückgegeben statt sie per E-Mail aufzulösen."
+                )
+
+            # The resolved AdrNr is the sole customer number for every
+            # following workflow step and for the Shopware write-back.
+            state["erp_nr"] = resolved_number
+            state["address_number"] = resolved_address_number or _to_int(resolved_number) or state.get("address_number")
         elif step in ("shipping_address", "billing_address"):
             shipping, billing = self._resolve_addresses(workflow.order)
             address = shipping if step == "shipping_address" else billing
@@ -355,7 +337,11 @@ class OrderSyncWorkflowService(BaseService):
             )
             if workflow is None or workflow.current_step != step:
                 return
-            self._apply_result(workflow, step, job.result_payload or {}, job=job)
+            try:
+                self._apply_result(workflow, step, job.result_payload or {}, job=job)
+            except Exception as exc:
+                self._mark_step_failed(workflow, step, exc)
+                return
             self._log_step(workflow, step, "completed")
             workflow.error_message = ""
             workflow.save(update_fields=("state", "step_log", "error_message", "updated_at"))
@@ -416,6 +402,9 @@ class OrderSyncWorkflowService(BaseService):
         elif step == "write_customer":
             operation = "upsertCustomer"
             input_data = customer_service._build_customer_input(customer=order.customer, address=shipping)
+            if self._is_email_upsert_customer_number(state.get("requested_customer_number") or state.get("erp_nr")):
+                if not str(input_data.get("email") or "").strip():
+                    raise ValueError("Neukunden-Upsert benötigt eine E-Mail-Adresse für die GraphQL-Auflösung.")
             submit = lambda: client.submit_upsert_customer(state["erp_nr"], input_data)
             payload = {"customerNumber": state["erp_nr"], "input": input_data}
         elif step in ("shipping_address", "billing_address"):
@@ -549,13 +538,7 @@ class OrderSyncWorkflowService(BaseService):
         state = workflow.state or {}
         client = MicrotechGraphQLClientService()
 
-        if step == "probe_vorgang":
-            beleg = (state.get("erp_order_id") or "").strip()
-            operation = "requestVorgang"
-            submit = lambda: client.submit_request_vorgang(beleg)
-            payload = {"belegNr": beleg}
-            kind = MicrotechGraphQLJob.Kind.ORDER_READ
-        elif step == "write_vorgang":
+        if step == "write_vorgang":
             upsert = OrderUpsertMicrotechService()
             resolved_rule = OrderRuleResolverService().resolve_for_order(order=order)
             positions, _rule_debug = upsert._build_graphql_positions(
@@ -574,21 +557,18 @@ class OrderSyncWorkflowService(BaseService):
                 "currency": "EUR",
                 "positions": positions,
             }
-            beleg = (state.get("beleg_nr") or "").strip()
             kind = MicrotechGraphQLJob.Kind.ORDER_UPSERT
-            if beleg:
-                operation = "updateVorgang"
-                submit = lambda: client.submit_update_vorgang(beleg, input_data)
-                payload = {"belegNr": beleg, "input": input_data}
-            else:
-                operation = "createVorgang"
-                create_input = {
-                    **input_data,
-                    "vorgangArt": order_type_number,
-                    "customerNumber": order.customer.erp_nr,
-                }
-                submit = lambda: client.submit_create_vorgang(create_input)
-                payload = {"input": create_input}
+            resolved_customer_number = str(state.get("erp_nr") or "").strip()
+            if not resolved_customer_number:
+                raise ValueError("Vorgangsanlage ohne aufgelöste Microtech-Kundennummer.")
+            operation = "createVorgang"
+            create_input = {
+                **input_data,
+                "vorgangArt": order_type_number,
+                "customerNumber": resolved_customer_number,
+            }
+            submit = lambda: client.submit_create_vorgang(create_input)
+            payload = {"input": create_input}
         else:
             raise ValueError(f"Unbekannter Order-Step: {step}")
 

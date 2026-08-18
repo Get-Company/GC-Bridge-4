@@ -404,14 +404,15 @@ class CustomerUpsertMicrotechService(BaseService):
         return {key: value for key, value in data.items() if value not in (None, "")}
 
     def _sync_new_customer_number_to_shopware(self, *, customer: Customer, erp_nr: str) -> bool:
+        erp_nr = _to_str(erp_nr)
+        if not erp_nr:
+            raise ValueError("Resolved Microtech customer number is required for Shopware write-back.")
         customer_id = _to_str(customer.api_id)
         if not customer_id:
-            logger.warning(
-                "Shopware customer update skipped for ERP {}: missing customer.api_id (customer_id={}).",
-                erp_nr,
-                customer.id,
+            raise ValueError(
+                "Shopware customer update requires customer.api_id "
+                f"for resolved Microtech customer number {erp_nr} (customer_id={customer.id})."
             )
-            return False
 
         service = CustomerService()
         existing = service.get_by_customer_number(erp_nr)
@@ -427,6 +428,9 @@ class CustomerUpsertMicrotechService(BaseService):
                 )
 
         service.update_customer_number(customer_id=customer_id, customer_number=erp_nr)
+        if customer.erp_nr != erp_nr:
+            customer.erp_nr = erp_nr
+            customer.save(update_fields=("erp_nr", "updated_at"))
         logger.info(
             "Shopware customer {} updated with new customerNumber {} (local customer_id={}).",
             customer_id,
