@@ -335,14 +335,18 @@ class OrderRuleResolverService(BaseService):
         for action in sorted(active_actions, key=lambda item: (item.priority, item.id)):
             action_type = _to_str(action.action_type)
 
-            if action_type == MicrotechOrderRuleAction.ActionType.CREATE_EXTRA_POSITION:
+            if action_type in {
+                MicrotechOrderRuleAction.ActionType.CREATE_EXTRA_POSITION,
+                MicrotechOrderRuleAction.ActionType.CREATE_SHIPPING_POSITION,
+            }:
                 erp_nr = _to_str(action.target_value)
                 if not erp_nr:
                     logger.warning(
-                        "Order {}: rule {} action {} ignored (missing ERP-Nr for create_extra_position).",
+                        "Order {}: rule {} action {} ignored (missing ERP-Nr for {}).",
                         order_label,
                         rule.pk,
                         action.pk,
+                        action_type,
                     )
                     continue
                 resolved.append(
@@ -408,18 +412,14 @@ class OrderRuleResolverService(BaseService):
     @classmethod
     def _address_looks_like_company(cls, address) -> bool:
         name1 = _to_str(getattr(address, "name1", ""))
-        name2 = _to_str(getattr(address, "name2", ""))
-        first_name = _to_str(getattr(address, "first_name", ""))
-        last_name = _to_str(getattr(address, "last_name", ""))
+        title = _to_str(getattr(address, "title", ""))
         lowered = name1.lower()
 
         if not name1:
             return False
-        if lowered in _SALUTATION_VALUES:
+        if title and name1.casefold() == title.casefold():
             return False
-        if name2 and name1 == name2:
-            return True
-        if first_name or last_name:
+        if lowered in _SALUTATION_VALUES:
             return False
         return True
 

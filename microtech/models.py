@@ -393,6 +393,7 @@ class MicrotechOrderRuleAction(BaseModel):
     class ActionType(models.TextChoices):
         SET_FIELD = "set_field", _("Dataset Feld setzen")
         CREATE_EXTRA_POSITION = "create_extra_position", _("Zusatzposition anlegen")
+        CREATE_SHIPPING_POSITION = "create_shipping_position", _("Versandposition anlegen")
 
     rule = models.ForeignKey(
         MicrotechOrderRule,
@@ -437,8 +438,11 @@ class MicrotechOrderRuleAction(BaseModel):
         ordering = ("rule", "priority", "id")
 
     def __str__(self) -> str:
-        if self.action_type == self.ActionType.CREATE_EXTRA_POSITION:
-            return f"{self.rule_id} | create_extra_position({self.target_value})"
+        if self.action_type in {
+            self.ActionType.CREATE_EXTRA_POSITION,
+            self.ActionType.CREATE_SHIPPING_POSITION,
+        }:
+            return f"{self.rule_id} | {self.action_type}({self.target_value})"
         field_name = self.dataset_field.field_name if self.dataset_field_id else "?"
         return f"{self.rule_id} | {field_name} = {self.target_value}"
 

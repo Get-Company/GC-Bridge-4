@@ -30,6 +30,7 @@ from microtech.rule_builder import (
     get_dataset_defs,
     get_dataset_field_defs,
     get_django_field_defs,
+    get_operator_defs,
     get_rule_action_target_defs,
 )
 from microtech.views.autocomplete import (
@@ -329,6 +330,8 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
                 return "Waehle zuerst eine fachliche Aktion."
             if obj.action_type == MicrotechOrderRuleAction.ActionType.CREATE_EXTRA_POSITION:
                 return "Legt eine Zusatzposition an. Zielwert = ERP-Nr der Position."
+            if obj.action_type == MicrotechOrderRuleAction.ActionType.CREATE_SHIPPING_POSITION:
+                return "Legt eine Versandposition an. Artikel V oder F, Preis = Versandkosten."
             if obj.dataset_field_id and obj.dataset_id:
                 try:
                     dataset_field = obj.dataset_field
@@ -386,6 +389,19 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
     def rule_builder_meta_view(self, request, **kwargs):
         if not self.has_view_permission(request):
             return JsonResponse({"ok": False, "error": "Zugriff verweigert."}, status=403)
+
+        django_fields = get_django_field_defs()
+        django_field_map = {item.path: item for item in django_fields}
+        operator_defs = get_operator_defs()
+        policies_by_field = {
+            item.field_path: item
+            for item in (
+                MicrotechOrderRuleDjangoFieldPolicy.objects
+                .filter(is_active=True)
+                .prefetch_related("allowed_operators")
+                .order_by("priority", "id")
+            )
+        }
         payload = {
             "ok": True,
             "operators": [
@@ -409,10 +425,16 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
                     "input_type": item.input_type,
                     "accepts_date_only": item.accepts_date_only,
                     "allowed_operator_codes": sorted(
-                        get_allowed_operator_codes(field_path=item.path, django_field_id=item.catalog_id)
+                        get_allowed_operator_codes(
+                            field_path=item.path,
+                            django_field_id=item.catalog_id,
+                            django_field_map=django_field_map,
+                            operator_defs=operator_defs,
+                            policies_by_field=policies_by_field,
+                        )
                     ),
                 }
-                for item in get_django_field_defs()
+                for item in django_fields
             ],
             "action_targets": [
                 {

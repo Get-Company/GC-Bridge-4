@@ -1,7 +1,10 @@
 from django.contrib.auth import get_user_model
+from unittest.mock import patch
+
 from django.test import TestCase
 from django.urls import reverse
 
+from microtech.admin import get_allowed_operator_codes
 from microtech.models import (
     MicrotechDatasetCatalog,
     MicrotechDatasetField,
@@ -103,6 +106,20 @@ class MicrotechOrderRuleAdminAutocompleteTest(TestCase):
         self.assertIn("Regel-Zusammenfassung", content)
         self.assertNotIn("tabular-table", content)
         self.assertIn("stacked", content)
+
+    def test_rule_builder_metadata_reuses_preloaded_field_definitions(self):
+        with patch(
+            "microtech.admin.get_allowed_operator_codes",
+            wraps=get_allowed_operator_codes,
+        ) as get_allowed_operator_codes_mock:
+            response = self.client.get(reverse("admin:microtech_orderrule_builder_meta"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(get_allowed_operator_codes_mock.called)
+        for call in get_allowed_operator_codes_mock.call_args_list:
+            self.assertIn("django_field_map", call.kwargs)
+            self.assertIn("operator_defs", call.kwargs)
+            self.assertIn("policies_by_field", call.kwargs)
 
     def test_operator_autocomplete_is_filtered_by_selected_django_field(self):
         django_field_id = MicrotechOrderRuleDjangoField.objects.get(field_path="payment_method").pk

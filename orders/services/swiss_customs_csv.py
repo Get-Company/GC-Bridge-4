@@ -87,18 +87,14 @@ def _address_looks_like_company(address: Address | None) -> bool:
     if address is None:
         return False
     name1 = _to_str(address.name1)
-    name2 = _to_str(address.name2)
-    first_name = _to_str(address.first_name)
-    last_name = _to_str(address.last_name)
+    title = _to_str(address.title)
     lowered = name1.lower()
 
     if not name1:
         return False
-    if lowered in _SALUTATION_VALUES:
+    if title and name1.casefold() == title.casefold():
         return False
-    if name2 and name1 == name2:
-        return True
-    if first_name or last_name:
+    if lowered in _SALUTATION_VALUES:
         return False
     return True
 

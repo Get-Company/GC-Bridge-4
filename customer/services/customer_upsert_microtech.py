@@ -490,9 +490,9 @@ class CustomerUpsertMicrotechService(BaseService):
         company_candidate = _to_str(address.name1)
         if not company_candidate:
             return False
-        if _to_str(address.name2) and _to_str(address.name2) == company_candidate:
-            return True
-        if _to_str(address.first_name) or _to_str(address.last_name):
+        if company_candidate.casefold() == _to_str(address.title).casefold():
+            return False
+        if CustomerUpsertMicrotechService._translate_salutation_to_de(company_candidate):
             return False
         return True
 

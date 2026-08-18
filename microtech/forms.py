@@ -24,6 +24,7 @@ from microtech.rule_builder import (
     is_dataset_field_allowed_for_action_target,
     resolve_rule_action_target,
     RULE_ACTION_TARGET_CREATE_EXTRA_POSITION,
+    RULE_ACTION_TARGET_CREATE_SHIPPING_POSITION,
     sync_django_field_catalog,
 )
 
@@ -405,7 +406,10 @@ class MicrotechOrderRuleActionForm(forms.ModelForm):
                 target_help = target_def.target_value_help or target_help
             elif selected_ui_action == LEGACY_UI_ACTION:
                 target_help = "Bestehende Sonderaktion ausserhalb der gefuehrten Targets. Bitte nur behalten oder bewusst umstellen."
-        if selected_dataset_field is not None and selected_ui_action != RULE_ACTION_TARGET_CREATE_EXTRA_POSITION:
+        if selected_dataset_field is not None and selected_ui_action not in {
+            RULE_ACTION_TARGET_CREATE_EXTRA_POSITION,
+            RULE_ACTION_TARGET_CREATE_SHIPPING_POSITION,
+        }:
             field_label = _to_str(selected_dataset_field.label) or _to_str(selected_dataset_field.field_name)
             target_help = f"{target_help} Zielfeld: {field_label} ({selected_dataset_field.field_type or 'Text'})."
             self.fields["target_value"].widget.attrs["data-dataset-field-type"] = _to_str(selected_dataset_field.field_type)
@@ -455,6 +459,17 @@ class MicrotechOrderRuleActionForm(forms.ModelForm):
             cleaned_data["dataset_field"] = None
             if not target_value:
                 self.add_error("target_value", "ERP-Nr fuer Zusatzposition ist erforderlich.")
+            return cleaned_data
+
+        if ui_action == RULE_ACTION_TARGET_CREATE_SHIPPING_POSITION:
+            cleaned_data["action_type"] = MicrotechOrderRuleAction.ActionType.CREATE_SHIPPING_POSITION
+            cleaned_data["dataset"] = None
+            cleaned_data["dataset_field"] = None
+            shipping_article = target_value.upper()
+            if shipping_article not in {"V", "F"}:
+                self.add_error("target_value", "Versandartikel muss V oder F sein.")
+            else:
+                cleaned_data["target_value"] = shipping_article
             return cleaned_data
 
         cleaned_data["action_type"] = MicrotechOrderRuleAction.ActionType.SET_FIELD

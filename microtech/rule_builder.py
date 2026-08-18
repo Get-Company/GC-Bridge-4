@@ -89,6 +89,7 @@ _ALLOWED_ENGINE_OPERATORS_BY_VALUE_KIND: dict[str, frozenset[str]] = {
 }
 
 RULE_ACTION_TARGET_CREATE_EXTRA_POSITION = "create_extra_position"
+RULE_ACTION_TARGET_CREATE_SHIPPING_POSITION = "create_shipping_position"
 RULE_ACTION_TARGET_VORGANG_FIELD = "set_vorgang_field"
 RULE_ACTION_TARGET_VORGANG_POSITION_FIELD = "set_vorgang_position_field"
 
@@ -99,6 +100,13 @@ DEFAULT_RULE_ACTION_TARGET_DEFS: tuple[RuleActionTargetDef, ...] = (
         action_type="create_extra_position",
         target_value_label="ERP-Nr",
         target_value_help="ERP-Nr der anzulegenden Zusatzposition, z. B. P.",
+    ),
+    RuleActionTargetDef(
+        code=RULE_ACTION_TARGET_CREATE_SHIPPING_POSITION,
+        label="Versandposition anlegen",
+        action_type="create_shipping_position",
+        target_value_label="Versandartikel",
+        target_value_help="Artikelnummer des Versandartikels: V oder F. Preis = Versandkosten der Bestellung.",
     ),
     RuleActionTargetDef(
         code=RULE_ACTION_TARGET_VORGANG_FIELD,
@@ -244,6 +252,8 @@ def resolve_rule_action_target(
     normalized_action_type = str(action_type or "").strip()
     if normalized_action_type == "create_extra_position":
         return RULE_ACTION_TARGET_CREATE_EXTRA_POSITION
+    if normalized_action_type == "create_shipping_position":
+        return RULE_ACTION_TARGET_CREATE_SHIPPING_POSITION
     if normalized_action_type != "set_field":
         return ""
 
@@ -306,7 +316,10 @@ def filter_dataset_field_queryset_for_action_target(queryset, *, action_target: 
     if not normalized_target:
         return queryset.none()
 
-    if normalized_target == RULE_ACTION_TARGET_CREATE_EXTRA_POSITION:
+    if normalized_target in {
+        RULE_ACTION_TARGET_CREATE_EXTRA_POSITION,
+        RULE_ACTION_TARGET_CREATE_SHIPPING_POSITION,
+    }:
         return queryset.none()
 
     allowed_sources = get_allowed_dataset_source_identifiers_for_action_target(normalized_target)
@@ -594,7 +607,14 @@ def get_django_field_map() -> dict[str, DjangoFieldDef]:
     return {item.path: item for item in get_django_field_defs()}
 
 
-def get_allowed_operator_codes(*, field_path: str = "", django_field_id: int | None = None) -> set[str]:
+def get_allowed_operator_codes(
+    *,
+    field_path: str = "",
+    django_field_id: int | None = None,
+    django_field_map: dict[str, DjangoFieldDef] | None = None,
+    operator_defs: list[OperatorDef] | None = None,
+    policies_by_field: dict[str, MicrotechOrderRuleDjangoFieldPolicy] | None = None,
+) -> set[str]:
     resolved_field_path = str(field_path or "").strip()
     if not resolved_field_path and django_field_id and _db_has_django_field_catalog_table():
         resolved_field_path = str(
@@ -605,15 +625,17 @@ def get_allowed_operator_codes(*, field_path: str = "", django_field_id: int | N
             or ""
         ).strip()
 
+    resolved_operator_defs = operator_defs if operator_defs is not None else get_operator_defs()
     all_operator_codes = {
         str(item.code).strip()
-        for item in get_operator_defs()
+        for item in resolved_operator_defs
         if str(item.code).strip()
     }
     if not resolved_field_path:
         return all_operator_codes
 
-    field_def = get_django_field_map().get(resolved_field_path)
+    resolved_field_map = django_field_map if django_field_map is not None else get_django_field_map()
+    field_def = resolved_field_map.get(resolved_field_path)
     if field_def is None:
         return set()
 
@@ -623,26 +645,29 @@ def get_allowed_operator_codes(*, field_path: str = "", django_field_id: int | N
     )
     allowed_codes = {
         str(item.code).strip()
-        for item in get_operator_defs()
+        for item in resolved_operator_defs
         if str(item.code).strip() and str(item.engine_operator).strip() in allowed_engines
     }
 
-    if not _db_has_django_field_policy_table():
-        return allowed_codes
-
-    policy = (
-        MicrotechOrderRuleDjangoFieldPolicy.objects
-        .filter(field_path=resolved_field_path, is_active=True)
-        .prefetch_related("allowed_operators")
-        .order_by("priority", "id")
-        .first()
-    )
+    if policies_by_field is not None:
+        policy = policies_by_field.get(resolved_field_path)
+    else:
+        if not _db_has_django_field_policy_table():
+            return allowed_codes
+        policy = (
+            MicrotechOrderRuleDjangoFieldPolicy.objects
+            .filter(field_path=resolved_field_path, is_active=True)
+            .prefetch_related("allowed_operators")
+            .order_by("priority", "id")
+            .first()
+        )
     if policy is None:
         return allowed_codes
 
     policy_codes = {
         str(operator.code).strip()
-        for operator in policy.allowed_operators.filter(is_active=True)
+        for operator in policy.allowed_operators.all()
+        if operator.is_active
         if str(operator.code).strip()
     }
     if not policy_codes:
@@ -711,6 +736,7 @@ __all__ = [
     "OperatorDef",
     "RuleActionTargetDef",
     "RULE_ACTION_TARGET_CREATE_EXTRA_POSITION",
+    "RULE_ACTION_TARGET_CREATE_SHIPPING_POSITION",
     "RULE_ACTION_TARGET_VORGANG_FIELD",
     "RULE_ACTION_TARGET_VORGANG_POSITION_FIELD",
     "filter_dataset_field_queryset_for_action_target",

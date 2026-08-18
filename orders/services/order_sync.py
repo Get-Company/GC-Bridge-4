@@ -497,7 +497,7 @@ class OrderSyncService(BaseService):
 
         address.erp_nr = _to_int(customer.erp_nr) or None
         address.name1 = _to_str(address_data.get("company")) or _to_str(salutation.get("displayName"))
-        address.name2 = _to_str(address_data.get("company")) or full_name
+        address.name2 = full_name
         address.name3 = ""
         address.department = _to_str(address_data.get("department"))
         address.street = _to_str(address_data.get("street"))

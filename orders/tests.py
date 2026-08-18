@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 from django.test import SimpleTestCase, TestCase
 
 from customer.models import Address, Customer
+from customer.services.customer_upsert_microtech import CustomerUpsertMicrotechService
 from microtech.models import (
     MicrotechDatasetCatalog,
     MicrotechDatasetField,
@@ -23,6 +24,54 @@ from orders.services.order_sync import OrderSyncService
 
 
 class OrderGraphQLPayloadTest(SimpleTestCase):
+    def test_shopware_company_address_keeps_contact_name_in_name2(self):
+        imported_address = SimpleNamespace(api_id="", name1="", name2="", save=MagicMock())
+        address_data = {
+            "id": "sw-address-1",
+            "company": "Muster GmbH",
+            "firstName": "Max",
+            "lastName": "Mustermann",
+            "salutation": {"displayName": "Herr"},
+            "country": {"iso": "DE"},
+        }
+
+        with (
+            patch("orders.services.order_sync.Address", return_value=imported_address) as address_model,
+            patch.object(OrderSyncService, "_find_contact_address", return_value=None),
+            patch.object(OrderSyncService, "_find_role_address", return_value=None),
+        ):
+            address_model.objects.filter.return_value.filter.return_value.first.return_value = None
+            OrderSyncService()._upsert_address(
+                customer=SimpleNamespace(erp_nr="1000"),
+                address_data=address_data,
+                fallback_email="",
+                is_invoice=True,
+                is_shipping=False,
+            )
+
+        self.assertEqual(imported_address.name1, "Muster GmbH")
+        self.assertEqual(imported_address.name2, "Max Mustermann")
+
+    def test_company_address_with_contact_keeps_company_name_in_graphql_name1(self):
+        address = Address(
+            name1="Muster GmbH",
+            name2="Max Mustermann",
+            title="Herr",
+            first_name="Max",
+            last_name="Mustermann",
+        )
+
+        payload = CustomerUpsertMicrotechService()._build_postal_address_input(
+            address=address,
+            is_shipping=True,
+            is_invoice=False,
+            na1_mode="auto",
+            na1_static_value="",
+        )
+
+        self.assertEqual(payload["name1"], "Muster GmbH")
+        self.assertEqual(payload["name2"], "Max Mustermann")
+
     def test_graphql_decimal_uses_german_decimal_separator(self):
         self.assertEqual(OrderUpsertMicrotechService._format_graphql_decimal(Decimal("15.00")), "15,00")
         self.assertEqual(OrderUpsertMicrotechService._format_graphql_decimal(Decimal("1.235")), "1,24")
@@ -58,6 +107,35 @@ class OrderGraphQLPayloadTest(SimpleTestCase):
                 {"erpNumber": "Q", "quantity": "1", "unit": "Stück"},
             ],
         )
+
+    def test_shipping_rule_uses_selected_article_and_order_shipping_costs(self):
+        order = SimpleNamespace(
+            details=SimpleNamespace(all=lambda: []),
+            shipping_costs=Decimal("4.95"),
+            billing_address=None,
+        )
+        resolved_rule = ResolvedOrderRule(
+            rule_id=7,
+            rule_name="F fuer Spedition",
+            dataset_actions=(
+                ResolvedDatasetAction(
+                    action_type=MicrotechOrderRuleAction.ActionType.CREATE_SHIPPING_POSITION,
+                    target_value="F",
+                ),
+            ),
+        )
+
+        positions, rule_debug = OrderUpsertMicrotechService()._build_graphql_positions(
+            order=order,
+            resolved_rule=resolved_rule,
+            client=MagicMock(),
+        )
+
+        self.assertEqual(
+            positions,
+            [{"erpNumber": "F", "quantity": "1", "unit": "Stück", "price": "4,95"}],
+        )
+        self.assertEqual(rule_debug.dataset_actions_applied, 1)
 
     def test_erp_order_id_fallback_uses_graphql_filter_string(self):
         customer = Customer(erp_nr="1000")

@@ -177,7 +177,11 @@ class OrderUpsertMicrotechService(BaseService):
             payment_terms_text=resolved_rule.zahlungsbedingung,
         )
         self._add_positions(order=order, so_vorgang=so_vorgang, erp=erp)
-        self._add_shipping_position(order=order, so_vorgang=so_vorgang)
+        self._add_shipping_position(
+            order=order,
+            so_vorgang=so_vorgang,
+            resolved_rule=resolved_rule,
+        )
         dataset_debug = self._apply_rule_dataset_actions(
             order=order,
             so_vorgang=so_vorgang,
@@ -375,10 +379,17 @@ class OrderUpsertMicrotechService(BaseService):
             )
             positions.append(position)
 
+        configured_shipping_erp_nr = self._configured_shipping_erp_nr(resolved_rule=resolved_rule)
+        shipping_erp_nr = configured_shipping_erp_nr or DEFAULT_SHIPPING_ERP_NR
+        shipping_action_applied = bool(
+            configured_shipping_erp_nr
+            and order.shipping_costs
+            and order.shipping_costs > Decimal("0")
+        )
         if order.shipping_costs and order.shipping_costs > Decimal("0"):
             positions.append(
                 {
-                    "erpNumber": DEFAULT_SHIPPING_ERP_NR,
+                    "erpNumber": shipping_erp_nr,
                     "quantity": "1",
                     "unit": DEFAULT_UNIT,
                     "price": self._format_graphql_decimal(order.shipping_costs),
@@ -389,6 +400,8 @@ class OrderUpsertMicrotechService(BaseService):
             order=order,
             resolved_rule=resolved_rule,
             positions=positions,
+            shipping_action_applied=shipping_action_applied,
+            shipping_erp_nr=configured_shipping_erp_nr or "",
         )
         return positions, rule_debug
 
@@ -398,6 +411,8 @@ class OrderUpsertMicrotechService(BaseService):
         order: Order,
         resolved_rule: ResolvedOrderRule,
         positions: list[dict[str, str]],
+        shipping_action_applied: bool = False,
+        shipping_erp_nr: str = "",
     ) -> OrderRuleDebugInfo:
         extra_created: list[str] = []
         for action in resolved_rule.dataset_actions:
@@ -409,11 +424,26 @@ class OrderUpsertMicrotechService(BaseService):
             positions.append(self._build_graphql_special_position(erp_nr=erp_nr))
             extra_created.append(erp_nr)
 
-        payment_info = self._build_graphql_payment_position(order=order, resolved_rule=resolved_rule, positions=positions)
+        payment_info = self._build_graphql_payment_position(
+            order=order,
+            resolved_rule=resolved_rule,
+            positions=positions,
+        )
+        notes: list[str] = []
+        if shipping_erp_nr:
+            if shipping_action_applied:
+                notes.append(f"Versandposition '{shipping_erp_nr}' wurde mit den Versandkosten angelegt.")
+            else:
+                notes.append(f"Versandposition '{shipping_erp_nr}' konfiguriert, aber keine Versandkosten vorhanden.")
+        if any(
+            action.action_type == MicrotechOrderRuleAction.ActionType.SET_FIELD
+            for action in resolved_rule.dataset_actions
+        ):
+            notes.append("Dataset-Feldaktionen werden erst nach Wrapper-Erweiterung fuer Vorgang-Felder angewendet.")
         return replace(
             payment_info,
             dataset_actions_total=len(resolved_rule.dataset_actions),
-            dataset_actions_applied=len(extra_created),
+            dataset_actions_applied=len(extra_created) + int(shipping_action_applied),
             dataset_create_position_requested=sum(
                 1
                 for action in resolved_rule.dataset_actions
@@ -421,7 +451,7 @@ class OrderUpsertMicrotechService(BaseService):
             ),
             dataset_create_position_applied=len(extra_created),
             dataset_created_position_erp_nrs=tuple(extra_created),
-            dataset_actions_note="Dataset-Feldaktionen werden erst nach Wrapper-Erweiterung fuer Vorgang-Felder angewendet.",
+            dataset_actions_note=" ".join(notes),
         )
 
     def _build_graphql_payment_position(
@@ -787,11 +817,37 @@ class OrderUpsertMicrotechService(BaseService):
         country_code = str(getattr(billing_address, "country_code", "") or "").strip().upper()
         return country_code in cls._SWISS_COUNTRY_CODES
 
-    def _add_shipping_position(self, *, order: Order, so_vorgang) -> None:
+    @staticmethod
+    def _configured_shipping_erp_nr(*, resolved_rule: ResolvedOrderRule) -> str | None:
+        for action in resolved_rule.dataset_actions:
+            if action.action_type != MicrotechOrderRuleAction.ActionType.CREATE_SHIPPING_POSITION:
+                continue
+            erp_nr = (action.target_value or "").strip().upper()
+            if erp_nr in {"V", "F"}:
+                return erp_nr
+            logger.warning(
+                "Order rule {} ('{}') uses invalid shipping article '{}'; expected V or F.",
+                resolved_rule.rule_id,
+                resolved_rule.rule_name,
+                erp_nr,
+            )
+        return None
+
+    def _add_shipping_position(
+        self,
+        *,
+        order: Order,
+        so_vorgang,
+        resolved_rule: ResolvedOrderRule,
+    ) -> None:
         if not order.shipping_costs or order.shipping_costs <= Decimal("0"):
             return
 
-        so_vorgang.Positionen.Add(1, DEFAULT_UNIT, DEFAULT_SHIPPING_ERP_NR)
+        shipping_erp_nr = (
+            self._configured_shipping_erp_nr(resolved_rule=resolved_rule)
+            or DEFAULT_SHIPPING_ERP_NR
+        )
+        so_vorgang.Positionen.Add(1, DEFAULT_UNIT, shipping_erp_nr)
         self._set_position_price(
             so_vorgang=so_vorgang,
             price=order.shipping_costs,
@@ -821,6 +877,12 @@ class OrderUpsertMicrotechService(BaseService):
 
         for action in resolved_rule.dataset_actions:
             total += 1
+            if action.action_type == MicrotechOrderRuleAction.ActionType.CREATE_SHIPPING_POSITION:
+                shipping_erp_nr = self._configured_shipping_erp_nr(resolved_rule=resolved_rule)
+                if shipping_erp_nr and order.shipping_costs and order.shipping_costs > Decimal("0"):
+                    applied += 1
+                continue
+
             if action.action_type == MicrotechOrderRuleAction.ActionType.CREATE_EXTRA_POSITION:
                 create_position_requested += 1
                 erp_nr = (action.target_value or "").strip()
