@@ -153,6 +153,112 @@
     {% endif %}
   </section>
 
+  {% if can_manage_worker %}
+  <section class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+    <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+      <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300">Backup-Fenster</h2>
+      {% if backup_mode_local.backup_mode_active %}
+      <span class="inline-flex items-center gap-2 px-2 py-1 rounded-md bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 text-xs font-semibold">
+        <span class="material-symbols-outlined" style="font-size:16px">pause_circle</span>
+        geöffnet
+      </span>
+      {% else %}
+      <span class="inline-flex items-center gap-2 px-2 py-1 rounded-md bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200 text-xs font-semibold">
+        <span class="material-symbols-outlined" style="font-size:16px">check_circle</span>
+        im Normalbetrieb
+      </span>
+      {% endif %}
+    </div>
+
+    <div class="p-4">
+      {% if backup_mode_local.backup_mode_active %}
+        {% if backup_mode.ready %}
+        <div class="p-3 rounded-lg border border-green-300 dark:border-green-700 bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-200 text-sm font-semibold">
+          Backup darf jetzt starten — die Verbindung zu microtech ist geschlossen.
+        </div>
+        {% else %}
+        <div class="p-3 rounded-lg border border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-200 text-sm font-semibold">
+          Backup noch nicht freigegeben — die Verbindung zu microtech ist nicht bestätigt geschlossen.
+          {% if backup_mode.message %}<span class="block font-normal mt-1">{{ backup_mode.message }}</span>{% endif %}
+        </div>
+        {% endif %}
+      {% else %}
+      <p class="text-sm text-gray-600 dark:text-gray-400">
+        microtech ist verbunden. Vor einem Backup hier das Fenster öffnen: der Worker wird beendet
+        und die microtech-Dienste werden gestoppt. Solange das Fenster offen ist, weist GC-Bridge
+        neue Microtech-Aufträge ab.
+      </p>
+      {% endif %}
+
+      {% if backup_mode_error %}
+      <div class="mt-4 p-3 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 text-sm">
+        <strong>Status vom Server:</strong> {{ backup_mode_error }}
+      </div>
+      {% endif %}
+
+      <dl class="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+        <div>
+          <dt class="text-xs uppercase tracking-wide text-gray-400">Geöffnet seit</dt>
+          <dd class="mt-1 text-gray-900 dark:text-gray-100">{{ backup_mode_local.backup_mode_entered_at|default:"-" }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs uppercase tracking-wide text-gray-400">Automatischer Wiederanlauf</dt>
+          <dd class="mt-1 text-gray-900 dark:text-gray-100">{{ backup_mode_local.backup_mode_deadline|default:"-" }}</dd>
+        </div>
+        <div>
+          <dt class="text-xs uppercase tracking-wide text-gray-400">COM-Verbindung</dt>
+          <dd class="mt-1 text-gray-900 dark:text-gray-100">
+            {% if not backup_mode_known %}-{% elif backup_mode.worker.microtechConnected %}offen{% else %}geschlossen{% endif %}
+          </dd>
+        </div>
+      </dl>
+
+      {% if backup_mode.services %}
+      <table class="mt-4 w-full text-sm">
+        <thead>
+          <tr class="text-left text-xs uppercase tracking-wide text-gray-400">
+            <th class="py-1">Dienst</th>
+            <th class="py-1">Zustand</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for service in backup_mode.services %}
+          <tr class="border-t border-gray-100 dark:border-gray-800">
+            <td class="py-1 text-gray-900 dark:text-gray-100">{{ service.name }}</td>
+            <td class="py-1 text-gray-700 dark:text-gray-300">
+              {{ service.state }}{% if not service.found %} <span class="text-xs text-gray-400">(nicht registriert)</span>{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+
+      <div class="mt-4 flex flex-wrap gap-3">
+        {% if backup_mode_local.backup_mode_active %}
+        <form method="post">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="leave_backup_mode">
+          <button type="submit" class="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-md bg-green-600 text-white text-sm font-medium">
+            <span class="material-symbols-outlined" style="font-size:18px">play_circle</span>
+            Backup-Fenster schließen
+          </button>
+        </form>
+        {% else %}
+        <form method="post">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="enter_backup_mode">
+          <button type="submit" onclick="return confirm('Backup-Fenster öffnen? Der Microtech-Worker wird beendet und die microtech-Dienste werden gestoppt. GC-Bridge weist bis zum Schließen alle Microtech-Aufträge ab.');" class="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-md bg-amber-600 text-white text-sm font-medium">
+            <span class="material-symbols-outlined" style="font-size:18px">pause_circle</span>
+            Backup-Fenster öffnen
+          </button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+  </section>
+  {% endif %}
+
   <section class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
     <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
       <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300">Rohdaten</h2>

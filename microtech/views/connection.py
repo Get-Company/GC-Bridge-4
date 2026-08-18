@@ -12,6 +12,7 @@ from django.utils.translation import gettext_lazy as _
 from django.views.decorators.http import require_http_methods
 
 from microtech.services import GraphQLMicrotechTimeout, MicrotechGraphQLClientService, MicrotechJobSentinelService
+from microtech.services.backup_mode import MicrotechBackupModeService
 
 
 class MicrotechMandantSwitchForm(forms.Form):
@@ -60,6 +61,25 @@ def _raw_json(value: dict | None) -> str:
     return json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True)
 
 
+# Die Einzelschritte bleiben fuer die Fehlersuche erhalten; im Regelfall wird
+# das Backup-Fenster als Ganzes geoeffnet und geschlossen.
+MAINTENANCE_ACTIONS = {
+    "stop_worker": "stopMicrotechWorker",
+    "start_worker": "startMicrotechWorker",
+    "enter_backup_mode": "enterMicrotechBackupMode",
+    "leave_backup_mode": "leaveMicrotechBackupMode",
+}
+
+MAINTENANCE_MESSAGES = {
+    "stop_worker": _("Der Worker wird beendet."),
+    "start_worker": _("Der Worker wird gestartet."),
+    "enter_backup_mode": _(
+        "Das Backup-Fenster wird geoeffnet. Warten Sie die Freigabe ab, bevor das Backup startet."
+    ),
+    "leave_backup_mode": _("Das Backup-Fenster wird geschlossen und microtech wieder verbunden."),
+}
+
+
 @require_http_methods(["GET", "POST"])
 def microtech_connection_admin_view(request):
     if not _has_microtech_connection_permission(request):
@@ -73,17 +93,20 @@ def microtech_connection_admin_view(request):
     maintenance_error = ""
     maintenance_job = None
     maintenance_job_url = ""
+    backup_mode: dict | None = None
+    backup_mode_known = False
+    backup_mode_error = ""
     timeout = _admin_poll_timeout()
     can_manage_worker = _has_microtech_maintenance_permission(request)
 
     if request.method == "POST":
         action = str(request.POST.get("action") or "").strip()
-        if action in {"stop_worker", "start_worker"}:
+        if action in MAINTENANCE_ACTIONS:
             if not can_manage_worker:
                 raise PermissionDenied
             form = MicrotechMandantSwitchForm()
             try:
-                operation = "stopMicrotechWorker" if action == "stop_worker" else "startMicrotechWorker"
+                operation = MAINTENANCE_ACTIONS[action]
                 maintenance_job = MicrotechJobSentinelService().enqueue_microtech_worker_operation(
                     operation=operation,
                     context={
@@ -95,10 +118,10 @@ def microtech_connection_admin_view(request):
                     "admin:microtech_microtechgraphqljob_change",
                     args=(maintenance_job.pk,),
                 )
-                messages.success(request, _("Microtech-Worker-Aktion wurde asynchron eingereiht."))
+                messages.success(request, MAINTENANCE_MESSAGES[action])
             except Exception as exc:
                 maintenance_error = str(exc)
-                messages.error(request, _("Microtech-Worker-Aktion fehlgeschlagen."))
+                messages.error(request, _("Microtech-Wartungsaktion fehlgeschlagen."))
         elif form.is_valid():
             mandant = form.cleaned_data["mandant"]
             try:
@@ -129,6 +152,14 @@ def microtech_connection_admin_view(request):
             except Exception as exc:
                 maintenance_error = str(exc)
 
+            try:
+                backup_mode = MicrotechGraphQLClientService().microtech_backup_mode()
+                backup_mode_known = True
+            except Exception as exc:
+                # Der lokale Zustand bleibt aussagekraeftig, auch wenn der
+                # Wrapper gerade nicht antwortet.
+                backup_mode_error = str(exc)
+
     context = admin.site.each_context(request)
     context.update(
         {
@@ -142,6 +173,10 @@ def microtech_connection_admin_view(request):
             "maintenance_job": maintenance_job,
             "maintenance_job_url": maintenance_job_url,
             "can_manage_worker": can_manage_worker,
+            "backup_mode": backup_mode or {},
+            "backup_mode_known": backup_mode_known,
+            "backup_mode_error": backup_mode_error,
+            "backup_mode_local": MicrotechBackupModeService.load(),
             "form": form,
             "graphql_url": getattr(settings, "MICROTECH_GRAPHQL_URL", ""),
         }

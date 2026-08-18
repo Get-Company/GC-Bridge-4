@@ -33,7 +33,14 @@ def register_continuation(name: str, handler: ContinuationHandler) -> None:
 class MicrotechJobSentinelService(BaseService):
     model = MicrotechGraphQLJob
 
-    WORKER_OPERATIONS = frozenset({"stopMicrotechWorker", "startMicrotechWorker"})
+    WORKER_OPERATIONS = frozenset(
+        {
+            "stopMicrotechWorker",
+            "startMicrotechWorker",
+            "enterMicrotechBackupMode",
+            "leaveMicrotechBackupMode",
+        }
+    )
 
     REMOTE_SUCCESS = {"DONE", "SUCCEEDED", "SUCCESS"}
     REMOTE_FAILED = {"FAILED", "ERROR"}
@@ -250,6 +257,12 @@ class MicrotechJobSentinelService(BaseService):
         ``next_poll_at``. Bei einer Ausnahme wird der Job auf FAILED gesetzt
         und die Ausnahme weitergeleitet.
         """
+        # Waehrend eines Backup-Fensters steht die Verbindung zu microtech still;
+        # neue Arbeit wird hier abgewiesen, statt spaeter ins Leere zu laufen.
+        from microtech.services.backup_mode import MicrotechBackupModeService
+
+        MicrotechBackupModeService.ensure_available(operation=operation)
+
         job = MicrotechGraphQLJob.objects.create(
             kind=kind,
             operation=operation,
@@ -301,6 +314,7 @@ class MicrotechJobSentinelService(BaseService):
         *,
         operation: str,
         context: dict[str, Any] | None = None,
+        deadline_minutes: int | None = None,
     ) -> MicrotechGraphQLJob:
         """Create a local maintenance job and submit it from a Celery worker.
 
@@ -333,7 +347,7 @@ class MicrotechJobSentinelService(BaseService):
                 kind=MicrotechGraphQLJob.Kind.MAINTENANCE,
                 operation=operation,
                 status=MicrotechGraphQLJob.Status.QUEUED,
-                request_payload={"operation": operation},
+                request_payload={"operation": operation, "deadlineMinutes": deadline_minutes},
                 context=context or {},
                 next_step="Warte auf die asynchrone GraphQL-Übergabe.",
                 delete_after_completion=False,
@@ -369,29 +383,53 @@ class MicrotechJobSentinelService(BaseService):
             job.next_step = "Warte auf die asynchrone GraphQL-Job-ID."
             job.save(update_fields=("status", "submitted_at", "started_at", "next_step", "updated_at"))
 
+        # Wartungsoperationen laufen im API-Prozess des Wrappers, nicht im
+        # COM-Worker - ein vom Worker abgearbeiteter Job koennte sich nicht
+        # selbst stoppen. Der Aufruf ist deshalb synchron und liefert das
+        # Endergebnis sofort; es gibt keinen Webhook, auf den man warten koennte.
+        from microtech.services.backup_mode import MicrotechBackupModeService
+
         client = MicrotechGraphQLClientService()
         try:
             if job.operation == "stopMicrotechWorker":
-                external_job_id, retry_after = client.submit_stop_microtech_worker()
+                result = client.stop_microtech_worker()
+            elif job.operation == "startMicrotechWorker":
+                result = client.start_microtech_worker()
+            elif job.operation == "enterMicrotechBackupMode":
+                result = client.enter_microtech_backup_mode(
+                    deadline_minutes=(job.request_payload or {}).get("deadlineMinutes"),
+                    requested_by=str((job.context or {}).get("requested_by") or ""),
+                )
             else:
-                external_job_id, retry_after = client.submit_start_microtech_worker()
+                result = client.leave_microtech_backup_mode()
         except Exception as exc:
             MicrotechGraphQLJob.objects.filter(pk=job.pk).update(
                 status=MicrotechGraphQLJob.Status.FAILED,
                 error_message=str(exc),
-                next_step="Asynchrone GraphQL-Übergabe fehlgeschlagen.",
+                next_step="Die Wartungsoperation ist fehlgeschlagen.",
                 completed_at=timezone.now(),
                 next_poll_at=None,
                 updated_at=timezone.now(),
             )
             raise
 
+        # Das lokale Flag erst jetzt setzen bzw. loeschen: der Wrapper hat den
+        # Zustand bestaetigt, vorher waere er nur behauptet.
+        if job.operation == "enterMicrotechBackupMode":
+            MicrotechBackupModeService.mark_entered(
+                deadline_at=result.get("deadlineAt"),
+                requested_by=str((job.context or {}).get("requested_by") or ""),
+            )
+        elif job.operation == "leaveMicrotechBackupMode":
+            MicrotechBackupModeService.mark_left()
+
         now = timezone.now()
         MicrotechGraphQLJob.objects.filter(pk=job.pk).update(
-            external_job_id=str(external_job_id),
-            status=MicrotechGraphQLJob.Status.WAITING_WEBHOOK,
-            next_step="Warte auf den GraphQL-Sentinel.",
-            next_poll_at=now + timedelta(seconds=max(int(retry_after), 30)),
+            status=MicrotechGraphQLJob.Status.SUCCEEDED,
+            result_payload=result,
+            next_step=str(result.get("message") or "Wartungsoperation abgeschlossen."),
+            completed_at=now,
+            next_poll_at=None,
             updated_at=now,
         )
         return MicrotechGraphQLJob.objects.filter(pk=job.pk).first()

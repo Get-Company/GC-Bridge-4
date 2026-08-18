@@ -21,6 +21,10 @@ class GraphQLMicrotechTimeout(TimeoutError):
     pass
 
 
+class MicrotechBackupModeActive(GraphQLMicrotechError):
+    """Ein microtech-Backup-Fenster ist offen; die Verbindung steht still."""
+
+
 @dataclass(frozen=True, slots=True)
 class MicrotechGraphQLConfig:
     url: str
@@ -50,12 +54,25 @@ class MicrotechGraphQLClientService(BaseService):
     def __init__(self, *, config: MicrotechGraphQLConfig | None = None) -> None:
         self.config = config or MicrotechGraphQLConfig.from_settings()
 
-    def execute(self, query: str, variables: dict[str, Any] | None = None) -> dict[str, Any]:
+    def execute(
+        self,
+        query: str,
+        variables: dict[str, Any] | None = None,
+        *,
+        timeout: float | None = None,
+        bypass_backup_mode: bool = False,
+    ) -> dict[str, Any]:
+        if not bypass_backup_mode:
+            # Import lokal: backup_mode importiert die Exception aus diesem Modul.
+            from microtech.services.backup_mode import MicrotechBackupModeService
+
+            MicrotechBackupModeService.ensure_available()
+
         response = requests.post(
             self.config.url,
             json={"query": query, "variables": variables or {}},
             headers={"Content-Type": "application/json"},
-            timeout=self.config.request_timeout,
+            timeout=timeout or self.config.request_timeout,
         )
         response.raise_for_status()
         payload = response.json()
@@ -70,31 +87,131 @@ class MicrotechGraphQLClientService(BaseService):
             )
         return data
 
-    def submit_stop_microtech_worker(self) -> tuple[str, float]:
-        """Queue the worker stop operation in the external GraphQL sentinel."""
-        accepted = self._mutation_with_job(
-            """
-            mutation {
-              stopMicrotechWorker { accepted jobId status message retryAfterSeconds }
-            }
-            """,
-            "stopMicrotechWorker",
-            {},
-        )
-        return self._submit_accepted(accepted)
+    # --- Wartung ---------------------------------------------------------
+    #
+    # Wartungsoperationen laufen im API-Prozess des Wrappers, nicht im
+    # COM-Worker: ein Job, den der Worker abarbeitet, koennte sich nicht selbst
+    # stoppen. Sie sind deshalb synchron und brauchen ein eigenes, laengeres
+    # Zeitlimit - Worker-Stop und Dienststeuerung dauern zusammen bis zu
+    # mehreren Minuten. Aufgerufen werden sie ausschliesslich aus Celery,
+    # niemals im Request-Zyklus.
 
-    def submit_start_microtech_worker(self) -> tuple[str, float]:
-        """Queue the worker start operation in the external GraphQL sentinel."""
-        accepted = self._mutation_with_job(
-            """
-            mutation {
-              startMicrotechWorker { accepted jobId status message retryAfterSeconds }
-            }
-            """,
-            "startMicrotechWorker",
-            {},
+    WORKER_STATUS_FIELDS = "running microtechConnected microtechUser connectionMessage taskName state"
+    BACKUP_MODE_FIELDS = (
+        "success message errorMessage ready active enteredAt deadlineAt requestedBy "
+        "services { name found state changed message } "
+        "worker { " + WORKER_STATUS_FIELDS + " }"
+    )
+
+    def _maintenance_timeout(self) -> float:
+        return float(getattr(settings, "MICROTECH_MAINTENANCE_REQUEST_TIMEOUT", 300.0))
+
+    def stop_microtech_worker(self) -> dict[str, Any]:
+        """Den COM-Worker beenden und das Ergebnis zurueckgeben."""
+        return self._maintenance_result(
+            self.execute(
+                """
+                mutation {
+                  stopMicrotechWorker {
+                    success message errorMessage
+                    worker { %s }
+                  }
+                }
+                """ % self.WORKER_STATUS_FIELDS,
+                timeout=self._maintenance_timeout(),
+                bypass_backup_mode=True,
+            ),
+            "stopMicrotechWorker",
         )
-        return self._submit_accepted(accepted)
+
+    def start_microtech_worker(self) -> dict[str, Any]:
+        """Den COM-Worker starten und das Ergebnis zurueckgeben."""
+        return self._maintenance_result(
+            self.execute(
+                """
+                mutation {
+                  startMicrotechWorker {
+                    success message errorMessage
+                    worker { %s }
+                  }
+                }
+                """ % self.WORKER_STATUS_FIELDS,
+                timeout=self._maintenance_timeout(),
+                bypass_backup_mode=True,
+            ),
+            "startMicrotechWorker",
+        )
+
+    def enter_microtech_backup_mode(
+        self,
+        *,
+        deadline_minutes: int | None = None,
+        requested_by: str = "",
+    ) -> dict[str, Any]:
+        """Backup-Fenster oeffnen: Worker beenden, microtech-Dienste stoppen."""
+        return self._backup_mode_result(
+            self.execute(
+                """
+                mutation EnterBackupMode($deadlineMinutes: Int, $requestedBy: String!) {
+                  enterMicrotechBackupMode(
+                    deadlineMinutes: $deadlineMinutes
+                    requestedBy: $requestedBy
+                  ) { %s }
+                }
+                """ % self.BACKUP_MODE_FIELDS,
+                {"deadlineMinutes": deadline_minutes, "requestedBy": str(requested_by or "")},
+                timeout=self._maintenance_timeout(),
+                bypass_backup_mode=True,
+            ),
+            "enterMicrotechBackupMode",
+        )
+
+    def leave_microtech_backup_mode(self) -> dict[str, Any]:
+        """Backup-Fenster schliessen: Dienste und Worker wieder hochfahren."""
+        return self._backup_mode_result(
+            self.execute(
+                """
+                mutation {
+                  leaveMicrotechBackupMode { %s }
+                }
+                """ % self.BACKUP_MODE_FIELDS,
+                timeout=self._maintenance_timeout(),
+                bypass_backup_mode=True,
+            ),
+            "leaveMicrotechBackupMode",
+        )
+
+    def microtech_backup_mode(self) -> dict[str, Any]:
+        """Zustand des Backup-Fensters lesen (auch bei aktivem Fenster erlaubt)."""
+        return self._backup_mode_result(
+            self.execute(
+                """
+                query {
+                  microtechBackupMode { %s }
+                }
+                """ % self.BACKUP_MODE_FIELDS,
+                timeout=self._maintenance_timeout(),
+                bypass_backup_mode=True,
+            ),
+            "microtechBackupMode",
+            require_success=False,
+        )
+
+    @staticmethod
+    def _backup_mode_result(
+        data: dict[str, Any],
+        field: str,
+        *,
+        require_success: bool = True,
+    ) -> dict[str, Any]:
+        result = data.get(field) or {}
+        if not isinstance(result, dict):
+            raise GraphQLMicrotechError(f"GraphQL {field} lieferte kein Ergebnis.")
+        if require_success and result.get("success") is not True:
+            raise GraphQLMicrotechError(
+                str(result.get("errorMessage") or result.get("message") or f"GraphQL {field} failed.")
+            )
+        return result
 
     def microtech_worker_status(self) -> dict[str, Any]:
         return self._maintenance_result(
@@ -106,7 +223,8 @@ class MicrotechGraphQLClientService(BaseService):
                     worker { running microtechConnected microtechUser connectionMessage }
                   }
                 }
-                """
+                """,
+                bypass_backup_mode=True,
             ),
             "microtechWorkerStatus",
         )

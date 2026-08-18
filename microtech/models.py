@@ -13,6 +13,17 @@ class MicrotechSettings(BaseModel):
     default_versandart_id = models.PositiveIntegerField(default=10, verbose_name=_("Standard Versandart-ID"))
     default_vorgangsart_id = models.PositiveIntegerField(default=111, verbose_name=_("Standard Vorgangsart-ID"))
 
+    # Backup-Fenster: waehrend eines microtech-Backups steht die COM-Verbindung
+    # still. Das Flag haelt neue Microtech-Jobs auf, damit sie nicht ins Leere
+    # laufen. Es wird ausschliesslich nach bestaetigter Rueckmeldung des
+    # Wrappers gesetzt bzw. geloescht.
+    backup_mode_active = models.BooleanField(default=False, verbose_name=_("Backup-Fenster aktiv"))
+    backup_mode_entered_at = models.DateTimeField(blank=True, null=True, verbose_name=_("Backup-Fenster geoeffnet am"))
+    backup_mode_deadline = models.DateTimeField(blank=True, null=True, verbose_name=_("Backup-Fenster Frist"))
+    backup_mode_started_by = models.CharField(
+        max_length=150, blank=True, default="", verbose_name=_("Backup-Fenster geoeffnet von")
+    )
+
     class Meta:
         verbose_name = _("Microtech Konfiguration")
         verbose_name_plural = _("Microtech Konfiguration")

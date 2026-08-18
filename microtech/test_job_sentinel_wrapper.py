@@ -82,8 +82,14 @@ class WorkerMaintenanceSentinelTest(TestCase):
         mock_delay.assert_called_once_with(job.pk)
 
     @patch("microtech.services.job_sentinel.MicrotechGraphQLClientService")
-    def test_celery_submission_hands_worker_operation_to_graphql_sentinel(self, mock_client_cls):
-        mock_client_cls.return_value.submit_start_microtech_worker.return_value = ("worker-job-1", 45.0)
+    def test_celery_submission_completes_the_worker_operation_synchronously(self, mock_client_cls):
+        # Der Wrapper beantwortet Wartungsoperationen sofort; es gibt keinen
+        # Webhook, auf den der Job warten koennte.
+        mock_client_cls.return_value.start_microtech_worker.return_value = {
+            "success": True,
+            "message": "Worker gestartet.",
+            "worker": {"running": True, "microtechConnected": True},
+        }
         job = MicrotechGraphQLJob.objects.create(
             kind=MicrotechGraphQLJob.Kind.MAINTENANCE,
             operation="startMicrotechWorker",
@@ -94,6 +100,8 @@ class WorkerMaintenanceSentinelTest(TestCase):
 
         self.assertIsNotNone(submitted)
         job.refresh_from_db()
-        self.assertEqual(job.external_job_id, "worker-job-1")
-        self.assertEqual(job.status, MicrotechGraphQLJob.Status.WAITING_WEBHOOK)
-        mock_client_cls.return_value.submit_start_microtech_worker.assert_called_once_with()
+        self.assertEqual(job.status, MicrotechGraphQLJob.Status.SUCCEEDED)
+        self.assertEqual(job.next_step, "Worker gestartet.")
+        self.assertIsNone(job.next_poll_at)
+        self.assertTrue(job.result_payload["success"])
+        mock_client_cls.return_value.start_microtech_worker.assert_called_once_with()

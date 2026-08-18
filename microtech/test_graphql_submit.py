@@ -2,7 +2,7 @@ from unittest.mock import patch
 
 from django.test import SimpleTestCase
 
-from microtech.services.graphql_client import MicrotechGraphQLClientService
+from microtech.services.graphql_client import GraphQLMicrotechError, MicrotechGraphQLClientService
 
 
 class SubmitMutationTest(SimpleTestCase):
@@ -117,27 +117,104 @@ class SubmitMutationTest(SimpleTestCase):
         self.assertEqual(mock_mutation.call_args.args[2], {"mandant": "59"})
         self.assertEqual(mock_poll.call_args.kwargs["timeout"], 5)
 
-    @patch.object(MicrotechGraphQLClientService, "_mutation_with_job")
-    def test_submit_stop_microtech_worker_returns_job_id_without_polling(self, mock_mutation):
-        mock_mutation.return_value = self._accepted()
+    # Wartungsoperationen laufen im API-Prozess des Wrappers und antworten
+    # synchron - anders als die Job-Mutationen, die der COM-Worker abarbeitet.
+
+    @patch.object(MicrotechGraphQLClientService, "execute")
+    def test_stop_microtech_worker_returns_the_result_synchronously(self, mock_execute):
+        mock_execute.return_value = {
+            "stopMicrotechWorker": {
+                "success": True,
+                "message": "Worker beendet.",
+                "errorMessage": None,
+                "worker": {"running": False, "microtechConnected": False},
+            }
+        }
         client = MicrotechGraphQLClientService.__new__(MicrotechGraphQLClientService)
 
-        job_id, retry_after = client.submit_stop_microtech_worker()
+        result = client.stop_microtech_worker()
 
-        self.assertEqual((job_id, retry_after), ("job-123", 42.0))
-        self.assertEqual(mock_mutation.call_args.args[1], "stopMicrotechWorker")
-        self.assertEqual(mock_mutation.call_args.args[2], {})
+        self.assertTrue(result["success"])
+        self.assertFalse(result["worker"]["microtechConnected"])
+        self.assertIn("stopMicrotechWorker", mock_execute.call_args.args[0])
+        self.assertTrue(mock_execute.call_args.kwargs["bypass_backup_mode"])
 
-    @patch.object(MicrotechGraphQLClientService, "_mutation_with_job")
-    def test_submit_start_microtech_worker_returns_job_id_without_polling(self, mock_mutation):
-        mock_mutation.return_value = self._accepted()
+    @patch.object(MicrotechGraphQLClientService, "execute")
+    def test_start_microtech_worker_returns_the_result_synchronously(self, mock_execute):
+        mock_execute.return_value = {
+            "startMicrotechWorker": {
+                "success": True,
+                "message": "Worker gestartet.",
+                "errorMessage": None,
+                "worker": {"running": True, "microtechConnected": True},
+            }
+        }
         client = MicrotechGraphQLClientService.__new__(MicrotechGraphQLClientService)
 
-        job_id, retry_after = client.submit_start_microtech_worker()
+        result = client.start_microtech_worker()
 
-        self.assertEqual((job_id, retry_after), ("job-123", 42.0))
-        self.assertEqual(mock_mutation.call_args.args[1], "startMicrotechWorker")
-        self.assertEqual(mock_mutation.call_args.args[2], {})
+        self.assertTrue(result["worker"]["microtechConnected"])
+        self.assertIn("startMicrotechWorker", mock_execute.call_args.args[0])
+
+    @patch.object(MicrotechGraphQLClientService, "execute")
+    def test_maintenance_failure_raises_with_the_wrapper_message(self, mock_execute):
+        mock_execute.return_value = {
+            "stopMicrotechWorker": {
+                "success": False,
+                "message": "Worker konnte nicht stop werden.",
+                "errorMessage": "Task manager timed out.",
+                "worker": None,
+            }
+        }
+        client = MicrotechGraphQLClientService.__new__(MicrotechGraphQLClientService)
+
+        with self.assertRaises(GraphQLMicrotechError) as caught:
+            client.stop_microtech_worker()
+
+        self.assertIn("Task manager timed out.", str(caught.exception))
+
+    @patch.object(MicrotechGraphQLClientService, "execute")
+    def test_enter_backup_mode_passes_deadline_and_requester(self, mock_execute):
+        mock_execute.return_value = {
+            "enterMicrotechBackupMode": {
+                "success": True,
+                "ready": True,
+                "message": "Backup-Fenster geoeffnet.",
+                "errorMessage": None,
+                "deadlineAt": "2026-08-18T14:00:00+00:00",
+                "services": [],
+                "worker": None,
+            }
+        }
+        client = MicrotechGraphQLClientService.__new__(MicrotechGraphQLClientService)
+
+        result = client.enter_microtech_backup_mode(deadline_minutes=45, requested_by="7")
+
+        self.assertTrue(result["ready"])
+        self.assertEqual(
+            mock_execute.call_args.args[1],
+            {"deadlineMinutes": 45, "requestedBy": "7"},
+        )
+
+    @patch.object(MicrotechGraphQLClientService, "execute")
+    def test_backup_mode_query_reports_state_even_when_not_ready(self, mock_execute):
+        mock_execute.return_value = {
+            "microtechBackupMode": {
+                "success": True,
+                "ready": False,
+                "active": True,
+                "message": "Backup-Fenster ist aktiv.",
+                "errorMessage": None,
+                "services": [],
+                "worker": None,
+            }
+        }
+        client = MicrotechGraphQLClientService.__new__(MicrotechGraphQLClientService)
+
+        result = client.microtech_backup_mode()
+
+        self.assertTrue(result["active"])
+        self.assertFalse(result["ready"])
 
     @patch.object(MicrotechGraphQLClientService, "execute")
     def test_worker_status_uses_status_query(self, mock_execute):

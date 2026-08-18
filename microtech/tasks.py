@@ -59,3 +59,39 @@ def cleanup_old_graphql_jobs(
         limit=limit,
         terminal_only=terminal_only,
     )
+
+
+@shared_task(name="microtech.backup_mode_watchdog")
+def backup_mode_watchdog() -> bool:
+    """Schliesst ein Backup-Fenster, dessen Frist abgelaufen ist.
+
+    Erste von zwei Ebenen: Ein vergessener oder haengengebliebener Backup-Lauf
+    darf microtech nicht dauerhaft stilllegen. Die zweite Ebene ist der
+    Scheduled Task GCMicrotech-BackupWatchdog auf dem Windows-Server, der auch
+    dann greift, wenn GC-Bridge selbst nicht erreichbar ist.
+    """
+    from microtech.services import MicrotechJobSentinelService
+    from microtech.services.backup_mode import MicrotechBackupModeService
+
+    if not MicrotechBackupModeService.is_deadline_exceeded():
+        return False
+
+    config = MicrotechBackupModeService.load()
+    logger.warning(
+        "Frist des Microtech-Backup-Fensters ueberschritten (offen seit %s, Frist %s); "
+        "microtech wird automatisch wieder hochgefahren.",
+        config.backup_mode_entered_at,
+        config.backup_mode_deadline,
+    )
+
+    try:
+        MicrotechJobSentinelService().enqueue_microtech_worker_operation(
+            operation="leaveMicrotechBackupMode",
+            context={"source": "backup_mode_watchdog"},
+        )
+    except Exception:
+        # Laeuft bereits eine Wartungsaktion, greift der naechste Lauf.
+        logger.exception("Watchdog konnte das Schliessen des Backup-Fensters nicht einreihen.")
+        return False
+
+    return True
