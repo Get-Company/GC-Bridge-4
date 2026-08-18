@@ -51,8 +51,8 @@ class TestJobSentinelSubmission(TestCase):
 
 
 class TestJobSentinelWebhook(TestCase):
-    @patch("microtech.tasks.poll_graphql_job.delay")
-    def test_success_webhook_schedules_result_poll_before_continuation(self, mock_delay):
+    @patch("microtech.tasks.process_graphql_job_result.delay")
+    def test_success_webhook_dispatches_continuation_with_embedded_result(self, mock_delay):
         job = _make_job(
             kind=MicrotechGraphQLJob.Kind.ORDER_UPSERT,
             operation="createVorgang",
@@ -60,17 +60,20 @@ class TestJobSentinelWebhook(TestCase):
         )
 
         result = MicrotechJobSentinelService().handle_webhook(
-            {"jobId": job.external_job_id, "status": "DONE", "message": "Erfolgreich"}
+            {
+                "jobId": job.external_job_id,
+                "status": "DONE",
+                "message": "Erfolgreich",
+                "result": {"vorgang": {"belegNr": "A-1000"}},
+            }
         )
 
         job.refresh_from_db()
         self.assertEqual(result.pk, job.pk)
-        self.assertEqual(job.status, MicrotechGraphQLJob.Status.WAITING_WEBHOOK)
-        self.assertEqual(job.result_payload["status"], "DONE")
+        self.assertEqual(job.status, MicrotechGraphQLJob.Status.SUCCEEDED)
+        self.assertEqual(job.result_payload, {"vorgang": {"belegNr": "A-1000"}})
         self.assertIsNotNone(job.webhook_received_at)
-        self.assertIsNotNone(job.next_poll_at)
-        self.assertLessEqual(job.next_poll_at, timezone.now())
-        self.assertIn("Ergebnis", job.next_step)
+        self.assertIn("Continuation", job.next_step)
         mock_delay.assert_called_once_with(job.pk)
 
 

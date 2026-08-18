@@ -401,7 +401,6 @@ class MicrotechJobSentinelService(BaseService):
         if not external_job_id:
             raise ValueError("Webhook payload does not contain jobId.")
 
-        fetch_result_now = False
         with transaction.atomic():
             job = (
                 MicrotechGraphQLJob.objects.select_for_update()
@@ -415,55 +414,19 @@ class MicrotechJobSentinelService(BaseService):
 
             now = timezone.now()
             job.webhook_received_at = now
-            job.result_payload = payload
             remote_status = str(self._payload_value(payload, "status") or "").upper()
             if remote_status in self.REMOTE_SUCCESS:
-                # Der Wrapper meldet per Webhook nur den Status. Das Ergebnis
-                # (beispielsweise die BelegNr eines neu angelegten Vorgangs)
-                # muss daher vor einer Continuation über die Job-Abfrage geladen
-                # werden; andernfalls geht es beim Workflow verloren.
-                job.status = MicrotechGraphQLJob.Status.WAITING_WEBHOOK
-                job.next_step = "Webhook empfangen; vollstaendiges Ergebnis wird geladen."
-                job.next_poll_at = now
-                job.save(
-                    update_fields=(
-                        "status",
-                        "webhook_received_at",
-                        "result_payload",
-                        "next_step",
-                        "next_poll_at",
-                        "updated_at",
-                    )
-                )
-                # The webhook intentionally contains only the terminal status.
-                # Fetch the full GraphQL result immediately; relying solely on
-                # the periodic fallback poller leaves the order workflow stuck
-                # whenever Celery Beat is unavailable or delayed.
-                fetch_result_now = True
+                result = payload.get("result")
+                if not isinstance(result, dict):
+                    raise ValueError("Erfolgreicher Microtech-Webhook enthält kein Ergebnis für die Continuation.")
+                job.result_payload = result
             else:
-                self._apply_remote_status(job, payload)
-                job.save()
-
-        if fetch_result_now:
-            self._dispatch_result_fetch(job.pk)
-            return MicrotechGraphQLJob.objects.filter(pk=job.pk).first() or job
+                job.result_payload = payload
+            self._apply_remote_status(job, payload)
+            job.save()
 
         self._after_terminal_update(job.pk)
         return MicrotechGraphQLJob.objects.filter(pk=job.pk).first() or job
-
-    @staticmethod
-    def _dispatch_result_fetch(job_id: int) -> None:
-        """Queue an immediate result fetch after a successful status webhook.
-
-        ``next_poll_at`` remains set as a fallback for a temporarily unavailable
-        broker, so a configured periodic poller can safely take over later.
-        """
-        try:
-            from microtech.tasks import poll_graphql_job
-
-            poll_graphql_job.delay(job_id)
-        except Exception:
-            logger.exception("Ergebnisabruf für Microtech GraphQL Job %s konnte nicht eingereiht werden.", job_id)
 
     def process_continuation(self, *, job_id: int) -> None:
         with transaction.atomic():
