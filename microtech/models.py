@@ -259,6 +259,21 @@ class MicrotechOrderRule(BaseModel):
         verbose_name=_("Bedingungslogik"),
     )
 
+    class ExecutionPhase(models.TextChoices):
+        BEFORE = "before", _("Vor dem Task")
+        AFTER = "after", _("Nach dem Task")
+
+    trigger = models.ForeignKey(
+        "RuleTrigger", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="rules", verbose_name=_("Trigger"),
+    )
+    execution_phase = models.CharField(
+        max_length=16, choices=ExecutionPhase.choices,
+        default=ExecutionPhase.BEFORE, verbose_name=_("Ausfuehrungsphase"),
+    )
+    shadow_mode = models.BooleanField(default=True, verbose_name=_("Schatten-Modus"))
+    engine_enabled = models.BooleanField(default=False, verbose_name=_("Neue Engine aktiv"))
+
     class Meta:
         verbose_name = _("Microtech Bestellregel")
         verbose_name_plural = _("Microtech Bestellregeln")

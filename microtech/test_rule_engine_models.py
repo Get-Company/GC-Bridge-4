@@ -15,3 +15,13 @@ class RuleTriggerModelTest(TestCase):
         )
         result = list(RuleTrigger.for_task("orders.microtech_order_upsert"))
         self.assertEqual([t.code for t in result], ["order_create"])
+
+
+class OrderRuleEngineFieldsTest(TestCase):
+    def test_new_engine_fields_have_safe_defaults(self):
+        from microtech.models import MicrotechOrderRule
+        rule = MicrotechOrderRule.objects.create(name="R")
+        self.assertEqual(rule.execution_phase, MicrotechOrderRule.ExecutionPhase.BEFORE)
+        self.assertTrue(rule.shadow_mode)          # Einführung: Schatten an
+        self.assertFalse(rule.engine_enabled)      # Einführung: neue Engine aus
+        self.assertIsNone(rule.trigger)
