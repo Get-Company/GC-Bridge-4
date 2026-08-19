@@ -479,6 +479,44 @@ class ShopwareAddressMatchingTest(TestCase):
 class ContactStepTest(TestCase):
     @patch("orders.services.order_sync_workflow.MicrotechGraphQLClientService")
     @patch("orders.services.order_sync_workflow.MicrotechJobSentinelService.submit_wrapper_job")
+    def test_shipping_and_billing_contacts_use_their_respective_address(self, mock_submit, mock_client_cls):
+        mock_submit.return_value = MagicMock(pk=8)
+        order = make_order()
+        order.shipping_address.first_name = "Sina"
+        order.shipping_address.last_name = "Lieferung"
+        order.shipping_address.email = "shipping@example.test"
+        order.shipping_address.erp_ans_nr = 7
+        order.shipping_address.save()
+        order.billing_address.first_name = "Bernd"
+        order.billing_address.last_name = "Rechnung"
+        order.billing_address.email = "billing@example.test"
+        order.billing_address.erp_ans_nr = 8
+        order.billing_address.save()
+        workflow = MicrotechOrderSyncWorkflow.objects.create(
+            order=order,
+            status=MicrotechOrderSyncWorkflow.Status.RUNNING,
+            state={
+                "erp_nr": order.customer.erp_nr,
+                "address_number": int(order.customer.erp_nr),
+                "shipping_ans_nr": 7,
+                "billing_ans_nr": 8,
+                "billing_same_as_shipping": False,
+            },
+        )
+
+        service = OrderSyncWorkflowService()
+        service.submit_step(workflow, "shipping_contact")
+        service.submit_step(workflow, "billing_contact")
+
+        shipping_input = mock_submit.call_args_list[0].kwargs["request_payload"]["input"]
+        billing_input = mock_submit.call_args_list[1].kwargs["request_payload"]["input"]
+        self.assertEqual(shipping_input["firstName"], "Sina")
+        self.assertEqual(shipping_input["email"], "shipping@example.test")
+        self.assertEqual(billing_input["firstName"], "Bernd")
+        self.assertEqual(billing_input["email"], "billing@example.test")
+
+    @patch("orders.services.order_sync_workflow.MicrotechGraphQLClientService")
+    @patch("orders.services.order_sync_workflow.MicrotechJobSentinelService.submit_wrapper_job")
     def test_address_step_reuses_matching_anschrift_for_different_contact_address(
         self,
         mock_submit,
