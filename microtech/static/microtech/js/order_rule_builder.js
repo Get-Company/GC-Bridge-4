@@ -376,21 +376,26 @@
     const pathInput = row.querySelector("select[name$='-django_field'], input[name$='-django_field']");
     const operatorSelect = row.querySelector("select[name$='-operator']");
     const expectedInput = row.querySelector("input[name$='-expected_value']");
-    if (!pathInput || !operatorSelect || !expectedInput || !RULE_META) return;
+    if (!pathInput || !operatorSelect || !expectedInput) return;
 
-    const fieldDef = djangoFieldByValue(pathInput.value);
     const currentFieldId = String(pathInput.value || "");
 
     if (row.dataset.ruleBuilderFieldId !== currentFieldId) {
+      const hadPreviousField = Object.prototype.hasOwnProperty.call(row.dataset, "ruleBuilderFieldId");
       row.dataset.ruleBuilderFieldId = currentFieldId;
-      operatorSelect.value = "";
-      const $ = getJQuery();
-      if ($) {
-        $(operatorSelect).find("option").not('[value=""]').remove();
+      if (hadPreviousField) {
+        operatorSelect.value = "";
+        const $ = getJQuery();
+        if ($) {
+          $(operatorSelect).find("option").not('[value=""]').remove();
+        }
       }
     }
 
     initOperatorAutocomplete(operatorSelect);
+    if (!RULE_META) return;
+
+    const fieldDef = djangoFieldByValue(pathInput.value);
     applyConditionInputType(row, fieldDef);
 
     if (!fieldDef) {
@@ -496,8 +501,10 @@
     if (!fieldInput.value || !operatorInput.value) return "";
 
     const fieldDef = djangoFieldByValue(fieldInput.value);
-    const fieldLabel = fieldDef ? (fieldDef.label || fieldDef.path) : "Feld";
-    const operatorLabel = getConditionOperatorLabel(operatorInput.value);
+    const fieldLabel = fieldDef
+      ? (fieldDef.label || fieldDef.path)
+      : (getSelectedOptionText(fieldInput) || "Feld");
+    const operatorLabel = getConditionOperatorLabel(operatorInput.value) || getSelectedOptionText(operatorInput);
     const operator = operatorsByValue()[String(operatorInput.value || "")] || null;
     const expectedValue = String(expectedInput.value || "").trim();
 
@@ -663,51 +670,38 @@
     });
   }
 
-  function observeInlineRows() {
-    const inlineGroups = Array.from(document.querySelectorAll(".inline-group"));
-    if (!inlineGroups.length) return;
-
-    const observer = new MutationObserver((mutations) => {
-      const addedRows = new Set();
-      mutations.forEach((mutation) => {
-        mutation.addedNodes.forEach((node) => {
-          if (!(node instanceof HTMLElement)) return;
-
-          if (node.matches("tr.form-row, .inline-related")) {
-            addedRows.add(node);
-          }
-          node.querySelectorAll("tr.form-row, .inline-related").forEach((row) => addedRows.add(row));
-        });
-      });
-
-      if (!addedRows.size) return;
-      addedRows.forEach(bindRow);
-      refreshRuleSummary();
-    });
-    inlineGroups.forEach((group) => observer.observe(group, { childList: true, subtree: true }));
-  }
-
   async function loadMeta() {
     const url = buildMetaUrl();
-    if (!url) return;
+    if (!url) return false;
     try {
       const response = await fetch(url, { credentials: "same-origin" });
-      if (!response.ok) return;
+      if (!response.ok) return false;
       const payload = await response.json();
-      if (!payload || payload.ok !== true) return;
+      if (!payload || payload.ok !== true) return false;
       RULE_META = payload;
+      return true;
     } catch (_error) {
       // Keep UI usable without metadata endpoint.
+      return false;
     }
   }
 
-  async function init() {
-    await loadMeta();
+  function refreshRowsWithMetadata() {
+    document.querySelectorAll(".inline-related").forEach((row) => {
+      updateConditionRow(row);
+      updateActionRow(row);
+    });
+    refreshRuleSummary();
+  }
+
+  function init() {
     patchAdminAutocomplete();
     initEnhancedSelects(document.body);
     bindAllRows();
     bindFormsetAddedEvents();
-    observeInlineRows();
+    loadMeta().then((loaded) => {
+      if (loaded) refreshRowsWithMetadata();
+    });
   }
 
   document.addEventListener("DOMContentLoaded", init);

@@ -1,4 +1,6 @@
 from django.test import TestCase
+from unittest.mock import patch
+
 from microtech.forms import LEGACY_UI_ACTION, MicrotechOrderRuleActionForm, MicrotechOrderRuleConditionForm
 from microtech.models import (
     MicrotechDatasetCatalog,
@@ -42,6 +44,12 @@ class MicrotechOrderRuleFormsTest(TestCase):
         self.assertIn("operator", form.fields)
         self.assertIn("rulebuilder-operator-autocomplete", form.fields["operator"].widget.attrs.get("class", ""))
         self.assertIn("data-operator-autocomplete-url", form.fields["operator"].widget.attrs)
+
+    def test_empty_condition_form_does_not_load_field_catalog(self):
+        with patch("microtech.forms.get_django_field_map") as field_map:
+            MicrotechOrderRuleConditionForm()
+
+        field_map.assert_not_called()
 
     def test_condition_form_marks_bool_input_with_value_kind_metadata(self):
         form = MicrotechOrderRuleConditionForm(

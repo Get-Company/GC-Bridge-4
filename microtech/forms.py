@@ -141,7 +141,6 @@ class MicrotechOrderRuleConditionForm(forms.ModelForm):
             or self.initial.get("django_field")
             or getattr(self.instance, "django_field_id", "")
         )
-        field_map = get_django_field_map()
         selected_field_path = _to_str(
             getattr(
                 MicrotechOrderRuleDjangoField.objects
@@ -151,6 +150,10 @@ class MicrotechOrderRuleConditionForm(forms.ModelForm):
                 "",
             )
         ) if selected_field_id.isdigit() else _to_str(getattr(self.instance, "django_field_path", ""))
+        # The empty inline form is rendered on every add page.  It has no
+        # selected field yet, so loading the full field definition map here
+        # only delays rendering without improving that initial form.
+        field_map = get_django_field_map() if selected_field_path else {}
         selected_field_def = field_map.get(selected_field_path)
         current_expected_value = _to_str(
             self.data.get(self.add_prefix("expected_value"))
