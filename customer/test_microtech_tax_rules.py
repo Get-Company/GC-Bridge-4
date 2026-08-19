@@ -2,6 +2,7 @@ from django.test import SimpleTestCase
 
 from customer.models import Address, Customer
 from customer.services.customer_upsert_microtech import CustomerUpsertMicrotechService
+from customer.services.webshop_mapping import CustomerWebshopMappingService
 
 
 class MicrotechCustomerTaxRuleTest(SimpleTestCase):
@@ -32,3 +33,34 @@ class MicrotechCustomerTaxRuleTest(SimpleTestCase):
 
         self.assertEqual(payload["country"], "AT")
         self.assertEqual(payload["vatId"], "ATU12345678")
+
+    def test_customer_input_uses_webshop_default_mapping(self):
+        customer = Customer(erp_nr="100001", name="Beispiel AG")
+        address = Address(customer=customer, name1="Beispiel AG", country_code="CH")
+
+        payload = CustomerUpsertMicrotechService()._build_customer_input(customer=customer, address=address)
+
+        self.assertEqual(payload["microtechFields"]["Status"], "Webshop-Kunde")
+        self.assertEqual(payload["microtechFields"]["SuchBeg"], "CL")
+        self.assertEqual(payload["microtechFields"]["VsdArt"], 10)
+
+    def test_german_customer_uses_german_webshop_mapping(self):
+        values = CustomerWebshopMappingService().get_microtech_defaults(country_code="DE")
+
+        self.assertEqual(values["Status"], "Webshop-Kunde")
+        self.assertNotIn("SuchBeg", values)
+
+    def test_na1_uses_company_name_or_german_salutation(self):
+        service = CustomerUpsertMicrotechService()
+
+        company_name = service._resolve_na1_for_anschrift(
+            address=Address(name1="Beispiel GmbH", title="Herr"),
+            na1_mode="firma_or_salutation",
+        )
+        private_salutation = service._resolve_na1_for_anschrift(
+            address=Address(name1="Herr", title="Herr"),
+            na1_mode="firma_or_salutation",
+        )
+
+        self.assertEqual(company_name, "Beispiel GmbH")
+        self.assertEqual(private_salutation, "Herr")

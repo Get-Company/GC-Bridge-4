@@ -5,6 +5,7 @@ from typing import Any
 
 from core.services import BaseService
 from customer.models import Address, Customer
+from customer.services.webshop_mapping import CustomerWebshopMappingService
 from loguru import logger
 from microtech.services import (
     GraphQLMicrotechError,
@@ -346,6 +347,9 @@ class CustomerUpsertMicrotechService(BaseService):
                 "department": address.department,
                 "country": address.country_code,
                 "vatId": customer.vat_id,
+                "webshopDefaults": CustomerWebshopMappingService().get_microtech_defaults(
+                    country_code=address.country_code,
+                ),
             }
         )
 
@@ -517,7 +521,7 @@ class CustomerUpsertMicrotechService(BaseService):
             return translated_salutation or _to_str(address.title) or company_candidate
         if mode == "firma_or_salutation":
             if is_company:
-                return "Firma"
+                return company_candidate
             return translated_salutation or _to_str(address.title) or company_candidate
 
         if is_company:
