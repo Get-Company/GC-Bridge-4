@@ -1,5 +1,4 @@
 from django.test import TestCase
-from microtech.models import RuleConstant
 from microtech.rule_engine.context import EvaluationContext
 from microtech.rule_engine.templates import render_template
 
@@ -16,12 +15,6 @@ class _Order:
 
 class TemplateTest(TestCase):
     def setUp(self):
-        RuleConstant.objects.update_or_create(
-            key="eu_country_codes", defaults={"value": "DE,IT", "kind": "list"}
-        )
-        RuleConstant.objects.update_or_create(
-            key="italian_b2b_group", defaults={"value": "it-b2b", "kind": "scalar"}
-        )
         self.ctx = EvaluationContext(_Order())
 
     def test_plain_literal(self):

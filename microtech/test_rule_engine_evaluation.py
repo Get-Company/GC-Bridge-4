@@ -1,7 +1,6 @@
 from django.test import TestCase
 from microtech.models import (
     MicrotechOrderRule, MicrotechOrderRuleConditionGroup, MicrotechOrderRuleCondition,
-    MicrotechOrderRuleDjangoField,
 )
 from microtech.rule_engine.context import EvaluationContext
 from microtech.rule_engine.evaluation import rule_matches
@@ -14,11 +13,6 @@ class _Order:
 
 
 class EvaluationTest(TestCase):
-    def setUp(self):
-        for path, kind in [("country_code", "string"), ("customer_group", "string"), ("total", "decimal")]:
-            MicrotechOrderRuleDjangoField.objects.create(
-                field_path=path, label=path, value_kind=kind)
-
     def _rule_with_tree(self):
         rule = MicrotechOrderRule.objects.create(name="R")
         root = MicrotechOrderRuleConditionGroup.objects.create(
