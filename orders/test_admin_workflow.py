@@ -26,6 +26,7 @@ class OrderAdminSearchTest(SimpleTestCase):
         self.assertEqual(detail_action_dropdown["icon"], "more_vert")
         self.assertIn("request_customer_change_detail", detail_action_dropdown["items"])
         self.assertIn("address_reconciliation_detail", detail_action_dropdown["items"])
+        self.assertIn("address_reconciliation_row", model_admin.actions_row)
         self.assertIn("abort_microtech_sync_detail", detail_action_dropdown["items"])
         self.assertIn("restart_microtech_sync_detail", detail_action_dropdown["items"])
         self.assertIn("customer", model_admin.readonly_fields)

@@ -147,3 +147,12 @@ class OrderAddressReconciliationServiceTest(SimpleTestCase):
 
         with self.assertRaisesMessage(ValueError, "Ansprechpartner gehört nicht zur gewählten Anschrift"):
             self.service.apply_from_post_data(comparison=comparison, post_data=post_data, client=self.client)
+
+    def test_comparison_keeps_zero_as_a_valid_microtech_address_number(self):
+        response = self.client.request_customer("4711")
+        response["customer"]["addresses"][0]["addressSubNumber"] = 0
+        self.client.request_customer = lambda _customer_number: response
+
+        comparison = self.service.get_comparison(order=self.order, client=self.client)
+
+        self.assertEqual(comparison["scopes"][0]["candidates"][0]["address_sub_number"], 0)

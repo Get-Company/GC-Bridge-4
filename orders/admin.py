@@ -209,7 +209,11 @@ class OrderAdmin(BaseAdmin):
     inlines = (OrderDetailInline,)
     actions_list = ("sync_open_orders_from_shopware_list",)
     actions = ("sync_open_orders_from_shopware",)
-    actions_row = ("upsert_to_microtech_row", "export_swiss_customs_csv_row")
+    actions_row = (
+        "address_reconciliation_row",
+        "upsert_to_microtech_row",
+        "export_swiss_customs_csv_row",
+    )
     actions_detail = (
         {
             "title": "Aktionen",
@@ -494,6 +498,15 @@ class OrderAdmin(BaseAdmin):
         permissions=("change",),
     )
     def address_reconciliation_detail(self, request, object_id: str):
+        return HttpResponseRedirect(reverse("admin:orders_order_address_reconciliation", args=(object_id,)))
+
+    @action(
+        description="Adressen abgleichen",
+        icon="compare_arrows",
+        variant=ActionVariant.WARNING,
+        permissions=("change",),
+    )
+    def address_reconciliation_row(self, request, object_id: str):
         return HttpResponseRedirect(reverse("admin:orders_order_address_reconciliation", args=(object_id,)))
 
     def address_reconciliation_view(self, request, object_id: str, **kwargs):
