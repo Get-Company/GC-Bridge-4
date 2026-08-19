@@ -83,6 +83,12 @@
     return RULE_META.dataset_fields.find((item) => String(item.id) === id) || null;
   }
 
+  function getSelectedOptionText(select) {
+    if (!select || !select.value) return "";
+    const option = select.options && select.options[select.selectedIndex];
+    return option ? String(option.text || "").trim() : "";
+  }
+
   function getDatasetFieldDisplay(datasetFieldDef) {
     if (!datasetFieldDef) return "";
     const datasetDef = datasetById(datasetFieldDef.dataset_id);
@@ -90,6 +96,11 @@
     const base = `${datasetName}.${datasetFieldDef.field_name || ""}`;
     const label = String(datasetFieldDef.label || "").trim();
     return label ? `${base} - ${label}` : base;
+  }
+
+  function getDatasetFieldDisplayForSelect(select) {
+    const datasetFieldDef = datasetFieldById(select ? select.value : "");
+    return datasetFieldDef ? getDatasetFieldDisplay(datasetFieldDef) : getSelectedOptionText(select);
   }
 
   function datasetById(idValue) {
@@ -394,7 +405,7 @@
     updateExpectedValueVisibility(operatorSelect, expectedInput);
   }
 
-  function updateActionContextPreview(row, actionTarget, datasetFieldDef) {
+  function updateActionContextPreview(row, actionTarget, datasetFieldDef, datasetFieldSelect) {
     const previewNode = row.querySelector(".field-action_context_preview .readonly");
     if (!previewNode) return;
 
@@ -408,14 +419,17 @@
       return;
     }
 
-    if (!datasetFieldDef) {
+    const datasetFieldLabel = getDatasetFieldDisplayForSelect(datasetFieldSelect);
+    if (!datasetFieldDef && !datasetFieldLabel) {
       previewNode.textContent = actionTarget === ACTION_TARGET_POSITION
         ? "Ziel: Zusatzposition. Waehle ein passendes Feld."
         : "Ziel: Vorgang. Waehle ein passendes Feld.";
       return;
     }
 
-    previewNode.textContent = getDatasetFieldDisplay(datasetFieldDef);
+    previewNode.textContent = datasetFieldDef
+      ? getDatasetFieldDisplay(datasetFieldDef)
+      : datasetFieldLabel;
   }
 
   function updateActionRow(row) {
@@ -442,7 +456,7 @@
       datasetFieldSelect.disabled = true;
       targetInput.placeholder = "ERP-Nr fuer Zusatzposition, z. B. P";
       targetInput.title = "Legt eine neue Zusatzposition in Microtech an.";
-      updateActionContextPreview(row, actionTarget, null);
+      updateActionContextPreview(row, actionTarget, null, datasetFieldSelect);
       return;
     }
 
@@ -450,17 +464,20 @@
       datasetFieldSelect.disabled = true;
       targetInput.placeholder = "Versandartikel V oder F";
       targetInput.title = "Menge 1 Stueck, Preis = Versandkosten der Bestellung.";
-      updateActionContextPreview(row, actionTarget, null);
+      updateActionContextPreview(row, actionTarget, null, datasetFieldSelect);
       return;
     }
 
     datasetFieldSelect.disabled = false;
     initDatasetFieldAutocomplete(datasetFieldSelect);
-    updateActionContextPreview(row, actionTarget, datasetFieldDef);
+    const datasetFieldLabel = getDatasetFieldDisplayForSelect(datasetFieldSelect);
+    updateActionContextPreview(row, actionTarget, datasetFieldDef, datasetFieldSelect);
 
-    if (datasetFieldDef) {
-      const datasetLabel = getDatasetFieldDisplay(datasetFieldDef);
-      targetInput.placeholder = datasetFieldDef.field_type || "Zielwert";
+    if (datasetFieldDef || datasetFieldLabel) {
+      const datasetLabel = datasetFieldDef
+        ? getDatasetFieldDisplay(datasetFieldDef)
+        : datasetFieldLabel;
+      targetInput.placeholder = (datasetFieldDef && datasetFieldDef.field_type) || "Zielwert";
       targetInput.title = datasetLabel;
       return;
     }
@@ -509,9 +526,9 @@
       return `${actionLabel}: ${targetValue}`;
     }
 
-    const datasetFieldDef = datasetFieldById(datasetFieldSelect.value);
-    if (!datasetFieldDef || !targetValue) return "";
-    return `${actionLabel}: ${getDatasetFieldDisplay(datasetFieldDef)} = ${targetValue}`;
+    const datasetFieldLabel = getDatasetFieldDisplayForSelect(datasetFieldSelect);
+    if (!datasetFieldLabel || !targetValue) return "";
+    return `${actionLabel}: ${datasetFieldLabel} = ${targetValue}`;
   }
 
   function collectSummaryWarnings() {

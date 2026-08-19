@@ -7,10 +7,18 @@ class MicrotechConfig(AppConfig):
     name = "microtech"
 
     def ready(self) -> None:
-        from microtech.signals import ensure_swiss_customs_field_defaults
+        from microtech.signals import (
+            ensure_swiss_customs_field_defaults,
+            sync_order_rule_django_field_catalog,
+        )
 
         post_migrate.connect(
             ensure_swiss_customs_field_defaults,
             sender=self,
             dispatch_uid="microtech.ensure_swiss_customs_field_defaults",
+        )
+        post_migrate.connect(
+            sync_order_rule_django_field_catalog,
+            sender=self,
+            dispatch_uid="microtech.sync_order_rule_django_field_catalog",
         )

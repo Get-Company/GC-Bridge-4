@@ -594,7 +594,25 @@ def sync_django_field_catalog() -> dict[str, int]:
 
 def get_django_field_defs() -> list[DjangoFieldDef]:
     defs = _build_effective_django_field_defs()
-    catalog_ids = sync_django_field_catalog()
+    if not _db_has_django_field_catalog_table():
+        return defs
+
+    active_paths = {item.path for item in defs}
+    catalog_ids = {
+        field_path: catalog_id
+        for field_path, catalog_id in (
+            MicrotechOrderRuleDjangoField.objects
+            .filter(field_path__in=active_paths, is_active=True)
+            .values_list("field_path", "id")
+        )
+    }
+
+    # The catalog is created lazily for installations which already have the
+    # schema but have not run a migration since the rule builder was added.
+    # Once present, request handling remains read-only: synchronizing the
+    # complete catalog must never hold up an admin form.
+    if len(catalog_ids) != len(active_paths):
+        catalog_ids = sync_django_field_catalog()
     if not catalog_ids:
         return defs
     return [

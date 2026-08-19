@@ -27,8 +27,6 @@ from microtech.models import (
 from microtech.services import MicrotechJobSentinelService
 from microtech.rule_builder import (
     get_allowed_operator_codes,
-    get_dataset_defs,
-    get_dataset_field_defs,
     get_django_field_defs,
     get_operator_defs,
     get_rule_action_target_defs,
@@ -402,6 +400,9 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
                 .order_by("priority", "id")
             )
         }
+        # Dataset fields remain available through their filtered autocomplete
+        # endpoint. Sending the complete Microtech catalog here makes opening
+        # a rule form scale with the catalog size.
         payload = {
             "ok": True,
             "operators": [
@@ -447,28 +448,6 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
                     "target_value_help": item.target_value_help,
                 }
                 for item in get_rule_action_target_defs()
-            ],
-            "datasets": [
-                {
-                    "id": item.id,
-                    "code": item.code,
-                    "name": item.name,
-                    "description": item.description,
-                    "source_identifier": item.source_identifier,
-                }
-                for item in get_dataset_defs()
-            ],
-            "dataset_fields": [
-                {
-                    "id": item.id,
-                    "dataset_id": item.dataset_id,
-                    "field_name": item.field_name,
-                    "label": item.label,
-                    "field_type": item.field_type,
-                    "can_access": item.can_access,
-                    "is_calc_field": item.is_calc_field,
-                }
-                for item in get_dataset_field_defs()
             ],
         }
         return JsonResponse(payload)

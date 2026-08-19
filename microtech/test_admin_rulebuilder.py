@@ -121,6 +121,14 @@ class MicrotechOrderRuleAdminAutocompleteTest(TestCase):
             self.assertIn("operator_defs", call.kwargs)
             self.assertIn("policies_by_field", call.kwargs)
 
+    def test_rule_builder_metadata_does_not_embed_dataset_field_catalog(self):
+        response = self.client.get(reverse("admin:microtech_orderrule_builder_meta"))
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertNotIn("datasets", payload)
+        self.assertNotIn("dataset_fields", payload)
+
     def test_operator_autocomplete_is_filtered_by_selected_django_field(self):
         django_field_id = MicrotechOrderRuleDjangoField.objects.get(field_path="payment_method").pk
 

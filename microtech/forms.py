@@ -25,7 +25,6 @@ from microtech.rule_builder import (
     resolve_rule_action_target,
     RULE_ACTION_TARGET_CREATE_EXTRA_POSITION,
     RULE_ACTION_TARGET_CREATE_SHIPPING_POSITION,
-    sync_django_field_catalog,
 )
 
 
@@ -120,7 +119,6 @@ class MicrotechOrderRuleConditionForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        sync_django_field_catalog()
         if not getattr(self.instance, "django_field_id", None) and getattr(self.instance, "django_field_path", ""):
             selected_catalog = (
                 MicrotechOrderRuleDjangoField.objects

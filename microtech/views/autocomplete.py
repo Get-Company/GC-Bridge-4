@@ -13,7 +13,6 @@ from microtech.models import (
 from microtech.rule_builder import (
     filter_dataset_field_queryset_for_action_target,
     get_allowed_operator_codes,
-    sync_django_field_catalog,
 )
 from unfold.views import BaseAutocompleteView
 
@@ -26,7 +25,6 @@ class MicrotechOrderRuleDjangoFieldAutocompleteView(BaseAutocompleteView):
         return super().dispatch(request, *args, **kwargs)
 
     def get_queryset(self):
-        sync_django_field_catalog()
         query = str(self.request.GET.get("term") or "").strip()
         queryset = (
             MicrotechOrderRuleDjangoField.objects
