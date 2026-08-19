@@ -1057,7 +1057,9 @@ class CustomerSyncDirectionService(BaseService):
         customer.name = company or f"{first} {last}".strip() or customer.name
         customer.email = _os_to_str(raw.get("email")) or customer.email
         customer.api_id = customer_id or customer.api_id
-        customer.is_gross = bool((raw.get("group") or {}).get("displayGross", True))
+        customer_group = raw.get("group") or {}
+        customer.is_gross = bool(customer_group.get("displayGross", True))
+        customer.shopware_customer_group = _os_to_str(customer_group.get("name")) or customer.shopware_customer_group
         customer.vat_id = _os_to_str(vat_ids[0]) if vat_ids else customer.vat_id
         customer.save()
 

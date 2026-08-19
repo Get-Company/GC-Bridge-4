@@ -1265,6 +1265,11 @@ class OrderServiceMicrotechWritebackTest(SimpleTestCase):
 
 
 class Shopware6DashboardMetricServiceTest(SimpleTestCase):
+    def test_customer_criteria_loads_the_customer_group(self):
+        criteria = CustomerService.__new__(CustomerService)._base_customer_criteria()
+
+        self.assertIn("group", criteria.associations)
+
     @patch.object(CustomerService, "request_post")
     def test_count_active_customer_accounts_uses_total_count_mode(self, mock_request_post):
         mock_request_post.return_value = {"total": 17}

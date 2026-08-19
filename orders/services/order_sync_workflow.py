@@ -32,6 +32,13 @@ class OrderSyncWorkflowService(BaseService):
     STEP_ORDER = (
         "write_customer",
         "writeback_adrnr",
+        "shipping_address",
+        "shipping_contact",
+        "billing_address",
+        "billing_contact",
+        "clear_default_shipping_address",
+        "clear_default_billing_address",
+        "set_default_addresses",
         "write_vorgang",
     )
 
@@ -46,11 +53,21 @@ class OrderSyncWorkflowService(BaseService):
     def _is_step_applicable(self, workflow: MicrotechOrderSyncWorkflow, step: str) -> bool:
         """Prüft anhand des Workflow-Zustands, ob ein Step ausgeführt werden soll."""
         state = workflow.state or {}
+        if step in ("billing_address", "billing_contact"):
+            return not bool(state.get("billing_same_as_shipping"))
         if step == "writeback_adrnr":
             # Die GraphQL-Resolution liefert für einen Shopware-Neukunden die
             # echte Microtech-Adressnummer zurück. Diese muss vor der
             # Vorgangsanlage nach Shopware geschrieben werden.
             return bool(state.get("is_new_customer"))
+        if step == "clear_default_shipping_address":
+            old_shipping = _to_int(state.get("existing_default_shipping_ans_nr")) or 0
+            shipping_ans_nr, _billing_ans_nr = self._target_default_ans_nrs(workflow)
+            return old_shipping > 0 and old_shipping != shipping_ans_nr
+        if step == "clear_default_billing_address":
+            old_billing = _to_int(state.get("existing_default_billing_ans_nr")) or 0
+            _shipping_ans_nr, billing_ans_nr = self._target_default_ans_nrs(workflow)
+            return old_billing > 0 and old_billing != billing_ans_nr
         return True
 
     @staticmethod
@@ -153,7 +170,7 @@ class OrderSyncWorkflowService(BaseService):
         if order.customer is None:
             raise ValueError("Order hat keinen Kunden zum Synchronisieren.")
 
-        shipping, _billing = self._resolve_addresses(order)
+        shipping, billing = self._resolve_addresses(order)
         erp_nr = (order.customer.erp_nr or "").strip()
         address_number = _to_int(erp_nr)
         if address_number is None:
@@ -170,6 +187,7 @@ class OrderSyncWorkflowService(BaseService):
                 # GraphQL allocates a new Microtech AdrNr for this Shopware
                 # placeholder. It is written back before the order is created.
                 "is_new_customer": self._is_provisional_customer_number(erp_nr),
+                "billing_same_as_shipping": billing.pk == shipping.pk,
             },
         )
         logger.info(
@@ -274,6 +292,7 @@ class OrderSyncWorkflowService(BaseService):
             # following workflow step and for the Shopware write-back.
             state["erp_nr"] = resolved_number
             state["address_number"] = resolved_address_number or _to_int(resolved_number) or state.get("address_number")
+            self._remember_existing_default_ans_nrs(state, customer)
         elif step in ("shipping_address", "billing_address"):
             shipping, billing = self._resolve_addresses(workflow.order)
             address = shipping if step == "shipping_address" else billing
@@ -401,7 +420,11 @@ class OrderSyncWorkflowService(BaseService):
             payload = {"customerNumber": state["erp_nr"]}
         elif step == "write_customer":
             operation = "upsertCustomer"
-            input_data = customer_service._build_customer_input(customer=order.customer, address=shipping)
+            input_data = customer_service._build_customer_input(
+                customer=order.customer,
+                address=shipping,
+                billing_address=billing,
+            )
             submit = lambda: client.submit_upsert_customer(state["erp_nr"], input_data)
             payload = {"customerNumber": state["erp_nr"], "input": input_data}
         elif step in ("shipping_address", "billing_address"):
@@ -414,6 +437,7 @@ class OrderSyncWorkflowService(BaseService):
                 is_invoice=not is_shipping or bool(state.get("billing_same_as_shipping")),
                 na1_mode="auto",
                 na1_static_value="",
+                include_email=is_shipping,
             )
             operation = "updatePostalAddress" if sub_number else "createPostalAddress"
             if sub_number:

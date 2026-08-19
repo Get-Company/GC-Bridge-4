@@ -38,6 +38,36 @@ _SALUTATION_MALE_VALUES = {
     "m",
     "h",
 }
+_EU_COUNTRY_CODES = {
+    "AT",
+    "BE",
+    "BG",
+    "CY",
+    "CZ",
+    "DE",
+    "DK",
+    "EE",
+    "ES",
+    "FI",
+    "FR",
+    "GR",
+    "HR",
+    "HU",
+    "IE",
+    "IT",
+    "LT",
+    "LU",
+    "LV",
+    "MT",
+    "NL",
+    "PL",
+    "PT",
+    "RO",
+    "SE",
+    "SI",
+    "SK",
+}
+_ITALIAN_B2B_GROUP = "gc | italien firma b2b"
 
 
 class CustomerWebshopMappingService(BaseService):
@@ -61,10 +91,11 @@ class CustomerWebshopMappingService(BaseService):
     def resolve_na1(cls, *, address: Address) -> str:
         """Use the company name for business addresses and the salutation otherwise.
 
-        Shopware imports preserve the distinction in the local address model:
-        business addresses contain the contact person's full name in ``name2``;
-        private addresses leave ``name2`` empty and store their full name in
-        ``name1``.  The latter must not be transferred to Microtech ``Na1``.
+        Older and newer Shopware imports use different local ``name1``/``name2``
+        layouts.  The invariant is that a private person's name equals the
+        stored first and last name, while a business address keeps a distinct
+        company name in ``name1``.  ``Na1`` must never contain a private
+        person's full name.
         """
         company_name = cls._to_text(address.name1)
         if cls.is_company_address(address=address):
@@ -77,7 +108,20 @@ class CustomerWebshopMappingService(BaseService):
 
     @classmethod
     def is_company_address(cls, *, address: Address) -> bool:
-        return bool(cls._to_text(address.name1) and cls._to_text(address.name2))
+        company_candidate = cls._to_text(address.name1)
+        if not company_candidate:
+            return False
+        if cls.translate_salutation_to_de(company_candidate):
+            return False
+        if company_candidate.casefold() == cls._to_text(address.title).casefold():
+            return False
+
+        full_name = " ".join(
+            value
+            for value in (cls._to_text(address.first_name), cls._to_text(address.last_name))
+            if value
+        )
+        return not full_name or company_candidate.casefold() != full_name.casefold()
 
     @classmethod
     def translate_salutation_to_de(cls, value: Any) -> str:
@@ -87,6 +131,39 @@ class CustomerWebshopMappingService(BaseService):
         if normalized in _SALUTATION_MALE_VALUES:
             return "Herr"
         return ""
+
+    @classmethod
+    def get_contact_person_salutation(cls, *, address: Address) -> str:
+        salutation = cls.translate_salutation_to_de(address.title)
+        if salutation == "Herr":
+            return "Herrn"
+        return salutation or cls._to_text(address.title)
+
+    @classmethod
+    def resolve_tax_category(
+        cls,
+        *,
+        billing_country_code: str,
+        vat_id: str,
+        customer_group: str,
+    ) -> int:
+        """Resolve Microtech ``UStKat`` from the agreed Shopware rules.
+
+        The invoice country has priority.  Only the Italian B2B group with a
+        VAT ID is tax category 3 within the EU; every other EU customer keeps
+        the domestic category 1.
+        """
+        country_code = cls._to_text(billing_country_code).upper()
+        if country_code == "DE":
+            return 1
+        if country_code == "CH" or country_code not in _EU_COUNTRY_CODES:
+            return 2
+        if (
+            cls._to_text(customer_group).casefold() == _ITALIAN_B2B_GROUP
+            and bool(cls._to_text(vat_id))
+        ):
+            return 3
+        return 1
 
     @classmethod
     @lru_cache(maxsize=2)

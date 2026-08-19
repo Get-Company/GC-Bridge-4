@@ -11,6 +11,12 @@ class Customer(BaseModel):
     name = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Name"))
     email = models.EmailField(max_length=255, blank=True, default="", verbose_name=_("E-Mail"))
     api_id = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Shopware Kunden-ID"))
+    shopware_customer_group = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        verbose_name=_("Shopware Kundengruppe"),
+    )
     vat_id = models.CharField(max_length=255, blank=True, default="", verbose_name=_("USt-IdNr"))
     is_gross = models.BooleanField(default=True, verbose_name=_("Bruttopreise"))
 

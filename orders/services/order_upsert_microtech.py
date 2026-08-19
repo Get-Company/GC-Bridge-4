@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from decimal import Decimal, ROUND_HALF_UP
+import re
 from typing import Any
 
 from loguru import logger
@@ -342,7 +343,7 @@ class OrderUpsertMicrotechService(BaseService):
         resolved_rule: ResolvedOrderRule,
         client: MicrotechGraphQLClientService,
     ) -> tuple[list[dict[str, str]], OrderRuleDebugInfo]:
-        details: list[OrderDetail] = list(order.details.all())
+        details = self._sort_order_details(order.details.all())
         artikel_service = MicrotechArtikelService(erp=client)
         article_name_cache: dict[str, str] = {}
         article_raw_unit_cache: dict[str, str] = {}
@@ -692,7 +693,7 @@ class OrderUpsertMicrotechService(BaseService):
             )
 
     def _add_positions(self, *, order: Order, so_vorgang, erp) -> None:
-        details: list[OrderDetail] = list(order.details.all())
+        details = self._sort_order_details(order.details.all())
         artikel_service = MicrotechArtikelService(erp=erp)
         article_name_cache: dict[str, str] = {}
         article_raw_unit_cache: dict[str, str] = {}
@@ -737,7 +738,6 @@ class OrderUpsertMicrotechService(BaseService):
                 self._set_position_price(
                     so_vorgang=so_vorgang,
                     price=detail.unit_price,
-                    is_gross=order.customer.is_gross,
                     position_name=position_name,
                 )
 
@@ -754,6 +754,19 @@ class OrderUpsertMicrotechService(BaseService):
             .values_list("erp_nr", "unit")
         )
         return {str(erp_nr).strip(): str(unit).strip() for erp_nr, unit in rows if erp_nr and unit}
+
+    @staticmethod
+    def _sort_order_details(details) -> list[OrderDetail]:
+        """Sort regular order positions by ERP article number before adding extras."""
+        def sort_key(detail: OrderDetail) -> tuple[tuple[tuple[int, int | str], ...], str, int]:
+            erp_nr = (detail.erp_nr or "").strip()
+            parts = tuple(
+                (0, int(part)) if part.isdigit() else (1, part.casefold())
+                for part in re.split(r"(\d+)", erp_nr)
+            )
+            return parts, erp_nr.casefold(), int(detail.pk or 0)
+
+        return sorted(details, key=sort_key)
 
     @classmethod
     def _build_product_export_text_map(cls, details: list[OrderDetail]) -> dict[str, str]:
@@ -851,7 +864,6 @@ class OrderUpsertMicrotechService(BaseService):
         self._set_position_price(
             so_vorgang=so_vorgang,
             price=order.shipping_costs,
-            is_gross=order.customer.is_gross,
         )
 
     def _apply_rule_dataset_actions(
@@ -1060,7 +1072,6 @@ class OrderUpsertMicrotechService(BaseService):
         self._set_position_price(
             so_vorgang=so_vorgang,
             price=amount,
-            is_gross=order.customer.is_gross,
             position_name=(resolved_rule.payment_position_name or "").strip(),
         )
         reason = f"Zahlungs-Zusatzposition '{erp_nr}' wurde mit Betrag {amount} angelegt."
@@ -1098,7 +1109,6 @@ class OrderUpsertMicrotechService(BaseService):
         *,
         so_vorgang,
         price: Decimal,
-        is_gross: bool,
         position_name: str = "",
     ) -> None:
         position_dataset = so_vorgang.Positionen.DataSet
@@ -1109,10 +1119,7 @@ class OrderUpsertMicrotechService(BaseService):
         )
 
         epr = position_dataset.Fields("EPr").GetEditObject(2)
-        if is_gross:
-            epr.GesBrutto = float(price)
-        else:
-            epr.GesNetto = float(price)
+        epr.GesNetto = float(price)
         epr.Save()
         position_dataset.Post()
 

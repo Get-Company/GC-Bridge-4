@@ -152,6 +152,7 @@ class OrderSyncService(BaseService):
             raise ValueError("Shopware order has no id.")
 
         price = order_data.get("price") or {}
+        tax_status = _to_str(price.get("taxStatus"))
         total_tax = Decimal("0.00")
         for tax in price.get("calculatedTaxes", []) or []:
             total_tax += _to_decimal((tax or {}).get("tax"))
@@ -166,7 +167,11 @@ class OrderSyncService(BaseService):
             "description": _to_str(order_data.get("customerComment")),
             "total_price": _to_decimal(price.get("totalPrice")),
             "total_tax": total_tax,
-            "shipping_costs": _to_decimal(order_data.get("shippingTotal")),
+            "shipping_costs": self._net_unit_price_from_shopware_price(
+                _normalize_entity(order_data.get("shippingCosts") or {"totalPrice": order_data.get("shippingTotal")}),
+                quantity=1,
+                tax_status=tax_status,
+            ),
             "payment_method": _to_str((transaction.get("paymentMethod") or {}).get("name")),
             "shipping_method": _to_str((delivery.get("shippingMethod") or {}).get("name")),
             "order_state": _to_str((order_data.get("stateMachineState") or {}).get("technicalName")),
@@ -185,6 +190,7 @@ class OrderSyncService(BaseService):
         details_count = self._replace_order_details(
             order=order,
             line_items=order_data.get("lineItems") or [],
+            tax_status=tax_status,
         )
 
         return {
@@ -265,8 +271,10 @@ class OrderSyncService(BaseService):
         customer.name = _to_str(nested_customer.get("firstName") or order_customer.get("firstName") or customer.name)
         customer.email = _to_str(order_customer.get("email") or nested_customer.get("email")) or customer.email
         customer.api_id = customer_id or customer.api_id
-        display_gross = bool((nested_customer.get("group") or {}).get("displayGross", True))
+        customer_group = nested_customer.get("group") or {}
+        display_gross = bool(customer_group.get("displayGross", True))
         customer.is_gross = display_gross
+        customer.shopware_customer_group = _to_str(customer_group.get("name")) or customer.shopware_customer_group
         customer.vat_id = _to_str(vat_ids[0]) if vat_ids else customer.vat_id
         customer.save()
 
@@ -319,13 +327,6 @@ class OrderSyncService(BaseService):
         if not default_shipping_address and shipping_address:
             customer.set_shipping_address(shipping_address)
 
-        self._apply_microtech_tax_price_mode(
-            customer=customer,
-            shipping_address=shipping_address,
-            billing_address=billing_address,
-            display_gross=display_gross,
-        )
-
         synced_address_ids = set(default_address_pks)
         if billing_address and billing_address.pk:
             synced_address_ids.add(billing_address.pk)
@@ -334,25 +335,6 @@ class OrderSyncService(BaseService):
         addresses_count = len(synced_address_ids)
 
         return customer, billing_address, shipping_address, addresses_count
-
-    @staticmethod
-    def _apply_microtech_tax_price_mode(
-        *,
-        customer: Customer,
-        shipping_address: Address | None,
-        billing_address: Address | None,
-        display_gross: bool,
-    ) -> None:
-        from customer.services.customer_upsert_microtech import CustomerUpsertMicrotechService
-
-        tax_address = shipping_address or billing_address
-        country_code = _to_str(getattr(tax_address, "country_code", ""))
-        ustkat = CustomerUpsertMicrotechService._resolve_ustkat(country_code, customer.vat_id)
-        should_use_gross_prices = bool(display_gross and ustkat == 1)
-        if customer.is_gross == should_use_gross_prices:
-            return
-        customer.is_gross = should_use_gross_prices
-        customer.save(update_fields=["is_gross", "updated_at"])
 
     def _load_shopware_customer(self, *, customer_id: str) -> dict[str, Any]:
         customer_id = _to_str(customer_id)
@@ -479,13 +461,6 @@ class OrderSyncService(BaseService):
             address = self._find_contact_address(customer=customer, address_data=address_data)
 
         if not address:
-            address = self._find_role_address(
-                customer=customer,
-                is_invoice=is_invoice,
-                is_shipping=is_shipping,
-            )
-
-        if not address:
             address = Address(customer=customer)
 
         if api_id and address.api_id != api_id:
@@ -541,43 +516,13 @@ class OrderSyncService(BaseService):
                 return match
         return None
 
-    @staticmethod
-    def _find_role_address(
+    def _replace_order_details(
+        self,
         *,
-        customer: Customer,
-        is_invoice: bool,
-        is_shipping: bool,
-    ) -> Address | None:
-        candidates = customer.addresses.all()
-        if is_shipping:
-            shipping_indexed = (
-                candidates
-                .filter(is_shipping=True)
-                .exclude(erp_ans_id__isnull=True, erp_ans_nr__isnull=True)
-                .order_by("-updated_at")
-                .first()
-            )
-            if shipping_indexed:
-                return shipping_indexed
-            shipping_any = candidates.filter(is_shipping=True).order_by("-updated_at").first()
-            if shipping_any:
-                return shipping_any
-
-        if is_invoice:
-            invoice_indexed = (
-                candidates
-                .filter(is_invoice=True)
-                .exclude(erp_ans_id__isnull=True, erp_ans_nr__isnull=True)
-                .order_by("-updated_at")
-                .first()
-            )
-            if invoice_indexed:
-                return invoice_indexed
-            return candidates.filter(is_invoice=True).order_by("-updated_at").first()
-
-        return None
-
-    def _replace_order_details(self, *, order: Order, line_items: list[dict[str, Any]]) -> int:
+        order: Order,
+        line_items: list[dict[str, Any]],
+        tax_status: str,
+    ) -> int:
         order.details.all().delete()
         created_count = 0
 
@@ -593,13 +538,37 @@ class OrderSyncService(BaseService):
                 erp_nr=_to_str((item.get("payload") or {}).get("productNumber")),
                 name=_to_str(item.get("label")),
                 quantity=_to_int(item.get("quantity")),
-                unit_price=_to_decimal(price_data.get("unitPrice")),
+                unit_price=self._net_unit_price_from_shopware_price(
+                    price_data,
+                    quantity=_to_int(item.get("quantity")) or 1,
+                    tax_status=tax_status,
+                ),
                 total_price=_to_decimal(price_data.get("totalPrice")),
                 tax=tax_value,
                 unit=_to_str(item.get("unitName")),
             )
             created_count += 1
         return created_count
+
+    @staticmethod
+    def _net_unit_price_from_shopware_price(
+        price_data: dict[str, Any],
+        *,
+        quantity: int,
+        tax_status: str,
+    ) -> Decimal:
+        unit_price = _to_decimal(price_data.get("unitPrice"))
+        if _to_str(tax_status).casefold() != "gross":
+            return unit_price
+
+        total_price = _to_decimal(price_data.get("totalPrice"))
+        total_tax = sum(
+            (_to_decimal((tax or {}).get("tax")) for tax in price_data.get("calculatedTaxes", []) or []),
+            start=Decimal("0.00"),
+        )
+        if total_price <= Decimal("0.00") or quantity <= 0:
+            return unit_price
+        return ((total_price - total_tax) / Decimal(quantity)).quantize(Decimal("0.01"))
 
     @staticmethod
     def _active_sales_channel_ids() -> list[str]:

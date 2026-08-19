@@ -35,6 +35,7 @@ class CustomerService(Shopware6Service):
     def _base_customer_criteria(self, *, limit: int = 1) -> Criteria:
         criteria = Criteria(limit=limit)
         criteria.associations["salutation"] = Criteria()
+        criteria.associations["group"] = Criteria()
 
         address_criteria = Criteria()
         address_criteria.associations["country"] = Criteria()

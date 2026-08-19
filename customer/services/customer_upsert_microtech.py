@@ -15,36 +15,6 @@ from microtech.services import (
 from shopware.services import CustomerService
 
 
-EU_COUNTRY_CODES = {
-    "AT",
-    "BE",
-    "BG",
-    "CY",
-    "CZ",
-    "DE",
-    "DK",
-    "EE",
-    "ES",
-    "FI",
-    "FR",
-    "GR",
-    "HR",
-    "HU",
-    "IE",
-    "IT",
-    "LT",
-    "LU",
-    "LV",
-    "MT",
-    "NL",
-    "PL",
-    "PT",
-    "RO",
-    "SE",
-    "SI",
-    "SK",
-}
-
 # ISO-3166 numeric (only commonly used values in this integration context)
 ISO2_TO_NUMERIC = {
     "DE": 276,
@@ -179,7 +149,11 @@ class CustomerUpsertMicrotechService(BaseService):
                 "Customer.erp_nr is required for GraphQL Microtech upsert until the wrapper exposes number allocation."
             )
 
-        input_data = self._build_customer_input(customer=customer, address=shipping)
+        input_data = self._build_customer_input(
+            customer=customer,
+            address=shipping,
+            billing_address=billing,
+        )
         is_new_customer = False
         try:
             client.request_customer(erp_nr)
@@ -251,6 +225,7 @@ class CustomerUpsertMicrotechService(BaseService):
             is_invoice=is_invoice,
             na1_mode=na1_mode,
             na1_static_value=na1_static_value,
+            include_email=is_shipping,
         )
         address_sub_number = _to_int(address.erp_ans_nr)
         if address_sub_number:
@@ -295,7 +270,14 @@ class CustomerUpsertMicrotechService(BaseService):
             asp_nr=_to_int(contact.get("contactNumber")) or contact_number,
         )
 
-    def _build_customer_input(self, *, customer: Customer, address: Address) -> dict[str, Any]:
+    def _build_customer_input(
+        self,
+        *,
+        customer: Customer,
+        address: Address,
+        billing_address: Address | None = None,
+    ) -> dict[str, Any]:
+        tax_address = billing_address or address
         return self._drop_blank(
             {
                 "salutation": self._translate_salutation_to_de(address.title or address.name1),
@@ -312,6 +294,11 @@ class CustomerUpsertMicrotechService(BaseService):
                 "department": address.department,
                 "country": address.country_code,
                 "vatId": customer.vat_id,
+                "taxCategory": CustomerWebshopMappingService.resolve_tax_category(
+                    billing_country_code=tax_address.country_code,
+                    vat_id=customer.vat_id,
+                    customer_group=customer.shopware_customer_group,
+                ),
                 "webshopDefaults": CustomerWebshopMappingService().get_microtech_defaults(
                     country_code=address.country_code,
                 ),
@@ -326,7 +313,10 @@ class CustomerUpsertMicrotechService(BaseService):
         is_invoice: bool,
         na1_mode: str,
         na1_static_value: str,
+        include_email: bool | None = None,
     ) -> dict[str, Any]:
+        if include_email is None:
+            include_email = is_shipping
         return self._drop_blank(
             {
                 "isDefaultShipping": bool(is_shipping),
@@ -341,7 +331,7 @@ class CustomerUpsertMicrotechService(BaseService):
                 "street": address.street,
                 "zipCode": address.postal_code,
                 "city": address.city,
-                "email": address.email,
+                "email": address.email if include_email else None,
                 "phone": address.phone,
                 "department": address.department,
                 "country": address.country_code,
@@ -358,7 +348,7 @@ class CustomerUpsertMicrotechService(BaseService):
         return self._drop_blank(
             {
                 "isDefault": True,
-                "salutation": address.title,
+                "salutation": CustomerWebshopMappingService.get_contact_person_salutation(address=address),
                 "firstName": first_name,
                 "lastName": last_name,
                 "displayName": f"{first_name} {last_name}".strip(),
@@ -409,17 +399,13 @@ class CustomerUpsertMicrotechService(BaseService):
         return True
 
     @staticmethod
-    def _resolve_ustkat(country_code: str, vat_id: str) -> int:
-        code = _to_str(country_code).upper()
-        has_vat_id = bool(_to_str(vat_id))
-
-        if code == "DE":
-            return 1
-        if code == "CH":
-            return 2
-        if code in EU_COUNTRY_CODES:
-            return 3 if has_vat_id else 1
-        return 3
+    def _resolve_ustkat(country_code: str, vat_id: str, customer_group: str = "") -> int:
+        """Compatibility helper for callers that previously used this method."""
+        return CustomerWebshopMappingService.resolve_tax_category(
+            billing_country_code=country_code,
+            vat_id=vat_id,
+            customer_group=customer_group,
+        )
 
     def _persist_anschrift_identity(
         self,

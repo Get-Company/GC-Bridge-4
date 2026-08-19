@@ -177,7 +177,6 @@ class OrderAdmin(BaseAdmin):
     list_display = (
         "order_number",
         "customer",
-        "total_price",
         "purchase_date",
         "order_state",
         "microtech_sync_status",

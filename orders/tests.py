@@ -38,7 +38,6 @@ class OrderGraphQLPayloadTest(SimpleTestCase):
         with (
             patch("orders.services.order_sync.Address", return_value=imported_address) as address_model,
             patch.object(OrderSyncService, "_find_contact_address", return_value=None),
-            patch.object(OrderSyncService, "_find_role_address", return_value=None),
         ):
             address_model.objects.filter.return_value.filter.return_value.first.return_value = None
             OrderSyncService()._upsert_address(
@@ -76,6 +75,17 @@ class OrderGraphQLPayloadTest(SimpleTestCase):
         self.assertEqual(OrderUpsertMicrotechService._format_graphql_decimal(Decimal("15.00")), "15,00")
         self.assertEqual(OrderUpsertMicrotechService._format_graphql_decimal(Decimal("1.235")), "1,24")
         self.assertEqual(OrderUpsertMicrotechService._format_graphql_decimal(None), "")
+
+    def test_order_details_are_sorted_by_article_number(self):
+        details = [
+            SimpleNamespace(erp_nr="ART-20", pk=1),
+            SimpleNamespace(erp_nr="ART-3", pk=2),
+            SimpleNamespace(erp_nr="ART-100", pk=3),
+        ]
+
+        ordered = OrderUpsertMicrotechService._sort_order_details(details)
+
+        self.assertEqual([detail.erp_nr for detail in ordered], ["ART-3", "ART-20", "ART-100"])
 
     def test_special_positions_always_include_a_vorgang_unit(self):
         positions: list[dict[str, str]] = []
@@ -154,44 +164,28 @@ class OrderGraphQLPayloadTest(SimpleTestCase):
         self.assertNotIn("filters", request_payload)
 
 
-class OrderSyncTaxModeTest(TestCase):
-    def test_eu_customer_with_vat_id_uses_net_prices_for_microtech(self):
-        customer = Customer.objects.create(
-            erp_nr="100001",
-            name="AT Firma",
-            vat_id="ATU12345678",
-            is_gross=True,
-        )
-        shipping = Address.objects.create(customer=customer, country_code="AT", is_shipping=True)
-
-        OrderSyncService._apply_microtech_tax_price_mode(
-            customer=customer,
-            shipping_address=shipping,
-            billing_address=None,
-            display_gross=True,
+class OrderNetPriceTest(SimpleTestCase):
+    def test_gross_shopware_price_is_converted_to_net_unit_price(self):
+        price = OrderSyncService._net_unit_price_from_shopware_price(
+            {
+                "unitPrice": "11.90",
+                "totalPrice": "23.80",
+                "calculatedTaxes": [{"tax": "3.80"}],
+            },
+            quantity=2,
+            tax_status="gross",
         )
 
-        customer.refresh_from_db()
-        self.assertFalse(customer.is_gross)
+        self.assertEqual(price, Decimal("10.00"))
 
-    def test_eu_customer_without_vat_id_keeps_shopware_gross_mode(self):
-        customer = Customer.objects.create(
-            erp_nr="100002",
-            name="AT Privat",
-            vat_id="",
-            is_gross=True,
-        )
-        shipping = Address.objects.create(customer=customer, country_code="AT", is_shipping=True)
-
-        OrderSyncService._apply_microtech_tax_price_mode(
-            customer=customer,
-            shipping_address=shipping,
-            billing_address=None,
-            display_gross=True,
+    def test_net_shopware_price_is_kept_as_net_unit_price(self):
+        price = OrderSyncService._net_unit_price_from_shopware_price(
+            {"unitPrice": "10.00", "totalPrice": "20.00", "calculatedTaxes": [{"tax": "3.80"}]},
+            quantity=2,
+            tax_status="net",
         )
 
-        customer.refresh_from_db()
-        self.assertTrue(customer.is_gross)
+        self.assertEqual(price, Decimal("10.00"))
 
 
 class OrderRuleResolverDynamicRulesTest(TestCase):

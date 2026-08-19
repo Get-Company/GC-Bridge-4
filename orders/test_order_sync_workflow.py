@@ -48,31 +48,45 @@ class NextStepResolverTest(TestCase):
         wf = self._wf()
         self.assertEqual(OrderSyncWorkflowService().next_step(wf), "write_customer")
 
-    def test_new_customer_writes_back_resolved_adrnr_before_creating_order(self):
+    def test_new_customer_writes_back_resolved_adrnr_before_address_sync(self):
         wf = self._wf(
             state={"is_new_customer": True},
             completed=["write_customer"],
         )
         self.assertEqual(OrderSyncWorkflowService().next_step(wf), "writeback_adrnr")
 
-    def test_existing_customer_skips_writeback_and_creates_order(self):
+    def test_existing_customer_skips_writeback_and_syncs_shipping_address(self):
         wf = self._wf(
             state={"is_new_customer": False},
             completed=["write_customer"],
         )
-        self.assertEqual(OrderSyncWorkflowService().next_step(wf), "write_vorgang")
+        self.assertEqual(OrderSyncWorkflowService().next_step(wf), "shipping_address")
 
-    def test_creates_order_after_customer_number_writeback(self):
+    def test_syncs_shipping_address_after_customer_number_writeback(self):
         wf = self._wf(
             state={"is_new_customer": True},
             completed=["write_customer", "writeback_adrnr"],
         )
-        self.assertEqual(OrderSyncWorkflowService().next_step(wf), "write_vorgang")
+        self.assertEqual(OrderSyncWorkflowService().next_step(wf), "shipping_address")
+
+    def test_different_billing_address_is_synced_after_shipping_contact(self):
+        wf = self._wf(
+            state={"is_new_customer": False, "billing_same_as_shipping": False},
+            completed=["write_customer", "shipping_address", "shipping_contact"],
+        )
+
+        self.assertEqual(OrderSyncWorkflowService().next_step(wf), "billing_address")
+
+    def test_same_billing_address_skips_the_separate_billing_steps(self):
+        wf = self._wf(state={"billing_same_as_shipping": True})
+
+        self.assertFalse(OrderSyncWorkflowService()._is_step_applicable(wf, "billing_address"))
+        self.assertFalse(OrderSyncWorkflowService()._is_step_applicable(wf, "billing_contact"))
 
     def test_all_done_returns_none(self):
         wf = self._wf(
             state={"is_new_customer": True},
-            completed=["write_customer", "writeback_adrnr", "write_vorgang"],
+            completed=list(OrderSyncWorkflowService.STEP_ORDER),
         )
         self.assertIsNone(OrderSyncWorkflowService().next_step(wf))
 
@@ -317,6 +331,11 @@ class StartAndSubmitTest(TestCase):
         job = MagicMock(pk=1)
         mock_submit.return_value = job
         order = make_order()
+        order.customer.vat_id = "ATU12345678"
+        order.customer.shopware_customer_group = "GC | Italien Firma B2B"
+        order.customer.save(update_fields=("vat_id", "shopware_customer_group"))
+        order.billing_address.country_code = "AT"
+        order.billing_address.save(update_fields=("country_code",))
 
         wf = OrderSyncWorkflowService().start_for_order(order)
 
@@ -329,6 +348,7 @@ class StartAndSubmitTest(TestCase):
         self.assertEqual(called["kind"], MicrotechGraphQLJob.Kind.CUSTOMER_UPSERT)
         self.assertEqual(called["context"]["step"], "write_customer")
         self.assertEqual(called["continuation"], "microtech_order_sync_advance")
+        self.assertEqual(called["request_payload"]["input"]["taxCategory"], 3)
 
     def test_start_rejects_second_active_workflow(self):
         order = make_order()
@@ -379,7 +399,7 @@ class OrderStepTest(TestCase):
 
 
 class ShopwareAddressMatchingTest(TestCase):
-    def test_upsert_address_matches_same_location_and_contact_before_role_fallback(self):
+    def test_upsert_address_matches_same_location_and_contact(self):
         order = make_order()
         existing = Address.objects.create(
             customer=order.customer,
@@ -422,6 +442,38 @@ class ShopwareAddressMatchingTest(TestCase):
         self.assertEqual(address.pk, matching_contact.pk)
         self.assertEqual(existing.first_name, "Anna")
         self.assertTrue(matching_contact.is_shipping)
+
+    def test_upsert_address_never_reuses_a_different_address_only_by_role(self):
+        order = make_order()
+        shipping = Address.objects.create(
+            customer=order.customer,
+            street="Lieferweg 1",
+            postal_code="34117",
+            city="Kassel",
+            first_name="Anna",
+            last_name="Lieferung",
+            is_shipping=True,
+        )
+
+        billing = OrderSyncService()._upsert_address(
+            customer=order.customer,
+            address_data={
+                "street": "Rechnungsweg 2",
+                "zipcode": "10115",
+                "city": "Berlin",
+                "firstName": "Berta",
+                "lastName": "Rechnung",
+            },
+            fallback_email="",
+            is_invoice=True,
+            is_shipping=False,
+        )
+
+        shipping.refresh_from_db()
+        self.assertNotEqual(billing.pk, shipping.pk)
+        self.assertEqual(billing.street, "Rechnungsweg 2")
+        self.assertTrue(billing.is_invoice)
+        self.assertTrue(shipping.is_shipping)
 
 
 class ContactStepTest(TestCase):
