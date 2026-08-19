@@ -25,3 +25,24 @@ class OrderRuleEngineFieldsTest(TestCase):
         self.assertTrue(rule.shadow_mode)          # Einführung: Schatten an
         self.assertFalse(rule.engine_enabled)      # Einführung: neue Engine aus
         self.assertIsNone(rule.trigger)
+
+
+class ConditionGroupModelTest(TestCase):
+    def test_nested_groups_and_second_value(self):
+        from microtech.models import (
+            MicrotechOrderRule, MicrotechOrderRuleConditionGroup, MicrotechOrderRuleCondition,
+        )
+        rule = MicrotechOrderRule.objects.create(name="R")
+        root = MicrotechOrderRuleConditionGroup.objects.create(
+            rule=rule, logic=MicrotechOrderRule.ConditionLogic.ALL,
+        )
+        sub = MicrotechOrderRuleConditionGroup.objects.create(
+            rule=rule, parent=root, logic=MicrotechOrderRule.ConditionLogic.ANY,
+        )
+        cond = MicrotechOrderRuleCondition.objects.create(
+            rule=rule, group=sub, django_field_path="total",
+            operator_code="between", expected_value="500", expected_value_2="9999",
+        )
+        self.assertEqual(list(root.children.all()), [sub])
+        self.assertEqual(cond.group, sub)
+        self.assertEqual(cond.expected_value_2, "9999")

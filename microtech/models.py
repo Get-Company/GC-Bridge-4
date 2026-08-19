@@ -331,6 +331,20 @@ class MicrotechOrderRuleCondition(BaseModel):
         default="",
         verbose_name=_("Vergleichswert"),
     )
+    group = models.ForeignKey(
+        "MicrotechOrderRuleConditionGroup",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="conditions",
+        verbose_name=_("Gruppe"),
+    )
+    expected_value_2 = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        verbose_name=_("Vergleichswert 2"),
+    )
 
     class Meta:
         verbose_name = _("Microtech Bestellregel Bedingung")
@@ -339,6 +353,31 @@ class MicrotechOrderRuleCondition(BaseModel):
 
     def __str__(self) -> str:
         return f"{self.rule_id} | {self.django_field_path} {self.operator_code} {self.expected_value}"
+
+
+class MicrotechOrderRuleConditionGroup(BaseModel):
+    rule = models.ForeignKey(
+        MicrotechOrderRule, on_delete=models.CASCADE,
+        related_name="condition_groups", verbose_name=_("Regel"),
+    )
+    parent = models.ForeignKey(
+        "self", on_delete=models.CASCADE, null=True, blank=True,
+        related_name="children", verbose_name=_("Uebergeordnete Gruppe"),
+    )
+    logic = models.CharField(
+        max_length=16, choices=MicrotechOrderRule.ConditionLogic.choices,
+        default=MicrotechOrderRule.ConditionLogic.ALL, verbose_name=_("Logik"),
+    )
+    is_active = models.BooleanField(default=True, verbose_name=_("Aktiv"))
+    priority = models.PositiveIntegerField(default=100, verbose_name=_("Prioritaet"))
+
+    class Meta:
+        verbose_name = _("Bedingungsgruppe")
+        verbose_name_plural = _("Bedingungsgruppen")
+        ordering = ("rule", "priority", "id")
+
+    def __str__(self) -> str:
+        return f"{self.rule_id} | Gruppe {self.pk} ({self.logic})"
 
 
 class MicrotechDatasetCatalog(BaseModel):
