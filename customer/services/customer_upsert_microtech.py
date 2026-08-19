@@ -317,6 +317,7 @@ class CustomerUpsertMicrotechService(BaseService):
     ) -> dict[str, Any]:
         if include_email is None:
             include_email = is_shipping
+        postal_mapping = CustomerWebshopMappingService().get_postal_address_mapping(address=address)
         return self._drop_blank(
             {
                 "isDefaultShipping": bool(is_shipping),
@@ -325,8 +326,8 @@ class CustomerUpsertMicrotechService(BaseService):
                     address=address,
                     na1_mode=na1_mode,
                     na1_static_value=na1_static_value,
-                ) or address.name1,
-                "name2": address.name2,
+                ) or postal_mapping["name1"],
+                "name2": postal_mapping["name2"],
                 "name3": address.name3,
                 "street": address.street,
                 "zipCode": address.postal_code,
@@ -458,7 +459,7 @@ class CustomerUpsertMicrotechService(BaseService):
             return translated_salutation or _to_str(address.title) or company_candidate
         if mode == "firma_or_salutation":
             if is_company:
-                return company_candidate
+                return "Firma"
             return translated_salutation or _to_str(address.title) or company_candidate
 
         return CustomerWebshopMappingService().get_postal_address_mapping(address=address)["name1"]

@@ -88,8 +88,16 @@ class MicrotechCustomerTaxRuleTest(SimpleTestCase):
         company_name = mapping_service.get_postal_address_mapping(address=company_address)["name1"]
         private_salutation = mapping_service.get_postal_address_mapping(address=private_address)["name1"]
 
-        self.assertEqual(company_name, "Beispiel GmbH")
+        self.assertEqual(company_name, "Firma")
         self.assertEqual(private_salutation, "Herr")
+        self.assertEqual(
+            mapping_service.get_postal_address_mapping(address=company_address)["name2"],
+            "Beispiel GmbH",
+        )
+        self.assertEqual(
+            mapping_service.get_postal_address_mapping(address=private_address)["name2"],
+            "Max Muster",
+        )
         self.assertEqual(
             upsert_service._build_postal_address_input(
                 address=company_address,
@@ -98,7 +106,7 @@ class MicrotechCustomerTaxRuleTest(SimpleTestCase):
                 na1_mode="auto",
                 na1_static_value="",
             )["name1"],
-            "Beispiel GmbH",
+            "Firma",
         )
         self.assertEqual(
             upsert_service._build_postal_address_input(
@@ -109,6 +117,16 @@ class MicrotechCustomerTaxRuleTest(SimpleTestCase):
                 na1_static_value="",
             )["name1"],
             "Herr",
+        )
+        self.assertEqual(
+            upsert_service._build_postal_address_input(
+                address=company_address,
+                is_shipping=True,
+                is_invoice=True,
+                na1_mode="auto",
+                na1_static_value="",
+            )["name2"],
+            "Beispiel GmbH",
         )
 
     def test_email_and_salutation_mapping_uses_the_address_role(self):

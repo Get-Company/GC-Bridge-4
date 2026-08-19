@@ -51,7 +51,7 @@ class OrderGraphQLPayloadTest(SimpleTestCase):
         self.assertEqual(imported_address.name1, "Muster GmbH")
         self.assertEqual(imported_address.name2, "Max Mustermann")
 
-    def test_company_address_with_contact_keeps_company_name_in_graphql_name1(self):
+    def test_company_address_uses_firma_in_graphql_name1_and_company_in_name2(self):
         address = Address(
             name1="Muster GmbH",
             name2="Max Mustermann",
@@ -68,8 +68,8 @@ class OrderGraphQLPayloadTest(SimpleTestCase):
             na1_static_value="",
         )
 
-        self.assertEqual(payload["name1"], "Muster GmbH")
-        self.assertEqual(payload["name2"], "Max Mustermann")
+        self.assertEqual(payload["name1"], "Firma")
+        self.assertEqual(payload["name2"], "Muster GmbH")
 
     def test_graphql_decimal_uses_german_decimal_separator(self):
         self.assertEqual(OrderUpsertMicrotechService._format_graphql_decimal(Decimal("15.00")), "15,00")

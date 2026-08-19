@@ -84,27 +84,42 @@ class CustomerWebshopMappingService(BaseService):
         return dict(self._load_mapping_file(mapping_file))
 
     def get_postal_address_mapping(self, *, address: Address) -> dict[str, str]:
-        """Return GraphQL postal-address fields (``name1`` maps to Microtech ``Na1``)."""
-        return {"name1": self.resolve_na1(address=address)}
+        """Return GraphQL postal-address fields (``name1``/``name2`` → ``Na1``/``Na2``)."""
+        return {
+            "name1": self.resolve_na1(address=address),
+            "name2": self.resolve_na2(address=address),
+        }
 
     @classmethod
     def resolve_na1(cls, *, address: Address) -> str:
-        """Use the company name for business addresses and the salutation otherwise.
+        """Use ``Firma`` for businesses and the salutation for private addresses.
 
         Older and newer Shopware imports use different local ``name1``/``name2``
         layouts.  The invariant is that a private person's name equals the
-        stored first and last name, while a business address keeps a distinct
-        company name in ``name1``.  ``Na1`` must never contain a private
-        person's full name.
+        stored first and last name, while a business address keeps its company
+        name in ``name1``.  Microtech's address layout uses a literal type in
+        ``Na1`` and the actual company or personal name in ``Na2``.
         """
-        company_name = cls._to_text(address.name1)
         if cls.is_company_address(address=address):
-            return company_name
+            return "Firma"
 
         salutation = cls.translate_salutation_to_de(address.title)
         if not salutation:
             salutation = cls.translate_salutation_to_de(address.name1)
-        return salutation or cls._to_text(address.title) or company_name
+        return salutation or cls._to_text(address.title)
+
+    @classmethod
+    def resolve_na2(cls, *, address: Address) -> str:
+        """Return the company name or the full private name for Microtech ``Na2``."""
+        if cls.is_company_address(address=address):
+            return cls._to_text(address.name1)
+
+        full_name = " ".join(
+            value
+            for value in (cls._to_text(address.first_name), cls._to_text(address.last_name))
+            if value
+        )
+        return cls._to_text(address.name2) or full_name or cls._to_text(address.name1)
 
     @classmethod
     def is_company_address(cls, *, address: Address) -> bool:
