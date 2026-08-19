@@ -516,3 +516,31 @@ class MicrotechOrderRuleDjangoFieldPolicy(BaseModel):
 
     def __str__(self) -> str:
         return f"{self.priority} | {self.field_path}"
+
+
+class RuleTriggerQuerySet(models.QuerySet):
+    def for_task(self, task_name):
+        return self.filter(is_active=True, task_name=task_name).order_by("priority", "id")
+
+
+class RuleTrigger(BaseModel):
+    code = models.CharField(max_length=64, unique=True, verbose_name=_("Code"))
+    label = models.CharField(max_length=255, verbose_name=_("Bezeichnung"))
+    task_name = models.CharField(max_length=128, db_index=True, verbose_name=_("Celery Task"))
+    context_root = models.CharField(max_length=128, verbose_name=_("Kontext-Wurzel (app_label.Model)"))
+    is_active = models.BooleanField(default=True, verbose_name=_("Aktiv"))
+    priority = models.PositiveIntegerField(default=100, verbose_name=_("Prioritaet"))
+
+    objects = RuleTriggerQuerySet.as_manager()
+
+    class Meta:
+        verbose_name = _("Regel-Trigger")
+        verbose_name_plural = _("Regel-Trigger")
+        ordering = ("priority", "id")
+
+    def __str__(self) -> str:
+        return f"{self.label} ({self.code})"
+
+    @classmethod
+    def for_task(cls, task_name):
+        return cls.objects.for_task(task_name)
