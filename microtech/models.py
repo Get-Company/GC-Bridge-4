@@ -510,6 +510,11 @@ class MicrotechOrderRuleOperator(BaseModel):
         LESS_THAN = "lt", _("<")
         IS_EMPTY = "is_empty", _("ist leer")
         IS_NOT_EMPTY = "is_not_empty", _("ist nicht leer")
+        BETWEEN = "between", _("zwischen")
+        BEFORE = "before", _("vor")
+        AFTER = "after", _("nach")
+        IS_TRUE = "is_true", _("ist wahr")
+        IS_FALSE = "is_false", _("ist falsch")
 
     code = models.CharField(max_length=64, unique=True, verbose_name=_("Code"))
     name = models.CharField(max_length=255, verbose_name=_("Name"))
