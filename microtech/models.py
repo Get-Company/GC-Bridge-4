@@ -603,3 +603,31 @@ class RuleTrigger(BaseModel):
     @classmethod
     def for_task(cls, task_name):
         return cls.objects.for_task(task_name)
+
+
+class RuleConstant(BaseModel):
+    class Kind(models.TextChoices):
+        SCALAR = "scalar", _("Einzelwert")
+        LIST = "list", _("Liste (komma-separiert)")
+
+    key = models.CharField(max_length=64, unique=True, verbose_name=_("Schluessel"))
+    value = models.TextField(blank=True, default="", verbose_name=_("Wert"))
+    kind = models.CharField(max_length=16, choices=Kind.choices, default=Kind.SCALAR, verbose_name=_("Art"))
+
+    class Meta:
+        verbose_name = _("Regel-Konstante")
+        verbose_name_plural = _("Regel-Konstanten")
+        ordering = ("key",)
+
+    def __str__(self) -> str:
+        return self.key
+
+    @classmethod
+    def get_scalar(cls, key: str) -> str:
+        obj = cls.objects.filter(key=key).first()
+        return (obj.value or "").strip() if obj else ""
+
+    @classmethod
+    def get_list(cls, key: str) -> list[str]:
+        raw = cls.get_scalar(key)
+        return [part.strip() for part in raw.split(",") if part.strip()]

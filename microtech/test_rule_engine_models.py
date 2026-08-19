@@ -46,3 +46,12 @@ class ConditionGroupModelTest(TestCase):
         self.assertEqual(list(root.children.all()), [sub])
         self.assertEqual(cond.group, sub)
         self.assertEqual(cond.expected_value_2, "9999")
+
+
+class RuleConstantTest(TestCase):
+    def test_seeded_eu_countries_and_it_group(self):
+        from microtech.models import RuleConstant
+        eu = RuleConstant.get_list("eu_country_codes")
+        self.assertIn("DE", eu)
+        self.assertIn("IT", eu)
+        self.assertTrue(RuleConstant.get_scalar("italian_b2b_group"))
