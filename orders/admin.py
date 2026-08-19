@@ -20,6 +20,7 @@ from unfold.forms import BaseDialogForm
 from unfold.sections import TemplateSection
 
 from core.admin import BaseAdmin, BaseTabularInline
+from customer.services.webshop_mapping import CustomerWebshopMappingService, EU_COUNTRY_CODES
 from microtech.services import microtech_connection
 from orders.models import MicrotechOrderSyncWorkflow, Order, OrderDetail
 from orders.services import (
@@ -176,11 +177,13 @@ class MicrotechOrderSyncWorkflowAdmin(BaseAdmin):
 class OrderAdmin(BaseAdmin):
     list_display = (
         "order_number",
-        "customer",
+        "customer_display",
+        "country_display",
         "purchase_date",
         "order_state",
         "microtech_sync_status",
     )
+    list_per_page = 20
     list_sections = [OrderExpandSection]
     list_sections_classes = "grid-cols-1"
     search_fields = (
@@ -224,6 +227,63 @@ class OrderAdmin(BaseAdmin):
         return super().get_queryset(request).select_related(
             "customer", "billing_address", "shipping_address"
         )
+
+    @staticmethod
+    def _customer_address(obj: Order):
+        return getattr(obj, "billing_address", None) or getattr(obj, "shipping_address", None)
+
+    @classmethod
+    def _country_code(cls, obj: Order) -> str:
+        address = cls._customer_address(obj)
+        return _to_str(getattr(address, "country_code", "")).upper()
+
+    @staticmethod
+    def _country_flag(country_code: str) -> str:
+        if len(country_code) != 2 or not country_code.isalpha():
+            return ""
+        return "".join(chr(0x1F1E6 + ord(character) - ord("A")) for character in country_code)
+
+    @staticmethod
+    def _customer_region_label(country_code: str) -> str:
+        if country_code == "DE":
+            return "Inland"
+        if country_code in EU_COUNTRY_CODES:
+            return "Ausland · EU"
+        if country_code:
+            return "Ausland"
+        return "Unbekannt"
+
+    @admin.display(description="Kunde", ordering="customer__erp_nr")
+    def customer_display(self, obj: Order):
+        customer = getattr(obj, "customer", None)
+        if not customer:
+            return "-"
+
+        address = self._customer_address(obj)
+        customer_name = (
+            CustomerWebshopMappingService.resolve_na2(address=address) if address else _to_str(customer.name)
+        )
+        customer_name = customer_name or _to_str(customer.name) or "-"
+        customer_label = f"{_to_str(customer.erp_nr) or '-'} | {customer_name}"
+        region_label = self._customer_region_label(self._country_code(obj))
+
+        return format_html(
+            '<span style="display:inline-flex;align-items:center;gap:6px;">'
+            "<span>{}</span>"
+            '<span style="border:1px solid #93c5fd;border-radius:999px;padding:1px 6px;font-size:11px;line-height:16px;color:#1d4ed8;background:#eff6ff;white-space:nowrap;">{}</span>'
+            "</span>",
+            customer_label,
+            region_label,
+        )
+
+    @admin.display(description="Land", ordering="billing_address__country_code")
+    def country_display(self, obj: Order):
+        country_code = self._country_code(obj)
+        if not country_code:
+            return "-"
+
+        flag = self._country_flag(country_code)
+        return format_html('<span title="{}">{} {}</span>', country_code, flag, country_code)
 
     class Media:
         js = ("orders/js/order_state_controls.js", "orders/js/microtech_sync_status.js")

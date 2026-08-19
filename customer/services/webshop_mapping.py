@@ -38,7 +38,7 @@ _SALUTATION_MALE_VALUES = {
     "m",
     "h",
 }
-_EU_COUNTRY_CODES = {
+EU_COUNTRY_CODES = {
     "AT",
     "BE",
     "BG",
@@ -171,7 +171,7 @@ class CustomerWebshopMappingService(BaseService):
         country_code = cls._to_text(billing_country_code).upper()
         if country_code == "DE":
             return 1
-        if country_code == "CH" or country_code not in _EU_COUNTRY_CODES:
+        if country_code == "CH" or country_code not in EU_COUNTRY_CODES:
             return 2
         if (
             cls._to_text(customer_group).casefold() == _ITALIAN_B2B_GROUP
@@ -239,4 +239,4 @@ class CustomerWebshopMappingService(BaseService):
         return " ".join(text.split())
 
 
-__all__ = ["CustomerWebshopMappingService"]
+__all__ = ["CustomerWebshopMappingService", "EU_COUNTRY_CODES"]
