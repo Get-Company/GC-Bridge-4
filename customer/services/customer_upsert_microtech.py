@@ -45,32 +45,6 @@ EU_COUNTRY_CODES = {
     "SK",
 }
 
-# Normalized salutation values that map to german outputs for Na1.
-_SALUTATION_FEMALE_VALUES = {
-    "frau",
-    "fr",
-    "mrs",
-    "ms",
-    "miss",
-    "madam",
-    "madame",
-    "weiblich",
-    "female",
-    "w",
-    "f",
-}
-_SALUTATION_MALE_VALUES = {
-    "herr",
-    "hr",
-    "mr",
-    "mister",
-    "mann",
-    "male",
-    "monsieur",
-    "m",
-    "h",
-}
-
 # ISO-3166 numeric (only commonly used values in this integration context)
 ISO2_TO_NUMERIC = {
     "DE": 276,
@@ -128,15 +102,6 @@ def _country_numeric(country_code: str) -> int | None:
     if code.isdigit():
         return int(code)
     return ISO2_TO_NUMERIC.get(code)
-
-
-def _normalize_salutation(value: Any) -> str:
-    text = _to_str(value).lower()
-    if not text:
-        return ""
-    for char in (".", ",", ";", ":", "-", "_", "/", "\\", "(", ")", "[", "]", "{", "}"):
-        text = text.replace(char, " ")
-    return " ".join(text.split())
 
 
 @dataclass(slots=True)
@@ -480,25 +445,11 @@ class CustomerUpsertMicrotechService(BaseService):
 
     @staticmethod
     def _translate_salutation_to_de(value: Any) -> str:
-        normalized = _normalize_salutation(value)
-        if not normalized:
-            return ""
-        if normalized in _SALUTATION_FEMALE_VALUES:
-            return "Frau"
-        if normalized in _SALUTATION_MALE_VALUES:
-            return "Herr"
-        return ""
+        return CustomerWebshopMappingService.translate_salutation_to_de(value)
 
     @staticmethod
     def _looks_like_company(*, address: Address) -> bool:
-        company_candidate = _to_str(address.name1)
-        if not company_candidate:
-            return False
-        if company_candidate.casefold() == _to_str(address.title).casefold():
-            return False
-        if CustomerUpsertMicrotechService._translate_salutation_to_de(company_candidate):
-            return False
-        return True
+        return CustomerWebshopMappingService.is_company_address(address=address)
 
     def _resolve_na1_for_anschrift(
         self,
@@ -524,12 +475,7 @@ class CustomerUpsertMicrotechService(BaseService):
                 return company_candidate
             return translated_salutation or _to_str(address.title) or company_candidate
 
-        if is_company:
-            return company_candidate
-
-        if translated_salutation:
-            return translated_salutation
-        return _to_str(address.title) or company_candidate
+        return CustomerWebshopMappingService().get_postal_address_mapping(address=address)["name1"]
 
     def _persist_ansprechpartner_identity(
         self,

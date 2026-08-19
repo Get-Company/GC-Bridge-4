@@ -40,9 +40,9 @@ class MicrotechCustomerTaxRuleTest(SimpleTestCase):
 
         payload = CustomerUpsertMicrotechService()._build_customer_input(customer=customer, address=address)
 
-        self.assertEqual(payload["microtechFields"]["Status"], "Webshop-Kunde")
-        self.assertEqual(payload["microtechFields"]["SuchBeg"], "CL")
-        self.assertEqual(payload["microtechFields"]["VsdArt"], 10)
+        self.assertEqual(payload["webshopDefaults"]["Status"], "Webshop-Kunde")
+        self.assertEqual(payload["webshopDefaults"]["SuchBeg"], "CL")
+        self.assertEqual(payload["webshopDefaults"]["VsdArt"], 10)
 
     def test_german_customer_uses_german_webshop_mapping(self):
         values = CustomerWebshopMappingService().get_microtech_defaults(country_code="DE")
@@ -50,17 +50,35 @@ class MicrotechCustomerTaxRuleTest(SimpleTestCase):
         self.assertEqual(values["Status"], "Webshop-Kunde")
         self.assertNotIn("SuchBeg", values)
 
-    def test_na1_uses_company_name_or_german_salutation(self):
-        service = CustomerUpsertMicrotechService()
+    def test_postal_address_mapping_uses_company_name_or_german_salutation(self):
+        mapping_service = CustomerWebshopMappingService()
+        upsert_service = CustomerUpsertMicrotechService()
 
-        company_name = service._resolve_na1_for_anschrift(
-            address=Address(name1="Beispiel GmbH", title="Herr"),
-            na1_mode="firma_or_salutation",
-        )
-        private_salutation = service._resolve_na1_for_anschrift(
-            address=Address(name1="Herr", title="Herr"),
-            na1_mode="firma_or_salutation",
-        )
+        company_address = Address(name1="Beispiel GmbH", name2="Max Muster", title="Herr")
+        private_address = Address(name1="Max Muster", title="Frau")
+
+        company_name = mapping_service.get_postal_address_mapping(address=company_address)["name1"]
+        private_salutation = mapping_service.get_postal_address_mapping(address=private_address)["name1"]
 
         self.assertEqual(company_name, "Beispiel GmbH")
-        self.assertEqual(private_salutation, "Herr")
+        self.assertEqual(private_salutation, "Frau")
+        self.assertEqual(
+            upsert_service._build_postal_address_input(
+                address=company_address,
+                is_shipping=True,
+                is_invoice=True,
+                na1_mode="auto",
+                na1_static_value="",
+            )["name1"],
+            "Beispiel GmbH",
+        )
+        self.assertEqual(
+            upsert_service._build_postal_address_input(
+                address=private_address,
+                is_shipping=True,
+                is_invoice=True,
+                na1_mode="auto",
+                na1_static_value="",
+            )["name1"],
+            "Frau",
+        )
