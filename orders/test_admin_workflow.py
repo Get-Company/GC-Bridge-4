@@ -25,6 +25,7 @@ class OrderAdminSearchTest(SimpleTestCase):
         self.assertEqual(detail_action_dropdown["title"], "Aktionen")
         self.assertEqual(detail_action_dropdown["icon"], "more_vert")
         self.assertIn("request_customer_change_detail", detail_action_dropdown["items"])
+        self.assertIn("address_reconciliation_detail", detail_action_dropdown["items"])
         self.assertIn("abort_microtech_sync_detail", detail_action_dropdown["items"])
         self.assertIn("restart_microtech_sync_detail", detail_action_dropdown["items"])
         self.assertIn("customer", model_admin.readonly_fields)
@@ -73,6 +74,14 @@ class OrderAdminListDisplayTest(SimpleTestCase):
         self.assertIn("customer_display", self.model_admin.list_display)
         self.assertIn("country_display", self.model_admin.list_display)
         self.assertEqual(self.model_admin.list_per_page, 20)
+
+    def test_address_reconciliation_status_marks_missing_microtech_ids(self):
+        order = self._order(country_code="DE")
+
+        rendered = str(self.model_admin.address_reconciliation_status(order))
+
+        self.assertIn("Abgleich nötig", rendered)
+        self.assertIn("Anschrift offen", rendered)
 
 
 class AdminTriggerTest(TestCase):
