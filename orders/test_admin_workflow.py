@@ -83,6 +83,16 @@ class OrderAdminListDisplayTest(SimpleTestCase):
         self.assertIn("Abgleich nötig", rendered)
         self.assertIn("Anschrift offen", rendered)
 
+    def test_address_reconciliation_status_marks_fully_matched_address(self):
+        order = self._order(country_code="DE")
+        order.shipping_address = order.billing_address
+        order.billing_address.erp_ans_nr = 1
+        order.billing_address.erp_asp_nr = 1
+
+        rendered = str(self.model_admin.address_reconciliation_status(order))
+
+        self.assertIn("Zugeordnet", rendered)
+
 
 class AdminTriggerTest(TestCase):
     def test_dialog_action_uses_hx_redirect_to_close_the_modal(self):

@@ -313,7 +313,8 @@ class OrderAdmin(BaseAdmin):
 
         if not open_items:
             return format_html(
-                '<span style="border:1px solid #86efac;border-radius:999px;padding:1px 6px;font-size:11px;line-height:16px;color:#166534;background:#f0fdf4;white-space:nowrap;">Zugeordnet</span>'
+                '<span style="border:1px solid #86efac;border-radius:999px;padding:1px 6px;font-size:11px;line-height:16px;color:#166534;background:#f0fdf4;white-space:nowrap;">{}</span>',
+                "Zugeordnet",
             )
         return format_html(
             '<span title="{}" style="border:1px solid #fcd34d;border-radius:999px;padding:1px 6px;font-size:11px;line-height:16px;color:#92400e;background:#fffbeb;white-space:nowrap;">Abgleich nötig · {}</span>',
