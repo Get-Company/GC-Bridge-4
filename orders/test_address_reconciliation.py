@@ -94,6 +94,11 @@ class OrderAddressReconciliationServiceTest(SimpleTestCase):
         self.assertEqual(comparison["scopes"][0]["label"], "Liefer- und Rechnungsanschrift")
         self.assertEqual(comparison["scopes"][0]["candidates"][0]["address_sub_number"], 3)
         self.assertEqual(comparison["scopes"][0]["candidates"][0]["contacts"][0]["contact_number"], 5)
+        self.assertEqual(comparison["scopes"][0]["candidates"][0]["field_values"][6]["value"], "München")
+        self.assertEqual(
+            comparison["scopes"][0]["candidates"][0]["contacts"][0]["field_values"][1]["value"],
+            "Max",
+        )
 
     def test_comparison_keeps_shipping_and_billing_addresses_separate(self):
         billing_address = Address(
@@ -146,6 +151,13 @@ class OrderAddressReconciliationServiceTest(SimpleTestCase):
         )
 
         with self.assertRaisesMessage(ValueError, "Ansprechpartner gehört nicht zur gewählten Anschrift"):
+            self.service.apply_from_post_data(comparison=comparison, post_data=post_data, client=self.client)
+
+    def test_apply_requires_exactly_one_selected_microtech_address(self):
+        comparison = self.service.get_comparison(order=self.order, client=self.client)
+        post_data = PostData({"shipping_billing_address_sub_number": ["3", "4"]})
+
+        with self.assertRaisesMessage(ValueError, "genau eine Microtech-Anschrift"):
             self.service.apply_from_post_data(comparison=comparison, post_data=post_data, client=self.client)
 
     def test_comparison_keeps_zero_as_a_valid_microtech_address_number(self):

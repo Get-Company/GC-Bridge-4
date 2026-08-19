@@ -88,9 +88,12 @@ class OrderAddressReconciliationService(BaseService):
 
         for scope in comparison["scopes"]:
             prefix = scope["key"]
-            address_sub_number = _to_int(post_data.get(f"{prefix}_address_sub_number"))
-            if address_sub_number is None:
-                raise ValueError(f"Bitte wählen Sie eine Microtech-Anschrift für {scope['label']} aus.")
+            selected_address_numbers = [
+                _to_int(value) for value in post_data.getlist(f"{prefix}_address_sub_number")
+            ]
+            if len(selected_address_numbers) != 1 or selected_address_numbers[0] is None:
+                raise ValueError(f"Bitte wählen Sie genau eine Microtech-Anschrift für {scope['label']} aus.")
+            address_sub_number = selected_address_numbers[0]
 
             candidate = next(
                 (item for item in scope["candidates"] if item["address_sub_number"] == address_sub_number),
@@ -208,8 +211,8 @@ class OrderAddressReconciliationService(BaseService):
             for key, label, source_field, _remote_field in cls._FIELD_DEFINITIONS
         ]
 
-    @staticmethod
-    def _candidate_from_payload(payload: dict[str, Any], *, address_number: int) -> dict[str, Any]:
+    @classmethod
+    def _candidate_from_payload(cls, payload: dict[str, Any], *, address_number: int) -> dict[str, Any]:
         address_sub_number = _to_int(payload.get("addressSubNumber"))
         assert address_sub_number is not None
         contacts = []
@@ -233,6 +236,7 @@ class OrderAddressReconciliationService(BaseService):
                     "contact_number": contact_number,
                     "label": contact_name,
                     "email": _to_str(contact.get("email")),
+                    "field_values": cls._remote_field_values(contact, cls.CONTACT_FIELDS),
                 }
             )
 
@@ -257,8 +261,19 @@ class OrderAddressReconciliationService(BaseService):
             "country": _to_str(payload.get("country")),
             "is_default_shipping": bool(payload.get("isDefaultShipping")),
             "is_default_billing": bool(payload.get("isDefaultBilling")),
+            "field_values": cls._remote_field_values(payload, cls.POSTAL_FIELDS),
             "contacts": contacts,
         }
+
+    @staticmethod
+    def _remote_field_values(
+        payload: dict[str, Any],
+        definitions: tuple[tuple[str, str, str, str], ...],
+    ) -> list[dict[str, str]]:
+        return [
+            {"key": key, "label": label, "value": _to_str(payload.get(remote_field))}
+            for key, label, _source_field, remote_field in definitions
+        ]
 
     @staticmethod
     def _customer_from_result(payload: Any) -> dict[str, Any]:

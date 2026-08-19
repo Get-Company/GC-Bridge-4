@@ -68,11 +68,11 @@
                   <h3 class="font-medium text-sm">Microtech</h3>
                   <span class="text-xs text-gray-400">Ziel auswählen</span>
                 </div>
-                <div class="flex flex-col gap-3">
+                <div class="flex flex-col gap-3 pr-1" style="max-height:42rem;overflow-y:auto;">
                   {% for candidate in scope.candidates %}
                     <div class="border border-gray-200 dark:border-gray-700 rounded-lg p-3 hover:border-primary-300 dark:hover:border-primary-700">
                       <label class="flex gap-3 cursor-pointer">
-                        <input type="radio" name="{{ scope.key }}_address_sub_number" value="{{ candidate.address_sub_number }}" data-address-radio="{{ scope.key }}" class="mt-1 border-gray-300 text-primary-600 focus:ring-primary-500" {% if candidate.is_selected %}checked{% endif %} required>
+                        <input type="checkbox" name="{{ scope.key }}_address_sub_number" value="{{ candidate.address_sub_number }}" data-address-checkbox="{{ scope.key }}" class="mt-1 rounded border-gray-300 text-primary-600 focus:ring-primary-500" {% if candidate.is_selected %}checked{% endif %}>
                         <span class="min-w-0">
                           <span class="font-medium block">AnsNr {{ candidate.address_sub_number }} · {{ candidate.name }}</span>
                           {% if candidate.street %}<span class="text-sm block text-gray-600 dark:text-gray-300">{{ candidate.street }}</span>{% endif %}
@@ -84,6 +84,18 @@
                         </span>
                       </label>
 
+                      <details class="ml-7 mt-3 pt-3 border-t border-gray-100 dark:border-gray-800" {% if candidate.is_selected %}open{% endif %}>
+                        <summary class="text-xs font-medium text-primary-700 dark:text-primary-300 cursor-pointer">Adressdaten anzeigen</summary>
+                        <dl class="mt-2 divide-y divide-gray-100 dark:divide-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                          {% for field in candidate.field_values %}
+                            <div class="grid grid-cols-2 gap-3 px-3 py-2 text-sm">
+                              <dt class="text-gray-500 dark:text-gray-400">{{ field.label }}</dt>
+                              <dd class="font-medium break-words">{{ field.value|default:"—" }}</dd>
+                            </div>
+                          {% endfor %}
+                        </dl>
+                      </details>
+
                       {% if candidate.contacts %}
                         <div class="ml-7 mt-3 pt-3 border-t border-gray-100 dark:border-gray-800">
                           <p class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">Ansprechpartner (optional)</p>
@@ -93,6 +105,17 @@
                                 <input type="radio" name="{{ scope.key }}_contact_reference" value="{{ candidate.address_sub_number }}:{{ contact.contact_number }}" data-contact-radio="{{ scope.key }}" data-address-sub-number="{{ candidate.address_sub_number }}" class="border-gray-300 text-primary-600 focus:ring-primary-500" {% if contact.is_selected %}checked{% endif %}>
                                 <span>AspNr {{ contact.contact_number }} · {{ contact.label }}{% if contact.email %}<span class="text-gray-400"> · {{ contact.email }}</span>{% endif %}</span>
                               </label>
+                              <details class="ml-6 mt-1">
+                                <summary class="text-xs text-primary-700 dark:text-primary-300 cursor-pointer">Ansprechpartnerdaten anzeigen</summary>
+                                <dl class="mt-1 divide-y divide-gray-100 dark:divide-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                                  {% for field in contact.field_values %}
+                                    <div class="grid grid-cols-2 gap-3 px-3 py-2 text-xs">
+                                      <dt class="text-gray-500 dark:text-gray-400">{{ field.label }}</dt>
+                                      <dd class="font-medium break-words">{{ field.value|default:"—" }}</dd>
+                                    </div>
+                                  {% endfor %}
+                                </dl>
+                              </details>
                             {% endfor %}
                           </div>
                         </div>
@@ -132,13 +155,33 @@ document.addEventListener("click", function (event) {
   });
 });
 
+function selectMicrotechAddress(input) {
+  const scope = input.dataset.addressCheckbox;
+  const selectedAddressSubNumber = input.checked ? input.value : "";
+  document.querySelectorAll('[data-address-checkbox="' + scope + '"]').forEach(function (checkbox) {
+    if (checkbox !== input) checkbox.checked = false;
+  });
+  document.querySelectorAll('[data-contact-radio="' + scope + '"]:checked').forEach(function (contact) {
+    if (contact.dataset.addressSubNumber !== selectedAddressSubNumber) contact.checked = false;
+  });
+}
+
 document.addEventListener("change", function (event) {
+  const address = event.target.closest("[data-address-checkbox]");
+  if (address) {
+    selectMicrotechAddress(address);
+    return;
+  }
+
   const contact = event.target.closest("[data-contact-radio]");
   if (!contact) return;
   const scope = contact.dataset.contactRadio;
   const addressSubNumber = contact.dataset.addressSubNumber;
-  const address = document.querySelector('[data-address-radio="' + scope + '"][value="' + addressSubNumber + '"]');
-  if (address) address.checked = true;
+  const addressCheckbox = document.querySelector('[data-address-checkbox="' + scope + '"][value="' + addressSubNumber + '"]');
+  if (addressCheckbox) {
+    addressCheckbox.checked = true;
+    selectMicrotechAddress(addressCheckbox);
+  }
 });
 </script>
 {% endblock %}
