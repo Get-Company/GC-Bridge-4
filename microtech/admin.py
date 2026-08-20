@@ -18,6 +18,7 @@ from microtech.models import (
     MicrotechOrderRule,
     MicrotechOrderRuleAction,
     MicrotechOrderRuleCondition,
+    MicrotechOrderRuleConditionGroup,
     MicrotechOrderRuleDjangoField,
     MicrotechOrderRuleDjangoFieldPolicy,
     MicrotechOrderRuleOperator,
@@ -631,6 +632,43 @@ class MicrotechDatasetFieldAdmin(BaseAdmin):
                     "field_type",
                     "is_calc_field",
                     "can_access",
+                ),
+            },
+        ),
+    )
+
+
+@admin.register(MicrotechOrderRuleConditionGroup)
+class MicrotechOrderRuleConditionGroupAdmin(BaseAdmin):
+    class GroupConditionInline(BaseStackedInline):
+        model = MicrotechOrderRuleCondition
+        fields = (
+            "is_active",
+            "priority",
+            "django_field_path",
+            "operator_code",
+            "expected_value",
+            "expected_value_2",
+        )
+        extra = 0
+        verbose_name = "Bedingung"
+        verbose_name_plural = "Bedingungen dieser Gruppe"
+
+    list_display = ("id", "rule", "logic", "parent", "is_active", "priority", "updated_at")
+    list_filter = ("logic", "is_active", "rule")
+    search_fields = ("rule__name",)
+    ordering = ("rule", "priority", "id")
+    autocomplete_fields = ("rule", "parent")
+    inlines = (GroupConditionInline,)
+    fieldsets = (
+        (
+            "Bedingungsgruppe",
+            {
+                "fields": ("rule", "parent", "logic", "is_active", "priority"),
+                "description": (
+                    "Verschachtelbare UND/ODER-Gruppe. 'parent' leer = Wurzelgruppe der Regel. "
+                    "Bedingungen dieser Gruppe unten. django_field_path/operator_code als Klartext "
+                    "(z. B. 'billing_address__country_code', Operator 'eq'/'between'/'before')."
                 ),
             },
         ),

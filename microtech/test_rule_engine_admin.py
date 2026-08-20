@@ -36,3 +36,23 @@ class RuleConstantAdminTest(TestCase):
             self.client.get(reverse("admin:microtech_ruleconstant_changelist")).status_code, 200)
         self.assertEqual(
             self.client.get(reverse("admin:microtech_ruleconstant_add")).status_code, 200)
+
+
+class ConditionGroupAdminTest(TestCase):
+    def setUp(self):
+        self.admin = get_user_model().objects.create_superuser(
+            username="root3", email="root3@example.com", password="pw")
+        self.client.force_login(self.admin)
+
+    def test_changelist_and_add_render(self):
+        from django.urls import reverse
+        from microtech.models import MicrotechOrderRule, MicrotechOrderRuleConditionGroup
+        rule = MicrotechOrderRule.objects.create(name="R")
+        MicrotechOrderRuleConditionGroup.objects.create(
+            rule=rule, logic=MicrotechOrderRule.ConditionLogic.ALL)
+        self.assertEqual(
+            self.client.get(reverse(
+                "admin:microtech_microtechorderruleconditiongroup_changelist")).status_code, 200)
+        self.assertEqual(
+            self.client.get(reverse(
+                "admin:microtech_microtechorderruleconditiongroup_add")).status_code, 200)
