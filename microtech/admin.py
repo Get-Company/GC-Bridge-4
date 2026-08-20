@@ -23,6 +23,7 @@ from microtech.models import (
     MicrotechOrderRuleOperator,
     MicrotechSettings,
     MicrotechSwissCustomsFieldMapping,
+    RuleConstant,
     RuleTrigger,
 )
 from microtech.services import MicrotechJobSentinelService
@@ -655,3 +656,25 @@ class RuleTriggerAdmin(BaseAdmin):
             },
         ),
     )
+
+
+@admin.register(RuleConstant)
+class RuleConstantAdmin(BaseAdmin):
+    list_display = ("key", "kind", "value_short", "updated_at")
+    search_fields = ("key", "value")
+    list_filter = ("kind",)
+    ordering = ("key",)
+    fieldsets = (
+        (
+            "Konstante",
+            {
+                "fields": ("key", "kind", "value"),
+                "description": "Benannte Konstante fuer Resolver und Bedingungen (z. B. EU-Laenderliste).",
+            },
+        ),
+    )
+
+    @admin.display(description="Wert")
+    def value_short(self, obj):
+        value = (obj.value or "").strip()
+        return f"{value[:80]}..." if len(value) > 80 else value
