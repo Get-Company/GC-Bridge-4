@@ -609,7 +609,13 @@ class MicrotechSyncProductsCommandTest(TestCase):
         self.assertEqual(derived_price.special_price, Decimal("100.00"))
 
     def test_update_product_payload_writes_default_price_to_vk0(self):
-        product = Product.objects.create(erp_nr="1008", name="Payload Artikel", tax=self.tax_19)
+        product = Product.objects.create(
+            erp_nr="1008",
+            name="Payload Artikel",
+            tax=self.tax_19,
+            factor=12,
+            unit="Stk",
+        )
         Price.objects.create(
             product=product,
             sales_channel=self.default_channel,
@@ -627,6 +633,8 @@ class MicrotechSyncProductsCommandTest(TestCase):
         self.assertNotIn("rebateQuantity", payload)
         self.assertNotIn("rebatePrice", payload)
         self.assertNotIn("specialPrice", payload)
+        self.assertEqual(payload["factor"], 12)
+        self.assertEqual(payload["unit"], "% Stck")
         self.assertEqual(
             payload["priceTrees"],
             [

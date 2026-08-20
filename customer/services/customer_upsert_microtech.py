@@ -346,13 +346,15 @@ class CustomerUpsertMicrotechService(BaseService):
             tokens = (address.name2 or address.name1).split(" ", 1)
             first_name = tokens[0] if tokens else ""
             last_name = tokens[1] if len(tokens) > 1 else ""
+        salutation = CustomerWebshopMappingService.get_contact_person_salutation(address=address)
+        display_name = " ".join(part for part in (salutation, first_name, last_name) if part)
         return self._drop_blank(
             {
                 "isDefault": True,
-                "salutation": CustomerWebshopMappingService.get_contact_person_salutation(address=address),
+                "salutation": salutation,
                 "firstName": first_name,
                 "lastName": last_name,
-                "displayName": f"{first_name} {last_name}".strip(),
+                "displayName": display_name,
                 "department": address.department,
                 "email": address.email,
                 "phone": address.phone,

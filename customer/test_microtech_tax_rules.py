@@ -162,3 +162,4 @@ class MicrotechCustomerTaxRuleTest(SimpleTestCase):
         self.assertNotIn("email", invoice_payload)
         self.assertEqual(contact_payload["email"], "max@example.test")
         self.assertEqual(contact_payload["salutation"], "Herrn")
+        self.assertEqual(contact_payload["displayName"], "Herrn Max Muster")

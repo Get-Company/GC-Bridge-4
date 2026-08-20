@@ -79,6 +79,15 @@ class Command(MonitoredBaseCommand):
             "sortOrder": product.sort_order,
         }
 
+        if product.factor is not None:
+            input_data["factor"] = product.factor
+        if product.factor and product.factor > 0:
+            # Microtech only observes Sel6 when the unit is a percentage of
+            # pieces.  Use the canonical short spelling accepted by Microtech.
+            input_data["unit"] = "% Stck"
+        elif product.unit is not None:
+            input_data["unit"] = product.unit
+
         if price_entry:
             input_data.update(
                 MicrotechProductPayloadService.build_complete_price_payload(
