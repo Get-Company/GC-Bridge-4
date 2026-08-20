@@ -190,6 +190,20 @@ class OrderAdmin(BaseAdmin):
     list_per_page = 20
     list_sections = [OrderExpandSection]
     list_sections_classes = "grid-cols-1"
+
+    def get_deleted_objects(self, objs, request):
+        """Allow deleting an order together with its internal sync history.
+
+        The workflow admin intentionally forbids direct deletion. Django's
+        deletion preview also consults that permission for cascade-related
+        objects, which otherwise prevents every order deletion. Removing this
+        one internal dependency from ``perms_needed`` keeps direct workflow
+        deletion blocked while users with ``delete_order`` can delete orders.
+        """
+        deleted_objects, model_count, perms_needed, protected = super().get_deleted_objects(objs, request)
+        perms_needed.discard(MicrotechOrderSyncWorkflow._meta.verbose_name)
+        return deleted_objects, model_count, perms_needed, protected
+
     search_fields = (
         "order_number",
         "api_id",

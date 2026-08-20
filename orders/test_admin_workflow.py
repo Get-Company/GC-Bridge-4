@@ -4,9 +4,10 @@ from django.contrib import admin as django_admin
 from django.test import RequestFactory
 from django.test import SimpleTestCase, TestCase
 
+from core.admin import BaseAdmin
 from customer.models import Address, Customer
 from orders.admin import OrderAdmin
-from orders.models import Order
+from orders.models import MicrotechOrderSyncWorkflow, Order
 from orders.test_order_sync_workflow import make_order
 
 
@@ -33,6 +34,24 @@ class OrderAdminSearchTest(SimpleTestCase):
         self.assertIsNotNone(model_admin.request_customer_change_detail.dialog)
         self.assertIsNotNone(model_admin.abort_microtech_sync_detail.dialog)
         self.assertIsNotNone(model_admin.restart_microtech_sync_detail.dialog)
+
+
+class OrderAdminDeleteTest(SimpleTestCase):
+    def test_deleting_an_order_does_not_require_direct_workflow_delete_permission(self):
+        model_admin = OrderAdmin(Order, django_admin.site)
+        permission_requirements = {
+            Order._meta.verbose_name,
+            MicrotechOrderSyncWorkflow._meta.verbose_name,
+        }
+
+        with patch.object(
+            BaseAdmin,
+            "get_deleted_objects",
+            return_value=([], {}, permission_requirements, []),
+        ):
+            _, _, perms_needed, _ = model_admin.get_deleted_objects([], RequestFactory().get("/"))
+
+        self.assertEqual(perms_needed, {Order._meta.verbose_name})
 
 
 class OrderAdminListDisplayTest(SimpleTestCase):
