@@ -745,6 +745,24 @@ UNFOLD = {
                         "link": reverse_lazy("admin:microtech_microtechswisscustomsfieldmapping_changelist"),
                         "permission": sidebar_model_view_permission("microtech", "MicrotechSwissCustomsFieldMapping"),
                     },
+                    {
+                        "title": _("Regel-Trigger"),
+                        "icon": "bolt",
+                        "link": reverse_lazy("admin:microtech_ruletrigger_changelist"),
+                        "permission": sidebar_model_view_permission("microtech", "RuleTrigger"),
+                    },
+                    {
+                        "title": _("Bedingungsgruppen"),
+                        "icon": "account_tree",
+                        "link": reverse_lazy("admin:microtech_microtechorderruleconditiongroup_changelist"),
+                        "permission": sidebar_model_view_permission("microtech", "MicrotechOrderRuleConditionGroup"),
+                    },
+                    {
+                        "title": _("Regel-Konstanten"),
+                        "icon": "data_object",
+                        "link": reverse_lazy("admin:microtech_ruleconstant_changelist"),
+                        "permission": sidebar_model_view_permission("microtech", "RuleConstant"),
+                    },
                 ],
             },
             {
