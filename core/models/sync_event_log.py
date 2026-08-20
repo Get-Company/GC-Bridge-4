@@ -11,15 +11,15 @@ class SyncEventLog(models.Model):
         ERROR = "error", _("Fehler")
         SKIPPED = "skipped", _("Übersprungen")
 
-    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True, verbose_name=_("Erstellt am"))
     task = models.CharField(max_length=120, db_index=True, verbose_name=_("Task"))
-    run_id = models.CharField(max_length=64, blank=True, default="", db_index=True)
-    entity = models.CharField(max_length=120, blank=True, default="")
-    target = models.CharField(max_length=40, blank=True, default="")
-    step = models.CharField(max_length=120, blank=True, default="")
-    status = models.CharField(max_length=16, choices=Status.choices)
-    message = models.TextField(blank=True, default="")
-    payload = models.JSONField(null=True, blank=True)
+    run_id = models.CharField(max_length=64, blank=True, default="", db_index=True, verbose_name=_("Lauf-ID"))
+    entity = models.CharField(max_length=120, blank=True, default="", verbose_name=_("Entität"))
+    target = models.CharField(max_length=40, blank=True, default="", verbose_name=_("Zielsystem"))
+    step = models.CharField(max_length=120, blank=True, default="", verbose_name=_("Schritt"))
+    status = models.CharField(max_length=16, choices=Status.choices, verbose_name=_("Status"))
+    message = models.TextField(blank=True, default="", verbose_name=_("Meldung"))
+    payload = models.JSONField(null=True, blank=True, verbose_name=_("Nutzdaten"))
 
     class Meta:
         verbose_name = _("Sync-Ereignis")

@@ -43,7 +43,7 @@ class DocumentType(BaseModel):
         ("price_list", _("Preisliste")),
         ("order_form", _("Bestellschein")),
         ("terms", _("AGB")),
-        ("privacy", _("Datenschutzerklaerung")),
+        ("privacy", _("Datenschutzerklärung")),
         ("imprint", _("Impressum")),
         ("other", _("Sonstiges")),
     )
@@ -80,7 +80,7 @@ class Document(BaseModel):
         PRICE_LIST = "price_list", _("Preisliste")
         ORDER_FORM = "order_form", _("Bestellschein")
         TERMS = "terms", _("AGB")
-        PRIVACY = "privacy", _("Datenschutzerklaerung")
+        PRIVACY = "privacy", _("Datenschutzerklärung")
         IMPRINT = "imprint", _("Impressum")
         OTHER = "other", _("Sonstiges")
 
@@ -102,7 +102,7 @@ class Document(BaseModel):
         blank=True,
         validators=[FileExtensionValidator(["html", "htm"])],
         verbose_name=_("HTML-Template-Datei"),
-        help_text=_("Primaere Vorlage. Eine neue Datei wird ohne Container-Neustart beim Rendern geladen."),
+        help_text=_("Primäre Vorlage. Eine neue Datei wird ohne Container-Neustart beim Rendern geladen."),
     )
     source_docx = models.FileField(
         upload_to=document_source_docx_upload_to,
@@ -120,8 +120,8 @@ class Document(BaseModel):
         related_name="price_list_duplicate_documents",
         verbose_name=_("Kategorien mit Doppelauflistung"),
         help_text=_(
-            "Artikel aus diesen Kategorien und ihren Unterkategorien duerfen in einer Preisliste "
-            "zusaetzlich zu ihrer regulaeren Kategorie erscheinen."
+            "Artikel aus diesen Kategorien und ihren Unterkategorien dürfen in einer Preisliste "
+            "zusätzlich zu ihrer regulären Kategorie erscheinen."
         ),
     )
     is_active = models.BooleanField(default=True, db_index=True, verbose_name=_("Aktiv"))
@@ -150,7 +150,7 @@ class Document(BaseModel):
         blank=True,
         validators=[FileExtensionValidator(["pdf"])],
         verbose_name=_("End-PDF"),
-        help_text=_("Wird dem generierten PDF angehaengt."),
+        help_text=_("Wird dem generierten PDF angehängt."),
     )
     use_jinja2 = models.BooleanField(
         default=True,

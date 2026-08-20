@@ -462,7 +462,7 @@ UNFOLD = {
                         ),
                     },
                     {
-                        "title": _("Newsletter Empfänger"),
+                        "title": _("Newsletter-Empfänger"),
                         "icon": "mark_email_read",
                         "link": reverse_lazy("admin:newsletter_newsletterrecipient_changelist"),
                         "permission": sidebar_model_view_permission("newsletter", "NewsletterRecipient"),
@@ -506,7 +506,7 @@ UNFOLD = {
                         "permission": sidebar_model_view_permission("customer", "Address"),
                     },
                     {
-                        "title": _("Kunden Merge"),
+                        "title": _("Kunden zusammenführen"),
                         "icon": "merge",
                         "link": reverse_lazy("admin:customer_merge"),
                         "permission": sidebar_model_view_permission("customer", "Customer"),
@@ -617,7 +617,7 @@ UNFOLD = {
                         "permission": sidebar_model_view_permission("mappei", "MappeiPriceSnapshot"),
                     },
                     {
-                        "title": _("Mappei<->Classei"),
+                        "title": _("Mappei <-> Classei"),
                         "icon": "link",
                         "link": reverse_lazy("admin:mappei_mappeiproductmapping_changelist"),
                         "permission": sidebar_model_view_permission("mappei", "MappeiProductMapping"),
@@ -642,7 +642,7 @@ UNFOLD = {
                         "permission": sidebar_model_view_permission("ai", "AIRewritePrompt"),
                     },
                     {
-                        "title": _("Uebersetzungen"),
+                        "title": _("Übersetzungen"),
                         "icon": "translate",
                         "link": reverse_lazy("admin:ai_aitranslationconfig_changelist"),
                         "permission": sidebar_model_view_permission("ai", "AITranslationConfig"),
@@ -654,7 +654,7 @@ UNFOLD = {
                         "permission": sidebar_model_view_permission("ai", "AITranslationGlossaryEntry"),
                     },
                     {
-                        "title": _("Uebersetzungsstatus"),
+                        "title": _("Übersetzungsstatus"),
                         "icon": "history",
                         "link": reverse_lazy("admin:ai_aitranslationstate_changelist"),
                         "permission": sidebar_model_view_permission("ai", "AITranslationState"),
@@ -734,13 +734,13 @@ UNFOLD = {
                         "permission": sidebar_model_view_permission("microtech", "MicrotechDatasetCatalog"),
                     },
                     {
-                        "title": _("Dataset Felder"),
+                        "title": _("Dataset-Felder"),
                         "icon": "table_rows",
                         "link": reverse_lazy("admin:microtech_microtechdatasetfield_changelist"),
                         "permission": sidebar_model_view_permission("microtech", "MicrotechDatasetField"),
                     },
                     {
-                        "title": _("Schweiz Zoll Mapping"),
+                        "title": _("Schweiz-Zoll-Mapping"),
                         "icon": "description",
                         "link": reverse_lazy("admin:microtech_microtechswisscustomsfieldmapping_changelist"),
                         "permission": sidebar_model_view_permission("microtech", "MicrotechSwissCustomsFieldMapping"),
@@ -765,7 +765,7 @@ UNFOLD = {
                         "permission": sidebar_model_view_permission("hr", "EmployeeProfile"),
                     },
                     {
-                        "title": _("Urlaubsantraege"),
+                        "title": _("Urlaubsanträge"),
                         "icon": "beach_access",
                         "link": reverse_lazy("admin:hr_leaverequest_changelist"),
                         "permission": sidebar_model_view_permission("hr", "LeaveRequest"),
@@ -789,7 +789,7 @@ UNFOLD = {
                         "permission": sidebar_model_view_permission("hr", "TimeAccountEntry"),
                     },
                     {
-                        "title": _("Monatsuebersichten"),
+                        "title": _("Monatsübersichten"),
                         "icon": "summarize",
                         "link": reverse_lazy("admin:hr_monthlyworksummary_changelist"),
                         "permission": sidebar_model_view_permission("hr", "MonthlyWorkSummary"),
@@ -838,7 +838,7 @@ UNFOLD = {
                         "permission": sidebar_model_view_permission("organization", "OrganizationRole"),
                     },
                     {
-                        "title": _("Telefon Zeitsteuerung"),
+                        "title": _("Telefon-Zeitsteuerung"),
                         "icon": "schedule",
                         "link": reverse_lazy("admin:telefon_zeitsteuerung_list"),
                     },
@@ -892,7 +892,7 @@ UNFOLD = {
                         "permission": sidebar_model_view_permission("django_celery_beat", "PeriodicTask"),
                     },
                     {
-                        "title": _("Celery Cron-Zeitplaene"),
+                        "title": _("Celery Cron-Zeitpläne"),
                         "icon": "schedule",
                         "link": reverse_lazy("admin:django_celery_beat_crontabschedule_changelist"),
                         "permission": sidebar_model_view_permission("django_celery_beat", "CrontabSchedule"),

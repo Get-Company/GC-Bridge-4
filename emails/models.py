@@ -48,14 +48,14 @@ class MjmlComponent(BaseModel):
         blank=True,
         verbose_name=_("Standard-Variablen"),
         help_text=_(
-            "Key-Value-Paare fuer Django/Jinja-Platzhalter. Werden in Kampagnen "
-            "ueberschrieben und im Shopware-Modus nicht verwendet."
+            "Key-Value-Paare für Django/Jinja-Platzhalter. Werden in Kampagnen "
+            "überschrieben und im Shopware-Modus nicht verwendet."
         ),
     )
 
     class Meta:
-        verbose_name = _("MJML Komponente")
-        verbose_name_plural = _("MJML Komponenten")
+        verbose_name = _("MJML-Komponente")
+        verbose_name_plural = _("MJML-Komponenten")
         ordering = ("order", "name")
 
     def __str__(self) -> str:
@@ -66,8 +66,8 @@ class EmailCampaignCategory(BaseModel):
     name = models.CharField(max_length=100, unique=True, verbose_name=_("Name"))
 
     class Meta:
-        verbose_name = _("E-Mail Kategorie")
-        verbose_name_plural = _("E-Mail Kategorien")
+        verbose_name = _("E-Mail-Kategorie")
+        verbose_name_plural = _("E-Mail-Kategorien")
         ordering = ("name",)
 
     def __str__(self) -> str:
@@ -106,8 +106,8 @@ class EmailCampaign(BaseModel):
     )
 
     class Meta:
-        verbose_name = _("E-Mail Kampagne")
-        verbose_name_plural = _("E-Mail Kampagnen")
+        verbose_name = _("E-Mail-Kampagne")
+        verbose_name_plural = _("E-Mail-Kampagnen")
         ordering = ("-created_at",)
 
     def __str__(self) -> str:
@@ -132,7 +132,7 @@ class EmailCampaignQueueEntry(BaseModel):
         "newsletter.NewsletterRecipient",
         on_delete=models.PROTECT,
         related_name="email_queue_entries",
-        verbose_name=_("Newsletter Empfaenger"),
+        verbose_name=_("Newsletter-Empfänger"),
     )
     customer = models.ForeignKey(
         "customer.Customer",
@@ -159,8 +159,8 @@ class EmailCampaignQueueEntry(BaseModel):
     sent_at = models.DateTimeField(null=True, blank=True, verbose_name=_("Gesendet am"))
 
     class Meta:
-        verbose_name = _("E-Mail Warteschlangen-Eintrag")
-        verbose_name_plural = _("E-Mail Warteschlange")
+        verbose_name = _("E-Mail-Warteschlangen-Eintrag")
+        verbose_name_plural = _("E-Mail-Warteschlange")
         ordering = ("-queued_at",)
         indexes = [
             models.Index(fields=("status", "queued_at"), name="email_queue_status_queued_idx"),
@@ -190,7 +190,7 @@ class EmailCampaignComponent(BaseModel):
         blank=True,
         related_name="children",
         verbose_name=_("Übergeordnete Komponente"),
-        help_text=_("Optional fuer verschachtelte MJML-Strukturen."),
+        help_text=_("Optional für verschachtelte MJML-Strukturen."),
     )
     campaign_product = models.ForeignKey(
         "EmailCampaignProduct",
@@ -199,7 +199,7 @@ class EmailCampaignComponent(BaseModel):
         blank=True,
         related_name="components",
         verbose_name=_("Produkt"),
-        help_text=_("Optionales Produkt fuer Produkt-Komponenten."),
+        help_text=_("Optionales Produkt für Produkt-Komponenten."),
     )
     product = models.ForeignKey(
         "products.Product",
@@ -208,14 +208,14 @@ class EmailCampaignComponent(BaseModel):
         blank=True,
         related_name="email_campaign_components",
         verbose_name=_("Produkt"),
-        help_text=_("Optionales Produkt fuer diese Kampagnen-Komponente."),
+        help_text=_("Optionales Produkt für diese Kampagnen-Komponente."),
     )
     title = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Titel"))
     variables = models.JSONField(
         default=dict,
         blank=True,
         verbose_name=_("Variablen"),
-        help_text=_('Key-Value-Paare fuer Platzhalter im MJML-Template, z.B. {"titel": "Hallo"}'),
+        help_text=_('Key-Value-Paare für Platzhalter im MJML-Template, z. B. {"titel": "Hallo"}'),
     )
     order = models.PositiveIntegerField(default=0, db_index=True, verbose_name=_("Reihenfolge"))
     enabled = models.BooleanField(default=True, verbose_name=_("Aktiviert"))
@@ -246,7 +246,7 @@ class EmailCampaignComponent(BaseModel):
             errors["parent"] = _("Eine Komponente kann nicht ihr eigener Parent sein.")
 
         if self.parent and self.parent.campaign_id != self.campaign_id:
-            errors["parent"] = _("Parent und Child muessen zur selben Kampagne gehoeren.")
+            errors["parent"] = _("Parent und Child müssen zur selben Kampagne gehören.")
 
         seen_ids = {self.pk} if self.pk else set()
         parent = self.parent

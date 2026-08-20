@@ -10,14 +10,14 @@ from .base import BaseModel
 class DatabaseBackup(BaseModel):
     class Status(models.TextChoices):
         QUEUED = "queued", _("Eingereiht")
-        RUNNING = "running", _("Laeuft")
+        RUNNING = "running", _("Läuft")
         SUCCEEDED = "succeeded", _("Erfolgreich")
         FAILED = "failed", _("Fehlgeschlagen")
 
     class RestoreStatus(models.TextChoices):
         NOT_REQUESTED = "not_requested", _("Nicht angefordert")
         QUEUED = "queued", _("Eingereiht")
-        RUNNING = "running", _("Laeuft")
+        RUNNING = "running", _("Läuft")
         SUCCEEDED = "succeeded", _("Erfolgreich")
         FAILED = "failed", _("Fehlgeschlagen")
 
@@ -31,7 +31,7 @@ class DatabaseBackup(BaseModel):
         verbose_name=_("Backup-Status"),
     )
     file_name = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Dateiname"))
-    file_size_bytes = models.PositiveBigIntegerField(default=0, verbose_name=_("Dateigroesse (Bytes)"))
+    file_size_bytes = models.PositiveBigIntegerField(default=0, verbose_name=_("Dateigröße (Bytes)"))
     error_message = models.TextField(blank=True, default="", verbose_name=_("Backup-Fehler"))
     started_at = models.DateTimeField(null=True, blank=True, verbose_name=_("Backup gestartet am"))
     completed_at = models.DateTimeField(null=True, blank=True, verbose_name=_("Backup abgeschlossen am"))

@@ -2,12 +2,13 @@ import os
 import sys
 
 from django.apps import AppConfig
+from django.utils.translation import gettext_lazy as _
 
 
 class MappeiConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
     name = "mappei"
-    verbose_name = "Mappei"
+    verbose_name = _("Mappei")
 
     def ready(self) -> None:
         if _is_server_process():

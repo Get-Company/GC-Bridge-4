@@ -60,7 +60,7 @@ class Issue(BaseModel):
     title = models.CharField(
         max_length=255,
         verbose_name=_("Kurzbeschreibung"),
-        help_text=_("Ein kurzer Satz reicht. Details, Link oder Screenshots koennen unten ergaenzt werden."),
+        help_text=_("Ein kurzer Satz reicht. Details, Link oder Screenshots können unten ergänzt werden."),
     )
     category = models.ForeignKey(
         IssueCategory,
@@ -82,7 +82,7 @@ class Issue(BaseModel):
         choices=Priority.choices,
         default=Priority.NORMAL,
         db_index=True,
-        verbose_name=_("Prioritaet"),
+        verbose_name=_("Priorität"),
     )
     reported_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
