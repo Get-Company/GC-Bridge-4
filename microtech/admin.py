@@ -475,7 +475,16 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
         (
             "Grundregel",
             {
-                "fields": ("name", "is_active", "priority", "condition_logic"),
+                "fields": (
+                    "name",
+                    "is_active",
+                    "priority",
+                    "condition_logic",
+                    "trigger",
+                    "execution_phase",
+                    "engine_enabled",
+                    "shadow_mode",
+                ),
                 "description": (
                     "Prioritaet steuert die Reihenfolge. Die erste passende aktive Regel gewinnt."
                 ),

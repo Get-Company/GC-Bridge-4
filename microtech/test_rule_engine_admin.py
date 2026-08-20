@@ -56,3 +56,19 @@ class ConditionGroupAdminTest(TestCase):
         self.assertEqual(
             self.client.get(reverse(
                 "admin:microtech_microtechorderruleconditiongroup_add")).status_code, 200)
+
+
+class OrderRuleAdminEngineFieldsTest(TestCase):
+    def setUp(self):
+        self.admin = get_user_model().objects.create_superuser(
+            username="root4", email="root4@example.com", password="pw")
+        self.client.force_login(self.admin)
+
+    def test_change_form_exposes_new_engine_fields(self):
+        from django.urls import reverse
+        from microtech.models import MicrotechOrderRule
+        rule = MicrotechOrderRule.objects.create(name="R")
+        html = self.client.get(
+            reverse("admin:microtech_microtechorderrule_change", args=(rule.pk,))).content.decode()
+        for field in ("trigger", "execution_phase", "shadow_mode", "engine_enabled"):
+            self.assertIn(f'name="{field}"', html)
