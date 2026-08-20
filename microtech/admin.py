@@ -23,6 +23,7 @@ from microtech.models import (
     MicrotechOrderRuleOperator,
     MicrotechSettings,
     MicrotechSwissCustomsFieldMapping,
+    RuleTrigger,
 )
 from microtech.services import MicrotechJobSentinelService
 from microtech.rule_builder import (
@@ -629,6 +630,27 @@ class MicrotechDatasetFieldAdmin(BaseAdmin):
                     "field_type",
                     "is_calc_field",
                     "can_access",
+                ),
+            },
+        ),
+    )
+
+
+@admin.register(RuleTrigger)
+class RuleTriggerAdmin(BaseAdmin):
+    list_display = ("priority", "code", "label", "task_name", "context_root", "is_active", "updated_at")
+    list_editable = ("is_active",)
+    search_fields = ("code", "label", "task_name", "context_root")
+    list_filter = ("is_active", "task_name")
+    ordering = ("priority", "id")
+    fieldsets = (
+        (
+            "Trigger",
+            {
+                "fields": ("is_active", "priority", "code", "label", "task_name", "context_root"),
+                "description": (
+                    "Ein Geschaefts-Event, das an einen Celery-Task gebunden ist. "
+                    "context_root (app_label.Model) definiert den Variablen-Namensraum der Regeln."
                 ),
             },
         ),
