@@ -1,10 +1,12 @@
 from django.apps import AppConfig
 from django.db.models.signals import post_migrate
+from django.utils.translation import gettext_lazy as _
 
 
 class MicrotechConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
     name = "microtech"
+    verbose_name = _("Microtech")
 
     def ready(self) -> None:
         from microtech.signals import (

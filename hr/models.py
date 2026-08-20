@@ -17,7 +17,7 @@ HEX_COLOR_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
 
 class Department(BaseModel):
     name = models.CharField(max_length=120, verbose_name=_("Abteilung"))
-    code = models.CharField(max_length=20, blank=True, default="", verbose_name=_("Kuerzel"))
+    code = models.CharField(max_length=20, blank=True, default="", verbose_name=_("Kürzel"))
     is_active = models.BooleanField(default=True, verbose_name=_("Aktiv"))
 
     class Meta:
@@ -79,7 +79,7 @@ class EmployeeProfile(BaseModel):
         blank=True,
         verbose_name=_("Feiertagskalender"),
     )
-    short_code = models.CharField(max_length=10, verbose_name=_("Kuerzel"))
+    short_code = models.CharField(max_length=10, verbose_name=_("Kürzel"))
     color = models.CharField(max_length=20, default="#3788d8", verbose_name=_("Kalenderfarbe"))
     phone = models.CharField(max_length=50, blank=True, default="", verbose_name=_("Telefon"))
     is_active_employee = models.BooleanField(default=True, verbose_name=_("Aktiver Mitarbeiter"))
@@ -186,8 +186,8 @@ class CompanyHoliday(BaseModel):
     name = models.CharField(max_length=120, verbose_name=_("Bezeichnung"))
     start_date = models.DateField(verbose_name=_("Von"))
     end_date = models.DateField(verbose_name=_("Bis"))
-    counts_as_vacation = models.BooleanField(default=False, verbose_name=_("Zaehlt als Urlaub"))
-    is_bridge_day = models.BooleanField(default=False, verbose_name=_("Brueckentag"))
+    counts_as_vacation = models.BooleanField(default=False, verbose_name=_("Zählt als Urlaub"))
+    is_bridge_day = models.BooleanField(default=False, verbose_name=_("Brückentag"))
     day_fraction = models.DecimalField(
         max_digits=3,
         decimal_places=2,
@@ -313,8 +313,8 @@ class EmployeeWorkSchedule(BaseModel):
         related_name="employee_assignments",
         verbose_name=_("Arbeitszeitmodell"),
     )
-    valid_from = models.DateField(verbose_name=_("Gueltig ab"))
-    valid_until = models.DateField(null=True, blank=True, verbose_name=_("Gueltig bis"))
+    valid_from = models.DateField(verbose_name=_("Gültig ab"))
+    valid_until = models.DateField(null=True, blank=True, verbose_name=_("Gültig bis"))
 
     class Meta:
         verbose_name = _("Mitarbeiter-Arbeitszeitmodell")
@@ -324,7 +324,7 @@ class EmployeeWorkSchedule(BaseModel):
     def clean(self) -> None:
         errors: dict[str, str] = {}
         if self.valid_from and self.valid_until and self.valid_until < self.valid_from:
-            errors["valid_until"] = _("Gueltig bis darf nicht vor Gueltig ab liegen.")
+            errors["valid_until"] = _("Gültig bis darf nicht vor Gültig ab liegen.")
         if self.employee_id and self.valid_from:
             candidate_end = self.valid_until or date.max
             overlaps = (
@@ -336,7 +336,7 @@ class EmployeeWorkSchedule(BaseModel):
                 other_end = assignment.valid_until or date.max
                 if assignment.valid_from <= candidate_end and other_end >= self.valid_from:
                     errors["valid_from"] = _(
-                        "Dieses Arbeitszeitmodell ueberschneidet sich mit einer bestehenden Zuweisung."
+                        "Dieses Arbeitszeitmodell überschneidet sich mit einer bestehenden Zuweisung."
                     )
                     break
         if errors:
@@ -350,7 +350,7 @@ class LeaveRequest(BaseModel):
     class LeaveType(models.TextChoices):
         VACATION = "vacation", _("Urlaub")
         SPECIAL_LEAVE = "special_leave", _("Sonderurlaub")
-        OVERTIME_REDUCTION = "overtime_reduction", _("Ueberstundenabbau")
+        OVERTIME_REDUCTION = "overtime_reduction", _("Überstundenabbau")
 
     class Status(models.TextChoices):
         REQUESTED = "requested", _("Beantragt")
@@ -399,7 +399,7 @@ class LeaveRequest(BaseModel):
 
     class Meta:
         verbose_name = _("Urlaubsantrag")
-        verbose_name_plural = _("Urlaubsantraege")
+        verbose_name_plural = _("Urlaubsanträge")
         ordering = ("-start_date", "-id")
 
     def clean(self) -> None:
@@ -409,7 +409,7 @@ class LeaveRequest(BaseModel):
                 errors["end_date"] = _("Bis darf nicht vor Von liegen.")
             if self.start_date == self.end_date and self.half_day_start and self.half_day_end:
                 errors["half_day_end"] = _(
-                    "Bei einem eintaeigen Antrag kann nicht beides gleichzeitig halbtags sein."
+                    "Bei einem eintägigen Antrag kann nicht beides gleichzeitig halbtags sein."
                 )
         if self.employee_id and self.start_date and self.end_date:
             from hr.services.leave_service import LeaveService
@@ -418,7 +418,7 @@ class LeaveRequest(BaseModel):
             self.calculated_days = calculated_days
             if calculated_days <= Decimal("0.00"):
                 errors["start_date"] = _(
-                    "Im gewaehlten Zeitraum liegen laut Arbeitszeitmodell, Feiertagskalender und Wochenende keine Arbeitstage."
+                    "Im gewählten Zeitraum liegen laut Arbeitszeitmodell, Feiertagskalender und Wochenende keine Arbeitstage."
                 )
         if self.status == self.Status.APPROVED and self.employee_id and self.start_date and self.end_date:
             try:
@@ -469,10 +469,10 @@ class SickLeave(BaseModel):
 
 class TimeAccountEntry(BaseModel):
     class EntryType(models.TextChoices):
-        EXTRA_WORK = "extra_work", _("Mehrarbeit / Ueberstunden")
+        EXTRA_WORK = "extra_work", _("Mehrarbeit / Überstunden")
         MINUS_TIME = "minus_time", _("Minusstunden")
         CORRECTION = "correction", _("Manuelle Korrektur")
-        OVERTIME_REDUCTION = "overtime_reduction", _("Ueberstundenabbau")
+        OVERTIME_REDUCTION = "overtime_reduction", _("Überstundenabbau")
 
     class Status(models.TextChoices):
         DRAFT = "draft", _("Entwurf")
@@ -490,9 +490,9 @@ class TimeAccountEntry(BaseModel):
     entry_type = models.CharField(max_length=30, choices=EntryType.choices, verbose_name=_("Art"))
     minutes = models.IntegerField(
         verbose_name=_("Minuten"),
-        help_text=_("Plus fuer Ueberstunden, Minus fuer Minusstunden."),
+        help_text=_("Plus für Überstunden, Minus für Minusstunden."),
     )
-    reason = models.TextField(blank=True, default="", verbose_name=_("Begruendung"))
+    reason = models.TextField(blank=True, default="", verbose_name=_("Begründung"))
     status = models.CharField(
         max_length=20,
         choices=Status.choices,
@@ -518,7 +518,7 @@ class TimeAccountEntry(BaseModel):
         errors: dict[str, str] = {}
         if self.minutes is not None:
             if self.minutes == 0:
-                errors["minutes"] = _("Die Minuten duerfen nicht 0 sein.")
+                errors["minutes"] = _("Die Minuten dürfen nicht 0 sein.")
             if self.entry_type == self.EntryType.EXTRA_WORK and self.minutes <= 0:
                 errors["minutes"] = _("Mehrarbeit muss als positive Minuten gebucht werden.")
             if self.entry_type in {self.EntryType.MINUS_TIME, self.EntryType.OVERTIME_REDUCTION} and self.minutes >= 0:
@@ -542,15 +542,15 @@ class MonthlyWorkSummary(BaseModel):
     target_minutes = models.IntegerField(default=0, verbose_name=_("Soll-Minuten"))
     vacation_minutes = models.IntegerField(default=0, verbose_name=_("Urlaubs-Minuten"))
     sick_minutes = models.IntegerField(default=0, verbose_name=_("Krankheits-Minuten"))
-    overtime_minutes = models.IntegerField(default=0, verbose_name=_("Ueberstunden"))
+    overtime_minutes = models.IntegerField(default=0, verbose_name=_("Überstunden"))
     minus_minutes = models.IntegerField(default=0, verbose_name=_("Minusstunden"))
     balance_minutes = models.IntegerField(default=0, verbose_name=_("Saldo"))
     calculated_at = models.DateTimeField(null=True, blank=True, verbose_name=_("Berechnet am"))
     locked = models.BooleanField(default=False, verbose_name=_("Abgeschlossen"))
 
     class Meta:
-        verbose_name = _("Monatsuebersicht Arbeitszeit")
-        verbose_name_plural = _("Monatsuebersichten Arbeitszeit")
+        verbose_name = _("Monatsübersicht Arbeitszeit")
+        verbose_name_plural = _("Monatsübersichten Arbeitszeit")
         ordering = ("-year", "-month", "employee")
         constraints = [
             models.UniqueConstraint(fields=("employee", "year", "month"), name="unique_monthly_work_summary"),
@@ -591,7 +591,7 @@ class VacationEntitlement(BaseModel):
     carryover_expires_on = models.DateField(
         null=True,
         blank=True,
-        verbose_name=_("Resturlaub verfaellt am"),
+        verbose_name=_("Resturlaub verfällt am"),
         help_text=_("Standard: 31.03. des Jahres. Danach wird der Resturlaub nicht mehr angerechnet."),
     )
     note = models.TextField(blank=True, default="", verbose_name=_("Bemerkung"))

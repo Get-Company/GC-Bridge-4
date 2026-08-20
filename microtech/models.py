@@ -259,6 +259,21 @@ class MicrotechOrderRule(BaseModel):
         verbose_name=_("Bedingungslogik"),
     )
 
+    class ExecutionPhase(models.TextChoices):
+        BEFORE = "before", _("Vor dem Task")
+        AFTER = "after", _("Nach dem Task")
+
+    trigger = models.ForeignKey(
+        "RuleTrigger", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="rules", verbose_name=_("Trigger"),
+    )
+    execution_phase = models.CharField(
+        max_length=16, choices=ExecutionPhase.choices,
+        default=ExecutionPhase.BEFORE, verbose_name=_("Ausfuehrungsphase"),
+    )
+    shadow_mode = models.BooleanField(default=True, verbose_name=_("Schatten-Modus"))
+    engine_enabled = models.BooleanField(default=False, verbose_name=_("Neue Engine aktiv"))
+
     class Meta:
         verbose_name = _("Microtech Bestellregel")
         verbose_name_plural = _("Microtech Bestellregeln")
@@ -316,6 +331,20 @@ class MicrotechOrderRuleCondition(BaseModel):
         default="",
         verbose_name=_("Vergleichswert"),
     )
+    group = models.ForeignKey(
+        "MicrotechOrderRuleConditionGroup",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="conditions",
+        verbose_name=_("Gruppe"),
+    )
+    expected_value_2 = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        verbose_name=_("Vergleichswert 2"),
+    )
 
     class Meta:
         verbose_name = _("Microtech Bestellregel Bedingung")
@@ -324,6 +353,31 @@ class MicrotechOrderRuleCondition(BaseModel):
 
     def __str__(self) -> str:
         return f"{self.rule_id} | {self.django_field_path} {self.operator_code} {self.expected_value}"
+
+
+class MicrotechOrderRuleConditionGroup(BaseModel):
+    rule = models.ForeignKey(
+        MicrotechOrderRule, on_delete=models.CASCADE,
+        related_name="condition_groups", verbose_name=_("Regel"),
+    )
+    parent = models.ForeignKey(
+        "self", on_delete=models.CASCADE, null=True, blank=True,
+        related_name="children", verbose_name=_("Uebergeordnete Gruppe"),
+    )
+    logic = models.CharField(
+        max_length=16, choices=MicrotechOrderRule.ConditionLogic.choices,
+        default=MicrotechOrderRule.ConditionLogic.ALL, verbose_name=_("Logik"),
+    )
+    is_active = models.BooleanField(default=True, verbose_name=_("Aktiv"))
+    priority = models.PositiveIntegerField(default=100, verbose_name=_("Prioritaet"))
+
+    class Meta:
+        verbose_name = _("Bedingungsgruppe")
+        verbose_name_plural = _("Bedingungsgruppen")
+        ordering = ("rule", "priority", "id")
+
+    def __str__(self) -> str:
+        return f"{self.rule_id} | Gruppe {self.pk} ({self.logic})"
 
 
 class MicrotechDatasetCatalog(BaseModel):
@@ -456,6 +510,11 @@ class MicrotechOrderRuleOperator(BaseModel):
         LESS_THAN = "lt", _("<")
         IS_EMPTY = "is_empty", _("ist leer")
         IS_NOT_EMPTY = "is_not_empty", _("ist nicht leer")
+        BETWEEN = "between", _("zwischen")
+        BEFORE = "before", _("vor")
+        AFTER = "after", _("nach")
+        IS_TRUE = "is_true", _("ist wahr")
+        IS_FALSE = "is_false", _("ist falsch")
 
     code = models.CharField(max_length=64, unique=True, verbose_name=_("Code"))
     name = models.CharField(max_length=255, verbose_name=_("Name"))
@@ -516,3 +575,59 @@ class MicrotechOrderRuleDjangoFieldPolicy(BaseModel):
 
     def __str__(self) -> str:
         return f"{self.priority} | {self.field_path}"
+
+
+class RuleTriggerQuerySet(models.QuerySet):
+    def for_task(self, task_name):
+        return self.filter(is_active=True, task_name=task_name).order_by("priority", "id")
+
+
+class RuleTrigger(BaseModel):
+    code = models.CharField(max_length=64, unique=True, verbose_name=_("Code"))
+    label = models.CharField(max_length=255, verbose_name=_("Bezeichnung"))
+    task_name = models.CharField(max_length=128, db_index=True, verbose_name=_("Celery Task"))
+    context_root = models.CharField(max_length=128, verbose_name=_("Kontext-Wurzel (app_label.Model)"))
+    is_active = models.BooleanField(default=True, verbose_name=_("Aktiv"))
+    priority = models.PositiveIntegerField(default=100, verbose_name=_("Prioritaet"))
+
+    objects = RuleTriggerQuerySet.as_manager()
+
+    class Meta:
+        verbose_name = _("Regel-Trigger")
+        verbose_name_plural = _("Regel-Trigger")
+        ordering = ("priority", "id")
+
+    def __str__(self) -> str:
+        return f"{self.label} ({self.code})"
+
+    @classmethod
+    def for_task(cls, task_name):
+        return cls.objects.for_task(task_name)
+
+
+class RuleConstant(BaseModel):
+    class Kind(models.TextChoices):
+        SCALAR = "scalar", _("Einzelwert")
+        LIST = "list", _("Liste (komma-separiert)")
+
+    key = models.CharField(max_length=64, unique=True, verbose_name=_("Schluessel"))
+    value = models.TextField(blank=True, default="", verbose_name=_("Wert"))
+    kind = models.CharField(max_length=16, choices=Kind.choices, default=Kind.SCALAR, verbose_name=_("Art"))
+
+    class Meta:
+        verbose_name = _("Regel-Konstante")
+        verbose_name_plural = _("Regel-Konstanten")
+        ordering = ("key",)
+
+    def __str__(self) -> str:
+        return self.key
+
+    @classmethod
+    def get_scalar(cls, key: str) -> str:
+        obj = cls.objects.filter(key=key).first()
+        return (obj.value or "").strip() if obj else ""
+
+    @classmethod
+    def get_list(cls, key: str) -> list[str]:
+        raw = cls.get_scalar(key)
+        return [part.strip() for part in raw.split(",") if part.strip()]

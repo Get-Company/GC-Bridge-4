@@ -1,11 +1,12 @@
 from django.apps import AppConfig
 from django.db.models.signals import post_migrate
+from django.utils.translation import gettext_lazy as _
 
 
 class DocumentsConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
     name = "documents"
-    verbose_name = "Dokumente"
+    verbose_name = _("Dokumente")
 
     def ready(self) -> None:
         from documents.signals import ensure_document_type_defaults

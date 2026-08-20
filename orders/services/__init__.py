@@ -1,5 +1,6 @@
 from .order_customer_change import CONTINUATION_NAME as ORDER_CUSTOMER_CHANGE_CONTINUATION
 from .order_customer_change import OrderCustomerChangeService
+from .order_address_reconciliation import OrderAddressReconciliationService
 from .order_rule_resolver import OrderRuleResolverService, ResolvedOrderRule
 from .order_sync import OrderSyncService
 from .order_sync_workflow import CONTINUATION_NAME, OrderSyncWorkflowService
@@ -10,6 +11,7 @@ __all__ = [
     "CONTINUATION_NAME",
     "ORDER_CUSTOMER_CHANGE_CONTINUATION",
     "OrderCustomerChangeService",
+    "OrderAddressReconciliationService",
     "OrderRuleResolverService",
     "OrderSyncService",
     "OrderSyncWorkflowService",

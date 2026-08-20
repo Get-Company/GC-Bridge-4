@@ -3,10 +3,12 @@ from typing import Any
 
 from django import forms
 from django.contrib import admin, messages
+from django.core.exceptions import PermissionDenied
 from django.http import HttpResponseRedirect
 from django.http import HttpResponse
 from django.http import JsonResponse
 from django.template.loader import render_to_string
+from django.template.response import TemplateResponse
 from django.urls import reverse
 from django.utils.html import format_html, format_html_join
 
@@ -20,9 +22,11 @@ from unfold.forms import BaseDialogForm
 from unfold.sections import TemplateSection
 
 from core.admin import BaseAdmin, BaseTabularInline
+from customer.services.webshop_mapping import CustomerWebshopMappingService, EU_COUNTRY_CODES
 from microtech.services import microtech_connection
 from orders.models import MicrotechOrderSyncWorkflow, Order, OrderDetail
 from orders.services import (
+    OrderAddressReconciliationService,
     OrderSyncService,
     OrderCustomerChangeService,
     OrderSyncWorkflowService,
@@ -176,11 +180,14 @@ class MicrotechOrderSyncWorkflowAdmin(BaseAdmin):
 class OrderAdmin(BaseAdmin):
     list_display = (
         "order_number",
-        "customer",
+        "customer_display",
+        "country_display",
+        "address_reconciliation_status",
         "purchase_date",
         "order_state",
         "microtech_sync_status",
     )
+    list_per_page = 20
     list_sections = [OrderExpandSection]
     list_sections_classes = "grid-cols-1"
     search_fields = (
@@ -202,13 +209,18 @@ class OrderAdmin(BaseAdmin):
     inlines = (OrderDetailInline,)
     actions_list = ("sync_open_orders_from_shopware_list",)
     actions = ("sync_open_orders_from_shopware",)
-    actions_row = ("upsert_to_microtech_row", "export_swiss_customs_csv_row")
+    actions_row = (
+        "address_reconciliation_row",
+        "upsert_to_microtech_row",
+        "export_swiss_customs_csv_row",
+    )
     actions_detail = (
         {
             "title": "Aktionen",
             "icon": "more_vert",
             "items": (
                 "request_customer_change_detail",
+                "address_reconciliation_detail",
                 "upsert_to_microtech_detail",
                 "resume_microtech_sync_detail",
                 "abort_microtech_sync_detail",
@@ -223,6 +235,95 @@ class OrderAdmin(BaseAdmin):
     def get_queryset(self, request):
         return super().get_queryset(request).select_related(
             "customer", "billing_address", "shipping_address"
+        )
+
+    @staticmethod
+    def _customer_address(obj: Order):
+        return getattr(obj, "billing_address", None) or getattr(obj, "shipping_address", None)
+
+    @classmethod
+    def _country_code(cls, obj: Order) -> str:
+        address = cls._customer_address(obj)
+        return _to_str(getattr(address, "country_code", "")).upper()
+
+    @staticmethod
+    def _country_flag(country_code: str) -> str:
+        if len(country_code) != 2 or not country_code.isalpha():
+            return ""
+        return "".join(chr(0x1F1E6 + ord(character) - ord("A")) for character in country_code)
+
+    @staticmethod
+    def _customer_region_label(country_code: str) -> str:
+        if country_code == "DE":
+            return "Inland"
+        if country_code in EU_COUNTRY_CODES:
+            return "Ausland · EU"
+        if country_code:
+            return "Ausland"
+        return "Unbekannt"
+
+    @admin.display(description="Kunde", ordering="customer__erp_nr")
+    def customer_display(self, obj: Order):
+        customer = getattr(obj, "customer", None)
+        if not customer:
+            return "-"
+
+        address = self._customer_address(obj)
+        customer_name = (
+            CustomerWebshopMappingService.resolve_na2(address=address) if address else _to_str(customer.name)
+        )
+        customer_name = customer_name or _to_str(customer.name) or "-"
+        customer_label = f"{_to_str(customer.erp_nr) or '-'} | {customer_name}"
+        region_label = self._customer_region_label(self._country_code(obj))
+
+        return format_html(
+            '<span style="display:inline-flex;align-items:center;gap:6px;">'
+            "<span>{}</span>"
+            '<span style="border:1px solid #93c5fd;border-radius:999px;padding:1px 6px;font-size:11px;line-height:16px;color:#1d4ed8;background:#eff6ff;white-space:nowrap;">{}</span>'
+            "</span>",
+            customer_label,
+            region_label,
+        )
+
+    @admin.display(description="Land", ordering="billing_address__country_code")
+    def country_display(self, obj: Order):
+        country_code = self._country_code(obj)
+        if not country_code:
+            return "-"
+
+        flag = self._country_flag(country_code)
+        return format_html('<span title="{}">{} {}</span>', country_code, flag, country_code)
+
+    @admin.display(description="Adressabgleich")
+    def address_reconciliation_status(self, obj: Order):
+        shipping = getattr(obj, "shipping_address", None)
+        billing = getattr(obj, "billing_address", None)
+        same_address = shipping is billing or (
+            shipping is not None and billing is not None and shipping.pk and shipping.pk == billing.pk
+        )
+        addresses = (
+            (("Lieferung & Rechnung", shipping),)
+            if same_address
+            else (("Lieferung", shipping), ("Rechnung", billing))
+        )
+        open_items = []
+        for label, address in addresses:
+            if address is None:
+                open_items.append(f"{label}: Adresse fehlt")
+            elif not address.erp_ans_nr:
+                open_items.append(f"{label}: Anschrift offen")
+            elif not address.erp_asp_nr:
+                open_items.append(f"{label}: Ansprechpartner offen")
+
+        if not open_items:
+            return format_html(
+                '<span style="border:1px solid #86efac;border-radius:999px;padding:1px 6px;font-size:11px;line-height:16px;color:#166534;background:#f0fdf4;white-space:nowrap;">{}</span>',
+                "Zugeordnet",
+            )
+        return format_html(
+            '<span title="{}" style="border:1px solid #fcd34d;border-radius:999px;padding:1px 6px;font-size:11px;line-height:16px;color:#92400e;background:#fffbeb;white-space:nowrap;">Abgleich nötig · {}</span>',
+            "; ".join(open_items),
+            len(open_items),
         )
 
     class Media:
@@ -374,6 +475,11 @@ class OrderAdmin(BaseAdmin):
                 self.microtech_sync_status_view,
             ),
             (
+                "<path:object_id>/address-reconciliation/",
+                "orders_order_address_reconciliation",
+                self.address_reconciliation_view,
+            ),
+            (
                 "<path:object_id>/shopware-state-options/",
                 "orders_order_state_options",
                 self.shopware_state_options_view,
@@ -384,6 +490,70 @@ class OrderAdmin(BaseAdmin):
                 self.shopware_set_state_view,
             ),
         )
+
+    @action(
+        description="Adressen abgleichen",
+        icon="compare_arrows",
+        variant=ActionVariant.WARNING,
+        permissions=("change",),
+    )
+    def address_reconciliation_detail(self, request, object_id: str):
+        return HttpResponseRedirect(reverse("admin:orders_order_address_reconciliation", args=(object_id,)))
+
+    @action(
+        description="Adressen abgleichen",
+        icon="compare_arrows",
+        variant=ActionVariant.WARNING,
+        permissions=("change",),
+    )
+    def address_reconciliation_row(self, request, object_id: str):
+        return HttpResponseRedirect(reverse("admin:orders_order_address_reconciliation", args=(object_id,)))
+
+    def address_reconciliation_view(self, request, object_id: str, **kwargs):
+        order = self.get_queryset(request).filter(pk=object_id).first()
+        if order is None:
+            return self._redirect_to_changelist()
+        if not self.has_view_permission(request, order):
+            raise PermissionDenied
+
+        comparison = None
+        try:
+            with microtech_connection() as client:
+                service = OrderAddressReconciliationService()
+                comparison = service.get_comparison(order=order, client=client)
+                if request.method == "POST":
+                    if not self.has_change_permission(request, order):
+                        raise PermissionDenied
+                    updates = service.apply_from_post_data(
+                        comparison=comparison,
+                        post_data=request.POST,
+                        client=client,
+                    )
+                    field_count = sum(update["postal_fields"] + update["contact_fields"] for update in updates)
+                    self.message_user(
+                        request,
+                        f"{len(updates)} Anschrift(en) zugeordnet, {field_count} Feld(er) nach Microtech übertragen.",
+                        level=messages.SUCCESS,
+                    )
+                    return HttpResponseRedirect(
+                        reverse("admin:orders_order_address_reconciliation", args=(order.pk,))
+                    )
+        except ValueError as exc:
+            self.message_user(request, str(exc), level=messages.ERROR)
+        except PermissionDenied:
+            raise
+        except Exception as exc:
+            self.message_user(request, f"Adressabgleich fehlgeschlagen: {exc}", level=messages.ERROR)
+
+        context = {
+            **self.admin_site.each_context(request),
+            "title": f"Adressen abgleichen · {order}",
+            "opts": self.model._meta,
+            "order": order,
+            "comparison": comparison,
+            "order_change_url": reverse("admin:orders_order_change", args=(order.pk,)),
+        }
+        return TemplateResponse(request, "orders/admin/address_reconciliation.html", context)
 
     def microtech_sync_status_view(self, request, object_id: str, **kwargs):
         order = self.get_object(request, object_id)

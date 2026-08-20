@@ -1,0 +1,187 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+<div class="flex flex-col gap-6 max-w-7xl">
+  <div class="flex flex-wrap items-start justify-between gap-3">
+    <div>
+      <h1 class="text-xl font-semibold">Adressen abgleichen</h1>
+      <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+        Bestellung {{ order.order_number|default:order.api_id }} · Microtech AdrNr {{ order.customer.erp_nr }}
+      </p>
+    </div>
+    <a href="{{ order_change_url }}" class="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded text-sm hover:bg-gray-50 dark:hover:bg-gray-800">
+      Zur Bestellung
+    </a>
+  </div>
+
+  <div class="border border-blue-200 dark:border-blue-900 rounded-lg p-4 bg-blue-50 dark:bg-blue-950/30 text-sm text-blue-900 dark:text-blue-100">
+    Wählen Sie vorhandene Microtech-Anschriften und Ansprechpartner aus. Die Zuordnung speichert nur deren IDs in der Bridge.
+    Markierte, nicht leere Shopware-Felder werden zusätzlich einmalig nach Microtech übertragen. Es werden keine neuen Anschriften oder Ansprechpartner angelegt.
+  </div>
+
+  {% if comparison %}
+    {% if not comparison.has_candidates %}
+      <div class="border border-amber-200 dark:border-amber-900 rounded-lg p-4 bg-amber-50 dark:bg-amber-950/30 text-sm text-amber-900 dark:text-amber-100">
+        Für diesen Kunden wurden in Microtech keine vorhandenen Anschriften gefunden. Ein Abgleich ist daher nicht möglich.
+      </div>
+    {% else %}
+      <form method="post" class="flex flex-col gap-6">
+        {% csrf_token %}
+
+        {% for scope in comparison.scopes %}
+          <section class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden bg-white dark:bg-gray-900">
+            <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h2 class="font-semibold">{{ scope.label }}</h2>
+                <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  {% if scope.is_mapped %}Bereits einer Microtech-Anschrift zugeordnet.{% else %}Noch nicht zugeordnet.{% endif %}
+                  {% if scope.is_contact_mapped %} Ansprechpartner ist zugeordnet.{% endif %}
+                </p>
+              </div>
+              <button type="button" data-select-all="{{ scope.key }}" class="text-xs px-2.5 py-1.5 rounded border border-primary-300 dark:border-primary-700 text-primary-700 dark:text-primary-300 hover:bg-primary-50 dark:hover:bg-primary-950/30">
+                Alle Werte übernehmen
+              </button>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-gray-200 dark:divide-gray-700">
+              <div class="p-4">
+                <div class="flex items-center gap-2 mb-3">
+                  <span class="material-symbols-outlined text-primary-600 dark:text-primary-400" style="font-size:18px">shopping_bag</span>
+                  <h3 class="font-medium text-sm">Shopware</h3>
+                  <span class="text-xs text-gray-400">Werte übernehmen</span>
+                </div>
+                <div class="divide-y divide-gray-100 dark:divide-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                  {% for field in scope.field_values %}
+                    <label class="grid grid-cols-3 gap-3 items-center px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer">
+                      <input type="checkbox" name="{{ scope.key }}_fields" value="{{ field.key }}" data-scope-fields="{{ scope.key }}" class="rounded border-gray-300 text-primary-600 focus:ring-primary-500">
+                      <span class="text-gray-500 dark:text-gray-400">{{ field.label }}</span>
+                      <span class="font-medium break-words">{{ field.value|default:"—" }}</span>
+                    </label>
+                  {% endfor %}
+                </div>
+                <p class="text-xs text-gray-400 dark:text-gray-500 mt-2">Leere Shopware-Felder werden nicht nach Microtech übertragen.</p>
+              </div>
+
+              <div class="p-4">
+                <div class="flex items-center gap-2 mb-3">
+                  <span class="material-symbols-outlined text-amber-600 dark:text-amber-400" style="font-size:18px">precision_manufacturing</span>
+                  <h3 class="font-medium text-sm">Microtech</h3>
+                  <span class="text-xs text-gray-400">Ziel auswählen</span>
+                </div>
+                <div class="flex flex-col gap-3 pr-1" style="max-height:42rem;overflow-y:auto;">
+                  {% for candidate in scope.candidates %}
+                    <div class="border border-gray-200 dark:border-gray-700 rounded-lg p-3 hover:border-primary-300 dark:hover:border-primary-700">
+                      <label class="flex gap-3 cursor-pointer">
+                        <input type="checkbox" name="{{ scope.key }}_address_sub_number" value="{{ candidate.address_sub_number }}" data-address-checkbox="{{ scope.key }}" class="mt-1 rounded border-gray-300 text-primary-600 focus:ring-primary-500" {% if candidate.is_selected %}checked{% endif %}>
+                        <span class="min-w-0">
+                          <span class="font-medium block">AnsNr {{ candidate.address_sub_number }} · {{ candidate.name }}</span>
+                          {% if candidate.street %}<span class="text-sm block text-gray-600 dark:text-gray-300">{{ candidate.street }}</span>{% endif %}
+                          {% if candidate.location or candidate.country %}<span class="text-sm block text-gray-600 dark:text-gray-300">{{ candidate.location }}{% if candidate.country %}{% if candidate.location %} · {% endif %}{{ candidate.country }}{% endif %}</span>{% endif %}
+                          <span class="flex flex-wrap gap-1 mt-1">
+                            {% if candidate.is_default_shipping %}<span class="text-xs px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300">Lieferstandard</span>{% endif %}
+                            {% if candidate.is_default_billing %}<span class="text-xs px-1.5 py-0.5 rounded bg-violet-100 dark:bg-violet-950 text-violet-700 dark:text-violet-300">Rechnungsstandard</span>{% endif %}
+                          </span>
+                        </span>
+                      </label>
+
+                      <details class="ml-7 mt-3 pt-3 border-t border-gray-100 dark:border-gray-800" {% if candidate.is_selected %}open{% endif %}>
+                        <summary class="text-xs font-medium text-primary-700 dark:text-primary-300 cursor-pointer">Adressdaten anzeigen</summary>
+                        <dl class="mt-2 divide-y divide-gray-100 dark:divide-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                          {% for field in candidate.field_values %}
+                            <div class="grid grid-cols-2 gap-3 px-3 py-2 text-sm">
+                              <dt class="text-gray-500 dark:text-gray-400">{{ field.label }}</dt>
+                              <dd class="font-medium break-words">{{ field.value|default:"—" }}</dd>
+                            </div>
+                          {% endfor %}
+                        </dl>
+                      </details>
+
+                      {% if candidate.contacts %}
+                        <div class="ml-7 mt-3 pt-3 border-t border-gray-100 dark:border-gray-800">
+                          <p class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">Ansprechpartner (optional)</p>
+                          <div class="flex flex-col gap-1.5">
+                            {% for contact in candidate.contacts %}
+                              <label class="flex items-center gap-2 text-sm cursor-pointer">
+                                <input type="radio" name="{{ scope.key }}_contact_reference" value="{{ candidate.address_sub_number }}:{{ contact.contact_number }}" data-contact-radio="{{ scope.key }}" data-address-sub-number="{{ candidate.address_sub_number }}" class="border-gray-300 text-primary-600 focus:ring-primary-500" {% if contact.is_selected %}checked{% endif %}>
+                                <span>AspNr {{ contact.contact_number }} · {{ contact.label }}{% if contact.email %}<span class="text-gray-400"> · {{ contact.email }}</span>{% endif %}</span>
+                              </label>
+                              <details class="ml-6 mt-1">
+                                <summary class="text-xs text-primary-700 dark:text-primary-300 cursor-pointer">Ansprechpartnerdaten anzeigen</summary>
+                                <dl class="mt-1 divide-y divide-gray-100 dark:divide-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                                  {% for field in contact.field_values %}
+                                    <div class="grid grid-cols-2 gap-3 px-3 py-2 text-xs">
+                                      <dt class="text-gray-500 dark:text-gray-400">{{ field.label }}</dt>
+                                      <dd class="font-medium break-words">{{ field.value|default:"—" }}</dd>
+                                    </div>
+                                  {% endfor %}
+                                </dl>
+                              </details>
+                            {% endfor %}
+                          </div>
+                        </div>
+                      {% endif %}
+                    </div>
+                  {% endfor %}
+                </div>
+              </div>
+            </div>
+          </section>
+        {% endfor %}
+
+        <div class="flex flex-wrap items-center justify-end gap-3">
+          <a href="{{ order_change_url }}" class="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded text-sm hover:bg-gray-50 dark:hover:bg-gray-800">Abbrechen</a>
+          <button type="submit" class="px-3 py-2 rounded bg-primary-600 text-white text-sm font-medium hover:bg-primary-700">
+            Zuordnung speichern
+          </button>
+        </div>
+      </form>
+    {% endif %}
+  {% else %}
+    <div class="border border-red-200 dark:border-red-900 rounded-lg p-4 bg-red-50 dark:bg-red-950/30 text-sm text-red-900 dark:text-red-100">
+      Die Microtech-Anschriften konnten nicht geladen werden.
+    </div>
+  {% endif %}
+</div>
+
+<script>
+document.addEventListener("click", function (event) {
+  const button = event.target.closest("[data-select-all]");
+  if (!button) return;
+  const scope = button.dataset.selectAll;
+  const hasSelectedContact = document.querySelector('[data-contact-radio="' + scope + '"]:checked');
+  document.querySelectorAll('[data-scope-fields="' + scope + '"]').forEach(function (input) {
+    if (input.value.startsWith("contact:") && !hasSelectedContact) return;
+    input.checked = true;
+  });
+});
+
+function selectMicrotechAddress(input) {
+  const scope = input.dataset.addressCheckbox;
+  const selectedAddressSubNumber = input.checked ? input.value : "";
+  document.querySelectorAll('[data-address-checkbox="' + scope + '"]').forEach(function (checkbox) {
+    if (checkbox !== input) checkbox.checked = false;
+  });
+  document.querySelectorAll('[data-contact-radio="' + scope + '"]:checked').forEach(function (contact) {
+    if (contact.dataset.addressSubNumber !== selectedAddressSubNumber) contact.checked = false;
+  });
+}
+
+document.addEventListener("change", function (event) {
+  const address = event.target.closest("[data-address-checkbox]");
+  if (address) {
+    selectMicrotechAddress(address);
+    return;
+  }
+
+  const contact = event.target.closest("[data-contact-radio]");
+  if (!contact) return;
+  const scope = contact.dataset.contactRadio;
+  const addressSubNumber = contact.dataset.addressSubNumber;
+  const addressCheckbox = document.querySelector('[data-address-checkbox="' + scope + '"][value="' + addressSubNumber + '"]');
+  if (addressCheckbox) {
+    addressCheckbox.checked = true;
+    selectMicrotechAddress(addressCheckbox);
+  }
+});
+</script>
+{% endblock %}

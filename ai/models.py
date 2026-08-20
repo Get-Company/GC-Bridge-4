@@ -91,8 +91,8 @@ class AIProviderConfig(BaseModel):
     is_active = models.BooleanField(default=True, verbose_name=_("Aktiv"))
 
     class Meta:
-        verbose_name = _("AI Provider")
-        verbose_name_plural = _("AI Provider")
+        verbose_name = _("KI-Provider")
+        verbose_name_plural = _("KI-Provider")
         ordering = ("name",)
 
     def __str__(self) -> str:
@@ -109,9 +109,9 @@ class AITranslationConfig(BaseModel):
         PROPERTIES = "properties", _("Eigenschaftsgruppen und -werte")
 
     class RecordStatus(models.TextChoices):
-        ACTIVE = "active", _("Aktive Datensaetze")
-        INACTIVE = "inactive", _("Inaktive Datensaetze")
-        ARCHIVED = "archived", _("Archivierte Datensaetze")
+        ACTIVE = "active", _("Aktive Datensätze")
+        INACTIVE = "inactive", _("Inaktive Datensätze")
+        ARCHIVED = "archived", _("Archivierte Datensätze")
 
     _translation_area_by_model_label = {
         "products.product": TranslationArea.PRODUCTS,
@@ -131,21 +131,21 @@ class AITranslationConfig(BaseModel):
     source_language = models.CharField(max_length=16, default="de", verbose_name=_("Quellsprache"))
     translation_areas = models.JSONField(
         default=default_translation_areas,
-        verbose_name=_("Uebersetzungsbereiche"),
-        help_text=_("Legt fest, welche Inhalte der Uebersetzungsscan verarbeitet."),
+        verbose_name=_("Übersetzungsbereiche"),
+        help_text=_("Legt fest, welche Inhalte der Übersetzungsscan verarbeitet."),
     )
     record_statuses = models.JSONField(
         default=default_translation_record_statuses,
         verbose_name=_("Datensatzstatus"),
         help_text=_(
-            "Legt fest, welche aktiven, inaktiven oder archivierten Datensaetze verarbeitet werden. "
-            "Datensaetze ohne eigenen Status gelten als aktiv."
+            "Legt fest, welche aktiven, inaktiven oder archivierten Datensätze verarbeitet werden. "
+            "Datensätze ohne eigenen Status gelten als aktiv."
         ),
     )
     batch_size = models.PositiveIntegerField(
         default=100,
-        verbose_name=_("Maximale Uebersetzungen pro Lauf"),
-        help_text=_("Begrenzt die Anzahl einzelner Feld-/Sprachuebersetzungen je Scan."),
+        verbose_name=_("Maximale Übersetzungen pro Lauf"),
+        help_text=_("Begrenzt die Anzahl einzelner Feld-/Sprachübersetzungen je Scan."),
     )
     status_retention_days = models.PositiveIntegerField(
         default=30,
@@ -166,7 +166,7 @@ class AITranslationConfig(BaseModel):
         default=DEFAULT_TRANSLATION_USER_PROMPT_TEMPLATE,
         verbose_name=_("Benutzer-Prompt-Vorlage"),
         help_text=_(
-            "Verfuegbare Platzhalter: source_language, source_language_name, "
+            "Verfügbare Platzhalter: source_language, source_language_name, "
             "target_language, target_language_name, locale_instruction und segments_json."
         ),
     )
@@ -174,12 +174,12 @@ class AITranslationConfig(BaseModel):
         default=default_translation_locale_instructions,
         blank=True,
         verbose_name=_("Sprachvarianten-Hinweise"),
-        help_text=_("JSON-Objekt mit Sprachcode als Schluessel und Uebersetzungshinweis als Wert."),
+        help_text=_("JSON-Objekt mit Sprachcode als Schlüssel und Übersetzungshinweis als Wert."),
     )
 
     class Meta:
-        verbose_name = _("KI-Uebersetzungskonfiguration")
-        verbose_name_plural = _("KI-Uebersetzungskonfigurationen")
+        verbose_name = _("KI-Übersetzungskonfiguration")
+        verbose_name_plural = _("KI-Übersetzungskonfigurationen")
         ordering = ("name",)
         constraints = [
             models.UniqueConstraint(
@@ -251,12 +251,12 @@ class AITranslationGlossaryEntry(BaseModel):
 
     source_term = models.CharField(max_length=255, verbose_name=_("Quellbegriff"))
     target_language = models.CharField(max_length=16, verbose_name=_("Zielsprache"))
-    target_term = models.CharField(max_length=255, verbose_name=_("Verbindliche Uebersetzung"))
+    target_term = models.CharField(max_length=255, verbose_name=_("Verbindliche Übersetzung"))
     is_active = models.BooleanField(default=True, db_index=True, verbose_name=_("Aktiv"))
 
     class Meta:
-        verbose_name = _("KI-Uebersetzungsglossareintrag")
-        verbose_name_plural = _("KI-Uebersetzungsglossar")
+        verbose_name = _("KI-Übersetzungsglossareintrag")
+        verbose_name_plural = _("KI-Übersetzungsglossar")
         ordering = ("source_term", "target_language")
         indexes = [
             models.Index(fields=("target_language", "is_active")),
@@ -281,8 +281,8 @@ class AIRewritePrompt(BaseModel):
     is_active = models.BooleanField(default=True, verbose_name=_("Aktiv"))
 
     class Meta:
-        verbose_name = _("AI Rewrite Prompt")
-        verbose_name_plural = _("AI Rewrite Prompts")
+        verbose_name = _("KI-Rewrite-Prompt")
+        verbose_name_plural = _("KI-Rewrite-Prompts")
         ordering = ("name",)
 
     def __str__(self) -> str:
@@ -298,7 +298,7 @@ class AIRewriteJob(BaseModel):
     class Status(models.TextChoices):
         QUEUED = "queued", _("In Arbeit")
         READY = "ready", _("Ergebnis vorhanden")
-        APPLIED = "applied", _("Uebernommen")
+        APPLIED = "applied", _("Übernommen")
         FAILED = "failed", _("Fehlgeschlagen")
 
     external_key = models.CharField(max_length=255, blank=True, default="", db_index=True, verbose_name=_("Externe Referenz"))
@@ -343,7 +343,7 @@ class AIRewriteJob(BaseModel):
     provider_response = models.TextField(
         blank=True,
         default="",
-        verbose_name=_("KI-Rueckgabe (roh)"),
+        verbose_name=_("KI-Rückgabe (roh)"),
     )
     rendered_prompt = models.TextField(blank=True, default="", verbose_name=_("Gerenderter Prompt"))
     error_message = models.TextField(blank=True, default="", verbose_name=_("Fehler"))
@@ -356,11 +356,11 @@ class AIRewriteJob(BaseModel):
         related_name="requested_ai_rewrite_jobs",
         verbose_name=_("Angefordert von"),
     )
-    applied_at = models.DateTimeField(null=True, blank=True, verbose_name=_("Uebernommen am"))
+    applied_at = models.DateTimeField(null=True, blank=True, verbose_name=_("Übernommen am"))
 
     class Meta:
-        verbose_name = _("AI Rewrite Job")
-        verbose_name_plural = _("AI Rewrite Jobs")
+        verbose_name = _("KI-Rewrite-Job")
+        verbose_name_plural = _("KI-Rewrite-Jobs")
         ordering = ("-created_at",)
         indexes = [
             models.Index(fields=("product", "field")),
@@ -433,12 +433,12 @@ class AITranslationState(BaseModel):
     )
     attempt_count = models.PositiveIntegerField(default=0, verbose_name=_("Versuche"))
     celery_task_id = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Celery Task-ID"))
-    translated_at = models.DateTimeField(null=True, blank=True, verbose_name=_("Uebersetzt am"))
+    translated_at = models.DateTimeField(null=True, blank=True, verbose_name=_("Übersetzt am"))
     last_error = models.TextField(blank=True, default="", verbose_name=_("Letzter Fehler"))
 
     class Meta:
-        verbose_name = _("KI-Uebersetzungsstatus")
-        verbose_name_plural = _("KI-Uebersetzungsstatus")
+        verbose_name = _("KI-Übersetzungsstatus")
+        verbose_name_plural = _("KI-Übersetzungsstatus")
         ordering = ("status", "updated_at", "id")
         indexes = [
             models.Index(fields=("content_type", "object_id")),
