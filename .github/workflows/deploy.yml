@@ -50,9 +50,15 @@ jobs:
           fi
 
           printf '%s' "$DEPLOY_TAG" > VERSION
+          export APP_IMAGE_TAG="$DEPLOY_TAG"
 
+          run_logged docker compose config --quiet
           run_logged docker compose build
-          run_logged docker compose up -d --remove-orphans
+          run_logged docker compose run --rm --no-deps --entrypoint python web -c "from GC_Bridge_4.celery import app; assert app.conf.task_default_queue == 'microtech'; assert app.conf.task_routes['orders.*']['queue'] == 'orders'; assert app.conf.task_routes['products.*']['queue'] == 'bulk'; print('Celery routing verified')"
+          run_logged docker compose run --rm --no-deps --entrypoint python mcp -c "import mcp_server.server; print('MCP import verified')"
+          run_logged docker compose up -d --force-recreate --remove-orphans
+          run_logged docker compose exec -T celery python -c "from GC_Bridge_4.celery import app; assert app.conf.task_default_queue == 'microtech'; assert app.conf.task_routes['orders.*']['queue'] == 'orders'; assert app.conf.task_routes['products.*']['queue'] == 'bulk'; print('Running Celery routing verified')"
+          run_logged docker compose exec -T mcp python -c "import mcp_server.server; print('Running MCP import verified')"
           run_logged docker compose ps
 
           log "Deployment ${DEPLOY_TAG} finished"

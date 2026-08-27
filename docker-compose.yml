@@ -34,7 +34,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: gc-bridge-4:latest
+    image: gc-bridge-4:${APP_IMAGE_TAG:-latest}
     container_name: gc_bridge_4_web
     restart: unless-stopped
     env_file:
@@ -78,7 +78,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: gc-bridge-4:latest
+    image: gc-bridge-4:${APP_IMAGE_TAG:-latest}
     container_name: gc_bridge_4_celery
     restart: unless-stopped
     env_file:
@@ -114,7 +114,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: gc-bridge-4:latest
+    image: gc-bridge-4:${APP_IMAGE_TAG:-latest}
     container_name: gc_bridge_4_celery_orders
     restart: unless-stopped
     env_file:
@@ -150,7 +150,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: gc-bridge-4:latest
+    image: gc-bridge-4:${APP_IMAGE_TAG:-latest}
     container_name: gc_bridge_4_celery_bulk
     restart: unless-stopped
     env_file:
@@ -186,7 +186,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: gc-bridge-4:latest
+    image: gc-bridge-4:${APP_IMAGE_TAG:-latest}
     container_name: gc_bridge_4_celery_beat
     restart: unless-stopped
     env_file:
@@ -219,7 +219,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: gc-bridge-4:latest
+    image: gc-bridge-4:${APP_IMAGE_TAG:-latest}
     container_name: gc_bridge_4_flower
     restart: unless-stopped
     env_file:
@@ -246,7 +246,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: gc-bridge-4:latest
+    image: gc-bridge-4:${APP_IMAGE_TAG:-latest}
     container_name: gc_bridge_4_mcp
     restart: unless-stopped
     env_file:
