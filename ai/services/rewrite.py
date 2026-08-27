@@ -115,7 +115,6 @@ class AIRewriteService(BaseService):
                 trigger="ai_rewrite_apply",
                 targets=(
                     ProductSyncJob.Target.MICROTECH,
-                    ProductSyncJob.Target.SHOPWARE5,
                     ProductSyncJob.Target.SHOPWARE,
                 ),
             )

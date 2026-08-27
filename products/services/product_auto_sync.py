@@ -15,7 +15,6 @@ _state = local()
 
 _TARGET_LABELS = {
     ProductSyncJob.Target.SHOPWARE: "shopware6",
-    ProductSyncJob.Target.SHOPWARE5: "shopware5",
     ProductSyncJob.Target.MICROTECH: "microtech",
 }
 
@@ -39,7 +38,6 @@ class ProductAutoSyncService(BaseService):
 
     targets = (
         ProductSyncJob.Target.SHOPWARE,
-        ProductSyncJob.Target.SHOPWARE5,
         ProductSyncJob.Target.MICROTECH,
     )
 
@@ -93,6 +91,16 @@ class ProductAutoSyncService(BaseService):
         task = "products.auto_sync"
         run_id = str(job_id)
         target_label = _TARGET_LABELS.get(target, str(target))
+        if target not in self.targets:
+            # Existing queued jobs from retired targets remain auditable, but
+            # must never revive a discontinued integration.
+            with transaction.atomic():
+                job = ProductSyncJob.objects.select_for_update().get(pk=job_id)
+                job.status = ProductSyncJob.Status.CANCELLED
+                job.finished_at = timezone.now()
+                job.last_error = f"Ausgemustertes Sync-Ziel: {target}"
+                job.save(update_fields=("status", "finished_at", "last_error", "updated_at"))
+            return job
         emit_event(
             task, entity=product_erp_nr, step=f"→ {target_label}", status="info",
             summary=f"Produkt {product_erp_nr} → {target_label}",
@@ -114,8 +122,6 @@ class ProductAutoSyncService(BaseService):
                         apply=True,
                         skip_product_sync=True,
                     )
-            elif target == ProductSyncJob.Target.SHOPWARE5:
-                call_command("shopware5_sync_products", product_erp_nr)
             elif target == ProductSyncJob.Target.MICROTECH:
                 self._submit_microtech_sentinel_jobs(
                     product_id=product_id,

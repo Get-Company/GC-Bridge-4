@@ -26,6 +26,7 @@ dependencies = [
     "django-celery-beat>=2.9.0",
     "qrcode[pil]>=8.2",
     "flower>=2.0.0",
+    "mcp>=2.0.0",
 ]
 
 [tool.pytest.ini_options]

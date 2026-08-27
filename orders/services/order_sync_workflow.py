@@ -9,7 +9,7 @@ from core.services import BaseService
 from microtech.models import MicrotechGraphQLJob
 from microtech.services import MicrotechJobSentinelService
 from microtech.services.graphql_client import MicrotechGraphQLClientService
-from orders.models import MicrotechOrderSyncWorkflow
+from orders.models import MicrotechOrderSyncWorkflow, Order
 from orders.services.order_rule_resolver import OrderRuleResolverService
 from orders.services.order_upsert_microtech import OrderUpsertMicrotechService
 
@@ -39,6 +39,7 @@ class OrderSyncWorkflowService(BaseService):
         "clear_default_shipping_address",
         "clear_default_billing_address",
         "set_default_addresses",
+        "probe_vorgang",
         "write_vorgang",
     )
 
@@ -60,6 +61,8 @@ class OrderSyncWorkflowService(BaseService):
             # echte Microtech-Adressnummer zurück. Diese muss vor der
             # Vorgangsanlage nach Shopware geschrieben werden.
             return bool(state.get("is_new_customer"))
+        if step == "probe_vorgang":
+            return not bool(state.get("beleg_nr") or state.get("erp_order_id") or workflow.order.erp_order_id)
         if step == "clear_default_shipping_address":
             old_shipping = _to_int(state.get("existing_default_shipping_ans_nr")) or 0
             shipping_ans_nr, _billing_ans_nr = self._target_default_ans_nrs(workflow)
@@ -152,21 +155,17 @@ class OrderSyncWorkflowService(BaseService):
                 beleg = extract(node)
                 if beleg:
                     return beleg
+            for record in container.get("records") or []:
+                beleg = extract(record)
+                if beleg:
+                    return beleg
         return ""
 
     def _build_customer_service(self) -> CustomerUpsertMicrotechService:
         """Erzeugt den bestehenden Customer-Upsert-Service für Payload-Builder-Reuse."""
         return CustomerUpsertMicrotechService()
 
-    def start_for_order(self, order) -> MicrotechOrderSyncWorkflow:
-        """Legt einen Workflow für eine Bestellung an und startet den ersten Schritt."""
-        active = MicrotechOrderSyncWorkflow.objects.filter(
-            order=order,
-            status__in=MicrotechOrderSyncWorkflow.ACTIVE_STATUSES,
-        ).first()
-        if active is not None:
-            raise ValueError(f"Für Bestellung {order.pk} läuft bereits ein Sync-Workflow (#{active.pk}).")
-
+    def _initial_workflow_state(self, order) -> dict[str, Any]:
         if order.customer is None:
             raise ValueError("Order hat keinen Kunden zum Synchronisieren.")
 
@@ -176,25 +175,182 @@ class OrderSyncWorkflowService(BaseService):
         if address_number is None:
             raise ValueError("Order-Kunde hat keine numerische erp_nr; GraphQL-Upsert erfordert eine Adressnummer.")
 
-        workflow = MicrotechOrderSyncWorkflow.objects.create(
-            order=order,
-            status=MicrotechOrderSyncWorkflow.Status.RUNNING,
-            state={
-                "erp_nr": erp_nr,
-                "address_number": address_number,
-                "requested_customer_number": erp_nr,
-                # A six-digit Shopware number is only a placeholder.  The
-                # GraphQL allocates a new Microtech AdrNr for this Shopware
-                # placeholder. It is written back before the order is created.
-                "is_new_customer": self._is_provisional_customer_number(erp_nr),
-                "billing_same_as_shipping": billing.pk == shipping.pk,
-            },
-        )
+        return {
+            "erp_nr": erp_nr,
+            "address_number": address_number,
+            "requested_customer_number": erp_nr,
+            # A six-digit Shopware number is only a placeholder.  The
+            # GraphQL allocates a new Microtech AdrNr for this Shopware
+            # placeholder. It is written back before the order is created.
+            "is_new_customer": self._is_provisional_customer_number(erp_nr),
+            "billing_same_as_shipping": billing.pk == shipping.pk,
+        }
+
+    def ensure_pending_for_order(self, order) -> tuple[MicrotechOrderSyncWorkflow | None, bool]:
+        """Persist the export intent before publishing a Celery task.
+
+        The PENDING row is the durable hand-off between the Shopware import
+        transaction and the orders worker.  A failed broker publication can
+        therefore be recovered by the independent order reconciler.
+        """
+        from django.db import IntegrityError, transaction
+
+        if (order.erp_order_id or "").strip() or not order.microtech_export_enabled:
+            return None, False
+
+        state = self._initial_workflow_state(order)
+        try:
+            with transaction.atomic():
+                active = (
+                    MicrotechOrderSyncWorkflow.objects.select_for_update()
+                    .filter(order=order, status__in=MicrotechOrderSyncWorkflow.ACTIVE_STATUSES)
+                    .first()
+                )
+                if active is not None:
+                    return active, False
+                workflow = MicrotechOrderSyncWorkflow.objects.create(
+                    order=order,
+                    status=MicrotechOrderSyncWorkflow.Status.PENDING,
+                    state=state,
+                )
+        except IntegrityError:
+            # The conditional unique constraint wins a concurrent importer.
+            workflow = MicrotechOrderSyncWorkflow.objects.filter(
+                order=order,
+                status__in=MicrotechOrderSyncWorkflow.ACTIVE_STATUSES,
+            ).first()
+            if workflow is None:
+                raise
+            return workflow, False
+        return workflow, True
+
+    def start_pending_workflow(self, *, workflow_id: int) -> MicrotechOrderSyncWorkflow | None:
+        """Claim a durable PENDING workflow and submit its first remote step."""
+        from django.db import transaction
+
+        with transaction.atomic():
+            workflow = (
+                MicrotechOrderSyncWorkflow.objects.select_for_update()
+                .select_related("order", "order__customer", "order__billing_address", "order__shipping_address")
+                .filter(pk=workflow_id)
+                .first()
+            )
+            if workflow is None or workflow.status != MicrotechOrderSyncWorkflow.Status.PENDING:
+                return workflow
+            if (workflow.order.erp_order_id or "").strip() or not workflow.order.microtech_export_enabled:
+                workflow.status = MicrotechOrderSyncWorkflow.Status.CANCELLED
+                workflow.error_message = workflow.order.microtech_export_exclusion_reason or "Microtech-Export nicht freigegeben."
+                workflow.save(update_fields=("status", "error_message", "updated_at"))
+                return workflow
+            workflow.status = MicrotechOrderSyncWorkflow.Status.RUNNING
+            workflow.save(update_fields=("status", "updated_at"))
+
         logger.info(
-            "Order-Sync-Workflow #%s für Bestellung %s (erp_nr=%s) gestartet.", workflow.pk, order.pk, erp_nr
+            "Order-Sync-Workflow #%s für Bestellung %s gestartet.", workflow.pk, workflow.order_id
         )
         self._advance(workflow)
         return workflow
+
+    def start_for_order(self, order) -> MicrotechOrderSyncWorkflow:
+        """Manually create and immediately start a workflow for one order."""
+        workflow, created = self.ensure_pending_for_order(order)
+        if workflow is None:
+            raise ValueError(f"Bestellung {order.pk} ist bereits exportiert oder nicht für Microtech freigegeben.")
+        if not created:
+            raise ValueError(f"Für Bestellung {order.pk} läuft bereits ein Sync-Workflow (#{workflow.pk}).")
+
+        return self.start_pending_workflow(workflow_id=workflow.pk) or workflow
+
+    def recover_missing_remote_job(
+        self,
+        *,
+        workflow_id: int,
+        job_id: int,
+        error_message: str,
+    ) -> bool:
+        """Safely recover an unavailable ``createVorgang`` remote job.
+
+        A lost create job is never submitted again blindly.  The workflow first
+        submits a new ``AuftrNr`` probe; a found BelegNr turns the next step
+        into ``updateVorgang``, while an absent one permits a fresh create.
+        """
+        from django.db import transaction
+        from django.utils import timezone
+
+        with transaction.atomic():
+            workflow = (
+                MicrotechOrderSyncWorkflow.objects.select_for_update()
+                .select_related("order", "order__customer", "order__billing_address", "order__shipping_address")
+                .filter(pk=workflow_id, current_job_id=job_id, current_step="write_vorgang")
+                .first()
+            )
+            if workflow is None:
+                return False
+
+            state = dict(workflow.state or {})
+            attempts = int(state.get("write_vorgang_remote_recovery_attempts") or 0)
+            if attempts >= 3:
+                workflow.status = MicrotechOrderSyncWorkflow.Status.FAILED
+                workflow.error_message = "Remote-Jobverlust für Vorgang nach drei Wiederherstellungsversuchen."
+                self._log_step(workflow, "write_vorgang", "failed", error=workflow.error_message)
+                workflow.save(update_fields=("status", "error_message", "step_log", "updated_at"))
+                return False
+
+            job = MicrotechGraphQLJob.objects.select_for_update().filter(pk=job_id).first()
+            if job is None:
+                return False
+            history = list(job.external_job_history or [])
+            history.append(
+                {
+                    "external_job_id": job.external_job_id or "",
+                    "at": timezone.now().isoformat(),
+                    "reason": "remote_job_not_found",
+                    "message": str(error_message),
+                }
+            )
+            job.status = MicrotechGraphQLJob.Status.FAILED
+            job.error_message = str(error_message)
+            job.next_step = "Remote-Job nicht gefunden; Vorgang wird über AuftrNr geprüft."
+            job.next_poll_at = None
+            job.completed_at = timezone.now()
+            job.external_job_history = history
+            job.save(
+                update_fields=(
+                    "status",
+                    "error_message",
+                    "next_step",
+                    "next_poll_at",
+                    "completed_at",
+                    "external_job_history",
+                    "updated_at",
+                )
+            )
+
+            state["write_vorgang_remote_recovery_attempts"] = attempts + 1
+            workflow.state = state
+            workflow.status = MicrotechOrderSyncWorkflow.Status.RUNNING
+            workflow.current_step = "probe_vorgang"
+            workflow.current_job = None
+            workflow.error_message = ""
+            self._log_step(workflow, "write_vorgang", "recovery_pending", error=str(error_message))
+            workflow.save(
+                update_fields=(
+                    "state",
+                    "status",
+                    "current_step",
+                    "current_job",
+                    "error_message",
+                    "step_log",
+                    "updated_at",
+                )
+            )
+
+        try:
+            self._submit_order_step(workflow, "probe_vorgang")
+        except Exception as exc:
+            self._mark_step_failed(workflow, "probe_vorgang", exc)
+            return False
+        return True
 
     def abort(self, workflow: MicrotechOrderSyncWorkflow, *, reason: str = "") -> bool:
         """Bricht einen hängenden Workflow lokal ab, ohne auf den Remote-Job zu warten."""
@@ -330,6 +486,7 @@ class OrderSyncWorkflowService(BaseService):
             if beleg:
                 state["beleg_nr"] = beleg
                 state["erp_order_id"] = beleg
+                OrderUpsertMicrotechService()._persist_erp_order_id(order=workflow.order, erp_order_id=beleg)
         elif step == "write_vorgang":
             beleg = self._beleg_nr_from_vorgang_result(result) or state.get("beleg_nr", "")
             state["beleg_nr"] = beleg
@@ -559,7 +716,26 @@ class OrderSyncWorkflowService(BaseService):
         state = workflow.state or {}
         client = MicrotechGraphQLClientService()
 
-        if step == "write_vorgang":
+        if step == "probe_vorgang":
+            order_number = (order.order_number or order.api_id or "").strip()
+            if not order_number:
+                raise ValueError("Vorgangs-Probe ohne Shopware-Bestellnummer.")
+            quoted_order_number = order_number.replace("'", "''")
+            request_payload = {
+                "dataset": "Vorgang",
+                "indexField": "BelegNr",
+                "range": {"fromValues": [""], "toValues": ["ZZZZZZZZZZZZZZ"]},
+                "filter": f"AuftrNr = '{quoted_order_number}'",
+                "fields": ["BelegNr", "AuftrNr", "AdrNr"],
+                "limit": 20,
+            }
+            job = MicrotechJobSentinelService().submit_dataset_records(
+                input_data=request_payload,
+                context={"workflow_id": workflow.pk, "step": step},
+                continuation=CONTINUATION_NAME,
+                next_step="Microtech requestDatasetRecords (probe_vorgang).",
+            )
+        elif step == "write_vorgang":
             upsert = OrderUpsertMicrotechService()
             resolved_rule = OrderRuleResolverService().resolve_for_order(order=order)
             positions, _rule_debug = upsert._build_graphql_positions(
@@ -582,26 +758,33 @@ class OrderSyncWorkflowService(BaseService):
             resolved_customer_number = str(state.get("erp_nr") or "").strip()
             if not resolved_customer_number:
                 raise ValueError("Vorgangsanlage ohne aufgelöste Microtech-Kundennummer.")
-            operation = "createVorgang"
-            create_input = {
-                **input_data,
-                "vorgangArt": order_type_number,
-                "customerNumber": resolved_customer_number,
-            }
-            submit = lambda: client.submit_create_vorgang(create_input)
-            payload = {"input": create_input}
+            existing_beleg_nr = str(
+                state.get("beleg_nr") or state.get("erp_order_id") or order.erp_order_id or ""
+            ).strip()
+            if existing_beleg_nr:
+                operation = "updateVorgang"
+                submit = lambda: client.submit_update_vorgang(existing_beleg_nr, input_data)
+                payload = {"belegNr": existing_beleg_nr, "input": input_data}
+            else:
+                operation = "createVorgang"
+                create_input = {
+                    **input_data,
+                    "vorgangArt": order_type_number,
+                    "customerNumber": resolved_customer_number,
+                }
+                submit = lambda: client.submit_create_vorgang(create_input)
+                payload = {"input": create_input}
+            job = MicrotechJobSentinelService().submit_wrapper_job(
+                kind=kind,
+                operation=operation,
+                submit=submit,
+                request_payload=payload,
+                context={"workflow_id": workflow.pk, "step": step},
+                continuation=CONTINUATION_NAME,
+                next_step=f"Microtech {operation} ({step}).",
+            )
         else:
             raise ValueError(f"Unbekannter Order-Step: {step}")
-
-        job = MicrotechJobSentinelService().submit_wrapper_job(
-            kind=kind,
-            operation=operation,
-            submit=submit,
-            request_payload=payload,
-            context={"workflow_id": workflow.pk, "step": step},
-            continuation=CONTINUATION_NAME,
-            next_step=f"Microtech {operation} ({step}).",
-        )
         workflow.status = MicrotechOrderSyncWorkflow.Status.WAITING
         workflow.current_step = step
         update_fields = ["status", "current_step", "updated_at"]
@@ -757,11 +940,46 @@ class OrderSyncWorkflowService(BaseService):
         return any(fragment in lowered for fragment in NOT_FOUND_FRAGMENTS)
 
     def reconcile_failures(self) -> int:
-        """Verarbeitet fehlgeschlagene Jobs und erkennt verwaiste wartende Workflows."""
+        """Recover durable starts and process failed or orphaned workflows."""
         from django.db import transaction
         from django.utils import timezone
 
         changed = 0
+        missing_order_ids = list(
+            Order.objects.filter(
+                erp_order_id="",
+                microtech_export_enabled=True,
+                order_state__in=("open", "in_progress"),
+                microtech_sync_workflows__isnull=True,
+            ).values_list("pk", flat=True)
+        )
+        for order_id in missing_order_ids:
+            order = Order.objects.select_related("customer", "billing_address", "shipping_address").get(pk=order_id)
+            try:
+                workflow, created = self.ensure_pending_for_order(order)
+                if created and workflow is not None:
+                    self.start_pending_workflow(workflow_id=workflow.pk)
+                    changed += 1
+            except Exception:
+                # A malformed imported order must stay visible for correction;
+                # it is never silently excluded from the Microtech export.
+                logger.exception("Order-Sync-Reconcile: Workflow für Bestellung %s konnte nicht angelegt werden.", order_id)
+
+        pending_ids = list(
+            MicrotechOrderSyncWorkflow.objects.filter(
+                status=MicrotechOrderSyncWorkflow.Status.PENDING,
+            ).values_list("pk", flat=True)
+        )
+        for workflow_id in pending_ids:
+            try:
+                workflow = self.start_pending_workflow(workflow_id=workflow_id)
+                if workflow is not None:
+                    changed += 1
+            except Exception:
+                # _advance marks the workflow as FAILED; continue reconciling
+                # independent orders instead of aborting the batch.
+                logger.exception("Order-Sync-Reconcile: PENDING Workflow %s konnte nicht gestartet werden.", workflow_id)
+
         waiting = list(
             MicrotechOrderSyncWorkflow.objects.filter(
                 status=MicrotechOrderSyncWorkflow.Status.WAITING,
@@ -812,6 +1030,17 @@ class OrderSyncWorkflowService(BaseService):
             if not job.is_terminal:
                 continue
             if job.status == MicrotechGraphQLJob.Status.SUCCEEDED:
+                if job.continuation_status != MicrotechGraphQLJob.ContinuationStatus.FAILED:
+                    continue
+                error_message = job.error_message or "Continuation des erfolgreichen Microtech-Jobs fehlgeschlagen."
+                with transaction.atomic():
+                    wf = MicrotechOrderSyncWorkflow.objects.select_for_update().get(pk=workflow.pk)
+                    wf.status = MicrotechOrderSyncWorkflow.Status.FAILED
+                    wf.error_message = error_message
+                    self._log_step(wf, wf.current_step, "failed", error=error_message)
+                    wf.save(update_fields=("status", "error_message", "step_log", "updated_at"))
+                logger.error("Order-Sync-Workflow #%s: %s", workflow.pk, error_message)
+                changed += 1
                 continue
 
             step = workflow.current_step

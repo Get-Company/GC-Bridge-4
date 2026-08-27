@@ -653,7 +653,6 @@ Eigenschaft: {% for prop in product.product_properties.all %}{{ prop.value.group
             [sync_job.target for sync_job in sync_jobs],
             [
                 ProductSyncJob.Target.MICROTECH,
-                ProductSyncJob.Target.SHOPWARE5,
                 ProductSyncJob.Target.SHOPWARE,
             ],
         )

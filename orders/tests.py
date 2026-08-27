@@ -21,6 +21,7 @@ from orders.services.order_rule_resolver import (
 )
 from orders.services.order_upsert_microtech import OrderRuleDebugInfo, OrderUpsertMicrotechService
 from orders.services.order_sync import OrderSyncService
+from products.models import Product
 
 
 class OrderGraphQLPayloadTest(SimpleTestCase):
@@ -186,6 +187,55 @@ class OrderNetPriceTest(SimpleTestCase):
         )
 
         self.assertEqual(price, Decimal("10.00"))
+
+
+class OrderProductNumberResolutionTest(TestCase):
+    def setUp(self):
+        self.order = Order.objects.create(api_id="order-product-number-resolution")
+        self.product = Product.objects.create(
+            erp_nr="ERP-ARTICLE-42",
+            sku="shopware-product-42",
+        )
+
+    def test_product_position_uses_django_erp_number_from_shopware_product_id(self):
+        created = OrderSyncService()._replace_order_details(
+            order=self.order,
+            line_items=[
+                {
+                    "id": "line-item-42",
+                    "type": "product",
+                    "referencedId": self.product.sku,
+                    "payload": {"productNumber": "ERP-ARTICLE-42"},
+                    "label": "Artikel 42",
+                    "quantity": 1,
+                    "price": {"unitPrice": "10.00", "totalPrice": "10.00"},
+                }
+            ],
+            tax_status="net",
+        )
+
+        self.assertEqual(created, 1)
+        self.assertEqual(self.order.details.get().erp_nr, "ERP-ARTICLE-42")
+
+    def test_auto_generated_shopware_variant_number_is_rejected(self):
+        with self.assertRaisesMessage(ValueError, "kann keiner Django-Artikelnummer zugeordnet werden"):
+            OrderSyncService()._replace_order_details(
+                order=self.order,
+                line_items=[
+                    {
+                        "id": "line-item-duplicate",
+                        "type": "product",
+                        "referencedId": "shopware-duplicate-variant",
+                        "payload": {"productNumber": "PARENT-STRIP-TABS.33"},
+                        "label": "Doppelte Variante",
+                        "quantity": 1,
+                        "price": {"unitPrice": "10.00", "totalPrice": "10.00"},
+                    }
+                ],
+                tax_status="net",
+            )
+
+        self.assertFalse(self.order.details.exists())
 
 
 class OrderRuleResolverDynamicRulesTest(TestCase):

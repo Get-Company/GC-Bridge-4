@@ -9,6 +9,7 @@ from core.live_events import emit_event, emit_run_finished, emit_run_started
 from issues.services import TaskIssueCollector
 
 PRODUCT_SYNC_CONTINUATION = "products.scheduled_product_sync_page"
+PRODUCT_SYNC_SHOPWARE_BATCH_SIZE = 50
 
 
 def _erp_list(erp_nrs: Sequence[str] | None) -> list[str]:
@@ -38,6 +39,38 @@ def _active_product_erp_nrs(*, limit: int | None = None) -> list[str]:
     if limit:
         queryset = queryset[:limit]
     return _erp_list(queryset)
+
+
+def _chunks(values: Sequence[str], size: int) -> list[list[str]]:
+    return [list(values[index:index + size]) for index in range(0, len(values), size)]
+
+
+def _enqueue_shopware_product_batches(
+    *,
+    erp_nrs: Sequence[str],
+    include_images: bool,
+    source_job_id: int | None = None,
+) -> list[str]:
+    """Publish bounded, idempotent Shopware-6 batches on the bulk queue.
+
+    The GraphQL continuation must only turn a completed Microtech read into
+    follow-up work.  It must never keep the continuation worker occupied for
+    the full catalogue export.
+    """
+    cleaned = _erp_list(erp_nrs)
+    task_ids: list[str] = []
+    for batch_number, batch in enumerate(_chunks(cleaned, PRODUCT_SYNC_SHOPWARE_BATCH_SIZE), start=1):
+        result = sync_shopware_product_batch.apply_async(
+            kwargs={
+                "erp_nrs": batch,
+                "include_images": bool(include_images),
+                "source_job_id": source_job_id,
+                "batch_number": batch_number,
+            },
+            queue="bulk",
+        )
+        task_ids.append(str(result.id or ""))
+    return task_ids
 
 
 @shared_task(
@@ -195,7 +228,7 @@ def _scheduled_product_sync_finalize(
     write_base_price_back: bool = False,
     force_images: bool = True,
 ) -> dict:
-    """Schritte 2–5 des vollständigen Produkt-Syncs nach dem Microtech-Import."""
+    """Legacy entry point that now only publishes bounded Shopware-6 work."""
     from loguru import logger
     from microtech.services import MicrotechExpiredSpecialSyncService, microtech_connection
     from django.utils import timezone
@@ -212,21 +245,17 @@ def _scheduled_product_sync_finalize(
             )
         logger.info("Sonderpreise: {} abgelaufen, {} in Microtech aktualisiert", expired_count, mt_updated)
 
-    logger.info("scheduled_product_sync finalize: Django → Shopware")
-    with TaskIssueCollector("products.scheduled_product_sync"):
-        call_command("shopware_sync_products", all=True, limit=limit, skip_images=force_images)
-        if force_images:
-            logger.info("scheduled_product_sync finalize: Shopware Bilder force-upload")
-            call_command("shopware_force_product_image_uploads", all=True, limit=limit)
-        logger.info("scheduled_product_sync finalize: Shopware Variantenstruktur")
-        call_command(
-            "shopware_sync_variants",
-            all=True,
-            apply=True,
-            skip_product_sync=True,
-        )
-
-    return {"expired": expired_count, "microtech_updated": mt_updated, "force_images": force_images}
+    task_ids = _enqueue_shopware_product_batches(
+        erp_nrs=_active_product_erp_nrs(limit=limit),
+        include_images=bool(force_images),
+    )
+    logger.info("scheduled_product_sync finalize: {} Shopware-6-Batches eingereiht", len(task_ids))
+    return {
+        "expired": expired_count,
+        "microtech_updated": mt_updated,
+        "force_images": force_images,
+        "shopware_batches": len(task_ids),
+    }
 
 
 @shared_task(name="products.scheduled_product_sync")
@@ -400,11 +429,23 @@ def _scheduled_product_sync_continuation(job) -> None:
             expired_count,
             restored_count,
         )
-    _finalize_scheduled_product_sync(
-        include_images=include_images,
-        limit=None if erp_nrs else limit,
-        erp_nrs=erp_nrs or None,
+    # After the import, publish small Shopware-6 tasks.  The continuation can
+    # complete here; each output batch has its own retry/error state in Celery
+    # and cannot monopolise the worker that advances GraphQL jobs.
+    selected_erp_nrs = erp_nrs or _erp_list(
+        product.get("artNr") or product.get("erpNr")
+        for product in products[: state["processed"]]
     )
+    task_ids = _enqueue_shopware_product_batches(
+        erp_nrs=selected_erp_nrs,
+        include_images=include_images,
+        source_job_id=job.pk,
+    )
+    context["state"] = state
+    context["shopware_batch_task_ids"] = task_ids
+    context["shopware_batch_count"] = len(task_ids)
+    job.context = context
+    job.save(update_fields=("context", "updated_at"))
 
 
 def _finalize_scheduled_product_sync(
@@ -412,43 +453,82 @@ def _finalize_scheduled_product_sync(
     include_images: bool,
     limit: int | None = None,
     erp_nrs: Sequence[str] | None = None,
-) -> None:
-    from loguru import logger
+) -> list[str]:
+    """Compatibility helper for callers that used the former serial finalizer."""
+    cleaned_erp_nrs = _erp_list(erp_nrs) or _active_product_erp_nrs(limit=limit)
+    return _enqueue_shopware_product_batches(
+        erp_nrs=cleaned_erp_nrs,
+        include_images=include_images,
+    )
+
+
+@shared_task(
+    name="products.sync_shopware_product_batch",
+    bind=True,
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_jitter=True,
+    retry_kwargs={"max_retries": 3},
+    soft_time_limit=900,
+    time_limit=960,
+)
+def sync_shopware_product_batch(
+    task,
+    *,
+    erp_nrs: Sequence[str],
+    include_images: bool = True,
+    source_job_id: int | None = None,
+    batch_number: int | None = None,
+) -> dict:
+    """Synchronize one finite catalogue slice plus its affected variants.
+
+    Repeating this task is safe: Shopware upserts are keyed by product number
+    and the variant command resolves the same persisted family definition.
+    """
+    from products.models import Product
+    from products.services.variant_family import ProductVariantFamilyResolverService
 
     cleaned_erp_nrs = _erp_list(erp_nrs)
-    with TaskIssueCollector("products.scheduled_product_sync"):
-        logger.info("scheduled_product_sync: Django -> Shopware ohne Bild-Medien starten")
-        if cleaned_erp_nrs:
-            call_command("shopware_sync_products", *cleaned_erp_nrs, skip_images=True)
-        else:
-            call_command(
-                "shopware_sync_products",
-                all=True,
-                limit=limit,
-                skip_images=True,
-            )
-        logger.info("scheduled_product_sync: Django -> Shopware5 starten")
-        if cleaned_erp_nrs:
-            call_command("shopware5_sync_products", *cleaned_erp_nrs)
-        else:
-            call_command("shopware5_sync_products", limit=limit)
+    if not cleaned_erp_nrs:
+        return {"status": "skipped", "count": 0, "batch_number": batch_number}
+
+    run_id = str(source_job_id or task.request.id or "")
+    with TaskIssueCollector("products.sync_shopware_product_batch"):
+        call_command("shopware_sync_products", *cleaned_erp_nrs, skip_images=True)
         if include_images:
-            logger.info("scheduled_product_sync: Shopware Bilder loeschen und neu hochladen")
-            if cleaned_erp_nrs:
-                call_command("shopware_force_product_image_uploads", *cleaned_erp_nrs)
-            else:
-                call_command(
-                    "shopware_force_product_image_uploads",
-                    all=True,
-                    limit=limit,
-                )
-        logger.info("scheduled_product_sync: Shopware Variantenstruktur starten")
-        call_command(
-            "shopware_sync_variants",
-            all=True,
-            apply=True,
-            skip_product_sync=True,
+            call_command("shopware_force_product_image_uploads", *cleaned_erp_nrs)
+
+        resolver = ProductVariantFamilyResolverService()
+        family_slugs = sorted(
+            {
+                family.slug
+                for product in Product.objects.filter(erp_nr__in=cleaned_erp_nrs).only("id", "erp_nr")
+                for family in resolver.families_for_product(product)
+            }
         )
+        if family_slugs:
+            call_command(
+                "shopware_sync_variants",
+                *family_slugs,
+                apply=True,
+                skip_product_sync=True,
+            )
+
+    emit_event(
+        "products.sync_shopware_product_batch",
+        entity=", ".join(cleaned_erp_nrs[:3]),
+        step=f"Batch {batch_number or '-'} → shopware6",
+        status="ok",
+        summary=f"{len(cleaned_erp_nrs)} Produkte und {len(family_slugs)} Variantenfamilien synchronisiert",
+        run_id=run_id,
+        target="shopware6",
+    )
+    return {
+        "status": "succeeded",
+        "count": len(cleaned_erp_nrs),
+        "family_count": len(family_slugs),
+        "batch_number": batch_number,
+    }
 
 
 @shared_task(name="products.microtech_sync_products")
@@ -480,16 +560,15 @@ def microtech_update_prices(erp_nrs: Sequence[str]) -> None:
 
 @shared_task(name="products.sync_restored_price_increase")
 def sync_restored_price_increase(erp_nrs: Sequence[str]) -> dict[str, int]:
-    """Push restored Bridge prices to Microtech, Shopware 6, and Shopware 5."""
+    """Push restored Bridge prices to Microtech and Shopware 6."""
     cleaned_erp_nrs = _clean_erp_nrs(erp_nrs)
     if not cleaned_erp_nrs:
-        return {"microtech": 0, "shopware": 0, "shopware5": 0}
+        return {"microtech": 0, "shopware": 0}
 
     call_command("microtech_update_prices", *cleaned_erp_nrs)
     call_command("shopware_sync_products", *cleaned_erp_nrs, skip_images=True)
-    call_command("shopware5_sync_products", *cleaned_erp_nrs)
     count = len(cleaned_erp_nrs)
-    return {"microtech": count, "shopware": count, "shopware5": count}
+    return {"microtech": count, "shopware": count}
 
 
 @shared_task(name="products.shopware_sync_products")

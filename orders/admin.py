@@ -185,6 +185,7 @@ class OrderAdmin(BaseAdmin):
         "address_reconciliation_status",
         "purchase_date",
         "order_state",
+        "microtech_export_state",
         "microtech_sync_status",
     )
     list_per_page = 20
@@ -217,6 +218,7 @@ class OrderAdmin(BaseAdmin):
         ("order_state", FieldTextFilter),
         ("payment_state", FieldTextFilter),
         ("shipping_state", FieldTextFilter),
+        "microtech_export_enabled",
         ("purchase_date", RangeDateTimeFilter),
         ("created_at", RangeDateTimeFilter),
     ]
@@ -383,6 +385,15 @@ class OrderAdmin(BaseAdmin):
     @admin.display(description="Microtech-Sync")
     def microtech_sync_status(self, obj):
         return self.microtech_sync_status_for_order(obj)
+
+    @admin.display(description="Microtech-Export", ordering="microtech_export_enabled")
+    def microtech_export_state(self, obj: Order):
+        if obj.microtech_export_enabled:
+            return True
+        return format_html(
+            '<span title="{}" style="color:#b45309;">ausgeschlossen</span>',
+            obj.microtech_export_exclusion_reason or "Kein Grund dokumentiert.",
+        )
 
     @admin.display(description="AdrNr-Änderung")
     def customer_change_status(self, obj: Order):

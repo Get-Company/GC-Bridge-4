@@ -48,6 +48,12 @@
           <span>{{ graphql_health.latency_ms }} ms</span>
         </div>
         {% endif %}
+        {% if graphql_health.worker %}
+        <div class="flex items-center gap-2 text-gray-500 dark:text-gray-400">
+          <span class="material-symbols-outlined" style="font-size:14px">precision_manufacturing</span>
+          <span>COM-Worker: {% if graphql_health.worker.running %}läuft{% else %}steht{% endif %}{% if graphql_health.worker.microtechConnected %} · Microtech verbunden{% endif %}</span>
+        </div>
+        {% endif %}
         {% if graphql_health.error %}
         <div class="text-red-600 dark:text-red-400 break-words">{{ graphql_health.error }}</div>
         {% endif %}
@@ -248,6 +254,11 @@
     }
     if (health.latency_ms != null) {
       rows.push(`<div class="flex items-center gap-2 text-gray-500 dark:text-gray-400"><span class="material-symbols-outlined" style="font-size:14px">timer</span><span>${esc(health.latency_ms)} ms</span></div>`);
+    }
+    if (health.worker) {
+      const workerState = health.worker.running ? "läuft" : "steht";
+      const connection = health.worker.microtechConnected ? " · Microtech verbunden" : "";
+      rows.push(`<div class="flex items-center gap-2 text-gray-500 dark:text-gray-400"><span class="material-symbols-outlined" style="font-size:14px">precision_manufacturing</span><span>COM-Worker: ${workerState}${connection}</span></div>`);
     }
     const errorMsg = health.error || (health.ok === false ? health.detail : null);
     if (errorMsg) {

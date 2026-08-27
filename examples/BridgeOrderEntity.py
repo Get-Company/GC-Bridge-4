@@ -129,7 +129,7 @@ class BridgeOrderEntity(db.Model):
         except Exception as e:
             print(f"Error querying new orders: {str(e)}")
 
-    def map_sw5_to_db(self, order):
+    def map_legacy_to_db(self, order):
         self.api_id = order["id"]
         self.purchase_date = datetime.strptime(order["orderTime"], "%Y-%m-%dT%H:%M:%S%z").replace(tzinfo=None)
         self.total_price = order["invoiceAmountNet"]
@@ -137,7 +137,7 @@ class BridgeOrderEntity(db.Model):
         self.payment_method = order["payment"]["description"]
         self.created_at = datetime.now()
         self.edited_at = datetime.now()
-        self.erp_order_id = "SW5_" + str(order["id"])
+        self.erp_order_id = "LEGACY_" + str(order["id"])
         self.order_number = order["number"]
         self.shipping_method = order["billing"]["country"]["iso"]
         self.description = order["customerComment"]

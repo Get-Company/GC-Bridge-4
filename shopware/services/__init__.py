@@ -8,10 +8,6 @@ from .product_media import ProductMediaSyncService
 from .product import ProductService
 from .translations import ShopwareTranslationService
 from .shopware6 import Shopware6Service, Criteria, EqualsFilter, ContainsFilter
-from .shopware5 import Shopware5ProductSyncService
-from .shopware5_category_mapping import Shopware5CategoryMappingService
-from .shopware5_duplicate_category_merge import Shopware5DuplicateCategoryTreeMergeService
-from .shopware5_translation_import import Shopware5ItalianTranslationImportService
 from .variant_sync import ShopwareVariantSyncService
 
 __all__ = [
@@ -25,10 +21,6 @@ __all__ = [
     "CustomerService",
     "ShopwareCategoryTranslationSyncService",
     "ShopwareCategoryContentSyncService",
-    "Shopware5ProductSyncService",
-    "Shopware5ItalianTranslationImportService",
-    "Shopware5CategoryMappingService",
-    "Shopware5DuplicateCategoryTreeMergeService",
     "ShopwareVariantSyncService",
     "Criteria",
     "EqualsFilter",

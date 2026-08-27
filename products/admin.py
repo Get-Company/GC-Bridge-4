@@ -1346,9 +1346,8 @@ class PriceIncreaseAdmin(BaseAdmin):
                 continue
             lead_category = min(matching_categories, key=lambda category: (-category.level, category.lft, category.id))
             category_path = self._category_path_in_subtree(lead_category, subtree_categories)
-            # In SW5 ist die logische Root-Kategorie (z. B. Deutsch) unter einem
-            # technischen MPTT-Root abgelegt. Die Preisliste beginnt fachlich erst
-            # bei Ebene 2 (z. B. Orga-Mappen) und zeigt Ebene 3 separat darunter.
+            # Die Preisliste beginnt unterhalb der fachlichen Root-Kategorie
+            # und zeigt die folgenden Ebenen separat darunter.
             relative_category_path = category_path[1:]
             visible_category_path = (
                 relative_category_path[1:]
@@ -3811,7 +3810,6 @@ class CategoryAdmin(TabbedTranslationAdmin, BaseAdmin):
     list_filter_sheet = BaseAdmin.list_filter_sheet
     list_display = (
         "name",
-        "sw5_id",
         "sw6_id",
         "sku",
         "slug",
@@ -3823,7 +3821,7 @@ class CategoryAdmin(TabbedTranslationAdmin, BaseAdmin):
         "created_at",
     )
     list_display_links = ("name",)
-    search_fields = ("name", "sw5_id", "sw6_id", "sku", "slug", "legacy_erp_nr", "legacy_api_id", "parent__name")
+    search_fields = ("name", "sw6_id", "sku", "slug", "legacy_erp_nr", "legacy_api_id", "parent__name")
     list_filter = [
         ("parent", RelatedDropdownFilter),
         ("is_active", BooleanRadioFilter),
@@ -3984,7 +3982,6 @@ class CategoryAdmin(TabbedTranslationAdmin, BaseAdmin):
         categories = Category.objects.order_by("tree_id", "lft").values(
             "id",
             "name",
-            "sw5_id",
             "sw6_id",
             "sku",
             "slug",
@@ -3999,7 +3996,6 @@ class CategoryAdmin(TabbedTranslationAdmin, BaseAdmin):
             {
                 "id": row["id"],
                 "name": row["name"],
-                "sw5_id": row["sw5_id"] or "",
                 "sw6_id": row["sw6_id"] or "",
                 "sku": row["sku"] or "",
                 "slug": row["slug"],
@@ -4082,7 +4078,6 @@ class CategoryAdmin(TabbedTranslationAdmin, BaseAdmin):
             "category": {
                 "id": category.pk,
                 "name": category.name,
-                "sw5_id": category.sw5_id or "",
                 "sw6_id": category.sw6_id or "",
                 "sku": category.sku or "",
                 "slug": category.slug,

@@ -12,11 +12,26 @@ def _run_id() -> str:
     return getattr(getattr(current_task, "request", None), "id", "") or ""
 
 
-@shared_task(name="microtech.reconcile_order_sync_workflows")
+@shared_task(name="orders.reconcile_order_sync_workflows")
 def reconcile_order_sync_workflows() -> int:
     from orders.services.order_sync_workflow import OrderSyncWorkflowService
 
     return OrderSyncWorkflowService().reconcile_failures()
+
+
+@shared_task(name="microtech.reconcile_order_sync_workflows")
+def legacy_reconcile_order_sync_workflows() -> int:
+    """Compatibility alias for already configured periodic tasks."""
+    return reconcile_order_sync_workflows.run()
+
+
+@shared_task(name="orders.start_microtech_order_workflow", soft_time_limit=240, time_limit=300)
+def start_microtech_order_workflow(workflow_id: int) -> int | None:
+    """Start a persisted order workflow after its import transaction committed."""
+    from orders.services.order_sync_workflow import OrderSyncWorkflowService
+
+    workflow = OrderSyncWorkflowService().start_pending_workflow(workflow_id=workflow_id)
+    return workflow.pk if workflow is not None else None
 
 
 def register_order_sync_continuations() -> None:

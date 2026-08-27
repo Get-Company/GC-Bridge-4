@@ -51,8 +51,8 @@ class TestJobSentinelSubmission(TestCase):
 
 
 class TestJobSentinelWebhook(TestCase):
-    @patch("microtech.tasks.process_graphql_job_result.delay")
-    def test_success_webhook_dispatches_continuation_with_embedded_result(self, mock_delay):
+    @patch("microtech.tasks.process_graphql_job_result.apply_async")
+    def test_success_webhook_dispatches_continuation_with_embedded_result(self, mock_apply_async):
         job = _make_job(
             kind=MicrotechGraphQLJob.Kind.ORDER_UPSERT,
             operation="createVorgang",
@@ -74,7 +74,9 @@ class TestJobSentinelWebhook(TestCase):
         self.assertEqual(job.result_payload, {"vorgang": {"belegNr": "A-1000"}})
         self.assertIsNotNone(job.webhook_received_at)
         self.assertIn("Continuation", job.next_step)
-        mock_delay.assert_called_once_with(job.pk)
+        mock_apply_async.assert_called_once()
+        self.assertEqual(mock_apply_async.call_args.kwargs["args"], (job.pk,))
+        self.assertEqual(mock_apply_async.call_args.kwargs["queue"], "microtech")
 
 
 @patch("microtech.services.job_sentinel.MicrotechGraphQLClientService")
@@ -217,7 +219,7 @@ class TestJobSentinelCleanup(TestCase):
 
 class TestJobSentinelContinuations(TestCase):
     @patch(
-        "microtech.tasks.process_graphql_job_result.delay",
+        "microtech.tasks.process_bulk_graphql_job_result.apply_async",
         side_effect=ConnectionError("Celery broker nicht erreichbar"),
     )
     def test_dispatch_failure_keeps_successful_continuation_pending(self, _mock_delay):
@@ -233,8 +235,9 @@ class TestJobSentinelContinuations(TestCase):
         job.refresh_from_db()
         self.assertEqual(job.status, MicrotechGraphQLJob.Status.SUCCEEDED)
         self.assertEqual(job.next_step, "Continuation ausfuehren.")
-        self.assertIsNotNone(job.next_poll_at)
-        self.assertLessEqual(job.next_poll_at, timezone.now())
+        self.assertEqual(job.continuation_status, MicrotechGraphQLJob.ContinuationStatus.PENDING)
+        self.assertEqual(job.continuation_task_id, "")
+        self.assertIsNone(job.continuation_lease_expires_at)
 
     @patch.dict(CONTINUATIONS, {}, clear=True)
     def test_process_continuation_marks_job_failed_when_handler_raises(self):
@@ -247,20 +250,23 @@ class TestJobSentinelContinuations(TestCase):
             continuation="test.fail",
             next_step="Continuation eingereiht.",
             delete_after_completion=False,
+            continuation_status=MicrotechGraphQLJob.ContinuationStatus.DISPATCHED,
+            continuation_task_id="continuation-task",
         )
 
         with self.assertRaises(RuntimeError):
-            MicrotechJobSentinelService().process_continuation(job_id=job.pk)
+            MicrotechJobSentinelService().process_continuation(job_id=job.pk, task_id="continuation-task")
 
         job.refresh_from_db()
-        self.assertEqual(job.status, MicrotechGraphQLJob.Status.FAILED)
+        self.assertEqual(job.status, MicrotechGraphQLJob.Status.SUCCEEDED)
+        self.assertEqual(job.continuation_status, MicrotechGraphQLJob.ContinuationStatus.FAILED)
         self.assertEqual(job.next_step, "Continuation fehlgeschlagen.")
         self.assertIn("Continuation kaputt", job.error_message)
         self.assertIsNone(job.next_poll_at)
 
-    @patch("microtech.tasks.process_graphql_job_result.delay")
+    @patch("microtech.tasks.process_bulk_graphql_job_result.apply_async")
     @patch("microtech.tasks.poll_graphql_job.delay")
-    def test_poll_due_jobs_dispatches_pending_continuations(self, mock_poll_delay, mock_continuation_delay):
+    def test_poll_due_jobs_dispatches_pending_continuations(self, mock_poll_delay, mock_continuation_apply_async):
         past = timezone.now() - timedelta(minutes=1)
         job = _make_job(
             status=MicrotechGraphQLJob.Status.SUCCEEDED,
@@ -273,7 +279,11 @@ class TestJobSentinelContinuations(TestCase):
 
         self.assertEqual(count, 1)
         mock_poll_delay.assert_not_called()
-        mock_continuation_delay.assert_called_once_with(job.pk)
+        mock_continuation_apply_async.assert_called_once()
+        self.assertEqual(mock_continuation_apply_async.call_args.kwargs["args"], (job.pk,))
+        self.assertEqual(mock_continuation_apply_async.call_args.kwargs["queue"], "bulk")
         job.refresh_from_db()
         self.assertEqual(job.next_step, "Continuation eingereiht.")
-        self.assertGreater(job.next_poll_at, timezone.now())
+        self.assertEqual(job.continuation_status, MicrotechGraphQLJob.ContinuationStatus.DISPATCHED)
+        self.assertTrue(job.continuation_task_id)
+        self.assertGreater(job.continuation_lease_expires_at, timezone.now())

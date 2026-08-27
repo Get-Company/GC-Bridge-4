@@ -4,6 +4,7 @@ import hmac
 import json
 import logging
 import random
+from uuid import uuid4
 from collections.abc import Callable, Sequence
 from datetime import timedelta
 from typing import Any
@@ -63,21 +64,17 @@ class MicrotechJobSentinelService(BaseService):
     MIN_POLL_INTERVAL_SECONDS = 10
     POLL_JITTER_SECONDS = 15
     POLL_ERROR_BACKOFF_SECONDS = 300
-    # Zeitfenster, fuer das ein dispatchter Job als "in Bearbeitung" gilt,
-    # damit der naechste Beat-Tick ihn nicht erneut einreiht.
-    CLAIM_BACKOFF_SECONDS = 120
-    CONTINUATION_STEPS_PENDING = (
-        "Continuation ausfuehren.",
-        "Continuation ausfuehren",
-        "Continuation ausführen.",
-        "Continuation ausführen",
-        "Continuation eingereiht.",
-        "Continuation eingereiht",
-        "Continuation laeuft.",
-        "Continuation laeuft",
-        "Continuation läuft.",
-        "Continuation läuft",
-    )
+    # A remote-job poll is short-lived, so a two-minute dispatch backoff is
+    # sufficient. Continuations use their own durable lifecycle below.
+    POLL_DISPATCH_BACKOFF_SECONDS = 120
+    CONTINUATION_LEASE_SECONDS = 300
+    BULK_CONTINUATION_LEASE_SECONDS = 7_500
+    CONTINUATION_LOCK_NAMESPACE = 82_641
+    CONTINUATION_QUEUE_BY_NAME = {
+        "microtech_order_sync_advance": "orders",
+        "order_customer_change_apply": "orders",
+        "products.scheduled_product_sync_page": "bulk",
+    }
 
     def submit_dataset_records(
         self,
@@ -96,7 +93,9 @@ class MicrotechJobSentinelService(BaseService):
             context=context or {},
             continuation=str(continuation or "").strip(),
             next_step=next_step or "Warte auf Microtech GraphQL Webhook.",
-            delete_after_completion=delete_after_completion,
+            # Keep completed continuation rows for recovery and observability;
+            # scheduled cleanup removes their remote/local records later.
+            delete_after_completion=delete_after_completion and not bool(str(continuation or "").strip()),
         )
         client = MicrotechGraphQLClientService()
         try:
@@ -152,7 +151,7 @@ class MicrotechJobSentinelService(BaseService):
             context=context or {},
             continuation=str(continuation or "").strip(),
             next_step=next_step or "Warte auf Microtech GraphQL Produkt-Update.",
-            delete_after_completion=delete_after_completion,
+            delete_after_completion=delete_after_completion and not bool(str(continuation or "").strip()),
         )
         client = MicrotechGraphQLClientService()
         try:
@@ -204,7 +203,7 @@ class MicrotechJobSentinelService(BaseService):
             context=context or {},
             continuation=str(continuation or "").strip(),
             next_step=next_step or "Warte auf Microtech GraphQL Produkt-Batch.",
-            delete_after_completion=delete_after_completion,
+            delete_after_completion=delete_after_completion and not bool(str(continuation or "").strip()),
         )
         client = MicrotechGraphQLClientService()
         try:
@@ -271,7 +270,7 @@ class MicrotechJobSentinelService(BaseService):
             context=context or {},
             continuation=str(continuation or "").strip(),
             next_step=next_step or "Warte auf Microtech GraphQL Job.",
-            delete_after_completion=delete_after_completion,
+            delete_after_completion=delete_after_completion and not bool(str(continuation or "").strip()),
         )
         try:
             external_job_id, retry_after = submit()
@@ -466,7 +465,18 @@ class MicrotechJobSentinelService(BaseService):
         self._after_terminal_update(job.pk)
         return MicrotechGraphQLJob.objects.filter(pk=job.pk).first() or job
 
-    def process_continuation(self, *, job_id: int) -> None:
+    def process_continuation(self, *, job_id: int, task_id: str) -> None:
+        """Run exactly one claimed continuation.
+
+        A Celery delivery is only allowed to run the handler when it owns the
+        durable task id stored on the job.  A late duplicate delivery therefore
+        becomes a no-op before it reaches a remote mutation.
+        """
+        task_id = str(task_id or "").strip()
+        if not task_id:
+            logger.warning("Continuation fuer Microtech GraphQL Job %s ohne Celery-Task-ID ignoriert.", job_id)
+            return
+
         with transaction.atomic():
             job = MicrotechGraphQLJob.objects.select_for_update().filter(pk=job_id).first()
             if job is None or job.status != MicrotechGraphQLJob.Status.SUCCEEDED:
@@ -476,43 +486,115 @@ class MicrotechJobSentinelService(BaseService):
                 should_cleanup = job.delete_after_completion
                 handler = None
             else:
+                if (
+                    job.continuation_status != MicrotechGraphQLJob.ContinuationStatus.DISPATCHED
+                    or job.continuation_task_id != task_id
+                ):
+                    return
                 handler = CONTINUATIONS.get(continuation)
                 should_cleanup = False
                 if handler is None:
-                    job.status = MicrotechGraphQLJob.Status.FAILED
+                    job.continuation_status = MicrotechGraphQLJob.ContinuationStatus.FAILED
                     job.error_message = f"Keine Continuation fuer '{continuation}' registriert."
-                    job.completed_at = timezone.now()
-                    job.save(update_fields=("status", "error_message", "completed_at", "updated_at"))
+                    job.next_step = "Continuation fehlgeschlagen."
+                    job.next_poll_at = None
+                    job.continuation_completed_at = timezone.now()
+                    job.continuation_lease_expires_at = None
+                    job.save(
+                        update_fields=(
+                            "continuation_status",
+                            "error_message",
+                            "next_step",
+                            "next_poll_at",
+                            "continuation_completed_at",
+                            "continuation_lease_expires_at",
+                            "updated_at",
+                        )
+                    )
                     return
 
+                now = timezone.now()
+                job.continuation_status = MicrotechGraphQLJob.ContinuationStatus.RUNNING
+                job.continuation_started_at = job.continuation_started_at or now
+                job.continuation_heartbeat_at = now
+                job.continuation_lease_expires_at = now + timedelta(
+                    seconds=self._continuation_lease_seconds(job)
+                )
+                job.next_step = "Continuation laeuft."
+                job.next_poll_at = None
+                job.save(
+                    update_fields=(
+                        "continuation_status",
+                        "continuation_started_at",
+                        "continuation_heartbeat_at",
+                        "continuation_lease_expires_at",
+                        "next_step",
+                        "next_poll_at",
+                        "updated_at",
+                    )
+                )
+
         if handler is not None:
-            MicrotechGraphQLJob.objects.filter(pk=job_id).update(
-                next_step="Continuation laeuft.",
-                next_poll_at=timezone.now() + timedelta(seconds=self.CLAIM_BACKOFF_SECONDS),
-                updated_at=timezone.now(),
-            )
+            if not self._acquire_continuation_lock(job_id=job_id):
+                logger.warning("Continuation fuer Microtech GraphQL Job %s ist bereits durch einen Worker gesperrt.", job_id)
+                return
             try:
                 handler(job)
             except Exception as exc:
-                MicrotechGraphQLJob.objects.filter(pk=job_id).update(
-                    status=MicrotechGraphQLJob.Status.FAILED,
+                MicrotechGraphQLJob.objects.filter(
+                    pk=job_id,
+                    continuation_task_id=task_id,
+                    continuation_status=MicrotechGraphQLJob.ContinuationStatus.RUNNING,
+                ).update(
+                    continuation_status=MicrotechGraphQLJob.ContinuationStatus.FAILED,
                     error_message=str(exc),
                     next_step="Continuation fehlgeschlagen.",
                     next_poll_at=None,
-                    completed_at=timezone.now(),
+                    continuation_completed_at=timezone.now(),
+                    continuation_lease_expires_at=None,
                     updated_at=timezone.now(),
                 )
                 raise
+            finally:
+                self._release_continuation_lock(job_id=job_id)
             should_cleanup = job.delete_after_completion
 
         if should_cleanup:
             self.delete_job(job_id=job_id, delete_remote=True)
         elif handler is not None:
-            MicrotechGraphQLJob.objects.filter(pk=job_id).update(
+            MicrotechGraphQLJob.objects.filter(
+                pk=job_id,
+                continuation_task_id=task_id,
+                continuation_status=MicrotechGraphQLJob.ContinuationStatus.RUNNING,
+            ).update(
+                continuation_status=MicrotechGraphQLJob.ContinuationStatus.COMPLETED,
                 next_step="Continuation abgeschlossen.",
                 next_poll_at=None,
+                continuation_heartbeat_at=timezone.now(),
+                continuation_completed_at=timezone.now(),
+                continuation_lease_expires_at=None,
                 updated_at=timezone.now(),
             )
+
+    def heartbeat_continuation(self, *, job_id: int, task_id: str) -> bool:
+        """Extend a running continuation lease only for its owning task."""
+        task_id = str(task_id or "").strip()
+        if not task_id:
+            return False
+        now = timezone.now()
+        job = MicrotechGraphQLJob.objects.filter(
+            pk=job_id,
+            continuation_task_id=task_id,
+            continuation_status=MicrotechGraphQLJob.ContinuationStatus.RUNNING,
+        ).only("continuation", "context").first()
+        if job is None:
+            return False
+        updated = MicrotechGraphQLJob.objects.filter(pk=job.pk, continuation_task_id=task_id).update(
+            continuation_heartbeat_at=now,
+            continuation_lease_expires_at=now + timedelta(seconds=self._continuation_lease_seconds(job)),
+            updated_at=now,
+        )
+        return bool(updated)
 
     def poll_due_jobs(self, *, limit: int = 50) -> int:
         job_ids = self._claim_due_jobs(limit=limit)
@@ -521,13 +603,11 @@ class MicrotechJobSentinelService(BaseService):
         for job_id in job_ids:
             poll_graphql_job.delay(job_id)
         remaining = max(0, limit - len(job_ids))
-        continuation_ids = self._claim_pending_continuations(limit=remaining)
-        if continuation_ids:
-            from microtech.tasks import process_graphql_job_result
-
-            for job_id in continuation_ids:
-                process_graphql_job_result.delay(job_id)
-        return len(job_ids) + len(continuation_ids)
+        continuation_ids = self._pending_continuation_ids(limit=remaining)
+        dispatched_continuations = sum(
+            1 for continuation_id in continuation_ids if self._dispatch_continuation(continuation_id)
+        )
+        return len(job_ids) + dispatched_continuations
 
     def _claim_due_jobs(self, *, limit: int) -> list[int]:
         """Reserviere faellige Jobs atomar und schiebe ihren naechsten Poll nach vorne.
@@ -547,32 +627,28 @@ class MicrotechJobSentinelService(BaseService):
             )
             if job_ids:
                 MicrotechGraphQLJob.objects.filter(pk__in=job_ids).update(
-                    next_poll_at=now + timedelta(seconds=self.CLAIM_BACKOFF_SECONDS),
+                    next_poll_at=now + timedelta(seconds=self.POLL_DISPATCH_BACKOFF_SECONDS),
                     updated_at=now,
                 )
         return job_ids
 
-    def _claim_pending_continuations(self, *, limit: int) -> list[int]:
+    def _pending_continuation_ids(self, *, limit: int) -> list[int]:
         if limit <= 0:
             return []
         now = timezone.now()
-        with transaction.atomic():
-            job_ids = list(
-                MicrotechGraphQLJob.objects.select_for_update(**self._skip_locked_kwargs())
-                .filter(status=MicrotechGraphQLJob.Status.SUCCEEDED)
-                .exclude(continuation="")
-                .filter(next_step__in=self.CONTINUATION_STEPS_PENDING)
-                .filter(Q(next_poll_at__lte=now) | Q(next_poll_at__isnull=True))
-                .order_by("next_poll_at", "completed_at", "created_at")
-                .values_list("pk", flat=True)[:limit]
-            )
-            if job_ids:
-                MicrotechGraphQLJob.objects.filter(pk__in=job_ids).update(
-                    next_step="Continuation eingereiht.",
-                    next_poll_at=now + timedelta(seconds=self.CLAIM_BACKOFF_SECONDS),
-                    updated_at=now,
+        return list(
+            MicrotechGraphQLJob.objects.filter(status=MicrotechGraphQLJob.Status.SUCCEEDED)
+            .exclude(continuation="")
+            .filter(
+                Q(continuation_status=MicrotechGraphQLJob.ContinuationStatus.PENDING)
+                | Q(
+                    continuation_status=MicrotechGraphQLJob.ContinuationStatus.DISPATCHED,
+                    continuation_lease_expires_at__lte=now,
                 )
-        return job_ids
+            )
+            .order_by("continuation_lease_expires_at", "completed_at", "created_at")
+            .values_list("pk", flat=True)[:limit]
+        )
 
     @staticmethod
     def _skip_locked_kwargs() -> dict[str, bool]:
@@ -705,7 +781,13 @@ class MicrotechJobSentinelService(BaseService):
     def _delete_local_job_references(job: MicrotechGraphQLJob) -> None:
         from orders.models import MicrotechOrderSyncWorkflow
 
-        MicrotechOrderSyncWorkflow.objects.filter(current_job=job).delete()
+        # A deleted or remote-lost job must not erase the business workflow.
+        # The order reconciler can safely mark a workflow with no current job as
+        # failed and decide whether to recover or resume it.
+        MicrotechOrderSyncWorkflow.objects.filter(current_job=job).update(
+            current_job=None,
+            updated_at=timezone.now(),
+        )
 
     @staticmethod
     def verify_webhook_signature(*, body: bytes, signature: str) -> bool:
@@ -729,28 +811,143 @@ class MicrotechJobSentinelService(BaseService):
         elif job.status == MicrotechGraphQLJob.Status.CANCELLED and job.delete_after_completion:
             self.delete_job(job_id=job_id, delete_remote=True)
 
-    def _dispatch_continuation(self, job_id: int) -> None:
-        now = timezone.now()
-        MicrotechGraphQLJob.objects.filter(pk=job_id).update(
-            next_step="Continuation eingereiht.",
-            next_poll_at=now + timedelta(seconds=self.CLAIM_BACKOFF_SECONDS),
-            updated_at=now,
-        )
-        try:
-            from microtech.tasks import process_graphql_job_result
+    def _dispatch_continuation(self, job_id: int) -> bool:
+        """Atomically claim and publish one continuation exactly once.
 
-            process_graphql_job_result.delay(job_id)
+        The generated Celery task id is stored before publishing.  If the
+        process stops in the small publish window, the lease eventually makes
+        the *unstarted* dispatch eligible again; a late old delivery no longer
+        owns the persisted task id and exits without side effects.
+        """
+        now = timezone.now()
+        task_id = str(uuid4())
+        with transaction.atomic():
+            job = MicrotechGraphQLJob.objects.select_for_update().filter(pk=job_id).first()
+            if (
+                job is None
+                or job.status != MicrotechGraphQLJob.Status.SUCCEEDED
+                or not str(job.continuation or "").strip()
+            ):
+                return False
+
+            can_claim = job.continuation_status == MicrotechGraphQLJob.ContinuationStatus.PENDING
+            can_reclaim = (
+                job.continuation_status == MicrotechGraphQLJob.ContinuationStatus.DISPATCHED
+                and job.continuation_lease_expires_at is not None
+                and job.continuation_lease_expires_at <= now
+            )
+            if not (can_claim or can_reclaim):
+                return False
+            if job.continuation_attempt >= job.continuation_max_attempts:
+                job.continuation_status = MicrotechGraphQLJob.ContinuationStatus.FAILED
+                job.error_message = "Continuation konnte nicht eingereiht werden: max. Versuche erreicht."
+                job.next_step = "Continuation fehlgeschlagen."
+                job.continuation_completed_at = now
+                job.continuation_lease_expires_at = None
+                job.save(
+                    update_fields=(
+                        "continuation_status",
+                        "error_message",
+                        "next_step",
+                        "continuation_completed_at",
+                        "continuation_lease_expires_at",
+                        "updated_at",
+                    )
+                )
+                return False
+
+            job.continuation_status = MicrotechGraphQLJob.ContinuationStatus.DISPATCHED
+            job.continuation_task_id = task_id
+            job.continuation_dispatched_at = now
+            job.continuation_started_at = None
+            job.continuation_heartbeat_at = None
+            job.continuation_completed_at = None
+            job.continuation_lease_expires_at = now + timedelta(seconds=self._continuation_lease_seconds(job))
+            job.continuation_attempt += 1
+            job.next_step = "Continuation eingereiht."
+            job.next_poll_at = None
+            job.save(
+                update_fields=(
+                    "continuation_status",
+                    "continuation_task_id",
+                    "continuation_dispatched_at",
+                    "continuation_started_at",
+                    "continuation_heartbeat_at",
+                    "continuation_completed_at",
+                    "continuation_lease_expires_at",
+                    "continuation_attempt",
+                    "next_step",
+                    "next_poll_at",
+                    "updated_at",
+                )
+            )
+
+        try:
+            self._enqueue_continuation_task(job_id=job_id, task_id=task_id, queue=self._continuation_queue(job))
         except Exception:
-            # Der Remote-Job ist bereits erfolgreich abgeschlossen. Ein temporärer
-            # Broker-Ausfall darf diesen fachlichen Erfolg nicht in einen Fehler
-            # umwandeln. Der Beat-Poller beansprucht den weiterhin erfolgreichen,
-            # ausstehenden Job beim nächsten Lauf erneut.
-            MicrotechGraphQLJob.objects.filter(pk=job_id).update(
+            # The remote job has already completed. A known broker-publish
+            # failure returns the continuation to PENDING immediately; an
+            # unknown crash is recovered through the persisted lease above.
+            MicrotechGraphQLJob.objects.filter(
+                pk=job_id,
+                continuation_task_id=task_id,
+                continuation_status=MicrotechGraphQLJob.ContinuationStatus.DISPATCHED,
+            ).update(
+                continuation_status=MicrotechGraphQLJob.ContinuationStatus.PENDING,
+                continuation_task_id="",
                 next_step="Continuation ausfuehren.",
-                next_poll_at=timezone.now(),
+                continuation_dispatched_at=None,
+                continuation_lease_expires_at=None,
                 updated_at=timezone.now(),
             )
             logger.exception("Continuation für Microtech GraphQL Job %s konnte nicht eingereiht werden.", job_id)
+            return False
+        return True
+
+    @classmethod
+    def _continuation_queue(cls, job: MicrotechGraphQLJob) -> str:
+        return cls.CONTINUATION_QUEUE_BY_NAME.get(str(job.continuation or "").strip(), "microtech")
+
+    def _continuation_lease_seconds(self, job: MicrotechGraphQLJob) -> int:
+        if self._continuation_queue(job) == "bulk":
+            return self.BULK_CONTINUATION_LEASE_SECONDS
+        return self.CONTINUATION_LEASE_SECONDS
+
+    @staticmethod
+    def _enqueue_continuation_task(*, job_id: int, task_id: str, queue: str) -> None:
+        from microtech.tasks import (
+            process_bulk_graphql_job_result,
+            process_graphql_job_result,
+            process_order_graphql_job_result,
+        )
+
+        task = {
+            "orders": process_order_graphql_job_result,
+            "bulk": process_bulk_graphql_job_result,
+        }.get(queue, process_graphql_job_result)
+        task.apply_async(args=(job_id,), task_id=task_id, queue=queue)
+
+    @classmethod
+    def _acquire_continuation_lock(cls, *, job_id: int) -> bool:
+        if connection.vendor != "postgresql":
+            return True
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT pg_try_advisory_lock(%s, %s)",
+                [cls.CONTINUATION_LOCK_NAMESPACE, int(job_id)],
+            )
+            row = cursor.fetchone()
+        return bool(row and row[0])
+
+    @classmethod
+    def _release_continuation_lock(cls, *, job_id: int) -> None:
+        if connection.vendor != "postgresql":
+            return
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT pg_advisory_unlock(%s, %s)",
+                [cls.CONTINUATION_LOCK_NAMESPACE, int(job_id)],
+            )
 
     def _apply_remote_status(self, job: MicrotechGraphQLJob, payload: dict[str, Any]) -> None:
         remote_status = str(self._payload_value(payload, "status") or "").upper()
@@ -796,6 +993,11 @@ class MicrotechJobSentinelService(BaseService):
 
     def _handle_poll_failure(self, *, job_id: int, attempt: int, max_attempts: int, error: Exception) -> None:
         now = timezone.now()
+        if self._is_remote_job_missing(error) and self._recover_missing_remote_job(
+            job_id=job_id,
+            error_message=str(error),
+        ):
+            return
         if attempt >= max_attempts:
             MicrotechGraphQLJob.objects.filter(pk=job_id).update(
                 status=MicrotechGraphQLJob.Status.FAILED,
@@ -812,6 +1014,144 @@ class MicrotechJobSentinelService(BaseService):
             next_poll_at=now + timedelta(seconds=self.POLL_ERROR_BACKOFF_SECONDS + jitter),
             updated_at=now,
         )
+
+    @staticmethod
+    def _is_remote_job_missing(error: Exception) -> bool:
+        message = str(error or "").lower()
+        missing = ("job not found", "unknown job", "job-id not found", "job id not found", "job nicht gefunden")
+        return any(fragment in message for fragment in missing)
+
+    def _recover_missing_remote_job(self, *, job_id: int, error_message: str) -> bool:
+        """Recover a lost remote job only through an operation-specific path."""
+        job = MicrotechGraphQLJob.objects.filter(pk=job_id).first()
+        if job is None:
+            return False
+
+        from orders.models import MicrotechOrderSyncWorkflow
+
+        workflow = MicrotechOrderSyncWorkflow.objects.filter(current_job_id=job.pk).first()
+        if workflow is not None and workflow.current_step == "write_vorgang":
+            from orders.services.order_sync_workflow import OrderSyncWorkflowService
+
+            return OrderSyncWorkflowService().recover_missing_remote_job(
+                workflow_id=workflow.pk,
+                job_id=job.pk,
+                error_message=error_message,
+            )
+
+        return self._resubmit_lost_remote_job(job=job, error_message=error_message)
+
+    def _resubmit_lost_remote_job(self, *, job: MicrotechGraphQLJob, error_message: str) -> bool:
+        """Re-submit only mutations with deterministic request semantics."""
+        if job.remote_resubmit_attempt >= job.remote_resubmit_max_attempts:
+            return False
+        try:
+            external_job_id, retry_after = self._submit_saved_request(job=job)
+        except ValueError:
+            # Unsupported creates are intentionally left for the workflow
+            # reconciler instead of risking a duplicate remote mutation.
+            return False
+        except Exception:
+            logger.exception("Remote-Jobverlust für Microtech GraphQL Job %s konnte nicht wiederhergestellt werden.", job.pk)
+            return False
+
+        now = timezone.now()
+        with transaction.atomic():
+            locked = MicrotechGraphQLJob.objects.select_for_update().filter(pk=job.pk).first()
+            if locked is None or locked.is_terminal:
+                return False
+            history = list(locked.external_job_history or [])
+            history.append(
+                {
+                    "external_job_id": locked.external_job_id or "",
+                    "at": now.isoformat(),
+                    "reason": "remote_job_not_found_resubmitted",
+                    "message": str(error_message),
+                    "replacement_external_job_id": str(external_job_id),
+                }
+            )
+            locked.external_job_history = history
+            locked.external_job_id = str(external_job_id)
+            locked.status = MicrotechGraphQLJob.Status.WAITING_WEBHOOK
+            locked.error_message = ""
+            locked.next_step = "Remote-Job nach Verlust erneut eingereicht."
+            locked.submitted_at = now
+            locked.started_at = now
+            locked.last_polled_at = None
+            locked.next_poll_at = now + timedelta(seconds=max(int(retry_after), 30))
+            locked.attempt = 0
+            locked.remote_resubmit_attempt += 1
+            locked.save(
+                update_fields=(
+                    "external_job_history",
+                    "external_job_id",
+                    "status",
+                    "error_message",
+                    "next_step",
+                    "submitted_at",
+                    "started_at",
+                    "last_polled_at",
+                    "next_poll_at",
+                    "attempt",
+                    "remote_resubmit_attempt",
+                    "updated_at",
+                )
+            )
+        logger.warning(
+            "Microtech GraphQL Job %s remote neu eingereiht: %s -> %s.",
+            job.pk,
+            job.external_job_id,
+            external_job_id,
+        )
+        return True
+
+    @staticmethod
+    def _submit_saved_request(*, job: MicrotechGraphQLJob) -> tuple[str, float]:
+        """Map persisted request payloads to idempotent GraphQL submissions."""
+        client = MicrotechGraphQLClientService()
+        payload = dict(job.request_payload or {})
+        operation = str(job.operation or "")
+        if operation == "requestDatasetRecords":
+            return client.submit_dataset_job(payload)
+        if operation == "requestProducts":
+            return client.submit_request_products(
+                erp_numbers=payload.get("erpNumbers") or None,
+                include_images=bool(payload.get("includeImages", True)),
+            )
+        if operation == "updateProduct":
+            return client.submit_update_product(str(payload["erpNumber"]), dict(payload["input"]))
+        if operation == "requestCustomer":
+            return client.submit_request_customer(str(payload["customerNumber"]))
+        if operation == "searchCustomers":
+            return client.submit_search_customers(
+                customer_number=str(payload.get("customer_number") or ""),
+                email=str(payload.get("email") or ""),
+                first_name=str(payload.get("first_name") or ""),
+                last_name=str(payload.get("last_name") or ""),
+                limit=int(payload.get("limit") or 20),
+            )
+        if operation == "upsertCustomer":
+            return client.submit_upsert_customer(str(payload["customerNumber"]), dict(payload["input"]))
+        if operation == "updateCustomer":
+            return client.submit_update_customer(str(payload["customerNumber"]), dict(payload["input"]))
+        if operation == "updatePostalAddress":
+            return client.submit_update_postal_address(
+                int(payload["addressNumber"]),
+                int(payload["addressSubNumber"]),
+                dict(payload["input"]),
+            )
+        if operation == "updateContactPerson":
+            return client.submit_update_contact_person(
+                int(payload["addressNumber"]),
+                int(payload["addressSubNumber"]),
+                int(payload["contactNumber"]),
+                dict(payload["input"]),
+            )
+        if operation == "requestVorgang":
+            return client.submit_request_vorgang(str(payload["belegNr"]))
+        if operation == "updateVorgang":
+            return client.submit_update_vorgang(str(payload["belegNr"]), dict(payload["input"]))
+        raise ValueError(f"Remote resubmit is unsafe or unsupported for operation '{operation}'.")
 
     def _reschedule_at(self, remote: dict[str, Any]):
         retry_after = self._payload_value(remote, "retryAfterSeconds")

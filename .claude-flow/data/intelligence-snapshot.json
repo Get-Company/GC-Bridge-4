@@ -1,1130 +1,5 @@
 [
   {
-    "timestamp": 1781071881550,
-    "nodes": 7,
-    "edges": 2,
-    "pageRankSum": 0.9999999999999998,
-    "confidences": [
-      0.28,
-      0.28,
-      0.28,
-      0.28,
-      0.28,
-      0.28,
-      0.28500000000000003
-    ],
-    "accessCounts": [
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0
-    ],
-    "topPatterns": [
-      {
-        "id": "mem-MEMORY-project",
-        "summary": "Project",
-        "confidence": 0.28,
-        "pageRank": 0.2126436902566286,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-MEMORY-project--gc-bridge-4",
-        "summary": "Project: GC-Bridge-4",
-        "confidence": 0.28,
-        "pageRank": 0.2126436902566286,
-        "accessCount": 0
-      },
-      {
-        "id": "insight-1777271652123-bb4d",
-        "summary": "Frequently edited: unknown (15x)",
-        "confidence": 0.28500000000000003,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-MEMORY-preferences",
-        "summary": "Preferences",
-        "confidence": 0.28,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-project_overview----",
-        "summary": "---",
-        "confidence": 0.28,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-MEMORY-user-preferences",
-        "summary": "User Preferences",
-        "confidence": 0.28,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-project_microtech_testing----",
-        "summary": "---",
-        "confidence": 0.28,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      }
-    ]
-  },
-  {
-    "timestamp": 1781093479200,
-    "nodes": 7,
-    "edges": 2,
-    "pageRankSum": 0.9999999999999998,
-    "confidences": [
-      0.060000000000000026,
-      0.060000000000000026,
-      0.060000000000000026,
-      0.060000000000000026,
-      0.060000000000000026,
-      0.060000000000000026,
-      0.06500000000000003
-    ],
-    "accessCounts": [
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0
-    ],
-    "topPatterns": [
-      {
-        "id": "mem-MEMORY-project",
-        "summary": "Project",
-        "confidence": 0.060000000000000026,
-        "pageRank": 0.2126436902566286,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-MEMORY-project--gc-bridge-4",
-        "summary": "Project: GC-Bridge-4",
-        "confidence": 0.060000000000000026,
-        "pageRank": 0.2126436902566286,
-        "accessCount": 0
-      },
-      {
-        "id": "insight-1777271652123-bb4d",
-        "summary": "Frequently edited: unknown (15x)",
-        "confidence": 0.06500000000000003,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-MEMORY-preferences",
-        "summary": "Preferences",
-        "confidence": 0.060000000000000026,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-project_overview----",
-        "summary": "---",
-        "confidence": 0.060000000000000026,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-MEMORY-user-preferences",
-        "summary": "User Preferences",
-        "confidence": 0.060000000000000026,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-project_microtech_testing----",
-        "summary": "---",
-        "confidence": 0.060000000000000026,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      }
-    ]
-  },
-  {
-    "timestamp": 1781094488092,
-    "nodes": 7,
-    "edges": 2,
-    "pageRankSum": 0.9999999999999998,
-    "confidences": [
-      0.05,
-      0.05,
-      0.05,
-      0.05,
-      0.05,
-      0.05,
-      0.05
-    ],
-    "accessCounts": [
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0
-    ],
-    "topPatterns": [
-      {
-        "id": "mem-MEMORY-project",
-        "summary": "Project",
-        "confidence": 0.05,
-        "pageRank": 0.2126436902566286,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-MEMORY-project--gc-bridge-4",
-        "summary": "Project: GC-Bridge-4",
-        "confidence": 0.05,
-        "pageRank": 0.2126436902566286,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-MEMORY-preferences",
-        "summary": "Preferences",
-        "confidence": 0.05,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-project_overview----",
-        "summary": "---",
-        "confidence": 0.05,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-MEMORY-user-preferences",
-        "summary": "User Preferences",
-        "confidence": 0.05,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-project_microtech_testing----",
-        "summary": "---",
-        "confidence": 0.05,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "insight-1777271652123-bb4d",
-        "summary": "Frequently edited: unknown (15x)",
-        "confidence": 0.05,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      }
-    ]
-  },
-  {
-    "timestamp": 1781189767810,
-    "nodes": 7,
-    "edges": 2,
-    "pageRankSum": 0.9999999999999998,
-    "confidences": [
-      0.275,
-      0.275,
-      0.275,
-      0.275,
-      0.275,
-      0.275,
-      0.275
-    ],
-    "accessCounts": [
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0
-    ],
-    "topPatterns": [
-      {
-        "id": "mem-MEMORY-project",
-        "summary": "Project",
-        "confidence": 0.275,
-        "pageRank": 0.2126436902566286,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-MEMORY-project--gc-bridge-4",
-        "summary": "Project: GC-Bridge-4",
-        "confidence": 0.275,
-        "pageRank": 0.2126436902566286,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-MEMORY-preferences",
-        "summary": "Preferences",
-        "confidence": 0.275,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-project_overview----",
-        "summary": "---",
-        "confidence": 0.275,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-MEMORY-user-preferences",
-        "summary": "User Preferences",
-        "confidence": 0.275,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-project_microtech_testing----",
-        "summary": "---",
-        "confidence": 0.275,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "insight-1777271652123-bb4d",
-        "summary": "Frequently edited: unknown (15x)",
-        "confidence": 0.275,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      }
-    ]
-  },
-  {
-    "timestamp": 1781534956769,
-    "nodes": 7,
-    "edges": 2,
-    "pageRankSum": 0.9999999999999998,
-    "confidences": [
-      0.255,
-      0.255,
-      0.255,
-      0.255,
-      0.255,
-      0.255,
-      0.255
-    ],
-    "accessCounts": [
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0
-    ],
-    "topPatterns": [
-      {
-        "id": "mem-MEMORY-project",
-        "summary": "Project",
-        "confidence": 0.255,
-        "pageRank": 0.2126436902566286,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-MEMORY-project--gc-bridge-4",
-        "summary": "Project: GC-Bridge-4",
-        "confidence": 0.255,
-        "pageRank": 0.2126436902566286,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-MEMORY-preferences",
-        "summary": "Preferences",
-        "confidence": 0.255,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-project_overview----",
-        "summary": "---",
-        "confidence": 0.255,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-MEMORY-user-preferences",
-        "summary": "User Preferences",
-        "confidence": 0.255,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-project_microtech_testing----",
-        "summary": "---",
-        "confidence": 0.255,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "insight-1777271652123-bb4d",
-        "summary": "Frequently edited: unknown (15x)",
-        "confidence": 0.255,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      }
-    ]
-  },
-  {
-    "timestamp": 1781590188352,
-    "nodes": 7,
-    "edges": 2,
-    "pageRankSum": 0.9999999999999998,
-    "confidences": [
-      0.25,
-      0.25,
-      0.25,
-      0.25,
-      0.25,
-      0.25,
-      0.255
-    ],
-    "accessCounts": [
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0
-    ],
-    "topPatterns": [
-      {
-        "id": "mem-MEMORY-project",
-        "summary": "Project",
-        "confidence": 0.25,
-        "pageRank": 0.2126436902566286,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-MEMORY-project--gc-bridge-4",
-        "summary": "Project: GC-Bridge-4",
-        "confidence": 0.25,
-        "pageRank": 0.2126436902566286,
-        "accessCount": 0
-      },
-      {
-        "id": "insight-1777271652123-bb4d",
-        "summary": "Frequently edited: unknown (15x)",
-        "confidence": 0.255,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-MEMORY-preferences",
-        "summary": "Preferences",
-        "confidence": 0.25,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-project_overview----",
-        "summary": "---",
-        "confidence": 0.25,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-MEMORY-user-preferences",
-        "summary": "User Preferences",
-        "confidence": 0.25,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-project_microtech_testing----",
-        "summary": "---",
-        "confidence": 0.25,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      }
-    ]
-  },
-  {
-    "timestamp": 1781621337170,
-    "nodes": 7,
-    "edges": 2,
-    "pageRankSum": 0.9999999999999998,
-    "confidences": [
-      0.05,
-      0.05,
-      0.05,
-      0.05,
-      0.05,
-      0.05,
-      0.05
-    ],
-    "accessCounts": [
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0
-    ],
-    "topPatterns": [
-      {
-        "id": "mem-MEMORY-project",
-        "summary": "Project",
-        "confidence": 0.05,
-        "pageRank": 0.2126436902566286,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-MEMORY-project--gc-bridge-4",
-        "summary": "Project: GC-Bridge-4",
-        "confidence": 0.05,
-        "pageRank": 0.2126436902566286,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-MEMORY-preferences",
-        "summary": "Preferences",
-        "confidence": 0.05,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-project_overview----",
-        "summary": "---",
-        "confidence": 0.05,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-MEMORY-user-preferences",
-        "summary": "User Preferences",
-        "confidence": 0.05,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-project_microtech_testing----",
-        "summary": "---",
-        "confidence": 0.05,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "insight-1777271652123-bb4d",
-        "summary": "Frequently edited: unknown (15x)",
-        "confidence": 0.05,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      }
-    ]
-  },
-  {
-    "timestamp": 1781699600439,
-    "nodes": 7,
-    "edges": 2,
-    "pageRankSum": 0.9999999999999998,
-    "confidences": [
-      0.245,
-      0.245,
-      0.245,
-      0.245,
-      0.245,
-      0.245,
-      0.245
-    ],
-    "accessCounts": [
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0
-    ],
-    "topPatterns": [
-      {
-        "id": "mem-MEMORY-project",
-        "summary": "Project",
-        "confidence": 0.245,
-        "pageRank": 0.2126436902566286,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-MEMORY-project--gc-bridge-4",
-        "summary": "Project: GC-Bridge-4",
-        "confidence": 0.245,
-        "pageRank": 0.2126436902566286,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-MEMORY-preferences",
-        "summary": "Preferences",
-        "confidence": 0.245,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-project_overview----",
-        "summary": "---",
-        "confidence": 0.245,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-MEMORY-user-preferences",
-        "summary": "User Preferences",
-        "confidence": 0.245,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-project_microtech_testing----",
-        "summary": "---",
-        "confidence": 0.245,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "insight-1777271652123-bb4d",
-        "summary": "Frequently edited: unknown (15x)",
-        "confidence": 0.245,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      }
-    ]
-  },
-  {
-    "timestamp": 1781707973759,
-    "nodes": 7,
-    "edges": 2,
-    "pageRankSum": 0.9999999999999998,
-    "confidences": [
-      0.245,
-      0.245,
-      0.245,
-      0.245,
-      0.245,
-      0.245,
-      0.245
-    ],
-    "accessCounts": [
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0
-    ],
-    "topPatterns": [
-      {
-        "id": "mem-MEMORY-project",
-        "summary": "Project",
-        "confidence": 0.245,
-        "pageRank": 0.2126436902566286,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-MEMORY-project--gc-bridge-4",
-        "summary": "Project: GC-Bridge-4",
-        "confidence": 0.245,
-        "pageRank": 0.2126436902566286,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-MEMORY-preferences",
-        "summary": "Preferences",
-        "confidence": 0.245,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-project_overview----",
-        "summary": "---",
-        "confidence": 0.245,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-MEMORY-user-preferences",
-        "summary": "User Preferences",
-        "confidence": 0.245,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-project_microtech_testing----",
-        "summary": "---",
-        "confidence": 0.245,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "insight-1777271652123-bb4d",
-        "summary": "Frequently edited: unknown (15x)",
-        "confidence": 0.245,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      }
-    ]
-  },
-  {
-    "timestamp": 1781765592690,
-    "nodes": 7,
-    "edges": 2,
-    "pageRankSum": 0.9999999999999998,
-    "confidences": [
-      0.24,
-      0.24,
-      0.24,
-      0.24,
-      0.24,
-      0.24,
-      0.24
-    ],
-    "accessCounts": [
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0
-    ],
-    "topPatterns": [
-      {
-        "id": "mem-MEMORY-project",
-        "summary": "Project",
-        "confidence": 0.24,
-        "pageRank": 0.2126436902566286,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-MEMORY-project--gc-bridge-4",
-        "summary": "Project: GC-Bridge-4",
-        "confidence": 0.24,
-        "pageRank": 0.2126436902566286,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-MEMORY-preferences",
-        "summary": "Preferences",
-        "confidence": 0.24,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-project_overview----",
-        "summary": "---",
-        "confidence": 0.24,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-MEMORY-user-preferences",
-        "summary": "User Preferences",
-        "confidence": 0.24,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-project_microtech_testing----",
-        "summary": "---",
-        "confidence": 0.24,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "insight-1777271652123-bb4d",
-        "summary": "Frequently edited: unknown (15x)",
-        "confidence": 0.24,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      }
-    ]
-  },
-  {
-    "timestamp": 1781786116926,
-    "nodes": 7,
-    "edges": 2,
-    "pageRankSum": 0.9999999999999998,
-    "confidences": [
-      0.05,
-      0.05,
-      0.05,
-      0.05,
-      0.05,
-      0.05,
-      0.05
-    ],
-    "accessCounts": [
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0
-    ],
-    "topPatterns": [
-      {
-        "id": "mem-MEMORY-project",
-        "summary": "Project",
-        "confidence": 0.05,
-        "pageRank": 0.2126436902566286,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-MEMORY-project--gc-bridge-4",
-        "summary": "Project: GC-Bridge-4",
-        "confidence": 0.05,
-        "pageRank": 0.2126436902566286,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-MEMORY-preferences",
-        "summary": "Preferences",
-        "confidence": 0.05,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-project_overview----",
-        "summary": "---",
-        "confidence": 0.05,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-MEMORY-user-preferences",
-        "summary": "User Preferences",
-        "confidence": 0.05,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-project_microtech_testing----",
-        "summary": "---",
-        "confidence": 0.05,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "insight-1777271652123-bb4d",
-        "summary": "Frequently edited: unknown (15x)",
-        "confidence": 0.05,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      }
-    ]
-  },
-  {
-    "timestamp": 1781786968778,
-    "nodes": 7,
-    "edges": 2,
-    "pageRankSum": 0.9999999999999998,
-    "confidences": [
-      0.24,
-      0.24,
-      0.24,
-      0.24,
-      0.24,
-      0.24,
-      0.24
-    ],
-    "accessCounts": [
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0
-    ],
-    "topPatterns": [
-      {
-        "id": "mem-MEMORY-project",
-        "summary": "Project",
-        "confidence": 0.24,
-        "pageRank": 0.2126436902566286,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-MEMORY-project--gc-bridge-4",
-        "summary": "Project: GC-Bridge-4",
-        "confidence": 0.24,
-        "pageRank": 0.2126436902566286,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-MEMORY-preferences",
-        "summary": "Preferences",
-        "confidence": 0.24,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-project_overview----",
-        "summary": "---",
-        "confidence": 0.24,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-MEMORY-user-preferences",
-        "summary": "User Preferences",
-        "confidence": 0.24,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-project_microtech_testing----",
-        "summary": "---",
-        "confidence": 0.24,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "insight-1777271652123-bb4d",
-        "summary": "Frequently edited: unknown (15x)",
-        "confidence": 0.24,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      }
-    ]
-  },
-  {
-    "timestamp": 1781794655174,
-    "nodes": 7,
-    "edges": 2,
-    "pageRankSum": 0.9999999999999998,
-    "confidences": [
-      0.05,
-      0.05,
-      0.05,
-      0.05,
-      0.05,
-      0.05,
-      0.05
-    ],
-    "accessCounts": [
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0
-    ],
-    "topPatterns": [
-      {
-        "id": "mem-MEMORY-project",
-        "summary": "Project",
-        "confidence": 0.05,
-        "pageRank": 0.2126436902566286,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-MEMORY-project--gc-bridge-4",
-        "summary": "Project: GC-Bridge-4",
-        "confidence": 0.05,
-        "pageRank": 0.2126436902566286,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-MEMORY-preferences",
-        "summary": "Preferences",
-        "confidence": 0.05,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-project_overview----",
-        "summary": "---",
-        "confidence": 0.05,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-MEMORY-user-preferences",
-        "summary": "User Preferences",
-        "confidence": 0.05,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-project_microtech_testing----",
-        "summary": "---",
-        "confidence": 0.05,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "insight-1777271652123-bb4d",
-        "summary": "Frequently edited: unknown (15x)",
-        "confidence": 0.05,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      }
-    ]
-  },
-  {
-    "timestamp": 1782124746410,
-    "nodes": 7,
-    "edges": 2,
-    "pageRankSum": 0.9999999999999998,
-    "confidences": [
-      0.21999999999999997,
-      0.21999999999999997,
-      0.21999999999999997,
-      0.21999999999999997,
-      0.21999999999999997,
-      0.21999999999999997,
-      0.21999999999999997
-    ],
-    "accessCounts": [
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0
-    ],
-    "topPatterns": [
-      {
-        "id": "mem-MEMORY-project",
-        "summary": "Project",
-        "confidence": 0.21999999999999997,
-        "pageRank": 0.2126436902566286,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-MEMORY-project--gc-bridge-4",
-        "summary": "Project: GC-Bridge-4",
-        "confidence": 0.21999999999999997,
-        "pageRank": 0.2126436902566286,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-MEMORY-preferences",
-        "summary": "Preferences",
-        "confidence": 0.21999999999999997,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-project_overview----",
-        "summary": "---",
-        "confidence": 0.21999999999999997,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-MEMORY-user-preferences",
-        "summary": "User Preferences",
-        "confidence": 0.21999999999999997,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-project_microtech_testing----",
-        "summary": "---",
-        "confidence": 0.21999999999999997,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "insight-1777271652123-bb4d",
-        "summary": "Frequently edited: unknown (15x)",
-        "confidence": 0.21999999999999997,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      }
-    ]
-  },
-  {
-    "timestamp": 1782130948027,
-    "nodes": 7,
-    "edges": 2,
-    "pageRankSum": 0.9999999999999998,
-    "confidences": [
-      0.21999999999999997,
-      0.21999999999999997,
-      0.21999999999999997,
-      0.21999999999999997,
-      0.21999999999999997,
-      0.21999999999999997,
-      0.21999999999999997
-    ],
-    "accessCounts": [
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0
-    ],
-    "topPatterns": [
-      {
-        "id": "mem-MEMORY-project",
-        "summary": "Project",
-        "confidence": 0.21999999999999997,
-        "pageRank": 0.2126436902566286,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-MEMORY-project--gc-bridge-4",
-        "summary": "Project: GC-Bridge-4",
-        "confidence": 0.21999999999999997,
-        "pageRank": 0.2126436902566286,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-MEMORY-preferences",
-        "summary": "Preferences",
-        "confidence": 0.21999999999999997,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-project_overview----",
-        "summary": "---",
-        "confidence": 0.21999999999999997,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-MEMORY-user-preferences",
-        "summary": "User Preferences",
-        "confidence": 0.21999999999999997,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "mem-project_microtech_testing----",
-        "summary": "---",
-        "confidence": 0.21999999999999997,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      },
-      {
-        "id": "insight-1777271652123-bb4d",
-        "summary": "Frequently edited: unknown (15x)",
-        "confidence": 0.21999999999999997,
-        "pageRank": 0.11494252389734855,
-        "accessCount": 0
-      }
-    ]
-  },
-  {
     "timestamp": 1782139522757,
     "nodes": 7,
     "edges": 2,
@@ -3676,6 +2551,1131 @@
   },
   {
     "timestamp": 1786373241940,
+    "nodes": 7,
+    "edges": 2,
+    "pageRankSum": 0.9999999999999998,
+    "confidences": [
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.05
+    ],
+    "accessCounts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "topPatterns": [
+      {
+        "id": "mem-MEMORY-project",
+        "summary": "Project",
+        "confidence": 0.05,
+        "pageRank": 0.2126436902566286,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-MEMORY-project--gc-bridge-4",
+        "summary": "Project: GC-Bridge-4",
+        "confidence": 0.05,
+        "pageRank": 0.2126436902566286,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-MEMORY-preferences",
+        "summary": "Preferences",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-project_overview----",
+        "summary": "---",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-MEMORY-user-preferences",
+        "summary": "User Preferences",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-project_microtech_testing----",
+        "summary": "---",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1777271652123-bb4d",
+        "summary": "Frequently edited: unknown (15x)",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      }
+    ]
+  },
+  {
+    "timestamp": 1786633011863,
+    "nodes": 7,
+    "edges": 2,
+    "pageRankSum": 0.9999999999999998,
+    "confidences": [
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.05
+    ],
+    "accessCounts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "topPatterns": [
+      {
+        "id": "mem-MEMORY-project",
+        "summary": "Project",
+        "confidence": 0.05,
+        "pageRank": 0.2126436902566286,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-MEMORY-project--gc-bridge-4",
+        "summary": "Project: GC-Bridge-4",
+        "confidence": 0.05,
+        "pageRank": 0.2126436902566286,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-MEMORY-preferences",
+        "summary": "Preferences",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-project_overview----",
+        "summary": "---",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-MEMORY-user-preferences",
+        "summary": "User Preferences",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-project_microtech_testing----",
+        "summary": "---",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1777271652123-bb4d",
+        "summary": "Frequently edited: unknown (15x)",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      }
+    ]
+  },
+  {
+    "timestamp": 1787064949944,
+    "nodes": 7,
+    "edges": 2,
+    "pageRankSum": 0.9999999999999998,
+    "confidences": [
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.05
+    ],
+    "accessCounts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "topPatterns": [
+      {
+        "id": "mem-MEMORY-project",
+        "summary": "Project",
+        "confidence": 0.05,
+        "pageRank": 0.2126436902566286,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-MEMORY-project--gc-bridge-4",
+        "summary": "Project: GC-Bridge-4",
+        "confidence": 0.05,
+        "pageRank": 0.2126436902566286,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-MEMORY-preferences",
+        "summary": "Preferences",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-project_overview----",
+        "summary": "---",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-MEMORY-user-preferences",
+        "summary": "User Preferences",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-project_microtech_testing----",
+        "summary": "---",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1777271652123-bb4d",
+        "summary": "Frequently edited: unknown (15x)",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      }
+    ]
+  },
+  {
+    "timestamp": 1787120775436,
+    "nodes": 7,
+    "edges": 2,
+    "pageRankSum": 0.9999999999999998,
+    "confidences": [
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.05
+    ],
+    "accessCounts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "topPatterns": [
+      {
+        "id": "mem-MEMORY-project",
+        "summary": "Project",
+        "confidence": 0.05,
+        "pageRank": 0.2126436902566286,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-MEMORY-project--gc-bridge-4",
+        "summary": "Project: GC-Bridge-4",
+        "confidence": 0.05,
+        "pageRank": 0.2126436902566286,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-MEMORY-preferences",
+        "summary": "Preferences",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-project_overview----",
+        "summary": "---",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-MEMORY-user-preferences",
+        "summary": "User Preferences",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-project_microtech_testing----",
+        "summary": "---",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1777271652123-bb4d",
+        "summary": "Frequently edited: unknown (15x)",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      }
+    ]
+  },
+  {
+    "timestamp": 1787120974282,
+    "nodes": 7,
+    "edges": 2,
+    "pageRankSum": 0.9999999999999998,
+    "confidences": [
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.05
+    ],
+    "accessCounts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "topPatterns": [
+      {
+        "id": "mem-MEMORY-project",
+        "summary": "Project",
+        "confidence": 0.05,
+        "pageRank": 0.2126436902566286,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-MEMORY-project--gc-bridge-4",
+        "summary": "Project: GC-Bridge-4",
+        "confidence": 0.05,
+        "pageRank": 0.2126436902566286,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-MEMORY-preferences",
+        "summary": "Preferences",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-project_overview----",
+        "summary": "---",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-MEMORY-user-preferences",
+        "summary": "User Preferences",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-project_microtech_testing----",
+        "summary": "---",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1777271652123-bb4d",
+        "summary": "Frequently edited: unknown (15x)",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      }
+    ]
+  },
+  {
+    "timestamp": 1787123140248,
+    "nodes": 7,
+    "edges": 2,
+    "pageRankSum": 0.9999999999999998,
+    "confidences": [
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.05
+    ],
+    "accessCounts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "topPatterns": [
+      {
+        "id": "mem-MEMORY-project",
+        "summary": "Project",
+        "confidence": 0.05,
+        "pageRank": 0.2126436902566286,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-MEMORY-project--gc-bridge-4",
+        "summary": "Project: GC-Bridge-4",
+        "confidence": 0.05,
+        "pageRank": 0.2126436902566286,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-MEMORY-preferences",
+        "summary": "Preferences",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-project_overview----",
+        "summary": "---",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-MEMORY-user-preferences",
+        "summary": "User Preferences",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-project_microtech_testing----",
+        "summary": "---",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1777271652123-bb4d",
+        "summary": "Frequently edited: unknown (15x)",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      }
+    ]
+  },
+  {
+    "timestamp": 1787124038765,
+    "nodes": 7,
+    "edges": 2,
+    "pageRankSum": 0.9999999999999998,
+    "confidences": [
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.05
+    ],
+    "accessCounts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "topPatterns": [
+      {
+        "id": "mem-MEMORY-project",
+        "summary": "Project",
+        "confidence": 0.05,
+        "pageRank": 0.2126436902566286,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-MEMORY-project--gc-bridge-4",
+        "summary": "Project: GC-Bridge-4",
+        "confidence": 0.05,
+        "pageRank": 0.2126436902566286,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-MEMORY-preferences",
+        "summary": "Preferences",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-project_overview----",
+        "summary": "---",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-MEMORY-user-preferences",
+        "summary": "User Preferences",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-project_microtech_testing----",
+        "summary": "---",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1777271652123-bb4d",
+        "summary": "Frequently edited: unknown (15x)",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      }
+    ]
+  },
+  {
+    "timestamp": 1787212188459,
+    "nodes": 7,
+    "edges": 2,
+    "pageRankSum": 0.9999999999999998,
+    "confidences": [
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.05
+    ],
+    "accessCounts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "topPatterns": [
+      {
+        "id": "mem-MEMORY-project",
+        "summary": "Project",
+        "confidence": 0.05,
+        "pageRank": 0.2126436902566286,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-MEMORY-project--gc-bridge-4",
+        "summary": "Project: GC-Bridge-4",
+        "confidence": 0.05,
+        "pageRank": 0.2126436902566286,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-MEMORY-preferences",
+        "summary": "Preferences",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-project_overview----",
+        "summary": "---",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-MEMORY-user-preferences",
+        "summary": "User Preferences",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-project_microtech_testing----",
+        "summary": "---",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1777271652123-bb4d",
+        "summary": "Frequently edited: unknown (15x)",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      }
+    ]
+  },
+  {
+    "timestamp": 1787213690990,
+    "nodes": 7,
+    "edges": 2,
+    "pageRankSum": 0.9999999999999998,
+    "confidences": [
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.05
+    ],
+    "accessCounts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "topPatterns": [
+      {
+        "id": "mem-MEMORY-project",
+        "summary": "Project",
+        "confidence": 0.05,
+        "pageRank": 0.2126436902566286,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-MEMORY-project--gc-bridge-4",
+        "summary": "Project: GC-Bridge-4",
+        "confidence": 0.05,
+        "pageRank": 0.2126436902566286,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-MEMORY-preferences",
+        "summary": "Preferences",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-project_overview----",
+        "summary": "---",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-MEMORY-user-preferences",
+        "summary": "User Preferences",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-project_microtech_testing----",
+        "summary": "---",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1777271652123-bb4d",
+        "summary": "Frequently edited: unknown (15x)",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      }
+    ]
+  },
+  {
+    "timestamp": 1787224246644,
+    "nodes": 7,
+    "edges": 2,
+    "pageRankSum": 0.9999999999999998,
+    "confidences": [
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.05
+    ],
+    "accessCounts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "topPatterns": [
+      {
+        "id": "mem-MEMORY-project",
+        "summary": "Project",
+        "confidence": 0.05,
+        "pageRank": 0.2126436902566286,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-MEMORY-project--gc-bridge-4",
+        "summary": "Project: GC-Bridge-4",
+        "confidence": 0.05,
+        "pageRank": 0.2126436902566286,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-MEMORY-preferences",
+        "summary": "Preferences",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-project_overview----",
+        "summary": "---",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-MEMORY-user-preferences",
+        "summary": "User Preferences",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-project_microtech_testing----",
+        "summary": "---",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1777271652123-bb4d",
+        "summary": "Frequently edited: unknown (15x)",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      }
+    ]
+  },
+  {
+    "timestamp": 1787225145508,
+    "nodes": 7,
+    "edges": 2,
+    "pageRankSum": 0.9999999999999998,
+    "confidences": [
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.05
+    ],
+    "accessCounts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "topPatterns": [
+      {
+        "id": "mem-MEMORY-project",
+        "summary": "Project",
+        "confidence": 0.05,
+        "pageRank": 0.2126436902566286,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-MEMORY-project--gc-bridge-4",
+        "summary": "Project: GC-Bridge-4",
+        "confidence": 0.05,
+        "pageRank": 0.2126436902566286,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-MEMORY-preferences",
+        "summary": "Preferences",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-project_overview----",
+        "summary": "---",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-MEMORY-user-preferences",
+        "summary": "User Preferences",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-project_microtech_testing----",
+        "summary": "---",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1777271652123-bb4d",
+        "summary": "Frequently edited: unknown (15x)",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      }
+    ]
+  },
+  {
+    "timestamp": 1787229122731,
+    "nodes": 7,
+    "edges": 2,
+    "pageRankSum": 0.9999999999999998,
+    "confidences": [
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.05
+    ],
+    "accessCounts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "topPatterns": [
+      {
+        "id": "mem-MEMORY-project",
+        "summary": "Project",
+        "confidence": 0.05,
+        "pageRank": 0.2126436902566286,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-MEMORY-project--gc-bridge-4",
+        "summary": "Project: GC-Bridge-4",
+        "confidence": 0.05,
+        "pageRank": 0.2126436902566286,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-MEMORY-preferences",
+        "summary": "Preferences",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-project_overview----",
+        "summary": "---",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-MEMORY-user-preferences",
+        "summary": "User Preferences",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-project_microtech_testing----",
+        "summary": "---",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1777271652123-bb4d",
+        "summary": "Frequently edited: unknown (15x)",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      }
+    ]
+  },
+  {
+    "timestamp": 1787230021397,
+    "nodes": 7,
+    "edges": 2,
+    "pageRankSum": 0.9999999999999998,
+    "confidences": [
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.05
+    ],
+    "accessCounts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "topPatterns": [
+      {
+        "id": "mem-MEMORY-project",
+        "summary": "Project",
+        "confidence": 0.05,
+        "pageRank": 0.2126436902566286,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-MEMORY-project--gc-bridge-4",
+        "summary": "Project: GC-Bridge-4",
+        "confidence": 0.05,
+        "pageRank": 0.2126436902566286,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-MEMORY-preferences",
+        "summary": "Preferences",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-project_overview----",
+        "summary": "---",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-MEMORY-user-preferences",
+        "summary": "User Preferences",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-project_microtech_testing----",
+        "summary": "---",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1777271652123-bb4d",
+        "summary": "Frequently edited: unknown (15x)",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      }
+    ]
+  },
+  {
+    "timestamp": 1787230751673,
+    "nodes": 7,
+    "edges": 2,
+    "pageRankSum": 0.9999999999999998,
+    "confidences": [
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.05
+    ],
+    "accessCounts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "topPatterns": [
+      {
+        "id": "mem-MEMORY-project",
+        "summary": "Project",
+        "confidence": 0.05,
+        "pageRank": 0.2126436902566286,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-MEMORY-project--gc-bridge-4",
+        "summary": "Project: GC-Bridge-4",
+        "confidence": 0.05,
+        "pageRank": 0.2126436902566286,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-MEMORY-preferences",
+        "summary": "Preferences",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-project_overview----",
+        "summary": "---",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-MEMORY-user-preferences",
+        "summary": "User Preferences",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-project_microtech_testing----",
+        "summary": "---",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1777271652123-bb4d",
+        "summary": "Frequently edited: unknown (15x)",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      }
+    ]
+  },
+  {
+    "timestamp": 1787231650520,
+    "nodes": 7,
+    "edges": 2,
+    "pageRankSum": 0.9999999999999998,
+    "confidences": [
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.05,
+      0.05
+    ],
+    "accessCounts": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "topPatterns": [
+      {
+        "id": "mem-MEMORY-project",
+        "summary": "Project",
+        "confidence": 0.05,
+        "pageRank": 0.2126436902566286,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-MEMORY-project--gc-bridge-4",
+        "summary": "Project: GC-Bridge-4",
+        "confidence": 0.05,
+        "pageRank": 0.2126436902566286,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-MEMORY-preferences",
+        "summary": "Preferences",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-project_overview----",
+        "summary": "---",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-MEMORY-user-preferences",
+        "summary": "User Preferences",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "mem-project_microtech_testing----",
+        "summary": "---",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      },
+      {
+        "id": "insight-1777271652123-bb4d",
+        "summary": "Frequently edited: unknown (15x)",
+        "confidence": 0.05,
+        "pageRank": 0.11494252389734855,
+        "accessCount": 0
+      }
+    ]
+  },
+  {
+    "timestamp": 1787237249991,
     "nodes": 7,
     "edges": 2,
     "pageRankSum": 0.9999999999999998,

@@ -16,6 +16,8 @@ TASK_LABELS: dict[str, str] = {
     "products.expire_special_prices": "Abgelaufene Sonderpreise bereinigen",
     "microtech.poll_graphql_jobs": "Microtech GraphQL Jobs pruefen",
     "microtech.cleanup_old_graphql_jobs": "Alte Microtech GraphQL Jobs loeschen",
+    "microtech.monitor_worker_health": "Microtech-Worker überwachen",
+    "orders.reconcile_order_sync_workflows": "Order-Sync-Workflows abgleichen",
     "products.scheduled_product_sync": "Produkt-Sync komplett",
     "products.process_product_sync_job": "Produkt Auto-Sync Job",
     "orders.shopware_sync_open_orders": "Offene Bestellungen importieren",
@@ -80,15 +82,28 @@ def _get_graphql_health() -> dict:
     try:
         from microtech.services import MicrotechGraphQLClientService
 
-        result = MicrotechGraphQLClientService(config=cfg).health()
+        client = MicrotechGraphQLClientService(config=cfg)
+        result = client.health()
+        worker_result = client.microtech_worker_status()
+        worker = dict(worker_result.get("worker") or {})
         latency_ms = round((time.monotonic() - t0) * 1000)
-        ok = result == "ok"
+        worker_running = bool(worker.get("running"))
+        ok = result == "ok" and worker_running
         return {
             "url": url,
             "status": result if result else "leer",
             "ok": ok,
             "latency_ms": latency_ms,
-            "error": None if ok else f"Unerwartete Antwort: {result!r}",
+            "worker": worker,
+            "error": (
+                None
+                if ok
+                else (
+                    str(worker.get("connectionMessage") or "Microtech-COM-Worker läuft nicht.")
+                    if result == "ok" and not worker_running
+                    else f"Unerwartete Antwort: {result!r}"
+                )
+            ),
         }
     except Exception as exc:
         latency_ms = round((time.monotonic() - t0) * 1000)

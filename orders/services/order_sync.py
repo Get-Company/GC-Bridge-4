@@ -10,6 +10,7 @@ from loguru import logger
 from core.services import BaseService
 from customer.models import Address, Customer
 from orders.models import Order, OrderDetail
+from products.models import Product
 from shopware.models import ShopwareSettings
 from shopware.services import CustomerService, OrderService
 
@@ -192,10 +193,21 @@ class OrderSyncService(BaseService):
             line_items=order_data.get("lineItems") or [],
             tax_status=tax_status,
         )
+        from orders.services.order_sync_workflow import OrderSyncWorkflowService
+
+        workflow, workflow_created = OrderSyncWorkflowService().ensure_pending_for_order(order)
+        if workflow_created and workflow is not None:
+            from orders.tasks import start_microtech_order_workflow
+
+            transaction.on_commit(
+                lambda workflow_id=workflow.pk: start_microtech_order_workflow.delay(workflow_id)
+            )
 
         return {
             "created": created,
             "order": order,
+            "workflow_id": workflow.pk if workflow is not None else None,
+            "workflow_created": workflow_created,
             "customer_upserted": True,
             "addresses_upserted": addresses_count,
             "details_upserted": details_count,
@@ -523,11 +535,24 @@ class OrderSyncService(BaseService):
         line_items: list[dict[str, Any]],
         tax_status: str,
     ) -> int:
+        normalized_line_items = [_normalize_entity(item) for item in line_items]
+        products_by_sku, products_by_erp_nr = self._product_maps_for_line_items(normalized_line_items)
+        resolved_line_items = [
+            (
+                item,
+                self._resolve_line_item_erp_nr(
+                    item=item,
+                    products_by_sku=products_by_sku,
+                    products_by_erp_nr=products_by_erp_nr,
+                ),
+            )
+            for item in normalized_line_items
+        ]
+
         order.details.all().delete()
         created_count = 0
 
-        for item in line_items:
-            item = _normalize_entity(item)
+        for item, erp_nr in resolved_line_items:
             price_data = item.get("price") or {}
             calculated_taxes = price_data.get("calculatedTaxes") or []
             tax_value = _to_decimal((calculated_taxes[0] or {}).get("tax")) if calculated_taxes else None
@@ -535,7 +560,7 @@ class OrderSyncService(BaseService):
             OrderDetail.objects.create(
                 order=order,
                 api_id=_to_str(item.get("id")),
-                erp_nr=_to_str((item.get("payload") or {}).get("productNumber")),
+                erp_nr=erp_nr,
                 name=_to_str(item.get("label")),
                 quantity=_to_int(item.get("quantity")),
                 unit_price=self._net_unit_price_from_shopware_price(
@@ -549,6 +574,90 @@ class OrderSyncService(BaseService):
             )
             created_count += 1
         return created_count
+
+    @staticmethod
+    def _product_maps_for_line_items(line_items: list[dict[str, Any]]) -> tuple[dict[str, str], dict[str, str]]:
+        """Return Django's authoritative mapping for the products in an order."""
+        product_ids: set[str] = set()
+        product_numbers: set[str] = set()
+        for item in line_items:
+            payload = item.get("payload") or {}
+            product_ids.update(
+                product_id
+                for product_id in (
+                    _to_str(item.get("referencedId")),
+                    _to_str(item.get("productId")),
+                    _to_str(payload.get("productId")),
+                )
+                if product_id
+            )
+            if product_number := _to_str(payload.get("productNumber")):
+                product_numbers.add(product_number)
+
+        products = Product.objects.filter(sku__in=product_ids) | Product.objects.filter(erp_nr__in=product_numbers)
+        products = products.only("sku", "erp_nr")
+        return (
+            {product.sku: product.erp_nr for product in products if product.sku},
+            {product.erp_nr: product.erp_nr for product in products},
+        )
+
+    @staticmethod
+    def _resolve_line_item_erp_nr(
+        *,
+        item: dict[str, Any],
+        products_by_sku: dict[str, str],
+        products_by_erp_nr: dict[str, str],
+    ) -> str:
+        """Resolve a Shopware product position to an ERP number stored in Django.
+
+        Shopware's ``payload.productNumber`` is display data from the order, not
+        a reliable integration key.  The Shopware product UUID is mapped through
+        ``Product.sku`` first; a number is accepted only when it exactly matches
+        a Django product.  This prevents auto-generated Shopware variant numbers
+        from reaching Microtech.
+        """
+        payload = item.get("payload") or {}
+        product_id = next(
+            (
+                product_id
+                for product_id in (
+                    _to_str(item.get("referencedId")),
+                    _to_str(item.get("productId")),
+                    _to_str(payload.get("productId")),
+                )
+                if product_id
+            ),
+            "",
+        )
+        product_number = _to_str(payload.get("productNumber"))
+        line_item_type = _to_str(item.get("type"))
+
+        # Promotion, credit and custom positions do not represent an ERP
+        # article. Their effects are transferred by the order total/rules, not
+        # by manufacturing an article position in Microtech.
+        if line_item_type and line_item_type != "product":
+            return ""
+        if not product_id and not product_number:
+            return ""
+
+        erp_nr_by_id = products_by_sku.get(product_id, "")
+        erp_nr_by_number = products_by_erp_nr.get(product_number, "")
+        if erp_nr_by_id and erp_nr_by_number and erp_nr_by_id != erp_nr_by_number:
+            raise ValueError(
+                "Shopware-Produktposition hat widersprüchliche Produktdaten: "
+                f"Produkt-ID {product_id} gehört in Django zu {erp_nr_by_id}, "
+                f"die übermittelte Artikelnummer lautet jedoch {product_number}."
+            )
+
+        erp_nr = erp_nr_by_id or erp_nr_by_number
+        if erp_nr:
+            return erp_nr
+
+        raise ValueError(
+            "Shopware-Produktposition kann keiner Django-Artikelnummer zugeordnet werden: "
+            f"Produkt-ID={product_id or '-'}, Artikelnummer={product_number or '-'} "
+            f"(Position {(_to_str(item.get('id')) or '-')})."
+        )
 
     @staticmethod
     def _net_unit_price_from_shopware_price(

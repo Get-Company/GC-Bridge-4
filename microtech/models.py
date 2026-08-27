@@ -69,6 +69,13 @@ class MicrotechGraphQLJob(BaseModel):
         DELETE_REMOTE = "delete_remote", _("Remote loeschen")
         LOCAL_ONLY = "local_only", _("Nur lokal abbrechen")
 
+    class ContinuationStatus(models.TextChoices):
+        PENDING = "pending", _("Ausstehend")
+        DISPATCHED = "dispatched", _("Eingereiht")
+        RUNNING = "running", _("Läuft")
+        COMPLETED = "completed", _("Abgeschlossen")
+        FAILED = "failed", _("Fehlgeschlagen")
+
     kind = models.CharField(max_length=48, choices=Kind.choices, db_index=True, verbose_name=_("Job-Art"))
     operation = models.CharField(max_length=96, db_index=True, verbose_name=_("GraphQL Operation"))
     status = models.CharField(
@@ -85,6 +92,11 @@ class MicrotechGraphQLJob(BaseModel):
         unique=True,
         verbose_name=_("GraphQL Job-ID"),
     )
+    external_job_history = models.JSONField(
+        blank=True,
+        default=list,
+        verbose_name=_("Historie externer GraphQL-Job-IDs"),
+    )
     continuation = models.CharField(max_length=96, blank=True, default="", verbose_name=_("Continuation"))
     next_step = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Naechster Schritt"))
     request_payload = models.JSONField(blank=True, default=dict, verbose_name=_("Request Payload"))
@@ -98,6 +110,55 @@ class MicrotechGraphQLJob(BaseModel):
         verbose_name=_("Abbruchstrategie"),
     )
     delete_after_completion = models.BooleanField(default=True, verbose_name=_("Nach Abschluss loeschen"))
+    continuation_status = models.CharField(
+        max_length=16,
+        choices=ContinuationStatus.choices,
+        default=ContinuationStatus.PENDING,
+        db_index=True,
+        verbose_name=_("Continuation-Status"),
+    )
+    continuation_task_id = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        verbose_name=_("Continuation Celery-Task-ID"),
+    )
+    continuation_dispatched_at = models.DateTimeField(
+        blank=True,
+        null=True,
+        verbose_name=_("Continuation eingereiht am"),
+    )
+    continuation_started_at = models.DateTimeField(
+        blank=True,
+        null=True,
+        verbose_name=_("Continuation gestartet am"),
+    )
+    continuation_heartbeat_at = models.DateTimeField(
+        blank=True,
+        null=True,
+        verbose_name=_("Continuation Heartbeat"),
+    )
+    continuation_lease_expires_at = models.DateTimeField(
+        blank=True,
+        null=True,
+        db_index=True,
+        verbose_name=_("Continuation-Lease bis"),
+    )
+    continuation_completed_at = models.DateTimeField(
+        blank=True,
+        null=True,
+        verbose_name=_("Continuation abgeschlossen am"),
+    )
+    continuation_attempt = models.PositiveIntegerField(default=0, verbose_name=_("Continuation-Versuche"))
+    continuation_max_attempts = models.PositiveIntegerField(
+        default=3,
+        verbose_name=_("Continuation max. Versuche"),
+    )
+    remote_resubmit_attempt = models.PositiveIntegerField(default=0, verbose_name=_("Remote-Resubmits"))
+    remote_resubmit_max_attempts = models.PositiveIntegerField(
+        default=3,
+        verbose_name=_("Remote max. Resubmits"),
+    )
     submitted_at = models.DateTimeField(blank=True, null=True, db_index=True, verbose_name=_("Uebergeben am"))
     started_at = models.DateTimeField(blank=True, null=True, verbose_name=_("Gestartet am"))
     completed_at = models.DateTimeField(blank=True, null=True, verbose_name=_("Beendet am"))
@@ -115,6 +176,10 @@ class MicrotechGraphQLJob(BaseModel):
         indexes = [
             models.Index(fields=("status", "next_poll_at"), name="microtech_gql_job_poll_idx"),
             models.Index(fields=("kind", "status"), name="microtech_gql_job_kind_idx"),
+            models.Index(
+                fields=("continuation_status", "continuation_lease_expires_at"),
+                name="microtech_gql_cont_lease_idx",
+            ),
         ]
 
     def __str__(self) -> str:

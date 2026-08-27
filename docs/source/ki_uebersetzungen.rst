@@ -50,8 +50,8 @@ Shopware-Export
 Eine erfolgreich geschriebene Produktuebersetzung startet ausschliesslich einen
 Shopware-6-Produktsync. Der SW6-Payload enthaelt fuer jede dort vorhandene,
 passende Locale (``en-*``, ``de-CH``, ``de-IT``, ``it-IT``) einen nativen
-``translations``-Eintrag mit Name, Beschreibung und Verpackungseinheit. SW5
-und Microtech erhalten keine KI-Uebersetzungen. Eine Kurzbeschreibung besitzt
+``translations``-Eintrag mit Name, Beschreibung und Verpackungseinheit.
+Microtech erhaelt keine KI-Uebersetzungen. Eine Kurzbeschreibung besitzt
 in der SW6-Produktentitaet kein eigenes Standardfeld und wird deshalb nicht
 exportiert.
 

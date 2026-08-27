@@ -41,6 +41,16 @@ class Order(BaseModel):
         db_index=True,
         verbose_name=_("Microtech BelegNr"),
     )
+    microtech_export_enabled = models.BooleanField(
+        default=True,
+        db_index=True,
+        verbose_name=_("Für Microtech-Export freigegeben"),
+    )
+    microtech_export_exclusion_reason = models.TextField(
+        blank=True,
+        default="",
+        verbose_name=_("Ausschlussgrund Microtech-Export"),
+    )
     description = models.TextField(blank=True, default="", verbose_name=_("Beschreibung"))
     total_price = models.DecimalField(
         max_digits=12,

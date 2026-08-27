@@ -323,8 +323,33 @@ CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
-CELERY_BEAT_SCHEDULE = {}
-CELERY_IMPORTS = ("core.tasks", "newsletter.tasks", "microtech.tasks", "products.tasks", "shopware.tasks")
+CELERY_TASK_DEFAULT_QUEUE = "microtech"
+CELERY_TASK_ROUTES = {
+    # Time-critical GraphQL polling and worker-control requests must never
+    # compete with full catalogue exports.
+    "microtech.*": {"queue": "microtech"},
+    # Order import, workflow progress and their reconciliation are isolated
+    # from both GraphQL polling and bulk catalogue processing.
+    "orders.*": {"queue": "orders"},
+    # Product, media, variant and Shopware work is deliberately throttled on
+    # one bulk worker.
+    "products.*": {"queue": "bulk"},
+    "shopware.*": {"queue": "bulk"},
+    "bulk.*": {"queue": "bulk"},
+}
+CELERY_BEAT_SCHEDULE = {
+    "orders-reconcile-every-five-minutes": {
+        "task": "orders.reconcile_order_sync_workflows",
+        "schedule": 300.0,
+        "options": {"queue": "orders"},
+    },
+    "microtech-worker-health-every-two-minutes": {
+        "task": "microtech.monitor_worker_health",
+        "schedule": 120.0,
+        "options": {"queue": "microtech"},
+    },
+}
+CELERY_IMPORTS = ("core.tasks", "newsletter.tasks", "microtech.tasks", "products.tasks")
 
 
 UNFOLD = {
@@ -683,12 +708,6 @@ UNFOLD = {
                         "icon": "storefront",
                         "link": reverse_lazy("admin:shopware_shopwaresettings_changelist"),
                         "permission": sidebar_model_view_permission("shopware", "ShopwareSettings"),
-                    },
-                    {
-                        "title": _("Shopware 5 Sync"),
-                        "icon": "sync_alt",
-                        "link": reverse_lazy("admin:shopware_shopware5settings_changelist"),
-                        "permission": sidebar_model_view_permission("shopware", "Shopware5Settings"),
                     },
                 ],
             },

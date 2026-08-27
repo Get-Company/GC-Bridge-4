@@ -44,14 +44,6 @@ class Category(MPTTModel, BaseModel):
         db_index=True,
         verbose_name=_("Shopware 6 ID"),
     )
-    sw5_id = models.CharField(
-        max_length=32,
-        unique=True,
-        null=True,
-        blank=True,
-        db_index=True,
-        verbose_name=_("Shopware 5 ID"),
-    )
     sku = models.CharField(
         max_length=64,
         unique=True,
@@ -375,7 +367,6 @@ class ArchivedProduct(Product):
 class ProductSyncJob(BaseModel):
     class Target(models.TextChoices):
         SHOPWARE = "shopware", _("Shopware")
-        SHOPWARE5 = "shopware5", _("Shopware 5")
         MICROTECH = "microtech", _("Microtech")
 
     class Status(models.TextChoices):

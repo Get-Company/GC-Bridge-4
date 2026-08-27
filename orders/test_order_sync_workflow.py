@@ -713,7 +713,8 @@ class JobDeletionCleanupTest(TestCase):
         MicrotechJobSentinelService().delete_job(job_id=job.pk, delete_remote=False)
 
         self.assertFalse(MicrotechGraphQLJob.objects.filter(pk=job.pk).exists())
-        self.assertFalse(MicrotechOrderSyncWorkflow.objects.filter(order=order).exists())
+        workflow = MicrotechOrderSyncWorkflow.objects.get(order=order)
+        self.assertIsNone(workflow.current_job)
 
 
 class ResumeTest(TestCase):
