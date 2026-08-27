@@ -356,6 +356,52 @@ class StartAndSubmitTest(TestCase):
         with self.assertRaises(ValueError):
             OrderSyncWorkflowService().start_for_order(order)
 
+    @patch("orders.services.order_sync_workflow.OrderSyncWorkflowService._advance")
+    def test_start_pending_workflow_locks_only_workflow_with_nullable_order_relations(self, mock_advance):
+        order = make_order()
+        order.customer = None
+        order.billing_address = None
+        order.shipping_address = None
+        order.save(update_fields=("customer", "billing_address", "shipping_address", "updated_at"))
+        workflow = MicrotechOrderSyncWorkflow.objects.create(order=order)
+
+        started = OrderSyncWorkflowService().start_pending_workflow(workflow_id=workflow.pk)
+
+        self.assertEqual(started.pk, workflow.pk)
+        self.assertEqual(started.status, MicrotechOrderSyncWorkflow.Status.RUNNING)
+        mock_advance.assert_called_once_with(started)
+
+    @patch("orders.services.order_sync_workflow.OrderSyncWorkflowService._submit_order_step")
+    def test_remote_job_recovery_locks_only_workflow_with_nullable_order_relations(self, mock_submit):
+        order = make_order()
+        order.customer = None
+        order.billing_address = None
+        order.shipping_address = None
+        order.save(update_fields=("customer", "billing_address", "shipping_address", "updated_at"))
+        job = MicrotechGraphQLJob.objects.create(
+            kind=MicrotechGraphQLJob.Kind.ORDER_UPSERT,
+            operation="createVorgang",
+            status=MicrotechGraphQLJob.Status.WAITING_WEBHOOK,
+            external_job_id="lost-vorgang-job",
+        )
+        workflow = MicrotechOrderSyncWorkflow.objects.create(
+            order=order,
+            status=MicrotechOrderSyncWorkflow.Status.WAITING,
+            current_step="write_vorgang",
+            current_job=job,
+        )
+
+        recovered = OrderSyncWorkflowService().recover_missing_remote_job(
+            workflow_id=workflow.pk,
+            job_id=job.pk,
+            error_message="remote job not found",
+        )
+
+        self.assertTrue(recovered)
+        workflow.refresh_from_db()
+        self.assertEqual(workflow.current_step, "probe_vorgang")
+        mock_submit.assert_called_once_with(workflow, "probe_vorgang")
+
 
 class LocalStepTest(TestCase):
     @patch("customer.services.customer_upsert_microtech.CustomerUpsertMicrotechService._sync_new_customer_number_to_shopware")

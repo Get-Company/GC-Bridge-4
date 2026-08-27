@@ -229,9 +229,12 @@ class OrderSyncWorkflowService(BaseService):
         from django.db import transaction
 
         with transaction.atomic():
+            # ``Order.customer`` and both address relations are nullable.
+            # Locking them through ``select_related()`` would create LEFT OUTER
+            # JOINs, whose nullable sides PostgreSQL refuses to lock.  Lock
+            # only the workflow row; related order data is loaded lazily.
             workflow = (
                 MicrotechOrderSyncWorkflow.objects.select_for_update()
-                .select_related("order", "order__customer", "order__billing_address", "order__shipping_address")
                 .filter(pk=workflow_id)
                 .first()
             )
@@ -278,9 +281,10 @@ class OrderSyncWorkflowService(BaseService):
         from django.utils import timezone
 
         with transaction.atomic():
+            # See ``start_pending_workflow``: optional order relations must
+            # not be joined while acquiring a PostgreSQL row lock.
             workflow = (
                 MicrotechOrderSyncWorkflow.objects.select_for_update()
-                .select_related("order", "order__customer", "order__billing_address", "order__shipping_address")
                 .filter(pk=workflow_id, current_job_id=job_id, current_step="write_vorgang")
                 .first()
             )
