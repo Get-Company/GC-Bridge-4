@@ -161,6 +161,35 @@ class OrderSyncWorkflowService(BaseService):
                     return beleg
         return ""
 
+    @staticmethod
+    def _vorgang_id_from_vorgang_result(result: dict[str, Any] | None) -> str:
+        """Liest die unveränderliche Vorgangs-ID aus der Vorgangsbezeichnung."""
+        from customer.services.customer_upsert_microtech import _to_str
+
+        def extract(node: Any) -> str:
+            if not isinstance(node, dict):
+                return ""
+            vorgang = node.get("vorgang")
+            if isinstance(vorgang, dict):
+                value = _to_str(vorgang.get("description") or vorgang.get("Bez"))
+                if value:
+                    return value
+            return _to_str(node.get("Bez") or node.get("description"))
+
+        root = result if isinstance(result, dict) else {}
+        data = root.get("data") if isinstance(root.get("data"), dict) else {}
+        for container in (root, data):
+            for key in ("", "vorgangJob", "requestVorgang", "createVorgang", "updateVorgang"):
+                node = container if not key else container.get(key)
+                vorgang_id = extract(node)
+                if vorgang_id:
+                    return vorgang_id
+            for record in container.get("records") or []:
+                vorgang_id = extract(record)
+                if vorgang_id:
+                    return vorgang_id
+        return ""
+
     def _build_customer_service(self) -> CustomerUpsertMicrotechService:
         """Erzeugt den bestehenden Customer-Upsert-Service für Payload-Builder-Reuse."""
         return CustomerUpsertMicrotechService()
@@ -491,12 +520,26 @@ class OrderSyncWorkflowService(BaseService):
                 state["beleg_nr"] = beleg
                 state["erp_order_id"] = beleg
                 OrderUpsertMicrotechService()._persist_erp_order_id(order=workflow.order, erp_order_id=beleg)
+            vorgang_id = self._vorgang_id_from_vorgang_result(result)
+            if vorgang_id:
+                state["erp_vorgang_id"] = vorgang_id
+                OrderUpsertMicrotechService()._persist_erp_vorgang_id(
+                    order=workflow.order,
+                    erp_vorgang_id=vorgang_id,
+                )
         elif step == "write_vorgang":
             beleg = self._beleg_nr_from_vorgang_result(result) or state.get("beleg_nr", "")
             state["beleg_nr"] = beleg
             if beleg:
                 state["erp_order_id"] = beleg
                 OrderUpsertMicrotechService()._persist_erp_order_id(order=workflow.order, erp_order_id=beleg)
+            vorgang_id = self._vorgang_id_from_vorgang_result(result)
+            if vorgang_id:
+                state["erp_vorgang_id"] = vorgang_id
+                OrderUpsertMicrotechService()._persist_erp_vorgang_id(
+                    order=workflow.order,
+                    erp_vorgang_id=vorgang_id,
+                )
         workflow.state = state
 
     # --- Continuation -------------------------------------------------------
@@ -730,7 +773,7 @@ class OrderSyncWorkflowService(BaseService):
                 "indexField": "BelegNr",
                 "range": {"fromValues": [""], "toValues": ["ZZZZZZZZZZZZZZ"]},
                 "filter": f"AuftrNr = '{quoted_order_number}'",
-                "fields": ["BelegNr", "AuftrNr", "AdrNr"],
+                "fields": ["BelegNr", "AuftrNr", "AdrNr", "Bez"],
                 "limit": 20,
             }
             job = MicrotechJobSentinelService().submit_dataset_records(

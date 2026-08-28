@@ -157,7 +157,7 @@ class AdvanceHandlerTest(TestCase):
 
     @patch("orders.services.order_sync_workflow.OrderSyncWorkflowService.submit_step")
     @patch("orders.services.order_upsert_microtech.OrderUpsertMicrotechService._sync_erp_order_id_to_shopware")
-    def test_advance_write_vorgang_persists_wrapped_beleg_nr(self, mock_shopware_sync, mock_submit):
+    def test_advance_write_vorgang_persists_wrapped_beleg_nr_and_vorgang_id(self, mock_shopware_sync, mock_submit):
         order = make_order()
         wf = MicrotechOrderSyncWorkflow.objects.create(
             order=order,
@@ -168,7 +168,13 @@ class AdvanceHandlerTest(TestCase):
         job = self._job(
             wf,
             "write_vorgang",
-            {"data": {"vorgangJob": {"vorgang": {"belegNr": "WB26/325"}}}},
+            {
+                "data": {
+                    "vorgangJob": {
+                        "vorgang": {"belegNr": "WB26/325", "description": "VORGANG-4711"}
+                    }
+                }
+            },
         )
 
         OrderSyncWorkflowService().advance(job)
@@ -176,7 +182,9 @@ class AdvanceHandlerTest(TestCase):
         order.refresh_from_db()
         wf.refresh_from_db()
         self.assertEqual(order.erp_order_id, "WB26/325")
+        self.assertEqual(order.erp_vorgang_id, "VORGANG-4711")
         self.assertEqual(wf.state["erp_order_id"], "WB26/325")
+        self.assertEqual(wf.state["erp_vorgang_id"], "VORGANG-4711")
         self.assertEqual(wf.state["beleg_nr"], "WB26/325")
         mock_shopware_sync.assert_called_once()
 
@@ -186,6 +194,13 @@ class AdvanceHandlerTest(TestCase):
         )
 
         self.assertEqual(beleg, "WB26/326")
+
+    def test_vorgang_id_extractor_reads_vorgangsbezeichnung_from_dataset_record(self):
+        vorgang_id = OrderSyncWorkflowService._vorgang_id_from_vorgang_result(
+            {"records": [{"BelegNr": "WB26/326", "Bez": "VORGANG-4712"}]}
+        )
+
+        self.assertEqual(vorgang_id, "VORGANG-4712")
 
     @patch("orders.services.order_sync_workflow.OrderSyncWorkflowService.submit_step")
     def test_advance_ignores_stale_step(self, mock_submit):

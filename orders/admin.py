@@ -208,6 +208,8 @@ class OrderAdmin(BaseAdmin):
     search_fields = (
         "order_number",
         "api_id",
+        "erp_order_id",
+        "erp_vorgang_id",
         "customer__erp_nr",
         "customer__name",
         "customer__email",
@@ -597,6 +599,7 @@ class OrderAdmin(BaseAdmin):
             "order_id": order.pk,
             "order_number": order.order_number,
             "erp_order_id": order.erp_order_id,
+            "erp_vorgang_id": order.erp_vorgang_id,
             "has_workflow": workflow is not None,
             "workflow_id": workflow.pk if workflow else None,
             "workflow_url": (

@@ -105,6 +105,10 @@ class OrderUpsertMicrotechService(BaseService):
 
         if existing_beleg_nr and vorgang_service.find(existing_beleg_nr):
             self._persist_erp_order_id(order=order, erp_order_id=existing_beleg_nr)
+            self._persist_erp_vorgang_id(
+                order=order,
+                erp_vorgang_id=str(vorgang_service.get_field("Bez", silent=True) or ""),
+            )
             return existing_beleg_nr
 
         if order_number:
@@ -121,6 +125,11 @@ class OrderUpsertMicrotechService(BaseService):
                     order_number,
                 )
                 self._persist_erp_order_id(order=order, erp_order_id=beleg_nr)
+                if vorgang_service.find(beleg_nr):
+                    self._persist_erp_vorgang_id(
+                        order=order,
+                        erp_vorgang_id=str(vorgang_service.get_field("Bez", silent=True) or ""),
+                    )
                 return beleg_nr
 
         self._clear_erp_order_id(order=order)
@@ -242,6 +251,10 @@ class OrderUpsertMicrotechService(BaseService):
         )
 
         self._persist_erp_order_id(order=order, erp_order_id=erp_order_id)
+        self._persist_erp_vorgang_id(
+            order=order,
+            erp_vorgang_id=self._get_vorgang_field(so_vorgang=so_vorgang, field_name="Bez"),
+        )
 
         return OrderUpsertResult(
             order=order,
@@ -258,6 +271,10 @@ class OrderUpsertMicrotechService(BaseService):
             beleg_nr = str(vorgang.get("belegNr") or "").strip()
             if beleg_nr:
                 self._persist_erp_order_id(order=order, erp_order_id=beleg_nr)
+                self._persist_erp_vorgang_id(
+                    order=order,
+                    erp_vorgang_id=str(vorgang.get("description") or "").strip(),
+                )
                 return beleg_nr
             self._clear_erp_order_id(order=order)
 
@@ -272,23 +289,28 @@ class OrderUpsertMicrotechService(BaseService):
                 "indexField": "BelegNr",
                 "range": {"fromValues": [""], "toValues": ["ZZZZZZZZZZZZZZ"]},
                 "filter": f"AuftrNr = '{quoted_order_number}'",
-                "fields": ["BelegNr", "AuftrNr", "AdrNr"],
+                "fields": ["BelegNr", "AuftrNr", "AdrNr", "Bez"],
                 "limit": 20,
             },
             timeout=180,
         )
         customer_erp_nr = (order.customer.erp_nr or "").strip() if order.customer else ""
         first_beleg_nr = ""
+        first_vorgang_id = ""
         for record in result.get("records") or []:
             beleg_nr = str((record or {}).get("BelegNr") or "").strip()
             adr_nr = str((record or {}).get("AdrNr") or "").strip()
+            vorgang_id = str((record or {}).get("Bez") or "").strip()
             if beleg_nr and not first_beleg_nr:
                 first_beleg_nr = beleg_nr
+                first_vorgang_id = vorgang_id
             if beleg_nr and customer_erp_nr and adr_nr == customer_erp_nr:
                 self._persist_erp_order_id(order=order, erp_order_id=beleg_nr)
+                self._persist_erp_vorgang_id(order=order, erp_vorgang_id=vorgang_id)
                 return beleg_nr
         if first_beleg_nr:
             self._persist_erp_order_id(order=order, erp_order_id=first_beleg_nr)
+            self._persist_erp_vorgang_id(order=order, erp_vorgang_id=first_vorgang_id)
             return first_beleg_nr
         return ""
 
@@ -328,6 +350,10 @@ class OrderUpsertMicrotechService(BaseService):
         erp_order_id = str(vorgang.get("belegNr") or existing_beleg_nr or "").strip()
         if erp_order_id:
             self._persist_erp_order_id(order=order, erp_order_id=erp_order_id)
+        self._persist_erp_vorgang_id(
+            order=order,
+            erp_vorgang_id=str(vorgang.get("description") or "").strip(),
+        )
 
         return OrderUpsertResult(
             order=order,
@@ -1361,6 +1387,14 @@ class OrderUpsertMicrotechService(BaseService):
             order.erp_order_id = erp_order_id
             order.save(update_fields=["erp_order_id", "updated_at"])
         OrderUpsertMicrotechService._sync_erp_order_id_to_shopware(order=order, erp_order_id=erp_order_id)
+
+    @staticmethod
+    def _persist_erp_vorgang_id(*, order: Order, erp_vorgang_id: str) -> None:
+        erp_vorgang_id = (erp_vorgang_id or "").strip()
+        if not erp_vorgang_id or order.erp_vorgang_id == erp_vorgang_id:
+            return
+        order.erp_vorgang_id = erp_vorgang_id
+        order.save(update_fields=["erp_vorgang_id", "updated_at"])
 
     @staticmethod
     def _sync_erp_order_id_to_shopware(*, order: Order, erp_order_id: str) -> None:

@@ -41,6 +41,13 @@ class Order(BaseModel):
         db_index=True,
         verbose_name=_("Microtech BelegNr"),
     )
+    erp_vorgang_id = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        db_index=True,
+        verbose_name=_("Microtech Vorgangsbezeichnung (ID)"),
+    )
     microtech_export_enabled = models.BooleanField(
         default=True,
         db_index=True,
