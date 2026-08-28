@@ -189,6 +189,49 @@ class OrderNetPriceTest(SimpleTestCase):
         self.assertEqual(price, Decimal("10.00"))
 
 
+class OrderSyncWorkflowEnqueueTest(SimpleTestCase):
+    def test_new_workflow_registers_task_after_commit(self):
+        service = OrderSyncService()
+        customer = SimpleNamespace()
+        billing_address = SimpleNamespace()
+        shipping_address = SimpleNamespace()
+        order = SimpleNamespace(pk=42)
+        workflow = SimpleNamespace(pk=73)
+        order_data = {
+            "id": "shopware-order-1",
+            "price": {"taxStatus": "net", "totalPrice": "10.00", "calculatedTaxes": []},
+            "deliveries": [{"id": "delivery-1"}],
+            "transactions": [{"id": "transaction-1"}],
+            "lineItems": [],
+        }
+
+        with (
+            patch.object(
+                service,
+                "_upsert_customer_block",
+                return_value=(customer, billing_address, shipping_address, 2),
+            ),
+            patch.object(service, "_replace_order_details", return_value=0),
+            patch(
+                "orders.services.order_sync.Order.objects.update_or_create",
+                return_value=(order, True),
+            ),
+            patch(
+                "orders.services.order_sync_workflow.OrderSyncWorkflowService.ensure_pending_for_order",
+                return_value=(workflow, True),
+            ),
+            patch("orders.services.order_sync.transaction.on_commit") as on_commit,
+        ):
+            result = OrderSyncService.upsert_from_shopware_order.__wrapped__(
+                service,
+                order_data=order_data,
+            )
+
+        self.assertTrue(result["workflow_created"])
+        on_commit.assert_called_once()
+        self.assertEqual(on_commit.call_args.args[0].__defaults__, (workflow.pk,))
+
+
 class OrderProductNumberResolutionTest(TestCase):
     def setUp(self):
         self.order = Order.objects.create(api_id="order-product-number-resolution")

@@ -159,10 +159,10 @@ class OrderSyncService(BaseService):
             total_tax += _to_decimal((tax or {}).get("tax"))
 
         delivery = _normalize_entity((order_data.get("deliveries") or [{}])[0] or {})
-        transaction = _normalize_entity((order_data.get("transactions") or [{}])[0] or {})
+        payment_transaction = _normalize_entity((order_data.get("transactions") or [{}])[0] or {})
         order_defaults = {
             "api_delivery_id": _to_str(delivery.get("id")),
-            "api_transaction_id": _to_str(transaction.get("id")),
+            "api_transaction_id": _to_str(payment_transaction.get("id")),
             "sales_channel_id": sales_channel_id or _to_str(order_data.get("salesChannelId")),
             "order_number": _to_str(order_data.get("orderNumber")),
             "description": _to_str(order_data.get("customerComment")),
@@ -173,11 +173,11 @@ class OrderSyncService(BaseService):
                 quantity=1,
                 tax_status=tax_status,
             ),
-            "payment_method": _to_str((transaction.get("paymentMethod") or {}).get("name")),
+            "payment_method": _to_str((payment_transaction.get("paymentMethod") or {}).get("name")),
             "shipping_method": _to_str((delivery.get("shippingMethod") or {}).get("name")),
             "order_state": _to_str((order_data.get("stateMachineState") or {}).get("technicalName")),
             "shipping_state": _to_str((delivery.get("stateMachineState") or {}).get("technicalName")),
-            "payment_state": _to_str((transaction.get("stateMachineState") or {}).get("technicalName")),
+            "payment_state": _to_str((payment_transaction.get("stateMachineState") or {}).get("technicalName")),
             "purchase_date": parse_datetime(_to_str(order_data.get("createdAt"))),
             "customer": customer,
             "billing_address": billing_address,
