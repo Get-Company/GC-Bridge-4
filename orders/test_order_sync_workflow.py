@@ -365,6 +365,58 @@ class StartAndSubmitTest(TestCase):
         self.assertEqual(called["continuation"], "microtech_order_sync_advance")
         self.assertEqual(called["request_payload"]["input"]["taxCategory"], 3)
 
+    @patch("orders.services.order_sync_workflow.MicrotechGraphQLClientService")
+    @patch("orders.services.order_sync_workflow.MicrotechJobSentinelService.submit_wrapper_job")
+    def test_start_reexports_order_with_stale_beleg_references(self, mock_submit, mock_client):
+        """Ein in Microtech geloeschter Vorgang darf erneut angelegt werden."""
+        mock_submit.return_value = MagicMock(pk=2)
+        order = make_order()
+        order.erp_order_id = "WB26/325"
+        order.erp_vorgang_id = "{1234}"
+        order.save(update_fields=("erp_order_id", "erp_vorgang_id", "updated_at"))
+
+        wf = OrderSyncWorkflowService().start_for_order(order)
+
+        order.refresh_from_db()
+        self.assertEqual(order.erp_order_id, "")
+        self.assertEqual(order.erp_vorgang_id, "")
+        self.assertEqual(wf.current_step, "write_customer")
+        self.assertEqual(wf.status, MicrotechOrderSyncWorkflow.Status.WAITING)
+        # Ohne BelegNr sondiert der Workflow den Vorgang erneut, statt blind
+        # einen zweiten anzulegen.
+        self.assertTrue(
+            OrderSyncWorkflowService()._is_step_applicable(wf, "probe_vorgang")
+        )
+
+    def test_start_rejects_order_excluded_from_export(self):
+        order = make_order()
+        order.microtech_export_enabled = False
+        order.microtech_export_exclusion_reason = "Testausschluss"
+        order.save(
+            update_fields=(
+                "microtech_export_enabled",
+                "microtech_export_exclusion_reason",
+                "updated_at",
+            )
+        )
+
+        with self.assertRaises(ValueError) as raised:
+            OrderSyncWorkflowService().start_for_order(order)
+
+        self.assertIn("Testausschluss", str(raised.exception))
+
+    def test_start_keeps_beleg_references_while_a_workflow_is_active(self):
+        order = make_order()
+        order.erp_order_id = "WB26/325"
+        order.save(update_fields=("erp_order_id", "updated_at"))
+        MicrotechOrderSyncWorkflow.objects.create(order=order, status=MicrotechOrderSyncWorkflow.Status.WAITING)
+
+        with self.assertRaises(ValueError):
+            OrderSyncWorkflowService().start_for_order(order)
+
+        order.refresh_from_db()
+        self.assertEqual(order.erp_order_id, "WB26/325")
+
     def test_start_rejects_second_active_workflow(self):
         order = make_order()
         MicrotechOrderSyncWorkflow.objects.create(order=order, status=MicrotechOrderSyncWorkflow.Status.WAITING)

@@ -215,16 +215,29 @@ class OrderSyncWorkflowService(BaseService):
             "billing_same_as_shipping": billing.pk == shipping.pk,
         }
 
-    def ensure_pending_for_order(self, order) -> tuple[MicrotechOrderSyncWorkflow | None, bool]:
+    def ensure_pending_for_order(
+        self,
+        order,
+        *,
+        allow_reexport: bool = False,
+    ) -> tuple[MicrotechOrderSyncWorkflow | None, bool]:
         """Persist the export intent before publishing a Celery task.
 
         The PENDING row is the durable hand-off between the Shopware import
         transaction and the orders worker.  A failed broker publication can
         therefore be recovered by the independent order reconciler.
+
+        ``allow_reexport`` covers the manual retry of an order whose Vorgang
+        was removed in Microtech: the stale BelegNr is cleared so that the
+        ``probe_vorgang`` step decides again.  A Vorgang that still exists is
+        found by that probe and updated, so the retry cannot create a
+        duplicate.
         """
         from django.db import IntegrityError, transaction
 
-        if (order.erp_order_id or "").strip() or not order.microtech_export_enabled:
+        if not order.microtech_export_enabled:
+            return None, False
+        if (order.erp_order_id or "").strip() and not allow_reexport:
             return None, False
 
         state = self._initial_workflow_state(order)
@@ -236,7 +249,11 @@ class OrderSyncWorkflowService(BaseService):
                     .first()
                 )
                 if active is not None:
+                    # Die Belegreferenzen bleiben stehen, solange ein aktiver
+                    # Workflow sie noch braucht.
                     return active, False
+                if allow_reexport:
+                    self._clear_stale_beleg_references(order)
                 workflow = MicrotechOrderSyncWorkflow.objects.create(
                     order=order,
                     status=MicrotechOrderSyncWorkflow.Status.PENDING,
@@ -283,11 +300,26 @@ class OrderSyncWorkflowService(BaseService):
         self._advance(workflow)
         return workflow
 
-    def start_for_order(self, order) -> MicrotechOrderSyncWorkflow:
+    @staticmethod
+    def _clear_stale_beleg_references(order) -> None:
+        """Entfernt die Microtech-Belegreferenzen vor einem erneuten Export."""
+        if not (order.erp_order_id or "").strip() and not (order.erp_vorgang_id or "").strip():
+            return
+        logger.info(
+            "Bestellung %s wird erneut exportiert; BelegNr '%s' wird verworfen.",
+            order.pk,
+            order.erp_order_id,
+        )
+        order.erp_order_id = ""
+        order.erp_vorgang_id = ""
+        order.save(update_fields=("erp_order_id", "erp_vorgang_id", "updated_at"))
+
+    def start_for_order(self, order, *, allow_reexport: bool = True) -> MicrotechOrderSyncWorkflow:
         """Manually create and immediately start a workflow for one order."""
-        workflow, created = self.ensure_pending_for_order(order)
+        workflow, created = self.ensure_pending_for_order(order, allow_reexport=allow_reexport)
         if workflow is None:
-            raise ValueError(f"Bestellung {order.pk} ist bereits exportiert oder nicht für Microtech freigegeben.")
+            reason = order.microtech_export_exclusion_reason or "Kein Grund dokumentiert."
+            raise ValueError(f"Bestellung {order.pk} ist nicht für Microtech freigegeben: {reason}")
         if not created:
             raise ValueError(f"Für Bestellung {order.pk} läuft bereits ein Sync-Workflow (#{workflow.pk}).")
 
