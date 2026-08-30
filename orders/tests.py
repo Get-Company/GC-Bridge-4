@@ -13,7 +13,7 @@ from microtech.models import (
     MicrotechOrderRuleAction,
     MicrotechOrderRuleCondition,
 )
-from orders.models import Order
+from orders.models import Order, OrderDetail
 from orders.services.order_rule_resolver import (
     OrderRuleResolverService,
     ResolvedDatasetAction,
@@ -281,6 +281,58 @@ class OrderProductNumberResolutionTest(TestCase):
             )
 
         self.assertFalse(self.order.details.exists())
+
+
+class OrderPositionFactorUnitTest(TestCase):
+    """Artikel mit gepflegtem Faktor werden in Microtech ueber den Grundpreis abgerechnet."""
+
+    def setUp(self):
+        self.order = Order.objects.create(api_id="order-factor-unit", order_number="ORDER-FACTOR")
+        self.detail = OrderDetail.objects.create(
+            order=self.order,
+            erp_nr="ERP-FACTOR-1",
+            name="Faktorartikel",
+            unit="Pack",
+            quantity=2,
+            unit_price=Decimal("10.00"),
+            total_price=Decimal("20.00"),
+        )
+
+    def _build_positions(self):
+        with patch(
+            "orders.services.order_upsert_microtech.MicrotechArtikelService"
+        ) as artikel_service_cls:
+            artikel_service_cls.return_value.find.return_value = True
+            artikel_service_cls.return_value.get_unit.return_value = "Karton"
+            artikel_service_cls.return_value.get_name.return_value = "Faktorartikel"
+            positions, _debug = OrderUpsertMicrotechService()._build_graphql_positions(
+                order=self.order,
+                resolved_rule=ResolvedOrderRule(rule_id=None, rule_name=""),
+                client=MagicMock(),
+            )
+        return positions
+
+    def test_article_with_factor_uses_the_base_price_unit(self):
+        Product.objects.create(erp_nr="ERP-FACTOR-1", sku="sku-factor-1", factor=5, unit="Pack")
+
+        positions = self._build_positions()
+
+        self.assertEqual(positions[0]["unit"], "% Stck")
+        self.assertTrue(OrderUpsertMicrotechService._requires_microtech_base_price(positions[0]["unit"]))
+
+    def test_article_without_factor_keeps_the_microtech_article_unit(self):
+        Product.objects.create(erp_nr="ERP-FACTOR-1", sku="sku-factor-1", unit="Pack")
+
+        positions = self._build_positions()
+
+        self.assertEqual(positions[0]["unit"], "Karton")
+
+    def test_factor_below_one_keeps_the_microtech_article_unit(self):
+        Product.objects.create(erp_nr="ERP-FACTOR-1", sku="sku-factor-1", factor=0, unit="Pack")
+
+        positions = self._build_positions()
+
+        self.assertEqual(positions[0]["unit"], "Karton")
 
 
 class OrderRuleResolverDynamicRulesTest(TestCase):

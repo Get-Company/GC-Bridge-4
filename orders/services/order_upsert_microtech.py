@@ -23,6 +23,7 @@ from orders.services.constants import (
     DEFAULT_SHIPPING_ERP_NR,
     DEFAULT_SHIPPING_TYPE_NUMBER,
     DEFAULT_UNIT,
+    FACTOR_UNIT,
 )
 from orders.services.order_rule_resolver import (
     OrderRuleResolverService,
@@ -374,6 +375,7 @@ class OrderUpsertMicrotechService(BaseService):
         article_name_cache: dict[str, str] = {}
         article_raw_unit_cache: dict[str, str] = {}
         product_unit_map = self._build_product_unit_map(details)
+        product_factor_map = self._build_product_factor_map(details)
         product_export_text_map = self._build_product_export_text_map(details)
         append_customs_metadata = self._has_swiss_billing_address(order)
         positions: list[dict[str, str]] = []
@@ -389,6 +391,7 @@ class OrderUpsertMicrotechService(BaseService):
                 product_unit_map=product_unit_map,
                 article_name_cache=article_name_cache,
                 article_raw_unit_cache=article_raw_unit_cache,
+                product_factor_map=product_factor_map,
             )
             position = {
                 "erpNumber": erp_nr,
@@ -724,6 +727,7 @@ class OrderUpsertMicrotechService(BaseService):
         article_name_cache: dict[str, str] = {}
         article_raw_unit_cache: dict[str, str] = {}
         product_unit_map = self._build_product_unit_map(details)
+        product_factor_map = self._build_product_factor_map(details)
         product_export_text_map = self._build_product_export_text_map(details)
         append_customs_metadata = self._has_swiss_billing_address(order)
 
@@ -743,6 +747,7 @@ class OrderUpsertMicrotechService(BaseService):
                 product_unit_map=product_unit_map,
                 article_name_cache=article_name_cache,
                 article_raw_unit_cache=article_raw_unit_cache,
+                product_factor_map=product_factor_map,
             )
             quantity = detail.quantity or 1
             position_name = self._resolve_position_name(
@@ -766,6 +771,19 @@ class OrderUpsertMicrotechService(BaseService):
                     price=detail.unit_price,
                     position_name=position_name,
                 )
+
+    @staticmethod
+    def _build_product_factor_map(details: list[OrderDetail]) -> dict[str, int]:
+        """Liefert je ErpNr den Artikel-Faktor, sofern gepflegt und >= 1."""
+        erp_nrs = {(detail.erp_nr or "").strip() for detail in details if (detail.erp_nr or "").strip()}
+        if not erp_nrs:
+            return {}
+        rows = (
+            Product.objects
+            .filter(erp_nr__in=erp_nrs, factor__gte=1)
+            .values_list("erp_nr", "factor")
+        )
+        return {str(erp_nr).strip(): int(factor) for erp_nr, factor in rows if erp_nr and factor}
 
     @staticmethod
     def _build_product_unit_map(details: list[OrderDetail]) -> dict[str, str]:
@@ -827,7 +845,14 @@ class OrderUpsertMicrotechService(BaseService):
         product_unit_map: dict[str, str],
         article_name_cache: dict[str, str],
         article_raw_unit_cache: dict[str, str],
+        product_factor_map: dict[str, int] | None = None,
     ) -> str:
+        # Ein gepflegter Faktor bestimmt die Mengeneinheit der Vorgangsposition:
+        # Microtech rechnet solche Artikel ueber den Grundpreis ab, was das
+        # "%"-Praefix kennzeichnet (siehe _requires_microtech_base_price).
+        if (product_factor_map or {}).get(erp_nr, 0) >= 1:
+            return FACTOR_UNIT
+
         raw_unit = article_raw_unit_cache.get(erp_nr)
         if raw_unit is None:
             raw_unit = ""
