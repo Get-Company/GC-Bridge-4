@@ -438,8 +438,31 @@ class LocalStepTest(TestCase):
 class OrderStepTest(TestCase):
     @patch("orders.services.order_sync_workflow.MicrotechGraphQLClientService")
     @patch("orders.services.order_sync_workflow.MicrotechJobSentinelService.submit_wrapper_job")
-    def test_write_vorgang_always_creates_with_the_resolved_customer_number(self, mock_submit, mock_client_cls):
+    def test_write_vorgang_creates_with_the_resolved_customer_number(self, mock_submit, mock_client_cls):
         mock_submit.return_value = MagicMock(pk=5)
+        order = make_order()
+        wf = MicrotechOrderSyncWorkflow.objects.create(
+            order=order,
+            status=MicrotechOrderSyncWorkflow.Status.WAITING,
+            state={"erp_nr": "10042"},
+        )
+
+        with patch(
+            "orders.services.order_upsert_microtech.OrderUpsertMicrotechService._build_graphql_positions",
+            return_value=([], MagicMock()),
+        ):
+            OrderSyncWorkflowService()._submit_order_step(wf, "write_vorgang")
+
+        called = mock_submit.call_args.kwargs
+        self.assertEqual(called["kind"], MicrotechGraphQLJob.Kind.ORDER_UPSERT)
+        self.assertEqual(called["operation"], "createVorgang")
+        self.assertEqual(called["request_payload"]["input"]["customerNumber"], "10042")
+
+    @patch("orders.services.order_sync_workflow.MicrotechGraphQLClientService")
+    @patch("orders.services.order_sync_workflow.MicrotechJobSentinelService.submit_wrapper_job")
+    def test_write_vorgang_updates_a_known_beleg_nr(self, mock_submit, mock_client_cls):
+        """Eine bekannte BelegNr darf keinen zweiten Vorgang in Microtech anlegen."""
+        mock_submit.return_value = MagicMock(pk=6)
         order = make_order()
         wf = MicrotechOrderSyncWorkflow.objects.create(
             order=order,
@@ -455,8 +478,8 @@ class OrderStepTest(TestCase):
 
         called = mock_submit.call_args.kwargs
         self.assertEqual(called["kind"], MicrotechGraphQLJob.Kind.ORDER_UPSERT)
-        self.assertEqual(called["operation"], "createVorgang")
-        self.assertEqual(called["request_payload"]["input"]["customerNumber"], "10042")
+        self.assertEqual(called["operation"], "updateVorgang")
+        self.assertEqual(called["request_payload"]["belegNr"], "WB26/325")
 
 
 class ShopwareAddressMatchingTest(TestCase):

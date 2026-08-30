@@ -70,7 +70,12 @@ class OrderAdminSwissCustomsActionTest(TestCase):
 
         self.assertEqual(response.status_code, 200)
         content = response.content.decode("utf-8")
-        self.assertIn("Schweiz Zoll Mapping", content)
+        # Auf den Link statt den Anzeigetext pruefen: der Sidebar-Titel wird
+        # uebersetzt und darf sich aendern, das Ziel der Navigation nicht.
+        self.assertIn(
+            reverse("admin:microtech_microtechswisscustomsfieldmapping_changelist"),
+            content,
+        )
 
     @patch("orders.admin.SwissCustomsCsvExportService.export_order")
     @patch("orders.admin.OrderUpsertMicrotechService.refresh_erp_order_id")
