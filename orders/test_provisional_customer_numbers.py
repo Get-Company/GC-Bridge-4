@@ -6,11 +6,14 @@ from orders.services.order_sync_workflow import OrderSyncWorkflowService
 
 
 class ProvisionalCustomerNumberWorkflowTest(SimpleTestCase):
-    def test_six_digit_number_from_950000_uses_new_customer_number_allocation(self):
+    def test_six_digit_number_from_900000_uses_new_customer_number_allocation(self):
+        self.assertTrue(OrderSyncWorkflowService._is_provisional_customer_number("900000"))
         self.assertTrue(OrderSyncWorkflowService._is_provisional_customer_number("950002"))
+        self.assertTrue(OrderSyncWorkflowService._is_provisional_customer_number("999999"))
 
     def test_existing_customer_number_does_not_use_new_customer_number_allocation(self):
-        self.assertFalse(OrderSyncWorkflowService._is_provisional_customer_number("949999"))
+        self.assertFalse(OrderSyncWorkflowService._is_provisional_customer_number("899999"))
+        self.assertFalse(OrderSyncWorkflowService._is_provisional_customer_number("100012"))
 
     def test_new_customer_sequence_writes_back_before_order_creation(self):
         workflow = SimpleNamespace(state={"is_new_customer": True}, step_log=[{"step": "write_customer", "status": "completed"}])

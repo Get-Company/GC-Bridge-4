@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 # Fehlermeldungs-Fragmente, die einen Probe-Fehlschlag als fachliches
 # "nicht gefunden" (Branch) statt als technischen Fehler kennzeichnen.
 NOT_FOUND_FRAGMENTS = ("nicht gefunden", "not found", "wurde nicht gefunden")
-NEW_CUSTOMER_NUMBER_MIN = 950_000
+NEW_CUSTOMER_NUMBER_MIN = 900_000
 NEW_CUSTOMER_NUMBER_MAX = 999_999
 
 
