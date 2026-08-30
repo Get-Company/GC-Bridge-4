@@ -190,7 +190,7 @@ class OrderNetPriceTest(SimpleTestCase):
 
 
 class OrderSyncWorkflowEnqueueTest(SimpleTestCase):
-    def test_new_workflow_registers_task_after_commit(self):
+    def test_import_does_not_start_microtech_workflow(self):
         service = OrderSyncService()
         customer = SimpleNamespace()
         billing_address = SimpleNamespace()
@@ -219,7 +219,7 @@ class OrderSyncWorkflowEnqueueTest(SimpleTestCase):
             patch(
                 "orders.services.order_sync_workflow.OrderSyncWorkflowService.ensure_pending_for_order",
                 return_value=(workflow, True),
-            ),
+            ) as ensure_pending,
             patch("orders.services.order_sync.transaction.on_commit") as on_commit,
         ):
             result = OrderSyncService.upsert_from_shopware_order.__wrapped__(
@@ -227,9 +227,11 @@ class OrderSyncWorkflowEnqueueTest(SimpleTestCase):
                 order_data=order_data,
             )
 
-        self.assertTrue(result["workflow_created"])
-        on_commit.assert_called_once()
-        self.assertEqual(on_commit.call_args.args[0].__defaults__, (workflow.pk,))
+        # Der Export nach Microtech wird ausschliesslich manuell gestartet.
+        self.assertFalse(result["workflow_created"])
+        self.assertIsNone(result["workflow_id"])
+        ensure_pending.assert_not_called()
+        on_commit.assert_not_called()
 
 
 class OrderProductNumberResolutionTest(TestCase):

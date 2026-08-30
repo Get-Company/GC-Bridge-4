@@ -193,21 +193,15 @@ class OrderSyncService(BaseService):
             line_items=order_data.get("lineItems") or [],
             tax_status=tax_status,
         )
-        from orders.services.order_sync_workflow import OrderSyncWorkflowService
-
-        workflow, workflow_created = OrderSyncWorkflowService().ensure_pending_for_order(order)
-        if workflow_created and workflow is not None:
-            from orders.tasks import start_microtech_order_workflow
-
-            transaction.on_commit(
-                lambda workflow_id=workflow.pk: start_microtech_order_workflow.delay(workflow_id)
-            )
+        # Der Microtech-Export wird bewusst nicht automatisch angestossen.
+        # Bestellungen werden ausschliesslich manuell ueber die Admin-Aktion
+        # "Microtech-Sync starten" nach Microtech uebertragen.
 
         return {
             "created": created,
             "order": order,
-            "workflow_id": workflow.pk if workflow is not None else None,
-            "workflow_created": workflow_created,
+            "workflow_id": None,
+            "workflow_created": False,
             "customer_upserted": True,
             "addresses_upserted": addresses_count,
             "details_upserted": details_count,

@@ -987,31 +987,13 @@ class OrderSyncWorkflowService(BaseService):
         return any(fragment in lowered for fragment in NOT_FOUND_FRAGMENTS)
 
     def reconcile_failures(self) -> int:
-        """Recover durable starts and process failed or orphaned workflows."""
+        """Resume manually started workflows and process failed or orphaned ones."""
         from django.db import transaction
         from django.utils import timezone
 
         changed = 0
-        missing_order_ids = list(
-            Order.objects.filter(
-                erp_order_id="",
-                microtech_export_enabled=True,
-                order_state__in=("open", "in_progress"),
-                microtech_sync_workflows__isnull=True,
-            ).values_list("pk", flat=True)
-        )
-        for order_id in missing_order_ids:
-            order = Order.objects.select_related("customer", "billing_address", "shipping_address").get(pk=order_id)
-            try:
-                workflow, created = self.ensure_pending_for_order(order)
-                if created and workflow is not None:
-                    self.start_pending_workflow(workflow_id=workflow.pk)
-                    changed += 1
-            except Exception:
-                # A malformed imported order must stay visible for correction;
-                # it is never silently excluded from the Microtech export.
-                logger.exception("Order-Sync-Reconcile: Workflow für Bestellung %s konnte nicht angelegt werden.", order_id)
-
+        # Bestellungen ohne Workflow werden hier bewusst nicht mehr nachgezogen:
+        # der Export startet ausschliesslich manuell ueber ``start_for_order``.
         pending_ids = list(
             MicrotechOrderSyncWorkflow.objects.filter(
                 status=MicrotechOrderSyncWorkflow.Status.PENDING,
