@@ -20,6 +20,8 @@ from shopware.services.translations import ShopwareTranslationService
 
 DEFAULT_TAX_ID = "d391e13bdd95404a885f4ad28ea218e0"
 REDUCED_TAX_ID = "be66a53eae3a49829f4a8c5959535501"
+# Custom-Field des Shops fuer den Artikel-Faktor (Set "geco_price_factor").
+PRICE_FACTOR_CUSTOM_FIELD = "geco_price_factor_value"
 
 def _get_admin_user_id() -> int | None:
     user = get_user_model().objects.filter(is_superuser=True).order_by("id").first()
@@ -306,6 +308,13 @@ def _build_product_sync_payload(
         payload["id"] = effective_sku
     if product.description is not None:
         payload["description"] = product.description
+    pack_unit = (product.unit or "").strip()
+    if pack_unit:
+        payload["packUnit"] = pack_unit
+    if product.factor is not None:
+        # Shopware fuehrt customFields beim Update zusammen, andere Felder des
+        # Produkts (z. B. attr18) bleiben deshalb erhalten.
+        payload["customFields"] = {PRICE_FACTOR_CUSTOM_FIELD: int(product.factor)}
     translations = _build_product_translations(
         product=product,
         translation_language_ids=translation_language_ids,

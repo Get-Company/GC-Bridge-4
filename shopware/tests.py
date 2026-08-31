@@ -51,6 +51,8 @@ class Shopware6ProductStockPayloadTest(SimpleTestCase):
             name_de="",
             name_en="",
             description=None,
+            unit="",
+            factor=None,
             storage=SimpleNamespace(get_shopware_stock=91),
             prices=prices,
         )
@@ -67,6 +69,55 @@ class Shopware6ProductStockPayloadTest(SimpleTestCase):
         self.assertEqual(payload["productNumber"], "581001")
         self.assertEqual(payload["stock"], 91)
         self.assertEqual(payload["maxPurchase"], 91)
+
+
+class Shopware6ProductUnitAndFactorPayloadTest(SimpleTestCase):
+    """Einheit und Faktor gehoeren in den Produkt-Payload nach Shopware."""
+
+    def _product(self, *, unit, factor):
+        prices = MagicMock()
+        prices.select_related.return_value.all.return_value = []
+        return SimpleNamespace(
+            erp_nr="204113",
+            is_active=True,
+            tax=None,
+            name="Faktorartikel",
+            name_de="",
+            name_en="",
+            description=None,
+            unit=unit,
+            factor=factor,
+            storage=SimpleNamespace(get_shopware_stock=5),
+            prices=prices,
+        )
+
+    def _payload(self, product):
+        return _build_product_sync_payload(
+            product=product,
+            effective_sku="",
+            default_channel=None,
+            channels=[],
+            admin_user_id=None,
+            content_type_id=None,
+        )
+
+    def test_unit_is_sent_as_pack_unit_and_factor_as_custom_field(self):
+        payload = self._payload(self._product(unit="Stck", factor=100))
+
+        self.assertEqual(payload["packUnit"], "Stck")
+        self.assertEqual(payload["customFields"], {"geco_price_factor_value": 100})
+
+    def test_missing_unit_and_factor_are_omitted(self):
+        payload = self._payload(self._product(unit="", factor=None))
+
+        self.assertNotIn("packUnit", payload)
+        self.assertNotIn("customFields", payload)
+
+    def test_factor_zero_is_still_transferred(self):
+        payload = self._payload(self._product(unit=" Pack ", factor=0))
+
+        self.assertEqual(payload["packUnit"], "Pack")
+        self.assertEqual(payload["customFields"], {"geco_price_factor_value": 0})
 
 
 class Shopware6ProductTranslationPayloadTest(SimpleTestCase):
@@ -276,6 +327,8 @@ class Shopware6CustomSearchKeywordsPayloadTest(SimpleTestCase):
             name_de="",
             name_en="",
             description=None,
+            unit="",
+            factor=None,
             storage=SimpleNamespace(get_shopware_stock=1),
             prices=prices,
             mappei_products=mappei_products_manager,
