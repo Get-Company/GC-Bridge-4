@@ -1292,10 +1292,13 @@ class CustomerSyncDirectionService(BaseService):
                     client=client,
                     address_number=address_number,
                     address=addr,
-                    is_shipping=bool(addr.is_shipping),
-                    is_invoice=bool(addr.is_invoice),
+                    # The pair selected above is the only default pair.
+                    is_shipping=False,
+                    is_invoice=False,
                     na1_mode="auto",
                     na1_static_value="",
+                    known_address_sub_numbers=result.known_address_sub_numbers,
+                    include_email=bool(addr.is_shipping),
                 )
 
         addr_count = len(all_addresses)

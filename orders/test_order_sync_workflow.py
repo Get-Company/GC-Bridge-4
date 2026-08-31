@@ -83,6 +83,13 @@ class NextStepResolverTest(TestCase):
         self.assertFalse(OrderSyncWorkflowService()._is_step_applicable(wf, "billing_address"))
         self.assertFalse(OrderSyncWorkflowService()._is_step_applicable(wf, "billing_contact"))
 
+    def test_separately_saved_identical_addresses_are_synced_once(self):
+        order = make_order()
+
+        state = OrderSyncWorkflowService()._initial_workflow_state(order)
+
+        self.assertTrue(state["billing_same_as_shipping"])
+
     def test_all_done_returns_none(self):
         wf = self._wf(
             state={"is_new_customer": True},
@@ -267,9 +274,38 @@ class AdvanceHandlerTest(TestCase):
         OrderSyncWorkflowService()._apply_result(wf, "shipping_address", {}, job=job)
 
         order.shipping_address.refresh_from_db()
-        self.assertEqual(wf.state["shipping_ans_nr"], 1)
-        self.assertEqual(wf.state["billing_ans_nr"], 1)
-        self.assertEqual(order.shipping_address.erp_ans_nr, 1)
+        self.assertNotIn("shipping_ans_nr", wf.state)
+        self.assertNotIn("billing_ans_nr", wf.state)
+        self.assertIsNone(order.shipping_address.erp_ans_nr)
+
+    def test_apply_write_customer_remembers_remote_address_inventory_and_all_default_flags(self):
+        wf = MicrotechOrderSyncWorkflow.objects.create(
+            order=make_order(),
+            status=MicrotechOrderSyncWorkflow.Status.WAITING,
+            current_step="write_customer",
+            state={"requested_customer_number": "100001"},
+        )
+
+        OrderSyncWorkflowService()._apply_result(
+            wf,
+            "write_customer",
+            {
+                "customer": {
+                    "customerNumber": "100001",
+                    "erpAddressNumber": 100001,
+                    "defaultShippingAddressNumber": 2,
+                    "addresses": [
+                        {"addressSubNumber": 2, "isDefaultShipping": True},
+                        {"addressSubNumber": 4, "isDefaultShipping": True, "isDefaultBilling": True},
+                    ],
+                }
+            },
+        )
+
+        self.assertTrue(wf.state["remote_address_inventory_known"])
+        self.assertEqual(wf.state["remote_address_sub_numbers"], [2, 4])
+        self.assertEqual(wf.state["existing_default_shipping_ans_nrs"], [2, 4])
+        self.assertEqual(wf.state["existing_default_billing_ans_nrs"], [4])
 
     def test_apply_address_result_persists_address_identity(self):
         order = make_order()
@@ -653,7 +689,7 @@ class ContactStepTest(TestCase):
 
     @patch("orders.services.order_sync_workflow.MicrotechGraphQLClientService")
     @patch("orders.services.order_sync_workflow.MicrotechJobSentinelService.submit_wrapper_job")
-    def test_address_step_reuses_matching_anschrift_for_different_contact_address(
+    def test_address_step_does_not_reuse_a_sibling_mapping_without_remote_confirmation(
         self,
         mock_submit,
         mock_client_cls,
@@ -689,9 +725,65 @@ class ContactStepTest(TestCase):
 
         order.shipping_address.refresh_from_db()
         called = mock_submit.call_args.kwargs
+        self.assertEqual(called["operation"], "createPostalAddress")
+        self.assertNotIn("addressSubNumber", called["request_payload"])
+        self.assertIsNone(order.shipping_address.erp_ans_nr)
+        self.assertIsNone(order.shipping_address.erp_asp_nr)
+
+    @patch("orders.services.order_sync_workflow.MicrotechGraphQLClientService")
+    @patch("orders.services.order_sync_workflow.MicrotechJobSentinelService.submit_wrapper_job")
+    def test_address_step_updates_only_a_remote_confirmed_ans_nr(self, mock_submit, mock_client_cls):
+        mock_submit.return_value = MagicMock(pk=8)
+        order = make_order()
+        order.shipping_address.erp_ans_nr = 12
+        order.shipping_address.save(update_fields=("erp_ans_nr",))
+        wf = MicrotechOrderSyncWorkflow.objects.create(
+            order=order,
+            status=MicrotechOrderSyncWorkflow.Status.RUNNING,
+            state={
+                "erp_nr": order.customer.erp_nr,
+                "address_number": int(order.customer.erp_nr),
+                "remote_address_inventory_known": True,
+                "remote_address_sub_numbers": [12],
+            },
+        )
+
+        OrderSyncWorkflowService().submit_step(wf, "shipping_address")
+
+        called = mock_submit.call_args.kwargs
         self.assertEqual(called["operation"], "updatePostalAddress")
         self.assertEqual(called["request_payload"]["addressSubNumber"], 12)
-        self.assertEqual(order.shipping_address.erp_ans_nr, 12)
+        self.assertFalse(called["request_payload"]["input"]["isDefaultShipping"])
+        self.assertFalse(called["request_payload"]["input"]["isDefaultBilling"])
+
+    @patch("orders.services.order_sync_workflow.MicrotechGraphQLClientService")
+    @patch("orders.services.order_sync_workflow.MicrotechJobSentinelService.submit_wrapper_job")
+    def test_address_step_creates_when_local_ans_nr_is_absent_from_microtech(self, mock_submit, mock_client_cls):
+        mock_submit.return_value = MagicMock(pk=8)
+        order = make_order()
+        order.shipping_address.erp_ans_id = 22
+        order.shipping_address.erp_ans_nr = 2
+        order.shipping_address.erp_asp_id = 3
+        order.shipping_address.erp_asp_nr = 3
+        order.shipping_address.save()
+        wf = MicrotechOrderSyncWorkflow.objects.create(
+            order=order,
+            status=MicrotechOrderSyncWorkflow.Status.RUNNING,
+            state={
+                "erp_nr": order.customer.erp_nr,
+                "address_number": int(order.customer.erp_nr),
+                "remote_address_inventory_known": True,
+                "remote_address_sub_numbers": [1],
+            },
+        )
+
+        OrderSyncWorkflowService().submit_step(wf, "shipping_address")
+
+        order.shipping_address.refresh_from_db()
+        self.assertEqual(mock_submit.call_args.kwargs["operation"], "createPostalAddress")
+        self.assertIsNone(order.shipping_address.erp_ans_id)
+        self.assertIsNone(order.shipping_address.erp_ans_nr)
+        self.assertIsNone(order.shipping_address.erp_asp_id)
         self.assertIsNone(order.shipping_address.erp_asp_nr)
 
     @patch("orders.services.order_sync_workflow.MicrotechGraphQLClientService")
@@ -715,7 +807,7 @@ class ContactStepTest(TestCase):
 
     @patch("orders.services.order_sync_workflow.MicrotechGraphQLClientService")
     @patch("orders.services.order_sync_workflow.MicrotechJobSentinelService.submit_wrapper_job")
-    def test_shipping_contact_recovers_sub_number_from_previous_create_address_job(self, mock_submit, mock_client_cls):
+    def test_shipping_contact_rejects_a_create_result_without_address_sub_number(self, mock_submit, mock_client_cls):
         mock_submit.return_value = MagicMock(pk=7)
         order = make_order()
         previous_job = MicrotechGraphQLJob.objects.create(
@@ -732,12 +824,9 @@ class ContactStepTest(TestCase):
             state={"erp_nr": order.customer.erp_nr, "address_number": int(order.customer.erp_nr)},
         )
 
-        OrderSyncWorkflowService().submit_step(wf, "shipping_contact")
-
-        order.shipping_address.refresh_from_db()
-        called = mock_submit.call_args.kwargs
-        self.assertEqual(called["request_payload"]["addressSubNumber"], 1)
-        self.assertEqual(order.shipping_address.erp_ans_nr, 1)
+        with self.assertRaises(ValueError):
+            OrderSyncWorkflowService().submit_step(wf, "shipping_contact")
+        mock_submit.assert_not_called()
 
 
 class ReconcileTest(TestCase):
@@ -876,6 +965,36 @@ class ResumeTest(TestCase):
         order = make_order()
         wf = MicrotechOrderSyncWorkflow.objects.create(order=order, status=MicrotechOrderSyncWorkflow.Status.WAITING)
         self.assertIsNone(OrderSyncWorkflowService().resume(wf))
+
+    @patch("orders.services.order_sync_workflow.OrderSyncWorkflowService.submit_step")
+    def test_resume_recreates_a_missing_postal_address_instead_of_repeating_the_update(self, mock_submit):
+        order = make_order()
+        order.shipping_address.erp_ans_nr = 2
+        order.shipping_address.erp_asp_nr = 3
+        order.shipping_address.save()
+        job = MicrotechGraphQLJob.objects.create(
+            kind=MicrotechGraphQLJob.Kind.CUSTOMER_UPSERT,
+            operation="updatePostalAddress",
+            status=MicrotechGraphQLJob.Status.FAILED,
+            error_message="Anschrift '100001/2' wurde nicht gefunden.",
+        )
+        wf = MicrotechOrderSyncWorkflow.objects.create(
+            order=order,
+            status=MicrotechOrderSyncWorkflow.Status.FAILED,
+            current_step="shipping_address",
+            current_job=job,
+            error_message=job.error_message,
+            state={"erp_nr": order.customer.erp_nr, "shipping_ans_nr": 2},
+        )
+
+        OrderSyncWorkflowService().resume(wf)
+
+        order.shipping_address.refresh_from_db()
+        wf.refresh_from_db()
+        self.assertIsNone(order.shipping_address.erp_ans_nr)
+        self.assertIsNone(order.shipping_address.erp_asp_nr)
+        self.assertNotIn("shipping_ans_nr", wf.state)
+        mock_submit.assert_called_once_with(wf, "shipping_address")
 
     @patch("orders.services.order_sync_workflow.OrderSyncWorkflowService.submit_step")
     def test_resume_skips_already_completed_step(self, mock_submit):
@@ -1067,6 +1186,33 @@ class SetDefaultAddressesTest(TestCase):
                 "input": {"isDefaultBilling": False},
             },
         )
+
+    @patch("orders.services.order_sync_workflow.MicrotechGraphQLClientService")
+    @patch("orders.services.order_sync_workflow.MicrotechJobSentinelService.submit_wrapper_job")
+    def test_clear_default_shipping_processes_every_legacy_flag(self, mock_submit, mock_client):
+        mock_submit.return_value = MagicMock(pk=4)
+        order = make_order()
+        wf = MicrotechOrderSyncWorkflow.objects.create(
+            order=order,
+            status=MicrotechOrderSyncWorkflow.Status.RUNNING,
+            state={
+                "erp_nr": order.customer.erp_nr,
+                "address_number": int(order.customer.erp_nr),
+                "existing_default_shipping_ans_nrs": [2, 4],
+                "shipping_ans_nr": 3,
+            },
+        )
+        service = OrderSyncWorkflowService()
+
+        service.submit_step(wf, "clear_default_shipping_address")
+        first_job = MagicMock(request_payload=mock_submit.call_args.kwargs["request_payload"])
+        service._apply_result(wf, "clear_default_shipping_address", {}, job=first_job)
+
+        self.assertEqual(wf.state["pending_default_shipping_clear_ans_nrs"], [4])
+        self.assertTrue(service._is_step_applicable(wf, "clear_default_shipping_address"))
+
+        service.submit_step(wf, "clear_default_shipping_address")
+        self.assertEqual(mock_submit.call_args.kwargs["request_payload"]["addressSubNumber"], 4)
 
     @patch("orders.services.order_sync_workflow.MicrotechGraphQLClientService")
     @patch("orders.services.order_sync_workflow.MicrotechJobSentinelService.submit_wrapper_job")

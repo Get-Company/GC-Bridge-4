@@ -64,13 +64,9 @@ class OrderSyncWorkflowService(BaseService):
         if step == "probe_vorgang":
             return not bool(state.get("beleg_nr") or state.get("erp_order_id") or workflow.order.erp_order_id)
         if step == "clear_default_shipping_address":
-            old_shipping = _to_int(state.get("existing_default_shipping_ans_nr")) or 0
-            shipping_ans_nr, _billing_ans_nr = self._target_default_ans_nrs(workflow)
-            return old_shipping > 0 and old_shipping != shipping_ans_nr
+            return bool(self._pending_default_clear_nrs(workflow, role="shipping"))
         if step == "clear_default_billing_address":
-            old_billing = _to_int(state.get("existing_default_billing_ans_nr")) or 0
-            _shipping_ans_nr, billing_ans_nr = self._target_default_ans_nrs(workflow)
-            return old_billing > 0 and old_billing != billing_ans_nr
+            return bool(self._pending_default_clear_nrs(workflow, role="billing"))
         return True
 
     @staticmethod
@@ -100,6 +96,32 @@ class OrderSyncWorkflowService(BaseService):
         billing = order.billing_address or shipping
         return shipping, billing
 
+    @staticmethod
+    def _same_address(shipping: Address, billing: Address) -> bool:
+        """Compare the complete local address identity, not only Django PKs."""
+        if shipping is billing or (shipping.pk and shipping.pk == billing.pk):
+            return True
+        fields = (
+            "name1",
+            "name2",
+            "name3",
+            "department",
+            "street",
+            "postal_code",
+            "city",
+            "country_code",
+            "email",
+            "phone",
+            "title",
+            "first_name",
+            "last_name",
+        )
+        return all(
+            str(getattr(shipping, field, "") or "").strip().casefold()
+            == str(getattr(billing, field, "") or "").strip().casefold()
+            for field in fields
+        )
+
     def _target_default_ans_nrs(self, workflow: MicrotechOrderSyncWorkflow) -> tuple[int, int]:
         """Liefert die Ziel-AnsNr für Standard-Liefer- und Rechnungsanschrift."""
         shipping, billing = self._resolve_addresses(workflow.order)
@@ -112,9 +134,9 @@ class OrderSyncWorkflowService(BaseService):
 
     @staticmethod
     def _remember_existing_default_ans_nrs(state: dict[str, Any], customer: dict[str, Any]) -> None:
-        """Merkt sich vorhandene Microtech-Default-Flags für späteres Zurücksetzen."""
-        shipping_ans_nr = _to_int(customer.get("defaultShippingAddressNumber")) or 0
-        billing_ans_nr = _to_int(customer.get("defaultBillingAddressNumber")) or 0
+        """Remember every existing default flag for deterministic cleanup."""
+        shipping_numbers = {_to_int(customer.get("defaultShippingAddressNumber"))}
+        billing_numbers = {_to_int(customer.get("defaultBillingAddressNumber"))}
 
         for address in customer.get("addresses") or []:
             if not isinstance(address, dict):
@@ -123,14 +145,63 @@ class OrderSyncWorkflowService(BaseService):
             if ans_nr <= 0:
                 continue
             if address.get("isDefaultShipping"):
-                shipping_ans_nr = ans_nr
+                shipping_numbers.add(ans_nr)
             if address.get("isDefaultBilling"):
-                billing_ans_nr = ans_nr
+                billing_numbers.add(ans_nr)
 
-        if shipping_ans_nr > 0:
-            state["existing_default_shipping_ans_nr"] = shipping_ans_nr
-        if billing_ans_nr > 0:
-            state["existing_default_billing_ans_nr"] = billing_ans_nr
+        shipping_numbers.discard(None)
+        billing_numbers.discard(None)
+        if shipping_numbers:
+            values = sorted(shipping_numbers)
+            state["existing_default_shipping_ans_nrs"] = values
+            # Kept for already-created workflows and admin displays.
+            state["existing_default_shipping_ans_nr"] = values[0]
+        if billing_numbers:
+            values = sorted(billing_numbers)
+            state["existing_default_billing_ans_nrs"] = values
+            # Kept for already-created workflows and admin displays.
+            state["existing_default_billing_ans_nr"] = values[0]
+
+    @staticmethod
+    def _remember_remote_address_sub_numbers(state: dict[str, Any], customer: dict[str, Any]) -> None:
+        """Store the authoritative address inventory returned by Microtech."""
+        addresses = customer.get("addresses")
+        if not isinstance(addresses, list):
+            return
+        state["remote_address_inventory_known"] = True
+        state["remote_address_sub_numbers"] = sorted(
+            {
+                sub_number
+                for address in addresses
+                if isinstance(address, dict)
+                for sub_number in (_to_int(address.get("addressSubNumber")),)
+                if sub_number is not None and sub_number > 0
+            }
+        )
+
+    @staticmethod
+    def _default_numbers_from_state(state: dict[str, Any], *, role: str) -> list[int]:
+        plural_key = f"existing_default_{role}_ans_nrs"
+        singular_key = f"existing_default_{role}_ans_nr"
+        raw_values = state.get(plural_key)
+        if not isinstance(raw_values, list):
+            raw_values = [state.get(singular_key)]
+        return sorted({number for value in raw_values if (number := _to_int(value)) and number > 0})
+
+    def _pending_default_clear_nrs(self, workflow: MicrotechOrderSyncWorkflow, *, role: str) -> list[int]:
+        state = workflow.state or {}
+        queue_key = f"pending_default_{role}_clear_ans_nrs"
+        queued = state.get(queue_key)
+        if isinstance(queued, list):
+            return sorted({number for value in queued if (number := _to_int(value)) and number > 0})
+
+        shipping_ans_nr, billing_ans_nr = self._target_default_ans_nrs(workflow)
+        target = shipping_ans_nr if role == "shipping" else billing_ans_nr
+        return [
+            number
+            for number in self._default_numbers_from_state(state, role=role)
+            if number != target
+        ]
 
     @staticmethod
     def _beleg_nr_from_vorgang_result(result: dict[str, Any] | None) -> str:
@@ -212,7 +283,7 @@ class OrderSyncWorkflowService(BaseService):
             # GraphQL allocates a new Microtech AdrNr for this Shopware
             # placeholder. It is written back before the order is created.
             "is_new_customer": self._is_provisional_customer_number(erp_nr),
-            "billing_same_as_shipping": billing.pk == shipping.pk,
+            "billing_same_as_shipping": self._same_address(shipping, billing),
         }
 
     def ensure_pending_for_order(
@@ -493,6 +564,7 @@ class OrderSyncWorkflowService(BaseService):
             if found:
                 state["address_number"] = _to_int(customer.get("erpAddressNumber")) or state.get("address_number")
                 self._remember_existing_default_ans_nrs(state, customer)
+                self._remember_remote_address_sub_numbers(state, customer)
         elif step == "write_customer":
             customer = (result or {}).get("customer") or {}
             requested_number = str(
@@ -514,6 +586,10 @@ class OrderSyncWorkflowService(BaseService):
             state["erp_nr"] = resolved_number
             state["address_number"] = resolved_address_number or _to_int(resolved_number) or state.get("address_number")
             self._remember_existing_default_ans_nrs(state, customer)
+            self._remember_remote_address_sub_numbers(state, customer)
+            if state.get("is_new_customer"):
+                state["remote_address_inventory_known"] = True
+                state["remote_address_sub_numbers"] = []
         elif step in ("shipping_address", "billing_address"):
             shipping, billing = self._resolve_addresses(workflow.order)
             address = shipping if step == "shipping_address" else billing
@@ -546,6 +622,17 @@ class OrderSyncWorkflowService(BaseService):
             contact_number = self._contact_number_from_result(result, address_sub_number=sub or None)
             if contact_number:
                 self._persist_contact_number(address=address, contact_number=contact_number)
+        elif step in ("clear_default_shipping_address", "clear_default_billing_address"):
+            if job is None:
+                raise ValueError(f"{step} ohne zugehörigen Microtech-Job.")
+            role = "shipping" if step == "clear_default_shipping_address" else "billing"
+            queue_key = f"pending_default_{role}_clear_ans_nrs"
+            submitted_sub_number = _to_int((job.request_payload or {}).get("addressSubNumber"))
+            state[queue_key] = [
+                number
+                for number in self._pending_default_clear_nrs(workflow, role=role)
+                if number != submitted_sub_number
+            ]
         elif step == "probe_vorgang":
             beleg = self._beleg_nr_from_vorgang_result(result)
             if beleg:
@@ -597,7 +684,11 @@ class OrderSyncWorkflowService(BaseService):
             except Exception as exc:
                 self._mark_step_failed(workflow, step, exc)
                 return
-            self._log_step(workflow, step, "completed")
+            cleanup_pending = step in (
+                "clear_default_shipping_address",
+                "clear_default_billing_address",
+            ) and self._is_step_applicable(workflow, step)
+            self._log_step(workflow, step, "cleanup_pending" if cleanup_pending else "completed")
             workflow.error_message = ""
             workflow.save(update_fields=("state", "step_log", "error_message", "updated_at"))
         self._advance(workflow)
@@ -666,11 +757,13 @@ class OrderSyncWorkflowService(BaseService):
         elif step in ("shipping_address", "billing_address"):
             address = shipping if step == "shipping_address" else billing
             is_shipping = step == "shipping_address"
-            sub_number = _to_int(address.erp_ans_nr) or self._copy_matching_anschrift_identity(address)
+            sub_number = self._verified_address_sub_number(workflow=workflow, address=address)
             input_data = customer_service._build_postal_address_input(
                 address=address,
-                is_shipping=is_shipping,
-                is_invoice=not is_shipping or bool(state.get("billing_same_as_shipping")),
+                # Defaults are assigned exactly once in set_default_addresses,
+                # after every legacy flag has been removed.
+                is_shipping=False,
+                is_invoice=False,
                 na1_mode="auto",
                 na1_static_value="",
                 include_email=is_shipping,
@@ -686,8 +779,6 @@ class OrderSyncWorkflowService(BaseService):
             address = shipping if step == "shipping_contact" else billing
             sub_key = "shipping_ans_nr" if step == "shipping_contact" else "billing_ans_nr"
             sub_number = int(state.get(sub_key) or 0) or (_to_int(address.erp_ans_nr) or 0)
-            if sub_number <= 0:
-                sub_number = self._copy_matching_anschrift_identity(address) or 0
             if sub_number <= 0:
                 address_step = "shipping_address" if step == "shipping_contact" else "billing_address"
                 current_job = workflow.current_job
@@ -734,14 +825,15 @@ class OrderSyncWorkflowService(BaseService):
                 payload = {"addressNumber": address_number, "addressSubNumber": sub_number, "input": input_data}
         elif step in ("clear_default_shipping_address", "clear_default_billing_address"):
             operation = "updatePostalAddress"
-            if step == "clear_default_shipping_address":
-                sub_number = _to_int(state.get("existing_default_shipping_ans_nr")) or 0
-                input_data = {"isDefaultShipping": False}
-            else:
-                sub_number = _to_int(state.get("existing_default_billing_ans_nr")) or 0
-                input_data = {"isDefaultBilling": False}
+            role = "shipping" if step == "clear_default_shipping_address" else "billing"
+            pending = self._pending_default_clear_nrs(workflow, role=role)
+            sub_number = pending[0] if pending else 0
+            input_data = {"isDefaultShipping" if role == "shipping" else "isDefaultBilling": False}
             if sub_number <= 0:
                 raise ValueError(f"{step} ohne bekannte alte Standard-Anschrift.")
+            state = dict(state)
+            state[f"pending_default_{role}_clear_ans_nrs"] = pending
+            workflow.state = state
             submit = lambda: client.submit_update_postal_address(address_number, sub_number, input_data)
             payload = {"addressNumber": address_number, "addressSubNumber": sub_number, "input": input_data}
         elif step == "set_default_addresses":
@@ -773,6 +865,8 @@ class OrderSyncWorkflowService(BaseService):
         workflow.status = MicrotechOrderSyncWorkflow.Status.WAITING
         workflow.current_step = step
         update_fields = ["status", "current_step", "updated_at"]
+        if step in ("clear_default_shipping_address", "clear_default_billing_address"):
+            update_fields.append("state")
         if isinstance(job, MicrotechGraphQLJob):
             workflow.current_job = job
             update_fields.append("current_job")
@@ -918,7 +1012,9 @@ class OrderSyncWorkflowService(BaseService):
                 return candidate_sub
         if len(addresses) == 1:
             return _to_int((addresses[0] or {}).get("addressSubNumber")) or _to_int(address.erp_ans_nr)
-        return _to_int(address.erp_ans_nr) or (1 if operation == "createPostalAddress" else None)
+        if operation == "createPostalAddress":
+            return None
+        return _to_int(address.erp_ans_nr)
 
     @staticmethod
     def _persist_address_sub_number(
@@ -944,32 +1040,51 @@ class OrderSyncWorkflowService(BaseService):
         )
 
     @staticmethod
-    def _copy_matching_anschrift_identity(address: Address) -> int | None:
-        if not address.street or not address.postal_code:
-            return None
-        sibling = (
-            Address.objects.filter(
-                customer=address.customer,
-                street=address.street,
-                postal_code=address.postal_code,
-                city=address.city,
-                country_code=address.country_code,
-                erp_ans_nr__isnull=False,
-            )
-            .exclude(pk=address.pk)
-            .order_by("-updated_at")
-            .first()
-        )
-        if sibling is None:
+    def _clear_stale_address_identity(address: Address) -> None:
+        """Remove an address/contact mapping proven absent from Microtech."""
+        fields = ("erp_combined_id", "erp_ans_id", "erp_ans_nr", "erp_asp_id", "erp_asp_nr")
+        update_fields = [field for field in fields if getattr(address, field) is not None]
+        if not update_fields:
+            return
+        for field in update_fields:
+            setattr(address, field, None)
+        address.save(update_fields=(*update_fields, "updated_at"))
+
+    def _verified_address_sub_number(
+        self,
+        *,
+        workflow: MicrotechOrderSyncWorkflow,
+        address: Address,
+    ) -> int | None:
+        """Return a local AnsNr only when the current Microtech snapshot contains it."""
+        sub_number = _to_int(address.erp_ans_nr)
+        if sub_number is None:
             return None
 
-        CustomerUpsertMicrotechService()._persist_anschrift_identity(
-            erp_nr=str(sibling.erp_nr or address.customer.erp_nr or ""),
-            address=address,
-            ans_id=sibling.erp_ans_id,
-            ans_nr=sibling.erp_ans_nr,
+        state = workflow.state or {}
+        if not state.get("remote_address_inventory_known"):
+            # Compatibility fallback for older wrapper responses that omitted
+            # ``customer.addresses``. A not-found response still receives the
+            # guarded recovery below.
+            return sub_number
+
+        known_numbers = {
+            number
+            for value in state.get("remote_address_sub_numbers") or []
+            if (number := _to_int(value)) is not None
+        }
+        if sub_number in known_numbers:
+            return sub_number
+
+        logger.warning(
+            "Order-Sync-Workflow #%s: lokale AnsNr %s der Adresse %s ist nicht mehr in Microtech vorhanden; "
+            "es wird eine neue Anschrift angelegt.",
+            workflow.pk,
+            sub_number,
+            address.pk,
         )
-        return sibling.erp_ans_nr
+        self._clear_stale_address_identity(address)
+        return None
 
     @staticmethod
     def _contact_number_from_result(result: dict[str, Any], *, address_sub_number: int | None = None) -> int | None:
@@ -1150,11 +1265,25 @@ class OrderSyncWorkflowService(BaseService):
         if workflow.status != MicrotechOrderSyncWorkflow.Status.FAILED:
             return None
 
+        step = workflow.current_step
+        if self._is_missing_postal_address_update(workflow=workflow, step=step):
+            shipping, billing = self._resolve_addresses(workflow.order)
+            address = shipping if step == "shipping_address" else billing
+            stale_sub_number = _to_int(address.erp_ans_nr)
+            self._clear_stale_address_identity(address)
+            state = dict(workflow.state or {})
+            state.pop("shipping_ans_nr" if step == "shipping_address" else "billing_ans_nr", None)
+            workflow.state = state
+            logger.warning(
+                "Order-Sync-Workflow #%s: fehlende Anschrift %s wird beim Fortsetzen neu angelegt.",
+                workflow.pk,
+                stale_sub_number,
+            )
+
         workflow.error_message = ""
-        workflow.save(update_fields=("error_message", "updated_at"))
+        workflow.save(update_fields=("state", "error_message", "updated_at"))
         logger.info("Order-Sync-Workflow #%s wird fortgesetzt (Schritt '%s').", workflow.pk, workflow.current_step)
 
-        step = workflow.current_step
         # Bereits erledigte oder lokale Steps nicht erneut submitten,
         # sondern die Kette regulär über den Resolver weitertreiben.
         if not step or step in self._completed_steps(workflow) or step == "writeback_adrnr":
@@ -1162,3 +1291,13 @@ class OrderSyncWorkflowService(BaseService):
             return workflow.current_job
 
         return self.submit_step(workflow, step)
+
+    def _is_missing_postal_address_update(self, *, workflow: MicrotechOrderSyncWorkflow, step: str) -> bool:
+        if step not in ("shipping_address", "billing_address"):
+            return False
+        job = workflow.current_job
+        return bool(
+            job is not None
+            and job.operation == "updatePostalAddress"
+            and self._looks_like_not_found_error(workflow.error_message or job.error_message)
+        )

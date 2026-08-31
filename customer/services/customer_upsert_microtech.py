@@ -48,6 +48,7 @@ ISO2_TO_NUMERIC = {
     "SK": 703,
     "US": 840,
 }
+NOT_FOUND_FRAGMENTS = ("nicht gefunden", "not found", "wurde nicht gefunden")
 
 
 def _to_str(value: Any) -> str:
@@ -82,6 +83,7 @@ class UpsertResult:
     billing_ans_nr: int
     is_new_customer: bool = False
     shopware_updated: bool = False
+    known_address_sub_numbers: set[int] | None = None
 
 
 class CustomerUpsertMicrotechService(BaseService):
@@ -155,38 +157,59 @@ class CustomerUpsertMicrotechService(BaseService):
             billing_address=billing,
         )
         is_new_customer = False
+        existing_customer: dict[str, Any] = {}
         try:
-            client.request_customer(erp_nr)
-            client.update_customer(erp_nr, input_data)
-        except GraphQLMicrotechError:
+            result = client.request_customer(erp_nr)
+            existing_customer = self._customer_from_result(result)
+        except GraphQLMicrotechError as exc:
+            if not self._looks_like_not_found_error(str(exc)):
+                raise
             is_new_customer = True
             client.create_customer(erp_nr, input_data)
+        else:
+            if existing_customer.get("customerNumber"):
+                client.update_customer(erp_nr, input_data)
+            else:
+                is_new_customer = True
+                client.create_customer(erp_nr, input_data)
 
         address_number = _to_int(erp_nr)
         if address_number is None:
             raise ValueError(f"Customer.erp_nr '{erp_nr}' is not a numeric Microtech address number.")
 
+        known_address_sub_numbers = (
+            set() if is_new_customer else self._address_sub_numbers_from_customer(existing_customer)
+        )
         shipping_ans_nr = self._upsert_postal_address_graphql(
             client=client,
             address_number=address_number,
             address=shipping,
-            is_shipping=True,
-            is_invoice=billing.pk == shipping.pk,
+            is_shipping=False,
+            is_invoice=False,
             na1_mode=na1_mode,
             na1_static_value=na1_static_value,
+            known_address_sub_numbers=known_address_sub_numbers,
+            include_email=True,
         )
         billing_ans_nr = shipping_ans_nr
-        if billing.pk != shipping.pk:
+        if not self._same_address(shipping, billing):
             billing_ans_nr = self._upsert_postal_address_graphql(
                 client=client,
                 address_number=address_number,
                 address=billing,
                 is_shipping=False,
-                is_invoice=True,
+                is_invoice=False,
                 na1_mode=na1_mode,
                 na1_static_value=na1_static_value,
+                known_address_sub_numbers=known_address_sub_numbers,
+                include_email=False,
             )
 
+        self._clear_existing_default_flags(
+            client=client,
+            address_number=address_number,
+            customer=existing_customer,
+        )
         client.update_customer(
             erp_nr,
             {
@@ -206,6 +229,7 @@ class CustomerUpsertMicrotechService(BaseService):
             billing_ans_nr=billing_ans_nr,
             is_new_customer=is_new_customer,
             shopware_updated=shopware_updated,
+            known_address_sub_numbers=known_address_sub_numbers,
         )
 
     def _upsert_postal_address_graphql(
@@ -218,6 +242,8 @@ class CustomerUpsertMicrotechService(BaseService):
         is_invoice: bool,
         na1_mode: str,
         na1_static_value: str,
+        known_address_sub_numbers: set[int] | None,
+        include_email: bool,
     ) -> int:
         input_data = self._build_postal_address_input(
             address=address,
@@ -225,22 +251,39 @@ class CustomerUpsertMicrotechService(BaseService):
             is_invoice=is_invoice,
             na1_mode=na1_mode,
             na1_static_value=na1_static_value,
-            include_email=is_shipping,
+            include_email=include_email,
         )
         address_sub_number = _to_int(address.erp_ans_nr)
-        if address_sub_number:
+        if address_sub_number and (
+            known_address_sub_numbers is None or address_sub_number in known_address_sub_numbers
+        ):
             result = client.update_postal_address(address_number, address_sub_number, input_data)
         else:
+            if address_sub_number:
+                logger.warning(
+                    "Lokale AnsNr {} der Adresse {} ist nicht mehr in Microtech vorhanden; "
+                    "neue Anschrift wird angelegt.",
+                    address_sub_number,
+                    address.pk,
+                )
+                self._clear_stale_address_identity(address)
             result = client.create_postal_address(address_number, input_data)
 
         postal_address = result.get("postalAddress") or {}
-        resolved_sub_number = _to_int(postal_address.get("addressSubNumber")) or address_sub_number or 1
+        resolved_sub_number = _to_int(postal_address.get("addressSubNumber"))
+        if resolved_sub_number is None and address_sub_number and known_address_sub_numbers is None:
+            resolved_sub_number = address_sub_number
+        if resolved_sub_number is None:
+            raise ValueError("Microtech lieferte nach dem Anschriften-Upsert keine Anschrift-Nummer.")
         self._persist_anschrift_identity(
             erp_nr=str(address_number),
             address=address,
-            ans_id=_to_int(postal_address.get("addressNumber")) or address.erp_ans_id,
+            # GraphQL's addressNumber is the customer AdrNr, not an Anschrift-ID.
+            ans_id=address.erp_ans_id,
             ans_nr=resolved_sub_number,
         )
+        if known_address_sub_numbers is not None:
+            known_address_sub_numbers.add(resolved_sub_number)
         self._upsert_contact_person_graphql(
             client=client,
             address_number=address_number,
@@ -364,6 +407,102 @@ class CustomerUpsertMicrotechService(BaseService):
     @staticmethod
     def _drop_blank(data: dict[str, Any]) -> dict[str, Any]:
         return {key: value for key, value in data.items() if value not in (None, "")}
+
+    @staticmethod
+    def _customer_from_result(result: Any) -> dict[str, Any]:
+        if not isinstance(result, dict):
+            return {}
+        customer = result.get("customer")
+        if isinstance(customer, dict):
+            return customer
+        for value in result.values():
+            customer = CustomerUpsertMicrotechService._customer_from_result(value)
+            if customer:
+                return customer
+        return {}
+
+    @staticmethod
+    def _address_sub_numbers_from_customer(customer: dict[str, Any]) -> set[int] | None:
+        addresses = customer.get("addresses") if isinstance(customer, dict) else None
+        if not isinstance(addresses, list):
+            return None
+        return {
+            sub_number
+            for address in addresses
+            if isinstance(address, dict)
+            for sub_number in (_to_int(address.get("addressSubNumber")),)
+            if sub_number is not None and sub_number > 0
+        }
+
+    @staticmethod
+    def _same_address(shipping: Address, billing: Address) -> bool:
+        """Keep one Microtech Anschrift for semantically identical addresses."""
+        if shipping is billing or (shipping.pk and shipping.pk == billing.pk):
+            return True
+        fields = (
+            "name1",
+            "name2",
+            "name3",
+            "department",
+            "street",
+            "postal_code",
+            "city",
+            "country_code",
+            "email",
+            "phone",
+            "title",
+            "first_name",
+            "last_name",
+        )
+        return all(
+            str(getattr(shipping, field, "") or "").strip().casefold()
+            == str(getattr(billing, field, "") or "").strip().casefold()
+            for field in fields
+        )
+
+    @staticmethod
+    def _looks_like_not_found_error(message: str) -> bool:
+        lowered = str(message or "").lower()
+        return any(fragment in lowered for fragment in NOT_FOUND_FRAGMENTS)
+
+    def _clear_existing_default_flags(
+        self,
+        *,
+        client: MicrotechGraphQLClientService,
+        address_number: int,
+        customer: dict[str, Any],
+    ) -> None:
+        """Clear every legacy default flag before assigning the final pair."""
+        defaults = {
+            "shipping": {_to_int(customer.get("defaultShippingAddressNumber"))},
+            "billing": {_to_int(customer.get("defaultBillingAddressNumber"))},
+        }
+        for address in customer.get("addresses") or []:
+            if not isinstance(address, dict):
+                continue
+            sub_number = _to_int(address.get("addressSubNumber"))
+            if sub_number is None or sub_number <= 0:
+                continue
+            if address.get("isDefaultShipping"):
+                defaults["shipping"].add(sub_number)
+            if address.get("isDefaultBilling"):
+                defaults["billing"].add(sub_number)
+
+        for role, numbers in defaults.items():
+            field = "isDefaultShipping" if role == "shipping" else "isDefaultBilling"
+            for sub_number in sorted(number for number in numbers if number is not None and number > 0):
+                client.update_postal_address(address_number, sub_number, {field: False})
+
+    @staticmethod
+    def _clear_stale_address_identity(address: Address) -> None:
+        """Discard an Anschrift/contact mapping that Microtech no longer knows."""
+        fields = ("erp_combined_id", "erp_ans_id", "erp_ans_nr", "erp_asp_id", "erp_asp_nr")
+        update_fields = [field for field in fields if getattr(address, field) is not None]
+        if not update_fields:
+            return
+        for field in update_fields:
+            setattr(address, field, None)
+        address.save(update_fields=(*update_fields, "updated_at"))
 
     def _sync_new_customer_number_to_shopware(self, *, customer: Customer, erp_nr: str) -> bool:
         erp_nr = _to_str(erp_nr)
