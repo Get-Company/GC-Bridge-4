@@ -1,11 +1,17 @@
+import json
+import shutil
+import subprocess
+from pathlib import Path
+from unittest import skipUnless
 from unittest.mock import MagicMock, patch
 
-from django.test import SimpleTestCase
+from django.test import RequestFactory, SimpleTestCase
 
 from customer.services.customer_merge import (
     CustomerMergeSearchService,
     ShopwareCustomerAddressService,
     ShopwareCustomerMergeService,
+    ShopwareMergeError,
     _has_wildcard,
     _split_terms,
     _wildcard_segments,
@@ -269,144 +275,522 @@ class MicrotechResolutionRoutingTest(SimpleTestCase):
 
 
 class ShopwareCustomerMergeTest(SimpleTestCase):
-    def _merge(self, sw_service, *, keep, delete, order_service=None, move_orders_result=None):
-        patches = [
-            patch("shopware.services.CustomerService", return_value=sw_service),
-        ]
-        if order_service is None:
-            patches.append(
-                patch.object(
-                    ShopwareCustomerMergeService,
-                    "_move_orders",
-                    return_value=move_orders_result or (0, [], set()),
-                )
-            )
+    source = "a" * 32
+    target = "b" * 32
+    operation = "c" * 32
+    billing = "d" * 32
+    shipping = "e" * 32
+
+    def setUp(self):
+        self.client_patch = patch("shopware.services.CustomerService")
+        self.client = self.client_patch.start().return_value
+        self.addCleanup(self.client_patch.stop)
+        self.service = ShopwareCustomerMergeService()
+
+    def response(self, *, preview=False, copied=True):
+        data = {
+            "sourceId": self.source, "targetId": self.target,
+            "credentialSourceId": self.source if copied else self.target,
+            "credentialsCopied": copied, "addressesMoved": 5, "ordersMoved": 501,
+            "defaultBillingAddressId": self.billing, "defaultShippingAddressId": self.shipping,
+        }
+        if preview:
+            data.update({
+                "previewToken": "snapshot-token",
+                "defaultBillingAddressId": self.billing, "defaultShippingAddressId": self.shipping,
+            })
         else:
-            patches.append(patch("shopware.services.OrderService", return_value=order_service))
-        started = [p.start() for p in patches]
-        try:
-            return ShopwareCustomerMergeService().merge(keep_sw_id=keep, delete_sw_id=delete)
-        finally:
-            for p in patches:
-                p.stop()
+            data.update({
+                "operationId": self.operation, "status": "merged", "sourceDeleted": True,
+                "lastLogin": "2026-09-14T10:00:00+00:00",
+                "verified": {field: True for field in self.service.VERIFIED_FIELDS},
+            })
+        return data
 
-    def test_identical_ids_raise(self):
-        with self.assertRaises(ValueError):
-            ShopwareCustomerMergeService().merge(keep_sw_id="same", delete_sw_id="same")
-
-    def test_missing_customer_raises(self):
-        sw = MagicMock()
-        sw.get_by_id.side_effect = lambda cid: {"data": []}
-        with self.assertRaises(ValueError):
-            self._merge(sw, keep="keep-id", delete="del-id")
-
-    def test_keep_survives_when_it_has_the_newer_login(self):
-        sw = MagicMock()
-        payloads = {
-            "keep-id": _sw_customer("keep-id", "1001", "keep@x.de", last_login="2026-02-01T10:00:00"),
-            "del-id": _sw_customer("del-id", "1002", "del@x.de", last_login="2026-01-01T10:00:00"),
+    def merge(self, **overrides):
+        kwargs = {
+            "keep_sw_id": self.target, "delete_sw_id": self.source,
+            "operation_id": self.operation, "preview_token": "snapshot-token",
         }
-        sw.get_by_id.side_effect = lambda cid: payloads[cid]
+        return self.service.merge(**{**kwargs, **overrides})
 
-        result = self._merge(sw, keep="keep-id", delete="del-id")
+    def upstream_error(self, status, code=None, detail="Ein sicherer Plugin-Fehlertext."):
+        response = MagicMock()
+        response.status_code = status
+        response.json.return_value = {"errors": [{"code": code, "detail": detail}]} if code else {}
+        cause = RuntimeError("raw upstream error must never be exposed")
+        cause.response = response
+        wrapper = RuntimeError("wrapper includes sensitive response")
+        wrapper.__cause__ = cause
+        return wrapper
 
-        self.assertEqual(result["survivor_sw_id"], "keep-id")
-        self.assertEqual(result["removed_sw_id"], "del-id")
-        self.assertFalse(result["identity_transplanted"])
-        sw.request_delete.assert_called_once_with("/customer/del-id")
-        sw.update_customer.assert_not_called()
-
-    def test_delete_survives_and_keep_identity_is_transplanted(self):
-        sw = MagicMock()
-        customers = {
-            "keep-id": {
-                "customerNumber": "1001", "email": "keep@x.de",
-                "lastLogin": "2026-01-01T10:00:00", "firstName": "Right", "lastName": "Customer",
-            },
-            "del-id": {
-                "customerNumber": "1002", "email": "del@x.de",
-                "lastLogin": "2026-02-01T10:00:00",
-            },
-        }
-
-        def load(cid):
-            return {"data": [{"id": cid, "attributes": {**customers[cid], "addresses": []}}]}
-
-        sw.get_by_id.side_effect = load
-        sw.update_customer_number.side_effect = lambda cid, number: customers[cid].update(customerNumber=number)
-        sw.update_customer.side_effect = lambda cid, payload: customers[cid].update(payload)
-
-        result = self._merge(sw, keep="keep-id", delete="del-id")
-
-        # The last-login record (del-id) survives and keeps its own credentials.
-        self.assertEqual(result["survivor_sw_id"], "del-id")
-        self.assertEqual(result["removed_sw_id"], "keep-id")
-        self.assertTrue(result["identity_transplanted"])
-        # The keep record is deleted, then the keep identity is written onto the survivor.
-        sw.request_delete.assert_called_once_with("/customer/keep-id")
-        sw.update_customer.assert_called_once()
-        called_id, payload = sw.update_customer.call_args.args
-        self.assertEqual(called_id, "del-id")
-        self.assertEqual(payload["customerNumber"], "1001")
-        self.assertEqual(payload["firstName"], "Right")
-        # Email must never be transplanted — it stays with the surviving login.
-        self.assertNotIn("email", payload)
-        self.assertTrue(result["verification"]["credentials"]["email_matches"])
-
-    def test_verification_failure_keeps_the_old_customer(self):
-        sw = MagicMock()
-        payloads = {
-            "keep-id": _sw_customer(
-                "keep-id", "1001", "keep@x.de", addresses=[],
-            ),
-            "del-id": _sw_customer(
-                "del-id", "1002", "del@x.de", addresses=[{"id": "source-address"}],
-            ),
-        }
-        sw.get_by_id.side_effect = lambda cid: payloads[cid]
-
-        with self.assertRaisesMessage(ValueError, "nicht geloescht"):
-            self._merge(sw, keep="keep-id", delete="del-id")
-
-        sw.request_delete.assert_not_called()
-
-    def test_failed_order_transfer_keeps_the_old_customer(self):
-        sw = MagicMock()
-        sw.get_by_id.side_effect = lambda cid: _sw_customer(cid, cid, f"{cid}@x.de")
-
-        with self.assertRaisesMessage(ValueError, "nicht geloescht"):
-            self._merge(
-                sw,
-                keep="keep-id",
-                delete="del-id",
-                move_orders_result=(0, ["Order o1: API nicht erreichbar"], {"o1"}),
-            )
-
-        sw.request_delete.assert_not_called()
-
-    def test_no_logins_keeps_user_choice(self):
-        sw = MagicMock()
-        sw.get_by_id.side_effect = lambda cid: _sw_customer(cid, cid, f"{cid}@x.de")
-
-        result = self._merge(sw, keep="keep-id", delete="del-id")
-
-        self.assertEqual(result["survivor_sw_id"], "keep-id")
-        sw.request_delete.assert_called_once_with("/customer/del-id")
-
-    def test_orders_are_moved_from_removed_to_survivor(self):
-        sw = MagicMock()
-        sw.get_by_id.side_effect = lambda cid: _sw_customer(cid, cid, f"{cid}@x.de")
-        order_service = MagicMock()
-        order_service.request_post.return_value = {
-            "data": [{"id": "o1", "orderCustomer": {"id": "oc1"}}]
-        }
-
-        result = self._merge(sw, keep="keep-id", delete="del-id", order_service=order_service)
-
-        self.assertEqual(result["orders_moved"], 1)
-        order_service.request_patch.assert_called_once_with(
-            "/order-customer/oc1", payload={"customerId": "keep-id"}
+    def test_preview_uses_only_plugin_and_authoritative_credential_source(self):
+        self.client._request_with_retry.return_value = self.response(preview=True)
+        result = self.service.preview(keep_sw_id=self.target, delete_sw_id=self.source)
+        self.assertEqual(result["credentialSourceId"], self.source)
+        self.client._request_with_retry.assert_called_once_with(
+            "request_post", "/_action/gc-customer-merge/preview",
+            payload={"targetId": self.target, "sourceId": self.source},
         )
+        self.client.get_by_id.assert_not_called()
+
+    def test_newer_source_credentials_keep_selected_target(self):
+        self.client._request_with_retry.return_value = self.response()
+        result = self.merge()
+        self.assertEqual(result["targetId"], self.target)
+        self.assertEqual(result["credentialSourceId"], self.source)
+        self.assertTrue(result["credentialsCopied"])
+        self.assertEqual(result["addressesMoved"], 5)
+        self.assertEqual(result["ordersMoved"], 501)
+        self.client._request_with_retry.assert_called_once_with(
+            "request_post", "/_action/gc-customer-merge/execute",
+            payload={
+                "sourceId": self.source, "targetId": self.target,
+                "previewToken": "snapshot-token", "operationId": self.operation,
+            },
+        )
+        self.client.request_patch.assert_not_called()
+        self.client.request_delete.assert_not_called()
+        self.client.update_customer.assert_not_called()
+
+    def test_target_credentials_can_be_retained(self):
+        self.client._request_with_retry.return_value = self.response(copied=False)
+        self.assertFalse(self.merge()["credentialsCopied"])
+
+    def test_no_password_fields_leave_adapter(self):
+        response = self.response()
+        response.update({"password": "hidden", "legacyPassword": "hidden", "hash": "hidden", "email": "hidden"})
+        response["verified"]["password"] = "hidden"
+        self.client._request_with_retry.return_value = response
+        result = self.merge()
+        self.assertNotIn("hidden", json.dumps(result))
+        self.assertEqual(set(result["verified"]), set(self.service.VERIFIED_FIELDS))
+
+    def test_defaults_are_sent_only_if_selected(self):
+        self.client._request_with_retry.return_value = self.response(preview=True)
+        self.service.preview(
+            keep_sw_id=self.target, delete_sw_id=self.source,
+            default_billing_address_id=self.billing, default_shipping_address_id="",
+        )
+        payload = self.client._request_with_retry.call_args.kwargs["payload"]
+        self.assertEqual(payload["defaultBillingAddressId"], self.billing)
+        self.assertNotIn("defaultShippingAddressId", payload)
+
+    def test_preview_and_execute_keep_identical_default_selection(self):
+        for selected in ("", self.billing):
+            with self.subTest(selected=selected):
+                self.client._request_with_retry.return_value = self.response(preview=True)
+                self.service.preview(
+                    keep_sw_id=self.target, delete_sw_id=self.source,
+                    default_billing_address_id=selected,
+                )
+                preview_payload = self.client._request_with_retry.call_args.kwargs["payload"].copy()
+                self.client._request_with_retry.return_value = self.response()
+                self.merge(default_billing_address_id=selected)
+                execute_payload = self.client._request_with_retry.call_args.kwargs["payload"].copy()
+                execute_payload.pop("operationId")
+                execute_payload.pop("previewToken")
+                self.assertEqual(execute_payload, preview_payload)
+                self.assertNotIn("defaultShippingAddressId", execute_payload)
+
+    def test_final_result_must_match_explicitly_selected_defaults(self):
+        self.client._request_with_retry.return_value = self.response()
+        result = self.merge(default_billing_address_id=self.billing, default_shipping_address_id=self.shipping)
+        self.assertEqual(result["defaultBillingAddressId"], self.billing)
+        for key in ("default_billing_address_id", "default_shipping_address_id"):
+            with self.subTest(key=key), self.assertRaises(ShopwareMergeError) as raised:
+                self.merge(**{key: "f" * 32})
+            self.assertTrue(raised.exception.uncertain)
+
+    def test_ids_are_validated_before_api_calls(self):
+        for value in ("", "abc", "../customer", None, "f" * 33):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                self.merge(keep_sw_id=value)
+        self.client._request_with_retry.assert_not_called()
+
+    def test_identical_ids_are_rejected(self):
+        with self.assertRaisesMessage(ValueError, "unterschiedlich"):
+            self.merge(keep_sw_id=self.source)
+        self.client._request_with_retry.assert_not_called()
+
+    def test_execute_requires_preview_and_operation(self):
+        for overrides in ({"preview_token": ""}, {"preview_token": {}}, {"operation_id": ""}):
+            with self.subTest(overrides=overrides), self.assertRaises(ValueError):
+                self.merge(**overrides)
+        self.client._request_with_retry.assert_not_called()
+
+    def test_repeated_execute_keeps_same_operation_and_preview(self):
+        self.client._request_with_retry.return_value = self.response()
+        self.merge()
+        first = self.client._request_with_retry.call_args
+        self.merge()
+        self.assertEqual(first, self.client._request_with_retry.call_args)
+
+    def test_swapped_target_or_incomplete_verification_is_not_success(self):
+        bad_results = []
+        data = self.response()
+        data["targetId"], data["sourceId"] = self.source, self.target
+        bad_results.append(data)
+        for field in self.service.VERIFIED_FIELDS:
+            data = self.response()
+            data["verified"][field] = False
+            bad_results.append(data)
+        for field, value in (
+            ("sourceDeleted", False), ("operationId", "f" * 32),
+            ("addressesMoved", True), ("ordersMoved", -1),
+            ("credentialsCopied", False), ("credentialSourceId", "f" * 32),
+            ("defaultBillingAddressId", None), ("defaultShippingAddressId", ""),
+        ):
+            data = self.response()
+            data[field] = value
+            bad_results.append(data)
+        for data in bad_results:
+            with self.subTest(data=data):
+                self.client._request_with_retry.return_value = data
+                with self.assertRaises(ShopwareMergeError) as raised:
+                    self.merge()
+                self.assertTrue(raised.exception.uncertain)
+
+    def test_malformed_preview_or_changed_defaults_prevents_execution(self):
+        for field, value in (("previewToken", ""), ("defaultBillingAddressId", "f" * 32)):
+            with self.subTest(field=field):
+                data = self.response(preview=True)
+                data[field] = value
+                self.client._request_with_retry.return_value = data
+                with self.assertRaises(ShopwareMergeError) as raised:
+                    self.service.preview(
+                        keep_sw_id=self.target, delete_sw_id=self.source,
+                        default_billing_address_id=self.billing,
+                    )
+                self.assertFalse(raised.exception.uncertain)
+
+    def test_status_returns_confirmed_operation(self):
+        self.client._request_with_retry.return_value = self.response()
+        result = self.service.status(operation_id=self.operation)
+        self.assertEqual(result["operationId"], self.operation)
+        self.client._request_with_retry.assert_called_once_with(
+            "request_get", f"/_action/gc-customer-merge/status/{self.operation}"
+        )
+
+    def test_status_not_found_is_not_a_successful_merge(self):
+        self.client._request_with_retry.return_value = {"status": "not_found", "operationId": self.operation}
+        self.assertEqual(self.service.status(operation_id=self.operation)["status"], "not_found")
+
+    def test_status_rejects_wrong_operation(self):
+        self.client._request_with_retry.return_value = {"status": "not_found", "operationId": "f" * 32}
+        with self.assertRaises(ShopwareMergeError):
+            self.service.status(operation_id=self.operation)
+
+    def test_stale_preview_returns_safe_code_and_message(self):
+        self.client._request_with_retry.side_effect = self.upstream_error(
+            409, "GC_MERGE_PREVIEW_STALE", "Die Kundendaten wurden seit der Vorschau geändert."
+        )
+        with self.assertRaises(ShopwareMergeError) as raised:
+            self.merge()
+        self.assertEqual(raised.exception.code, "GC_MERGE_PREVIEW_STALE")
+        self.assertEqual(raised.exception.status, 409)
+        self.assertFalse(raised.exception.uncertain)
+        self.assertIn("seit der Vorschau", str(raised.exception))
+
+    def test_operation_conflict_and_server_errors_require_status_check(self):
+        for status, code in ((409, "GC_MERGE_OPERATION_CONFLICT"), (500, "GC_MERGE_FAILED")):
+            with self.subTest(code=code):
+                self.client._request_with_retry.side_effect = self.upstream_error(status, code)
+                with self.assertRaises(ShopwareMergeError) as raised:
+                    self.merge()
+                self.assertTrue(raised.exception.uncertain)
+
+    def test_connection_failure_does_not_log_or_expose_raw_exception(self):
+        self.client._request_with_retry.side_effect = RuntimeError("password=super-secret")
+        with self.assertRaises(ShopwareMergeError) as raised:
+            self.merge()
+        self.assertNotIn("super-secret", str(raised.exception))
+        self.assertTrue(raised.exception.uncertain)
+        self.assertIn("Vorgangsstatus", str(raised.exception))
+
+    def test_missing_plugin_never_falls_back_to_entity_mutations(self):
+        self.client._request_with_retry.side_effect = self.upstream_error(404)
+        with self.assertRaisesMessage(ShopwareMergeError, "GecoCustomerMerge"):
+            self.merge()
+        self.client.request_patch.assert_not_called()
+        self.client.request_delete.assert_not_called()
+        self.client.get_by_id.assert_not_called()
+
+    def test_permission_error_is_actionable(self):
+        self.client._request_with_retry.side_effect = self.upstream_error(403)
+        with self.assertRaisesMessage(ShopwareMergeError, "Merge-ACL") as raised:
+            self.merge()
+        # Permission may have changed after an earlier timed-out execution.
+        # Losing the operation ID would lose the only safe way to recover it.
+        self.assertTrue(raised.exception.uncertain)
+
+
+class ShopwareCustomerMergeViewTest(SimpleTestCase):
+    def request(self, body=None, *, query="", method="post", permitted=True):
+        factory = RequestFactory()
+        if method == "post":
+            request = factory.post("/", data=json.dumps(body), content_type="application/json")
+        else:
+            request = factory.get("/" + query)
+        request.user = MagicMock()
+        request.user.has_perms.return_value = permitted
+        return request
+
+    @patch("customer.views.ShopwareCustomerMergeService")
+    def test_preview_is_separate_from_execution(self, service_class):
+        from customer.views import customer_merge_shopware_api
+        service_class.return_value.preview.return_value = {"previewToken": "token"}
+        result = customer_merge_shopware_api(self.request({
+            "action": "preview", "keep_sw_id": "b" * 32, "delete_sw_id": "a" * 32,
+        }))
+        self.assertEqual(result.status_code, 200)
+        service_class.return_value.preview.assert_called_once()
+        service_class.return_value.merge.assert_not_called()
+
+    @patch("customer.views.ShopwareCustomerMergeService")
+    def test_old_unguarded_execute_contract_is_rejected(self, service_class):
+        from customer.views import customer_merge_shopware_api
+        result = customer_merge_shopware_api(self.request({"keep_sw_id": "b" * 32, "delete_sw_id": "a" * 32}))
+        self.assertEqual(result.status_code, 400)
+        service_class.return_value.merge.assert_not_called()
+
+    @patch("customer.views.ShopwareCustomerMergeService")
+    def test_execute_passes_stable_operation_and_token(self, service_class):
+        from customer.views import customer_merge_shopware_api
+        service_class.return_value.merge.return_value = {"status": "merged"}
+        result = customer_merge_shopware_api(self.request({
+            "action": "execute", "keep_sw_id": "b" * 32, "delete_sw_id": "a" * 32,
+            "operation_id": "c" * 32, "preview_token": "snapshot",
+        }))
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(service_class.return_value.merge.call_args.kwargs["operation_id"], "c" * 32)
+        self.assertEqual(service_class.return_value.merge.call_args.kwargs["preview_token"], "snapshot")
+
+    @patch("customer.views.ShopwareCustomerMergeService")
+    def test_status_uses_get_without_starting_an_operation(self, service_class):
+        from customer.views import customer_merge_shopware_api
+        service_class.return_value.status.return_value = {"status": "not_found"}
+        result = customer_merge_shopware_api(self.request(method="get", query="?action=status&operation_id=" + "c" * 32))
+        self.assertEqual(result.status_code, 200)
+        service_class.return_value.status.assert_called_once_with(operation_id="c" * 32)
+        service_class.return_value.merge.assert_not_called()
+
+    @patch("customer.views.ShopwareCustomerMergeService")
+    def test_permission_denied_before_any_plugin_call(self, service_class):
+        from customer.views import customer_merge_shopware_api
+        result = customer_merge_shopware_api(self.request({"action": "execute"}, permitted=False))
+        self.assertEqual(result.status_code, 403)
+        service_class.assert_not_called()
+
+    @patch("customer.views.ShopwareCustomerMergeService")
+    def test_stale_preview_is_exposed_with_structured_error(self, service_class):
+        from customer.views import customer_merge_shopware_api
+        service_class.return_value.merge.side_effect = ShopwareMergeError(
+            "Neue Vorschau erforderlich.", code="GC_MERGE_PREVIEW_STALE", status=409,
+        )
+        result = customer_merge_shopware_api(self.request({"action": "execute"}))
+        self.assertEqual(result.status_code, 409)
+        self.assertEqual(json.loads(result.content)["code"], "GC_MERGE_PREVIEW_STALE")
+
+    @patch("customer.views.ShopwareCustomerMergeService")
+    def test_non_object_json_is_rejected(self, service_class):
+        from customer.views import customer_merge_shopware_api
+        result = customer_merge_shopware_api(self.request([]))
+        self.assertEqual(result.status_code, 400)
+        service_class.return_value.merge.assert_not_called()
+
+    @patch("customer.views.ShopwareCustomerMergeService")
+    def test_unexpected_errors_are_not_leaked(self, service_class):
+        from customer.views import customer_merge_shopware_api
+        service_class.return_value.merge.side_effect = RuntimeError("password=secret")
+        result = customer_merge_shopware_api(self.request({"action": "execute"}))
+        self.assertEqual(result.status_code, 502)
+        self.assertNotIn("secret", result.content.decode())
+
+
+@skipUnless(shutil.which("node"), "Node is needed for the isolated browser-state checks")
+class ShopwareMergeBrowserStateTest(SimpleTestCase):
+    """Exercise the actual template JS with fake DOM/network and no database."""
+
+    def run_js(self, assertions, *, saved=None):
+        template = (Path(__file__).resolve().parents[1] / "templates/admin/customer_merge.html").read_text()
+        script = "const swMergeStorageKey =" + template.split("const swMergeStorageKey =", 1)[1].split("</script>", 1)[0]
+        harness = r'''
+const assert = require('node:assert/strict');
+const vm = require('node:vm');
+const elements = new Map();
+const stored = new Map();
+const savedOperation = SAVED_OPERATION;
+if (savedOperation) stored.set('gc-sw6-merge-operation-v1', JSON.stringify(savedOperation));
+let networkCalls = [];
+let confirmCount = 0;
+let refreshCount = 0;
+const element = id => {
+  if (!elements.has(id)) elements.set(id, {
+    value: '', innerHTML: '', disabled: false,
+    classList: {removed: [], remove(name) { this.removed.push(name); }},
+  });
+  return elements.get(id);
+};
+element('sw-merge-keep').value = 'b'.repeat(32);
+element('sw-merge-delete').value = 'a'.repeat(32);
+const sandbox = {
+  assert, console, Uint8Array, AbortController, URLSearchParams,
+  crypto: require('node:crypto').webcrypto,
+  CSRF: 'test-only',
+  sessionStorage: {getItem: key => stored.get(key) || null, setItem: (key, val) => stored.set(key, val), removeItem: key => stored.delete(key)},
+  document: {getElementById: element},
+  spinner: () => 'loading', esc: value => String(value ?? ''),
+  collectShopwareCustomers: () => [], shopwareCustomerById: () => null,
+  confirm: () => { confirmCount++; return true; },
+  alert: message => { throw new Error(message); },
+  setTimeout: () => 1, clearTimeout: () => {},
+  doSearch: () => { refreshCount++; },
+  fetch: async (url, options) => {
+    const body = options.body ? JSON.parse(options.body) : null;
+    networkCalls.push({url, body});
+    if (body?.action === 'execute') {
+      assert.equal(JSON.parse(stored.get('gc-sw6-merge-operation-v1')).operation_id, body.operation_id,
+        'Idempotency key must be durable before the first HTTP write');
+    }
+    return sandbox.nextResponse(url, options);
+  },
+  nextResponse: async () => { throw new Error('simulated timeout'); },
+  networkCalls, stored, elements,
+  getConfirmCount: () => confirmCount,
+};
+const script = SCRIPT;
+const assertions = ASSERTIONS;
+vm.runInNewContext(script + '\n(async () => {' + assertions + '\n})().catch(error => { console.error(error); process.exitCode = 1; });', {...sandbox, process});
+'''.replace("SCRIPT;", json.dumps(script) + ";").replace("ASSERTIONS;", json.dumps(assertions) + ";").replace("SAVED_OPERATION;", json.dumps(saved) + ";")
+        result = subprocess.run([shutil.which("node"), "-e", harness], text=True, capture_output=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_timeout_keeps_durable_operation_and_retry_uses_same_id(self):
+        self.run_js(r'''
+const selection = swMergeSelection();
+swMergePreview = {selection, data: {sourceId: selection.delete_sw_id, targetId: selection.keep_sw_id,
+  credentialsCopied: true, addressesMoved: 5, ordersMoved: 501, previewToken: 'snapshot'}};
+await executeShopwareMerge();
+assert.equal(networkCalls.length, 1);
+assert.ok(swMergePending);
+assert.equal(swMergeRetryAllowed, false);
+const original = JSON.stringify(networkCalls[0].body);
+const operation = swMergePending.operation_id;
+await executeShopwareMerge();
+assert.equal(networkCalls.length, 1, 'A pending operation blocks creating a new key');
+// Check the API first; only then permit resending the exact original request.
+nextResponse = async () => ({ok: true, json: async () => ({status: 'not_found', operationId: operation})});
+// The fetch closure uses the outer harness object, so override fetch for this stage.
+fetch = async (url, options) => {
+  networkCalls.push({url, body: options.body ? JSON.parse(options.body) : null});
+  return {ok: true, json: async () => ({status: 'not_found', operationId: operation})};
+};
+await checkShopwareMergeStatus();
+assert.equal(swMergeRetryAllowed, true);
+assert.ok(networkCalls[1].url.includes(operation));
+fetch = async (url, options) => {
+  networkCalls.push({url, body: JSON.parse(options.body)});
+  throw new Error('still unavailable');
+};
+await retryShopwareMerge();
+assert.equal(JSON.stringify(networkCalls[2].body), original);
+assert.equal(swMergePending.operation_id, operation);
+''')
+
+    def test_reload_exposes_recovery_before_any_customer_search(self):
+        self.run_js(r'''
+assert.equal(swMergePending.operation_id, 'c'.repeat(32));
+assert.ok(elements.get('results-area').classList.removed.includes('hidden'));
+assert.ok(elements.get('sw-merge-result').innerHTML.includes('wiederhergestellt'));
+assert.equal(elements.get('sw-merge-btn').disabled, true);
+assert.equal(elements.get('sw-merge-retry-btn').disabled, true);
+assert.equal(networkCalls.length, 0, 'Recovery never starts a merge automatically');
+''', saved={
+            "action": "execute", "keep_sw_id": "b" * 32, "delete_sw_id": "a" * 32,
+            "operation_id": "c" * 32, "preview_token": "existing-snapshot",
+        })
+
+    def test_ui_does_not_add_resolved_defaults_to_signed_selection(self):
+        self.run_js(r'''
+const source = 'a'.repeat(32), target = 'b'.repeat(32);
+fetch = async (url, options) => {
+  const body = JSON.parse(options.body);
+  networkCalls.push({url, body});
+  if (body.action === 'preview') return {ok: true, json: async () => ({
+    sourceId: source, targetId: target, credentialSourceId: source, credentialsCopied: true,
+    addressesMoved: 5, ordersMoved: 1, previewToken: 'signed-with-omitted-defaults',
+    defaultBillingAddressId: 'd'.repeat(32), defaultShippingAddressId: 'e'.repeat(32),
+  })};
+  throw new Error('simulated timeout');
+};
+await loadShopwareMergePreview();
+assert.equal(swMergePreview.data.defaultBillingAddressId, 'd'.repeat(32));
+await executeShopwareMerge();
+assert.equal(networkCalls.length, 2);
+const previewBody = networkCalls[0].body, executeBody = networkCalls[1].body;
+assert.equal(previewBody.default_billing_address_id, '');
+assert.equal(executeBody.default_billing_address_id, '');
+assert.equal(executeBody.default_shipping_address_id, '');
+assert.equal(executeBody.keep_sw_id, previewBody.keep_sw_id);
+assert.equal(executeBody.delete_sw_id, previewBody.delete_sw_id);
+assert.equal(executeBody.preview_token, 'signed-with-omitted-defaults');
+''')
+
+    def test_status_mismatching_selected_default_keeps_recovery(self):
+        self.run_js(r'''
+swMergePending = {action: 'execute', ...swMergeSelection(), operation_id: 'c'.repeat(32),
+  preview_token: 'x', default_billing_address_id: 'd'.repeat(32)};
+stored.set(swMergeStorageKey, JSON.stringify(swMergePending));
+fetch = async () => ({ok: true, json: async () => ({status: 'merged',
+  operationId: 'c'.repeat(32), sourceId: 'a'.repeat(32), targetId: 'b'.repeat(32),
+  defaultBillingAddressId: 'f'.repeat(32), defaultShippingAddressId: 'e'.repeat(32),
+  addressesMoved: 5, ordersMoved: 1, credentialsCopied: true,
+})});
+await checkShopwareMergeStatus();
+assert.ok(swMergePending);
+assert.equal(stored.size, 1);
+assert.ok(elements.get('sw-merge-result').innerHTML.includes('passt nicht'));
+''')
+
+    def test_page_entrypoint_does_not_expose_general_django_merge(self):
+        template = (Path(__file__).resolve().parents[1] / "templates/admin/customer_merge.html").read_text()
+        entrypoint = template.split("function renderMergeSection()", 1)[1].split("function renderDjangoMergeSection()", 1)[0]
+        self.assertIn("renderShopwareMergeSection();", entrypoint)
+        self.assertNotIn("renderDjangoMergeSection(", entrypoint)
+        self.assertIn("document.getElementById('merge-section').innerHTML = '';", entrypoint)
+
+    def test_stale_preview_requires_new_preview_and_confirmation(self):
+        self.run_js(r'''
+const selection = swMergeSelection();
+swMergePreview = {selection, data: {sourceId: selection.delete_sw_id, targetId: selection.keep_sw_id,
+  credentialsCopied: true, addressesMoved: 5, ordersMoved: 1, previewToken: 'stale'}};
+fetch = async () => ({ok: false, json: async () => ({error: 'Neue Vorschau erforderlich.',
+  code: 'GC_MERGE_PREVIEW_STALE', uncertain: false})});
+await executeShopwareMerge();
+assert.equal(swMergePending, null);
+assert.equal(swMergePreview, null);
+assert.equal(stored.size, 0);
+assert.equal(elements.get('sw-merge-btn').disabled, true);
+assert.ok(elements.get('sw-merge-result').innerHTML.includes('erneut bestätigen'));
+const confirms = getConfirmCount();
+await executeShopwareMerge();
+assert.equal(getConfirmCount(), confirms, 'No re-execution without a new authoritative preview');
+''')
+
+    def test_successful_status_clears_pending_and_rejects_other_target(self):
+        self.run_js(r'''
+swMergePending = {action: 'execute', ...swMergeSelection(), operation_id: 'c'.repeat(32), preview_token: 'x'};
+stored.set(swMergeStorageKey, JSON.stringify(swMergePending));
+assert.throws(() => completeShopwareMerge({operationId: swMergePending.operation_id,
+  sourceId: swMergePending.delete_sw_id, targetId: 'f'.repeat(32)}));
+assert.ok(swMergePending, 'Mismatch must retain the original operation for recovery');
+completeShopwareMerge({operationId: swMergePending.operation_id, sourceId: swMergePending.delete_sw_id,
+  targetId: swMergePending.keep_sw_id, addressesMoved: 5, ordersMoved: 501, credentialsCopied: true});
+assert.equal(swMergePending, null);
+assert.equal(stored.size, 0);
+assert.ok(elements.get('sw-merge-result').innerHTML.includes('Passwort-Hash wurden gemeinsam'));
+''')
 
 
 class ShopwareCustomerAddressDeleteTest(SimpleTestCase):

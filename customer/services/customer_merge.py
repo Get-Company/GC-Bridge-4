@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import re
 from typing import Any
-from uuid import uuid4
 
 from loguru import logger
 
@@ -1512,385 +1511,195 @@ class CustomerSyncDirectionService(BaseService):
         return {"message": msg}
 
 
+class ShopwareMergeError(ValueError):
+    """Safe plugin/transport failure; never includes a raw upstream response."""
+
+    def __init__(self, message: str, *, code: str, status: int = 502, uncertain: bool = False):
+        super().__init__(message)
+        self.code = code
+        self.status = status
+        self.uncertain = uncertain
+
+
 class ShopwareCustomerMergeService(BaseService):
-    """Merge two Shopware 6 customers, keeping the last-login credentials.
+    """Delegate the complete SW6 merge to the transactional Shopware plugin.
 
-    The customer the user marks as *keep* (the "richtig" one) provides the
-    surviving identity — customer number and name. The customer with the most
-    recent login always keeps its physical record, because Shopware cannot
-    transfer a password hash between customers. Email and password therefore
-    stay together on that record.
-
-    All transferred addresses and orders, the unchanged credentials, and (if
-    necessary) the transplanted identity are re-read from Shopware before the
-    other customer is deleted. This deliberately makes deletion the final
-    externally visible mutation of the merge.
+    Django never reads/writes a password hash and never falls back to a series
+    of customer/address/order API mutations. The selected target ID survives.
     """
 
-    # Scalar identity fields copied onto the survivor when the keep customer is
-    # not the last-login record. Email and password are deliberately excluded:
-    # they always stay with the surviving (last-login) record.
-    IDENTITY_FIELDS = (
-        "customerNumber",
-        "firstName",
-        "lastName",
-        "company",
-        "title",
-        "salutationId",
-        "groupId",
-    )
+    ENDPOINT = "/_action/gc-customer-merge"
+    VERIFIED_FIELDS = ("credentials", "addresses", "orders", "defaults", "identity")
 
-    _TEMPORARY_NUMBER_PREFIX = "MERGED-"
+    @staticmethod
+    def _id(value: Any, label: str) -> str:
+        value = _to_str(value).lower()
+        if not re.fullmatch(r"[0-9a-f]{32}", value):
+            raise ValueError(f"{label} muss eine gültige 32-stellige Shopware-ID sein.")
+        return value
 
-    def merge(self, *, keep_sw_id: str, delete_sw_id: str) -> dict[str, Any]:
-        keep_sw_id = _to_str(keep_sw_id)
-        delete_sw_id = _to_str(delete_sw_id)
-        if not keep_sw_id or not delete_sw_id:
-            raise ValueError("Behalten- und Loeschen-Kunde erforderlich.")
-        if keep_sw_id == delete_sw_id:
-            raise ValueError("Behalten- und Loeschen-Kunde sind identisch.")
+    def _payload(
+        self, *, keep_sw_id: str, delete_sw_id: str,
+        default_billing_address_id: str = "", default_shipping_address_id: str = "",
+    ) -> dict[str, str]:
+        target = self._id(keep_sw_id, "Zielkunde")
+        source = self._id(delete_sw_id, "Quellkunde")
+        if target == source:
+            raise ValueError("Quell- und Zielkunde müssen unterschiedlich sein.")
+        payload = {"sourceId": source, "targetId": target}
+        for key, value in (
+            ("defaultBillingAddressId", default_billing_address_id),
+            ("defaultShippingAddressId", default_shipping_address_id),
+        ):
+            if value:
+                payload[key] = self._id(value, "Standardadresse")
+        return payload
 
+    @staticmethod
+    def _upstream_error(data: Any, status: int, *, uncertain: bool) -> ShopwareMergeError:
+        errors = data.get("errors") if isinstance(data, dict) else None
+        if isinstance(errors, list):
+            for error in errors:
+                if not isinstance(error, dict):
+                    continue
+                code, detail = error.get("code"), error.get("detail")
+                if (
+                    isinstance(code, str) and re.fullmatch(r"GC_MERGE_[A-Z0-9_]+", code)
+                    and isinstance(detail, str) and 0 < len(detail) <= 2000
+                ):
+                    return ShopwareMergeError(
+                        detail, code=code, status=status,
+                        uncertain=uncertain and (status >= 500 or code in (
+                            "GC_MERGE_OPERATION_CONFLICT", "GC_MERGE_FAILED",
+                        )),
+                    )
+        if status in (401, 403):
+            return ShopwareMergeError(
+                "Keine Berechtigung für das Shopware-Merge-Plugin. Bitte API-Anmeldung und Merge-ACL prüfen.",
+                code="GC_MERGE_ACCESS_DENIED", status=403, uncertain=uncertain,
+            )
+        if status == 404:
+            return ShopwareMergeError(
+                "Das Shopware-Plugin GecoCustomerMerge ist nicht erreichbar. Installation und Aktivierung prüfen. "
+                "Es wird kein ungesicherter Ersatz-Merge ausgeführt.",
+                code="GC_MERGE_PLUGIN_UNAVAILABLE", status=503, uncertain=uncertain,
+            )
+        return ShopwareMergeError(
+            "Shopware hat kein bestätigtes Merge-Ergebnis geliefert. "
+            "Bitte den Vorgangsstatus prüfen; nicht mit einer neuen Vorgangs-ID erneut starten."
+            if uncertain else "Die Shopware-Merge-Vorschau ist nicht verfügbar. Es wurde kein Merge gestartet.",
+            code="GC_MERGE_STATUS_UNKNOWN" if uncertain else "GC_MERGE_PREVIEW_UNAVAILABLE",
+            status=502, uncertain=uncertain,
+        )
+
+    def _request(self, action: str, *, payload: dict | None = None, operation_id: str = "") -> dict:
         from shopware.services import CustomerService
 
         service = CustomerService()
-        keep = self._load_customer(service, keep_sw_id, role="Behalten")
-        delete = self._load_customer(service, delete_sw_id, role="Loeschen")
-
-        log: list[str] = []
-
-        def _log(msg: str) -> None:
-            logger.info("SW-MERGE| {}", msg)
-            log.append(msg)
-
-        survivor_id, removed_id = self._determine_survivor(keep, delete)
-        transplant_identity = survivor_id != keep_sw_id
-        survivor = keep if survivor_id == keep_sw_id else delete
-        removed_customer = keep if removed_id == keep_sw_id else delete
-        # Capture the keep identity before any customer number is changed.
-        identity_payload = self._identity_payload(keep) if transplant_identity else {}
-        credential_snapshot = self._credential_snapshot(survivor)
-        expected_address_ids = {
-            address["id"]
-            for customer in (survivor, removed_customer)
-            for address in customer.get("addresses", [])
-            if address.get("id")
-        }
-
-        result: dict[str, Any] = {
-            "keep_sw_id": keep_sw_id,
-            "delete_sw_id": delete_sw_id,
-            "survivor_sw_id": survivor_id,
-            "removed_sw_id": removed_id,
-            "orders_moved": 0,
-            "addresses_moved": 0,
-            "identity_transplanted": False,
-            "verification": {},
-            "errors": [],
-            "log": log,
-        }
-        _log(
-            f"keep(richtig)={keep_sw_id}, loeschen(falsch)={delete_sw_id}, "
-            f"ueberlebt(letzter Login)={survivor_id}"
-        )
-
-        # 1) Move every order and address. Any failed transfer aborts before a
-        #    customer can be deleted.
-        orders_moved, order_errors, expected_order_ids = self._move_orders(
-            source_sw_id=removed_id, target_sw_id=survivor_id
-        )
-        result["orders_moved"] = orders_moved
-        result["errors"].extend(order_errors)
-        _log(f"Bestellungen verschoben: {orders_moved} (Fehler: {len(order_errors)})")
-        if order_errors:
-            self._abort_before_delete("Bestellungen", order_errors)
-
-        # 2) Addresses are never collapsed or deleted: every source address is
-        #    added to the surviving Shopware customer.
-        addresses_moved, address_errors = self._move_addresses(
-            service, source=removed_customer, target_sw_id=survivor_id
-        )
-        result["addresses_moved"] = addresses_moved
-        result["errors"].extend(address_errors)
-        _log(f"Adressen verschoben: {addresses_moved} (Fehler: {len(address_errors)})")
-        if address_errors:
-            self._abort_before_delete("Adressen", address_errors)
-
-        # 3) When the last-login record is not the selected correct customer,
-        #    temporarily free the correct customer's number first. This lets us
-        #    verify the complete final state *before* deleting that customer.
-        if transplant_identity and not identity_payload.get("customerNumber"):
-            self._abort_before_delete(
-                "Identitaet",
-                ["Der als richtig markierte Kunde hat keine Kundennummer."],
-            )
-        if transplant_identity and identity_payload:
-            keep_number = identity_payload.get("customerNumber", "")
-            if keep_number and keep_number != survivor.get("customerNumber"):
-                temporary_number = self._temporary_customer_number()
-                service.update_customer_number(removed_id, temporary_number)
-                _log(
-                    f"Kundennummer von {removed_id} temporaer auf "
-                    f"{temporary_number} gesetzt"
-                )
-            service.update_customer(survivor_id, identity_payload)
-            result["identity_transplanted"] = True
-            _log(f"Identitaet auf {survivor_id} uebertragen: {sorted(identity_payload)}")
-
-        # 4) Re-read the final Shopware state. The login email and lastLogin
-        #    prove that the physical credential record was retained; password
-        #    hashes are intentionally never read or written by this service.
-        result["verification"] = self._verify_before_delete(
-            service=service,
-            survivor_id=survivor_id,
-            credential_snapshot=credential_snapshot,
-            expected_address_ids=expected_address_ids,
-            expected_order_ids=expected_order_ids,
-            expected_identity=identity_payload if transplant_identity else {},
-        )
-        _log(
-            "Pruefung erfolgreich: "
-            f"{result['verification']['addresses']['verified']} Adressen, "
-            f"{result['verification']['orders']['verified']} Bestellungen, "
-            "Login-Paar unveraendert."
-        )
-
-        # 5) Only after the verification passes may the old physical record be
-        #    deleted. Django and Microtech remain intentionally untouched.
-        service.request_delete(f"/customer/{removed_id}")
-        _log(f"SW6-Kunde geloescht: {removed_id}")
-
-        _log("SW6-Merge abgeschlossen.")
-        return result
-
-    def _load_customer(self, service, sw_id: str, *, role: str) -> dict[str, Any]:
-        response = service.get_by_id(sw_id)
-        data = (response or {}).get("data", []) or []
-        if not data:
-            raise ValueError(f"{role}-Kunde {sw_id} nicht in Shopware gefunden.")
-        record = data[0]
-        attrs = _safe_attrs(record)
-        addresses = []
-        for addr in _safe_list(attrs.get("addresses")):
-            addr_id = _to_str(addr.get("id") or _safe_attrs(addr).get("id"))
-            if addr_id:
-                addresses.append({"id": addr_id})
-        return {
-            "id": _to_str(record.get("id") or attrs.get("id")) or sw_id,
-            "customerNumber": _to_str(attrs.get("customerNumber")),
-            "email": _to_str(attrs.get("email")),
-            "firstName": _to_str(attrs.get("firstName")),
-            "lastName": _to_str(attrs.get("lastName")),
-            "company": _to_str(attrs.get("company")),
-            "title": _to_str(attrs.get("title")),
-            "salutationId": _to_str(attrs.get("salutationId")),
-            "groupId": _to_str(attrs.get("groupId")),
-            "lastLogin": _to_str(attrs.get("lastLogin")),
-            "updatedAt": _to_str(attrs.get("updatedAt")),
-            "addresses": addresses,
-        }
-
-    def _determine_survivor(self, keep: dict[str, Any], delete: dict[str, Any]) -> tuple[str, str]:
-        """Return ``(survivor_id, removed_id)``; the last login keeps its record.
-
-        Only a strictly newer, non-empty ``lastLogin`` on the delete record wins
-        it the surviving spot. Ties, or customers that never logged in, keep the
-        record the user chose as *keep*.
-        """
-        keep_login = keep.get("lastLogin") or ""
-        delete_login = delete.get("lastLogin") or ""
-        if delete_login and delete_login > keep_login:
-            return delete["id"], keep["id"]
-        return keep["id"], delete["id"]
-
-    def _identity_payload(self, keep: dict[str, Any]) -> dict[str, Any]:
-        return {field: keep[field] for field in self.IDENTITY_FIELDS if keep.get(field)}
-
-    @staticmethod
-    def _credential_snapshot(customer: dict[str, Any]) -> dict[str, str]:
-        """Keep only values that Shopware exposes and must not change on merge."""
-        return {
-            "email": _to_str(customer.get("email")),
-            "lastLogin": _to_str(customer.get("lastLogin")),
-        }
-
-    def _temporary_customer_number(self) -> str:
-        """Return a short, collision-resistant number used for milliseconds only."""
-        return f"{self._TEMPORARY_NUMBER_PREFIX}{uuid4().hex[:20]}"
-
-    @staticmethod
-    def _abort_before_delete(subject: str, errors: list[str]) -> None:
-        details = "; ".join(errors)
-        raise ValueError(
-            "SW6-Merge abgebrochen: Der alte Shopware-Kunde wurde nicht geloescht, "
-            f"weil die Uebernahme der {subject} nicht vollstaendig war. "
-            "Bereits uebertragene Daten wurden nicht zurueckgesetzt. "
-            f"{details}"
-        )
-
-    def _move_orders(
-        self, *, source_sw_id: str, target_sw_id: str
-    ) -> tuple[int, list[str], set[str]]:
-        moved = 0
-        errors: list[str] = []
-        source_order_ids: set[str] = set()
+        path = f"{self.ENDPOINT}/{action}"
+        uncertain = action != "preview"
         try:
-            from shopware.services import Criteria, EqualsFilter, OrderService
-
-            order_service = OrderService()
-            page = 1
-            while True:
-                criteria = Criteria(limit=500, page=page)
-                criteria.associations["orderCustomer"] = Criteria()
-                criteria.filter.append(
-                    EqualsFilter(field="orderCustomer.customerId", value=source_sw_id)
-                )
-                response = order_service.request_post("/search/order", payload=criteria)
-                orders = (response or {}).get("data", []) or []
-                for order in orders:
-                    order_id = _to_str(order.get("id") or _safe_attrs(order).get("id"))
-                    if not order_id:
-                        errors.append("Order ohne ID gefunden")
-                        continue
-                    source_order_ids.add(order_id)
-                    oc = order.get("orderCustomer") or {}
-                    oc_data = (oc.get("data") or oc) if isinstance(oc, dict) else {}
-                    oc_attrs = _safe_attrs(oc_data)
-                    oc_id = _to_str(oc_data.get("id") or oc_attrs.get("id"))
-                    if not oc_id:
-                        errors.append(f"Order {order_id}: orderCustomer ID nicht gefunden")
-                        continue
+            # Bypass the generic wrapper's response/payload debug logging.
+            # The existing authenticated transport also retains HTTP error causes.
+            if action == "status":
+                data = service._request_with_retry("request_get", f"{path}/{operation_id}")
+            else:
+                data = service._request_with_retry("request_post", path, payload=payload)
+        except Exception as exc:
+            cause = exc
+            for _ in range(6):
+                response = getattr(cause, "response", None)
+                if response is not None:
+                    status = getattr(response, "status_code", 502)
                     try:
-                        order_service.request_patch(
-                            f"/order-customer/{oc_id}", payload={"customerId": target_sw_id}
-                        )
-                        moved += 1
-                    except Exception as exc:
-                        errors.append(f"Order {order_id}: {exc}")
-                if len(orders) < 500:
+                        detail = response.json()
+                    except Exception:
+                        detail = None
+                    raise self._upstream_error(
+                        detail, status if isinstance(status, int) else 502, uncertain=uncertain
+                    ) from None
+                cause = getattr(cause, "__cause__", None)
+                if cause is None:
                     break
-                page += 1
-        except Exception as exc:
-            errors.append(f"Shopware order migration failed: {exc}")
-        return moved, errors, source_order_ids
+            # Do not log/return str(exc): external errors may contain credentials.
+            raise self._upstream_error(None, 502, uncertain=uncertain) from None
+        if not isinstance(data, dict) or data.get("errors"):
+            raise self._upstream_error(data, 502, uncertain=uncertain)
+        return data
 
-    def _move_addresses(self, service, *, source: dict[str, Any], target_sw_id: str) -> tuple[int, list[str]]:
-        moved = 0
-        errors: list[str] = []
-        for addr in source.get("addresses", []):
-            addr_id = addr.get("id")
-            if not addr_id:
-                continue
-            try:
-                service.request_patch(
-                    f"/customer-address/{addr_id}", payload={"customerId": target_sw_id}
-                )
-                moved += 1
-            except Exception as exc:
-                errors.append(f"Adresse {addr_id}: {exc}")
-        return moved, errors
-
-    def _verify_before_delete(
-        self,
-        *,
-        service,
-        survivor_id: str,
-        credential_snapshot: dict[str, str],
-        expected_address_ids: set[str],
-        expected_order_ids: set[str],
-        expected_identity: dict[str, Any],
-    ) -> dict[str, Any]:
-        """Fail closed unless every required value is readable on the survivor."""
-        survivor = self._load_customer(service, survivor_id, role="ueberlebender")
-        errors: list[str] = []
-
-        for field, expected in credential_snapshot.items():
-            actual = _to_str(survivor.get(field))
-            if actual != expected:
-                errors.append(
-                    f"Login-{field} stimmt auf dem ueberlebenden Kunden nicht mehr ueberein"
-                )
-
-        observed_address_ids = {
-            address["id"] for address in survivor.get("addresses", []) if address.get("id")
-        }
-        missing_address_ids = sorted(expected_address_ids - observed_address_ids)
-        if missing_address_ids:
-            errors.append(
-                "Adressen nicht auf dem ueberlebenden Kunden auffindbar: "
-                + ", ".join(missing_address_ids)
-            )
-
-        observed_order_ids: set[str] = set()
-        order_errors: list[str] = []
-        if expected_order_ids:
-            observed_order_ids, order_errors = self._order_ids_for_customer(survivor_id)
-            errors.extend(order_errors)
-        missing_order_ids = sorted(expected_order_ids - observed_order_ids)
-        if missing_order_ids:
-            errors.append(
-                "Bestellungen nicht auf dem ueberlebenden Kunden auffindbar: "
-                + ", ".join(missing_order_ids)
-            )
-
-        for field, expected in expected_identity.items():
-            if _to_str(survivor.get(field)) != _to_str(expected):
-                errors.append(f"Feld {field} wurde nicht auf den Zielkunden uebernommen")
-
-        if errors:
-            self._abort_before_delete("Daten", errors)
-
-        return {
-            "credentials": {
-                "survivor_sw_id": survivor_id,
-                "email_matches": True,
-                "last_login_matches": True,
-                "password_hash_written": False,
-            },
-            "addresses": {"expected": len(expected_address_ids), "verified": len(observed_address_ids)},
-            "orders": {"expected": len(expected_order_ids), "verified": len(observed_order_ids)},
-        }
-
-    def _order_ids_for_customer(self, customer_id: str) -> tuple[set[str], list[str]]:
-        order_ids: set[str] = set()
-        errors: list[str] = []
+    def _validate_result(
+        self, data: dict, *, payload: dict | None = None, operation_id: str = "", preview: bool = False,
+    ) -> dict:
         try:
-            from shopware.services import Criteria, EqualsFilter, OrderService
+            source = self._id(data.get("sourceId"), "Plugin-Quellkunde")
+            target = self._id(data.get("targetId"), "Plugin-Zielkunde")
+            credential_source = self._id(data.get("credentialSourceId"), "Login-Quelle")
+            if source == target or credential_source not in (source, target):
+                raise ValueError("Ungültige Login-Quelle.")
+            if payload and (source != payload["sourceId"] or target != payload["targetId"]):
+                raise ValueError("Plugin hat Quell- oder Zielkunde vertauscht.")
+            copied = data.get("credentialsCopied")
+            if not isinstance(copied, bool) or copied != (credential_source == source):
+                raise ValueError("Unbestätigte Credential-Übertragung.")
+            clean = {
+                "sourceId": source, "targetId": target,
+                "credentialSourceId": credential_source, "credentialsCopied": copied,
+            }
+            for field in ("addressesMoved", "ordersMoved"):
+                count = data.get(field)
+                if not isinstance(count, int) or isinstance(count, bool) or count < 0:
+                    raise ValueError("Ungültige Anzahl.")
+                clean[field] = count
+            for field in ("defaultBillingAddressId", "defaultShippingAddressId"):
+                clean[field] = self._id(data.get(field), "Standardadresse")
+                if payload and payload.get(field) and clean[field] != payload[field]:
+                    raise ValueError("Abweichende Standardadresse.")
+            if preview:
+                token = data.get("previewToken")
+                if not isinstance(token, str) or not token or len(token) > 4096:
+                    raise ValueError("Vorschau-Bestätigung fehlt.")
+                clean["previewToken"] = token
+            else:
+                if data.get("status") != "merged" or data.get("sourceDeleted") is not True:
+                    raise ValueError("Merge nicht bestätigt.")
+                if data.get("operationId") != operation_id:
+                    raise ValueError("Abweichende Vorgangs-ID.")
+                verified = data.get("verified")
+                if not isinstance(verified, dict) or any(verified.get(f) is not True for f in self.VERIFIED_FIELDS):
+                    raise ValueError("Merge-Prüfung unvollständig.")
+                last_login = data.get("lastLogin")
+                if last_login is not None and (not isinstance(last_login, str) or len(last_login) > 80):
+                    raise ValueError("Ungültiger Login-Zeitpunkt.")
+                clean.update({
+                    "status": "merged", "sourceDeleted": True, "operationId": operation_id,
+                    "lastLogin": last_login,
+                    "verified": {field: True for field in self.VERIFIED_FIELDS},
+                })
+            # Explicit allowlist: unexpected password/hash fields are never forwarded.
+            return clean
+        except ValueError:
+            raise self._upstream_error(None, 502, uncertain=not preview) from None
 
-            order_service = OrderService()
-            page = 1
-            while True:
-                criteria = Criteria(limit=500, page=page)
-                criteria.filter.append(
-                    EqualsFilter(field="orderCustomer.customerId", value=customer_id)
-                )
-                response = order_service.request_post("/search/order", payload=criteria)
-                orders = (response or {}).get("data", []) or []
-                for order in orders:
-                    order_id = _to_str(order.get("id") or _safe_attrs(order).get("id"))
-                    if order_id:
-                        order_ids.add(order_id)
-                    else:
-                        errors.append("Order ohne ID bei der Pruefung gefunden")
-                if len(orders) < 500:
-                    break
-                page += 1
-        except Exception as exc:
-            errors.append(f"Shopware order verification failed: {exc}")
-        return order_ids, errors
+    def preview(self, **selection) -> dict[str, Any]:
+        payload = self._payload(**selection)
+        data = self._request("preview", payload=payload)
+        return self._validate_result(data, payload=payload, preview=True)
 
-    def _reconcile_django_api_id(self, *, removed_id: str, survivor_id: str) -> None:
-        """Repoint any Django customer that referenced the deleted SW6 record."""
-        try:
-            updated = Customer.objects.filter(api_id=removed_id).update(api_id=survivor_id)
-            if updated:
-                logger.info(
-                    "SW-MERGE| {} Django-Referenz(en) von {} auf {} umgehaengt",
-                    updated,
-                    removed_id,
-                    survivor_id,
-                )
-        except Exception as exc:
-            logger.warning("SW-MERGE| Django api_id reconcile uebersprungen: {}", exc)
+    def merge(self, *, operation_id: str, preview_token: str, **selection) -> dict[str, Any]:
+        payload = self._payload(**selection)
+        operation_id = self._id(operation_id, "Vorgangs-ID")
+        if not isinstance(preview_token, str) or not preview_token or len(preview_token) > 4096:
+            raise ValueError("Eine aktuelle, bestätigte Shopware-Vorschau ist erforderlich.")
+        payload.update({"operationId": operation_id, "previewToken": preview_token})
+        data = self._request("execute", payload=payload)
+        return self._validate_result(data, payload=payload, operation_id=operation_id)
+
+    def status(self, *, operation_id: str) -> dict[str, Any]:
+        operation_id = self._id(operation_id, "Vorgangs-ID")
+        data = self._request("status", operation_id=operation_id)
+        if data.get("status") == "not_found" and data.get("operationId") == operation_id:
+            return {"status": "not_found", "operationId": operation_id}
+        return self._validate_result(data, operation_id=operation_id)
 
 
 class ShopwareCustomerAddressService(BaseService):

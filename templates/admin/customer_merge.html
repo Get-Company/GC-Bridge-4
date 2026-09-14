@@ -1101,6 +1101,7 @@ function collectShopwareCustomers() {
       name: sw.company || [sw.firstName, sw.lastName].filter(Boolean).join(' ') || '',
       lastLogin: sw.lastLogin || '',
       updatedAt: sw.updatedAt || '',
+      addresses: sw.addresses || [],
     });
   });
   return list;
@@ -1116,154 +1117,263 @@ function fmtLogin(s) {
   return isNaN(d) ? esc(s) : d.toLocaleString('de-DE');
 }
 
-function renderShopwareMergeSection() {
-  const container = document.getElementById('sw-merge-section');
-  if (!container) return;
-  const customers = collectShopwareCustomers();
-  if (customers.length < 2) { container.innerHTML = ''; return; }
+const swMergeStorageKey = 'gc-sw6-merge-operation-v1';
+let swMergePending = null;
+try {
+  const saved = JSON.parse(sessionStorage.getItem(swMergeStorageKey) || 'null');
+  if (saved && /^[a-f0-9]{32}$/.test(saved.operation_id) &&
+      /^[a-f0-9]{32}$/.test(saved.keep_sw_id) && /^[a-f0-9]{32}$/.test(saved.delete_sw_id) &&
+      typeof saved.preview_token === 'string') swMergePending = saved;
+} catch (_) { /* Storage availability is checked before starting a merge. */ }
+let swMergePreview = null;
+let swMergeBusy = false;
+let swMergeRetryAllowed = false;
+let swMergePreviewSequence = 0;
 
-  const options = (selectedId) => customers.map(c =>
-    `<option value="${esc(c.id)}" ${c.id === selectedId ? 'selected' : ''}>${esc(c.number || '—')} · ${esc(c.name || '—')} · ${esc(c.email || '—')}</option>`
-  ).join('');
-
-  container.innerHTML = `
-  <div class="border border-blue-200 dark:border-blue-800 rounded-lg overflow-hidden">
-    <div class="bg-blue-50 dark:bg-blue-900/20 px-4 py-3 border-b border-blue-200 dark:border-blue-800">
-      <h2 class="font-semibold text-sm uppercase tracking-wide text-blue-700 dark:text-blue-300 flex items-center gap-2">
-        <span class="material-symbols-outlined text-base">shopping_bag</span>
-        SW6-Kunden zusammenführen
-      </h2>
-    </div>
-    <div class="p-4 space-y-4">
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label class="block text-xs font-semibold uppercase tracking-wider text-red-500 mb-1">Löschen (falscher Kunde)</label>
-          <select id="sw-merge-delete" onchange="updateShopwareMergePreview()"
-            class="w-full border border-red-300 dark:border-red-700 rounded px-3 py-2 text-sm bg-white dark:bg-gray-800">
-            ${options(customers[0].id)}
-          </select>
-        </div>
-        <div>
-          <label class="block text-xs font-semibold uppercase tracking-wider text-green-600 mb-1">Behalten (richtiger Kunde)</label>
-          <select id="sw-merge-keep" onchange="updateShopwareMergePreview()"
-            class="w-full border border-green-300 dark:border-green-700 rounded px-3 py-2 text-sm bg-white dark:bg-gray-800">
-            ${options(customers[1].id)}
-          </select>
-        </div>
-      </div>
-      <div id="sw-merge-preview"></div>
-      <button onclick="executeShopwareMerge()" id="sw-merge-btn"
-        class="px-4 py-2 bg-red-600 text-white rounded text-sm font-medium hover:bg-red-700 transition flex items-center gap-2 disabled:opacity-50">
-        <span class="material-symbols-outlined text-base">merge</span>
-        SW6-Merge ausführen
-      </button>
-      <div id="sw-merge-result" class="hidden"></div>
-    </div>
-  </div>`;
-  updateShopwareMergePreview();
+function swMergeSelection() {
+  return {
+    keep_sw_id: document.getElementById('sw-merge-keep')?.value || '',
+    delete_sw_id: document.getElementById('sw-merge-delete')?.value || '',
+    default_billing_address_id: document.getElementById('sw-merge-billing')?.value || '',
+    default_shipping_address_id: document.getElementById('sw-merge-shipping')?.value || '',
+  };
 }
 
-function updateShopwareMergePreview() {
+function setShopwareMergeBusy(busy) {
+  swMergeBusy = busy;
+  ['sw-merge-keep', 'sw-merge-delete', 'sw-merge-billing', 'sw-merge-shipping', 'sw-merge-preview-btn'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = busy || !!swMergePending;
+  });
+  const execute = document.getElementById('sw-merge-btn');
+  if (execute) execute.disabled = busy || !!swMergePending || !swMergePreview;
+  const status = document.getElementById('sw-merge-status-btn');
+  if (status) status.disabled = busy;
+  const retry = document.getElementById('sw-merge-retry-btn');
+  if (retry) retry.disabled = busy || !swMergeRetryAllowed;
+}
+
+function renderShopwareMergeSection() {
+  const container = document.getElementById('sw-merge-section');
+  if (!container || swMergeBusy) return;
+  const customers = collectShopwareCustomers();
+  if (customers.length < 2 && !swMergePending) { container.innerHTML = ''; return; }
+  const previous = swMergeSelection();
+  const selected = swMergePending || {
+    ...previous,
+    delete_sw_id: customers.some(c => c.id === previous.delete_sw_id) ? previous.delete_sw_id : customers[0]?.id,
+    keep_sw_id: customers.some(c => c.id === previous.keep_sw_id) ? previous.keep_sw_id : customers[1]?.id,
+  };
+  const options = selectedId => {
+    const known = customers.map(c => '<option value="' + esc(c.id) + '"' + (c.id === selectedId ? ' selected' : '') + '>' +
+      esc(c.number || '—') + ' · ' + esc(c.name || '—') + ' · ' + esc(c.email || '—') + '</option>').join('');
+    return known + (selectedId && !customers.some(c => c.id === selectedId)
+      ? '<option selected value="' + esc(selectedId) + '">SW6-ID: ' + esc(selectedId) + '</option>' : '');
+  };
+  container.innerHTML = '<div class="border border-blue-200 dark:border-blue-800 rounded-lg overflow-hidden">' +
+    '<div class="bg-blue-50 dark:bg-blue-900/20 px-4 py-3"><h2 class="font-semibold text-sm text-blue-700 dark:text-blue-300">SW6-Kunden zusammenführen</h2></div>' +
+    '<div class="p-4 space-y-4"><div class="grid grid-cols-1 md:grid-cols-2 gap-4">' +
+    '<label class="text-sm text-red-600">Quellkunde – nach Prüfung löschen<select id="sw-merge-delete" onchange="updateShopwareMergePreview()" class="w-full border rounded p-2 bg-white dark:bg-gray-800">' +
+    options(selected.delete_sw_id || customers[0]?.id) + '</select></label>' +
+    '<label class="text-sm text-green-600">Zielkunde – SW6-ID bleibt erhalten<select id="sw-merge-keep" onchange="updateShopwareMergePreview()" class="w-full border rounded p-2 bg-white dark:bg-gray-800">' +
+    options(selected.keep_sw_id || customers[1]?.id) + '</select></label></div>' +
+    '<div id="sw-merge-defaults" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>' +
+    '<div class="text-xs text-gray-500">Alle Adressen und Bestellzuordnungen werden übernommen. Keine Adresse wird zusammengefasst oder gelöscht. Django und microtech bleiben unverändert.</div>' +
+    '<div id="sw-merge-preview"></div><div class="flex gap-3 flex-wrap">' +
+    '<button id="sw-merge-preview-btn" onclick="loadShopwareMergePreview()" class="px-4 py-2 border rounded text-sm disabled:opacity-50">Verbindliche Vorschau laden</button>' +
+    '<button id="sw-merge-btn" disabled onclick="executeShopwareMerge()" class="px-4 py-2 bg-red-600 text-white rounded text-sm disabled:opacity-50">SW6-Merge bestätigen und ausführen</button></div>' +
+    '<div id="sw-merge-result" class="hidden"></div></div></div>';
+  updateShopwareMergePreview(selected);
+  if (swMergePending) showShopwareMergePending('Ein noch nicht abschließend bestätigter Vorgang wurde wiederhergestellt. Bitte zuerst den Status prüfen.');
+}
+
+function updateShopwareMergePreview(previousDefaults = null) {
+  swMergePreview = null;
+  swMergePreviewSequence++;
+  const selection = swMergeSelection();
+  const keep = shopwareCustomerById(selection.keep_sw_id);
+  const source = shopwareCustomerById(selection.delete_sw_id);
+  const choices = [keep, source].filter(Boolean).flatMap(c => c.addresses.map(a => ({
+    id: a.id, label: (c.number || c.id) + ' · ' + [a.company, a.firstName, a.lastName, a.street, a.zipcode, a.city].filter(Boolean).join(' '),
+  })));
+  const defaults = document.getElementById('sw-merge-defaults');
+  if (defaults) defaults.innerHTML = [
+    ['billing', 'Standard-Rechnungsadresse', 'is_invoice', 'text-purple-600', 'default_billing_address_id'],
+    ['shipping', 'Standard-Lieferadresse', 'is_shipping', 'text-blue-600', 'default_shipping_address_id'],
+  ].map(([kind, label, flag, tone, key]) => {
+    const selectedId = previousDefaults?.[key] || keep?.addresses.find(a => a[flag])?.id || '';
+    return '<label class="text-sm ' + tone + '">' + label +
+      '<select id="sw-merge-' + kind + '" onchange="invalidateShopwareMergePreview()" class="w-full border rounded p-2 bg-white dark:bg-gray-800">' +
+      '<option value="">Aktuellen Standard des Zielkunden beibehalten</option>' +
+      choices.map(a => '<option value="' + esc(a.id) + '"' + (a.id === selectedId ? ' selected' : '') + '>' + esc(a.label) + '</option>').join('') +
+      '</select></label>';
+  }).join('');
+  invalidateShopwareMergePreview();
+}
+
+function invalidateShopwareMergePreview() {
+  swMergePreview = null;
+  swMergePreviewSequence++;
   const preview = document.getElementById('sw-merge-preview');
-  if (!preview) return;
-  const delId = document.getElementById('sw-merge-delete')?.value;
-  const keepId = document.getElementById('sw-merge-keep')?.value;
-  const btn = document.getElementById('sw-merge-btn');
+  if (preview) preview.innerHTML = '<div class="text-sm text-gray-500">Bitte die Vorschau laden. Shopware ermittelt die Login-Quelle anhand des letzten Logins und prüft die gewählte Zusammenführung.</div>';
+  setShopwareMergeBusy(swMergeBusy);
+}
 
-  if (!delId || !keepId || delId === keepId) {
-    preview.innerHTML = `<div class="text-sm text-amber-600 dark:text-amber-400 flex items-center gap-2">
-      <span class="material-symbols-outlined text-base">warning</span>
-      Bitte zwei unterschiedliche SW6-Kunden wählen.</div>`;
-    if (btn) btn.disabled = true;
-    return;
+async function shopwareMergeRequest(body, statusOperationId = null) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 95000);
+  try {
+    const url = '/admin/customer-merge/api/merge-shopware/' + (statusOperationId
+      ? '?action=status&operation_id=' + encodeURIComponent(statusOperationId) : '');
+    const response = await fetch(url, statusOperationId ? {
+      signal: controller.signal, headers: {'Accept': 'application/json'},
+    } : {
+      method: 'POST', signal: controller.signal,
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF},
+      body: JSON.stringify(body),
+    });
+    const data = await response.json();
+    if (!response.ok || data.error) {
+      const error = new Error(data.error || 'Shopware hat kein bestätigtes Ergebnis geliefert.');
+      error.code = data.code || '';
+      error.uncertain = data.uncertain !== false;
+      throw error;
+    }
+    return data;
+  } finally { clearTimeout(timeout); }
+}
+
+async function loadShopwareMergePreview() {
+  if (swMergePending || swMergeBusy) return;
+  const selection = swMergeSelection();
+  if (!selection.keep_sw_id || !selection.delete_sw_id || selection.keep_sw_id === selection.delete_sw_id) {
+    alert('Bitte zwei unterschiedliche SW6-Kunden wählen.'); return;
   }
-  if (btn) btn.disabled = false;
+  const sequence = ++swMergePreviewSequence;
+  setShopwareMergeBusy(true);
+  const preview = document.getElementById('sw-merge-preview');
+  preview.innerHTML = spinner() + ' Shopware prüft den Merge …';
+  try {
+    const data = await shopwareMergeRequest({action: 'preview', ...selection});
+    if (sequence !== swMergePreviewSequence) return;
+    swMergePreview = {selection, data};
+    const credentials = shopwareCustomerById(data.credentialSourceId);
+    preview.innerHTML = '<div class="p-3 border border-blue-200 rounded bg-blue-50 dark:bg-blue-900/20 text-sm">' +
+      '<strong>Von Shopware bestätigte Vorschau</strong><br>' +
+      'Zielkunde bleibt: <span class="font-mono">' + esc(data.targetId) + '</span><br>' +
+      'Login-Daten: E-Mail und Passwort-Hash ' + (data.credentialsCopied ? 'werden gemeinsam vom Quellkunden übernommen' : 'des Zielkunden bleiben erhalten') + '.<br>' +
+      'Login-Quelle: ' + esc(credentials?.number || data.credentialSourceId) +
+      ' · ' + data.addressesMoved + ' Adressen und ' + data.ordersMoved + ' Bestellzuordnungen werden übertragen.<br>' +
+      'Der Quellkunde wird erst nach erfolgreicher serverseitiger Prüfung gelöscht.</div>';
+  } catch (error) {
+    swMergePreview = null;
+    preview.innerHTML = '<div class="p-3 text-sm text-red-600">' + esc(error.message) + '</div>';
+  } finally { setShopwareMergeBusy(false); }
+}
 
-  const del = shopwareCustomerById(delId);
-  const keep = shopwareCustomerById(keepId);
-  const lastLoginIsDelete = (del.lastLogin || '') && (del.lastLogin || '') > (keep.lastLogin || '');
-  const survivor = lastLoginIsDelete ? del : keep;
-  const removed = lastLoginIsDelete ? keep : del;
+function showShopwareMergePending(message) {
+  const result = document.getElementById('sw-merge-result');
+  if (!result || !swMergePending) return;
+  result.classList.remove('hidden');
+  result.innerHTML = '<div class="p-3 border border-amber-300 rounded text-sm text-amber-700 dark:text-amber-300">' +
+    esc(message) + '<br>Vorgangs-ID: <span class="font-mono break-all">' + esc(swMergePending.operation_id) + '</span>' +
+    '<div class="flex gap-3 flex-wrap mt-3"><button id="sw-merge-status-btn" onclick="checkShopwareMergeStatus()" class="border rounded px-3 py-2 disabled:opacity-50">Status prüfen</button>' +
+    '<button id="sw-merge-retry-btn" onclick="retryShopwareMerge()" class="border rounded px-3 py-2 disabled:opacity-50">Denselben Vorgang erneut senden</button></div></div>';
+  setShopwareMergeBusy(swMergeBusy);
+}
 
-  const card = (c, tone, tag) => `
-    <div class="flex-1 min-w-0 border rounded-lg p-3 ${tone}">
-      <div class="text-[10px] font-semibold uppercase tracking-wider mb-1">${tag}</div>
-      <div class="font-semibold text-base truncate">${esc(c.name || '—')}</div>
-      <div class="text-sm text-gray-500 font-mono">Nr: ${esc(c.number || '—')}</div>
-      <div class="text-sm text-gray-500 truncate">${esc(c.email || '—')}</div>
-      <div class="text-xs text-gray-400 mt-1">Letzter Login: ${fmtLogin(c.lastLogin)}</div>
-    </div>`;
+function clearShopwareMergePending() {
+  sessionStorage.removeItem(swMergeStorageKey);
+  swMergePending = null;
+  swMergeRetryAllowed = false;
+}
 
-  let html = `<div class="flex items-stretch gap-3 flex-wrap md:flex-nowrap">
-    ${card(survivor, 'border-green-300 dark:border-green-700 bg-green-50/50 dark:bg-green-900/10', '<span class="text-green-600">Technisch erhalten – letzter Login</span>')}
-    ${card(removed, 'border-red-300 dark:border-red-700 bg-red-50/50 dark:bg-red-900/10', '<span class="text-red-500">Wird nach erfolgreicher Prüfung gelöscht</span>')}
-  </div>`;
-
-  html += `<div class="mt-3 p-3 rounded bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-sm flex items-start gap-2">
-    <span class="material-symbols-outlined text-base text-blue-600 dark:text-blue-400">key</span>
-    <div>E-Mail + Passwort-Hash bleiben als unverändertes Paar auf dem Konto mit dem <strong>letzten Login</strong>: ${esc(survivor.name || survivor.number || '—')} (${fmtLogin(survivor.lastLogin)}).</div>
-  </div>`;
-
-  if (lastLoginIsDelete) {
-    html += `<div class="mt-2 p-3 rounded bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-sm flex items-start gap-2">
-      <span class="material-symbols-outlined text-base text-amber-600 dark:text-amber-400">info</span>
-      <div>Der als falsch ausgewählte Datensatz hat den jüngsten Login. Deshalb bleibt technisch dieses Konto erhalten; Kundennummer und Name von <strong>${esc(keep.number || '—')}</strong> werden darauf übertragen. Gelöscht wird anschließend der andere Datensatz.</div>
-    </div>`;
+function completeShopwareMerge(data) {
+  if (!swMergePending || data.operationId !== swMergePending.operation_id ||
+      data.targetId !== swMergePending.keep_sw_id || data.sourceId !== swMergePending.delete_sw_id ||
+      (swMergePending.default_billing_address_id && data.defaultBillingAddressId !== swMergePending.default_billing_address_id) ||
+      (swMergePending.default_shipping_address_id && data.defaultShippingAddressId !== swMergePending.default_shipping_address_id)) {
+    throw new Error('Die Statusantwort passt nicht zum gewählten Vorgang. Bitte den Vorgang prüfen.');
   }
+  clearShopwareMergePending();
+  swMergePreview = null;
+  const result = document.getElementById('sw-merge-result');
+  result.classList.remove('hidden');
+  result.innerHTML = '<div class="p-3 border border-green-300 rounded text-sm text-green-700 dark:text-green-300">' +
+    'Merge abgeschlossen und vollständig geprüft. Zielkunde: ' + esc(data.targetId) +
+    '. Quellkunde gelöscht. Übertragen: ' + data.addressesMoved + ' Adressen, ' + data.ordersMoved + ' Bestellzuordnungen. ' +
+    (data.credentialsCopied ? 'E-Mail und Passwort-Hash wurden gemeinsam übernommen.' : 'Die Zugangsdaten des Zielkunden wurden beibehalten.') +
+    '</div>';
+  setTimeout(doSearch, 1500);
+}
 
-  html += `<div class="mt-2 text-xs text-gray-500 dark:text-gray-400">Vor dem Löschen prüft Shopware erneut alle übertragenen Adressen und Bestellungen sowie die unveränderte Login-E-Mail und den letzten Login.</div>`;
-
-  preview.innerHTML = html;
+async function sendPendingShopwareMerge() {
+  setShopwareMergeBusy(true);
+  showShopwareMergePending('Merge läuft. Bitte den Vorgang nicht erneut mit einer anderen ID starten.');
+  try {
+    completeShopwareMerge(await shopwareMergeRequest(swMergePending));
+  } catch (error) {
+    if (error.code === 'GC_MERGE_PREVIEW_STALE' || error.uncertain === false) {
+      clearShopwareMergePending();
+      invalidateShopwareMergePreview();
+      const result = document.getElementById('sw-merge-result');
+      result.classList.remove('hidden');
+      result.innerHTML = '<div class="p-3 text-sm text-red-600">' + esc(error.message) +
+        ' Bitte eine neue Vorschau laden und erneut bestätigen.</div>';
+    } else {
+      showShopwareMergePending(error.message + ' Das Ergebnis ist noch nicht bestätigt. Bitte den Status prüfen.');
+    }
+  } finally { setShopwareMergeBusy(false); }
 }
 
 async function executeShopwareMerge() {
-  const delId = document.getElementById('sw-merge-delete').value;
-  const keepId = document.getElementById('sw-merge-keep').value;
-  if (!delId || !keepId || delId === keepId) { alert('Bitte zwei unterschiedliche SW6-Kunden wählen.'); return; }
-  const del = shopwareCustomerById(delId);
-  const keep = shopwareCustomerById(keepId);
-  const sourceHasNewestLogin = (del.lastLogin || '') && (del.lastLogin || '') > (keep.lastLogin || '');
-  const physicallyRemoved = sourceHasNewestLogin ? keep : del;
-  if (!confirm(`Der SW6-Kunde "${physicallyRemoved.name || physicallyRemoved.number}" wird erst nach erfolgreicher Prüfung gelöscht. Fortfahren?`)) return;
-
-  const btn = document.getElementById('sw-merge-btn');
-  const res = document.getElementById('sw-merge-result');
-  btn.disabled = true;
-  btn.innerHTML = `${spinner()} Merge läuft...`;
-
+  if (swMergeBusy || swMergePending || !swMergePreview) return;
+  const {selection, data} = swMergePreview;
+  if (JSON.stringify(selection) !== JSON.stringify(swMergeSelection())) { invalidateShopwareMergePreview(); return; }
+  if (!confirm('Kunde ' + data.sourceId + ' nach ' + data.targetId + ' zusammenführen? Der Zielkunde behält seine SW6-ID. ' +
+      data.addressesMoved + ' Adressen und ' + data.ordersMoved + ' Bestellzuordnungen werden übernommen. ' +
+      (data.credentialsCopied ? 'E-Mail und Passwort-Hash des Quellkunden gewinnen. ' : 'Zugangsdaten des Zielkunden bleiben erhalten. ') +
+      'Der Quellkunde wird nach erfolgreicher Prüfung unwiderruflich gelöscht.')) return;
   try {
-    const resp = await fetch('/admin/customer-merge/api/merge-shopware/', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json','X-CSRFToken':CSRF},
-      body: JSON.stringify({ keep_sw_id: keepId, delete_sw_id: delId }),
-    });
-    const data = await resp.json();
-    res.classList.remove('hidden');
-    if (data.error) {
-      res.innerHTML = `<div class="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-sm text-red-600 dark:text-red-400">${esc(data.error)}</div>`;
-    } else {
-      const verifiedAddresses = data.verification?.addresses?.verified ?? data.addresses_moved;
-      const verifiedOrders = data.verification?.orders?.verified ?? data.orders_moved;
-      let m = `SW6-Merge erfolgreich geprüft und abgeschlossen. Überlebender Datensatz: ${esc(data.survivor_sw_id)}, gelöscht: ${esc(data.removed_sw_id)}. Bestellungen: ${verifiedOrders}, Adressen: ${verifiedAddresses}`;
-      if (data.identity_transplanted) m += ' (Kundennummer/Name übertragen)';
-      if (data.verification?.credentials) m += ' (Login-Paar unverändert bestätigt)';
-      let w = '';
-      if (data.errors?.length) w = `<div class="mt-1 text-yellow-600 dark:text-yellow-400 text-xs">${data.errors.map(e => '· ' + esc(e)).join('<br>')}</div>`;
-      let logHtml = '';
-      if (data.log?.length) {
-        logHtml = `<details class="mt-2"><summary class="text-[10px] text-gray-400 cursor-pointer hover:text-gray-600">Merge-Log (${data.log.length})</summary>
-          <pre class="mt-1 p-2 bg-gray-100 dark:bg-gray-900 rounded text-[10px] text-gray-600 dark:text-gray-400 overflow-x-auto max-h-64 overflow-y-auto font-mono whitespace-pre-wrap">${data.log.map(l => esc(l)).join('\n')}</pre></details>`;
-      }
-      res.innerHTML = `<div class="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded text-sm text-green-700 dark:text-green-400">${esc(m)}${w}${logHtml}</div>`;
-      setTimeout(doSearch, 1500);
-    }
-  } catch(e) {
-    res.classList.remove('hidden');
-    res.innerHTML = `<div class="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-sm text-red-600">${esc(e.message)}</div>`;
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = '<span class="material-symbols-outlined text-base">merge</span> SW6-Merge ausführen';
+    const operationId = Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('');
+    const pending = {action: 'execute', ...selection, operation_id: operationId, preview_token: data.previewToken};
+    // Persist before sending so reload/timeout never loses the idempotency key.
+    sessionStorage.setItem(swMergeStorageKey, JSON.stringify(pending));
+    swMergePending = pending;
+    swMergeRetryAllowed = false;
+  } catch (_) {
+    alert('Der Vorgang kann nicht sicher im Browser gespeichert werden. Bitte Sitzungsspeicher erlauben; es wurde kein Merge gestartet.');
+    return;
   }
+  await sendPendingShopwareMerge();
+}
+
+async function checkShopwareMergeStatus() {
+  if (!swMergePending || swMergeBusy) return;
+  setShopwareMergeBusy(true);
+  try {
+    const data = await shopwareMergeRequest(null, swMergePending.operation_id);
+    if (data.status === 'merged') completeShopwareMerge(data);
+    else if (data.status === 'not_found') {
+      swMergeRetryAllowed = true;
+      showShopwareMergePending('Shopware hat noch keinen abgeschlossenen Vorgang gespeichert. Sie können denselben Auftrag mit unveränderter Vorgangs-ID erneut senden. Ein parallel laufender Auftrag wird serverseitig abgesichert.');
+    } else showShopwareMergePending('Der Vorgang ist noch nicht abschließend bestätigt. Bitte den Status erneut prüfen.');
+  } catch (error) {
+    showShopwareMergePending(error.message + ' Die Vorgangs-ID bleibt für die nächste Statusabfrage erhalten.');
+  } finally { setShopwareMergeBusy(false); }
+}
+
+async function retryShopwareMerge() {
+  if (!swMergePending || swMergeBusy || !swMergeRetryAllowed) return;
+  if (!confirm('Denselben Auftrag mit der Vorgangs-ID ' + swMergePending.operation_id + ' erneut senden?')) return;
+  swMergeRetryAllowed = false;
+  await sendPendingShopwareMerge();
+}
+
+// Recovery must be visible immediately after reload, even before a new search.
+if (swMergePending) {
+  document.getElementById('results-area').classList.remove('hidden');
+  renderShopwareMergeSection();
 }
 
 </script>

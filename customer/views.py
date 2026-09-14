@@ -17,6 +17,7 @@ from customer.services.customer_merge import (
     CustomerSyncDirectionService,
     ShopwareCustomerAddressService,
     ShopwareCustomerMergeService,
+    ShopwareMergeError,
 )
 
 
@@ -370,27 +371,51 @@ def customer_delete_addresses_api(request):
 
 
 def customer_merge_shopware_api(request):
-    """Merge one Shopware 6 customer (delete) into another (keep)."""
-    if request.method != "POST":
-        return JsonResponse({"error": "POST erforderlich."}, status=405)
+    """Preview, execute or recover the transactional Shopware-only merge."""
+    if request.method not in ("POST", "GET"):
+        return JsonResponse({"error": "GET oder POST erforderlich."}, status=405)
+    if not request.user.has_perms(("customer.change_customer", "customer.delete_customer")):
+        return JsonResponse({"error": "Keine Berechtigung zum Zusammenführen und Löschen von Kunden."}, status=403)
     try:
-        body = json.loads(request.body)
-        keep_sw_id = body.get("keep_sw_id", "").strip()
-        delete_sw_id = body.get("delete_sw_id", "").strip()
-
-        if not keep_sw_id or not delete_sw_id:
-            return JsonResponse(
-                {"error": "Behalten- und Loeschen-Kunde erforderlich."}, status=400
-            )
-
         service = ShopwareCustomerMergeService()
-        result = service.merge(keep_sw_id=keep_sw_id, delete_sw_id=delete_sw_id)
+        if request.method == "GET":
+            if request.GET.get("action") != "status":
+                return JsonResponse({"error": "GET ist nur für die Statusabfrage erlaubt."}, status=400)
+            result = service.status(operation_id=request.GET.get("operation_id", ""))
+            return JsonResponse({"success": True, **result})
+
+        body = json.loads(request.body)
+        if not isinstance(body, dict):
+            raise ValueError("Ein JSON-Objekt ist erforderlich.")
+        selection = {
+            "keep_sw_id": body.get("keep_sw_id", ""),
+            "delete_sw_id": body.get("delete_sw_id", ""),
+            "default_billing_address_id": body.get("default_billing_address_id", ""),
+            "default_shipping_address_id": body.get("default_shipping_address_id", ""),
+        }
+        if body.get("action") == "preview":
+            result = service.preview(**selection)
+        elif body.get("action") == "execute":
+            result = service.merge(
+                **selection, operation_id=body.get("operation_id", ""),
+                preview_token=body.get("preview_token", ""),
+            )
+        else:
+            raise ValueError("Bitte zuerst eine Vorschau abrufen und anschließend ausdrücklich bestätigen.")
         return JsonResponse({"success": True, **result})
+    except ShopwareMergeError as exc:
+        return JsonResponse(
+            {"error": str(exc), "code": exc.code, "uncertain": exc.uncertain}, status=exc.status
+        )
     except ValueError as exc:
         return JsonResponse({"error": str(exc)}, status=400)
-    except Exception as exc:
-        logger.error("Shopware merge failed: {}\n{}", exc, traceback.format_exc())
-        return JsonResponse({"error": str(exc)}, status=500)
+    except Exception:
+        # Never expose raw upstream responses or tracebacks from credential operations.
+        logger.error("Shopware merge request failed without a confirmed result")
+        return JsonResponse({
+            "error": "Kein bestätigtes Shopware-Ergebnis verfügbar. Bitte den Vorgangsstatus prüfen.",
+            "code": "GC_MERGE_STATUS_UNKNOWN", "uncertain": True,
+        }, status=502)
 
 
 def customer_delete_shopware_addresses_api(request):
