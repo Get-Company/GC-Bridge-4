@@ -2,9 +2,11 @@ from django.test import TestCase
 
 from microtech.models import (
     MicrotechOrderRule, MicrotechOrderRuleConditionGroup,
-    MicrotechOrderRuleCondition, RuleTrigger,
+    MicrotechOrderRuleCondition, MicrotechOrderRuleOperator, RuleTrigger,
 )
-from microtech.rule_engine.editor import serialize_rule_for_edit
+from microtech.rule_engine.editor import (
+    EditorValidationError, save_rule_from_payload, serialize_rule_for_edit,
+)
 
 
 class SerializeForEditTest(TestCase):
@@ -23,3 +25,43 @@ class SerializeForEditTest(TestCase):
         c = data["root_group"]["conditions"][0]
         self.assertEqual((c["field_path"], c["operator_code"], c["expected_value"], c["expected_value_2"]),
                          ("total", "between", "5", "9"))
+
+
+class SaveFromPayloadTest(TestCase):
+    def setUp(self):
+        MicrotechOrderRuleOperator.objects.get_or_create(code="eq", defaults={"name": "==", "engine_operator": "eq"})
+        MicrotechOrderRuleOperator.objects.get_or_create(code="between", defaults={"name": "between", "engine_operator": "between"})
+
+    def _payload(self):
+        return {
+            "name": "Neu", "priority": 30, "is_active": True,
+            "execution_phase": "before", "engine_enabled": False, "shadow_mode": True,
+            "trigger_id": None,
+            "root_group": {"logic": "all", "children": [
+                {"logic": "any", "children": [], "conditions": [
+                    {"field_path": "total", "operator_code": "between", "expected_value": "5", "expected_value_2": "9"}]}],
+                "conditions": [{"field_path": "billing_address__country_code", "operator_code": "eq",
+                                "expected_value": "CH", "expected_value_2": ""}]},
+            "actions": [{"action_type": "create_shipping_position", "dataset_field_id": None, "target_value": "V"}],
+        }
+
+    def test_round_trip(self):
+        rule = save_rule_from_payload(self._payload())
+        data = serialize_rule_for_edit(rule)
+        self.assertEqual(data["name"], "Neu")
+        self.assertEqual(len(data["root_group"]["children"]), 1)
+        self.assertEqual(data["root_group"]["children"][0]["conditions"][0]["operator_code"], "between")
+        self.assertEqual(data["actions"][0]["target_value"], "V")
+
+    def test_resave_replaces_tree(self):
+        rule = save_rule_from_payload(self._payload())
+        p2 = self._payload(); p2["root_group"]["children"] = []; p2["actions"] = []
+        save_rule_from_payload(p2, rule=rule)
+        data = serialize_rule_for_edit(rule)
+        self.assertEqual(data["root_group"]["children"], [])
+        self.assertEqual(data["actions"], [])
+
+    def test_invalid_operator_rolls_back(self):
+        p = self._payload(); p["root_group"]["conditions"][0]["operator_code"] = "nope"
+        with self.assertRaises(EditorValidationError):
+            save_rule_from_payload(p)

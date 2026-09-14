@@ -7,7 +7,16 @@ for the sibling read-only overview serializer.
 """
 from __future__ import annotations
 
-from microtech.models import MicrotechOrderRule
+from django.db import transaction
+
+from microtech.models import (
+    MicrotechOrderRule,
+    MicrotechOrderRuleAction,
+    MicrotechOrderRuleCondition,
+    MicrotechOrderRuleConditionGroup,
+    MicrotechOrderRuleOperator,
+    RuleTrigger,
+)
 
 
 def _serialize_condition(condition) -> dict:
@@ -83,4 +92,124 @@ def serialize_rule_for_edit(rule) -> dict:
     }
 
 
-__all__ = ["serialize_rule_for_edit"]
+class EditorValidationError(Exception):
+    """Raised when an edit-JSON payload fails validation in ``save_rule_from_payload``.
+
+    Carries every violation found (not just the first) in ``.messages`` so the
+    editor UI can surface them all at once.
+    """
+
+    def __init__(self, messages: list[str]):
+        self.messages = list(messages)
+        super().__init__("; ".join(self.messages))
+
+
+def _validate_payload(payload: dict) -> list[str]:
+    errors: list[str] = []
+
+    valid_phases = {code for code, _label in MicrotechOrderRule.ExecutionPhase.choices}
+    execution_phase = payload.get("execution_phase")
+    if execution_phase not in valid_phases:
+        errors.append(f"Ungueltige execution_phase: {execution_phase!r}")
+
+    trigger_id = payload.get("trigger_id")
+    if trigger_id is not None and not RuleTrigger.objects.filter(pk=trigger_id).exists():
+        errors.append(f"Trigger existiert nicht: {trigger_id!r}")
+
+    active_operator_codes = set(
+        MicrotechOrderRuleOperator.objects.filter(is_active=True).values_list("code", flat=True)
+    )
+
+    def _walk_group(group_payload: dict | None) -> None:
+        if not group_payload:
+            return
+        for condition in group_payload.get("conditions", []) or []:
+            operator_code = condition.get("operator_code")
+            if operator_code not in active_operator_codes:
+                errors.append(f"Ungueltiger operator_code: {operator_code!r}")
+        for child in group_payload.get("children", []) or []:
+            _walk_group(child)
+
+    _walk_group(payload.get("root_group"))
+
+    valid_action_types = {code for code, _label in MicrotechOrderRuleAction.ActionType.choices}
+    for action in payload.get("actions", []) or []:
+        action_type = action.get("action_type")
+        if action_type not in valid_action_types:
+            errors.append(f"Ungueltiger action_type: {action_type!r}")
+            continue
+        if action_type == MicrotechOrderRuleAction.ActionType.SET_FIELD and not action.get("dataset_field_id"):
+            errors.append("set_field-Aktion benoetigt dataset_field_id")
+
+    return errors
+
+
+def _fill_group(rule: MicrotechOrderRule, group, group_payload: dict) -> None:
+    for priority, condition_payload in enumerate(group_payload.get("conditions", []) or []):
+        MicrotechOrderRuleCondition.objects.create(
+            rule=rule,
+            group=group,
+            priority=priority,
+            django_field_path=condition_payload.get("field_path", ""),
+            operator_code=condition_payload.get("operator_code", ""),
+            expected_value=condition_payload.get("expected_value", ""),
+            expected_value_2=condition_payload.get("expected_value_2", ""),
+        )
+    for priority, child_payload in enumerate(group_payload.get("children", []) or []):
+        child_group = MicrotechOrderRuleConditionGroup.objects.create(
+            rule=rule,
+            parent=group,
+            priority=priority,
+            logic=child_payload.get("logic", MicrotechOrderRule.ConditionLogic.ALL),
+        )
+        _fill_group(rule, child_group, child_payload)
+
+
+def save_rule_from_payload(payload: dict, *, rule: MicrotechOrderRule | None = None) -> MicrotechOrderRule:
+    """Persist edit-JSON ``payload`` (see ``serialize_rule_for_edit``) as a ``MicrotechOrderRule``.
+
+    Creates a new rule when ``rule`` is ``None``, otherwise updates the given
+    rule in place. The rule's entire condition-group tree and action list are
+    replaced (existing ones deleted, then recreated from ``payload``). Runs in
+    a single ``transaction.atomic`` block: any validation failure raises
+    ``EditorValidationError`` and leaves the database untouched.
+    """
+    errors = _validate_payload(payload)
+    if errors:
+        raise EditorValidationError(errors)
+
+    with transaction.atomic():
+        if rule is None:
+            rule = MicrotechOrderRule()
+
+        rule.name = payload.get("name", "")
+        rule.priority = payload.get("priority", 100)
+        rule.is_active = payload.get("is_active", True)
+        rule.execution_phase = payload.get("execution_phase")
+        rule.engine_enabled = payload.get("engine_enabled", False)
+        rule.shadow_mode = payload.get("shadow_mode", True)
+        rule.trigger_id = payload.get("trigger_id")
+        rule.save()
+
+        rule.condition_groups.all().delete()
+        rule.actions.all().delete()
+
+        root_group = payload.get("root_group")
+        if root_group:
+            _fill_group(rule, MicrotechOrderRuleConditionGroup.objects.create(
+                rule=rule, parent=None, logic=root_group.get("logic", MicrotechOrderRule.ConditionLogic.ALL),
+            ), root_group)
+
+        for priority, action_payload in enumerate(payload.get("actions", []) or []):
+            MicrotechOrderRuleAction.objects.create(
+                rule=rule,
+                priority=priority,
+                action_type=action_payload.get("action_type"),
+                dataset_field_id=action_payload.get("dataset_field_id"),
+                target_value=action_payload.get("target_value", ""),
+            )
+
+    return rule
+
+
+__all__ = ["serialize_rule_for_edit", "save_rule_from_payload", "EditorValidationError"]
