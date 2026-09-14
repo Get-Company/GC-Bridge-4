@@ -357,6 +357,16 @@ class ShopwareCustomerMergeTest(SimpleTestCase):
         self.client._request_with_retry.return_value = self.response(copied=False)
         self.assertFalse(self.merge()["credentialsCopied"])
 
+    def test_never_logged_in_target_retains_credentials_and_null_timestamp(self):
+        response = self.response(copied=False)
+        response["lastLogin"] = None
+        self.client._request_with_retry.return_value = response
+        for result in (self.merge(), self.service.status(operation_id=self.operation)):
+            self.assertEqual(result["targetId"], self.target)
+            self.assertEqual(result["credentialSourceId"], self.target)
+            self.assertFalse(result["credentialsCopied"])
+            self.assertIsNone(result["lastLogin"])
+
     def test_no_password_fields_leave_adapter(self):
         response = self.response()
         response.update({"password": "hidden", "legacyPassword": "hidden", "hash": "hidden", "email": "hidden"})
@@ -729,12 +739,28 @@ assert.equal(swMergePreview.data.defaultBillingAddressId, 'd'.repeat(32));
 await executeShopwareMerge();
 assert.equal(networkCalls.length, 2);
 const previewBody = networkCalls[0].body, executeBody = networkCalls[1].body;
-assert.equal(previewBody.default_billing_address_id, '');
-assert.equal(executeBody.default_billing_address_id, '');
-assert.equal(executeBody.default_shipping_address_id, '');
+for (const body of [previewBody, executeBody]) {
+  assert.equal(Object.hasOwn(body, 'default_billing_address_id'), false);
+  assert.equal(Object.hasOwn(body, 'default_shipping_address_id'), false);
+}
 assert.equal(executeBody.keep_sw_id, previewBody.keep_sw_id);
 assert.equal(executeBody.delete_sw_id, previewBody.delete_sw_id);
 assert.equal(executeBody.preview_token, 'signed-with-omitted-defaults');
+''')
+
+    def test_merge_section_has_no_default_address_selectors(self):
+        self.run_js(r'''
+collectShopwareCustomers = () => [
+  {id: 'a'.repeat(32), number: 'A', email: 'a@example.invalid'},
+  {id: 'b'.repeat(32), number: 'B', email: 'b@example.invalid'},
+];
+renderShopwareMergeSection();
+const html = elements.get('sw-merge-section').innerHTML;
+for (const id of ['sw-merge-defaults', 'sw-merge-billing', 'sw-merge-shipping']) {
+  assert.equal(html.includes(id), false);
+}
+assert.ok(html.includes('am Zielkunden eingestellten Standardadressen bleiben erhalten'));
+assert.deepEqual(Object.keys(swMergeSelection()).sort(), ['delete_sw_id', 'keep_sw_id']);
 ''')
 
     def test_status_mismatching_selected_default_keeps_recovery(self):
