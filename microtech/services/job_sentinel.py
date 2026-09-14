@@ -980,6 +980,8 @@ class MicrotechJobSentinelService(BaseService):
         if job.kind == MicrotechGraphQLJob.Kind.DATASET_RECORDS:
             if job.operation == "searchCustomers":
                 return client.customer_search_job(str(job.external_job_id))
+            if job.operation == "searchAddressRecords":
+                return client.address_search_job(str(job.external_job_id))
             return client.dataset_job(str(job.external_job_id))
         if job.kind == MicrotechGraphQLJob.Kind.PRODUCT_READ:
             return client.product_list_job(str(job.external_job_id))

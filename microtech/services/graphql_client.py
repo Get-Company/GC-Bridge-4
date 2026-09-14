@@ -708,6 +708,43 @@ class MicrotechGraphQLClientService(BaseService):
         )
         return self._submit_accepted(accepted)
 
+    def submit_search_address_records(self, search_term: str, limit_per_dataset: int = 20) -> tuple[str, float]:
+        """Submit one non-blocking Microtech address search (contains match).
+
+        Matches ``search_term`` as a substring against AdrNr, first name, last
+        name and the company name (Na1) across the address datasets.
+        """
+        accepted = self._mutation_with_job(
+            """
+            mutation SearchAddressRecords($searchTerm: String!, $limitPerDataset: Int!) {
+              searchAddressRecords(searchTerm: $searchTerm, limitPerDataset: $limitPerDataset) {
+                accepted jobId status message retryAfterSeconds
+              }
+            }
+            """,
+            "searchAddressRecords",
+            {"searchTerm": str(search_term or "").strip(), "limitPerDataset": int(limit_per_dataset)},
+        )
+        return self._submit_accepted(accepted)
+
+    def address_search_job(self, job_id: str) -> dict[str, Any]:
+        """Read the status and hits of an address (contains) search job."""
+        data = self.execute(
+            """
+            query AddressSearchJob($jobId: ID!) {
+              addressSearchJob(jobId: $jobId) {
+                jobId status message searchTerm errorMessage
+                datasets {
+                  dataset limitReached
+                  records { adrNr ansNr aspNr firstName lastName matchedFields }
+                }
+              }
+            }
+            """,
+            {"jobId": job_id},
+        )
+        return data.get("addressSearchJob") or {}
+
     def submit_create_customer(self, customer_number: str, input_data: dict[str, Any]) -> tuple[str, float]:
         accepted = self._mutation_with_job(
             """

@@ -5,6 +5,9 @@ from django.test import SimpleTestCase
 from customer.services.customer_merge import (
     CustomerMergeSearchService,
     ShopwareCustomerMergeService,
+    _has_wildcard,
+    _split_terms,
+    _wildcard_segments,
 )
 
 
@@ -167,6 +170,76 @@ class CustomerMergeMicrotechSearchTest(SimpleTestCase):
         self.assertEqual(customer["erp_id"], 42)
         self.assertEqual(customer["addresses"][0]["firstName"], "Max")
         self.assertEqual(customer["addresses"][0]["email"], "max@example.com")
+
+
+class SearchTermParsingTest(SimpleTestCase):
+    def test_split_terms_handles_comma_separated_numbers(self):
+        self.assertEqual(_split_terms(" 10001 , 10002 ,, 10003 "), ["10001", "10002", "10003"])
+        self.assertEqual(_split_terms(""), [])
+
+    def test_has_wildcard_detects_question_mark(self):
+        self.assertTrue(_has_wildcard("?@x.de"))
+        self.assertFalse(_has_wildcard("plain"))
+
+    def test_wildcard_segments_extract_literal_parts(self):
+        self.assertEqual(_wildcard_segments("? Insulation ?"), ["Insulation"])
+        self.assertEqual(_wildcard_segments("JACKSON ?"), ["JACKSON"])
+        self.assertEqual(_wildcard_segments("?@jackodur.com"), ["@jackodur.com"])
+        # A plain term without "?" yields itself.
+        self.assertEqual(_wildcard_segments("Müller"), ["Müller"])
+        self.assertEqual(_wildcard_segments(""), [])
+
+
+class AddressSearchResultParsingTest(SimpleTestCase):
+    def test_erp_numbers_are_collected_across_datasets_uniquely(self):
+        result = {
+            "datasets": [
+                {"dataset": "Adressen", "records": [{"adrNr": "10001"}, {"adrNr": "10002"}]},
+                {"dataset": "Ansprechpartner", "records": [{"adrNr": "10001"}, {"adrNr": "10003"}]},
+            ]
+        }
+        self.assertEqual(
+            CustomerMergeSearchService._erp_numbers_from_address_search_result(result),
+            ["10001", "10002", "10003"],
+        )
+
+
+class MicrotechResolutionRoutingTest(SimpleTestCase):
+    @patch.object(CustomerMergeSearchService, "start_microtech_customer_search")
+    def test_multiple_numbers_start_one_customer_search_each(self, mock_search):
+        mock_search.side_effect = [{"job_id": 1}, {"job_id": 2}]
+
+        jobs = CustomerMergeSearchService().start_microtech_resolution_search(
+            customer_number="10001, 10002",
+        )
+
+        self.assertEqual(mock_search.call_count, 2)
+        self.assertEqual(jobs, [
+            {"job_id": 1, "search_kind": "customer"},
+            {"job_id": 2, "search_kind": "customer"},
+        ])
+
+    @patch.object(CustomerMergeSearchService, "_submit_address_records_search")
+    def test_company_uses_address_records_contains_search(self, mock_addr):
+        mock_addr.return_value = [{"job_id": 7, "search_kind": "address_records"}]
+
+        jobs = CustomerMergeSearchService().start_microtech_resolution_search(
+            company="? Insulation ?",
+        )
+
+        mock_addr.assert_called_once_with("Insulation")
+        self.assertEqual(jobs, [{"job_id": 7, "search_kind": "address_records"}])
+
+    @patch.object(CustomerMergeSearchService, "_submit_address_records_search")
+    def test_wildcard_last_name_uses_address_records(self, mock_addr):
+        mock_addr.return_value = [{"job_id": 8, "search_kind": "address_records"}]
+
+        jobs = CustomerMergeSearchService().start_microtech_resolution_search(
+            last_name="JACKSON ?",
+        )
+
+        mock_addr.assert_called_once_with("JACKSON")
+        self.assertEqual(jobs, [{"job_id": 8, "search_kind": "address_records"}])
 
 
 class ShopwareCustomerMergeTest(SimpleTestCase):

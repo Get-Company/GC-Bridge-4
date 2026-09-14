@@ -53,14 +53,21 @@
         <input type="text" id="search-customer-number"
           class="border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm font-normal
                  bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-primary-500"
-          placeholder="z. B. 10001">
+          placeholder="z. B. 10001, 10002">
       </label>
       <label class="flex flex-col gap-1 text-sm font-medium" for="search-email">
         E-Mail
-        <input type="email" id="search-email"
+        <input type="text" id="search-email"
           class="border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm font-normal
                  bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-primary-500"
-          placeholder="kunde@example.de">
+          placeholder="kunde@example.de oder ?@domain.de">
+      </label>
+      <label class="flex flex-col gap-1 text-sm font-medium" for="search-company">
+        Firma
+        <input type="text" id="search-company"
+          class="border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm font-normal
+                 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-primary-500"
+          placeholder="z. B. ? Insulation ?">
       </label>
       <div class="flex flex-col gap-1 text-sm font-medium">
         <span>Kundenname</span>
@@ -133,6 +140,7 @@ function normalize(d, sys) {
     const name = [d.firstName, d.lastName].filter(Boolean).join(' ');
     return {
       name: d.company || name || '',
+      customerNr: d.customerNumber || '',
       email: d.email || '',
       systemId: d.id || '',
       extra: [
@@ -149,6 +157,7 @@ function normalize(d, sys) {
   if (sys === 'django') {
     return {
       name: d.name || '',
+      customerNr: d.erp_nr || '',
       email: d.email || '',
       systemId: d.api_id || '',
       extra: [
@@ -169,6 +178,7 @@ function normalize(d, sys) {
   // microtech
   return {
     name: d.name || '',
+    customerNr: d.erp_nr || '',
     email: d.email || '',
     systemId: d.erp_id != null ? String(d.erp_id) : '',
     extra: [
@@ -470,6 +480,7 @@ async function doSearch() {
     email: document.getElementById('search-email').value.trim(),
     first_name: document.getElementById('search-first-name').value.trim(),
     last_name: document.getElementById('search-last-name').value.trim(),
+    company: document.getElementById('search-company').value.trim(),
   };
   if (!Object.values(criteria).some(Boolean)) return;
 
@@ -658,6 +669,12 @@ function renderUnifiedCell(nr, sysKey) {
   const emailDiff = others.length && others.some(o => o.email && d.email && o.email !== d.email);
 
   let h = `<div class="space-y-1.5 text-sm">`;
+
+  // Row 0: Kundennr / AdrNr
+  h += `<div>
+    <span class="text-[10px] text-gray-400 uppercase">Kundennr</span>
+    <div class="font-mono text-base">${esc(d.customerNr) || '<span class="text-gray-300">—</span>'}</div>
+  </div>`;
 
   // Row 1: Name
   h += `<div class="${nameDiff ? 'diff-highlight rounded px-1 -mx-1' : ''}">

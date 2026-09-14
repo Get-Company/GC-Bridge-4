@@ -34,6 +34,7 @@ def customer_merge_resolve_api(request):
         "email": request.GET.get("email", "").strip(),
         "first_name": request.GET.get("first_name", "").strip(),
         "last_name": request.GET.get("last_name", "").strip(),
+        "company": request.GET.get("company", "").strip(),
     }
     if any(criteria.values()):
         search_service = CustomerMergeSearchService()
@@ -52,8 +53,10 @@ def customer_merge_resolve_api(request):
                     resolved_sets[system] = []
 
         erp_nrs: list[str] = []
-        if criteria["customer_number"]:
-            erp_nrs.append(criteria["customer_number"])
+        for number in criteria["customer_number"].split(","):
+            number = number.strip()
+            if number and number not in erp_nrs:
+                erp_nrs.append(number)
         for system in ("shopware", "django"):
             for erp_nr in resolved_sets.get(system, []):
                 if erp_nr not in erp_nrs:

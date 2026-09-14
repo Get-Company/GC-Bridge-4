@@ -41,6 +41,26 @@ def _safe_attrs(item: Any) -> dict:
     return item.get("attributes") or item
 
 
+def _split_terms(value: Any) -> list[str]:
+    """Split a comma-separated field into trimmed, non-empty terms."""
+    return [term.strip() for term in _to_str(value).split(",") if term.strip()]
+
+
+def _has_wildcard(value: Any) -> bool:
+    """Whether the value uses the ``?`` placeholder (any character sequence)."""
+    return "?" in _to_str(value)
+
+
+def _wildcard_segments(value: Any) -> list[str]:
+    """Literal segments of a ``?``-wildcard term, in order, without empties.
+
+    ``"? Insulation ?"`` -> ``["Insulation"]`` (contains), ``"JACKSON ?"`` ->
+    ``["JACKSON"]`` (prefix), ``"?@x.de"`` -> ``["@x.de"]`` (suffix). A plain
+    term without ``?`` yields itself, so callers can always match per segment.
+    """
+    return [segment.strip() for segment in _to_str(value).split("?") if segment.strip()]
+
+
 class CustomerMergeSearchService(BaseService):
     """Searches for customer data across Django, Shopware 6, and Microtech."""
 
@@ -51,24 +71,46 @@ class CustomerMergeSearchService(BaseService):
         email: str = "",
         first_name: str = "",
         last_name: str = "",
+        company: str = "",
     ) -> list[str]:
         """Resolve matching customer numbers from the GC-Bridge database."""
         customer_number = _to_str(customer_number)
         email = _to_str(email)
         first_name = _to_str(first_name)
         last_name = _to_str(last_name)
+        company = _to_str(company)
 
+        numbers = _split_terms(customer_number)
         filters = models.Q()
-        if customer_number:
-            filters &= models.Q(erp_nr__iexact=customer_number)
+        used = False
+        if numbers:
+            used = True
+            number_q = models.Q()
+            for number in numbers:
+                number_q |= models.Q(erp_nr__iexact=number)
+            filters &= number_q
         if email:
-            filters &= models.Q(email__iexact=email) | models.Q(addresses__email__iexact=email)
-        if first_name:
-            filters &= models.Q(addresses__first_name__icontains=first_name)
-        if last_name:
-            filters &= models.Q(addresses__last_name__icontains=last_name)
+            used = True
+            if _has_wildcard(email):
+                for segment in _wildcard_segments(email):
+                    filters &= models.Q(email__icontains=segment) | models.Q(
+                        addresses__email__icontains=segment
+                    )
+            else:
+                filters &= models.Q(email__iexact=email) | models.Q(addresses__email__iexact=email)
+        for segment in _wildcard_segments(first_name):
+            used = True
+            filters &= models.Q(addresses__first_name__icontains=segment)
+        for segment in _wildcard_segments(last_name):
+            used = True
+            filters &= models.Q(addresses__last_name__icontains=segment)
+        for segment in _wildcard_segments(company):
+            used = True
+            filters &= models.Q(name__icontains=segment) | models.Q(
+                addresses__name1__icontains=segment
+            )
 
-        if not any((customer_number, email, first_name, last_name)):
+        if not used:
             return []
 
         try:
@@ -89,27 +131,65 @@ class CustomerMergeSearchService(BaseService):
         email: str = "",
         first_name: str = "",
         last_name: str = "",
+        company: str = "",
     ) -> list[str]:
-        """Resolve matching customer numbers from Shopware 6."""
-        try:
-            from shopware.services import CustomerService
+        """Resolve matching customer numbers from Shopware 6.
 
-            response = CustomerService().search_by_customer_fields(
-                customer_number=_to_str(customer_number),
-                email=_to_str(email),
-                first_name=_to_str(first_name),
-                last_name=_to_str(last_name),
-                limit=_MICROTECH_SEARCH_LIMIT,
-            )
+        Supports comma-separated customer numbers, ``?`` wildcards (matched with
+        Shopware ``contains`` filters per literal segment) and a company search.
+        """
+        try:
+            from shopware.services import ContainsFilter, Criteria, CustomerService, EqualsFilter
+            from lib_shopware6_api_base import MultiFilter
+
+            criteria = Criteria(limit=_MICROTECH_SEARCH_LIMIT)
+            numbers = _split_terms(customer_number)
+            if len(numbers) == 1:
+                criteria.filter.append(EqualsFilter(field="customerNumber", value=numbers[0]))
+            elif numbers:
+                criteria.filter.append(
+                    MultiFilter(
+                        operator="OR",
+                        queries=[EqualsFilter(field="customerNumber", value=n) for n in numbers],
+                    )
+                )
+
+            email = _to_str(email)
+            if email:
+                if _has_wildcard(email):
+                    for segment in _wildcard_segments(email):
+                        criteria.filter.append(ContainsFilter(field="email", value=segment))
+                else:
+                    criteria.filter.append(EqualsFilter(field="email", value=email))
+
+            for segment in _wildcard_segments(first_name):
+                criteria.filter.append(ContainsFilter(field="firstName", value=segment))
+            for segment in _wildcard_segments(last_name):
+                criteria.filter.append(ContainsFilter(field="lastName", value=segment))
+            for segment in _wildcard_segments(company):
+                criteria.filter.append(
+                    MultiFilter(
+                        operator="OR",
+                        queries=[
+                            ContainsFilter(field="company", value=segment),
+                            ContainsFilter(field="addresses.company", value=segment),
+                        ],
+                    )
+                )
+
+            if not criteria.filter:
+                return []
+
+            response = CustomerService().request_post("/search/customer", payload=criteria)
         except Exception as exc:
             logger.warning("Shopware customer resolve failed: {}", exc)
             return []
 
         customer_numbers: list[str] = []
         for item in (response or {}).get("data", []) or []:
-            customer_number = _to_str(_safe_attrs(item).get("customerNumber"))
-            if customer_number and customer_number not in customer_numbers:
-                customer_numbers.append(customer_number)
+            resolved = _to_str(_safe_attrs(item).get("customerNumber"))
+            if resolved and resolved not in customer_numbers:
+                customer_numbers.append(resolved)
         return customer_numbers
 
     def resolve_query(self, term: str) -> list[str]:
@@ -190,66 +270,93 @@ class CustomerMergeSearchService(BaseService):
         email: str = "",
         first_name: str = "",
         last_name: str = "",
+        company: str = "",
     ) -> list[dict[str, Any]]:
         """Queue Microtech searches through the GraphQL Sentinel.
 
-        An AdrNr uses the exact ``requestCustomer`` lookup; the remaining
-        structured fields use the wrapper's dedicated customer search. ``term``
-        remains available for the legacy free-text DatasetReadInput API.
+        An AdrNr uses the exact ``requestCustomer`` lookup (once per
+        comma-separated number). Company and any ``?``-wildcarded name use the
+        wrapper's ``searchAddressRecords`` contains search (matches AdrNr, first
+        name, last name and company/Na1). Plain (non-wildcard) email and names
+        use the exact ``searchCustomers`` query — Microtech has no contains
+        search on email. ``term`` remains available for the legacy free-text
+        DatasetReadInput API.
         """
         term = _to_str(term)
         customer_number = _to_str(customer_number)
         email = _to_str(email)
         first_name = _to_str(first_name)
         last_name = _to_str(last_name)
-        uses_structured_fields = any((customer_number, email, first_name, last_name))
+        company = _to_str(company)
+        uses_structured_fields = any((customer_number, email, first_name, last_name, company))
 
         if uses_structured_fields:
-            # ``requestCustomer`` is the exact, established lookup for an AdrNr.
-            # Do not route it through the broader ``searchCustomers`` query: the
-            # merge UI needs the complete customer object for its Microtech cell.
-            if customer_number:
-                result = self.start_microtech_customer_search(customer_number, purpose="resolve")
-                if result.get("error"):
-                    return []
-                return [{"job_id": result["job_id"], "search_kind": "customer"}]
+            jobs: list[dict[str, Any]] = []
 
-            search_criteria = {
-                "customer_number": customer_number,
-                "email": email,
-                "first_name": first_name,
-                "last_name": last_name,
-            }
-            try:
-                from microtech.models import MicrotechGraphQLJob
-                from microtech.services import MicrotechGraphQLClientService, MicrotechJobSentinelService
+            # ``requestCustomer`` is the exact, established AdrNr lookup and
+            # returns the complete customer object the merge cell needs.
+            numbers = _split_terms(customer_number)
+            if numbers:
+                for number in numbers:
+                    result = self.start_microtech_customer_search(number, purpose="resolve")
+                    if not result.get("error"):
+                        jobs.append({"job_id": result["job_id"], "search_kind": "customer"})
+                return jobs
 
-                client = MicrotechGraphQLClientService()
-                job = MicrotechJobSentinelService().submit_wrapper_job(
-                    kind=MicrotechGraphQLJob.Kind.DATASET_RECORDS,
-                    operation="searchCustomers",
-                    submit=lambda: client.submit_search_customers(
-                        customer_number=customer_number,
-                        email=email,
-                        first_name=first_name,
-                        last_name=last_name,
-                        limit=_MICROTECH_SEARCH_LIMIT,
-                    ),
-                    request_payload={**search_criteria, "limit": _MICROTECH_SEARCH_LIMIT},
-                    context={
-                        "source": _MICROTECH_SEARCH_SOURCE,
-                        "purpose": "resolve",
-                        "search_kind": "customers",
-                        "search_criteria": search_criteria,
-                    },
-                    continuation="",
-                    next_step="Warte auf Microtech-Kundensuche.",
-                    delete_after_completion=False,
-                )
-            except Exception as exc:
-                logger.warning("Microtech structured customer search submit failed: {}", exc)
-                return []
-            return [{"job_id": job.pk, "search_kind": "customers"}]
+            # Company and any wildcarded name use the contains search
+            # (searchAddressRecords). Company is not part of CustomerSearchInput
+            # at all, so it can only be found this way.
+            contains_terms: list[str] = []
+            contains_terms.extend(_wildcard_segments(company))
+            if _has_wildcard(first_name):
+                contains_terms.extend(_wildcard_segments(first_name))
+            if _has_wildcard(last_name):
+                contains_terms.extend(_wildcard_segments(last_name))
+            for contains_term in dict.fromkeys(contains_terms):
+                jobs.extend(self._submit_address_records_search(contains_term))
+
+            # Plain (non-wildcard) email/name use the exact structured search.
+            exact_email = "" if _has_wildcard(email) else email
+            exact_first = "" if _has_wildcard(first_name) else first_name
+            exact_last = "" if _has_wildcard(last_name) else last_name
+            if exact_email or exact_first or exact_last:
+                search_criteria = {
+                    "customer_number": "",
+                    "email": exact_email,
+                    "first_name": exact_first,
+                    "last_name": exact_last,
+                }
+                try:
+                    from microtech.models import MicrotechGraphQLJob
+                    from microtech.services import MicrotechGraphQLClientService, MicrotechJobSentinelService
+
+                    client = MicrotechGraphQLClientService()
+                    job = MicrotechJobSentinelService().submit_wrapper_job(
+                        kind=MicrotechGraphQLJob.Kind.DATASET_RECORDS,
+                        operation="searchCustomers",
+                        submit=lambda: client.submit_search_customers(
+                            customer_number="",
+                            email=exact_email,
+                            first_name=exact_first,
+                            last_name=exact_last,
+                            limit=_MICROTECH_SEARCH_LIMIT,
+                        ),
+                        request_payload={**search_criteria, "limit": _MICROTECH_SEARCH_LIMIT},
+                        context={
+                            "source": _MICROTECH_SEARCH_SOURCE,
+                            "purpose": "resolve",
+                            "search_kind": "customers",
+                            "search_criteria": search_criteria,
+                        },
+                        continuation="",
+                        next_step="Warte auf Microtech-Kundensuche.",
+                        delete_after_completion=False,
+                    )
+                    jobs.append({"job_id": job.pk, "search_kind": "customers"})
+                except Exception as exc:
+                    logger.warning("Microtech structured customer search submit failed: {}", exc)
+
+            return jobs
         else:
             if not term or term.isdigit() or _UUID_RE.match(term):
                 return []
@@ -281,6 +388,36 @@ class CustomerMergeSearchService(BaseService):
                 continue
             jobs.append({"job_id": job.pk, "search_kind": search_kind})
         return jobs
+
+    def _submit_address_records_search(self, term: str) -> list[dict[str, Any]]:
+        """Queue a Microtech contains search on AdrNr, names and company (Na1)."""
+        term = _to_str(term)
+        if not term:
+            return []
+        try:
+            from microtech.models import MicrotechGraphQLJob
+            from microtech.services import MicrotechGraphQLClientService, MicrotechJobSentinelService
+
+            client = MicrotechGraphQLClientService()
+            job = MicrotechJobSentinelService().submit_wrapper_job(
+                kind=MicrotechGraphQLJob.Kind.DATASET_RECORDS,
+                operation="searchAddressRecords",
+                submit=lambda: client.submit_search_address_records(term, _MICROTECH_SEARCH_LIMIT),
+                request_payload={"search_term": term, "limit_per_dataset": _MICROTECH_SEARCH_LIMIT},
+                context={
+                    "source": _MICROTECH_SEARCH_SOURCE,
+                    "purpose": "resolve",
+                    "search_kind": "address_records",
+                    "search_criteria": {"search_term": term},
+                },
+                continuation="",
+                next_step="Warte auf Microtech-Suche.",
+                delete_after_completion=False,
+            )
+        except Exception as exc:
+            logger.warning("Microtech address search submit failed: {}", exc)
+            return []
+        return [{"job_id": job.pk, "search_kind": "address_records"}]
 
     @staticmethod
     def _microtech_resolution_requests(term: str) -> list[tuple[str, dict[str, Any]]]:
@@ -403,6 +540,15 @@ class CustomerMergeSearchService(BaseService):
                     "result_count": len(customers),
                     "customers": customers,
                 }
+            if job.operation == "searchAddressRecords":
+                erp_nrs = self._erp_numbers_from_address_search_result(job.result_payload or {})
+                return {
+                    "job_id": job.pk,
+                    "state": "succeeded",
+                    "message": f"{len(erp_nrs)} passende Kundennummern in Microtech gefunden.",
+                    "result_count": len(erp_nrs),
+                    "erp_nrs": erp_nrs,
+                }
             erp_nrs = self._erp_numbers_from_dataset_result(job.result_payload or {})
             return {
                 "job_id": job.pk,
@@ -452,6 +598,21 @@ class CustomerMergeSearchService(BaseService):
             erp_nr = _to_str(record.get("AdrNr"))
             if erp_nr and erp_nr not in erp_nrs:
                 erp_nrs.append(erp_nr)
+        return erp_nrs
+
+    @staticmethod
+    def _erp_numbers_from_address_search_result(result: dict[str, Any]) -> list[str]:
+        """Collect unique AdrNr values from a ``searchAddressRecords`` result."""
+        erp_nrs: list[str] = []
+        for dataset in result.get("datasets") or []:
+            if not isinstance(dataset, dict):
+                continue
+            for record in dataset.get("records") or []:
+                if not isinstance(record, dict):
+                    continue
+                erp_nr = _to_str(record.get("adrNr") or record.get("AdrNr"))
+                if erp_nr and erp_nr not in erp_nrs:
+                    erp_nrs.append(erp_nr)
         return erp_nrs
 
     @staticmethod
