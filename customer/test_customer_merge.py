@@ -1,8 +1,40 @@
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from django.test import SimpleTestCase
 
-from customer.services.customer_merge import CustomerMergeSearchService
+from customer.services.customer_merge import (
+    CustomerMergeSearchService,
+    ShopwareCustomerMergeService,
+)
+
+
+def _sw_customer(
+    cid,
+    number,
+    email="",
+    *,
+    last_login="",
+    first_name="",
+    last_name="",
+    company="",
+    addresses=None,
+):
+    return {
+        "data": [
+            {
+                "id": cid,
+                "attributes": {
+                    "customerNumber": number,
+                    "email": email,
+                    "lastLogin": last_login,
+                    "firstName": first_name,
+                    "lastName": last_name,
+                    "company": company,
+                    "addresses": addresses or [],
+                },
+            }
+        ]
+    }
 
 
 class CustomerMergeMicrotechSearchTest(SimpleTestCase):
@@ -135,3 +167,100 @@ class CustomerMergeMicrotechSearchTest(SimpleTestCase):
         self.assertEqual(customer["erp_id"], 42)
         self.assertEqual(customer["addresses"][0]["firstName"], "Max")
         self.assertEqual(customer["addresses"][0]["email"], "max@example.com")
+
+
+class ShopwareCustomerMergeTest(SimpleTestCase):
+    def _merge(self, sw_service, *, keep, delete, order_service=None):
+        patches = [
+            patch("shopware.services.CustomerService", return_value=sw_service),
+            patch.object(ShopwareCustomerMergeService, "_reconcile_django_api_id"),
+        ]
+        if order_service is None:
+            patches.append(
+                patch.object(ShopwareCustomerMergeService, "_move_orders", return_value=(0, []))
+            )
+        else:
+            patches.append(patch("shopware.services.OrderService", return_value=order_service))
+        started = [p.start() for p in patches]
+        try:
+            return ShopwareCustomerMergeService().merge(keep_sw_id=keep, delete_sw_id=delete)
+        finally:
+            for p in patches:
+                p.stop()
+
+    def test_identical_ids_raise(self):
+        with self.assertRaises(ValueError):
+            ShopwareCustomerMergeService().merge(keep_sw_id="same", delete_sw_id="same")
+
+    def test_missing_customer_raises(self):
+        sw = MagicMock()
+        sw.get_by_id.side_effect = lambda cid: {"data": []}
+        with self.assertRaises(ValueError):
+            self._merge(sw, keep="keep-id", delete="del-id")
+
+    def test_keep_survives_when_it_has_the_newer_login(self):
+        sw = MagicMock()
+        payloads = {
+            "keep-id": _sw_customer("keep-id", "1001", "keep@x.de", last_login="2026-02-01T10:00:00"),
+            "del-id": _sw_customer("del-id", "1002", "del@x.de", last_login="2026-01-01T10:00:00"),
+        }
+        sw.get_by_id.side_effect = lambda cid: payloads[cid]
+
+        result = self._merge(sw, keep="keep-id", delete="del-id")
+
+        self.assertEqual(result["survivor_sw_id"], "keep-id")
+        self.assertEqual(result["removed_sw_id"], "del-id")
+        self.assertFalse(result["identity_transplanted"])
+        sw.request_delete.assert_called_once_with("/customer/del-id")
+        sw.update_customer.assert_not_called()
+
+    def test_delete_survives_and_keep_identity_is_transplanted(self):
+        sw = MagicMock()
+        payloads = {
+            "keep-id": _sw_customer(
+                "keep-id", "1001", "keep@x.de",
+                last_login="2026-01-01T10:00:00", first_name="Right", last_name="Customer",
+            ),
+            "del-id": _sw_customer("del-id", "1002", "del@x.de", last_login="2026-02-01T10:00:00"),
+        }
+        sw.get_by_id.side_effect = lambda cid: payloads[cid]
+
+        result = self._merge(sw, keep="keep-id", delete="del-id")
+
+        # The last-login record (del-id) survives and keeps its own credentials.
+        self.assertEqual(result["survivor_sw_id"], "del-id")
+        self.assertEqual(result["removed_sw_id"], "keep-id")
+        self.assertTrue(result["identity_transplanted"])
+        # The keep record is deleted, then the keep identity is written onto the survivor.
+        sw.request_delete.assert_called_once_with("/customer/keep-id")
+        sw.update_customer.assert_called_once()
+        called_id, payload = sw.update_customer.call_args.args
+        self.assertEqual(called_id, "del-id")
+        self.assertEqual(payload["customerNumber"], "1001")
+        self.assertEqual(payload["firstName"], "Right")
+        # Email must never be transplanted — it stays with the surviving login.
+        self.assertNotIn("email", payload)
+
+    def test_no_logins_keeps_user_choice(self):
+        sw = MagicMock()
+        sw.get_by_id.side_effect = lambda cid: _sw_customer(cid, cid, f"{cid}@x.de")
+
+        result = self._merge(sw, keep="keep-id", delete="del-id")
+
+        self.assertEqual(result["survivor_sw_id"], "keep-id")
+        sw.request_delete.assert_called_once_with("/customer/del-id")
+
+    def test_orders_are_moved_from_removed_to_survivor(self):
+        sw = MagicMock()
+        sw.get_by_id.side_effect = lambda cid: _sw_customer(cid, cid, f"{cid}@x.de")
+        order_service = MagicMock()
+        order_service.request_post.return_value = {
+            "data": [{"id": "o1", "orderCustomer": {"id": "oc1"}}]
+        }
+
+        result = self._merge(sw, keep="keep-id", delete="del-id", order_service=order_service)
+
+        self.assertEqual(result["orders_moved"], 1)
+        order_service.request_patch.assert_called_once_with(
+            "/order-customer/oc1", payload={"customerId": "keep-id"}
+        )

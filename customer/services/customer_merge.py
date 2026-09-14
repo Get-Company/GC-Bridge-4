@@ -1307,3 +1307,210 @@ class CustomerSyncDirectionService(BaseService):
             msg += " [NEU]"
         logger.info("Django->Microtech: {} upserted ({} addresses)", erp_nr, addr_count)
         return {"message": msg}
+
+
+class ShopwareCustomerMergeService(BaseService):
+    """Merge two Shopware 6 customers, keeping the last-login credentials.
+
+    The customer the user marks as *keep* (the "richtig" one) provides the
+    surviving identity — customer number and name. The customer with the most
+    recent login always keeps its record, because Shopware cannot transfer a
+    password hash between customers. When the *keep* customer is not the last
+    one to log in, the surviving record is the other one, and the keep identity
+    is transplanted onto it after the keep record has been deleted.
+    """
+
+    # Scalar identity fields copied onto the survivor when the keep customer is
+    # not the last-login record. Email and password are deliberately excluded:
+    # they always stay with the surviving (last-login) record.
+    IDENTITY_FIELDS = (
+        "customerNumber",
+        "firstName",
+        "lastName",
+        "company",
+        "title",
+        "salutationId",
+        "groupId",
+    )
+
+    def merge(self, *, keep_sw_id: str, delete_sw_id: str) -> dict[str, Any]:
+        keep_sw_id = _to_str(keep_sw_id)
+        delete_sw_id = _to_str(delete_sw_id)
+        if not keep_sw_id or not delete_sw_id:
+            raise ValueError("Behalten- und Loeschen-Kunde erforderlich.")
+        if keep_sw_id == delete_sw_id:
+            raise ValueError("Behalten- und Loeschen-Kunde sind identisch.")
+
+        from shopware.services import CustomerService
+
+        service = CustomerService()
+        keep = self._load_customer(service, keep_sw_id, role="Behalten")
+        delete = self._load_customer(service, delete_sw_id, role="Loeschen")
+
+        log: list[str] = []
+
+        def _log(msg: str) -> None:
+            logger.info("SW-MERGE| {}", msg)
+            log.append(msg)
+
+        survivor_id, removed_id = self._determine_survivor(keep, delete)
+        transplant_identity = survivor_id != keep_sw_id
+        removed_customer = keep if removed_id == keep_sw_id else delete
+        # Capture the keep identity BEFORE the record is deleted below.
+        identity_payload = self._identity_payload(keep) if transplant_identity else {}
+
+        result: dict[str, Any] = {
+            "keep_sw_id": keep_sw_id,
+            "delete_sw_id": delete_sw_id,
+            "survivor_sw_id": survivor_id,
+            "removed_sw_id": removed_id,
+            "orders_moved": 0,
+            "addresses_moved": 0,
+            "identity_transplanted": False,
+            "errors": [],
+            "log": log,
+        }
+        _log(
+            f"keep(richtig)={keep_sw_id}, loeschen(falsch)={delete_sw_id}, "
+            f"ueberlebt(letzter Login)={survivor_id}"
+        )
+
+        # 1) Move orders from the removed record onto the survivor.
+        orders_moved, order_errors = self._move_orders(
+            source_sw_id=removed_id, target_sw_id=survivor_id
+        )
+        result["orders_moved"] = orders_moved
+        result["errors"].extend(order_errors)
+        _log(f"Bestellungen verschoben: {orders_moved} (Fehler: {len(order_errors)})")
+
+        # 2) Move addresses from the removed record onto the survivor (best effort).
+        addresses_moved, address_errors = self._move_addresses(
+            service, source=removed_customer, target_sw_id=survivor_id
+        )
+        result["addresses_moved"] = addresses_moved
+        result["errors"].extend(address_errors)
+        _log(f"Adressen verschoben: {addresses_moved} (Fehler: {len(address_errors)})")
+
+        # 3) Delete the removed record. This frees its customer number so the
+        #    keep identity can be transplanted onto the survivor afterwards.
+        service.request_delete(f"/customer/{removed_id}")
+        _log(f"SW6-Kunde geloescht: {removed_id}")
+
+        # 4) Transplant the keep identity onto the survivor if it was not kept.
+        if transplant_identity and identity_payload:
+            service.update_customer(survivor_id, identity_payload)
+            result["identity_transplanted"] = True
+            _log(f"Identitaet auf {survivor_id} uebertragen: {sorted(identity_payload)}")
+
+        # 5) Keep any Django reference to the removed record intact (best effort).
+        self._reconcile_django_api_id(removed_id=removed_id, survivor_id=survivor_id)
+
+        _log("SW6-Merge abgeschlossen.")
+        return result
+
+    def _load_customer(self, service, sw_id: str, *, role: str) -> dict[str, Any]:
+        response = service.get_by_id(sw_id)
+        data = (response or {}).get("data", []) or []
+        if not data:
+            raise ValueError(f"{role}-Kunde {sw_id} nicht in Shopware gefunden.")
+        record = data[0]
+        attrs = _safe_attrs(record)
+        addresses = []
+        for addr in _safe_list(attrs.get("addresses")):
+            addr_id = _to_str(addr.get("id") or _safe_attrs(addr).get("id"))
+            if addr_id:
+                addresses.append({"id": addr_id})
+        return {
+            "id": _to_str(record.get("id") or attrs.get("id")) or sw_id,
+            "customerNumber": _to_str(attrs.get("customerNumber")),
+            "email": _to_str(attrs.get("email")),
+            "firstName": _to_str(attrs.get("firstName")),
+            "lastName": _to_str(attrs.get("lastName")),
+            "company": _to_str(attrs.get("company")),
+            "title": _to_str(attrs.get("title")),
+            "salutationId": _to_str(attrs.get("salutationId")),
+            "groupId": _to_str(attrs.get("groupId")),
+            "lastLogin": _to_str(attrs.get("lastLogin")),
+            "updatedAt": _to_str(attrs.get("updatedAt")),
+            "addresses": addresses,
+        }
+
+    def _determine_survivor(self, keep: dict[str, Any], delete: dict[str, Any]) -> tuple[str, str]:
+        """Return ``(survivor_id, removed_id)``; the last login keeps its record.
+
+        Only a strictly newer, non-empty ``lastLogin`` on the delete record wins
+        it the surviving spot. Ties, or customers that never logged in, keep the
+        record the user chose as *keep*.
+        """
+        keep_login = keep.get("lastLogin") or ""
+        delete_login = delete.get("lastLogin") or ""
+        if delete_login and delete_login > keep_login:
+            return delete["id"], keep["id"]
+        return keep["id"], delete["id"]
+
+    def _identity_payload(self, keep: dict[str, Any]) -> dict[str, Any]:
+        return {field: keep[field] for field in self.IDENTITY_FIELDS if keep.get(field)}
+
+    def _move_orders(self, *, source_sw_id: str, target_sw_id: str) -> tuple[int, list[str]]:
+        moved = 0
+        errors: list[str] = []
+        try:
+            from shopware.services import Criteria, EqualsFilter, OrderService
+
+            order_service = OrderService()
+            criteria = Criteria(limit=500)
+            criteria.associations["orderCustomer"] = Criteria()
+            criteria.filter.append(
+                EqualsFilter(field="orderCustomer.customerId", value=source_sw_id)
+            )
+            response = order_service.request_post("/search/order", payload=criteria)
+            orders = (response or {}).get("data", []) or []
+            for order in orders:
+                order_id = order.get("id") or _safe_attrs(order).get("id")
+                oc = order.get("orderCustomer") or {}
+                oc_data = (oc.get("data") or oc) if isinstance(oc, dict) else {}
+                oc_attrs = _safe_attrs(oc_data)
+                oc_id = oc_data.get("id") or oc_attrs.get("id")
+                if not oc_id:
+                    errors.append(f"Order {order_id}: orderCustomer ID nicht gefunden")
+                    continue
+                try:
+                    order_service.request_patch(
+                        f"/order-customer/{oc_id}", payload={"customerId": target_sw_id}
+                    )
+                    moved += 1
+                except Exception as exc:
+                    errors.append(f"Order {order_id}: {exc}")
+        except Exception as exc:
+            errors.append(f"Shopware order migration failed: {exc}")
+        return moved, errors
+
+    def _move_addresses(self, service, *, source: dict[str, Any], target_sw_id: str) -> tuple[int, list[str]]:
+        moved = 0
+        errors: list[str] = []
+        for addr in source.get("addresses", []):
+            addr_id = addr.get("id")
+            if not addr_id:
+                continue
+            try:
+                service.request_patch(
+                    f"/customer-address/{addr_id}", payload={"customerId": target_sw_id}
+                )
+                moved += 1
+            except Exception as exc:
+                errors.append(f"Adresse {addr_id}: {exc}")
+        return moved, errors
+
+    def _reconcile_django_api_id(self, *, removed_id: str, survivor_id: str) -> None:
+        """Repoint any Django customer that referenced the deleted SW6 record."""
+        try:
+            updated = Customer.objects.filter(api_id=removed_id).update(api_id=survivor_id)
+            if updated:
+                logger.info(
+                    "SW-MERGE| {} Django-Referenz(en) von {} auf {} umgehaengt",
+                    updated,
+                    removed_id,
+                    survivor_id,
+                )
+        except Exception as exc:
+            logger.warning("SW-MERGE| Django api_id reconcile uebersprungen: {}", exc)

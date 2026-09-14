@@ -15,6 +15,7 @@ from customer.services.customer_merge import (
     CustomerMergeSearchService,
     CustomerMergeService,
     CustomerSyncDirectionService,
+    ShopwareCustomerMergeService,
 )
 
 
@@ -359,6 +360,30 @@ def customer_delete_addresses_api(request):
         return JsonResponse({"success": True, "deleted": count, "errors": errors})
     except Exception as exc:
         logger.error("Address delete failed: {}\n{}", exc, traceback.format_exc())
+        return JsonResponse({"error": str(exc)}, status=500)
+
+
+def customer_merge_shopware_api(request):
+    """Merge one Shopware 6 customer (delete) into another (keep)."""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST erforderlich."}, status=405)
+    try:
+        body = json.loads(request.body)
+        keep_sw_id = body.get("keep_sw_id", "").strip()
+        delete_sw_id = body.get("delete_sw_id", "").strip()
+
+        if not keep_sw_id or not delete_sw_id:
+            return JsonResponse(
+                {"error": "Behalten- und Loeschen-Kunde erforderlich."}, status=400
+            )
+
+        service = ShopwareCustomerMergeService()
+        result = service.merge(keep_sw_id=keep_sw_id, delete_sw_id=delete_sw_id)
+        return JsonResponse({"success": True, **result})
+    except ValueError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+    except Exception as exc:
+        logger.error("Shopware merge failed: {}\n{}", exc, traceback.format_exc())
         return JsonResponse({"error": str(exc)}, status=500)
 
 
