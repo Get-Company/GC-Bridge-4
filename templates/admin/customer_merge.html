@@ -115,6 +115,16 @@ const SYSTEMS = [
 
 /* ── helpers ──────────────────────────────────────────── */
 function esc(s) { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; }
+function customerField(label, value, { mono = false, diff = false, title = '' } = {}) {
+  const hasValue = value !== '' && value !== null && value !== undefined;
+  const displayValue = hasValue
+    ? esc(value)
+    : '<span class="text-gray-300 dark:text-gray-600">—</span>';
+  return `<div class="flex min-w-0 items-baseline gap-1.5 ${diff ? 'diff-highlight rounded px-1 -mx-1' : ''}">
+    <span class="shrink-0 text-[10px] font-medium uppercase tracking-wide text-gray-400">${esc(label)}:</span>
+    <span class="min-w-0 truncate ${mono ? 'font-mono' : ''}"${title ? ` title="${esc(title)}"` : ''}>${displayValue}</span>
+  </div>`;
+}
 function toggleSection(btn) { btn.classList.toggle('open'); btn.nextElementSibling.classList.toggle('open'); }
 function spinner() { return '<span class="material-symbols-outlined text-sm animate-spin">progress_activity</span>'; }
 function loaderCell(message = 'Lade...') {
@@ -141,8 +151,10 @@ function normalize(d, sys) {
     return {
       name: d.company || name || '',
       customerNr: d.customerNumber || '',
+      customerNrLabel: 'Kundennr.',
       email: d.email || '',
       systemId: d.id || '',
+      systemIdLabel: 'SW6-ID',
       extra: [
         d.lastLogin ? `Login: ${d.lastLogin}` : '',
         d.updatedAt ? `Update: ${d.updatedAt}` : '',
@@ -158,8 +170,10 @@ function normalize(d, sys) {
     return {
       name: d.name || '',
       customerNr: d.erp_nr || '',
+      customerNrLabel: 'AdrNr',
       email: d.email || '',
       systemId: d.api_id || '',
+      systemIdLabel: 'SW6-ID',
       extra: [
         d.vat_id ? `USt-ID: ${d.vat_id}` : '',
       ].filter(Boolean),
@@ -179,8 +193,10 @@ function normalize(d, sys) {
   return {
     name: d.name || '',
     customerNr: d.erp_nr || '',
+    customerNrLabel: 'AdrNr',
     email: d.email || '',
     systemId: d.erp_id != null ? String(d.erp_id) : '',
+    systemIdLabel: 'Adresse-ID',
     extra: [
       d.status ? `Status: ${d.status}` : '',
     ].filter(Boolean),
@@ -668,38 +684,25 @@ function renderUnifiedCell(nr, sysKey) {
   const nameDiff = others.length && others.some(o => o.name && d.name && o.name !== d.name);
   const emailDiff = others.length && others.some(o => o.email && d.email && o.email !== d.email);
 
-  let h = `<div class="space-y-1.5 text-sm">`;
+  let h = `<div class="space-y-3 text-sm">`;
 
-  // Row 0: Kundennr / AdrNr
-  h += `<div>
-    <span class="text-[10px] text-gray-400 uppercase">Kundennr</span>
-    <div class="font-mono text-base">${esc(d.customerNr) || '<span class="text-gray-300">—</span>'}</div>
+  // The two identifiers are deliberately always visible and share one row.
+  // This makes the AdrNr/customer number and the linked SW6 ID easy to compare.
+  h += `<div class="grid grid-cols-2 gap-x-3 gap-y-1 rounded-md border border-gray-100 bg-gray-50/70 px-2.5 py-2 dark:border-gray-700/60 dark:bg-gray-800/40">
+    ${customerField(d.customerNrLabel, d.customerNr, { mono: true, title: d.customerNr })}
+    ${customerField(d.systemIdLabel, d.systemId, { mono: true, title: d.systemId })}
   </div>`;
 
-  // Row 1: Name
-  h += `<div class="${nameDiff ? 'diff-highlight rounded px-1 -mx-1' : ''}">
-    <span class="text-[10px] text-gray-400 uppercase">Name</span>
-    <div class="font-medium text-base">${esc(d.name) || '<span class="text-gray-300">—</span>'}</div>
-  </div>`;
+  h += `<div class="space-y-1.5">
+    ${customerField('Name', d.name, { diff: nameDiff, title: d.name })}
+    ${customerField('E-Mail', d.email, { diff: emailDiff, title: d.email })}`;
 
-  // Row 2: E-Mail
-  h += `<div class="${emailDiff ? 'diff-highlight rounded px-1 -mx-1' : ''}">
-    <span class="text-[10px] text-gray-400 uppercase">E-Mail</span>
-    <div>${esc(d.email) || '<span class="text-gray-300">—</span>'}</div>
-  </div>`;
+  d.extra.forEach(entry => {
+    const [label, ...valueParts] = entry.split(':');
+    h += customerField(label, valueParts.join(':').trim());
+  });
 
-  // Row 3: System ID
-  if (d.systemId) {
-    h += `<div>
-      <span class="text-[10px] text-gray-400 uppercase">ID</span>
-      <div class="font-mono text-[11px] text-gray-500 truncate" title="${esc(d.systemId)}">${esc(d.systemId)}</div>
-    </div>`;
-  }
-
-  // Extra info
-  d.extra.forEach(e => { h += `<div class="text-gray-400">${esc(e)}</div>`; });
-
-  h += `</div>`;
+  h += `</div></div>`;
 
   // Addresses — collapsible
   if (d.addresses.length) {
