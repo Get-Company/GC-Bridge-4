@@ -1068,7 +1068,41 @@ class CustomerDeleteService(BaseService):
 
 
 class CustomerIdUpdateService(BaseService):
-    """Updates erp_nr or Shopware api_id with validation against all systems."""
+    """Updates customer numbers and Shopware IDs with system-specific validation."""
+
+    def update_shopware_customer_number(
+        self, shopware_id: str, new_customer_number: str
+    ) -> dict[str, Any]:
+        """Change a Shopware customer number without requiring a local Django record."""
+        shopware_id = _to_str(shopware_id)
+        new_customer_number = _to_str(new_customer_number)
+        if not shopware_id:
+            raise ValueError("Shopware-ID darf nicht leer sein.")
+        if not new_customer_number:
+            raise ValueError("Kundennummer darf nicht leer sein.")
+
+        from shopware.services import CustomerService
+
+        service = CustomerService()
+        response = service.get_by_customer_number(new_customer_number)
+        for item in (response or {}).get("data", []) or []:
+            item_id = _to_str(item.get("id") or _safe_attrs(item).get("id"))
+            if item_id and item_id != shopware_id:
+                raise ValueError(
+                    f"Shopware: customerNumber {new_customer_number} wird bereits "
+                    f"von Kunde {item_id} verwendet."
+                )
+
+        service.update_customer_number(shopware_id, new_customer_number)
+        logger.info(
+            "Shopware customer number changed: customer={} number={}",
+            shopware_id,
+            new_customer_number,
+        )
+        return {
+            "shopware_id": shopware_id,
+            "new_customer_number": new_customer_number,
+        }
 
     def update_erp_nr(self, customer_id: int, new_erp_nr: str) -> dict[str, Any]:
         customer = Customer.objects.filter(pk=customer_id).first()
