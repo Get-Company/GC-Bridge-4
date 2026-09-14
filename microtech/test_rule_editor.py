@@ -172,3 +172,13 @@ class RuleEditorViewTest(TestCase):
         data = response.json()
         self.assertFalse(data["ok"])
         self.assertTrue(data["errors"])
+
+    def test_post_save_malformed_json_returns_400(self):
+        response = self.client.post(
+            reverse("admin:microtech_orderrule_editor_save"),
+            data=b"{kaputt",
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+        data = response.json()
+        self.assertFalse(data["ok"])

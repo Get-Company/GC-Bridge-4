@@ -2,7 +2,7 @@ import json
 
 from django.contrib import admin, messages
 from django.db import models
-from django.http import HttpResponseNotAllowed, HttpResponseRedirect, JsonResponse
+from django.http import HttpResponseRedirect, JsonResponse
 from django.template.response import TemplateResponse
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
@@ -574,9 +574,13 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
 
     def rule_editor_save_view(self, request, **kwargs):
         if request.method != "POST":
-            return HttpResponseNotAllowed(["POST"])
+            return JsonResponse({"ok": False, "errors": ["Nur POST erlaubt"]}, status=405)
 
-        payload = json.loads(request.body)
+        try:
+            payload = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({"ok": False, "errors": ["Ungültiges JSON"]}, status=400)
+
         object_id = payload.get("id")
         rule = self.get_object(request, object_id) if object_id else None
 
