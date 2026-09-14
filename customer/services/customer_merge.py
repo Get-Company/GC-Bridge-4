@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from typing import Any
+from uuid import uuid4
 
 from loguru import logger
 
@@ -654,6 +655,8 @@ class CustomerMergeSearchService(BaseService):
                     "firstName": _to_str(contact.get("firstName")),
                     "lastName": _to_str(contact.get("lastName")),
                     "phone": _to_str(address.get("phone")) or _to_str(contact.get("phone")),
+                    "is_shipping": bool(address.get("isDefaultShipping")),
+                    "is_invoice": bool(address.get("isDefaultBilling")),
                 }
             )
 
@@ -745,13 +748,16 @@ class CustomerMergeSearchService(BaseService):
                 return None
             customer = data[0]
             attrs = _safe_attrs(customer)
+            default_billing_id = _to_str(attrs.get("defaultBillingAddressId"))
+            default_shipping_id = _to_str(attrs.get("defaultShippingAddressId"))
             addresses = []
             for addr in _safe_list(attrs.get("addresses")):
                 a = _safe_attrs(addr)
                 country = _safe_attrs(a.get("country")) if isinstance(a.get("country"), dict) else {}
                 country_a = _safe_attrs(country) if country else {}
+                address_id = _to_str(addr.get("id") or a.get("id"))
                 addresses.append({
-                    "id": addr.get("id") or a.get("id", ""),
+                    "id": address_id,
                     "firstName": a.get("firstName", ""),
                     "lastName": a.get("lastName", ""),
                     "company": a.get("company", ""),
@@ -760,6 +766,8 @@ class CustomerMergeSearchService(BaseService):
                     "city": a.get("city", ""),
                     "countryIso": country_a.get("iso", ""),
                     "email": a.get("email") or attrs.get("email", ""),
+                    "is_shipping": address_id == default_shipping_id,
+                    "is_invoice": address_id == default_billing_id,
                 })
 
             return {
@@ -1509,10 +1517,14 @@ class ShopwareCustomerMergeService(BaseService):
 
     The customer the user marks as *keep* (the "richtig" one) provides the
     surviving identity — customer number and name. The customer with the most
-    recent login always keeps its record, because Shopware cannot transfer a
-    password hash between customers. When the *keep* customer is not the last
-    one to log in, the surviving record is the other one, and the keep identity
-    is transplanted onto it after the keep record has been deleted.
+    recent login always keeps its physical record, because Shopware cannot
+    transfer a password hash between customers. Email and password therefore
+    stay together on that record.
+
+    All transferred addresses and orders, the unchanged credentials, and (if
+    necessary) the transplanted identity are re-read from Shopware before the
+    other customer is deleted. This deliberately makes deletion the final
+    externally visible mutation of the merge.
     """
 
     # Scalar identity fields copied onto the survivor when the keep customer is
@@ -1527,6 +1539,8 @@ class ShopwareCustomerMergeService(BaseService):
         "salutationId",
         "groupId",
     )
+
+    _TEMPORARY_NUMBER_PREFIX = "MERGED-"
 
     def merge(self, *, keep_sw_id: str, delete_sw_id: str) -> dict[str, Any]:
         keep_sw_id = _to_str(keep_sw_id)
@@ -1550,9 +1564,17 @@ class ShopwareCustomerMergeService(BaseService):
 
         survivor_id, removed_id = self._determine_survivor(keep, delete)
         transplant_identity = survivor_id != keep_sw_id
+        survivor = keep if survivor_id == keep_sw_id else delete
         removed_customer = keep if removed_id == keep_sw_id else delete
-        # Capture the keep identity BEFORE the record is deleted below.
+        # Capture the keep identity before any customer number is changed.
         identity_payload = self._identity_payload(keep) if transplant_identity else {}
+        credential_snapshot = self._credential_snapshot(survivor)
+        expected_address_ids = {
+            address["id"]
+            for customer in (survivor, removed_customer)
+            for address in customer.get("addresses", [])
+            if address.get("id")
+        }
 
         result: dict[str, Any] = {
             "keep_sw_id": keep_sw_id,
@@ -1562,6 +1584,7 @@ class ShopwareCustomerMergeService(BaseService):
             "orders_moved": 0,
             "addresses_moved": 0,
             "identity_transplanted": False,
+            "verification": {},
             "errors": [],
             "log": log,
         }
@@ -1570,35 +1593,71 @@ class ShopwareCustomerMergeService(BaseService):
             f"ueberlebt(letzter Login)={survivor_id}"
         )
 
-        # 1) Move orders from the removed record onto the survivor.
-        orders_moved, order_errors = self._move_orders(
+        # 1) Move every order and address. Any failed transfer aborts before a
+        #    customer can be deleted.
+        orders_moved, order_errors, expected_order_ids = self._move_orders(
             source_sw_id=removed_id, target_sw_id=survivor_id
         )
         result["orders_moved"] = orders_moved
         result["errors"].extend(order_errors)
         _log(f"Bestellungen verschoben: {orders_moved} (Fehler: {len(order_errors)})")
+        if order_errors:
+            self._abort_before_delete("Bestellungen", order_errors)
 
-        # 2) Move addresses from the removed record onto the survivor (best effort).
+        # 2) Addresses are never collapsed or deleted: every source address is
+        #    added to the surviving Shopware customer.
         addresses_moved, address_errors = self._move_addresses(
             service, source=removed_customer, target_sw_id=survivor_id
         )
         result["addresses_moved"] = addresses_moved
         result["errors"].extend(address_errors)
         _log(f"Adressen verschoben: {addresses_moved} (Fehler: {len(address_errors)})")
+        if address_errors:
+            self._abort_before_delete("Adressen", address_errors)
 
-        # 3) Delete the removed record. This frees its customer number so the
-        #    keep identity can be transplanted onto the survivor afterwards.
-        service.request_delete(f"/customer/{removed_id}")
-        _log(f"SW6-Kunde geloescht: {removed_id}")
-
-        # 4) Transplant the keep identity onto the survivor if it was not kept.
+        # 3) When the last-login record is not the selected correct customer,
+        #    temporarily free the correct customer's number first. This lets us
+        #    verify the complete final state *before* deleting that customer.
+        if transplant_identity and not identity_payload.get("customerNumber"):
+            self._abort_before_delete(
+                "Identitaet",
+                ["Der als richtig markierte Kunde hat keine Kundennummer."],
+            )
         if transplant_identity and identity_payload:
+            keep_number = identity_payload.get("customerNumber", "")
+            if keep_number and keep_number != survivor.get("customerNumber"):
+                temporary_number = self._temporary_customer_number()
+                service.update_customer_number(removed_id, temporary_number)
+                _log(
+                    f"Kundennummer von {removed_id} temporaer auf "
+                    f"{temporary_number} gesetzt"
+                )
             service.update_customer(survivor_id, identity_payload)
             result["identity_transplanted"] = True
             _log(f"Identitaet auf {survivor_id} uebertragen: {sorted(identity_payload)}")
 
-        # 5) Keep any Django reference to the removed record intact (best effort).
-        self._reconcile_django_api_id(removed_id=removed_id, survivor_id=survivor_id)
+        # 4) Re-read the final Shopware state. The login email and lastLogin
+        #    prove that the physical credential record was retained; password
+        #    hashes are intentionally never read or written by this service.
+        result["verification"] = self._verify_before_delete(
+            service=service,
+            survivor_id=survivor_id,
+            credential_snapshot=credential_snapshot,
+            expected_address_ids=expected_address_ids,
+            expected_order_ids=expected_order_ids,
+            expected_identity=identity_payload if transplant_identity else {},
+        )
+        _log(
+            "Pruefung erfolgreich: "
+            f"{result['verification']['addresses']['verified']} Adressen, "
+            f"{result['verification']['orders']['verified']} Bestellungen, "
+            "Login-Paar unveraendert."
+        )
+
+        # 5) Only after the verification passes may the old physical record be
+        #    deleted. Django and Microtech remain intentionally untouched.
+        service.request_delete(f"/customer/{removed_id}")
+        _log(f"SW6-Kunde geloescht: {removed_id}")
 
         _log("SW6-Merge abgeschlossen.")
         return result
@@ -1646,39 +1705,73 @@ class ShopwareCustomerMergeService(BaseService):
     def _identity_payload(self, keep: dict[str, Any]) -> dict[str, Any]:
         return {field: keep[field] for field in self.IDENTITY_FIELDS if keep.get(field)}
 
-    def _move_orders(self, *, source_sw_id: str, target_sw_id: str) -> tuple[int, list[str]]:
+    @staticmethod
+    def _credential_snapshot(customer: dict[str, Any]) -> dict[str, str]:
+        """Keep only values that Shopware exposes and must not change on merge."""
+        return {
+            "email": _to_str(customer.get("email")),
+            "lastLogin": _to_str(customer.get("lastLogin")),
+        }
+
+    def _temporary_customer_number(self) -> str:
+        """Return a short, collision-resistant number used for milliseconds only."""
+        return f"{self._TEMPORARY_NUMBER_PREFIX}{uuid4().hex[:20]}"
+
+    @staticmethod
+    def _abort_before_delete(subject: str, errors: list[str]) -> None:
+        details = "; ".join(errors)
+        raise ValueError(
+            "SW6-Merge abgebrochen: Der alte Shopware-Kunde wurde nicht geloescht, "
+            f"weil die Uebernahme der {subject} nicht vollstaendig war. "
+            "Bereits uebertragene Daten wurden nicht zurueckgesetzt. "
+            f"{details}"
+        )
+
+    def _move_orders(
+        self, *, source_sw_id: str, target_sw_id: str
+    ) -> tuple[int, list[str], set[str]]:
         moved = 0
         errors: list[str] = []
+        source_order_ids: set[str] = set()
         try:
             from shopware.services import Criteria, EqualsFilter, OrderService
 
             order_service = OrderService()
-            criteria = Criteria(limit=500)
-            criteria.associations["orderCustomer"] = Criteria()
-            criteria.filter.append(
-                EqualsFilter(field="orderCustomer.customerId", value=source_sw_id)
-            )
-            response = order_service.request_post("/search/order", payload=criteria)
-            orders = (response or {}).get("data", []) or []
-            for order in orders:
-                order_id = order.get("id") or _safe_attrs(order).get("id")
-                oc = order.get("orderCustomer") or {}
-                oc_data = (oc.get("data") or oc) if isinstance(oc, dict) else {}
-                oc_attrs = _safe_attrs(oc_data)
-                oc_id = oc_data.get("id") or oc_attrs.get("id")
-                if not oc_id:
-                    errors.append(f"Order {order_id}: orderCustomer ID nicht gefunden")
-                    continue
-                try:
-                    order_service.request_patch(
-                        f"/order-customer/{oc_id}", payload={"customerId": target_sw_id}
-                    )
-                    moved += 1
-                except Exception as exc:
-                    errors.append(f"Order {order_id}: {exc}")
+            page = 1
+            while True:
+                criteria = Criteria(limit=500, page=page)
+                criteria.associations["orderCustomer"] = Criteria()
+                criteria.filter.append(
+                    EqualsFilter(field="orderCustomer.customerId", value=source_sw_id)
+                )
+                response = order_service.request_post("/search/order", payload=criteria)
+                orders = (response or {}).get("data", []) or []
+                for order in orders:
+                    order_id = _to_str(order.get("id") or _safe_attrs(order).get("id"))
+                    if not order_id:
+                        errors.append("Order ohne ID gefunden")
+                        continue
+                    source_order_ids.add(order_id)
+                    oc = order.get("orderCustomer") or {}
+                    oc_data = (oc.get("data") or oc) if isinstance(oc, dict) else {}
+                    oc_attrs = _safe_attrs(oc_data)
+                    oc_id = _to_str(oc_data.get("id") or oc_attrs.get("id"))
+                    if not oc_id:
+                        errors.append(f"Order {order_id}: orderCustomer ID nicht gefunden")
+                        continue
+                    try:
+                        order_service.request_patch(
+                            f"/order-customer/{oc_id}", payload={"customerId": target_sw_id}
+                        )
+                        moved += 1
+                    except Exception as exc:
+                        errors.append(f"Order {order_id}: {exc}")
+                if len(orders) < 500:
+                    break
+                page += 1
         except Exception as exc:
             errors.append(f"Shopware order migration failed: {exc}")
-        return moved, errors
+        return moved, errors, source_order_ids
 
     def _move_addresses(self, service, *, source: dict[str, Any], target_sw_id: str) -> tuple[int, list[str]]:
         moved = 0
@@ -1696,6 +1789,95 @@ class ShopwareCustomerMergeService(BaseService):
                 errors.append(f"Adresse {addr_id}: {exc}")
         return moved, errors
 
+    def _verify_before_delete(
+        self,
+        *,
+        service,
+        survivor_id: str,
+        credential_snapshot: dict[str, str],
+        expected_address_ids: set[str],
+        expected_order_ids: set[str],
+        expected_identity: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Fail closed unless every required value is readable on the survivor."""
+        survivor = self._load_customer(service, survivor_id, role="ueberlebender")
+        errors: list[str] = []
+
+        for field, expected in credential_snapshot.items():
+            actual = _to_str(survivor.get(field))
+            if actual != expected:
+                errors.append(
+                    f"Login-{field} stimmt auf dem ueberlebenden Kunden nicht mehr ueberein"
+                )
+
+        observed_address_ids = {
+            address["id"] for address in survivor.get("addresses", []) if address.get("id")
+        }
+        missing_address_ids = sorted(expected_address_ids - observed_address_ids)
+        if missing_address_ids:
+            errors.append(
+                "Adressen nicht auf dem ueberlebenden Kunden auffindbar: "
+                + ", ".join(missing_address_ids)
+            )
+
+        observed_order_ids: set[str] = set()
+        order_errors: list[str] = []
+        if expected_order_ids:
+            observed_order_ids, order_errors = self._order_ids_for_customer(survivor_id)
+            errors.extend(order_errors)
+        missing_order_ids = sorted(expected_order_ids - observed_order_ids)
+        if missing_order_ids:
+            errors.append(
+                "Bestellungen nicht auf dem ueberlebenden Kunden auffindbar: "
+                + ", ".join(missing_order_ids)
+            )
+
+        for field, expected in expected_identity.items():
+            if _to_str(survivor.get(field)) != _to_str(expected):
+                errors.append(f"Feld {field} wurde nicht auf den Zielkunden uebernommen")
+
+        if errors:
+            self._abort_before_delete("Daten", errors)
+
+        return {
+            "credentials": {
+                "survivor_sw_id": survivor_id,
+                "email_matches": True,
+                "last_login_matches": True,
+                "password_hash_written": False,
+            },
+            "addresses": {"expected": len(expected_address_ids), "verified": len(observed_address_ids)},
+            "orders": {"expected": len(expected_order_ids), "verified": len(observed_order_ids)},
+        }
+
+    def _order_ids_for_customer(self, customer_id: str) -> tuple[set[str], list[str]]:
+        order_ids: set[str] = set()
+        errors: list[str] = []
+        try:
+            from shopware.services import Criteria, EqualsFilter, OrderService
+
+            order_service = OrderService()
+            page = 1
+            while True:
+                criteria = Criteria(limit=500, page=page)
+                criteria.filter.append(
+                    EqualsFilter(field="orderCustomer.customerId", value=customer_id)
+                )
+                response = order_service.request_post("/search/order", payload=criteria)
+                orders = (response or {}).get("data", []) or []
+                for order in orders:
+                    order_id = _to_str(order.get("id") or _safe_attrs(order).get("id"))
+                    if order_id:
+                        order_ids.add(order_id)
+                    else:
+                        errors.append("Order ohne ID bei der Pruefung gefunden")
+                if len(orders) < 500:
+                    break
+                page += 1
+        except Exception as exc:
+            errors.append(f"Shopware order verification failed: {exc}")
+        return order_ids, errors
+
     def _reconcile_django_api_id(self, *, removed_id: str, survivor_id: str) -> None:
         """Repoint any Django customer that referenced the deleted SW6 record."""
         try:
@@ -1709,3 +1891,57 @@ class ShopwareCustomerMergeService(BaseService):
                 )
         except Exception as exc:
             logger.warning("SW-MERGE| Django api_id reconcile uebersprungen: {}", exc)
+
+
+class ShopwareCustomerAddressService(BaseService):
+    """Deletes explicitly selected non-default Shopware customer addresses."""
+
+    def delete_addresses(self, *, customer_id: str, address_ids: list[str]) -> dict[str, int]:
+        customer_id = _to_str(customer_id)
+        selected_ids = {_to_str(address_id) for address_id in address_ids if _to_str(address_id)}
+        if not customer_id:
+            raise ValueError("Shopware-Kunden-ID erforderlich.")
+        if not selected_ids:
+            raise ValueError("Keine Shopware-Adressen ausgewaehlt.")
+
+        from shopware.services import CustomerService
+
+        service = CustomerService()
+        response = service.get_by_id(customer_id)
+        data = (response or {}).get("data", []) or []
+        if not data:
+            raise ValueError(f"Shopware-Kunde {customer_id} nicht gefunden.")
+
+        attrs = _safe_attrs(data[0])
+        available_ids = {
+            _to_str(address.get("id") or _safe_attrs(address).get("id"))
+            for address in _safe_list(attrs.get("addresses"))
+        }
+        unknown_ids = sorted(selected_ids - available_ids)
+        if unknown_ids:
+            raise ValueError(
+                "Die gewaehlten Adressen gehoeren nicht zum Shopware-Kunden: "
+                + ", ".join(unknown_ids)
+            )
+
+        default_ids = {
+            _to_str(attrs.get("defaultBillingAddressId")),
+            _to_str(attrs.get("defaultShippingAddressId")),
+        }
+        default_ids.discard("")
+        protected_ids = sorted(selected_ids & default_ids)
+        if protected_ids:
+            raise ValueError(
+                "Standard-Liefer- oder Rechnungsadressen koennen erst geloescht werden, "
+                "wenn vorher eine andere Adresse als Standard gesetzt wurde: "
+                + ", ".join(protected_ids)
+            )
+
+        for address_id in sorted(selected_ids):
+            service.request_delete(f"/customer-address/{address_id}")
+        logger.info(
+            "SW-ADDRESS-DELETE| {} address(es) deleted for customer {}",
+            len(selected_ids),
+            customer_id,
+        )
+        return {"deleted": len(selected_ids)}

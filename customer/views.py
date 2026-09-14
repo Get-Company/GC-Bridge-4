@@ -15,6 +15,7 @@ from customer.services.customer_merge import (
     CustomerMergeSearchService,
     CustomerMergeService,
     CustomerSyncDirectionService,
+    ShopwareCustomerAddressService,
     ShopwareCustomerMergeService,
 )
 
@@ -389,6 +390,29 @@ def customer_merge_shopware_api(request):
         return JsonResponse({"error": str(exc)}, status=400)
     except Exception as exc:
         logger.error("Shopware merge failed: {}\n{}", exc, traceback.format_exc())
+        return JsonResponse({"error": str(exc)}, status=500)
+
+
+def customer_delete_shopware_addresses_api(request):
+    """Delete explicitly selected non-default addresses from one SW6 customer."""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST erforderlich."}, status=405)
+    try:
+        body = json.loads(request.body)
+        customer_id = str(body.get("customer_id", "")).strip()
+        address_ids = body.get("address_ids", [])
+        if not isinstance(address_ids, list):
+            return JsonResponse({"error": "address_ids muss eine Liste sein."}, status=400)
+
+        result = ShopwareCustomerAddressService().delete_addresses(
+            customer_id=customer_id,
+            address_ids=[str(address_id) for address_id in address_ids],
+        )
+        return JsonResponse({"success": True, **result})
+    except ValueError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+    except Exception as exc:
+        logger.error("Shopware address delete failed: {}\n{}", exc, traceback.format_exc())
         return JsonResponse({"error": str(exc)}, status=500)
 
 

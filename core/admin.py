@@ -62,6 +62,7 @@ from customer.views import (
     customer_merge_execute_api,
     customer_update_ids_api,
     customer_delete_addresses_api,
+    customer_delete_shopware_addresses_api,
     customer_sync_direction_api,
     customer_merge_shopware_api,
 )
@@ -470,6 +471,7 @@ def _admin_get_urls():
         path("customer-merge/api/merge/", admin.site.admin_view(customer_merge_execute_api), name="customer_merge_execute"),
         path("customer-merge/api/update-ids/", admin.site.admin_view(customer_update_ids_api), name="customer_merge_update_ids"),
         path("customer-merge/api/delete-addresses/", admin.site.admin_view(customer_delete_addresses_api), name="customer_merge_delete_addresses"),
+        path("customer-merge/api/delete-shopware-addresses/", admin.site.admin_view(customer_delete_shopware_addresses_api), name="customer_merge_delete_shopware_addresses"),
         path("customer-merge/api/sync/", admin.site.admin_view(customer_sync_direction_api), name="customer_merge_sync"),
         path("customer-merge/api/merge-shopware/", admin.site.admin_view(customer_merge_shopware_api), name="customer_merge_shopware"),
         path("hr/calendar/", admin.site.admin_view(hr_calendar_view), name="hr_calendar"),

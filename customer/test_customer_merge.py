@@ -4,6 +4,7 @@ from django.test import SimpleTestCase
 
 from customer.services.customer_merge import (
     CustomerMergeSearchService,
+    ShopwareCustomerAddressService,
     ShopwareCustomerMergeService,
     _has_wildcard,
     _split_terms,
@@ -151,6 +152,8 @@ class CustomerMergeMicrotechSearchTest(SimpleTestCase):
                         "zipCode": "12345",
                         "city": "Musterstadt",
                         "country": "DE",
+                        "isDefaultShipping": True,
+                        "isDefaultBilling": True,
                         "contacts": [
                             {
                                 "isDefault": True,
@@ -170,6 +173,29 @@ class CustomerMergeMicrotechSearchTest(SimpleTestCase):
         self.assertEqual(customer["erp_id"], 42)
         self.assertEqual(customer["addresses"][0]["firstName"], "Max")
         self.assertEqual(customer["addresses"][0]["email"], "max@example.com")
+        self.assertTrue(customer["addresses"][0]["is_shipping"])
+        self.assertTrue(customer["addresses"][0]["is_invoice"])
+
+    @patch("shopware.services.CustomerService")
+    def test_shopware_search_marks_default_addresses(self, customer_service_class):
+        service = customer_service_class.return_value
+        service.get_by_customer_number.return_value = {
+            "data": [{
+                "id": "customer-id",
+                "attributes": {
+                    "customerNumber": "10001",
+                    "defaultShippingAddressId": "shipping-id",
+                    "defaultBillingAddressId": "billing-id",
+                    "addresses": [{"id": "shipping-id"}, {"id": "billing-id"}],
+                },
+            }]
+        }
+
+        customer = CustomerMergeSearchService().search_shopware("10001")
+
+        self.assertTrue(customer["addresses"][0]["is_shipping"])
+        self.assertFalse(customer["addresses"][0]["is_invoice"])
+        self.assertTrue(customer["addresses"][1]["is_invoice"])
 
 
 class SearchTermParsingTest(SimpleTestCase):
@@ -243,14 +269,17 @@ class MicrotechResolutionRoutingTest(SimpleTestCase):
 
 
 class ShopwareCustomerMergeTest(SimpleTestCase):
-    def _merge(self, sw_service, *, keep, delete, order_service=None):
+    def _merge(self, sw_service, *, keep, delete, order_service=None, move_orders_result=None):
         patches = [
             patch("shopware.services.CustomerService", return_value=sw_service),
-            patch.object(ShopwareCustomerMergeService, "_reconcile_django_api_id"),
         ]
         if order_service is None:
             patches.append(
-                patch.object(ShopwareCustomerMergeService, "_move_orders", return_value=(0, []))
+                patch.object(
+                    ShopwareCustomerMergeService,
+                    "_move_orders",
+                    return_value=move_orders_result or (0, [], set()),
+                )
             )
         else:
             patches.append(patch("shopware.services.OrderService", return_value=order_service))
@@ -289,14 +318,23 @@ class ShopwareCustomerMergeTest(SimpleTestCase):
 
     def test_delete_survives_and_keep_identity_is_transplanted(self):
         sw = MagicMock()
-        payloads = {
-            "keep-id": _sw_customer(
-                "keep-id", "1001", "keep@x.de",
-                last_login="2026-01-01T10:00:00", first_name="Right", last_name="Customer",
-            ),
-            "del-id": _sw_customer("del-id", "1002", "del@x.de", last_login="2026-02-01T10:00:00"),
+        customers = {
+            "keep-id": {
+                "customerNumber": "1001", "email": "keep@x.de",
+                "lastLogin": "2026-01-01T10:00:00", "firstName": "Right", "lastName": "Customer",
+            },
+            "del-id": {
+                "customerNumber": "1002", "email": "del@x.de",
+                "lastLogin": "2026-02-01T10:00:00",
+            },
         }
-        sw.get_by_id.side_effect = lambda cid: payloads[cid]
+
+        def load(cid):
+            return {"data": [{"id": cid, "attributes": {**customers[cid], "addresses": []}}]}
+
+        sw.get_by_id.side_effect = load
+        sw.update_customer_number.side_effect = lambda cid, number: customers[cid].update(customerNumber=number)
+        sw.update_customer.side_effect = lambda cid, payload: customers[cid].update(payload)
 
         result = self._merge(sw, keep="keep-id", delete="del-id")
 
@@ -313,6 +351,38 @@ class ShopwareCustomerMergeTest(SimpleTestCase):
         self.assertEqual(payload["firstName"], "Right")
         # Email must never be transplanted — it stays with the surviving login.
         self.assertNotIn("email", payload)
+        self.assertTrue(result["verification"]["credentials"]["email_matches"])
+
+    def test_verification_failure_keeps_the_old_customer(self):
+        sw = MagicMock()
+        payloads = {
+            "keep-id": _sw_customer(
+                "keep-id", "1001", "keep@x.de", addresses=[],
+            ),
+            "del-id": _sw_customer(
+                "del-id", "1002", "del@x.de", addresses=[{"id": "source-address"}],
+            ),
+        }
+        sw.get_by_id.side_effect = lambda cid: payloads[cid]
+
+        with self.assertRaisesMessage(ValueError, "nicht geloescht"):
+            self._merge(sw, keep="keep-id", delete="del-id")
+
+        sw.request_delete.assert_not_called()
+
+    def test_failed_order_transfer_keeps_the_old_customer(self):
+        sw = MagicMock()
+        sw.get_by_id.side_effect = lambda cid: _sw_customer(cid, cid, f"{cid}@x.de")
+
+        with self.assertRaisesMessage(ValueError, "nicht geloescht"):
+            self._merge(
+                sw,
+                keep="keep-id",
+                delete="del-id",
+                move_orders_result=(0, ["Order o1: API nicht erreichbar"], {"o1"}),
+            )
+
+        sw.request_delete.assert_not_called()
 
     def test_no_logins_keeps_user_choice(self):
         sw = MagicMock()
@@ -337,3 +407,25 @@ class ShopwareCustomerMergeTest(SimpleTestCase):
         order_service.request_patch.assert_called_once_with(
             "/order-customer/oc1", payload={"customerId": "keep-id"}
         )
+
+
+class ShopwareCustomerAddressDeleteTest(SimpleTestCase):
+    @patch("shopware.services.CustomerService")
+    def test_default_addresses_are_not_deleted(self, customer_service_class):
+        service = customer_service_class.return_value
+        service.get_by_id.return_value = {
+            "data": [{
+                "id": "customer-id",
+                "attributes": {
+                    "defaultBillingAddressId": "billing-id",
+                    "addresses": [{"id": "billing-id"}, {"id": "other-id"}],
+                },
+            }]
+        }
+
+        with self.assertRaisesMessage(ValueError, "Standard-Liefer"):
+            ShopwareCustomerAddressService().delete_addresses(
+                customer_id="customer-id", address_ids=["billing-id"]
+            )
+
+        service.request_delete.assert_not_called()

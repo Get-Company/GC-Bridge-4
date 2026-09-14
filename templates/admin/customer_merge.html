@@ -163,7 +163,11 @@ function normalize(d, sys) {
       ].filter(Boolean),
       addresses: (d.addresses || []).map(a => {
         const n = [a.firstName, a.lastName].filter(Boolean).join(' ');
-        return { label: a.company || n, street: a.street||'', zip: a.zipcode||'', city: a.city||'', country: a.countryIso||'', email: a.email||'', flags: [] };
+        return {
+          id: a.id || '', addressNumber: a.id || '', label: a.company || n,
+          street: a.street||'', zip: a.zipcode||'', city: a.city||'', country: a.countryIso||'',
+          email: a.email||'', isShipping: Boolean(a.is_shipping), isBilling: Boolean(a.is_invoice),
+        };
       }),
       orders: [],
     };
@@ -180,10 +184,13 @@ function normalize(d, sys) {
         d.vat_id ? `USt-ID: ${d.vat_id}` : '',
       ].filter(Boolean),
       addresses: (d.addresses || []).map(a => {
-        const flags = [];
-        if (a.is_shipping) flags.push('Liefer');
-        if (a.is_invoice) flags.push('Rechnung');
-        return { id: a.id, label: [a.name1, a.name2].filter(Boolean).join(' / '), street: a.street||'', zip: a.postal_code||'', city: a.city||'', country: a.country_code||'', email: a.email||'', phone: a.phone||'', flags };
+        return {
+          id: a.id, addressNumber: a.erp_ans_nr || a.id,
+          label: [a.name1, a.name2].filter(Boolean).join(' / '),
+          street: a.street||'', zip: a.postal_code||'', city: a.city||'', country: a.country_code||'',
+          email: a.email||'', phone: a.phone||'',
+          isShipping: Boolean(a.is_shipping), isBilling: Boolean(a.is_invoice),
+        };
       }),
       orders: (d.orders || []).map(o => ({
         nr: o.order_number||'', total: o.total_price||'', state: o.order_state||'',
@@ -203,12 +210,25 @@ function normalize(d, sys) {
       d.status ? `Status: ${d.status}` : '',
     ].filter(Boolean),
     addresses: (d.addresses || []).map(a => ({
+      addressNumber: a.ans_nr || a.ans_id || '',
       label: [a.name1, a.name2].filter(Boolean).join(' / '),
       street: a.street||'', zip: a.postal_code||'', city: a.city||'',
-      country: a.country_code||'', email: a.email||'', flags: [],
+      country: a.country_code||'', email: a.email||'',
+      isShipping: Boolean(a.is_shipping), isBilling: Boolean(a.is_invoice),
     })),
     orders: [],
   };
+}
+
+function standardAddressBadges(address) {
+  const badges = [];
+  if (address.isShipping) {
+    badges.push('<span class="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">Lieferadresse</span>');
+  }
+  if (address.isBilling) {
+    badges.push('<span class="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-700 dark:bg-violet-900/40 dark:text-violet-300">Rechnungsadresse</span>');
+  }
+  return badges.length ? `<div class="flex flex-wrap gap-1">${badges.join('')}</div>` : '';
 }
 
 /* ── search ──────────────────────────────────────────── */
@@ -612,7 +632,7 @@ function renderRows(loading) {
   let html = '';
 
   searchErps.forEach(nr => {
-    html += `<div class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden mb-4" id="row-${esc(nr)}">`;
+    html += `<div class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden mb-8 shadow-sm" id="row-${esc(nr)}">`;
 
     // Row header
     html += `<div class="bg-gray-50 dark:bg-gray-800 px-4 py-2 border-b border-gray-200 dark:border-gray-700 flex items-center gap-3">
@@ -666,24 +686,20 @@ function renderUnifiedCell(nr, sysKey) {
 
   const d = normalize(raw, sysKey);
   if (!d) return '';
-  const sys = SYSTEMS.find(s => s.key === sysKey);
-  const color = sys.accent;
-
   // Check what other systems have for diff highlighting
   const others = SYSTEMS.filter(s => s.key !== sysKey).map(s => normalize(searchData[nr]?.[s.key], s.key)).filter(Boolean);
   const nameDiff = others.length && others.some(o => o.name && d.name && o.name !== d.name);
   const emailDiff = others.length && others.some(o => o.email && d.email && o.email !== d.email);
 
-  let h = `<div class="space-y-3 text-sm">`;
+  let h = `<div class="text-sm">`;
 
-  // The two identifiers are deliberately always visible and share one row.
-  // This makes the AdrNr/customer number and the linked SW6 ID easy to compare.
-  h += `<div class="grid grid-cols-2 gap-x-3 gap-y-1 rounded-md border border-gray-100 bg-gray-50/70 px-2.5 py-2 dark:border-gray-700/60 dark:bg-gray-800/40">
+  // Keep the identifiers together, but stack them to make long SW6 IDs legible.
+  h += `<div class="space-y-1 rounded-md border border-gray-100 bg-gray-50/70 px-2.5 py-2 dark:border-gray-700/60 dark:bg-gray-800/40">
     ${editableCustomerNumberField(nr, sysKey, d)}
     ${customerField(d.systemIdLabel, d.systemId, { mono: true, title: d.systemId })}
   </div>`;
 
-  h += `<div class="space-y-1.5">
+  h += `<div class="mt-5 space-y-1.5">
     ${customerField('Name', d.name, { diff: nameDiff, title: d.name })}
     ${customerField('E-Mail', d.email, { diff: emailDiff, title: d.email })}`;
 
@@ -696,52 +712,57 @@ function renderUnifiedCell(nr, sysKey) {
 
   // Addresses — collapsible
   if (d.addresses.length) {
-    const isDjango = sysKey === 'django';
+    const canDeleteAddresses = sysKey === 'django' || sysKey === 'shopware';
     const addrGroupId = `addr-group-${nr}-${sysKey}`;
     let addrHeader = `${esc('Adressen')} (${d.addresses.length})`;
-    if (isDjango) {
-      addrHeader = `Adressen (${d.addresses.length})`;
-    }
 
     let addrContent = '';
-    if (isDjango) {
+    if (canDeleteAddresses) {
       addrContent += `<div class="flex items-center gap-2 mb-2 pb-1.5 border-b border-gray-100 dark:border-gray-700/50">
         <label class="flex items-center gap-1.5 text-[10px] text-gray-400 cursor-pointer select-none">
           <input type="checkbox" class="rounded" onchange="toggleAllAddr(this, '${addrGroupId}')"> Alle
         </label>
-        <button onclick="deleteSelectedAddresses('${esc(nr)}', '${addrGroupId}')"
+        <button onclick="deleteSelectedAddresses('${esc(nr)}', '${addrGroupId}', '${sysKey}')"
           class="ml-auto px-2 py-0.5 text-[10px] rounded border border-red-300 dark:border-red-700 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition flex items-center gap-1 disabled:opacity-30"
           id="del-btn-${addrGroupId}">
           <span class="material-symbols-outlined" style="font-size:12px">delete</span> Markierte loeschen
         </button>
       </div>`;
     }
-    addrContent += d.addresses.map(a => {
-      let flags = '';
-      if (a.flags && a.flags.length) flags = `<div class="text-${color}-600 dark:text-${color}-400 text-[10px] font-medium">${a.flags.join(' · ')}</div>`;
-      const checkbox = isDjango && a.id
+    addrContent += d.addresses.map((a, index) => {
+      const flags = standardAddressBadges(a);
+      const checkbox = canDeleteAddresses && a.id
         ? `<input type="checkbox" value="${a.id}" class="rounded mt-0.5 addr-cb-${addrGroupId}" style="flex-shrink:0">`
         : '';
-      return `<div class="flex gap-2 p-2 rounded border border-gray-100 dark:border-gray-700/50 bg-gray-50/50 dark:bg-gray-800/30">
+      const rowTone = index % 2
+        ? 'bg-white dark:bg-gray-800/20'
+        : 'bg-gray-50 dark:bg-gray-800/50';
+      return `<div class="flex gap-2 rounded border border-gray-100 p-3 dark:border-gray-700/50 ${rowTone}">
         ${checkbox}
         <div class="flex-1 min-w-0">
+          <div class="mb-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+            <div class="flex items-baseline gap-2">
+              <span class="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Adr.-Nr.</span>
+              <span class="font-mono text-[2rem] font-semibold leading-none text-gray-800 dark:text-gray-100">${esc(a.addressNumber || '—')}</span>
+            </div>
+            ${flags}
+          </div>
           <div class="font-medium text-sm">${esc(a.label)}</div>
           <div class="text-gray-500">${esc(a.street)}</div>
           <div class="text-gray-500">${esc(a.zip)} ${esc(a.city)} ${a.country ? esc(a.country) : ''}</div>
           ${a.email ? `<div class="text-gray-400 truncate">${esc(a.email)}</div>` : ''}
           ${a.phone ? `<div class="text-gray-400">${esc(a.phone)}</div>` : ''}
-          ${flags}
         </div>
       </div>`;
     }).join('');
 
-    h += renderToggle(addrHeader, d.addresses.length, addrContent, color);
+    h += renderToggle(addrHeader, d.addresses.length, addrContent);
   }
 
   return h;
 }
 
-function renderToggle(label, count, content, color) {
+function renderToggle(label, count, content) {
   return `<div class="mt-3">
     <button class="toggle-btn text-[10px] font-semibold uppercase tracking-wider text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex items-center gap-0.5" onclick="toggleSection(this)">
       <span class="arrow material-symbols-outlined" style="font-size:12px">chevron_right</span>
@@ -826,23 +847,35 @@ function toggleAllAddr(masterCb, groupId) {
   document.querySelectorAll(`.addr-cb-${groupId}`).forEach(cb => { cb.checked = masterCb.checked; });
 }
 
-async function deleteSelectedAddresses(erpNr, groupId) {
+async function deleteSelectedAddresses(erpNr, groupId, sysKey = 'django') {
   const checked = [...document.querySelectorAll(`.addr-cb-${groupId}:checked`)];
   if (!checked.length) { alert('Keine Adressen ausgewaehlt.'); return; }
-  const ids = checked.map(cb => parseInt(cb.value));
+  const ids = checked.map(cb => cb.value);
+  const isShopware = sysKey === 'shopware';
+  const shopwareCustomerId = isShopware ? searchData[erpNr]?.shopware?.id : '';
+  if (isShopware && !shopwareCustomerId) {
+    alert('Die Shopware-Kunden-ID fehlt. Bitte die Suche erneut ausführen.');
+    return;
+  }
   console.log(`[DELETE] ${ids.length} Adresse(n) ausgewaehlt:`, ids, `fuer Kunde ${erpNr}`);
   if (!confirm(`${ids.length} Adresse(n) unwiderruflich loeschen?`)) return;
 
   const btn = document.getElementById(`del-btn-${groupId}`);
   if (btn) { btn.disabled = true; btn.innerHTML = `${spinner()} Loesche...`; }
 
-  console.log(`[DELETE] Sende Request an /admin/customer-merge/api/delete-addresses/ ...`);
+  const url = isShopware
+    ? '/admin/customer-merge/api/delete-shopware-addresses/'
+    : '/admin/customer-merge/api/delete-addresses/';
+  const payload = isShopware
+    ? { customer_id: shopwareCustomerId, address_ids: ids }
+    : { address_ids: ids.map(id => parseInt(id, 10)) };
+  console.log(`[DELETE] Sende Request an ${url} ...`);
   const t0 = performance.now();
   try {
-    const resp = await fetch('/admin/customer-merge/api/delete-addresses/', {
+    const resp = await fetch(url, {
       method: 'POST',
       headers: {'Content-Type':'application/json','X-CSRFToken':CSRF},
-      body: JSON.stringify({ address_ids: ids }),
+      body: JSON.stringify(payload),
     });
     const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
     console.log(`[DELETE] Response: ${resp.status} ${resp.statusText} (${elapsed}s)`);
@@ -868,6 +901,12 @@ async function deleteSelectedAddresses(erpNr, groupId) {
 /* ── Merge section ───────────────────────────────────── */
 function renderMergeSection() {
   renderShopwareMergeSection();
+  // Django and Microtech merge semantics are intentionally defined separately.
+  // Until then this page exposes only the verified SW6 merge workflow.
+  document.getElementById('merge-section').innerHTML = '';
+}
+
+function renderDjangoMergeSection() {
   const container = document.getElementById('merge-section');
   const djangoErps = searchErps.filter(nr => searchData[nr]?.django && !searchData[nr].django.error);
   if (djangoErps.length < 2) {
@@ -1143,7 +1182,8 @@ function updateShopwareMergePreview() {
   const del = shopwareCustomerById(delId);
   const keep = shopwareCustomerById(keepId);
   const lastLoginIsDelete = (del.lastLogin || '') && (del.lastLogin || '') > (keep.lastLogin || '');
-  const loginWinner = lastLoginIsDelete ? del : keep;
+  const survivor = lastLoginIsDelete ? del : keep;
+  const removed = lastLoginIsDelete ? keep : del;
 
   const card = (c, tone, tag) => `
     <div class="flex-1 min-w-0 border rounded-lg p-3 ${tone}">
@@ -1155,24 +1195,23 @@ function updateShopwareMergePreview() {
     </div>`;
 
   let html = `<div class="flex items-stretch gap-3 flex-wrap md:flex-nowrap">
-    ${card(del, 'border-red-300 dark:border-red-700 bg-red-50/50 dark:bg-red-900/10', '<span class="text-red-500">Wird gelöscht</span>')}
-    <div class="flex items-center justify-center px-1">
-      <span class="material-symbols-outlined text-gray-400">arrow_forward</span>
-    </div>
-    ${card(keep, 'border-green-300 dark:border-green-700 bg-green-50/50 dark:bg-green-900/10', '<span class="text-green-600">Bleibt erhalten</span>')}
+    ${card(survivor, 'border-green-300 dark:border-green-700 bg-green-50/50 dark:bg-green-900/10', '<span class="text-green-600">Technisch erhalten – letzter Login</span>')}
+    ${card(removed, 'border-red-300 dark:border-red-700 bg-red-50/50 dark:bg-red-900/10', '<span class="text-red-500">Wird nach erfolgreicher Prüfung gelöscht</span>')}
   </div>`;
 
   html += `<div class="mt-3 p-3 rounded bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-sm flex items-start gap-2">
     <span class="material-symbols-outlined text-base text-blue-600 dark:text-blue-400">key</span>
-    <div>E-Mail + Passwort bleiben vom <strong>letzten Login</strong>: ${esc(loginWinner.name || loginWinner.number || '—')} (${fmtLogin(loginWinner.lastLogin)}).</div>
+    <div>E-Mail + Passwort-Hash bleiben als unverändertes Paar auf dem Konto mit dem <strong>letzten Login</strong>: ${esc(survivor.name || survivor.number || '—')} (${fmtLogin(survivor.lastLogin)}).</div>
   </div>`;
 
   if (lastLoginIsDelete) {
     html += `<div class="mt-2 p-3 rounded bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-sm flex items-start gap-2">
       <span class="material-symbols-outlined text-base text-amber-600 dark:text-amber-400">info</span>
-      <div>Der zu löschende Datensatz hat den jüngsten Login. Der <strong>überlebende SW6-Datensatz</strong> ist technisch dieser (E-Mail + Passwort bleiben erhalten); Kundennummer <strong>${esc(keep.number || '—')}</strong> und Name werden darauf übertragen.</div>
+      <div>Der als falsch ausgewählte Datensatz hat den jüngsten Login. Deshalb bleibt technisch dieses Konto erhalten; Kundennummer und Name von <strong>${esc(keep.number || '—')}</strong> werden darauf übertragen. Gelöscht wird anschließend der andere Datensatz.</div>
     </div>`;
   }
+
+  html += `<div class="mt-2 text-xs text-gray-500 dark:text-gray-400">Vor dem Löschen prüft Shopware erneut alle übertragenen Adressen und Bestellungen sowie die unveränderte Login-E-Mail und den letzten Login.</div>`;
 
   preview.innerHTML = html;
 }
@@ -1183,7 +1222,9 @@ async function executeShopwareMerge() {
   if (!delId || !keepId || delId === keepId) { alert('Bitte zwei unterschiedliche SW6-Kunden wählen.'); return; }
   const del = shopwareCustomerById(delId);
   const keep = shopwareCustomerById(keepId);
-  if (!confirm(`SW6-Kunde "${del.name || del.number}" wird gelöscht und in "${keep.name || keep.number}" zusammengeführt. Fortfahren?`)) return;
+  const sourceHasNewestLogin = (del.lastLogin || '') && (del.lastLogin || '') > (keep.lastLogin || '');
+  const physicallyRemoved = sourceHasNewestLogin ? keep : del;
+  if (!confirm(`Der SW6-Kunde "${physicallyRemoved.name || physicallyRemoved.number}" wird erst nach erfolgreicher Prüfung gelöscht. Fortfahren?`)) return;
 
   const btn = document.getElementById('sw-merge-btn');
   const res = document.getElementById('sw-merge-result');
@@ -1201,8 +1242,11 @@ async function executeShopwareMerge() {
     if (data.error) {
       res.innerHTML = `<div class="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-sm text-red-600 dark:text-red-400">${esc(data.error)}</div>`;
     } else {
-      let m = `SW6-Merge erfolgreich! Überlebender Datensatz: ${esc(data.survivor_sw_id)}, gelöscht: ${esc(data.removed_sw_id)}. Bestellungen: ${data.orders_moved}, Adressen: ${data.addresses_moved}`;
+      const verifiedAddresses = data.verification?.addresses?.verified ?? data.addresses_moved;
+      const verifiedOrders = data.verification?.orders?.verified ?? data.orders_moved;
+      let m = `SW6-Merge erfolgreich geprüft und abgeschlossen. Überlebender Datensatz: ${esc(data.survivor_sw_id)}, gelöscht: ${esc(data.removed_sw_id)}. Bestellungen: ${verifiedOrders}, Adressen: ${verifiedAddresses}`;
       if (data.identity_transplanted) m += ' (Kundennummer/Name übertragen)';
+      if (data.verification?.credentials) m += ' (Login-Paar unverändert bestätigt)';
       let w = '';
       if (data.errors?.length) w = `<div class="mt-1 text-yellow-600 dark:text-yellow-400 text-xs">${data.errors.map(e => '· ' + esc(e)).join('<br>')}</div>`;
       let logHtml = '';
