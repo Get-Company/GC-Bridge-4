@@ -288,6 +288,18 @@ def customer_update_ids_api(request):
             if not address_id:
                 return JsonResponse({"error": "address_id erforderlich."}, status=400)
             result = service.update_shopware_address_id(int(address_id), value)
+        elif action == "update_microtech_address_mapping":
+            if not address_id:
+                return JsonResponse({"error": "address_id erforderlich."}, status=400)
+            ans_nr = body.get("ans_nr")
+            asp_nr = body.get("asp_nr")
+            if ans_nr in (None, ""):
+                return JsonResponse({"error": "AnsNr erforderlich."}, status=400)
+            result = service.update_microtech_address_mapping(
+                int(address_id),
+                int(ans_nr),
+                None if asp_nr in (None, "") else int(asp_nr),
+            )
         else:
             return JsonResponse({"error": f"Unbekannte Aktion: {action}"}, status=400)
 

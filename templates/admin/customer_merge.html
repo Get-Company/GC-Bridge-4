@@ -38,6 +38,10 @@
   .merge-identifier input { width: 100%; min-width: 0; padding: .35rem .5rem; border: 1px solid #cbd5e1; border-radius: .35rem; background: #fff; }
   .merge-identifier button { flex-shrink: 0; font-size: .7rem; font-weight: 500; color: #2563eb; }
   .merge-address-identifiers { margin: .75rem 0 1rem; padding: .5rem .75rem; background: transparent; }
+  .merge-contact-list { margin: .9rem 0 0; padding-top: .75rem; border-top: 1px solid #e2e8f0; }
+  .merge-contact-list h4 { margin: 0 0 .5rem; font-size: .65rem; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: #64748b; }
+  .merge-contact { margin: .4rem 0; padding: .65rem .75rem; border-radius: .45rem; background: #f8fafc; }
+  .merge-contact-map { display: block; width: 100%; margin-top: .5rem; padding: .35rem .45rem; border: 1px solid #cbd5e1; border-radius: .35rem; background: #fff; font-size: .75rem; }
   .merge-dialog { --merge-bg: #fff; --merge-muted: #f8fafc; --merge-line: #e2e8f0; --merge-text: #1e293b; --merge-subtle: #64748b; color: var(--merge-text); background: var(--merge-bg); width: min(1120px, calc(100vw - 3rem)); max-width: none; max-height: calc(100dvh - 3rem); margin: auto; padding: 0; border: 1px solid var(--merge-line); border-radius: 1rem; box-shadow: 0 24px 80px #0f172a33; }
   .merge-dialog::backdrop { background: #0f172a80; backdrop-filter: blur(3px); }
   .merge-dialog[open] { display: flex; flex-direction: column; }
@@ -93,6 +97,9 @@
   .dark .merge-identifier dt { color: #94a3b8; }
   .dark .merge-identifier dd { color: #e2e8f0; }
   .dark .merge-identifier input { background: #0f172a; border-color: #475569; }
+  .dark .merge-contact-list { border-color: #334155; }
+  .dark .merge-contact { background: #1e293b66; }
+  .dark .merge-contact-map { background: #0f172a; border-color: #475569; color: #e2e8f0; }
   .dark .merge-dialog { --merge-bg: #111827; --merge-muted: #1e293b; --merge-line: #334155; --merge-text: #e2e8f0; --merge-subtle: #94a3b8; }
   .dark .merge-launcher, .dark .merge-launcher h2, .dark .merge-selection-grid select, .dark .merge-preview-button { border-color: #334155; }
   .dark .merge-launcher h2, .dark .merge-selection-grid select { background: #1e293b; color: #e2e8f0; }
@@ -236,6 +243,14 @@ function editableShopwareMapping(label, value, action, idKey, idValue, erpNr) {
       <button type="button" onclick="updateShopwareMapping(this, '${esc(action)}')">Speichern</button>
   </div></dd></div>`;
 }
+function editableMicrotechMapping(address) {
+  return `<div class="merge-identifier"><dt>microtech</dt><dd><div class="customer-number-field"
+      data-address-id="${esc(address.id)}">
+      <input type="number" min="0" value="${esc(address.microtechAddressNumber)}" aria-label="microtech AnsNr" autocomplete="off">
+      <input type="number" min="0" value="${esc(address.microtechContactNumber)}" aria-label="microtech AnspNr" autocomplete="off">
+      <button type="button" onclick="updateMicrotechAddressMapping(this)">Speichern</button>
+  </div></dd></div>`;
+}
 function customerIdentifiers(nr, sysKey, raw, customer) {
   const number = sysKey === 'microtech' ? esc(customer.customerNr) || '—' : editableCustomerNumberField(nr, sysKey, customer);
   const ids = sysKey === 'django'
@@ -245,7 +260,17 @@ function customerIdentifiers(nr, sysKey, raw, customer) {
   return `<dl class="merge-identifiers merge-customer-identifiers" aria-label="Kennungen ${esc(sysKey)}">
     <div class="merge-identifier"><dt>${esc(customer.customerNrLabel)}</dt><dd>${number}</dd></div>${Array.isArray(ids) ? identifierRows(ids) : ids}</dl>`;
 }
-function toggleSection(btn) { btn.classList.toggle('open'); btn.nextElementSibling.classList.toggle('open'); }
+function toggleSection(btn) {
+  const shouldOpen = !btn.classList.contains('open');
+  const group = btn.dataset.addressToggle;
+  const buttons = group
+    ? document.querySelectorAll(`[data-address-toggle="${CSS.escape(group)}"]`)
+    : [btn];
+  buttons.forEach(toggle => {
+    toggle.classList.toggle('open', shouldOpen);
+    toggle.nextElementSibling.classList.toggle('open', shouldOpen);
+  });
+}
 function spinner() { return '<span class="material-symbols-outlined text-sm animate-spin">progress_activity</span>'; }
 function loaderCell(message = 'Lade...') {
   return `<div class="flex items-center gap-2 text-xs text-gray-400 py-8 justify-center cell-loading rounded">${spinner()} ${esc(message)}</div>`;
@@ -303,7 +328,10 @@ function normalize(d, sys) {
       addresses: (d.addresses || []).map(a => {
         return {
           id: a.id, apiId: a.api_id || '',
+          microtechAddressNumber: a.erp_ans_nr ?? '',
+          microtechContactNumber: a.erp_asp_nr ?? '',
           label: [a.name1, a.name2].filter(Boolean).join(' / '),
+          contactName: [a.first_name, a.last_name].filter(Boolean).join(' '),
           street: a.street||'', zip: a.postal_code||'', city: a.city||'', country: a.country_code||'',
           email: a.email||'', phone: a.phone||'',
           isShipping: Boolean(a.is_shipping), isBilling: Boolean(a.is_invoice),
@@ -323,6 +351,15 @@ function normalize(d, sys) {
     email: d.email || '',
     extra: [],
     addresses: (d.addresses || []).map(a => ({
+      microtechAddressNumber: a.ans_nr ?? '',
+      contacts: (a.contacts || (a.contact_numbers || []).map(asp_nr => ({asp_nr}))).map(contact => ({
+        microtechContactNumber: contact.asp_nr ?? '',
+        title: contact.title || '',
+        name: [contact.first_name, contact.last_name].filter(Boolean).join(' '),
+        email: contact.email || '',
+        phone: contact.phone || '',
+        isDefault: Boolean(contact.is_default),
+      })),
       label: [a.name1, a.name2].filter(Boolean).join(' / '),
       street: a.street||'', zip: a.postal_code||'', city: a.city||'',
       country: a.country_code||'', email: a.email||'',
@@ -341,6 +378,43 @@ function standardAddressBadges(address) {
     badges.push('<span class="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-700 dark:bg-violet-900/40 dark:text-violet-300">Rechnungsadresse</span>');
   }
   return badges.length ? `<div class="flex flex-wrap gap-1">${badges.join('')}</div>` : '';
+}
+
+function localAddressLabel(address) {
+  const contact = [address.first_name, address.last_name].filter(Boolean).join(' ');
+  const place = [address.street, address.postal_code, address.city].filter(Boolean).join(', ');
+  return contact || address.name1 || place || 'Bestehende Bridge-Adresse';
+}
+
+function microtechContactMapping(nr, address, contact) {
+  const localAddresses = searchData[nr]?.django?.addresses || [];
+  const ansNr = address.microtechAddressNumber;
+  const aspNr = contact?.microtechContactNumber ?? '';
+  const selected = localAddresses.find(local => String(local.erp_ans_nr ?? local.microtechAddressNumber) === String(ansNr)
+    && String(local.erp_asp_nr ?? local.microtechContactNumber ?? '') === String(aspNr));
+  const options = localAddresses.map(local => `<option value="${esc(local.id)}"${selected?.id === local.id ? ' selected' : ''}>${esc(localAddressLabel(local))}</option>`).join('');
+  if (!options) return '<div class="mt-2 text-[10px] text-gray-400">Keine bestehende Bridge-Adresse verfügbar.</div>';
+  return `<select class="merge-contact-map" aria-label="Bestehende Bridge-Adresse zuordnen"
+      data-ans-nr="${esc(ansNr)}" data-asp-nr="${esc(aspNr)}" onchange="assignMicrotechMapping(this)">
+      <option value="">Bestehende Bridge-Adresse zuordnen …</option>${options}
+  </select>`;
+}
+
+function microtechContacts(nr, address) {
+  const contacts = address.contacts || [];
+  const addressNumber = address.microtechAddressNumber === '' ? '—' : address.microtechAddressNumber;
+  const addressMapping = `<div class="merge-identifier"><dt>AnsNr</dt><dd>${esc(addressNumber)}</dd></div>`;
+  const contactRows = contacts.length ? contacts.map(contact => {
+    const number = contact.microtechContactNumber === '' ? '—' : contact.microtechContactNumber;
+    const name = [contact.title, contact.name].filter(Boolean).join(' ') || 'Ohne Namen';
+    return `<div class="merge-contact">
+      <div class="flex items-baseline justify-between gap-2"><span class="font-medium text-xs">${esc(name)}</span><span class="font-mono text-[10px] text-gray-400">AnspNr ${esc(number)}</span></div>
+      ${contact.email ? `<div class="mt-1 truncate text-[10px] text-gray-400">${esc(contact.email)}</div>` : ''}
+      ${microtechContactMapping(nr, address, contact)}
+    </div>`;
+  }).join('') : `<div class="merge-contact">${microtechContactMapping(nr, address, null)}</div>`;
+  return `<dl class="merge-identifiers merge-address-identifiers">${addressMapping}</dl>
+    <div class="merge-contact-list"><h4>Ansprechpartner (${contacts.length})</h4>${contactRows}</div>`;
 }
 
 /* ── search ──────────────────────────────────────────── */
@@ -748,7 +822,7 @@ function renderRows(loading) {
 
     // Row header
     html += `<div class="bg-gray-50 dark:bg-gray-800 px-4 py-2 border-b border-gray-200 dark:border-gray-700 flex items-center gap-3">
-      <span class="font-mono text-[2rem] font-semibold leading-none">${esc(nr)}</span>
+      <span class="font-mono font-semibold" style="font-size:2rem;line-height:1">${esc(nr)}</span>
       <span id="row-spinner-${esc(nr)}" class="${loading || isRowLoading(nr) ? '' : 'hidden'}">${spinner()}</span>
     </div>`;
 
@@ -849,8 +923,11 @@ function renderUnifiedCell(nr, sysKey) {
         ${checkbox}
         <div class="flex-1 min-w-0">
           ${flags ? `<div class="mb-2 flex flex-wrap items-center justify-end gap-x-3 gap-y-1">${flags}</div>` : ''}
-          ${sysKey === 'django' ? `<dl class="merge-identifiers merge-address-identifiers">${editableShopwareMapping('SW6-Adress-ID', a.apiId, 'update_shopware_address_id', 'address_id', a.id, nr)}</dl>` : ''}
+          ${sysKey === 'shopware' ? `<dl class="merge-identifiers merge-address-identifiers">${identifierRows([['SW6-Adress-ID', a.id]])}</dl>` : ''}
+          ${sysKey === 'django' ? `<dl class="merge-identifiers merge-address-identifiers">${editableShopwareMapping('SW6-Adress-ID', a.apiId, 'update_shopware_address_id', 'address_id', a.id, nr)}${editableMicrotechMapping(a)}</dl>` : ''}
+          ${sysKey === 'microtech' ? microtechContacts(nr, a) : ''}
           <div class="font-medium text-sm">${esc(a.label)}</div>
+          ${a.contactName ? `<div class="text-gray-400">${esc(a.contactName)}</div>` : ''}
           <div class="text-gray-500">${esc(a.street)}</div>
           <div class="text-gray-500">${esc(a.zip)} ${esc(a.city)} ${a.country ? esc(a.country) : ''}</div>
           ${a.email ? `<div class="text-gray-400 truncate">${esc(a.email)}</div>` : ''}
@@ -859,15 +936,15 @@ function renderUnifiedCell(nr, sysKey) {
       </div>`;
     }).join('');
 
-    h += renderToggle(addrHeader, d.addresses.length, addrContent);
+    h += renderToggle(addrHeader, d.addresses.length, addrContent, `addresses-${nr}`);
   }
 
   return h;
 }
 
-function renderToggle(label, count, content) {
+function renderToggle(label, count, content, group = '') {
   return `<div class="mt-3">
-    <button class="toggle-btn text-[10px] font-semibold uppercase tracking-wider text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex items-center gap-0.5" onclick="toggleSection(this)">
+    <button class="toggle-btn text-[10px] font-semibold uppercase tracking-wider text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex items-center gap-0.5" data-address-toggle="${esc(group)}" onclick="toggleSection(this)">
       <span class="arrow material-symbols-outlined" style="font-size:12px">chevron_right</span>
       ${label}
     </button>
@@ -966,6 +1043,90 @@ async function updateShopwareMapping(button, action) {
   } finally {
     button.disabled = false;
     button.innerHTML = idleLabel;
+  }
+}
+
+async function saveMicrotechMapping(addressId, ansNr, aspNr) {
+  const resp = await fetch('/admin/customer-merge/api/update-ids/', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json','X-CSRFToken':CSRF},
+    body: JSON.stringify({
+      action: 'update_microtech_address_mapping',
+      address_id: Number(addressId),
+      ans_nr: Number(ansNr),
+      asp_nr: aspNr === '' ? null : Number(aspNr),
+    }),
+  });
+  const data = await resp.json();
+  if (!resp.ok || data.error) throw new Error(data.error || 'microtech-Zuordnung konnte nicht gespeichert werden.');
+  return data;
+}
+
+function applyMicrotechMapping(erpNr, addressId, data) {
+  const local = searchData[erpNr]?.django?.addresses?.find(address => String(address.id) === String(addressId));
+  if (!local) return;
+  local.erp_ans_nr = data.ans_nr;
+  local.erp_asp_nr = data.asp_nr;
+  local.erp_ans_id = null;
+  local.erp_asp_id = null;
+  local.erp_combined_id = null;
+}
+
+async function updateMicrotechAddressMapping(button) {
+  const field = button.closest('.customer-number-field');
+  const inputs = field?.querySelectorAll('input') || [];
+  const ansNr = inputs[0]?.value.trim();
+  const aspNr = inputs[1]?.value.trim();
+  const addressId = field?.dataset.addressId;
+  if (!addressId || ansNr === '') {
+    alert('Bitte mindestens eine AnsNr eingeben.');
+    return;
+  }
+  const erpNr = Object.entries(searchData).find(([, systems]) =>
+    systems.django?.addresses?.some(address => String(address.id) === String(addressId))
+  )?.[0];
+  if (!erpNr) {
+    alert('Die Bridge-Adresse konnte nicht bestimmt werden. Bitte erneut suchen.');
+    return;
+  }
+  const idleLabel = button.innerHTML;
+  button.disabled = true;
+  button.innerHTML = spinner();
+  try {
+    const data = await saveMicrotechMapping(addressId, ansNr, aspNr);
+    applyMicrotechMapping(erpNr, addressId, data);
+    renderRowCells(erpNr);
+  } catch (error) {
+    alert('Fehler: ' + error.message);
+    renderRowCells(erpNr);
+  } finally {
+    button.disabled = false;
+    button.innerHTML = idleLabel;
+  }
+}
+
+async function assignMicrotechMapping(select) {
+  const addressId = select.value;
+  const ansNr = select.dataset.ansNr;
+  const aspNr = select.dataset.aspNr;
+  if (!addressId) return;
+  const erpNr = Object.entries(searchData).find(([, systems]) =>
+    systems.django?.addresses?.some(address => String(address.id) === String(addressId))
+  )?.[0];
+  if (!erpNr || ansNr === '') {
+    alert('Die microtech-Zuordnung ist unvollständig. Bitte erneut suchen.');
+    return;
+  }
+  select.disabled = true;
+  try {
+    const data = await saveMicrotechMapping(addressId, ansNr, aspNr);
+    applyMicrotechMapping(erpNr, addressId, data);
+    renderRowCells(erpNr);
+  } catch (error) {
+    alert('Fehler: ' + error.message);
+    renderRowCells(erpNr);
+  } finally {
+    select.disabled = false;
   }
 }
 

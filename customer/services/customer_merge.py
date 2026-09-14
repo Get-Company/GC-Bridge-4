@@ -645,6 +645,18 @@ class CustomerMergeSearchService(BaseService):
                     "ans_id": address.get("addressNumber"),
                     "ans_nr": address.get("addressSubNumber"),
                     "contact_numbers": [item["contactNumber"] for item in contacts if item.get("contactNumber") is not None],
+                    "contacts": [
+                        {
+                            "asp_nr": item.get("contactNumber"),
+                            "title": _to_str(item.get("salutation")),
+                            "first_name": _to_str(item.get("firstName")),
+                            "last_name": _to_str(item.get("lastName")),
+                            "email": _to_str(item.get("email")),
+                            "phone": _to_str(item.get("phone")),
+                            "is_default": bool(item.get("isDefault")),
+                        }
+                        for item in contacts
+                    ],
                     "name1": _to_str(address.get("name1")),
                     "name2": _to_str(address.get("name2")),
                     "street": _to_str(address.get("street")),
@@ -1242,6 +1254,61 @@ class CustomerIdUpdateService(BaseService):
         address.save(update_fields=["api_id", "updated_at"])
         logger.info("Shopware address mapping changed: {} -> {} (address {})", old_api_id, new_api_id, address.pk)
         return {"old_api_id": old_api_id, "new_api_id": new_api_id}
+
+    def update_microtech_address_mapping(
+        self,
+        address_id: int,
+        ans_nr: int,
+        asp_nr: int | None,
+    ) -> dict[str, Any]:
+        """Map an existing Bridge address to a Microtech postal address/contact pair.
+
+        The business keys are AdrNr, AnsNr and AnspNr.  The opaque Microtech
+        IDs are deliberately cleared for a manual assignment so a later sync
+        resolves the record through the selected business-key pair instead of
+        restoring a previous opaque-ID association.
+        """
+        address = Address.objects.select_related("customer").filter(pk=address_id).first()
+        if not address:
+            raise ValueError("Adresse nicht gefunden.")
+        if ans_nr < 0:
+            raise ValueError("AnsNr darf nicht negativ sein.")
+        if asp_nr is not None and asp_nr < 0:
+            raise ValueError("AnspNr darf nicht negativ sein.")
+
+        candidates = Address.objects.filter(customer=address.customer, erp_ans_nr=ans_nr).exclude(pk=address_id)
+        duplicate = (
+            candidates.filter(erp_asp_nr=asp_nr).first()
+            if asp_nr is not None
+            else candidates.filter(erp_asp_nr__isnull=True).first()
+        )
+        if duplicate:
+            raise ValueError("Diese microtech-Anschrift/Ansprechpartner-Zuordnung ist bereits vergeben.")
+
+        old_mapping = {"ans_nr": address.erp_ans_nr, "asp_nr": address.erp_asp_nr}
+        address.erp_ans_nr = ans_nr
+        address.erp_asp_nr = asp_nr
+        address.erp_ans_id = None
+        address.erp_asp_id = None
+        address.erp_combined_id = None
+        address.save(
+            update_fields=[
+                "erp_ans_nr",
+                "erp_asp_nr",
+                "erp_ans_id",
+                "erp_asp_id",
+                "erp_combined_id",
+                "updated_at",
+            ]
+        )
+        logger.info(
+            "Microtech address mapping changed: {} -> AnsNr={} AnspNr={} (address {})",
+            old_mapping,
+            ans_nr,
+            asp_nr,
+            address.pk,
+        )
+        return {"old_mapping": old_mapping, "ans_nr": ans_nr, "asp_nr": asp_nr}
 
 
 class CustomerSyncDirectionService(BaseService):
