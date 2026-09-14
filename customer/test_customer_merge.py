@@ -91,6 +91,71 @@ class CustomerIdUpdateServiceTest(SimpleTestCase):
         self.assertEqual(address.api_id, "c" * 32)
         address.save.assert_called_once_with(update_fields=["api_id", "updated_at"])
 
+    @patch("customer.services.customer_merge.Address")
+    def test_microtech_mapping_uses_business_numbers_and_clears_opaque_ids(self, address_model):
+        address = MagicMock(
+            pk=81,
+            erp_ans_nr=1,
+            erp_asp_nr=2,
+            erp_ans_id=75,
+            erp_asp_id=88,
+            erp_combined_id="10001-75-88",
+            customer=MagicMock(),
+        )
+        selected = MagicMock()
+        selected.filter.return_value.first.return_value = address
+        address_model.objects.select_related.return_value = selected
+        candidates = MagicMock()
+        candidates.filter.return_value.first.return_value = None
+        address_model.objects.filter.return_value.exclude.return_value = candidates
+
+        result = CustomerIdUpdateService().update_microtech_address_mapping(81, 7, 3)
+
+        self.assertEqual(result["old_mapping"], {"ans_nr": 1, "asp_nr": 2})
+        self.assertEqual(address.erp_ans_nr, 7)
+        self.assertEqual(address.erp_asp_nr, 3)
+        self.assertIsNone(address.erp_ans_id)
+        self.assertIsNone(address.erp_asp_id)
+        self.assertIsNone(address.erp_combined_id)
+        address.save.assert_called_once_with(
+            update_fields=[
+                "erp_ans_nr",
+                "erp_asp_nr",
+                "erp_ans_id",
+                "erp_asp_id",
+                "erp_combined_id",
+                "updated_at",
+            ]
+        )
+
+
+class CustomerIdUpdateViewTest(SimpleTestCase):
+    @patch("customer.views.CustomerIdUpdateService")
+    def test_microtech_address_mapping_is_dispatched(self, service_class):
+        from customer.views import customer_update_ids_api
+
+        service_class.return_value.update_microtech_address_mapping.return_value = {
+            "ans_nr": 7,
+            "asp_nr": 3,
+        }
+        request = RequestFactory().post(
+            "/admin/customer-merge/api/update-ids/",
+            data=json.dumps(
+                {
+                    "action": "update_microtech_address_mapping",
+                    "address_id": 81,
+                    "ans_nr": 7,
+                    "asp_nr": 3,
+                }
+            ),
+            content_type="application/json",
+        )
+
+        response = customer_update_ids_api(request)
+
+        self.assertEqual(response.status_code, 200)
+        service_class.return_value.update_microtech_address_mapping.assert_called_once_with(81, 7, 3)
+
 
 class CustomerMergeMicrotechSearchTest(SimpleTestCase):
     @patch.object(CustomerMergeSearchService, "start_microtech_customer_search")
@@ -226,6 +291,8 @@ class CustomerMergeMicrotechSearchTest(SimpleTestCase):
         self.assertEqual(customer["addresses"][0]["firstName"], "Max")
         self.assertEqual(customer["addresses"][0]["email"], "max@example.com")
         self.assertEqual(customer["addresses"][0]["contact_numbers"], [3])
+        self.assertEqual(customer["addresses"][0]["contacts"][0]["asp_nr"], 3)
+        self.assertEqual(customer["addresses"][0]["contacts"][0]["first_name"], "Max")
         self.assertTrue(customer["addresses"][0]["is_shipping"])
         self.assertTrue(customer["addresses"][0]["is_invoice"])
 
@@ -981,6 +1048,8 @@ assert.ok(identifierRows([['Test', '<script>']]).includes('&lt;script&gt;'));
 const microtech = normalize({status: 'microtech-com', addresses: [{ans_id: 10001, ans_nr: 2, contact_numbers: [1, 3]}]}, 'microtech');
 assert.deepEqual(microtech.extra, []);
 assert.equal(Object.hasOwn(microtech.addresses[0], 'identifiers'), false);
+assert.equal(microtech.addresses[0].microtechAddressNumber, 2);
+assert.deepEqual(microtech.addresses[0].contacts.map(contact => contact.microtechContactNumber), [1, 3]);
 ''')
 
     def test_modal_close_invalidates_preview_without_starting_merge(self):
