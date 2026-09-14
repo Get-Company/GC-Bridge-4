@@ -1,4 +1,6 @@
+from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.urls import reverse
 
 from microtech.models import (
     MicrotechOrderRule, MicrotechOrderRuleConditionGroup,
@@ -65,3 +67,33 @@ class SaveFromPayloadTest(TestCase):
         p = self._payload(); p["root_group"]["conditions"][0]["operator_code"] = "nope"
         with self.assertRaises(EditorValidationError):
             save_rule_from_payload(p)
+
+
+class MetaTriggersTest(TestCase):
+    def setUp(self):
+        self.admin_user = get_user_model().objects.create_superuser(
+            username="admin_meta_triggers",
+            email="admin_meta_triggers@example.com",
+            password="secret123",
+        )
+        self.client.force_login(self.admin_user)
+
+    def test_meta_includes_active_trigger(self):
+        trig, _ = RuleTrigger.objects.get_or_create(
+            code="test_meta_trigger",
+            defaults={
+                "label": "Test Meta Trigger",
+                "task_name": "orders.microtech_order_upsert",
+                "context_root": "orders.Order",
+            },
+        )
+        response = self.client.get(reverse("admin:microtech_orderrule_builder_meta"))
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        triggers_by_code = {item["code"]: item for item in data["triggers"]}
+        self.assertIn("test_meta_trigger", triggers_by_code)
+        entry = triggers_by_code["test_meta_trigger"]
+        self.assertEqual(entry["id"], trig.id)
+        self.assertEqual(entry["label"], "Test Meta Trigger")
+        self.assertEqual(entry["task_name"], "orders.microtech_order_upsert")
+        self.assertEqual(entry["context_root"], "orders.Order")

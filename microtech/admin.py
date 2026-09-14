@@ -505,6 +505,16 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
                 }
                 for item in get_rule_action_target_defs()
             ],
+            "triggers": [
+                {
+                    "id": item.id,
+                    "code": item.code,
+                    "label": item.label,
+                    "task_name": item.task_name,
+                    "context_root": item.context_root,
+                }
+                for item in RuleTrigger.objects.filter(is_active=True).order_by("priority", "id")
+            ],
         }
         return JsonResponse(payload)
 
