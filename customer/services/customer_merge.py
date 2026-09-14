@@ -644,6 +644,7 @@ class CustomerMergeSearchService(BaseService):
                 {
                     "ans_id": address.get("addressNumber"),
                     "ans_nr": address.get("addressSubNumber"),
+                    "contact_numbers": [item["contactNumber"] for item in contacts if item.get("contactNumber") is not None],
                     "name1": _to_str(address.get("name1")),
                     "name2": _to_str(address.get("name2")),
                     "street": _to_str(address.get("street")),
@@ -712,7 +713,7 @@ class CustomerMergeSearchService(BaseService):
                     "id", "erp_ans_id", "erp_ans_nr", "name1", "name2", "name3",
                     "street", "postal_code", "city", "country_code", "email",
                     "first_name", "last_name", "phone", "is_shipping", "is_invoice",
-                    "api_id",
+                    "api_id", "erp_nr", "erp_combined_id", "erp_asp_id", "erp_asp_nr",
                 )
             )
             orders = list(
@@ -1530,6 +1531,80 @@ class ShopwareCustomerMergeService(BaseService):
 
     ENDPOINT = "/_action/gc-customer-merge"
     VERIFIED_FIELDS = ("credentials", "addresses", "orders", "defaults", "identity")
+    # Request and return only displayable business fields, never password hashes,
+    # recovery/registration tokens or arbitrary extension payloads.
+    CUSTOMER_COMPARISON_FIELDS = (
+        "id", "customerNumber", "email", "firstName", "lastName", "company", "title",
+        "salutationId", "vatIds", "accountType", "birthday", "active", "guest",
+        "lastLogin", "firstLogin", "createdAt", "groupId", "salesChannelId", "languageId",
+        "lastPaymentMethodId", "requestedGroupId", "affiliateCode", "campaignCode",
+        "doubleOptInRegistration", "doubleOptInEmailSentDate", "doubleOptInConfirmDate",
+        "defaultBillingAddressId", "defaultShippingAddressId",
+    )
+    ADDRESS_COMPARISON_FIELDS = (
+        "id", "customerId", "salutationId", "title", "firstName", "lastName", "company",
+        "department", "street", "additionalAddressLine1", "additionalAddressLine2",
+        "zipcode", "city", "countryId", "countryStateId", "phoneNumber",
+    )
+
+    def _comparison_snapshot(self, payload: dict) -> dict:
+        """Read both customers and every address without truncating large collections."""
+        from shopware.services import CustomerService
+
+        service = CustomerService()
+        ids = [payload["sourceId"], payload["targetId"]]
+        try:
+            response = service._request_with_retry("request_post", "/search/customer", payload={
+                "ids": ids, "limit": 2,
+                "includes": {"customer": list(self.CUSTOMER_COMPARISON_FIELDS)},
+            })
+            customers = {}
+            for item in response["data"]:
+                attrs = _safe_attrs(item)
+                customer = {field: attrs.get(field) for field in self.CUSTOMER_COMPARISON_FIELDS}
+                customer["id"] = self._id(item.get("id") or attrs.get("id"), "Kunde")
+                customers[customer["id"]] = {**customer, "addresses": []}
+            if set(customers) != set(ids):
+                raise ValueError("Unvollständige Kundenansicht")
+            page, seen = 1, set()
+            while True:
+                response = service._request_with_retry("request_post", "/search/customer-address", payload={
+                    "filter": [{"type": "equalsAny", "field": "customerId", "value": ids}],
+                    "limit": 100, "page": page, "total-count-mode": 1,
+                    "sort": [{"field": "id", "order": "ASC"}],
+                    "associations": {"country": {}, "countryState": {}, "salutation": {}},
+                    "includes": {
+                        "customer_address": [*self.ADDRESS_COMPARISON_FIELDS, "country", "countryState", "salutation"],
+                        "country": ["iso", "name"], "country_state": ["shortCode", "name"],
+                        "salutation": ["displayName"],
+                    },
+                })
+                rows, total = response["data"], response["total"]
+                if not isinstance(rows, list) or type(total) is not int or total < 0:
+                    raise ValueError("Unvollständige Adressansicht")
+                for item in rows:
+                    attrs = _safe_attrs(item)
+                    address = {field: attrs.get(field) for field in self.ADDRESS_COMPARISON_FIELDS}
+                    address["id"] = self._id(item.get("id") or attrs.get("id"), "Adresse")
+                    if address["id"] in seen or address["customerId"] not in customers:
+                        raise ValueError("Abweichende Adressansicht")
+                    seen.add(address["id"])
+                    for association, field in (("country", "name"), ("countryState", "name"), ("salutation", "displayName")):
+                        value = attrs.get(association)
+                        address[association] = _to_str(_safe_attrs(value).get(field)) if isinstance(value, dict) else ""
+                    customers[address["customerId"]]["addresses"].append(address)
+                if len(seen) == total:
+                    break
+                if not rows or len(seen) > total:
+                    raise ValueError("Unvollständige Adressansicht")
+                page += 1
+            return {"source": customers[ids[0]], "target": customers[ids[1]]}
+        except Exception:
+            raise ShopwareMergeError(
+                "Die Kunden- und Adressfelder konnten nicht vollständig aus Shopware geladen werden. "
+                "Bitte die Vorschau erneut laden. Es wurde kein Merge gestartet.",
+                code="GC_MERGE_COMPARISON_UNAVAILABLE",
+            ) from None
 
     @staticmethod
     def _id(value: Any, label: str) -> str:
@@ -1680,10 +1755,22 @@ class ShopwareCustomerMergeService(BaseService):
         except ValueError:
             raise self._upstream_error(None, 502, uncertain=not preview) from None
 
-    def preview(self, **selection) -> dict[str, Any]:
+    def preview(self, *, include_comparison: bool = False, **selection) -> dict[str, Any]:
         payload = self._payload(**selection)
+        before = self._comparison_snapshot(payload) if include_comparison else None
         data = self._request("preview", payload=payload)
-        return self._validate_result(data, payload=payload, preview=True)
+        result = self._validate_result(data, payload=payload, preview=True)
+        if include_comparison:
+            # Bracket the signed plugin preview with fresh reads. Never show stale
+            # search-cache fields alongside a newer, authoritative merge plan.
+            after = self._comparison_snapshot(payload)
+            if before != after or len(after["source"]["addresses"]) != result["addressesMoved"]:
+                raise ShopwareMergeError(
+                    "Die Kundendaten haben sich während der Vorschau geändert. Bitte die Vorschau erneut laden.",
+                    code="GC_MERGE_PREVIEW_STALE", status=409,
+                )
+            result["comparison"] = after
+        return result
 
     def merge(self, *, operation_id: str, preview_token: str, **selection) -> dict[str, Any]:
         payload = self._payload(**selection)

@@ -14,7 +14,7 @@
     background-size: 200% 100%;
   }
   .toggle-section { max-height: 0; overflow: hidden; transition: max-height .3s ease; }
-  .toggle-section.open { max-height: 4000px; }
+  .toggle-section.open { max-height: none; }
   .toggle-btn .arrow { transition: transform .2s; display: inline-block; }
   .toggle-btn.open .arrow { transform: rotate(90deg); }
   /* Highlight diffs: cells that differ from the first found system */
@@ -27,6 +27,90 @@
   }
   @media (max-width: 1023px) {
     .columns-grid { grid-template-columns: 1fr; }
+  }
+  .merge-identifiers { margin: 0 0 1.5rem; padding: .9rem 1rem; border: 1px solid #e2e8f0; border-radius: .75rem; background: #f8fafc; }
+  .merge-customer-identifiers { min-height: 11.5rem; }
+  .merge-identifier { display: grid; grid-template-columns: 6.5rem minmax(0, 1fr); gap: .75rem; align-items: baseline; padding: .35rem 0; }
+  .merge-identifier + .merge-identifier { border-top: 1px solid #e2e8f0; }
+  .merge-identifier dt { font-size: .7rem; color: #64748b; font-weight: 500; }
+  .merge-identifier dd { margin: 0; font: 500 .8rem/1.6 ui-monospace, monospace; overflow-wrap: anywhere; color: #334155; }
+  .merge-identifier .customer-number-field { display: flex; gap: .4rem; align-items: center; }
+  .merge-identifier input { width: 100%; min-width: 0; padding: .35rem .5rem; border: 1px solid #cbd5e1; border-radius: .35rem; background: #fff; }
+  .merge-identifier button { flex-shrink: 0; font-size: .7rem; font-weight: 500; color: #2563eb; }
+  .merge-address-identifiers { margin: .75rem 0 1rem; padding: .5rem .75rem; background: transparent; }
+  .merge-address-number { font: 600 2rem/1.2 ui-monospace, monospace; overflow-wrap: anywhere; min-width: 0; }
+  .merge-dialog { --merge-bg: #fff; --merge-muted: #f8fafc; --merge-line: #e2e8f0; --merge-text: #1e293b; --merge-subtle: #64748b; color: var(--merge-text); background: var(--merge-bg); width: min(1120px, calc(100vw - 3rem)); max-width: none; max-height: calc(100dvh - 3rem); margin: auto; padding: 0; border: 1px solid var(--merge-line); border-radius: 1rem; box-shadow: 0 24px 80px #0f172a33; }
+  .merge-dialog::backdrop { background: #0f172a80; backdrop-filter: blur(3px); }
+  .merge-dialog[open] { display: flex; flex-direction: column; }
+  .merge-dialog-header, .merge-dialog-footer { flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1.25rem 1.75rem; }
+  .merge-dialog-header { border-bottom: 1px solid var(--merge-line); }
+  .merge-dialog-header h2 { margin: .2rem 0; font-size: 1.25rem; font-weight: 650; }
+  .merge-dialog-eyebrow { font-size: .7rem; letter-spacing: .08em; text-transform: uppercase; color: var(--merge-subtle); }
+  .merge-dialog-body { padding: 1.5rem 1.75rem; overflow-y: auto; overscroll-behavior: contain; min-height: 0; }
+  .merge-dialog-footer { border-top: 1px solid var(--merge-line); background: var(--merge-muted); }
+  .merge-dialog-footer p { max-width: 37rem; margin: 0; font-size: .75rem; line-height: 1.6; color: var(--merge-subtle); }
+  .merge-dialog-actions { display: flex; flex-shrink: 0; gap: .65rem; }
+  .merge-dialog button { cursor: pointer; }
+  .merge-dialog button:disabled { opacity: .45; cursor: wait; }
+  .merge-dialog button:focus-visible { outline: 2px solid #3b82f6; outline-offset: 3px; }
+  .merge-button { padding: .65rem 1rem; border-radius: .5rem; border: 1px solid var(--merge-line); font-size: .8rem; font-weight: 600; }
+  .merge-button-danger { color: #fff; background: #be123c; border-color: #be123c; }
+  .merge-close { width: 2rem; height: 2rem; font-size: 1.5rem; color: var(--merge-subtle); border-radius: .4rem; }
+  .merge-summary { display: flex; flex-wrap: wrap; gap: .6rem; margin: 0 0 1.25rem; }
+  .merge-summary span { padding: .4rem .75rem; border: 1px solid var(--merge-line); border-radius: 2rem; font-size: .75rem; background: var(--merge-muted); }
+  .merge-comparison-section { margin: 0 0 1.5rem; }
+  .merge-comparison-section h3, .merge-address-comparison summary { font-size: .9rem; font-weight: 600; }
+  .merge-comparison-section h3 { margin: 0 0 .4rem; }
+  .merge-comparison-note { font-size: .75rem; color: var(--merge-subtle); line-height: 1.65; margin: .4rem 0 1rem; }
+  .merge-table-wrap { overflow-x: auto; border: 1px solid var(--merge-line); border-radius: .65rem; }
+  .merge-comparison-table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: .8rem; line-height: 1.6; }
+  .merge-comparison-table th, .merge-comparison-table td { padding: .75rem 1rem; vertical-align: top; text-align: left; overflow-wrap: anywhere; border-bottom: 1px solid var(--merge-line); }
+  .merge-comparison-table thead th { background: var(--merge-muted); font-size: .75rem; font-weight: 600; }
+  .merge-comparison-table tbody th { font-size: .7rem; font-weight: 500; color: var(--merge-subtle); overflow-wrap: normal; hyphens: auto; }
+  .merge-comparison-table tr:last-child > * { border-bottom: 0; }
+  .merge-comparison-table tbody tr:nth-child(even) { background: var(--merge-muted); }
+  .merge-comparison-table .merge-direction { width: 2rem; padding: .75rem 0; text-align: center; color: #94a3b8; font-weight: 400; }
+  .merge-field-col { width: 22%; }
+  .merge-direction-col { width: 2rem; }
+  .merge-value-mono { font-family: ui-monospace, monospace; font-size: .75rem; }
+  .merge-field-note { display: block; margin-top: .25rem; font-size: .65rem; color: var(--merge-subtle); }
+  .merge-address-comparison { margin: .75rem 0; border: 1px solid var(--merge-line); border-radius: .65rem; overflow: hidden; }
+  .merge-address-comparison summary { padding: 1rem 1.25rem; cursor: pointer; background: var(--merge-muted); }
+  .merge-address-comparison .merge-table-wrap { margin: 0 1rem 1rem; }
+  .merge-address-meta { padding: 0 1.25rem; }
+  .merge-result-space:not(.hidden) { margin-top: 1rem; }
+  .merge-launcher { margin-top: 1.5rem; border: 1px solid #cbd5e1; border-radius: .75rem; overflow: hidden; }
+  .merge-launcher h2 { margin: 0; padding: 1rem 1.25rem; border-bottom: 1px solid #e2e8f0; background: #f8fafc; font-size: .9rem; font-weight: 600; }
+  .merge-launcher-body { padding: 1.25rem; }
+  .merge-selection-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.5rem; }
+  .merge-selection-grid label { min-width: 0; font-size: .75rem; font-weight: 500; }
+  .merge-selection-grid select { display: block; width: 100%; margin-top: .5rem; padding: .7rem .75rem; border: 1px solid #cbd5e1; border-radius: .5rem; background: #fff; color: #334155; font-size: .8rem; }
+  .merge-launcher-note { margin: 1rem 0; font-size: .75rem; line-height: 1.7; color: #64748b; }
+  .merge-preview-button { padding: .65rem 1rem; border: 1px solid #cbd5e1; border-radius: .5rem; font-size: .8rem; font-weight: 600; cursor: pointer; }
+  .merge-preview-button:disabled { opacity: .45; cursor: wait; }
+  .merge-preview-button:focus-visible { outline: 2px solid #3b82f6; outline-offset: 3px; }
+  .dark .merge-identifiers { background: #1e293b66; border-color: #334155; }
+  .dark .merge-identifier + .merge-identifier { border-color: #334155; }
+  .dark .merge-identifier dt { color: #94a3b8; }
+  .dark .merge-identifier dd { color: #e2e8f0; }
+  .dark .merge-identifier input { background: #0f172a; border-color: #475569; }
+  .dark .merge-dialog { --merge-bg: #111827; --merge-muted: #1e293b; --merge-line: #334155; --merge-text: #e2e8f0; --merge-subtle: #94a3b8; }
+  .dark .merge-launcher, .dark .merge-launcher h2, .dark .merge-selection-grid select, .dark .merge-preview-button { border-color: #334155; }
+  .dark .merge-launcher h2, .dark .merge-selection-grid select { background: #1e293b; color: #e2e8f0; }
+  .dark .merge-launcher-note { color: #94a3b8; }
+  @media (max-width: 1023px) { .merge-customer-identifiers { min-height: 0; } }
+  @media (max-width: 640px) {
+    .merge-dialog { width: calc(100vw - 1rem); max-height: calc(100dvh - 1rem); }
+    .merge-dialog-header, .merge-dialog-footer, .merge-dialog-body { padding: 1rem; }
+    .merge-dialog-footer { align-items: stretch; flex-direction: column; }
+    .merge-dialog-actions { justify-content: flex-end; }
+    .merge-comparison-table { font-size: .75rem; }
+    .merge-comparison-table th, .merge-comparison-table td { padding: .6rem .5rem; }
+    .merge-comparison-table .merge-direction { width: 1rem; padding: .6rem 0; }
+    .merge-direction-col { width: 1rem; }
+    .merge-comparison-table .merge-value-mono { font-size: .7rem; }
+    .merge-address-comparison .merge-table-wrap { margin: 0 .5rem .5rem; }
+    .merge-selection-grid { grid-template-columns: 1fr; gap: 1rem; }
   }
 </style>
 
@@ -86,6 +170,28 @@
   </div>
 </div>
 
+<dialog id="sw-merge-modal" class="merge-dialog" aria-labelledby="sw-merge-modal-title" aria-describedby="sw-merge-modal-description">
+  <header class="merge-dialog-header">
+    <div>
+      <div class="merge-dialog-eyebrow">Shopware 6 · Kundenmerge</div>
+      <h2 id="sw-merge-modal-title" tabindex="-1" autofocus>Verbindliche Vorschau</h2>
+      <p id="sw-merge-modal-description" class="merge-comparison-note" style="margin:0">Quelle links, Ergebnis beim Zielkunden rechts. Bitte die Übernahme prüfen.</p>
+    </div>
+    <button type="button" class="merge-close" id="sw-merge-close" onclick="closeShopwareMergeModal()" aria-label="Vorschau schließen">×</button>
+  </header>
+  <div class="merge-dialog-body">
+    <div id="sw-merge-preview" aria-live="polite"></div>
+    <div id="sw-merge-result" class="hidden merge-result-space" role="status" aria-live="polite"></div>
+  </div>
+  <footer class="merge-dialog-footer">
+    <p>Der Quellkunde wird nach erfolgreicher Prüfung endgültig gelöscht. Django und microtech bleiben unverändert.</p>
+    <div class="merge-dialog-actions">
+      <button type="button" class="merge-button" id="sw-merge-cancel" onclick="closeShopwareMergeModal()">Schließen</button>
+      <button type="button" class="merge-button merge-button-danger" id="sw-merge-btn" disabled onclick="executeShopwareMerge()">Merge bestätigen</button>
+    </div>
+  </footer>
+</dialog>
+
 <script>
 const CSRF = '{{ csrf_token }}';
 let searchData = {};
@@ -101,7 +207,7 @@ const SYSTEMS = [
 ];
 
 /* ── helpers ──────────────────────────────────────────── */
-function esc(s) { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; }
+function esc(s) { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML.replaceAll('"', '&quot;').replaceAll("'", '&#39;'); }
 function customerField(label, value, { mono = false, diff = false, title = '' } = {}) {
   const hasValue = value !== '' && value !== null && value !== undefined;
   const displayValue = hasValue
@@ -113,20 +219,25 @@ function customerField(label, value, { mono = false, diff = false, title = '' } 
   </div>`;
 }
 function editableCustomerNumberField(erpNr, sysKey, customer) {
-  if (sysKey === 'microtech') {
-    return customerField(customer.customerNrLabel, customer.customerNr, { mono: true, title: customer.customerNr });
-  }
-  return `<div class="customer-number-field flex min-w-0 items-center gap-1.5">
-    <span class="shrink-0 text-[10px] font-medium uppercase tracking-wide text-gray-400">${esc(customer.customerNrLabel)}:</span>
-    <div class="flex min-w-0 flex-1 items-center gap-1">
+  return `<div class="customer-number-field">
       <input type="text" value="${esc(customer.customerNr)}" aria-label="${esc(customer.customerNrLabel)}"
-        class="min-w-0 flex-1 rounded border border-gray-300 bg-white px-1.5 py-0.5 font-mono text-xs dark:border-gray-600 dark:bg-gray-800">
-      <button type="button" onclick="updateCustomerNumber('${esc(erpNr)}', '${sysKey}', this)"
-        class="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium text-primary-600 hover:bg-primary-50 dark:text-primary-400 dark:hover:bg-primary-950/30">
+        autocomplete="off">
+      <button type="button" data-erp-nr="${esc(erpNr)}" onclick="updateCustomerNumber(this.dataset.erpNr, '${sysKey}', this)">
         Speichern
       </button>
-    </div>
   </div>`;
+}
+function identifierRows(entries) {
+  return entries.map(([label, value]) => `<div class="merge-identifier"><dt>${esc(label)}</dt><dd>${esc(value ?? '—') || '—'}</dd></div>`).join('');
+}
+function customerIdentifiers(nr, sysKey, raw, customer) {
+  const number = sysKey === 'microtech' ? esc(customer.customerNr) || '—' : editableCustomerNumberField(nr, sysKey, customer);
+  const ids = sysKey === 'django'
+    ? [['Django-ID', raw.id], ['SW6-ID', raw.api_id], ['ERP-ID', raw.erp_id]]
+    : sysKey === 'shopware' ? [['SW6-ID', raw.id]]
+    : String(raw.erp_id ?? '') === String(customer.customerNr) ? [] : [['ERP-AdrNr', raw.erp_id]];
+  return `<dl class="merge-identifiers merge-customer-identifiers" aria-label="Kennungen ${esc(sysKey)}">
+    <div class="merge-identifier"><dt>${esc(customer.customerNrLabel)}</dt><dd>${number}</dd></div>${identifierRows(ids)}</dl>`;
 }
 function toggleSection(btn) { btn.classList.toggle('open'); btn.nextElementSibling.classList.toggle('open'); }
 function spinner() { return '<span class="material-symbols-outlined text-sm animate-spin">progress_activity</span>'; }
@@ -161,10 +272,11 @@ function normalize(d, sys) {
       extra: [
         d.lastLogin ? `Login: ${d.lastLogin}` : '',
       ].filter(Boolean),
-      addresses: (d.addresses || []).map(a => {
+      addresses: (d.addresses || []).map((a, index) => {
         const n = [a.firstName, a.lastName].filter(Boolean).join(' ');
         return {
-          id: a.id || '', addressNumber: a.id || '', label: a.company || n,
+          id: a.id || '', addressNumber: index + 1, numberLabel: 'Adresse',
+          identifiers: [['SW6-Adress-ID', a.id]], label: a.company || n,
           street: a.street||'', zip: a.zipcode||'', city: a.city||'', country: a.countryIso||'',
           email: a.email||'', isShipping: Boolean(a.is_shipping), isBilling: Boolean(a.is_invoice),
         };
@@ -185,7 +297,10 @@ function normalize(d, sys) {
       ].filter(Boolean),
       addresses: (d.addresses || []).map(a => {
         return {
-          id: a.id, addressNumber: a.erp_ans_nr || a.id,
+          id: a.id, addressNumber: a.erp_ans_nr ?? a.id, numberLabel: a.erp_ans_nr != null ? 'AnsNr' : 'Django-ID',
+          identifiers: [['Django-ID', a.id], ['SW6-Adress-ID', a.api_id], ['ERP-AdrNr', a.erp_nr],
+            ['ERP-Kombi-ID', a.erp_combined_id], ['AnsId', a.erp_ans_id], ['AnsNr', a.erp_ans_nr],
+            ['AspId', a.erp_asp_id], ['AspNr', a.erp_asp_nr]],
           label: [a.name1, a.name2].filter(Boolean).join(' / '),
           street: a.street||'', zip: a.postal_code||'', city: a.city||'', country: a.country_code||'',
           email: a.email||'', phone: a.phone||'',
@@ -210,7 +325,8 @@ function normalize(d, sys) {
       d.status ? `Status: ${d.status}` : '',
     ].filter(Boolean),
     addresses: (d.addresses || []).map(a => ({
-      addressNumber: a.ans_nr || a.ans_id || '',
+      addressNumber: a.ans_nr ?? '', numberLabel: 'AnsNr',
+      identifiers: [['AdrNr', a.ans_id], ['AnsNr', a.ans_nr], ['AspNr', (a.contact_numbers || []).join(', ')]],
       label: [a.name1, a.name2].filter(Boolean).join(' / '),
       street: a.street||'', zip: a.postal_code||'', city: a.city||'',
       country: a.country_code||'', email: a.email||'',
@@ -693,11 +809,7 @@ function renderUnifiedCell(nr, sysKey) {
 
   let h = `<div class="text-sm">`;
 
-  // Keep the identifiers together, but stack them to make long SW6 IDs legible.
-  h += `<div class="space-y-1 rounded-md border border-gray-100 bg-gray-50/70 px-2.5 py-2 dark:border-gray-700/60 dark:bg-gray-800/40">
-    ${editableCustomerNumberField(nr, sysKey, d)}
-    ${customerField(d.systemIdLabel, d.systemId, { mono: true, title: d.systemId })}
-  </div>`;
+  h += customerIdentifiers(nr, sysKey, raw, d);
 
   h += `<div class="mt-5 space-y-1.5">
     ${customerField('Name', d.name, { diff: nameDiff, title: d.name })}
@@ -741,12 +853,13 @@ function renderUnifiedCell(nr, sysKey) {
         ${checkbox}
         <div class="flex-1 min-w-0">
           <div class="mb-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-            <div class="flex items-baseline gap-2">
-              <span class="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Adr.-Nr.</span>
-              <span class="font-mono text-[2rem] font-semibold leading-none text-gray-800 dark:text-gray-100">${esc(a.addressNumber || '—')}</span>
+            <div class="flex min-w-0 items-baseline gap-2">
+              <span class="text-[10px] font-semibold uppercase tracking-wider text-gray-400">${esc(a.numberLabel)}</span>
+              <span class="merge-address-number">${esc(a.addressNumber ?? '—') || '—'}</span>
             </div>
             ${flags}
           </div>
+          <dl class="merge-identifiers merge-address-identifiers">${identifierRows(a.identifiers)}</dl>
           <div class="font-medium text-sm">${esc(a.label)}</div>
           <div class="text-gray-500">${esc(a.street)}</div>
           <div class="text-gray-500">${esc(a.zip)} ${esc(a.city)} ${a.country ? esc(a.country) : ''}</div>
@@ -1130,6 +1243,126 @@ let swMergeBusy = false;
 let swMergeRetryAllowed = false;
 let swMergePreviewSequence = 0;
 
+function openShopwareMergeModal() {
+  const modal = document.getElementById('sw-merge-modal');
+  if (!modal.open) modal.showModal();
+}
+
+function closeShopwareMergeModal() {
+  if (!swMergeBusy) document.getElementById('sw-merge-modal').close();
+}
+
+document.getElementById('sw-merge-modal').addEventListener('cancel', event => {
+  if (swMergeBusy) event.preventDefault();
+});
+document.getElementById('sw-merge-modal').addEventListener('close', () => {
+  // Closing is not approval. A later opening always gets a new preview.
+  invalidateShopwareMergePreview();
+});
+
+function mergeDisplayValue(value, field = '') {
+  if (field === 'lastLogin' && !value) return 'Noch nie eingeloggt';
+  if (value === null || value === undefined || value === '') return '—';
+  if (typeof value === 'boolean') return value ? 'Ja' : 'Nein';
+  if (field === 'accountType') return ({business: 'Geschäftskonto', private: 'Privatkonto'})[value] || String(value);
+  if (Array.isArray(value)) return value.join(', ') || '—';
+  if (['lastLogin', 'firstLogin', 'createdAt', 'doubleOptInEmailSentDate', 'doubleOptInConfirmDate'].includes(field)) {
+    const date = new Date(value);
+    if (!isNaN(date)) return date.toLocaleString('de-DE');
+  }
+  return String(value);
+}
+
+function mergeComparisonRow(label, before, after, {field = '', note = '', moves = false, previous} = {}) {
+  const mono = field === 'id' || field.endsWith('Id') || field === 'customerNumber';
+  const previousNote = previous !== undefined && previous !== after
+    ? `<span class="merge-field-note">Ziel vorher: ${esc(mergeDisplayValue(previous, field))}</span>` : '';
+  return `<tr><th scope="row">${esc(label)}</th>
+    <td class="${mono ? 'merge-value-mono' : ''}">${esc(mergeDisplayValue(before, field))}</td>
+    <td class="merge-direction" aria-hidden="true">${moves ? '→' : ''}</td>
+    <td class="${mono ? 'merge-value-mono' : ''}">${esc(mergeDisplayValue(after, field))}${previousNote}${note ? `<span class="merge-field-note">${esc(note)}</span>` : ''}</td></tr>`;
+}
+
+function mergeComparisonTable(rows, left = 'Quellkunde · vorher', right = 'Zielkunde · nachher') {
+  return `<div class="merge-table-wrap"><table class="merge-comparison-table">
+    <colgroup><col class="merge-field-col"><col><col class="merge-direction-col"><col></colgroup>
+    <thead><tr><th scope="col">Feld</th><th scope="col">${esc(left)}</th><th class="merge-direction" aria-hidden="true">→</th><th scope="col">${esc(right)}</th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+}
+
+function renderShopwareMergeComparison(data) {
+  const {source, target} = data.comparison || {};
+  if (!source || !target || source.id !== data.sourceId || target.id !== data.targetId ||
+      !Array.isArray(source.addresses) || !Array.isArray(target.addresses) ||
+      source.addresses.length !== data.addressesMoved) {
+    throw new Error('Die vollständigen Vergleichsdaten fehlen. Bitte die Vorschau erneut laden.');
+  }
+  const credentials = data.credentialsCopied ? source : target;
+  const number = customer => customer.customerNumber || customer.id;
+  const rows = fields => fields.map(([key, label]) => mergeComparisonRow(label, source[key], target[key], {field: key})).join('');
+  let html = `<div class="merge-summary"><span>${esc(number(source))} → ${esc(number(target))}</span>
+    <span>+ ${esc(data.addressesMoved)} Adressen</span><span>+ ${esc(data.ordersMoved)} Bestellzuordnungen</span></div>`;
+  html += `<section class="merge-comparison-section"><h3>Kundenkonto</h3>
+    <p class="merge-comparison-note">Links der bisherige Quellkunde, rechts der verbleibende Zielkunde nach dem Merge. Seine Identität und Stammdaten bleiben erhalten. Nur die Zugangsdaten werden anhand des letzten Logins ausgewählt.</p>`;
+  html += mergeComparisonTable(rows([
+    ['customerNumber', 'Kundennummer'], ['id', 'SW6-Kunden-ID'], ['company', 'Firma'],
+    ['title', 'Titel'], ['firstName', 'Vorname'], ['lastName', 'Nachname'], ['vatIds', 'USt-IDs'],
+    ['accountType', 'Kontotyp'], ['birthday', 'Geburtstag'], ['active', 'Aktiv'], ['guest', 'Gastkonto'],
+  ])) + '</section>';
+  html += `<section class="merge-comparison-section"><h3>Zugangsdaten · E-Mail und Passwort gehören zusammen</h3>
+    <p class="merge-comparison-note">${data.credentialsCopied
+      ? 'Der Quellkunde wurde zuletzt benutzt. Sein vollständiges Login-Paar wird beim Zielkunden eingetragen.'
+      : 'Das Login-Paar des Zielkunden bleibt erhalten. Bei gleichem oder beidseitig fehlendem lastLogin gilt ebenfalls der Zielkunde.'}
+      Passwort-Hashes werden ausschließlich innerhalb von Shopware verarbeitet und hier nicht offengelegt.</p>`;
+  html += mergeComparisonTable(
+    mergeComparisonRow('Login-E-Mail', source.email, credentials.email, {moves: data.credentialsCopied, previous: target.email}) +
+    mergeComparisonRow('Passwort-Hash', 'Geschützt · Konto ' + number(source), 'Geschützt · Konto ' + number(credentials), {
+      moves: data.credentialsCopied, note: 'Wird immer gemeinsam mit der zugehörigen E-Mail verwendet.',
+    }) +
+    mergeComparisonRow('Letzter Login', source.lastLogin, credentials.lastLogin, {field: 'lastLogin', moves: data.credentialsCopied, previous: target.lastLogin}) +
+    mergeComparisonRow('Login-Quelle', number(source), number(credentials), {moves: data.credentialsCopied})
+  ) + '</section>';
+  html += `<section class="merge-comparison-section"><h3>Adressen · ${source.addresses.length + target.addresses.length} nach dem Merge</h3>
+    <p class="merge-comparison-note">Jede Anschrift ist links vor und rechts nach dem Merge dargestellt. Quelladressen kommen zusätzlich zum Zielkunden; bestehende Zieladressen bleiben erhalten. Es wird keine Adresse überschrieben oder automatisch zusammengefasst. Blau markiert Lieferung, Violett Rechnung – jeweils den Standard des zugehörigen Kontos.</p>`;
+  const addressFields = [
+    ['id', 'SW6-Adress-ID'], ['customerId', 'SW6-Kunden-ID'], ['salutation', 'Anrede'], ['title', 'Titel'],
+    ['firstName', 'Vorname'], ['lastName', 'Nachname'], ['company', 'Firma'], ['department', 'Abteilung'],
+    ['street', 'Straße / Hausnummer'], ['additionalAddressLine1', 'Adresszusatz 1'], ['additionalAddressLine2', 'Adresszusatz 2'],
+    ['zipcode', 'PLZ'], ['city', 'Ort'], ['country', 'Land'], ['countryState', 'Bundesland'], ['phoneNumber', 'Telefon'],
+    ['countryId', 'Land-ID'], ['countryStateId', 'Bundesland-ID'], ['salutationId', 'Anrede-ID'],
+  ];
+  for (const [owner, moved] of [[source, true], [target, false]]) {
+    owner.addresses.forEach((address, index) => {
+      const badges = customer => standardAddressBadges({
+        isShipping: address.id === customer.defaultShippingAddressId,
+        isBilling: address.id === customer.defaultBillingAddressId,
+      }) || '<span class="merge-comparison-note">Kein Standard</span>';
+      const resultDefaults = {defaultShippingAddressId: data.defaultShippingAddressId, defaultBillingAddressId: data.defaultBillingAddressId};
+      const title = [address.company, address.street, address.zipcode, address.city].filter(Boolean).join(' · ');
+      let addressRows = mergeComparisonRow('Kundennummer', number(owner), number(target), {moves: moved});
+      addressRows += addressFields.map(([field, label]) => mergeComparisonRow(label, address[field], field === 'customerId' ? target.id : address[field], {
+        field, moves: moved && field === 'customerId',
+      })).join('');
+      addressRows += `<tr><th scope="row">Standardadresse</th><td>${badges(owner)}</td><td class="merge-direction" aria-hidden="true">${moved ? '→' : ''}</td><td>${badges(resultDefaults)}</td></tr>`;
+      html += `<details open class="merge-address-comparison"><summary>${moved ? 'Übernahme' : 'Bleibt erhalten'} · Adresse ${index + 1} von ${esc(number(owner))} · ${esc(title || address.id)}</summary>
+        <p class="merge-comparison-note merge-address-meta">${moved ? 'Diese Anschrift wird unverändert dem Zielkunden zugeordnet. Ihre SW6-Adress-ID bleibt erhalten.' : 'Diese Anschrift gehört bereits zum Zielkunden und bleibt unverändert.'}</p>
+        ${mergeComparisonTable(addressRows, 'Alte Adresse · ' + number(owner), 'Neue Zuordnung · ' + number(target))}</details>`;
+    });
+  }
+  html += '</section>';
+  html += `<section class="merge-comparison-section"><h3>Bestellungen</h3><p class="merge-comparison-note">${esc(data.ordersMoved)} Bestellzuordnungen wechseln zum Zielkunden. Bereits vorhandene Bestellungen bleiben erhalten. Historische Rechnungs- und Lieferadressen in den Bestellungen werden nicht verändert.</p></section>`;
+  html += `<details class="merge-address-comparison"><summary>Weitere Kontofelder und technische Verknüpfungen · Zielwerte bleiben erhalten</summary>
+    <p class="merge-comparison-note merge-address-meta">Zusätzliche Standardfelder im direkten Vergleich. Technische Erweiterungsfelder werden nicht angezeigt: Am Zielkonto bleiben sie unverändert; an Anschriften werden sie mit übertragen.</p>`;
+  html += mergeComparisonTable(rows([
+    ['salutationId', 'Anrede-ID'], ['groupId', 'Kundengruppen-ID'], ['requestedGroupId', 'Angefragte Gruppen-ID'],
+    ['salesChannelId', 'Verkaufskanal-ID'], ['languageId', 'Sprach-ID'], ['lastPaymentMethodId', 'Letzte Zahlungsart-ID'],
+    ['affiliateCode', 'Affiliate-Code'], ['campaignCode', 'Kampagnen-Code'], ['firstLogin', 'Erster Login'], ['createdAt', 'Erstellt am'],
+    ['doubleOptInRegistration', 'Double-Opt-in'], ['doubleOptInEmailSentDate', 'Bestätigung gesendet'], ['doubleOptInConfirmDate', 'Bestätigt am'],
+    ['defaultBillingAddressId', 'Standard-Rechnungsadresse-ID'], ['defaultShippingAddressId', 'Standard-Lieferadresse-ID'],
+  ])) + '</details>';
+  return html;
+}
+
 function swMergeSelection() {
   return {
     keep_sw_id: document.getElementById('sw-merge-keep')?.value || '',
@@ -1139,12 +1372,17 @@ function swMergeSelection() {
 
 function setShopwareMergeBusy(busy) {
   swMergeBusy = busy;
-  ['sw-merge-keep', 'sw-merge-delete', 'sw-merge-preview-btn'].forEach(id => {
+  ['sw-merge-keep', 'sw-merge-delete'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.disabled = busy || !!swMergePending;
   });
   const execute = document.getElementById('sw-merge-btn');
   if (execute) execute.disabled = busy || !!swMergePending || !swMergePreview;
+  if (execute) execute.hidden = !!swMergePending;
+  ['sw-merge-preview-btn', 'sw-merge-close', 'sw-merge-cancel'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = busy;
+  });
   const status = document.getElementById('sw-merge-status-btn');
   if (status) status.disabled = busy;
   const retry = document.getElementById('sw-merge-retry-btn');
@@ -1168,18 +1406,16 @@ function renderShopwareMergeSection() {
     return known + (selectedId && !customers.some(c => c.id === selectedId)
       ? '<option selected value="' + esc(selectedId) + '">SW6-ID: ' + esc(selectedId) + '</option>' : '');
   };
-  container.innerHTML = '<div class="border border-blue-200 dark:border-blue-800 rounded-lg overflow-hidden">' +
-    '<div class="bg-blue-50 dark:bg-blue-900/20 px-4 py-3"><h2 class="font-semibold text-sm text-blue-700 dark:text-blue-300">SW6-Kunden zusammenführen</h2></div>' +
-    '<div class="p-4 space-y-4"><div class="grid grid-cols-1 md:grid-cols-2 gap-4">' +
-    '<label class="text-sm text-red-600">Quellkunde – nach Prüfung löschen<select id="sw-merge-delete" onchange="invalidateShopwareMergePreview()" class="w-full border rounded p-2 bg-white dark:bg-gray-800">' +
+  container.innerHTML = '<div class="merge-launcher">' +
+    '<h2>SW6-Kunden zusammenführen</h2>' +
+    '<div class="merge-launcher-body"><div class="merge-selection-grid">' +
+    '<label>Quellkunde – nach Prüfung löschen<select id="sw-merge-delete" onchange="invalidateShopwareMergePreview()">' +
     options(selected.delete_sw_id || customers[0]?.id) + '</select></label>' +
-    '<label class="text-sm text-green-600">Zielkunde – SW6-ID bleibt erhalten<select id="sw-merge-keep" onchange="invalidateShopwareMergePreview()" class="w-full border rounded p-2 bg-white dark:bg-gray-800">' +
+    '<label>Zielkunde – SW6-ID bleibt erhalten<select id="sw-merge-keep" onchange="invalidateShopwareMergePreview()">' +
     options(selected.keep_sw_id || customers[1]?.id) + '</select></label></div>' +
-    '<div class="text-xs text-gray-500">Alle Adressen und Bestellzuordnungen werden übernommen. Keine Adresse wird zusammengefasst oder gelöscht. Die am Zielkunden eingestellten Standardadressen bleiben erhalten. Django und microtech bleiben unverändert.</div>' +
-    '<div id="sw-merge-preview"></div><div class="flex gap-3 flex-wrap">' +
-    '<button id="sw-merge-preview-btn" onclick="loadShopwareMergePreview()" class="px-4 py-2 border rounded text-sm disabled:opacity-50">Verbindliche Vorschau laden</button>' +
-    '<button id="sw-merge-btn" disabled onclick="executeShopwareMerge()" class="px-4 py-2 bg-red-600 text-white rounded text-sm disabled:opacity-50">SW6-Merge bestätigen und ausführen</button></div>' +
-    '<div id="sw-merge-result" class="hidden"></div></div></div>';
+    '<p class="merge-launcher-note">Alle Adressen und Bestellzuordnungen werden übernommen. Keine Adresse wird zusammengefasst oder gelöscht. Die am Zielkunden eingestellten Standardadressen bleiben erhalten. Django und microtech bleiben unverändert.</p>' +
+    '<button type="button" id="sw-merge-preview-btn" onclick="loadShopwareMergePreview()" class="merge-preview-button">Vorschau laden</button>' +
+    '</div></div>';
   invalidateShopwareMergePreview();
   if (swMergePending) showShopwareMergePending('Ein noch nicht abschließend bestätigter Vorgang wurde wiederhergestellt. Bitte zuerst den Status prüfen.');
 }
@@ -1217,27 +1453,27 @@ async function shopwareMergeRequest(body, statusOperationId = null) {
 }
 
 async function loadShopwareMergePreview() {
-  if (swMergePending || swMergeBusy) return;
+  if (swMergeBusy) return;
+  if (swMergePending) { openShopwareMergeModal(); return; }
   const selection = swMergeSelection();
   if (!selection.keep_sw_id || !selection.delete_sw_id || selection.keep_sw_id === selection.delete_sw_id) {
     alert('Bitte zwei unterschiedliche SW6-Kunden wählen.'); return;
   }
   const sequence = ++swMergePreviewSequence;
+  swMergePreview = null;
+  openShopwareMergeModal();
   setShopwareMergeBusy(true);
+  const result = document.getElementById('sw-merge-result');
+  result.innerHTML = '';
+  result.classList.add('hidden');
   const preview = document.getElementById('sw-merge-preview');
   preview.innerHTML = spinner() + ' Shopware prüft den Merge …';
   try {
     const data = await shopwareMergeRequest({action: 'preview', ...selection});
     if (sequence !== swMergePreviewSequence) return;
+    const comparison = renderShopwareMergeComparison(data);
     swMergePreview = {selection, data};
-    const credentials = shopwareCustomerById(data.credentialSourceId);
-    preview.innerHTML = '<div class="p-3 border border-blue-200 rounded bg-blue-50 dark:bg-blue-900/20 text-sm">' +
-      '<strong>Von Shopware bestätigte Vorschau</strong><br>' +
-      'Zielkunde bleibt: <span class="font-mono">' + esc(data.targetId) + '</span><br>' +
-      'Login-Daten: E-Mail und Passwort-Hash ' + (data.credentialsCopied ? 'werden gemeinsam vom Quellkunden übernommen' : 'des Zielkunden bleiben erhalten') + '.<br>' +
-      'Login-Quelle: ' + esc(credentials?.number || data.credentialSourceId) +
-      ' · ' + data.addressesMoved + ' Adressen und ' + data.ordersMoved + ' Bestellzuordnungen werden übertragen.<br>' +
-      'Der Quellkunde wird erst nach erfolgreicher serverseitiger Prüfung gelöscht.</div>';
+    preview.innerHTML = comparison;
   } catch (error) {
     swMergePreview = null;
     preview.innerHTML = '<div class="p-3 text-sm text-red-600">' + esc(error.message) + '</div>';
@@ -1247,6 +1483,7 @@ async function loadShopwareMergePreview() {
 function showShopwareMergePending(message) {
   const result = document.getElementById('sw-merge-result');
   if (!result || !swMergePending) return;
+  openShopwareMergeModal();
   result.classList.remove('hidden');
   result.innerHTML = '<div class="p-3 border border-amber-300 rounded text-sm text-amber-700 dark:text-amber-300">' +
     esc(message) + '<br>Vorgangs-ID: <span class="font-mono break-all">' + esc(swMergePending.operation_id) + '</span>' +
@@ -1301,13 +1538,9 @@ async function sendPendingShopwareMerge() {
 }
 
 async function executeShopwareMerge() {
-  if (swMergeBusy || swMergePending || !swMergePreview) return;
+  if (swMergeBusy || swMergePending || !swMergePreview || !document.getElementById('sw-merge-modal').open) return;
   const {selection, data} = swMergePreview;
   if (JSON.stringify(selection) !== JSON.stringify(swMergeSelection())) { invalidateShopwareMergePreview(); return; }
-  if (!confirm('Kunde ' + data.sourceId + ' nach ' + data.targetId + ' zusammenführen? Der Zielkunde behält seine SW6-ID. ' +
-      data.addressesMoved + ' Adressen und ' + data.ordersMoved + ' Bestellzuordnungen werden übernommen. ' +
-      (data.credentialsCopied ? 'E-Mail und Passwort-Hash des Quellkunden gewinnen. ' : 'Zugangsdaten des Zielkunden bleiben erhalten. ') +
-      'Der Quellkunde wird nach erfolgreicher Prüfung unwiderruflich gelöscht.')) return;
   try {
     const operationId = Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, '0')).join('');
     const pending = {action: 'execute', ...selection, operation_id: operationId, preview_token: data.previewToken};

@@ -163,6 +163,7 @@ class CustomerMergeMicrotechSearchTest(SimpleTestCase):
                         "contacts": [
                             {
                                 "isDefault": True,
+                                "contactNumber": 3,
                                 "firstName": "Max",
                                 "lastName": "Muster",
                                 "email": "max@example.com",
@@ -179,6 +180,7 @@ class CustomerMergeMicrotechSearchTest(SimpleTestCase):
         self.assertEqual(customer["erp_id"], 42)
         self.assertEqual(customer["addresses"][0]["firstName"], "Max")
         self.assertEqual(customer["addresses"][0]["email"], "max@example.com")
+        self.assertEqual(customer["addresses"][0]["contact_numbers"], [3])
         self.assertTrue(customer["addresses"][0]["is_shipping"])
         self.assertTrue(customer["addresses"][0]["is_invoice"])
 
@@ -555,6 +557,7 @@ class ShopwareCustomerMergeViewTest(SimpleTestCase):
         }))
         self.assertEqual(result.status_code, 200)
         service_class.return_value.preview.assert_called_once()
+        self.assertTrue(service_class.return_value.preview.call_args.kwargs["include_comparison"])
         service_class.return_value.merge.assert_not_called()
 
     @patch("customer.views.ShopwareCustomerMergeService")
@@ -618,13 +621,119 @@ class ShopwareCustomerMergeViewTest(SimpleTestCase):
         self.assertNotIn("secret", result.content.decode())
 
 
+class ShopwareMergeComparisonTest(SimpleTestCase):
+    def setUp(self):
+        self.client_patch = patch("shopware.services.CustomerService")
+        self.client = self.client_patch.start().return_value
+        self.addCleanup(self.client_patch.stop)
+        self.service = ShopwareCustomerMergeService()
+        self.source, self.target = "a" * 32, "b" * 32
+        self.customers = [
+            {"id": self.source, "customerNumber": "10001", "email": "source@example.invalid", "password": "NEVER-FORWARD"},
+            {"id": self.target, "customerNumber": "10002", "email": "target@example.invalid"},
+        ]
+        self.addresses = [
+            {"id": f"{index + 1:032x}", "customerId": self.source, "additionalAddressLine2": "Hinterhaus", "hash": "NEVER-FORWARD"}
+            for index in range(105)
+        ] + [{"id": "d" * 32, "customerId": self.target}]
+        self.plan = {
+            "sourceId": self.source, "targetId": self.target, "credentialSourceId": self.source,
+            "credentialsCopied": True, "addressesMoved": 105, "ordersMoved": 501,
+            "previewToken": "signed-plan", "defaultBillingAddressId": "d" * 32,
+            "defaultShippingAddressId": "d" * 32,
+        }
+        self.client._request_with_retry.side_effect = self.api_response
+
+    def api_response(self, method, path, *, payload):
+        self.assertEqual(method, "request_post")
+        if path == "/search/customer":
+            return {"data": self.customers}
+        if path == "/search/customer-address":
+            start = (payload["page"] - 1) * payload["limit"]
+            return {"data": self.addresses[start:start + payload["limit"]], "total": len(self.addresses)}
+        self.assertEqual(path, "/_action/gc-customer-merge/preview")
+        return self.plan
+
+    def preview(self):
+        return self.service.preview(include_comparison=True, keep_sw_id=self.target, delete_sw_id=self.source)
+
+    def test_fresh_comparison_includes_every_address_and_no_hashes(self):
+        result = self.preview()
+        self.assertEqual(len(result["comparison"]["source"]["addresses"]), 105)
+        self.assertEqual(len(result["comparison"]["target"]["addresses"]), 1)
+        self.assertEqual(result["comparison"]["source"]["addresses"][-1]["additionalAddressLine2"], "Hinterhaus")
+        self.assertNotIn("NEVER-FORWARD", json.dumps(result))
+        calls = self.client._request_with_retry.call_args_list
+        self.assertEqual([call.args[1] for call in calls], [
+            "/search/customer", "/search/customer-address", "/search/customer-address",
+            "/_action/gc-customer-merge/preview",
+            "/search/customer", "/search/customer-address", "/search/customer-address",
+        ])
+        requested_fields = json.dumps([call.kwargs["payload"].get("includes") for call in calls])
+        for field in ('"password"', '"legacyPassword"', '"hash"', '"customFields"'):
+            self.assertNotIn(field, requested_fields)
+        self.client.request_patch.assert_not_called()
+        self.client.request_delete.assert_not_called()
+
+    def test_changing_customer_during_preview_is_rejected(self):
+        def response(method, path, *, payload):
+            if path == "/_action/gc-customer-merge/preview":
+                self.customers[0]["email"] = "changed@example.invalid"
+            return self.api_response(method, path, payload=payload)
+        self.client._request_with_retry.side_effect = response
+        with self.assertRaises(ShopwareMergeError) as raised:
+            self.preview()
+        self.assertEqual(raised.exception.code, "GC_MERGE_PREVIEW_STALE")
+        self.assertFalse(raised.exception.uncertain)
+
+    def test_plugin_count_mismatch_rejects_incomplete_address_preview(self):
+        self.plan["addressesMoved"] = 106
+        with self.assertRaises(ShopwareMergeError) as raised:
+            self.preview()
+        self.assertEqual(raised.exception.code, "GC_MERGE_PREVIEW_STALE")
+
+    def test_missing_customer_never_falls_back_to_search_cache(self):
+        self.customers.pop()
+        with self.assertRaises(ShopwareMergeError) as raised:
+            self.preview()
+        self.assertEqual(raised.exception.code, "GC_MERGE_COMPARISON_UNAVAILABLE")
+        self.assertEqual(self.client._request_with_retry.call_count, 1)
+
+    def test_repeating_address_page_is_rejected(self):
+        self.addresses[100] = self.addresses[0]
+        with self.assertRaises(ShopwareMergeError):
+            self.preview()
+
+    def test_upstream_errors_cannot_leak_secrets(self):
+        self.client._request_with_retry.side_effect = RuntimeError("NEVER-FORWARD")
+        with self.assertRaises(ShopwareMergeError) as raised:
+            self.preview()
+        self.assertNotIn("NEVER-FORWARD", str(raised.exception))
+
+
 @skipUnless(shutil.which("node"), "Node is needed for the isolated browser-state checks")
 class ShopwareMergeBrowserStateTest(SimpleTestCase):
     """Exercise the actual template JS with fake DOM/network and no database."""
 
+    def test_template_has_one_confirmation_button_inside_native_dialog(self):
+        from django.template.loader import get_template
+
+        get_template("admin/customer_merge.html")  # Compile with Django, without rendering or DB access.
+        template = (Path(__file__).resolve().parents[1] / "templates/admin/customer_merge.html").read_text()
+        markup = template.split("<script>", 1)[0]
+        modal = markup.split('<dialog id="sw-merge-modal"', 1)[1].split("</dialog>", 1)[0]
+        self.assertEqual(markup.count('id="sw-merge-btn"'), 1)
+        self.assertIn('id="sw-merge-btn"', modal)
+        self.assertIn('aria-labelledby="sw-merge-modal-title"', modal)
+        self.assertIn('id="sw-merge-preview"', modal)
+        self.assertIn('id="sw-merge-result"', modal)
+
     def run_js(self, assertions, *, saved=None):
         template = (Path(__file__).resolve().parents[1] / "templates/admin/customer_merge.html").read_text()
-        script = "const swMergeStorageKey =" + template.split("const swMergeStorageKey =", 1)[1].split("</script>", 1)[0]
+        badges = "function standardAddressBadges(" + template.split("function standardAddressBadges(", 1)[1].split("/* ── search", 1)[0]
+        identifiers = "function editableCustomerNumberField(" + template.split("function editableCustomerNumberField(", 1)[1].split("function toggleSection(", 1)[0]
+        normalize = "function normalize(" + template.split("function normalize(", 1)[1].split("function standardAddressBadges(", 1)[0]
+        script = identifiers + normalize + badges + "const swMergeStorageKey =" + template.split("const swMergeStorageKey =", 1)[1].split("</script>", 1)[0]
         harness = r'''
 const assert = require('node:assert/strict');
 const vm = require('node:vm');
@@ -637,8 +746,11 @@ let confirmCount = 0;
 let refreshCount = 0;
 const element = id => {
   if (!elements.has(id)) elements.set(id, {
-    value: '', innerHTML: '', disabled: false,
-    classList: {removed: [], remove(name) { this.removed.push(name); }},
+    value: '', innerHTML: '', disabled: false, open: false, hidden: false, listeners: {},
+    addEventListener(name, handler) { this.listeners[name] = handler; },
+    showModal() { this.open = true; },
+    close() { this.open = false; this.listeners.close?.(); },
+    classList: {removed: [], remove(name) { this.removed.push(name); }, add() {}},
   });
   return elements.get(id);
 };
@@ -650,7 +762,14 @@ const sandbox = {
   CSRF: 'test-only',
   sessionStorage: {getItem: key => stored.get(key) || null, setItem: (key, val) => stored.set(key, val), removeItem: key => stored.delete(key)},
   document: {getElementById: element},
-  spinner: () => 'loading', esc: value => String(value ?? ''),
+  spinner: () => 'loading', esc: value => String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;'),
+  comparisonFixture: (source = 'a'.repeat(32), target = 'b'.repeat(32)) => ({
+    source: {id: source, customerNumber: '10001', email: 'quelle@example.invalid',
+      addresses: Array.from({length: 5}, (_, index) => ({id: String(index + 1).repeat(32), customerId: source, street: 'Quellstraße ' + (index + 1)}))},
+    target: {id: target, customerNumber: '10002', email: 'ziel@example.invalid',
+      defaultBillingAddressId: 'd'.repeat(32), defaultShippingAddressId: 'd'.repeat(32),
+      addresses: [{id: 'd'.repeat(32), customerId: target, street: 'Zielstraße 1'}]},
+  }),
   collectShopwareCustomers: () => [], shopwareCustomerById: () => null,
   confirm: () => { confirmCount++; return true; },
   alert: message => { throw new Error(message); },
@@ -679,6 +798,7 @@ vm.runInNewContext(script + '\n(async () => {' + assertions + '\n})().catch(erro
     def test_timeout_keeps_durable_operation_and_retry_uses_same_id(self):
         self.run_js(r'''
 const selection = swMergeSelection();
+openShopwareMergeModal();
 swMergePreview = {selection, data: {sourceId: selection.delete_sw_id, targetId: selection.keep_sw_id,
   credentialsCopied: true, addressesMoved: 5, ordersMoved: 501, previewToken: 'snapshot'}};
 await executeShopwareMerge();
@@ -731,6 +851,7 @@ fetch = async (url, options) => {
     sourceId: source, targetId: target, credentialSourceId: source, credentialsCopied: true,
     addressesMoved: 5, ordersMoved: 1, previewToken: 'signed-with-omitted-defaults',
     defaultBillingAddressId: 'd'.repeat(32), defaultShippingAddressId: 'e'.repeat(32),
+    comparison: comparisonFixture(source, target),
   })};
   throw new Error('simulated timeout');
 };
@@ -760,7 +881,103 @@ for (const id of ['sw-merge-defaults', 'sw-merge-billing', 'sw-merge-shipping'])
   assert.equal(html.includes(id), false);
 }
 assert.ok(html.includes('am Zielkunden eingestellten Standardadressen bleiben erhalten'));
+assert.equal(html.includes('id="sw-merge-btn"'), false, 'Merge can only be confirmed inside the modal');
+assert.equal(html.includes('id="sw-merge-preview"'), false, 'Preview content belongs to the modal');
+assert.ok(html.includes('>Vorschau laden</button>'));
 assert.deepEqual(Object.keys(swMergeSelection()).sort(), ['delete_sw_id', 'keep_sw_id']);
+''')
+
+    def test_modal_compares_all_addresses_and_keeps_target_profile(self):
+        self.run_js(r'''
+const comparison = comparisonFixture();
+comparison.source.firstName = '<img src=x onerror=alert(1)>';
+comparison.target.firstName = 'Ziel-Vorname';
+comparison.source.lastLogin = '2026-09-14T10:00:00Z';
+comparison.source.addresses[0].additionalAddressLine2 = 'Hinterhaus / 3. Stock';
+const html = renderShopwareMergeComparison({comparison, sourceId: comparison.source.id,
+  targetId: comparison.target.id, credentialSourceId: comparison.source.id, credentialsCopied: true,
+  addressesMoved: 5, ordersMoved: 501, defaultBillingAddressId: 'd'.repeat(32), defaultShippingAddressId: 'd'.repeat(32)});
+assert.equal((html.match(/<details open/g) || []).length, 6);
+for (const value of ['Quellstraße 5', 'Zielstraße 1', 'Hinterhaus / 3. Stock', 'Ziel-Vorname', 'quelle@example.invalid', 'ziel@example.invalid', 'Geschützt · Konto 10001']) assert.ok(html.includes(value), value);
+assert.equal(html.includes('<img'), false);
+assert.ok(html.includes('&lt;img'));
+assert.ok(html.includes('Lieferadresse'));
+assert.ok(html.includes('Rechnungsadresse'));
+assert.ok(html.includes('merge-direction'));
+assert.ok(html.includes('Ziel vorher: ziel@example.invalid'));
+''')
+
+    def test_missing_login_retains_target_pair_in_comparison(self):
+        self.run_js(r'''
+const comparison = comparisonFixture();
+const html = renderShopwareMergeComparison({comparison, sourceId: comparison.source.id,
+  targetId: comparison.target.id, credentialsCopied: false, addressesMoved: 5, ordersMoved: 1});
+assert.ok(html.includes('Noch nie eingeloggt'));
+assert.ok(html.includes('Geschützt · Konto 10002'));
+assert.ok(html.includes('Das Login-Paar des Zielkunden bleibt erhalten'));
+''')
+
+    def test_identifier_cards_include_all_django_links_and_escape_values(self):
+        self.run_js(r'''
+const raw = {id: 42, erp_nr: '10001', erp_id: 2345, api_id: 'a'.repeat(32), addresses: [{
+  id: 81, api_id: 'c'.repeat(32), erp_nr: 10001, erp_ans_id: 75, erp_ans_nr: 2,
+  erp_asp_id: 88, erp_asp_nr: 3, erp_combined_id: '10001-75-88',
+}]};
+const normalized = normalize(raw, 'django');
+const customerHtml = customerIdentifiers('10001', 'django', raw, normalized);
+for (const value of ['Django-ID', '42', 'AdrNr', '10001', 'SW6-ID', raw.api_id, 'ERP-ID', '2345']) assert.ok(customerHtml.includes(value), value);
+const addressHtml = identifierRows(normalized.addresses[0].identifiers);
+for (const value of ['81', raw.addresses[0].api_id, '10001-75-88', '75', '88', 'AspNr']) assert.ok(addressHtml.includes(value), value);
+assert.equal(normalized.addresses[0].addressNumber, 2);
+assert.equal(identifierRows([['Test', 0]]).includes('<dd>0</dd>'), true);
+assert.ok(identifierRows([['Test', '<script>']]).includes('&lt;script&gt;'));
+const microtech = normalize({addresses: [{ans_id: 10001, ans_nr: 2, contact_numbers: [1, 3]}]}, 'microtech');
+assert.deepEqual(microtech.addresses[0].identifiers, [['AdrNr', 10001], ['AnsNr', 2], ['AspNr', '1, 3']]);
+''')
+
+    def test_modal_close_invalidates_preview_without_starting_merge(self):
+        self.run_js(r'''
+openShopwareMergeModal();
+swMergePreview = {selection: swMergeSelection(), data: {previewToken: 'discard-me'}};
+closeShopwareMergeModal();
+assert.equal(elements.get('sw-merge-modal').open, false);
+assert.equal(swMergePreview, null);
+await executeShopwareMerge();
+assert.equal(networkCalls.length, 0);
+assert.equal(stored.size, 0);
+''')
+
+    def test_failed_or_incomplete_preview_never_enables_merge(self):
+        self.run_js(r'''
+swMergePreview = {selection: swMergeSelection(), data: {previewToken: 'old'}};
+fetch = async () => ({ok: true, json: async () => ({sourceId: 'a'.repeat(32), targetId: 'b'.repeat(32)})});
+await loadShopwareMergePreview();
+assert.equal(swMergePreview, null);
+assert.equal(elements.get('sw-merge-btn').disabled, true);
+assert.equal(elements.get('sw-merge-modal').open, true);
+assert.ok(elements.get('sw-merge-preview').innerHTML.includes('Vergleichsdaten fehlen'));
+await executeShopwareMerge();
+assert.equal(stored.size, 0);
+''')
+
+    def test_busy_modal_blocks_dismissal_but_pending_can_be_reopened(self):
+        self.run_js(r'''
+openShopwareMergeModal();
+setShopwareMergeBusy(true);
+let prevented = false;
+elements.get('sw-merge-modal').listeners.cancel({preventDefault: () => {prevented = true;}});
+closeShopwareMergeModal();
+assert.equal(prevented, true);
+assert.equal(elements.get('sw-merge-modal').open, true);
+setShopwareMergeBusy(false);
+swMergePending = {operation_id: 'c'.repeat(32)};
+showShopwareMergePending('Ergebnis unbekannt');
+closeShopwareMergeModal();
+assert.ok(swMergePending);
+await loadShopwareMergePreview();
+assert.equal(elements.get('sw-merge-modal').open, true);
+assert.ok(elements.get('sw-merge-result').innerHTML.includes('Ergebnis unbekannt'));
+assert.equal(networkCalls.length, 0);
 ''')
 
     def test_status_mismatching_selected_default_keeps_recovery(self):
@@ -789,6 +1006,7 @@ assert.ok(elements.get('sw-merge-result').innerHTML.includes('passt nicht'));
     def test_stale_preview_requires_new_preview_and_confirmation(self):
         self.run_js(r'''
 const selection = swMergeSelection();
+openShopwareMergeModal();
 swMergePreview = {selection, data: {sourceId: selection.delete_sw_id, targetId: selection.keep_sw_id,
   credentialsCopied: true, addressesMoved: 5, ordersMoved: 1, previewToken: 'stale'}};
 fetch = async () => ({ok: false, json: async () => ({error: 'Neue Vorschau erforderlich.',
