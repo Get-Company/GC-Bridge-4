@@ -584,6 +584,9 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
         object_id = payload.get("id")
         rule = self.get_object(request, object_id) if object_id else None
 
+        if object_id and rule is None:
+            return JsonResponse({"ok": False, "errors": ["Regel nicht gefunden."]}, status=404)
+
         if rule is not None:
             if not self.has_change_permission(request, rule):
                 return JsonResponse({"ok": False, "error": "Zugriff verweigert."}, status=403)

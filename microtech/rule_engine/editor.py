@@ -10,6 +10,7 @@ from __future__ import annotations
 from django.db import transaction
 
 from microtech.models import (
+    MicrotechDatasetField,
     MicrotechOrderRule,
     MicrotechOrderRuleAction,
     MicrotechOrderRuleCondition,
@@ -120,9 +121,17 @@ def _validate_payload(payload: dict) -> list[str]:
         MicrotechOrderRuleOperator.objects.filter(is_active=True).values_list("code", flat=True)
     )
 
-    def _walk_group(group_payload: dict | None) -> None:
+    valid_logic_values = {code for code, _label in MicrotechOrderRule.ConditionLogic.choices}
+
+    def _walk_group(group_payload) -> None:
         if not group_payload:
             return
+        if not isinstance(group_payload, dict):
+            errors.append(f"Ungueltige Gruppen-Struktur: {group_payload!r}")
+            return
+        logic = group_payload.get("logic")
+        if logic not in valid_logic_values:
+            errors.append(f"Ungueltige logic: {logic!r}")
         for condition in group_payload.get("conditions", []) or []:
             operator_code = condition.get("operator_code")
             if operator_code not in active_operator_codes:
@@ -138,8 +147,12 @@ def _validate_payload(payload: dict) -> list[str]:
         if action_type not in valid_action_types:
             errors.append(f"Ungueltiger action_type: {action_type!r}")
             continue
-        if action_type == MicrotechOrderRuleAction.ActionType.SET_FIELD and not action.get("dataset_field_id"):
-            errors.append("set_field-Aktion benoetigt dataset_field_id")
+        if action_type == MicrotechOrderRuleAction.ActionType.SET_FIELD:
+            dataset_field_id = action.get("dataset_field_id")
+            if not dataset_field_id:
+                errors.append("set_field-Aktion benoetigt dataset_field_id")
+            elif not MicrotechDatasetField.objects.filter(pk=dataset_field_id).exists():
+                errors.append(f"Dataset-Feld existiert nicht: {dataset_field_id!r}")
 
     return errors
 

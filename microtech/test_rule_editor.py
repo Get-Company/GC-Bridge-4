@@ -70,6 +70,24 @@ class SaveFromPayloadTest(TestCase):
         with self.assertRaises(EditorValidationError):
             save_rule_from_payload(p)
 
+    def test_unknown_dataset_field_id_raises_validation_error(self):
+        p = self._payload()
+        p["actions"] = [{"action_type": "set_field", "dataset_field_id": 999999, "target_value": "V"}]
+        rule_count_before = MicrotechOrderRule.objects.count()
+        with self.assertRaises(EditorValidationError):
+            save_rule_from_payload(p)
+        self.assertEqual(MicrotechOrderRule.objects.count(), rule_count_before)
+
+    def test_invalid_group_logic_raises_validation_error(self):
+        p = self._payload(); p["root_group"]["logic"] = "nope"
+        with self.assertRaises(EditorValidationError):
+            save_rule_from_payload(p)
+
+    def test_non_dict_group_payload_raises_validation_error(self):
+        p = self._payload(); p["root_group"]["children"] = ["not-a-dict"]
+        with self.assertRaises(EditorValidationError):
+            save_rule_from_payload(p)
+
 
 class MetaTriggersTest(TestCase):
     def setUp(self):
@@ -182,3 +200,31 @@ class RuleEditorViewTest(TestCase):
         self.assertEqual(response.status_code, 400)
         data = response.json()
         self.assertFalse(data["ok"])
+
+    def test_post_save_with_stale_id_returns_404_and_does_not_create(self):
+        payload = self._payload()
+        payload["id"] = 999999
+        rule_count_before = MicrotechOrderRule.objects.count()
+        response = self.client.post(
+            reverse("admin:microtech_orderrule_editor_save"),
+            data=json.dumps(payload),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 404)
+        data = response.json()
+        self.assertFalse(data["ok"])
+        self.assertEqual(MicrotechOrderRule.objects.count(), rule_count_before)
+
+    def test_post_save_with_unknown_dataset_field_id_returns_400_not_500(self):
+        payload = self._payload()
+        payload["actions"] = [{"action_type": "set_field", "dataset_field_id": 999999, "target_value": "V"}]
+        rule_count_before = MicrotechOrderRule.objects.count()
+        response = self.client.post(
+            reverse("admin:microtech_orderrule_editor_save"),
+            data=json.dumps(payload),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+        data = response.json()
+        self.assertFalse(data["ok"])
+        self.assertEqual(MicrotechOrderRule.objects.count(), rule_count_before)

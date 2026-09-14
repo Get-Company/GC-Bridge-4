@@ -292,6 +292,7 @@
               a.dataset_field_label = item.text;
               input.value = item.text;
               results.style.display = "none";
+              renderSummary();
             });
             results.appendChild(it);
           });
@@ -301,6 +302,7 @@
     }
     input.addEventListener("input", function () {
       a.dataset_field_id = null; a.dataset_field_label = "";
+      renderSummary();
       clearTimeout(timer); timer = setTimeout(search, 200);
     });
     input.addEventListener("focus", search);
