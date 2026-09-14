@@ -10,8 +10,12 @@
   <p class="rb-intro">
     Grafische Nur-Lese-Übersicht aller Bestellregeln: Trigger → Bedingungen (UND/ODER, verschachtelt) → Aktionen.
     Die neue Engine ist projektweit noch abgeschaltet; Regeln mit dem Abzeichen „Engine aktiv“ sind für den neuen Pfad markiert.
-    Bearbeitet werden Regeln weiterhin über die
-    <a href="{{ changelist_url }}">Bestellregel-Liste</a> und die Bedingungsgruppen-Seite.
+    Zum grafischen Bearbeiten „Bearbeiten“ an einer Regel wählen; die klassische
+    <a href="{{ changelist_url }}">Bestellregel-Liste</a> bleibt als Fallback.
+  </p>
+  <p style="margin:0 0 18px;">
+    <a class="rb-badge rb-badge-on" style="text-decoration:none;padding:6px 12px;"
+       href="{% url 'admin:microtech_orderrule_editor_new' %}">+ Neue Regel (grafisch)</a>
   </p>
 
   {% for rule in rules %}
@@ -19,7 +23,8 @@
     <div class="rb-rule-head">
       <div>
         <div class="rb-rule-title">{{ rule.name }}</div>
-        <div class="rb-rule-meta">Priorität {{ rule.priority }}</div>
+        <div class="rb-rule-meta">Priorität {{ rule.priority }} ·
+          <a href="{% url 'admin:microtech_orderrule_editor' rule.id %}">Bearbeiten</a></div>
       </div>
       <div class="rb-flags">
         <span class="rb-badge {% if rule.is_active %}rb-badge-on{% else %}rb-badge-off{% endif %}">{% if rule.is_active %}aktiv{% else %}inaktiv{% endif %}</span>
