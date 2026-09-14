@@ -1,3 +1,5 @@
+import json
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
@@ -97,3 +99,76 @@ class MetaTriggersTest(TestCase):
         self.assertEqual(entry["label"], "Test Meta Trigger")
         self.assertEqual(entry["task_name"], "orders.microtech_order_upsert")
         self.assertEqual(entry["context_root"], "orders.Order")
+
+
+class RuleEditorViewTest(TestCase):
+    def setUp(self):
+        MicrotechOrderRuleOperator.objects.get_or_create(
+            code="eq", defaults={"name": "==", "engine_operator": "eq"}
+        )
+        MicrotechOrderRuleOperator.objects.get_or_create(
+            code="between", defaults={"name": "between", "engine_operator": "between"}
+        )
+        self.admin_user = get_user_model().objects.create_superuser(
+            username="admin_rule_editor",
+            email="admin_rule_editor@example.com",
+            password="secret123",
+        )
+        self.client.force_login(self.admin_user)
+
+    def _payload(self):
+        return {
+            "name": "Editor-Regel", "priority": 30, "is_active": True,
+            "execution_phase": "before", "engine_enabled": False, "shadow_mode": True,
+            "trigger_id": None,
+            "root_group": {"logic": "all", "children": [], "conditions": [
+                {"field_path": "total", "operator_code": "between",
+                 "expected_value": "5", "expected_value_2": "9"}]},
+            "actions": [{"action_type": "create_shipping_position",
+                         "dataset_field_id": None, "target_value": "V"}],
+        }
+
+    def test_get_editor_page_for_existing_rule(self):
+        rule = MicrotechOrderRule.objects.create(name="Bestehend")
+        response = self.client.get(
+            reverse("admin:microtech_orderrule_editor", args=[rule.pk])
+        )
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        self.assertIn('id="rule-data"', content)
+        self.assertIn('id="re-conditions"', content)
+
+    def test_get_editor_page_for_new_rule(self):
+        response = self.client.get(
+            reverse("admin:microtech_orderrule_editor_new")
+        )
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        self.assertIn('id="rule-data"', content)
+        self.assertIn('id="re-conditions"', content)
+
+    def test_post_save_valid_payload_creates_rule(self):
+        response = self.client.post(
+            reverse("admin:microtech_orderrule_editor_save"),
+            data=json.dumps(self._payload()),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data["ok"])
+        rule = MicrotechOrderRule.objects.get(pk=data["id"])
+        self.assertEqual(rule.name, "Editor-Regel")
+        self.assertEqual(rule.actions.count(), 1)
+
+    def test_post_save_invalid_payload_returns_400(self):
+        payload = self._payload()
+        payload["root_group"]["conditions"][0]["operator_code"] = "not-a-real-code"
+        response = self.client.post(
+            reverse("admin:microtech_orderrule_editor_save"),
+            data=json.dumps(payload),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+        data = response.json()
+        self.assertFalse(data["ok"])
+        self.assertTrue(data["errors"])

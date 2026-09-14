@@ -1,6 +1,8 @@
+import json
+
 from django.contrib import admin, messages
 from django.db import models
-from django.http import HttpResponseRedirect, JsonResponse
+from django.http import HttpResponseNotAllowed, HttpResponseRedirect, JsonResponse
 from django.template.response import TemplateResponse
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
@@ -34,6 +36,11 @@ from microtech.rule_builder import (
     get_django_field_defs,
     get_operator_defs,
     get_rule_action_target_defs,
+)
+from microtech.rule_engine.editor import (
+    EditorValidationError,
+    save_rule_from_payload,
+    serialize_rule_for_edit,
 )
 from microtech.rule_engine.overview import serialize_rules_for_overview
 from microtech.views.autocomplete import (
@@ -426,6 +433,21 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
                 "microtech_orderrule_dataset_field_autocomplete",
                 MicrotechDatasetFieldAutocompleteView.as_view(),
             ),
+            (
+                "builder/new/",
+                "microtech_orderrule_editor_new",
+                self.rule_editor_view,
+            ),
+            (
+                "builder/<path:object_id>/edit/",
+                "microtech_orderrule_editor",
+                self.rule_editor_view,
+            ),
+            (
+                "builder/save/",
+                "microtech_orderrule_editor_save",
+                self.rule_editor_save_view,
+            ),
         )
 
     def rule_builder_view(self, request, **kwargs):
@@ -517,6 +539,64 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
             ],
         }
         return JsonResponse(payload)
+
+    def rule_editor_view(self, request, object_id=None, **kwargs):
+        if not self.has_view_permission(request):
+            return HttpResponseRedirect(reverse("admin:index"))
+
+        rule = self.get_object(request, object_id) if object_id else None
+        if rule is not None:
+            rule_json = serialize_rule_for_edit(rule)
+        else:
+            rule_json = {
+                "id": None,
+                "name": "",
+                "priority": 100,
+                "is_active": True,
+                "execution_phase": "before",
+                "engine_enabled": False,
+                "shadow_mode": True,
+                "trigger_id": None,
+                "root_group": None,
+                "actions": [],
+            }
+
+        context = {
+            **self.admin_site.each_context(request),
+            "title": "Regel bearbeiten" if rule is not None else "Neue Regel",
+            "rule_json": rule_json,
+            "save_url": reverse("admin:microtech_orderrule_editor_save"),
+            "meta_url": reverse("admin:microtech_orderrule_builder_meta"),
+            "overview_url": reverse("admin:microtech_orderrule_builder"),
+            "opts": self.model._meta,
+        }
+        return TemplateResponse(request, "admin/microtech/rule_editor.html", context)
+
+    def rule_editor_save_view(self, request, **kwargs):
+        if request.method != "POST":
+            return HttpResponseNotAllowed(["POST"])
+
+        payload = json.loads(request.body)
+        object_id = payload.get("id")
+        rule = self.get_object(request, object_id) if object_id else None
+
+        if rule is not None:
+            if not self.has_change_permission(request, rule):
+                return JsonResponse({"ok": False, "error": "Zugriff verweigert."}, status=403)
+        else:
+            if not self.has_add_permission(request):
+                return JsonResponse({"ok": False, "error": "Zugriff verweigert."}, status=403)
+
+        try:
+            rule = save_rule_from_payload(payload, rule=rule)
+        except EditorValidationError as exc:
+            return JsonResponse({"ok": False, "errors": exc.messages}, status=400)
+
+        return JsonResponse({
+            "ok": True,
+            "id": rule.id,
+            "redirect": reverse("admin:microtech_orderrule_builder"),
+        })
 
     @admin.display(description="Live-Zusammenfassung")
     def live_rule_summary(self, obj):

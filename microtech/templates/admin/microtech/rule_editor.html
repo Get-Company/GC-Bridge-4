@@ -1,0 +1,24 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block extrastyle %}{{ block.super }}
+  <link rel="stylesheet" href="{% static 'microtech/css/rule_editor.css' %}">
+{% endblock %}
+
+{% block content %}
+{{ rule_json|json_script:"rule-data" }}
+<div id="rule-editor"
+     data-save-url="{{ save_url }}"
+     data-meta-url="{{ meta_url }}"
+     data-overview-url="{{ overview_url }}">
+  <div id="re-trigger"></div>
+  <div id="re-conditions"></div>
+  <div id="re-actions"></div>
+  <div id="re-summary"></div>
+  <button type="button" id="re-save">Speichern</button>
+</div>
+{% endblock %}
+
+{% block extrahead %}{{ block.super }}
+  <script src="{% static 'microtech/js/rule_editor.js' %}" defer></script>
+{% endblock %}
