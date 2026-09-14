@@ -1,0 +1,15 @@
+{% comment %}Recursive render of one condition group. Vars: group, is_sub{% endcomment %}
+<div class="{% if is_sub %}rb-subgroup{% else %}rb-group{% endif %}">
+  <span class="rb-logic {% if group.logic_code == 'any' %}rb-logic-any{% endif %}">{{ group.logic }}</span>
+  {% for c in group.conditions %}
+    <div class="rb-cond">
+      <span class="rb-cond-field">{{ c.field }}</span>
+      <span class="rb-op">{{ c.operator }}</span>
+      {% if c.value %}<span class="rb-val">{{ c.value }}{% if c.value_is_variable %} 🔗{% endif %}</span>{% endif %}
+    </div>
+  {% endfor %}
+  {% for child in group.children %}
+    {% include "admin/microtech/_rule_group.html" with group=child is_sub=True %}
+  {% endfor %}
+  {% if group.is_empty %}<span class="rb-none">Keine Bedingung – Regel greift immer (globaler Fallback).</span>{% endif %}
+</div>

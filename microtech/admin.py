@@ -1,6 +1,7 @@
 from django.contrib import admin, messages
 from django.db import models
 from django.http import HttpResponseRedirect, JsonResponse
+from django.template.response import TemplateResponse
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 from django.urls import reverse
@@ -34,6 +35,7 @@ from microtech.rule_builder import (
     get_operator_defs,
     get_rule_action_target_defs,
 )
+from microtech.rule_engine.overview import serialize_rules_for_overview
 from microtech.views.autocomplete import (
     MicrotechDatasetFieldAutocompleteView,
     MicrotechOrderRuleOperatorAutocompleteView,
@@ -405,6 +407,11 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
         return (
             *urls,
             (
+                "builder/",
+                "microtech_orderrule_builder",
+                self.rule_builder_view,
+            ),
+            (
                 "rule-builder-meta/",
                 "microtech_orderrule_builder_meta",
                 self.rule_builder_meta_view,
@@ -420,6 +427,18 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
                 MicrotechDatasetFieldAutocompleteView.as_view(),
             ),
         )
+
+    def rule_builder_view(self, request, **kwargs):
+        if not self.has_view_permission(request):
+            return HttpResponseRedirect(reverse("admin:index"))
+        context = {
+            **self.admin_site.each_context(request),
+            "title": "Regelwerk – grafische Übersicht",
+            "rules": serialize_rules_for_overview(),
+            "opts": self.model._meta,
+            "changelist_url": reverse("admin:microtech_microtechorderrule_changelist"),
+        }
+        return TemplateResponse(request, "admin/microtech/rule_builder.html", context)
 
     def rule_builder_meta_view(self, request, **kwargs):
         if not self.has_view_permission(request):

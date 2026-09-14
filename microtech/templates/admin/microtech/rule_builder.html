@@ -1,0 +1,78 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block extrastyle %}{{ block.super }}
+  <link rel="stylesheet" href="{% static 'microtech/css/rule_builder_overview.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="rb-wrap">
+  <p class="rb-intro">
+    Grafische Nur-Lese-Übersicht aller Bestellregeln: Trigger → Bedingungen (UND/ODER, verschachtelt) → Aktionen.
+    Die neue Engine ist projektweit noch abgeschaltet; Regeln mit dem Abzeichen „Engine aktiv“ sind für den neuen Pfad markiert.
+    Bearbeitet werden Regeln weiterhin über die
+    <a href="{{ changelist_url }}">Bestellregel-Liste</a> und die Bedingungsgruppen-Seite.
+  </p>
+
+  {% for rule in rules %}
+  <div class="rb-rule{% if not rule.is_active %} rb-inactive{% endif %}">
+    <div class="rb-rule-head">
+      <div>
+        <div class="rb-rule-title">{{ rule.name }}</div>
+        <div class="rb-rule-meta">Priorität {{ rule.priority }}</div>
+      </div>
+      <div class="rb-flags">
+        <span class="rb-badge {% if rule.is_active %}rb-badge-on{% else %}rb-badge-off{% endif %}">{% if rule.is_active %}aktiv{% else %}inaktiv{% endif %}</span>
+        <span class="rb-badge rb-badge-phase">{{ rule.execution_phase }}</span>
+        {% if rule.engine_enabled %}<span class="rb-badge rb-badge-on">Engine aktiv</span>{% else %}<span class="rb-badge rb-badge-off">Engine aus</span>{% endif %}
+        {% if rule.shadow_mode %}<span class="rb-badge rb-badge-shadow">Schatten-Modus</span>{% endif %}
+      </div>
+    </div>
+
+    <div class="rb-trigger">
+      <div class="rb-trigger-label">Trigger</div>
+      {% if rule.trigger %}
+        <div class="rb-trigger-name">{{ rule.trigger.label }}</div>
+        <div class="rb-trigger-task">{{ rule.trigger.task_name }} · {{ rule.trigger.context_root }}</div>
+      {% else %}
+        <div class="rb-trigger-none">Kein Trigger gesetzt</div>
+      {% endif %}
+    </div>
+
+    <div class="rb-connector"></div>
+
+    <div class="rb-when">
+      <div class="rb-section-label">Wenn</div>
+      {% if rule.root_groups %}
+        {% for group in rule.root_groups %}
+          {% include "admin/microtech/_rule_group.html" with group=group is_sub=False %}
+        {% endfor %}
+      {% else %}
+        <span class="rb-none">Keine Bedingungsgruppe – Regel greift immer.</span>
+      {% endif %}
+    </div>
+
+    <div class="rb-connector"></div>
+
+    <div class="rb-then">
+      <div class="rb-section-label">Dann</div>
+      {% for a in rule.actions %}
+        <div class="rb-action">
+          <span class="rb-action-verb">{{ a.type_label }}</span>
+          {% if a.field %}<span class="rb-action-field">{{ a.field }}</span>{% endif %}
+          {% if a.value %}
+            <span class="rb-action-verb">=</span>
+            {% if a.value_is_variable %}<span class="rb-tag-var">Variable</span>{% else %}<span class="rb-tag-static">fester Wert</span>{% endif %}
+            <span class="rb-val">{{ a.value }}</span>
+          {% endif %}
+        </div>
+      {% empty %}
+        <span class="rb-none">Keine Aktion definiert.</span>
+      {% endfor %}
+    </div>
+  </div>
+  {% empty %}
+  <div class="rb-empty">Noch keine Bestellregeln angelegt.</div>
+  {% endfor %}
+</div>
+{% endblock %}

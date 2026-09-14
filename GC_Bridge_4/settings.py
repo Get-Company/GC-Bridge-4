@@ -723,6 +723,12 @@ UNFOLD = {
                         "permission": sidebar_model_view_permission("microtech", "MicrotechOrderRule"),
                     },
                     {
+                        "title": _("Regelwerk (grafisch)"),
+                        "icon": "account_tree",
+                        "link": reverse_lazy("admin:microtech_orderrule_builder"),
+                        "permission": sidebar_model_view_permission("microtech", "MicrotechOrderRule"),
+                    },
+                    {
                         "title": _("GraphQL Jobs"),
                         "icon": "task_alt",
                         "link": reverse_lazy("admin:microtech_microtechgraphqljob_changelist"),

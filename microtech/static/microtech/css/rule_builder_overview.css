@@ -1,0 +1,69 @@
+/* Read-only graphical overview of Microtech order rules (vertical block builder). */
+.rb-wrap { max-width: 900px; margin: 0 auto; padding: 8px 0 40px; }
+.rb-intro { font-size: 13px; color: #6b7280; margin: 0 0 20px; line-height: 1.6; }
+.rb-empty { padding: 24px; border: 1px dashed #cbd5e1; border-radius: 12px; color: #6b7280; text-align: center; }
+
+.rb-rule {
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 16px 18px;
+  margin: 0 0 22px;
+  background: #ffffff;
+}
+.rb-rule.rb-inactive { opacity: .6; }
+
+.rb-rule-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+.rb-rule-title { font-size: 15px; font-weight: 600; color: #111827; }
+.rb-rule-meta { font-size: 12px; color: #9ca3af; }
+.rb-flags { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.rb-badge { font-size: 11px; padding: 3px 9px; border-radius: 8px; white-space: nowrap; }
+.rb-badge-on { background: #dcfce7; color: #166534; }
+.rb-badge-off { background: #f1f5f9; color: #475569; }
+.rb-badge-shadow { background: #ede9fe; color: #5b21b6; }
+.rb-badge-phase { background: #eef2ff; color: #3730a3; }
+
+.rb-connector { width: 2px; height: 14px; background: #cbd5e1; margin: 0 auto; }
+
+/* Trigger */
+.rb-trigger { background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 12px; padding: 11px 14px; }
+.rb-trigger-label { font-size: 10px; letter-spacing: .05em; text-transform: uppercase; color: #4f46e5; }
+.rb-trigger-name { font-size: 15px; font-weight: 600; color: #312e81; }
+.rb-trigger-task { font-size: 12px; font-family: ui-monospace, monospace; color: #6366f1; }
+.rb-trigger-none { color: #9ca3af; font-style: italic; }
+
+/* WHEN / groups */
+.rb-when { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 12px; padding: 12px 14px; }
+.rb-then { background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 12px; padding: 12px 14px; }
+.rb-section-label { font-size: 10px; letter-spacing: .05em; text-transform: uppercase; font-weight: 600; margin-bottom: 10px; }
+.rb-when .rb-section-label { color: #1d4ed8; }
+.rb-then .rb-section-label { color: #047857; }
+
+.rb-group { display: flex; flex-direction: column; gap: 8px; }
+.rb-subgroup { border: 1px dashed #93c5fd; border-radius: 10px; padding: 8px 10px; background: rgba(191, 219, 254, .18); }
+.rb-logic { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 10px; background: #dbeafe; color: #1e3a8a; margin-bottom: 8px; }
+.rb-logic-any { background: #fef3c7; color: #92400e; }
+
+.rb-cond { display: flex; align-items: center; gap: 8px; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 7px 10px; flex-wrap: wrap; }
+.rb-cond-field { font-size: 13px; color: #111827; min-width: 140px; }
+.rb-op { font-size: 12px; padding: 2px 8px; border-radius: 6px; background: #d1fae5; color: #065f46; }
+.rb-val { font-size: 13px; font-family: ui-monospace, monospace; color: #4b5563; }
+
+/* actions */
+.rb-action { display: flex; align-items: center; gap: 8px; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 7px 10px; flex-wrap: wrap; }
+.rb-action-verb { font-size: 12px; color: #9ca3af; }
+.rb-action-field { font-size: 13px; color: #111827; min-width: 150px; }
+.rb-tag-static { font-size: 12px; padding: 2px 8px; border-radius: 6px; background: #f1f5f9; color: #475569; }
+.rb-tag-var { font-size: 12px; padding: 2px 8px; border-radius: 6px; background: #ede9fe; color: #5b21b6; }
+.rb-none { font-size: 12px; color: #9ca3af; font-style: italic; }
+
+@media (prefers-color-scheme: dark) {
+  .rb-rule { background: #1f2430; border-color: #374151; }
+  .rb-rule-title { color: #f3f4f6; }
+  .rb-cond, .rb-action { background: #111827; border-color: #374151; }
+  .rb-cond-field, .rb-action-field { color: #e5e7eb; }
+  .rb-val { color: #cbd5e1; }
+  .rb-trigger { background: #1e1b4b; border-color: #3730a3; }
+  .rb-when { background: #172554; border-color: #1e40af; }
+  .rb-then { background: #052e2b; border-color: #065f46; }
+}
