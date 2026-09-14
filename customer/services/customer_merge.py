@@ -1184,7 +1184,7 @@ class CustomerIdUpdateService(BaseService):
             raise ValueError("Kunde nicht gefunden.")
 
         new_api_id = _to_str(new_api_id)
-        steps = {"django": "ok", "shopware": "skipped"}
+        steps = {"django": "ok", "shopware": "validated"}
 
         if new_api_id:
             existing = Customer.objects.filter(api_id=new_api_id).exclude(pk=customer_id).first()
@@ -1199,14 +1199,12 @@ class CustomerIdUpdateService(BaseService):
                 check_data = (check or {}).get("data", []) or []
                 if not check_data:
                     raise ValueError(f"Shopware-Kunde mit ID {new_api_id} nicht gefunden.")
-                # Set the customerNumber in Shopware to match our erp_nr
-                if customer.erp_nr:
-                    service.update_customer_number(new_api_id, customer.erp_nr)
-                steps["shopware"] = "ok"
+                # This is only a local association.  Shopware resource IDs and
+                # customer numbers must never be changed by assigning a mapping.
             except ValueError:
                 raise
             except Exception as exc:
-                steps["shopware"] = str(exc)
+                raise ValueError(f"Shopware-Kunde konnte nicht validiert werden: {exc}") from exc
 
         old_api_id = customer.api_id
         customer.api_id = new_api_id
@@ -1214,6 +1212,36 @@ class CustomerIdUpdateService(BaseService):
 
         logger.info("Shopware-ID changed: {} -> {} (customer {}) steps={}", old_api_id, new_api_id, customer.pk, steps)
         return {"old_api_id": old_api_id, "new_api_id": new_api_id, "steps": steps}
+
+    def update_shopware_address_id(self, address_id: int, new_api_id: str) -> dict[str, Any]:
+        """Assign a local address to an existing address of its Shopware customer."""
+        address = Address.objects.select_related("customer").filter(pk=address_id).first()
+        if not address:
+            raise ValueError("Adresse nicht gefunden.")
+
+        new_api_id = _to_str(new_api_id)
+        if new_api_id:
+            if not address.customer.api_id:
+                raise ValueError("Die Shopware-ID des zugehörigen Kunden fehlt.")
+            existing = Address.objects.filter(api_id=new_api_id).exclude(pk=address_id).first()
+            if existing:
+                raise ValueError("Diese Shopware-Adress-ID ist bereits lokal zugeordnet.")
+
+            from shopware.services import CustomerService
+
+            response = CustomerService().get_by_id(address.customer.api_id)
+            customers = (response or {}).get("data", []) or []
+            if not customers:
+                raise ValueError("Der zugehörige Shopware-Kunde wurde nicht gefunden.")
+            shopware_addresses = _safe_attrs(customers[0]).get("addresses") or []
+            if new_api_id not in {_to_str(item.get("id")) for item in shopware_addresses}:
+                raise ValueError("Die Shopware-Adress-ID gehört nicht zu diesem Kunden.")
+
+        old_api_id = address.api_id
+        address.api_id = new_api_id
+        address.save(update_fields=["api_id", "updated_at"])
+        logger.info("Shopware address mapping changed: {} -> {} (address {})", old_api_id, new_api_id, address.pk)
+        return {"old_api_id": old_api_id, "new_api_id": new_api_id}
 
 
 class CustomerSyncDirectionService(BaseService):
