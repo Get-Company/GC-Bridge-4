@@ -394,7 +394,7 @@ def customer_merge_shopware_api(request):
             "default_shipping_address_id": body.get("default_shipping_address_id", ""),
         }
         if body.get("action") == "preview":
-            result = service.preview(**selection)
+            result = service.preview(include_comparison=True, **selection)
         elif body.get("action") == "execute":
             result = service.merge(
                 **selection, operation_id=body.get("operation_id", ""),
