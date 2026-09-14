@@ -35,6 +35,9 @@
   .merge-identifier dt { font-size: .7rem; color: #64748b; font-weight: 500; }
   .merge-identifier dd { margin: 0; font: 500 .8rem/1.6 ui-monospace, monospace; overflow-wrap: anywhere; color: #334155; }
   .merge-identifier .customer-number-field { display: flex; gap: .4rem; align-items: center; }
+  .merge-identifier .microtech-number-field { display: flex; gap: .4rem; align-items: end; }
+  .microtech-number-field label { flex: 1; min-width: 0; font: 500 .62rem/1.2 sans-serif; color: #64748b; }
+  .microtech-number-field input { margin-top: .2rem; }
   .merge-identifier input { width: 100%; min-width: 0; padding: .35rem .5rem; border: 1px solid #cbd5e1; border-radius: .35rem; background: #fff; }
   .merge-identifier button { flex-shrink: 0; font-size: .7rem; font-weight: 500; color: #2563eb; }
   .merge-address-identifiers { margin: .75rem 0 1rem; padding: .5rem .75rem; background: transparent; }
@@ -97,6 +100,7 @@
   .dark .merge-identifier dt { color: #94a3b8; }
   .dark .merge-identifier dd { color: #e2e8f0; }
   .dark .merge-identifier input { background: #0f172a; border-color: #475569; }
+  .dark .microtech-number-field label { color: #94a3b8; }
   .dark .merge-contact-list { border-color: #334155; }
   .dark .merge-contact { background: #1e293b66; }
   .dark .merge-contact-map { background: #0f172a; border-color: #475569; color: #e2e8f0; }
@@ -204,6 +208,7 @@ let searchData = {};
 let searchErps = [];
 let activeSearchId = 0;
 let searchProgress = null;
+const openAddressGroups = new Set();
 const SEARCH_BUTTON_IDLE = '<span class="material-symbols-outlined text-sm">search</span> Suchen';
 
 const SYSTEMS = [
@@ -244,18 +249,27 @@ function editableShopwareMapping(label, value, action, idKey, idValue, erpNr) {
   </div></dd></div>`;
 }
 function editableMicrotechMapping(address) {
-  return `<div class="merge-identifier"><dt>microtech</dt><dd><div class="customer-number-field"
+  return `<div class="merge-identifier"><dt>microtech</dt><dd><div class="microtech-number-field"
       data-address-id="${esc(address.id)}">
-      <input type="number" min="0" value="${esc(address.microtechAddressNumber)}" aria-label="microtech AnsNr" autocomplete="off">
-      <input type="number" min="0" value="${esc(address.microtechContactNumber)}" aria-label="microtech AnspNr" autocomplete="off">
+      <label>AnsNr<input type="number" min="0" value="${esc(address.microtechAddressNumber)}" aria-label="microtech AnsNr" autocomplete="off"></label>
+      <label>AnspNr<input type="number" min="0" value="${esc(address.microtechContactNumber)}" aria-label="microtech AnspNr" autocomplete="off"></label>
       <button type="button" onclick="updateMicrotechAddressMapping(this)">Speichern</button>
+  </div></dd></div>`;
+}
+function shopwareCustomerMapping(nr, raw) {
+  const target = searchData[nr]?.django;
+  const transfer = target?.id
+    ? `<button type="button" data-erp-nr="${esc(nr)}" onclick="adoptShopwareCustomerId(this.dataset.erpNr, this)">Zu Django übernehmen</button>`
+    : '';
+  return `<div class="merge-identifier"><dt>SW6-ID</dt><dd><div class="customer-number-field">
+      <span>${esc(raw.id || '—')}</span>${transfer}
   </div></dd></div>`;
 }
 function customerIdentifiers(nr, sysKey, raw, customer) {
   const number = sysKey === 'microtech' ? esc(customer.customerNr) || '—' : editableCustomerNumberField(nr, sysKey, customer);
   const ids = sysKey === 'django'
     ? editableShopwareMapping('SW6-ID', raw.api_id || '', 'update_shopware_id', 'customer_id', raw.id, nr)
-    : sysKey === 'shopware' ? [['SW6-ID', raw.id]]
+    : sysKey === 'shopware' ? shopwareCustomerMapping(nr, raw)
     : [];
   return `<dl class="merge-identifiers merge-customer-identifiers" aria-label="Kennungen ${esc(sysKey)}">
     <div class="merge-identifier"><dt>${esc(customer.customerNrLabel)}</dt><dd>${number}</dd></div>${Array.isArray(ids) ? identifierRows(ids) : ids}</dl>`;
@@ -263,6 +277,10 @@ function customerIdentifiers(nr, sysKey, raw, customer) {
 function toggleSection(btn) {
   const shouldOpen = !btn.classList.contains('open');
   const group = btn.dataset.addressToggle;
+  if (group) {
+    if (shouldOpen) openAddressGroups.add(group);
+    else openAddressGroups.delete(group);
+  }
   const buttons = group
     ? document.querySelectorAll(`[data-address-toggle="${CSS.escape(group)}"]`)
     : [btn];
@@ -707,6 +725,7 @@ async function doSearch() {
     company: document.getElementById('search-company').value.trim(),
   };
   if (!Object.values(criteria).some(Boolean)) return;
+  openAddressGroups.clear();
 
   setSearchButtonLoading(true);
   document.getElementById('results-area').classList.remove('hidden');
@@ -943,12 +962,13 @@ function renderUnifiedCell(nr, sysKey) {
 }
 
 function renderToggle(label, count, content, group = '') {
+  const isOpen = group && openAddressGroups.has(group);
   return `<div class="mt-3">
-    <button class="toggle-btn text-[10px] font-semibold uppercase tracking-wider text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex items-center gap-0.5" data-address-toggle="${esc(group)}" onclick="toggleSection(this)">
+    <button class="toggle-btn ${isOpen ? 'open' : ''} text-[10px] font-semibold uppercase tracking-wider text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex items-center gap-0.5" data-address-toggle="${esc(group)}" onclick="toggleSection(this)">
       <span class="arrow material-symbols-outlined" style="font-size:12px">chevron_right</span>
       ${label}
     </button>
-    <div class="toggle-section">
+    <div class="toggle-section ${isOpen ? 'open' : ''}">
       <div class="mt-2 space-y-2 text-sm">${content}</div>
     </div>
   </div>`;
@@ -1035,6 +1055,36 @@ async function updateShopwareMapping(button, action) {
 
     if (localAddress) localAddress.api_id = data.new_api_id || value;
     else raw.api_id = data.new_api_id || value;
+    renderRowCells(erpNr);
+    renderMergeSection();
+  } catch (error) {
+    alert('Fehler: ' + error.message);
+    renderRowCells(erpNr);
+  } finally {
+    button.disabled = false;
+    button.innerHTML = idleLabel;
+  }
+}
+
+async function adoptShopwareCustomerId(erpNr, button) {
+  const source = searchData[erpNr]?.shopware;
+  const target = searchData[erpNr]?.django;
+  if (!source?.id || !target?.id) {
+    alert('SW6-Quelle oder Bridge-Kunde fehlt. Bitte erneut suchen.');
+    return;
+  }
+  const idleLabel = button.innerHTML;
+  button.disabled = true;
+  button.innerHTML = spinner();
+  try {
+    const resp = await fetch('/admin/customer-merge/api/update-ids/', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json','X-CSRFToken':CSRF},
+      body: JSON.stringify({action: 'update_shopware_id', customer_id: target.id, value: source.id}),
+    });
+    const data = await resp.json();
+    if (!resp.ok || data.error) throw new Error(data.error || 'SW6-ID konnte nicht übernommen werden.');
+    target.api_id = data.new_api_id || source.id;
     renderRowCells(erpNr);
     renderMergeSection();
   } catch (error) {
