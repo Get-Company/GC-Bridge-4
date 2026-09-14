@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 from django.test import RequestFactory, SimpleTestCase
 
 from customer.services.customer_merge import (
+    CustomerIdUpdateService,
     CustomerMergeSearchService,
     ShopwareCustomerAddressService,
     ShopwareCustomerMergeService,
@@ -45,6 +46,50 @@ def _sw_customer(
             }
         ]
     }
+
+
+class CustomerIdUpdateServiceTest(SimpleTestCase):
+    @patch("customer.services.customer_merge.Customer")
+    @patch("shopware.services.CustomerService")
+    def test_customer_shopware_mapping_never_changes_remote_customer_number(
+        self, customer_service, customer_model
+    ):
+        customer = MagicMock(pk=7, erp_nr="10001", api_id="")
+        by_pk = MagicMock()
+        by_pk.first.return_value = customer
+        duplicates = MagicMock()
+        duplicates.exclude.return_value.first.return_value = None
+        customer_model.objects.filter.side_effect = [by_pk, duplicates]
+        customer_service.return_value.get_by_id.return_value = {"data": [{"id": "a" * 32}]}
+
+        result = CustomerIdUpdateService().update_shopware_id(7, "a" * 32)
+
+        self.assertEqual(result["new_api_id"], "a" * 32)
+        self.assertEqual(customer.api_id, "a" * 32)
+        customer.save.assert_called_once_with(update_fields=["api_id", "updated_at"])
+        customer_service.return_value.update_customer_number.assert_not_called()
+
+    @patch("customer.services.customer_merge.Address")
+    @patch("shopware.services.CustomerService")
+    def test_address_mapping_requires_an_address_of_the_linked_shopware_customer(
+        self, customer_service, address_model
+    ):
+        address = MagicMock(pk=81, api_id="", customer=MagicMock(api_id="b" * 32))
+        selected = MagicMock()
+        selected.filter.return_value.first.return_value = address
+        address_model.objects.select_related.return_value = selected
+        duplicates = MagicMock()
+        duplicates.exclude.return_value.first.return_value = None
+        address_model.objects.filter.return_value = duplicates
+        customer_service.return_value.get_by_id.return_value = {
+            "data": [{"attributes": {"addresses": [{"id": "c" * 32}]}}]
+        }
+
+        result = CustomerIdUpdateService().update_shopware_address_id(81, "c" * 32)
+
+        self.assertEqual(result["new_api_id"], "c" * 32)
+        self.assertEqual(address.api_id, "c" * 32)
+        address.save.assert_called_once_with(update_fields=["api_id", "updated_at"])
 
 
 class CustomerMergeMicrotechSearchTest(SimpleTestCase):
@@ -917,7 +962,7 @@ assert.ok(html.includes('Geschützt · Konto 10002'));
 assert.ok(html.includes('Das Login-Paar des Zielkunden bleibt erhalten'));
 ''')
 
-    def test_identifier_cards_include_all_django_links_and_escape_values(self):
+    def test_identifier_cards_only_show_editable_shopware_mappings(self):
         self.run_js(r'''
 const raw = {id: 42, erp_nr: '10001', erp_id: 2345, api_id: 'a'.repeat(32), addresses: [{
   id: 81, api_id: 'c'.repeat(32), erp_nr: 10001, erp_ans_id: 75, erp_ans_nr: 2,
@@ -925,14 +970,17 @@ const raw = {id: 42, erp_nr: '10001', erp_id: 2345, api_id: 'a'.repeat(32), addr
 }]};
 const normalized = normalize(raw, 'django');
 const customerHtml = customerIdentifiers('10001', 'django', raw, normalized);
-for (const value of ['Django-ID', '42', 'AdrNr', '10001', 'SW6-ID', raw.api_id, 'ERP-ID', '2345']) assert.ok(customerHtml.includes(value), value);
-const addressHtml = identifierRows(normalized.addresses[0].identifiers);
-for (const value of ['81', raw.addresses[0].api_id, '10001-75-88', '75', '88', 'AspNr']) assert.ok(addressHtml.includes(value), value);
-assert.equal(normalized.addresses[0].addressNumber, 2);
+for (const value of ['AdrNr', '10001', 'SW6-ID', raw.api_id, 'update_shopware_id']) assert.ok(customerHtml.includes(value), value);
+for (const hidden of ['Django-ID', 'ERP-ID', '2345', 'ERP-Kombi-ID', 'AnsId', 'AnsNr', 'AspId', 'AspNr']) assert.equal(customerHtml.includes(hidden), false, hidden);
+const addressHtml = editableShopwareMapping('SW6-Adress-ID', normalized.addresses[0].apiId, 'update_shopware_address_id', 'address_id', raw.addresses[0].id, '10001');
+assert.ok(addressHtml.includes(raw.addresses[0].api_id));
+assert.ok(addressHtml.includes('update_shopware_address_id'));
+assert.equal(Object.hasOwn(normalized.addresses[0], 'addressNumber'), false);
 assert.equal(identifierRows([['Test', 0]]).includes('<dd>0</dd>'), true);
 assert.ok(identifierRows([['Test', '<script>']]).includes('&lt;script&gt;'));
-const microtech = normalize({addresses: [{ans_id: 10001, ans_nr: 2, contact_numbers: [1, 3]}]}, 'microtech');
-assert.deepEqual(microtech.addresses[0].identifiers, [['AdrNr', 10001], ['AnsNr', 2], ['AspNr', '1, 3']]);
+const microtech = normalize({status: 'microtech-com', addresses: [{ans_id: 10001, ans_nr: 2, contact_numbers: [1, 3]}]}, 'microtech');
+assert.deepEqual(microtech.extra, []);
+assert.equal(Object.hasOwn(microtech.addresses[0], 'identifiers'), false);
 ''')
 
     def test_modal_close_invalidates_preview_without_starting_merge(self):

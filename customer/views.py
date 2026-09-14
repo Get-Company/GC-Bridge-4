@@ -266,6 +266,7 @@ def customer_update_ids_api(request):
         body = json.loads(request.body)
         action = body.get("action", "")
         customer_id = body.get("customer_id")
+        address_id = body.get("address_id")
         shopware_id = body.get("shopware_id")
         value = body.get("value", "").strip()
 
@@ -279,6 +280,14 @@ def customer_update_ids_api(request):
             if not shopware_id:
                 return JsonResponse({"error": "shopware_id erforderlich."}, status=400)
             result = service.update_shopware_customer_number(shopware_id, value)
+        elif action == "update_shopware_id":
+            if not customer_id:
+                return JsonResponse({"error": "customer_id erforderlich."}, status=400)
+            result = service.update_shopware_id(int(customer_id), value)
+        elif action == "update_shopware_address_id":
+            if not address_id:
+                return JsonResponse({"error": "address_id erforderlich."}, status=400)
+            result = service.update_shopware_address_id(int(address_id), value)
         else:
             return JsonResponse({"error": f"Unbekannte Aktion: {action}"}, status=400)
 
