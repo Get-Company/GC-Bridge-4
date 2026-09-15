@@ -85,3 +85,85 @@ def test_address_mode_default_off():
     from microtech.models import MicrotechSettings
 
     assert MicrotechSettings.load().rule_engine_address_mode == MicrotechSettings.EngineMode.OFF
+
+
+# --- Task 5: resolve_address_fields --------------------------------------
+
+
+def _na1_field():
+    from microtech.models import MicrotechDatasetCatalog, MicrotechDatasetField
+
+    cat, _ = MicrotechDatasetCatalog.objects.get_or_create(
+        code="adressen", defaults=dict(name="Adressen", source_identifier="Adressen - Adressen"))
+    fld, _ = MicrotechDatasetField.objects.get_or_create(dataset=cat, field_name="Na1", defaults=dict(field_type="String"))
+    return fld
+
+
+def _address_trigger():
+    from microtech.models import RuleTrigger
+
+    return RuleTrigger.objects.get(code="address_write")
+
+
+def _company_rule():
+    """Rule: company detection conditions → Na1 = 'Firma'."""
+    from microtech.models import (
+        MicrotechOrderRule, MicrotechOrderRuleAction,
+        MicrotechOrderRuleCondition, MicrotechOrderRuleConditionGroup,
+    )
+
+    rule = MicrotechOrderRule.objects.create(
+        name="Firma → Na1", is_active=True, engine_enabled=True, trigger=_address_trigger(),
+        execution_phase=MicrotechOrderRule.ExecutionPhase.BEFORE, priority=10)
+    g = MicrotechOrderRuleConditionGroup.objects.create(rule=rule, parent=None, logic="all")
+    conds = [
+        ("name1", "is_not_empty", ""),
+        ("name1", "not_in_list", "{{ @anreden }}"),
+        ("name1", "ne", "{{ title }}"),
+        ("name1", "ne", "{{ first_name }} {{ last_name }}"),
+    ]
+    for path, op, expected in conds:
+        MicrotechOrderRuleCondition.objects.create(
+            rule=rule, group=g, django_field_path=path, operator_code=op, expected_value=expected)
+    MicrotechOrderRuleAction.objects.create(
+        rule=rule, action_type=MicrotechOrderRuleAction.ActionType.SET_FIELD,
+        dataset_field=_na1_field(), target_value="Firma")
+    return rule
+
+
+def _private_fallback_rule():
+    """Fallback rule (no conditions) → Na1 = {{ @anrede }}."""
+    from microtech.models import MicrotechOrderRule, MicrotechOrderRuleAction
+
+    rule = MicrotechOrderRule.objects.create(
+        name="Privat → Na1", is_active=True, engine_enabled=True, trigger=_address_trigger(),
+        execution_phase=MicrotechOrderRule.ExecutionPhase.BEFORE, priority=100)
+    MicrotechOrderRuleAction.objects.create(
+        rule=rule, action_type=MicrotechOrderRuleAction.ActionType.SET_FIELD,
+        dataset_field=_na1_field(), target_value="{{ @anrede }}")
+    return rule
+
+
+def test_resolve_address_fields_company_and_private():
+    from customer.models import Customer, Address
+    from microtech.rule_engine.address_resolver import resolve_address_fields
+
+    _company_rule()
+    _private_fallback_rule()
+    cust = Customer.objects.create()
+
+    company = Address.objects.create(customer=cust, name1="ACME GmbH", title="", first_name="", last_name="")
+    assert resolve_address_fields(company) == {"Na1": "Firma"}
+
+    private = Address.objects.create(
+        customer=cust, name1="Max Mustermann", title="mr", first_name="Max", last_name="Mustermann")
+    assert resolve_address_fields(private) == {"Na1": "Herr"}
+
+
+def test_resolve_address_fields_no_rule_returns_empty():
+    from customer.models import Customer, Address
+    from microtech.rule_engine.address_resolver import resolve_address_fields
+
+    cust = Customer.objects.create()
+    addr = Address.objects.create(customer=cust, name1="ACME GmbH")
+    assert resolve_address_fields(addr) == {}
