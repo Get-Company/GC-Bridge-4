@@ -361,15 +361,21 @@ class CustomerUpsertMicrotechService(BaseService):
         if include_email is None:
             include_email = is_shipping
         postal_mapping = CustomerWebshopMappingService().get_postal_address_mapping(address=address)
+        code_na1 = self._resolve_na1_for_anschrift(
+            address=address,
+            na1_mode=na1_mode,
+            na1_static_value=na1_static_value,
+        ) or postal_mapping["name1"]
+        # Rule engine takes over Na1 only in live mode on success; otherwise the
+        # hardcoded value above stays authoritative (off/shadow, empty, error).
+        from microtech.rule_engine.dispatch import resolve_address_na1_with_mode
+
+        engine_na1 = resolve_address_na1_with_mode(address)
         return self._drop_blank(
             {
                 "isDefaultShipping": bool(is_shipping),
                 "isDefaultBilling": bool(is_invoice),
-                "name1": self._resolve_na1_for_anschrift(
-                    address=address,
-                    na1_mode=na1_mode,
-                    na1_static_value=na1_static_value,
-                ) or postal_mapping["name1"],
+                "name1": engine_na1 if engine_na1 is not None else code_na1,
                 "name2": postal_mapping["name2"],
                 "name3": address.name3,
                 "street": address.street,

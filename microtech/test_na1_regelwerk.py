@@ -232,3 +232,29 @@ def test_na1_facade_engine_error_returns_none(monkeypatch):
 
     monkeypatch.setattr(address_resolver, "resolve_address_fields", _boom)
     assert dispatch.resolve_address_na1_with_mode(_FakeAddr()) is None
+
+
+# --- Task 7: wiring in _build_postal_address_input -----------------------
+
+
+def test_postal_address_input_uses_engine_na1_or_code(monkeypatch):
+    from customer.models import Customer, Address
+    from customer.services.customer_upsert_microtech import CustomerUpsertMicrotechService
+    from microtech.rule_engine import dispatch
+
+    cust = Customer.objects.create()
+    addr = Address.objects.create(customer=cust, title="mr", name1="Max Mustermann",
+                                  first_name="Max", last_name="Mustermann")
+    svc = CustomerUpsertMicrotechService()
+
+    # Engine liefert Wert (live-Erfolg) → wird übernommen
+    monkeypatch.setattr(dispatch, "resolve_address_na1_with_mode", lambda a: "ENGINE")
+    out = svc._build_postal_address_input(
+        address=addr, is_shipping=True, is_invoice=False, na1_mode="auto", na1_static_value="")
+    assert out["name1"] == "ENGINE"
+
+    # Engine None (off/shadow/Fehler) → Code-Wert (auto → Anrede "Herr")
+    monkeypatch.setattr(dispatch, "resolve_address_na1_with_mode", lambda a: None)
+    out2 = svc._build_postal_address_input(
+        address=addr, is_shipping=True, is_invoice=False, na1_mode="auto", na1_static_value="")
+    assert out2["name1"] == "Herr"
