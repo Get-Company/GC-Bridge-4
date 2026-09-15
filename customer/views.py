@@ -11,6 +11,7 @@ from django.utils import timezone
 from loguru import logger
 
 from customer.services.customer_merge import (
+    CustomerDeleteService,
     CustomerIdUpdateService,
     CustomerMergeSearchService,
     CustomerMergeService,
@@ -308,6 +309,26 @@ def customer_update_ids_api(request):
         return JsonResponse({"error": str(exc)}, status=400)
     except Exception as exc:
         logger.error("ID update failed: {}\n{}", exc, traceback.format_exc())
+        return JsonResponse({"error": str(exc)}, status=500)
+
+
+def customer_delete_microtech_api(request):
+    """Delete one complete customer in Microtech only, after explicit UI confirmation."""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST erforderlich."}, status=405)
+    if not request.user.has_perm("customer.delete_customer"):
+        return JsonResponse({"error": "Keine Berechtigung zum Löschen von Kunden."}, status=403)
+    try:
+        body = json.loads(request.body)
+        erp_nr = str(body.get("erp_nr") or "").strip()
+        if not erp_nr:
+            return JsonResponse({"error": "AdrNr erforderlich."}, status=400)
+        result = CustomerDeleteService().delete_microtech(erp_nr)
+        return JsonResponse({"success": True, **result})
+    except ValueError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+    except Exception as exc:
+        logger.error("Microtech customer delete failed: {}\n{}", exc, traceback.format_exc())
         return JsonResponse({"error": str(exc)}, status=500)
 
 

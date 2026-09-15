@@ -51,6 +51,19 @@ class SubmitMutationTest(SimpleTestCase):
         self.assertEqual(job_id, "job-123")
         self.assertEqual(mock_mutation.call_args.args[1], "upsertCustomer")
 
+    @patch.object(MicrotechGraphQLClientService, "poll_job")
+    @patch.object(MicrotechGraphQLClientService, "_mutation_with_job")
+    def test_delete_customer_requires_wrapper_confirmation(self, mock_mutation, mock_poll):
+        mock_mutation.return_value = self._accepted()
+        mock_poll.return_value = {"status": "DONE", "deleted": True}
+        client = MicrotechGraphQLClientService.__new__(MicrotechGraphQLClientService)
+
+        result = client.delete_customer("100012")
+
+        self.assertTrue(result["deleted"])
+        self.assertEqual(mock_mutation.call_args.args[1], "deleteCustomer")
+        self.assertEqual(mock_mutation.call_args.args[2], {"customerNumber": "100012"})
+
     @patch.object(MicrotechGraphQLClientService, "_mutation_with_job")
     def test_submit_search_customers_uses_structured_customer_input(self, mock_mutation):
         mock_mutation.return_value = self._accepted()

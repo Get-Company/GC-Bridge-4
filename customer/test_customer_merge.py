@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 from django.test import RequestFactory, SimpleTestCase
 
 from customer.services.customer_merge import (
+    CustomerDeleteService,
     CustomerIdUpdateService,
     CustomerMergeSearchService,
     ShopwareCustomerAddressService,
@@ -127,6 +128,19 @@ class CustomerIdUpdateServiceTest(SimpleTestCase):
                 "updated_at",
             ]
         )
+
+
+class CustomerDeleteServiceTest(SimpleTestCase):
+    @patch("microtech.services.microtech_connection")
+    def test_microtech_customer_delete_requires_confirmed_wrapper_result(self, connection):
+        client = MagicMock()
+        client.delete_customer.return_value = {"status": "DONE", "deleted": True}
+        connection.return_value.__enter__.return_value = client
+
+        result = CustomerDeleteService().delete_microtech("10001")
+
+        self.assertEqual(result, {"deleted_erp_nr": "10001"})
+        client.delete_customer.assert_called_once_with("10001")
 
 
 class CustomerIdUpdateViewTest(SimpleTestCase):

@@ -565,6 +565,30 @@ class MicrotechGraphQLClientService(BaseService):
         )
         return self.poll_job(str(accepted["jobId"]), query_job=self.customer_job, retry_after=accepted.get("retryAfterSeconds"))
 
+    def delete_customer(self, customer_number: str) -> dict[str, Any]:
+        customer_number = str(customer_number or "").strip()
+        if not customer_number:
+            raise ValueError("customer_number is required.")
+        accepted = self._mutation_with_job(
+            """
+            mutation DeleteCustomer($customerNumber: String!) {
+              deleteCustomer(customerNumber: $customerNumber) {
+                accepted jobId status message retryAfterSeconds
+              }
+            }
+            """,
+            "deleteCustomer",
+            {"customerNumber": customer_number},
+        )
+        result = self.poll_job(
+            str(accepted["jobId"]),
+            query_job=self.customer_job,
+            retry_after=accepted.get("retryAfterSeconds"),
+        )
+        if result.get("deleted") is not True:
+            raise GraphQLMicrotechError("Microtech hat die Kundenlöschung nicht bestätigt.")
+        return result
+
     def create_postal_address(self, address_number: int, input_data: dict[str, Any]) -> dict[str, Any]:
         return self._postal_address_mutation("createPostalAddress", address_number, None, input_data)
 
@@ -890,7 +914,7 @@ class MicrotechGraphQLClientService(BaseService):
             """
             query CustomerJob($jobId: ID!) {
               customerJob(jobId: $jobId) {
-                jobId status message errorMessage
+                jobId status message deleted errorMessage
                 customer {
                   customerNumber erpAddressNumber salutation firstName lastName
                   name1 name2 name3 street zipCode city email phone department country

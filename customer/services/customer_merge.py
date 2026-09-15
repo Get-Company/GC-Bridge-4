@@ -1037,7 +1037,7 @@ class CustomerMergeService(BaseService):
 
 
 class CustomerDeleteService(BaseService):
-    """Deletes a customer from Django or Shopware."""
+    """Deletes a customer from one explicitly selected system."""
 
     def delete_django(self, erp_nr: str) -> dict[str, Any]:
         customer = Customer.objects.filter(erp_nr=erp_nr).first()
@@ -1085,6 +1085,21 @@ class CustomerDeleteService(BaseService):
 
         logger.info("Deleted Shopware customer {} (sw_id={})", erp_nr, sw_id)
         return {"deleted_sw_id": sw_id}
+
+    def delete_microtech(self, erp_nr: str) -> dict[str, Any]:
+        erp_nr = _to_str(erp_nr)
+        if not erp_nr:
+            raise ValueError("AdrNr erforderlich.")
+
+        from microtech.services import microtech_connection
+
+        with microtech_connection() as client:
+            result = client.delete_customer(erp_nr)
+        if result.get("deleted") is not True:
+            raise ValueError("Microtech hat die Kundenlöschung nicht bestätigt.")
+
+        logger.info("Deleted Microtech customer AdrNr={}", erp_nr)
+        return {"deleted_erp_nr": erp_nr}
 
 
 class CustomerIdUpdateService(BaseService):
