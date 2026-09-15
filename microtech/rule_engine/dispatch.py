@@ -145,3 +145,64 @@ def resolve_order_rule_with_mode(order):
     if mode == MicrotechSettings.EngineMode.LIVE:
         return engine
     return legacy
+
+
+# --- Address-path Na1 facade ----------------------------------------------
+#
+# Returns the engine's Na1 only in live mode on success; otherwise None so the
+# caller keeps its hardcoded resolve_na1. In shadow mode it persists a diff and
+# returns None. Any error degrades to None (code fallback).
+
+
+def _code_na1(address) -> str:
+    from customer.services.webshop_mapping import CustomerWebshopMappingService
+
+    return CustomerWebshopMappingService.resolve_na1(address=address)
+
+
+def _persist_address_shadow_run(address, code_value, engine_value) -> None:
+    from microtech.rule_engine.address_resolver import ADDRESS_WRITE_TASK
+
+    is_equal = str(code_value or "") == str(engine_value or "")
+    changed = {} if is_equal else {"Na1": {"code": code_value, "engine": engine_value}}
+    try:
+        RuleEngineShadowRun.objects.create(
+            order_number=str(getattr(address, "pk", "") or ""),
+            task_name=ADDRESS_WRITE_TASK,
+            engine_rule_id=None,
+            legacy_rule_id=None,
+            is_equal=is_equal,
+            changed_json=json.dumps(changed, ensure_ascii=False),
+        )
+    except Exception:
+        logger.exception("Anschrift-Schatten-Lauf konnte nicht persistiert werden.")
+    if not is_equal:
+        logger.warning("Na1 Schatten-Diff (address={}): code={!r} engine={!r}",
+                       getattr(address, "pk", ""), code_value, engine_value)
+
+
+def resolve_address_na1_with_mode(address):
+    """Resolve Na1 for an address honouring the configured address-engine mode."""
+    try:
+        mode = MicrotechSettings.load().rule_engine_address_mode
+    except Exception:
+        logger.exception("Adress-Engine-Modus nicht ladbar → 'off'.")
+        mode = MicrotechSettings.EngineMode.OFF
+
+    if mode == MicrotechSettings.EngineMode.OFF:
+        return None
+
+    try:
+        from microtech.rule_engine.address_resolver import resolve_address_fields
+
+        engine_value = resolve_address_fields(address).get("Na1")
+        code_value = _code_na1(address)
+    except Exception:
+        logger.exception("Na1-Engine-Auswertung fehlgeschlagen → Code-Fallback (address={}).",
+                         getattr(address, "pk", ""))
+        return None
+
+    _persist_address_shadow_run(address, code_value, engine_value)
+    if mode == MicrotechSettings.EngineMode.LIVE and engine_value:
+        return engine_value
+    return None

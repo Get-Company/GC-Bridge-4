@@ -167,3 +167,68 @@ def test_resolve_address_fields_no_rule_returns_empty():
     cust = Customer.objects.create()
     addr = Address.objects.create(customer=cust, name1="ACME GmbH")
     assert resolve_address_fields(addr) == {}
+
+
+# --- Task 6: resolve_address_na1_with_mode facade ------------------------
+
+
+class _FakeAddr:
+    pk = 1
+
+
+def _set_address_mode(mode):
+    from microtech.models import MicrotechSettings
+
+    s = MicrotechSettings.load()
+    s.rule_engine_address_mode = mode
+    s.save()
+
+
+def test_na1_facade_off_returns_none_no_engine(monkeypatch):
+    from microtech.models import MicrotechSettings, RuleEngineShadowRun
+    from microtech.rule_engine import dispatch, address_resolver
+
+    _set_address_mode(MicrotechSettings.EngineMode.OFF)
+
+    def _boom(a):
+        raise AssertionError("engine must not run in off mode")
+
+    monkeypatch.setattr(address_resolver, "resolve_address_fields", _boom)
+    monkeypatch.setattr(dispatch, "_code_na1", _boom)
+    assert dispatch.resolve_address_na1_with_mode(_FakeAddr()) is None
+    assert RuleEngineShadowRun.objects.filter(task_name=address_resolver.ADDRESS_WRITE_TASK).count() == 0
+
+
+def test_na1_facade_shadow_logs_and_returns_none(monkeypatch):
+    from microtech.models import MicrotechSettings, RuleEngineShadowRun
+    from microtech.rule_engine import dispatch, address_resolver
+
+    _set_address_mode(MicrotechSettings.EngineMode.SHADOW)
+    monkeypatch.setattr(address_resolver, "resolve_address_fields", lambda a: {"Na1": "Firma"})
+    monkeypatch.setattr(dispatch, "_code_na1", lambda a: "Herr")
+    assert dispatch.resolve_address_na1_with_mode(_FakeAddr()) is None
+    run = RuleEngineShadowRun.objects.filter(task_name=address_resolver.ADDRESS_WRITE_TASK).latest("created_at")
+    assert run.is_equal is False and "Na1" in run.changed_json
+
+
+def test_na1_facade_live_returns_engine(monkeypatch):
+    from microtech.models import MicrotechSettings
+    from microtech.rule_engine import dispatch, address_resolver
+
+    _set_address_mode(MicrotechSettings.EngineMode.LIVE)
+    monkeypatch.setattr(address_resolver, "resolve_address_fields", lambda a: {"Na1": "Firma"})
+    monkeypatch.setattr(dispatch, "_code_na1", lambda a: "Herr")
+    assert dispatch.resolve_address_na1_with_mode(_FakeAddr()) == "Firma"
+
+
+def test_na1_facade_engine_error_returns_none(monkeypatch):
+    from microtech.models import MicrotechSettings
+    from microtech.rule_engine import dispatch, address_resolver
+
+    _set_address_mode(MicrotechSettings.EngineMode.LIVE)
+
+    def _boom(a):
+        raise RuntimeError("engine down")
+
+    monkeypatch.setattr(address_resolver, "resolve_address_fields", _boom)
+    assert dispatch.resolve_address_na1_with_mode(_FakeAddr()) is None
