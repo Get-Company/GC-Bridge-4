@@ -1,5 +1,5 @@
 /* Read-only graphical overview of Microtech order rules (vertical block builder). */
-.rb-wrap { max-width: 900px; margin: 0 auto; padding: 8px 0 40px; }
+.rb-wrap { max-width: 900px; margin: 0 auto; padding: 16px; background: #f1f5f9; border-radius: 12px; color: #334155; }
 .rb-intro { font-size: 13px; color: #6b7280; margin: 0 0 20px; line-height: 1.6; }
 .rb-empty { padding: 24px; border: 1px dashed #cbd5e1; border-radius: 12px; color: #6b7280; text-align: center; }
 
@@ -56,14 +56,4 @@
 .rb-tag-static { font-size: 12px; padding: 2px 8px; border-radius: 6px; background: #f1f5f9; color: #475569; }
 .rb-tag-var { font-size: 12px; padding: 2px 8px; border-radius: 6px; background: #ede9fe; color: #5b21b6; }
 .rb-none { font-size: 12px; color: #9ca3af; font-style: italic; }
-
-@media (prefers-color-scheme: dark) {
-  .rb-rule { background: #1f2430; border-color: #374151; }
-  .rb-rule-title { color: #f3f4f6; }
-  .rb-cond, .rb-action { background: #111827; border-color: #374151; }
-  .rb-cond-field, .rb-action-field { color: #e5e7eb; }
-  .rb-val { color: #cbd5e1; }
-  .rb-trigger { background: #1e1b4b; border-color: #3730a3; }
-  .rb-when { background: #172554; border-color: #1e40af; }
-  .rb-then { background: #052e2b; border-color: #065f46; }
-}
+/* Immer helles Layout, unabhängig vom Admin-Dark-Mode. */

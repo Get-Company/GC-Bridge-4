@@ -1,5 +1,5 @@
 /* Interactive rule editor. */
-#rule-editor { max-width: 920px; margin: 0 auto; padding: 8px 0 60px; }
+#rule-editor { max-width: 920px; margin: 0 auto; padding: 16px; background: #f1f5f9; border-radius: 12px; color: #334155; }
 .re-block { border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px 16px; margin: 0 0 14px; background: #fff; }
 .re-block-label { font-size: 10px; letter-spacing: .05em; text-transform: uppercase; font-weight: 600; margin-bottom: 10px; color: #475569; }
 .re-trigger .re-block-label { color: #4f46e5; }
@@ -43,13 +43,4 @@
 .re-ac-results { position: absolute; z-index: 30; top: 100%; left: 0; right: 0; background: #fff; border: 1px solid #cbd5e1; border-radius: 6px; max-height: 220px; overflow-y: auto; box-shadow: 0 6px 18px rgba(0,0,0,.08); }
 .re-ac-item { padding: 6px 9px; font-size: 13px; cursor: pointer; }
 .re-ac-item:hover, .re-ac-item.re-ac-active { background: #eef2ff; }
-
-@media (prefers-color-scheme: dark) {
-  .re-block { background: #1f2430; border-color: #374151; }
-  #rule-editor input, #rule-editor select { background: #111827; color: #e5e7eb; border-color: #374151; }
-  .re-cond, .re-action { background: #111827; border-color: #374151; }
-  .re-group.re-root { background: #172554; border-color: #1e40af; }
-  .re-summary { background: #111827; border-color: #374151; color: #cbd5e1; }
-  .re-ac-results { background: #1f2430; border-color: #374151; }
-  .re-ac-item:hover, .re-ac-item.re-ac-active { background: #312e81; }
-}
+/* Immer helles Layout, unabhängig vom Admin-Dark-Mode. */
