@@ -276,3 +276,24 @@ def test_verify_view_rejects_invalid_mode(admin_client):
     url = reverse("admin:microtech_orderrule_engine_verify")
     admin_client.post(url, {"mode": "bogus"})
     assert MicrotechSettings.load().rule_engine_order_mode == "off"
+
+
+# --- Task 7: prepare command ---------------------------------------------
+
+
+def test_prepare_command_enable_sets_trigger_and_engine():
+    from django.core.management import call_command
+
+    trg = _order_trigger()
+    r = MicrotechOrderRule.objects.create(name="Legacy Regel", is_active=True, engine_enabled=False)
+
+    call_command("rule_engine_prepare", "--dry-run")
+    r.refresh_from_db()
+    assert r.engine_enabled is False
+    assert r.trigger_id is None
+
+    call_command("rule_engine_prepare", "--enable")
+    r.refresh_from_db()
+    assert r.engine_enabled is True
+    assert r.trigger_id == trg.id
+    assert r.execution_phase == MicrotechOrderRule.ExecutionPhase.BEFORE
