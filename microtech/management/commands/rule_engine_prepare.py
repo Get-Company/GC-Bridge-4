@@ -33,19 +33,23 @@ class Command(BaseCommand):
             self.stderr.write("Kein aktiver order_create-Trigger gefunden.")
             return
 
+        # In dry-run, preview the full prepare (including the enable step) so the
+        # report matches what a real `--enable` run would touch.
+        preview_enable = enable or dry_run
+
         touched = 0
         for rule in MicrotechOrderRule.objects.filter(is_active=True):
             needs = (
                 rule.trigger_id is None
                 or rule.execution_phase != MicrotechOrderRule.ExecutionPhase.BEFORE
-                or (enable and not rule.engine_enabled)
+                or (preview_enable and not rule.engine_enabled)
             )
             if not needs:
                 continue
             touched += 1
             prefix = "[dry-run] " if dry_run else ""
             self.stdout.write(
-                f"{prefix}Regel {rule.pk} '{rule.name}' → trigger={trigger.code}, phase=before, enable={enable}"
+                f"{prefix}Regel {rule.pk} '{rule.name}' → trigger={trigger.code}, phase=before, enable={preview_enable}"
             )
             if dry_run:
                 continue
