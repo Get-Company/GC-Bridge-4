@@ -118,6 +118,7 @@
   }
   .comparison-address-copy:hover { background: #dbeafe; }
   .comparison-address-copy:disabled { cursor: wait; opacity: .55; }
+  .comparison-address-copy-left { right: auto; left: -2.05rem; }
   .comparison-address-card .merge-address-identifiers { margin: 0 0 .65rem; padding: 0; }
   .comparison-address-card .merge-identifier { grid-template-columns: 5.25rem minmax(0, 1fr); }
   .comparison-address-card .merge-contact-list { margin-top: .7rem; padding-top: .65rem; }
@@ -316,47 +317,79 @@
 
   {# -- Search bar --------------------------------------------------- #}
   <div class="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-    <form id="customer-merge-search-form" class="grid grid-cols-1 lg:grid-cols-4 gap-3 items-end">
-      <label class="flex flex-col gap-1 text-sm font-medium" for="search-customer-number">
-        AdrNr / Kundennummer
-        <input type="text" id="search-customer-number"
-          class="border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm font-normal
-                 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-primary-500"
-          placeholder="z. B. 10001, 10002">
-      </label>
-      <label class="flex flex-col gap-1 text-sm font-medium" for="search-email">
-        E-Mail
-        <input type="text" id="search-email"
-          class="border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm font-normal
-                 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-primary-500"
-          placeholder="kunde@example.de oder ?@domain.de">
-      </label>
-      <label class="flex flex-col gap-1 text-sm font-medium" for="search-company">
-        Firma
-        <input type="text" id="search-company"
-          class="border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm font-normal
-                 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-primary-500"
-          placeholder="z. B. ? Insulation ?">
-      </label>
-      <div class="flex flex-col gap-1 text-sm font-medium">
-        <span>Kundenname</span>
-        <div class="grid grid-cols-2 gap-2">
-          <input type="text" id="search-first-name" aria-label="Vorname"
-            class="min-w-0 border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm font-normal
+    <form id="customer-merge-search-form" class="space-y-4">
+      <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <h2 class="text-sm font-semibold text-gray-700 dark:text-gray-200">Kundensuche</h2>
+        <p class="text-xs text-gray-400">Mehrere ausgefüllte Felder werden mit UND verknüpft.</p>
+      </div>
+      <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <label class="flex flex-col gap-1 text-sm font-medium" for="search-customer-number">
+          AdrNr / Kundennummer
+          <input type="text" id="search-customer-number"
+            class="border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm font-normal
+                   bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-primary-500"
+            placeholder="z. B. 10001, 10002">
+        </label>
+        <label class="flex flex-col gap-1 text-sm font-medium" for="search-email">
+          E-Mail
+          <input type="text" id="search-email"
+            class="border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm font-normal
+                   bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-primary-500"
+            placeholder="kunde@example.de oder ?@domain.de">
+        </label>
+        <label class="flex flex-col gap-1 text-sm font-medium" for="search-company">
+          Firma
+          <input type="text" id="search-company"
+            class="border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm font-normal
+                   bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-primary-500"
+            placeholder="z. B. ? Insulation ?">
+        </label>
+      </div>
+      <div class="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-5">
+        <label class="flex flex-col gap-1 text-sm font-medium" for="search-first-name">
+          Vorname
+          <input type="text" id="search-first-name"
+            class="border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm font-normal
                    bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-primary-500"
             placeholder="Vorname">
-          <input type="text" id="search-last-name" aria-label="Nachname"
-            class="min-w-0 border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm font-normal
+        </label>
+        <label class="flex flex-col gap-1 text-sm font-medium" for="search-last-name">
+          Nachname
+          <input type="text" id="search-last-name"
+            class="border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm font-normal
                    bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-primary-500"
             placeholder="Nachname">
-        </div>
+        </label>
+        <label class="flex flex-col gap-1 text-sm font-medium" for="search-street">
+          Straße
+          <input type="text" id="search-street"
+            class="border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm font-normal
+                   bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-primary-500"
+            placeholder="z. B. Musterstraße 1">
+        </label>
+        <label class="flex flex-col gap-1 text-sm font-medium" for="search-postal-code">
+          PLZ
+          <input type="text" id="search-postal-code"
+            class="border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm font-normal
+                   bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-primary-500"
+            placeholder="z. B. 12345">
+        </label>
+        <label class="flex flex-col gap-1 text-sm font-medium" for="search-city">
+          Ort
+          <input type="text" id="search-city"
+            class="border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm font-normal
+                   bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-primary-500"
+            placeholder="z. B. Berlin">
+        </label>
       </div>
-      <button type="submit" id="search-btn"
-        class="w-fit justify-self-start px-2.5 py-1.5 bg-primary-600 text-white rounded text-xs font-medium
-               hover:bg-primary-700 transition flex items-center justify-center gap-1.5 disabled:opacity-50">
-        <span class="material-symbols-outlined text-sm">search</span>
-        Suchen
-      </button>
+      <div class="flex justify-end">
+        <button type="submit" id="search-btn"
+          class="px-3 py-2 bg-primary-600 text-white rounded text-xs font-medium
+                 hover:bg-primary-700 transition flex items-center justify-center gap-1.5 disabled:opacity-50">
+          <span class="material-symbols-outlined text-sm">search</span>
+          Suchen
+        </button>
+      </div>
     </form>
   </div>
 
@@ -700,6 +733,12 @@ function comparisonAddressCard(nr, sysKey, address) {
         <span class="material-symbols-outlined" style="font-size:18px">arrow_forward</span>
       </button>`
     : '';
+  const copyToShopware = sysKey === 'django' && address.id && searchData[nr]?.shopware?.id
+    ? `<button type="button" class="comparison-address-copy comparison-address-copy-left" title="Diese Bridge-Adresse nach SW6 kopieren"
+        aria-label="Diese Bridge-Adresse nach SW6 kopieren" onclick="adoptDjangoAddress('${esc(nr)}', '${esc(address.id)}', this)">
+        <span class="material-symbols-outlined" style="font-size:18px">arrow_back</span>
+      </button>`
+    : '';
   const mappings = sysKey === 'shopware'
     ? `<dl class="merge-identifiers merge-address-identifiers">${identifierRows([['SW6-Adress-ID', address.id]])}</dl>`
     : sysKey === 'django'
@@ -708,7 +747,7 @@ function comparisonAddressCard(nr, sysKey, address) {
   const microtechContactsHtml = sysKey === 'microtech' ? microtechContacts(nr, address) : '';
 
   return `<article class="comparison-address-card flex gap-2">
-    ${copyToDjango}
+    ${copyToDjango}${copyToShopware}
     ${checkbox}
     <div class="flex-1 min-w-0">
       ${flags ? `<div class="mb-2 flex flex-wrap items-center justify-end gap-x-3 gap-y-1">${flags}</div>` : ''}
@@ -1091,6 +1130,9 @@ async function doSearch() {
     first_name: document.getElementById('search-first-name').value.trim(),
     last_name: document.getElementById('search-last-name').value.trim(),
     company: document.getElementById('search-company').value.trim(),
+    street: document.getElementById('search-street').value.trim(),
+    postal_code: document.getElementById('search-postal-code').value.trim(),
+    city: document.getElementById('search-city').value.trim(),
   };
   if (!Object.values(criteria).some(Boolean)) return;
   openAddressGroups.clear();
@@ -1510,6 +1552,31 @@ async function adoptShopwareAddress(erpNr, shopwareAddressId, button) {
       method: 'POST',
       headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF},
       body: JSON.stringify({erp_nr: erpNr, shopware_address_id: shopwareAddressId}),
+    });
+    const data = await response.json();
+    if (!response.ok || data.error) throw new Error(data.error || 'Die Adresse konnte nicht übernommen werden.');
+    await refetchRow(erpNr, erpNr);
+  } catch (error) {
+    alert('Fehler: ' + error.message);
+  } finally {
+    button.disabled = false;
+    button.innerHTML = idleLabel;
+  }
+}
+
+async function adoptDjangoAddress(erpNr, djangoAddressId, button) {
+  if (!searchData[erpNr]?.shopware?.id) {
+    alert('Der Kunde muss zuerst in Shopware vorhanden sein.');
+    return;
+  }
+  const idleLabel = button.innerHTML;
+  button.disabled = true;
+  button.innerHTML = spinner();
+  try {
+    const response = await fetch('/admin/customer-merge/api/adopt-django-address/', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF},
+      body: JSON.stringify({erp_nr: erpNr, django_address_id: djangoAddressId}),
     });
     const data = await response.json();
     if (!response.ok || data.error) throw new Error(data.error || 'Die Adresse konnte nicht übernommen werden.');

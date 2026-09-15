@@ -11,6 +11,7 @@ from customer.services.customer_merge import (
     CustomerDeleteService,
     CustomerIdUpdateService,
     CustomerMergeSearchService,
+    CustomerSyncDirectionService,
     ShopwareCustomerAddressService,
     ShopwareCustomerMergeService,
     ShopwareMergeError,
@@ -202,6 +203,36 @@ class CustomerMergeResolveViewTest(SimpleTestCase):
         self.assertIsNone(json.loads(response.content)["data"])
         service_class.return_value.start_microtech_customer_search.assert_not_called()
 
+    @patch("customer.views.CustomerMergeSearchService")
+    def test_address_criteria_are_forwarded_to_both_local_searches(self, service_class):
+        from customer.views import customer_merge_resolve_api
+
+        service = service_class.return_value
+        service.resolve_shopware_erp_numbers.return_value = []
+        service.resolve_django_erp_numbers.return_value = []
+        service.microtech_candidate_numbers.return_value = []
+        service.start_microtech_resolution_search.return_value = []
+        request = RequestFactory().get(
+            "/",
+            {"street": "Musterstraße", "postal_code": "12345", "city": "Berlin"},
+        )
+
+        response = customer_merge_resolve_api(request)
+
+        self.assertEqual(response.status_code, 200)
+        expected = {
+            "customer_number": "",
+            "email": "",
+            "first_name": "",
+            "last_name": "",
+            "company": "",
+            "street": "Musterstraße",
+            "postal_code": "12345",
+            "city": "Berlin",
+        }
+        service.resolve_shopware_erp_numbers.assert_called_once_with(**expected)
+        service.resolve_django_erp_numbers.assert_called_once_with(**expected)
+
 
 class CustomerMergeMicrotechSearchTest(SimpleTestCase):
     @patch.object(CustomerMergeSearchService, "start_microtech_customer_search")
@@ -373,6 +404,42 @@ class SearchTermParsingTest(SimpleTestCase):
         # A plain term without "?" yields itself.
         self.assertEqual(_wildcard_segments("Müller"), ["Müller"])
         self.assertEqual(_wildcard_segments(""), [])
+
+    @patch("customer.services.customer_merge.Customer")
+    def test_django_address_criteria_are_combined_with_and(self, customer_model):
+        matches = customer_model.objects.filter.return_value
+        matches.distinct.return_value.order_by.return_value.values_list.return_value = []
+
+        CustomerMergeSearchService().resolve_django_erp_numbers(
+            street="Musterstraße",
+            postal_code="12345",
+            city="Berlin",
+        )
+
+        query = customer_model.objects.filter.call_args.args[0]
+        self.assertEqual(query.connector, "AND")
+        for lookup in (
+            "addresses__street__icontains",
+            "addresses__postal_code__icontains",
+            "addresses__city__icontains",
+        ):
+            self.assertIn(lookup, str(query))
+
+    @patch("shopware.services.CustomerService")
+    def test_shopware_address_criteria_use_address_fields(self, customer_service):
+        customer_service.return_value.request_post.return_value = {"data": []}
+
+        CustomerMergeSearchService().resolve_shopware_erp_numbers(
+            street="Musterstraße",
+            postal_code="12345",
+            city="Berlin",
+        )
+
+        criteria = customer_service.return_value.request_post.call_args.kwargs["payload"]
+        rendered = str(criteria)
+        self.assertIn("addresses.street", rendered)
+        self.assertIn("addresses.zipcode", rendered)
+        self.assertIn("addresses.city", rendered)
 
 
 class AddressSearchResultParsingTest(SimpleTestCase):
@@ -796,6 +863,76 @@ class ShopwareCustomerMergeViewTest(SimpleTestCase):
         self.assertNotIn("secret", result.content.decode())
 
 
+class CustomerSyncDirectionServiceTest(SimpleTestCase):
+    @patch("customer.services.customer_merge.transaction.atomic")
+    @patch("customer.services.customer_merge.Address")
+    @patch("customer.services.customer_merge.Customer")
+    @patch("shopware.services.CustomerService")
+    def test_export_django_address_creates_and_links_one_shopware_address(
+        self, customer_service, customer_model, address_model, atomic
+    ):
+        customer = MagicMock(pk=7, erp_nr="10001", api_id="")
+        address = MagicMock(
+            pk=42,
+            customer=customer,
+            api_id="",
+            name1="Beispiel GmbH",
+            name2="Erika Muster",
+            first_name="Erika",
+            last_name="Muster",
+            street="Musterstraße 1",
+            postal_code="12345",
+            city="Berlin",
+            country_code="DE",
+            department="",
+            email="erika@example.invalid",
+            phone="",
+            is_invoice=True,
+            is_shipping=True,
+        )
+        address_model.objects.select_related.return_value.filter.return_value.first.return_value = address
+        address_model.objects.select_for_update.return_value.filter.return_value.first.return_value = address
+        customer_model.objects.filter.return_value.exclude.return_value.exists.return_value = False
+        customer_model.objects.select_for_update.return_value.filter.return_value.first.return_value = customer
+        atomic.return_value.__enter__.return_value = None
+        atomic.return_value.__exit__.return_value = False
+
+        shopware_customer_id = "a" * 32
+        shopware_address_id = "b" * 32
+        customer_service.return_value.get_by_customer_number.return_value = {
+            "data": [{
+                "id": shopware_customer_id,
+                "attributes": {"salutationId": "c" * 32, "addresses": []},
+            }],
+        }
+        customer_service.return_value.request_post.side_effect = [
+            {"data": [{"id": "d" * 32}]},
+            {"data": {"id": shopware_address_id}},
+        ]
+
+        result = CustomerSyncDirectionService().export_django_address(
+            erp_nr="10001", django_address_id=42,
+        )
+
+        self.assertTrue(result["created"])
+        self.assertEqual(result["shopware_address_id"], shopware_address_id)
+        create_call = customer_service.return_value.request_post.call_args_list[1]
+        self.assertEqual(create_call.args[0], "/customer-address")
+        self.assertEqual(create_call.kwargs["payload"]["customerId"], shopware_customer_id)
+        self.assertEqual(create_call.kwargs["payload"]["street"], "Musterstraße 1")
+        self.assertEqual(create_call.kwargs["payload"]["countryId"], "d" * 32)
+        self.assertEqual(create_call.kwargs["payload"]["salutationId"], "c" * 32)
+        customer_service.return_value.update_customer.assert_called_once_with(
+            shopware_customer_id,
+            {
+                "defaultBillingAddressId": shopware_address_id,
+                "defaultShippingAddressId": shopware_address_id,
+            },
+        )
+        self.assertEqual(customer.api_id, shopware_customer_id)
+        self.assertEqual(address.api_id, shopware_address_id)
+
+
 class CustomerMergeDjangoMutationViewTest(SimpleTestCase):
     def request(self, body, *, permitted=True):
         request = RequestFactory().post("/", data=json.dumps(body), content_type="application/json")
@@ -813,6 +950,20 @@ class CustomerMergeDjangoMutationViewTest(SimpleTestCase):
         self.assertEqual(result.status_code, 200)
         service_class.return_value.import_shopware_address.assert_called_once_with(
             erp_nr="10001", shopware_address_id="a" * 32,
+        )
+
+    @patch("customer.views.CustomerSyncDirectionService")
+    def test_adopt_django_address_calls_single_address_export(self, service_class):
+        from customer.views import customer_adopt_django_address_api
+
+        service_class.return_value.export_django_address.return_value = {"shopware_address_id": "a" * 32}
+        result = customer_adopt_django_address_api(self.request({
+            "erp_nr": "10001", "django_address_id": 42,
+        }))
+
+        self.assertEqual(result.status_code, 200)
+        service_class.return_value.export_django_address.assert_called_once_with(
+            erp_nr="10001", django_address_id=42,
         )
 
     @patch("customer.views.CustomerDeleteService")

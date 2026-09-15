@@ -64,6 +64,9 @@ def customer_merge_resolve_api(request):
         "first_name": request.GET.get("first_name", "").strip(),
         "last_name": request.GET.get("last_name", "").strip(),
         "company": request.GET.get("company", "").strip(),
+        "street": request.GET.get("street", "").strip(),
+        "postal_code": request.GET.get("postal_code", "").strip(),
+        "city": request.GET.get("city", "").strip(),
     }
     if any(criteria.values()):
         search_service = CustomerMergeSearchService()
@@ -588,3 +591,25 @@ def customer_adopt_shopware_address_api(request):
     except Exception as exc:
         logger.error("Shopware address import failed: {}\n{}", exc, traceback.format_exc())
         return JsonResponse({"error": "Die Shopware-Adresse konnte nicht nach Django übernommen werden."}, status=500)
+
+
+def customer_adopt_django_address_api(request):
+    """Copy one selected Django address to its existing SW6 customer."""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST erforderlich."}, status=405)
+    try:
+        body = json.loads(request.body)
+        if not isinstance(body, dict):
+            raise ValueError("Ein JSON-Objekt ist erforderlich.")
+        erp_nr = str(body.get("erp_nr") or "").strip()
+        django_address_id = body.get("django_address_id")
+        result = CustomerSyncDirectionService().export_django_address(
+            erp_nr=erp_nr,
+            django_address_id=django_address_id,
+        )
+        return JsonResponse({"success": True, **result})
+    except ValueError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+    except Exception as exc:
+        logger.error("Django address export failed: {}\n{}", exc, traceback.format_exc())
+        return JsonResponse({"error": "Die Django-Adresse konnte nicht nach Shopware übernommen werden."}, status=500)

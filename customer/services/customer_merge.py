@@ -73,6 +73,9 @@ class CustomerMergeSearchService(BaseService):
         first_name: str = "",
         last_name: str = "",
         company: str = "",
+        street: str = "",
+        postal_code: str = "",
+        city: str = "",
     ) -> list[str]:
         """Resolve matching customer numbers from the GC-Bridge database."""
         customer_number = _to_str(customer_number)
@@ -80,6 +83,9 @@ class CustomerMergeSearchService(BaseService):
         first_name = _to_str(first_name)
         last_name = _to_str(last_name)
         company = _to_str(company)
+        street = _to_str(street)
+        postal_code = _to_str(postal_code)
+        city = _to_str(city)
 
         numbers = _split_terms(customer_number)
         filters = models.Q()
@@ -110,6 +116,15 @@ class CustomerMergeSearchService(BaseService):
             filters &= models.Q(name__icontains=segment) | models.Q(
                 addresses__name1__icontains=segment
             )
+        for segment in _wildcard_segments(street):
+            used = True
+            filters &= models.Q(addresses__street__icontains=segment)
+        for segment in _wildcard_segments(postal_code):
+            used = True
+            filters &= models.Q(addresses__postal_code__icontains=segment)
+        for segment in _wildcard_segments(city):
+            used = True
+            filters &= models.Q(addresses__city__icontains=segment)
 
         if not used:
             return []
@@ -133,6 +148,9 @@ class CustomerMergeSearchService(BaseService):
         first_name: str = "",
         last_name: str = "",
         company: str = "",
+        street: str = "",
+        postal_code: str = "",
+        city: str = "",
     ) -> list[str]:
         """Resolve matching customer numbers from Shopware 6.
 
@@ -177,6 +195,12 @@ class CustomerMergeSearchService(BaseService):
                         ],
                     )
                 )
+            for segment in _wildcard_segments(street):
+                criteria.filter.append(ContainsFilter(field="addresses.street", value=segment))
+            for segment in _wildcard_segments(postal_code):
+                criteria.filter.append(ContainsFilter(field="addresses.zipcode", value=segment))
+            for segment in _wildcard_segments(city):
+                criteria.filter.append(ContainsFilter(field="addresses.city", value=segment))
 
             if not criteria.filter:
                 return []
@@ -1387,6 +1411,213 @@ class CustomerSyncDirectionService(BaseService):
             "message": "Shopware-Adresse nach Django übernommen.",
             "address_id": address.pk,
             "shopware_address_id": requested_address_id,
+        }
+
+    @staticmethod
+    def _shopware_entity_id(response: Any) -> str:
+        """Return the first entity ID from a Shopware search response."""
+        data = response.get("data", response) if isinstance(response, dict) else response
+        items = [data] if isinstance(data, dict) else _safe_list(data)
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            attrs = _safe_attrs(item)
+            entity_id = _to_str(item.get("id")) or _to_str(attrs.get("id"))
+            if entity_id:
+                return entity_id
+        return ""
+
+    def _shopware_country_id(self, service: Any, country_code: str) -> str:
+        """Resolve a Django ISO country code to Shopware's required country ID."""
+        country_code = _to_str(country_code).upper()
+        if not country_code:
+            raise ValueError("Die Django-Adresse benötigt einen Ländercode für Shopware.")
+
+        response = service.request_post(
+            "/search/country",
+            payload={
+                "filter": [{"type": "equals", "field": "iso", "value": country_code}],
+                "limit": 1,
+            },
+        )
+        country_id = self._shopware_entity_id(response)
+        if not country_id:
+            raise ValueError(f"Das Land '{country_code}' ist in Shopware nicht vorhanden.")
+        return country_id
+
+    def _shopware_salutation_id(self, service: Any, customer_data: dict[str, Any]) -> str:
+        """Use the customer's salutation, with Shopware's neutral one as fallback."""
+        salutation_id = _to_str(customer_data.get("salutationId"))
+        if not salutation_id:
+            salutation = customer_data.get("salutation")
+            if isinstance(salutation, dict):
+                salutation_id = _to_str(salutation.get("id")) or _to_str(
+                    _safe_attrs(salutation).get("id")
+                )
+        if salutation_id:
+            return salutation_id
+
+        response = service.request_post(
+            "/search/salutation",
+            payload={
+                "filter": [
+                    {"type": "equals", "field": "technicalName", "value": "not_specified"}
+                ],
+                "limit": 1,
+            },
+        )
+        salutation_id = self._shopware_entity_id(response)
+        if not salutation_id:
+            raise ValueError("Shopware hat keine verwendbare Anrede für die Adresse.")
+        return salutation_id
+
+    @staticmethod
+    def _shopware_address_payload(
+        address: Address,
+        *,
+        country_id: str,
+        salutation_id: str,
+    ) -> dict[str, Any]:
+        """Map one Django address to the Shopware customer-address payload."""
+        payload: dict[str, Any] = {
+            "firstName": address.first_name or address.name1 or ".",
+            "lastName": address.last_name or address.name2 or ".",
+            "street": address.street or ".",
+            "zipcode": address.postal_code or ".",
+            "city": address.city or ".",
+            "company": address.name1 if address.name2 else "",
+            "countryId": country_id,
+            "salutationId": salutation_id,
+        }
+        if address.department:
+            payload["department"] = address.department
+        if address.email:
+            payload["email"] = address.email
+        if address.phone:
+            payload["phoneNumber"] = address.phone
+        return payload
+
+    def export_django_address(self, *, erp_nr: str, django_address_id: int) -> dict[str, Any]:
+        """Copy one confirmed Django address to its matching Shopware customer.
+
+        This is deliberately the reverse of :meth:`import_shopware_address`:
+        it changes only the selected address and writes it to SW6 immediately,
+        instead of running the broader customer synchronisation.
+        """
+        from orders.services.order_sync import _normalize_entity
+        from shopware.services import CustomerService
+
+        erp_nr = _to_str(erp_nr)
+        if not erp_nr:
+            raise ValueError("ERP-Nummer erforderlich.")
+        try:
+            django_address_id = int(django_address_id)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Eine gültige Django-Adresse ist erforderlich.") from exc
+
+        address = Address.objects.select_related("customer").filter(pk=django_address_id).first()
+        if not address:
+            raise ValueError("Django-Adresse nicht gefunden.")
+        customer = address.customer
+        if customer.erp_nr != erp_nr:
+            raise ValueError("Die ausgewählte Adresse gehört nicht zu diesem Django-Kunden.")
+
+        service = CustomerService()
+        response = service.get_by_customer_number(erp_nr)
+        data = (response or {}).get("data", []) or []
+        if not data:
+            raise ValueError(f"Kunde {erp_nr} nicht in Shopware gefunden.")
+
+        raw = _normalize_entity(data[0])
+        shopware_customer_id = _to_str(raw.get("id")).lower()
+        if not _UUID_RE.fullmatch(shopware_customer_id):
+            raise ValueError("Shopware hat keine gültige Kunden-ID geliefert.")
+        if customer.api_id and customer.api_id.lower() != shopware_customer_id:
+            raise ValueError(
+                "Die lokale Shopware-Kunden-ID stimmt nicht mit dem SW6-Kunden überein. "
+                "Bitte zuerst die Kunden-ID prüfen."
+            )
+        if Customer.objects.filter(api_id__iexact=shopware_customer_id).exclude(pk=customer.pk).exists():
+            raise ValueError("Die Shopware-Kunden-ID ist bereits einem anderen Django-Kunden zugeordnet.")
+
+        addresses_raw = raw.get("addresses") or []
+        if isinstance(addresses_raw, dict):
+            addresses_raw = addresses_raw.get("data") or []
+        addresses_raw = _normalize_entity(addresses_raw) if isinstance(addresses_raw, list) else []
+        shopware_addresses = [item for item in addresses_raw if isinstance(item, dict)]
+        shopware_by_id = {
+            _to_str(item.get("id")).lower(): item
+            for item in shopware_addresses
+            if _to_str(item.get("id"))
+        }
+        location_key = f"{address.street}|{address.postal_code}".lower()
+        shopware_by_location = {
+            f"{_to_str(item.get('street'))}|{_to_str(item.get('zipcode'))}".lower(): item
+            for item in shopware_addresses
+            if _to_str(item.get("street")) or _to_str(item.get("zipcode"))
+        }
+        if address.api_id and address.api_id.lower() not in shopware_by_id:
+            raise ValueError(
+                "Die lokale SW6-Adress-ID gehört nicht zu diesem Shopware-Kunden. "
+                "Bitte zuerst die Adresszuordnung prüfen."
+            )
+        shopware_address = shopware_by_id.get(address.api_id.lower()) if address.api_id else None
+        if not shopware_address and location_key != "|":
+            shopware_address = shopware_by_location.get(location_key)
+
+        country_id = self._shopware_country_id(service, address.country_code)
+        salutation_id = self._shopware_salutation_id(service, raw)
+        payload = self._shopware_address_payload(
+            address,
+            country_id=country_id,
+            salutation_id=salutation_id,
+        )
+
+        if shopware_address:
+            shopware_address_id = _to_str(shopware_address.get("id"))
+            service.request_patch(f"/customer-address/{shopware_address_id}", payload=payload)
+            created = False
+        else:
+            payload["customerId"] = shopware_customer_id
+            result = service.request_post("/customer-address", payload=payload)
+            shopware_address_id = self._shopware_entity_id(result)
+            if not shopware_address_id:
+                raise ValueError("Shopware hat keine ID für die angelegte Adresse geliefert.")
+            created = True
+
+        default_updates: dict[str, str] = {}
+        if address.is_invoice or not _to_str(raw.get("defaultBillingAddressId")):
+            default_updates["defaultBillingAddressId"] = shopware_address_id
+        if address.is_shipping or not _to_str(raw.get("defaultShippingAddressId")):
+            default_updates["defaultShippingAddressId"] = shopware_address_id
+        if default_updates:
+            service.update_customer(shopware_customer_id, default_updates)
+
+        with transaction.atomic():
+            locked_customer = Customer.objects.select_for_update().filter(pk=customer.pk).first()
+            locked_address = Address.objects.select_for_update().filter(
+                pk=django_address_id, customer=locked_customer
+            ).first()
+            if not locked_customer or not locked_address:
+                raise ValueError("Django-Kunde oder Adresse wurde zwischenzeitlich geändert.")
+            if not locked_customer.api_id:
+                locked_customer.api_id = shopware_customer_id
+                locked_customer.save(update_fields=["api_id", "updated_at"])
+            if locked_address.api_id != shopware_address_id:
+                locked_address.api_id = shopware_address_id
+                locked_address.save(update_fields=["api_id", "updated_at"])
+
+        logger.info(
+            "Django->Shopware: copied local address {} for customer {} as Shopware address {}",
+            django_address_id,
+            erp_nr,
+            shopware_address_id,
+        )
+        return {
+            "message": "Django-Adresse nach Shopware übernommen.",
+            "address_id": django_address_id,
+            "shopware_address_id": shopware_address_id,
+            "created": created,
         }
 
     def _shopware_to_django(self, erp_nr: str) -> dict[str, Any]:
