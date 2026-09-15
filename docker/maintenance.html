@@ -133,11 +133,38 @@
       from { transform: translateY(0); }
       to { transform: translateY(-.35rem); }
     }
+    @keyframes refresh { to { transform: rotate(360deg); } }
     h1 { margin: 0; font-size: clamp(1.8rem, 5vw, 2.8rem); letter-spacing: -.045em; }
     p { margin: .9rem auto 0; max-width: 34rem; color: var(--muted); font-size: 1rem; line-height: 1.65; }
-    .hint { font-size: .84rem; color: #748087; }
+    .refresh-note {
+      display: inline-flex;
+      gap: .65rem;
+      align-items: center;
+      margin-top: 1.55rem;
+      padding: .7rem 1rem;
+      border: 1px solid #c9e2de;
+      border-radius: 999px;
+      background: #f4fbfa;
+      color: #3f6464;
+      font-size: .88rem;
+      line-height: 1.35;
+    }
+    .refresh-icon {
+      display: grid;
+      width: 1.45rem;
+      height: 1.45rem;
+      flex: 0 0 auto;
+      place-items: center;
+      border: 2px solid var(--turquoise);
+      border-left-color: transparent;
+      border-radius: 50%;
+      color: var(--turquoise);
+      font-size: .75rem;
+      font-weight: 700;
+      animation: refresh 2.4s linear infinite;
+    }
     @media (prefers-reduced-motion: reduce) {
-      .tab { animation: none; }
+      .tab, .refresh-icon { animation: none; }
     }
   </style>
 </head>
@@ -155,7 +182,10 @@
     </div>
     <h1>Wir bringen gerade alles in Ordnung.</h1>
     <p>Classei wird aktualisiert und ist gleich wieder für Sie da.</p>
-    <p class="hint">Diese Seite aktualisiert sich automatisch.</p>
+    <div class="refresh-note" role="status">
+      <span class="refresh-icon" aria-hidden="true">↻</span>
+      <span><strong>Sie müssen nichts tun.</strong> Diese Seite lädt sich automatisch alle 20 Sekunden neu.</span>
+    </div>
   </main>
 </body>
 </html>
