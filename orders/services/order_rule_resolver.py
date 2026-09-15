@@ -84,6 +84,27 @@ def _to_datetime(value: object) -> datetime | None:
         return None
 
 
+def address_looks_like_company(address) -> bool:
+    name1 = _to_str(getattr(address, "name1", ""))
+    title = _to_str(getattr(address, "title", ""))
+    lowered = name1.lower()
+
+    if not name1:
+        return False
+    if title and name1.casefold() == title.casefold():
+        return False
+    if lowered in _SALUTATION_VALUES:
+        return False
+    return True
+
+
+def detect_customer_type(*, order) -> str:
+    for address in (order.billing_address, order.shipping_address):
+        if address and address_looks_like_company(address):
+            return MicrotechOrderRule.CustomerType.COMPANY
+    return MicrotechOrderRule.CustomerType.PRIVATE
+
+
 @dataclass(frozen=True, slots=True)
 class ResolvedDatasetAction:
     action_type: str
@@ -403,25 +424,17 @@ class OrderRuleResolverService(BaseService):
 
     @classmethod
     def _detect_customer_type(cls, *, order: Order) -> str:
-        addresses = [order.billing_address, order.shipping_address]
-        for address in addresses:
-            if address and cls._address_looks_like_company(address):
-                return MicrotechOrderRule.CustomerType.COMPANY
-        return MicrotechOrderRule.CustomerType.PRIVATE
+        return detect_customer_type(order=order)
 
     @classmethod
     def _address_looks_like_company(cls, address) -> bool:
-        name1 = _to_str(getattr(address, "name1", ""))
-        title = _to_str(getattr(address, "title", ""))
-        lowered = name1.lower()
-
-        if not name1:
-            return False
-        if title and name1.casefold() == title.casefold():
-            return False
-        if lowered in _SALUTATION_VALUES:
-            return False
-        return True
+        return address_looks_like_company(address)
 
 
-__all__ = ["OrderRuleResolverService", "ResolvedDatasetAction", "ResolvedOrderRule"]
+__all__ = [
+    "OrderRuleResolverService",
+    "ResolvedDatasetAction",
+    "ResolvedOrderRule",
+    "detect_customer_type",
+    "address_looks_like_company",
+]
