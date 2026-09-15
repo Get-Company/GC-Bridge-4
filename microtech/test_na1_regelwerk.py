@@ -258,3 +258,21 @@ def test_postal_address_input_uses_engine_na1_or_code(monkeypatch):
     out2 = svc._build_postal_address_input(
         address=addr, is_shipping=True, is_invoice=False, na1_mode="auto", na1_static_value="")
     assert out2["name1"] == "Herr"
+
+
+# --- Task 8: editor meta carries context_root + address fields -----------
+
+
+def test_meta_view_includes_address_fields_with_context_root(admin_client):
+    import json
+    from django.urls import reverse
+
+    url = reverse("admin:microtech_orderrule_builder_meta")
+    data = json.loads(admin_client.get(url).content)
+    by_path = {f["path"]: f for f in data["django_fields"]}
+    assert by_path["name1"]["context_root"] == "customer.Address"
+    assert "not_in_list" in by_path["name1"]["allowed_operator_codes"]
+    assert by_path["billing_address__country_code"]["context_root"] == "orders.Order"
+    # trigger context roots available for the JS filter
+    roots = {t["context_root"] for t in data["triggers"]}
+    assert "customer.Address" in roots

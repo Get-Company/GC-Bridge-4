@@ -108,6 +108,17 @@
       for (var i = 0; i < META.django_fields.length; i++) if (META.django_fields[i].path === path) return META.django_fields[i];
       return null;
     }
+    function currentContextRoot() {
+      if (!STATE.trigger_id) return "orders.Order";
+      for (var i = 0; i < META.triggers.length; i++) {
+        if (String(META.triggers[i].id) === String(STATE.trigger_id)) return META.triggers[i].context_root || "orders.Order";
+      }
+      return "orders.Order";
+    }
+    function fieldsForContext() {
+      var ctx = currentContextRoot();
+      return META.django_fields.filter(function (f) { return (f.context_root || "orders.Order") === ctx; });
+    }
 
     // ---------- rendering ----------
     function render() { renderTrigger(); renderConditions(); renderActions(); renderSummary(); }
@@ -136,7 +147,10 @@
       META.triggers.forEach(function (t) {
         tsel.appendChild(opt(String(t.id), t.label + " (" + t.task_name + ")", String(STATE.trigger_id) === String(t.id)));
       });
-      tsel.addEventListener("change", function () { STATE.trigger_id = tsel.value ? parseInt(tsel.value, 10) : null; });
+      tsel.addEventListener("change", function () {
+        STATE.trigger_id = tsel.value ? parseInt(tsel.value, 10) : null;
+        render();  // Feldlisten hängen vom Trigger-Kontext ab
+      });
       r2.appendChild(tsel);
 
       r2.appendChild(el("label", null, "Phase"));
@@ -211,7 +225,7 @@
       var row = el("div", "re-cond");
       var fsel = el("select");
       fsel.appendChild(opt("", "— Feld —", !cond.field_path));
-      META.django_fields.forEach(function (f) { fsel.appendChild(opt(f.path, f.label || f.path, cond.field_path === f.path)); });
+      fieldsForContext().forEach(function (f) { fsel.appendChild(opt(f.path, f.label || f.path, cond.field_path === f.path)); });
       fsel.addEventListener("change", function () {
         cond.field_path = fsel.value;
         var f = fieldByPath(cond.field_path);
@@ -303,7 +317,7 @@
 
       var pick = el("select", "re-varpick");
       pick.appendChild(opt("", "Variable einfügen…", true));
-      META.django_fields.forEach(function (f) { pick.appendChild(opt(f.path, f.label || f.path)); });
+      fieldsForContext().forEach(function (f) { pick.appendChild(opt(f.path, f.label || f.path)); });
       pick.style.display = isVar ? "" : "none";
       pick.addEventListener("change", function () {
         if (!pick.value) return;

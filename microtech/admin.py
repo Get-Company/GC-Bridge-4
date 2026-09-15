@@ -32,6 +32,7 @@ from microtech.models import (
 )
 from microtech.services import MicrotechJobSentinelService
 from microtech.rule_builder import (
+    get_address_field_defs,
     get_allowed_operator_codes,
     get_django_field_defs,
     get_operator_defs,
@@ -553,8 +554,25 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
                             policies_by_field=policies_by_field,
                         )
                     ),
+                    "context_root": item.context_root,
                 }
                 for item in django_fields
+            ] + [
+                {
+                    "id": None,
+                    "path": item.path,
+                    "label": item.label,
+                    "value_kind": item.value_kind,
+                    "hint": item.hint,
+                    "example": item.example,
+                    "input_type": item.input_type,
+                    "accepts_date_only": item.accepts_date_only,
+                    "allowed_operator_codes": [
+                        "is_not_empty", "is_empty", "eq", "ne", "contains", "in_list", "not_in_list",
+                    ],
+                    "context_root": item.context_root,
+                }
+                for item in get_address_field_defs()
             ],
             "action_targets": [
                 {
