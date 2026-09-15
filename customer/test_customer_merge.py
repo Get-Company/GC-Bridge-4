@@ -859,7 +859,8 @@ class ShopwareMergeBrowserStateTest(SimpleTestCase):
         badges = "function standardAddressBadges(" + template.split("function standardAddressBadges(", 1)[1].split("/* ── search", 1)[0]
         identifiers = "function editableCustomerNumberField(" + template.split("function editableCustomerNumberField(", 1)[1].split("function toggleSection(", 1)[0]
         normalize = "function normalize(" + template.split("function normalize(", 1)[1].split("function standardAddressBadges(", 1)[0]
-        script = identifiers + normalize + badges + "const swMergeStorageKey =" + template.split("const swMergeStorageKey =", 1)[1].split("</script>", 1)[0]
+        renderer = "function renderRows(" + template.split("function renderRows(", 1)[1].split("function renderToggle(", 1)[0]
+        script = identifiers + normalize + badges + renderer + "const swMergeStorageKey =" + template.split("const swMergeStorageKey =", 1)[1].split("</script>", 1)[0]
         harness = r'''
 const assert = require('node:assert/strict');
 const vm = require('node:vm');
@@ -870,6 +871,12 @@ if (savedOperation) stored.set('gc-sw6-merge-operation-v1', JSON.stringify(saved
 let networkCalls = [];
 let confirmCount = 0;
 let refreshCount = 0;
+const SYSTEMS = [
+  {key: 'shopware', label: 'SW6', icon: 'shopping_bag'},
+  {key: 'django', label: 'GC-Bridge', icon: 'database'},
+  {key: 'microtech', label: 'Microtech', icon: 'precision_manufacturing'},
+];
+let searchData = {};
 const element = id => {
   if (!elements.has(id)) elements.set(id, {
     value: '', innerHTML: '', disabled: false, open: false, hidden: false, listeners: {},
@@ -885,6 +892,9 @@ element('sw-merge-delete').value = 'a'.repeat(32);
 const sandbox = {
   assert, console, Uint8Array, AbortController, URLSearchParams,
   crypto: require('node:crypto').webcrypto,
+  SYSTEMS, searchData,
+  getCellState: () => 'found', isRowLoading: () => false,
+  columnStatusLabel: () => 'geladen',
   CSRF: 'test-only',
   sessionStorage: {getItem: key => stored.get(key) || null, setItem: (key, val) => stored.set(key, val), removeItem: key => stored.delete(key)},
   document: {getElementById: element},
@@ -1064,6 +1074,45 @@ assert.deepEqual(microtech.extra, []);
 assert.equal(Object.hasOwn(microtech.addresses[0], 'identifiers'), false);
 assert.equal(microtech.addresses[0].microtechAddressNumber, 2);
 assert.deepEqual(microtech.addresses[0].contacts.map(contact => contact.microtechContactNumber), [1, 3]);
+''')
+
+    def test_address_comparison_groups_microtech_contacts_with_their_bridge_mapping(self):
+        self.run_js(r'''
+searchData = {
+  '10001': {
+    shopware: {addresses: [
+      {id: 'sw-billing', company: 'Beispiel GmbH', street: 'Rechnungsweg 1'},
+      {id: 'sw-shipping', company: 'Beispiel GmbH', street: 'Lieferweg 2'},
+    ]},
+    django: {addresses: [
+      {id: 11, api_id: 'sw-billing', erp_ans_nr: 0, erp_asp_nr: 0, name1: 'Beispiel GmbH', street: 'Rechnungsweg 1'},
+      {id: 12, api_id: 'sw-shipping', erp_ans_nr: 1, erp_asp_nr: 0, name1: 'Beispiel GmbH', street: 'Lieferweg 2'},
+    ]},
+    microtech: {addresses: [
+      {ans_nr: 0, name1: 'Beispiel GmbH', street: 'Rechnungsweg 1', contacts: [
+        {asp_nr: 0, first_name: 'Britta', last_name: 'Heidel'},
+        {asp_nr: 1, first_name: 'Max', last_name: 'Mustermann'},
+      ]},
+      {ans_nr: 1, name1: 'Beispiel GmbH', street: 'Lieferweg 2', contacts: [
+        {asp_nr: 0, first_name: 'Britta', last_name: 'Heidel'},
+      ]},
+    ]},
+  },
+};
+const groups = addressComparisonGroups('10001');
+assert.equal(groups.length, 2);
+assert.equal(groups[0].detail, 'AnsNr 0');
+assert.equal(groups[0].shopware[0].id, 'sw-billing');
+assert.equal(groups[0].django[0].id, 11);
+assert.equal(groups[0].microtech[0].contacts.length, 2);
+const microtechHtml = comparisonAddressCard('10001', 'microtech', groups[0].microtech[0]);
+assert.ok(microtechHtml.includes('Ansprechpartner (2)'));
+assert.ok(microtechHtml.includes('Britta Heidel'));
+assert.ok(microtechHtml.includes('Max Mustermann'));
+const comparisonHtml = renderComparisonRow('10001');
+assert.ok(comparisonHtml.includes('comparison-matrix'));
+assert.equal((comparisonHtml.match(/comparison-address-cell/g) || []).length, 6);
+assert.ok(comparisonHtml.includes('Jede Zeile ist eine gemeinsame Zuordnung.'));
 ''')
 
     def test_modal_close_invalidates_preview_without_starting_merge(self):

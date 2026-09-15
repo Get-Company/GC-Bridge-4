@@ -20,13 +20,110 @@
   /* Highlight diffs: cells that differ from the first found system */
   .diff-highlight { background: rgba(251,191,36,.1); }
   .dark .diff-highlight { background: rgba(251,191,36,.06); }
-  /* Three equal-width customer-system columns. */
-  .columns-grid {
+  /*
+   * One shared grid is intentional: a source must never be allowed to push
+   * the following values in only its own column down.  In particular, a
+   * microtech address can contain several contacts while its corresponding
+   * SW6/Bridge cells stay empty or compact.
+   */
+  .comparison-matrix {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: minmax(8.5rem, .38fr) repeat(3, minmax(0, 1fr));
+    overflow: hidden;
+    border: 1px solid #e2e8f0;
+    border-radius: .75rem;
   }
+  .comparison-matrix > * { min-width: 0; }
+  .comparison-matrix-corner,
+  .comparison-system-header {
+    min-height: 3.25rem;
+    padding: .75rem 1rem;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  .comparison-matrix-corner {
+    display: flex;
+    align-items: center;
+    font-size: .65rem;
+    font-weight: 600;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: #64748b;
+  }
+  .comparison-system-header { border-left: 1px solid #e2e8f0; }
+  .comparison-section {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: baseline;
+    gap: .5rem;
+    padding: .55rem 1rem;
+    background: #eff6ff;
+    border-bottom: 1px solid #bfdbfe;
+    color: #1e40af;
+  }
+  .comparison-section strong { font-size: .7rem; letter-spacing: .07em; text-transform: uppercase; }
+  .comparison-section span { font-size: .7rem; color: #3b82f6; }
+  .comparison-label,
+  .comparison-cell {
+    padding: .75rem 1rem;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  .comparison-label {
+    display: flex;
+    align-items: flex-start;
+    background: #f8fafc;
+    font-size: .7rem;
+    font-weight: 600;
+    color: #64748b;
+  }
+  .comparison-cell { border-left: 1px solid #e2e8f0; }
+  .comparison-value {
+    min-height: 1.4rem;
+    overflow-wrap: anywhere;
+    font-size: .825rem;
+    color: #334155;
+  }
+  .comparison-empty { color: #cbd5e1; }
+  .comparison-address-label {
+    flex-direction: column;
+    gap: .25rem;
+  }
+  .comparison-address-label span { font: 500 .65rem/1.3 ui-monospace, monospace; color: #94a3b8; }
+  .comparison-address-cell { background: #fff; }
+  .comparison-address-card + .comparison-address-card { margin-top: .6rem; }
+  .comparison-address-card {
+    height: 100%;
+    padding: .75rem;
+    border: 1px solid #e2e8f0;
+    border-radius: .55rem;
+    background: #f8fafc;
+  }
+  .comparison-address-card .merge-address-identifiers { margin: 0 0 .65rem; padding: 0; }
+  .comparison-address-card .merge-identifier { grid-template-columns: 5.25rem minmax(0, 1fr); }
+  .comparison-address-card .merge-contact-list { margin-top: .7rem; padding-top: .65rem; }
+  .comparison-address-card .merge-contact { background: #fff; }
+  .comparison-address-empty { padding: .8rem 0; font-size: .75rem; color: #94a3b8; }
+  .comparison-address-actions { min-height: 2.7rem; }
+  .comparison-address-actions .comparison-empty { font-size: .75rem; }
+  .comparison-matrix .merge-identifiers { margin: 0; }
+  .comparison-matrix .merge-customer-identifiers { min-height: 0; }
+  .comparison-matrix .diff-highlight { margin-inline: -.25rem; padding-inline: .25rem; }
+  .dark .comparison-matrix { border-color: #334155; }
+  .dark .comparison-matrix-corner,
+  .dark .comparison-system-header,
+  .dark .comparison-label { background: #1e293b; border-color: #334155; }
+  .dark .comparison-system-header,
+  .dark .comparison-cell { border-color: #334155; }
+  .dark .comparison-section { background: #1e3a5f66; border-color: #1d4ed8; color: #bfdbfe; }
+  .dark .comparison-section span { color: #93c5fd; }
+  .dark .comparison-label, .dark .comparison-matrix-corner { color: #94a3b8; }
+  .dark .comparison-value { color: #e2e8f0; }
+  .dark .comparison-address-cell { background: #111827; }
+  .dark .comparison-address-card { background: #1e293b; border-color: #334155; }
+  .dark .comparison-address-card .merge-contact { background: #0f172a; }
+  .dark .comparison-address-empty { color: #64748b; }
   @media (max-width: 1023px) {
-    .columns-grid { grid-template-columns: 1fr; }
+    .comparison-matrix { grid-template-columns: minmax(7rem, .4fr) repeat(3, minmax(13rem, 1fr)); overflow-x: auto; }
   }
   .merge-identifiers { margin: 0 0 1.5rem; padding: .9rem 1rem; border: 1px solid #e2e8f0; border-radius: .75rem; background: #f8fafc; }
   .merge-customer-identifiers { min-height: 11.5rem; }
@@ -219,16 +316,6 @@ const SYSTEMS = [
 
 /* ── helpers ──────────────────────────────────────────── */
 function esc(s) { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML.replaceAll('"', '&quot;').replaceAll("'", '&#39;'); }
-function customerField(label, value, { mono = false, diff = false, title = '' } = {}) {
-  const hasValue = value !== '' && value !== null && value !== undefined;
-  const displayValue = hasValue
-    ? esc(value)
-    : '<span class="text-gray-300 dark:text-gray-600">—</span>';
-  return `<div class="flex min-w-0 items-baseline gap-1.5 ${diff ? 'diff-highlight rounded px-1 -mx-1' : ''}">
-    <span class="shrink-0 text-[10px] font-medium uppercase tracking-wide text-gray-400">${esc(label)}:</span>
-    <span class="min-w-0 truncate ${mono ? 'font-mono' : ''}"${title ? ` title="${esc(title)}"` : ''}>${displayValue}</span>
-  </div>`;
-}
 function editableCustomerNumberField(erpNr, sysKey, customer) {
   return `<div class="customer-number-field">
       <input type="text" value="${esc(customer.customerNr)}" aria-label="${esc(customer.customerNrLabel)}"
@@ -443,6 +530,171 @@ function microtechContacts(nr, address) {
     <div class="merge-contact-list"><h4>Ansprechpartner (${contacts.length})</h4>${contactRows}</div>`;
 }
 
+/* ── Shared comparison matrix ────────────────────────── */
+function comparisonData(nr, sysKey) {
+  return normalize(searchData[nr]?.[sysKey], sysKey);
+}
+
+function comparisonUnavailable(nr, sysKey) {
+  const raw = searchData[nr]?.[sysKey];
+  const state = getCellState(nr, sysKey);
+  if (raw?.error || state === 'failed') {
+    return '<span class="text-xs text-amber-600 dark:text-amber-400">Nicht verfügbar</span>';
+  }
+  if (state === 'loading' || state === 'pending') {
+    return `<span class="inline-flex items-center gap-1 text-xs text-gray-400">${spinner()} Lädt …</span>`;
+  }
+  return '<span class="comparison-empty">—</span>';
+}
+
+function comparisonValue(value, { mono = false, diff = false, title = '' } = {}) {
+  const hasValue = value !== '' && value !== null && value !== undefined;
+  const display = hasValue ? esc(value) : '<span class="comparison-empty">—</span>';
+  return `<div class="comparison-value ${mono ? 'font-mono text-xs' : ''} ${diff ? 'diff-highlight rounded' : ''}"
+    ${title ? `title="${esc(title)}"` : ''}>${display}</div>`;
+}
+
+function comparisonDiff(values) {
+  const present = values.filter(value => value !== '' && value !== null && value !== undefined);
+  return new Set(present).size > 1;
+}
+
+function comparisonRow(label, cells, { labelDetail = '', labelClass = '', cellClass = '' } = {}) {
+  return `<div class="comparison-label ${labelClass}">${esc(label)}${labelDetail ? `<span>${esc(labelDetail)}</span>` : ''}</div>`
+    + cells.map(cell => `<div class="comparison-cell ${cellClass}">${cell}</div>`).join('');
+}
+
+function comparisonSection(label, detail = '') {
+  return `<div class="comparison-section"><strong>${esc(label)}</strong>${detail ? `<span>${esc(detail)}</span>` : ''}</div>`;
+}
+
+function comparisonSystemHeader(nr, system) {
+  return `<div class="comparison-system-header">
+    <span class="text-[10px] font-semibold uppercase tracking-wider text-gray-400 flex items-center gap-1">
+      <span class="material-symbols-outlined" style="font-size:12px">${system.icon}</span> ${system.label}
+      <span id="column-status-${esc(nr)}-${system.key}">${columnStatusLabel(nr, system.key)}</span>
+    </span>
+  </div>`;
+}
+
+function comparisonAddressActions(nr, sysKey, addresses) {
+  if (!addresses.length) return '<div class="comparison-empty">—</div>';
+  if (sysKey === 'microtech') return '<div class="comparison-empty">Keine Sammelaktion</div>';
+
+  const groupId = `addr-group-${nr}-${sysKey}`;
+  return `<div class="comparison-address-actions flex items-center gap-2">
+    <label class="flex items-center gap-1.5 text-[10px] text-gray-400 cursor-pointer select-none">
+      <input type="checkbox" class="rounded" onchange="toggleAllAddr(this, '${groupId}')"> Alle
+    </label>
+    <button onclick="deleteSelectedAddresses('${esc(nr)}', '${groupId}', '${sysKey}')"
+      class="ml-auto px-2 py-0.5 text-[10px] rounded border border-red-300 dark:border-red-700 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition flex items-center gap-1 disabled:opacity-30"
+      id="del-btn-${groupId}">
+      <span class="material-symbols-outlined" style="font-size:12px">delete</span> Markierte löschen
+    </button>
+  </div>`;
+}
+
+function comparisonAddressCard(nr, sysKey, address) {
+  const canDelete = sysKey === 'django' || sysKey === 'shopware';
+  const groupId = `addr-group-${nr}-${sysKey}`;
+  const flags = standardAddressBadges(address);
+  const checkbox = canDelete && address.id
+    ? `<input type="checkbox" value="${address.id}" class="rounded mt-0.5 addr-cb-${groupId}" style="flex-shrink:0">`
+    : '';
+  const mappings = sysKey === 'shopware'
+    ? `<dl class="merge-identifiers merge-address-identifiers">${identifierRows([['SW6-Adress-ID', address.id]])}</dl>`
+    : sysKey === 'django'
+      ? `<dl class="merge-identifiers merge-address-identifiers">${editableShopwareMapping('SW6-Adress-ID', address.apiId, 'update_shopware_address_id', 'address_id', address.id, nr)}${editableMicrotechMapping(address)}</dl>`
+      : '';
+  const microtechContactsHtml = sysKey === 'microtech' ? microtechContacts(nr, address) : '';
+
+  return `<article class="comparison-address-card flex gap-2">
+    ${checkbox}
+    <div class="flex-1 min-w-0">
+      ${flags ? `<div class="mb-2 flex flex-wrap items-center justify-end gap-x-3 gap-y-1">${flags}</div>` : ''}
+      ${mappings ? `<details class="mb-2">
+        <summary class="cursor-pointer text-[10px] font-semibold uppercase tracking-wider text-gray-400">Zuordnungen &amp; Kennungen</summary>
+        <div class="mt-2">${mappings}</div>
+      </details>` : ''}
+      <div class="font-medium text-sm">${esc(address.label) || '<span class="comparison-empty">Ohne Bezeichnung</span>'}</div>
+      ${address.contactName ? `<div class="text-gray-400">${esc(address.contactName)}</div>` : ''}
+      <div class="text-gray-500">${esc(address.street)}</div>
+      <div class="text-gray-500">${esc(address.zip)} ${esc(address.city)} ${address.country ? esc(address.country) : ''}</div>
+      ${address.email ? `<div class="text-gray-400 truncate">${esc(address.email)}</div>` : ''}
+      ${address.phone ? `<div class="text-gray-400">${esc(address.phone)}</div>` : ''}
+      ${microtechContactsHtml}
+    </div>
+  </article>`;
+}
+
+function addressComparisonGroups(nr) {
+  const sources = Object.fromEntries(SYSTEMS.map(system => [system.key, comparisonData(nr, system.key) || {addresses: []}]));
+  const django = sources.django.addresses || [];
+  const shopware = sources.shopware.addresses || [];
+  const microtech = sources.microtech.addresses || [];
+  const usedDjango = new Set();
+  const usedShopware = new Set();
+  const groups = [];
+
+  const addressesForDjango = addresses => addresses.filter(address => {
+    const index = django.indexOf(address);
+    return index >= 0 && !usedDjango.has(index);
+  });
+  const shopwareFor = addresses => {
+    const ids = new Set(addresses.map(address => String(address.apiId || '')).filter(Boolean));
+    return shopware.filter((address, index) => ids.has(String(address.id || '')) && !usedShopware.has(index));
+  };
+  const markUsed = (addresses, all, used) => addresses.forEach(address => used.add(all.indexOf(address)));
+
+  microtech.forEach(address => {
+    const ansNr = address.microtechAddressNumber;
+    const hasAnsNr = ansNr !== '' && ansNr !== null && ansNr !== undefined;
+    const local = hasAnsNr
+      ? addressesForDjango(django.filter(item => String(item.microtechAddressNumber) === String(ansNr)))
+      : [];
+    const sw = shopwareFor(local);
+    markUsed(local, django, usedDjango);
+    markUsed(sw, shopware, usedShopware);
+    groups.push({
+      label: `Adresse ${groups.length + 1}`,
+      detail: hasAnsNr ? `AnsNr ${ansNr}` : 'ohne AnsNr',
+      shopware: sw, django: local, microtech: [address],
+    });
+  });
+
+  django.forEach((address, index) => {
+    if (usedDjango.has(index)) return;
+    const ansNr = address.microtechAddressNumber;
+    const hasAnsNr = ansNr !== '' && ansNr !== null && ansNr !== undefined;
+    const local = hasAnsNr
+      ? addressesForDjango(django.filter(item => String(item.microtechAddressNumber) === String(ansNr)))
+      : [address];
+    const sw = shopwareFor(local);
+    markUsed(local, django, usedDjango);
+    markUsed(sw, shopware, usedShopware);
+    groups.push({
+      label: `Adresse ${groups.length + 1}`,
+      detail: hasAnsNr ? `AnsNr ${ansNr} · nicht in Microtech gefunden` : 'noch nicht zugeordnet',
+      shopware: sw, django: local, microtech: [],
+    });
+  });
+
+  shopware.forEach((address, index) => {
+    if (usedShopware.has(index)) return;
+    groups.push({
+      label: `Adresse ${groups.length + 1}`,
+      detail: 'noch nicht zugeordnet',
+      shopware: [address], django: [], microtech: [],
+    });
+  });
+  return groups;
+}
+
+function comparisonAddressCell(nr, sysKey, addresses) {
+  if (!addresses.length) return '<div class="comparison-address-empty">Keine zugeordnete Adresse</div>';
+  return addresses.map(address => comparisonAddressCard(nr, sysKey, address)).join('');
+}
+
 /* ── search ──────────────────────────────────────────── */
 const MICROTECH_JOB_TIMEOUT_MS = 150000;
 const MICROTECH_JOB_POLL_MS = 5000;
@@ -513,12 +765,10 @@ function columnStatusLabel(erpNr, systemKey) {
 }
 
 function refreshCellPresentation(erpNr, systemKey) {
-  const cell = document.querySelector(`#col-${CSS.escape(erpNr)}-${systemKey} > div:last-child`);
-  if (cell) cell.innerHTML = renderUnifiedCell(erpNr, systemKey);
-  const status = document.getElementById(`column-status-${erpNr}-${systemKey}`);
-  if (status) status.innerHTML = columnStatusLabel(erpNr, systemKey);
-  const rowSpinner = document.getElementById(`row-spinner-${erpNr}`);
-  if (rowSpinner) rowSpinner.classList.toggle('hidden', !isRowLoading(erpNr));
+  // One source can change the diff markers and address associations of the
+  // other two columns. Re-render the shared row instead of a single column.
+  const row = document.getElementById(`row-${erpNr}`);
+  if (row) row.outerHTML = renderComparisonRow(erpNr);
 }
 
 function localSourceDetail(systemKey, progress) {
@@ -840,133 +1090,62 @@ async function fetchCell(nr, sysKey, searchId = activeSearchId) {
 }
 
 /* ── render rows ─────────────────────────────────────── */
-function renderRows(loading) {
-  const container = document.getElementById('results-rows');
-  let html = '';
-
-  searchErps.forEach(nr => {
-    html += `<div class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden mb-8 shadow-sm" id="row-${esc(nr)}">`;
-
-    // Row header
-    html += `<div class="bg-gray-50 dark:bg-gray-800 px-4 py-2 border-b border-gray-200 dark:border-gray-700 flex items-center gap-3">
-      <span class="font-mono font-semibold" style="font-size:2rem;line-height:1">${esc(nr)}</span>
-      <span id="row-spinner-${esc(nr)}" class="${loading || isRowLoading(nr) ? '' : 'hidden'}">${spinner()}</span>
-    </div>`;
-
-    // Three customer-system columns.
-    html += `<div class="columns-grid">`;
-    SYSTEMS.forEach((sys, idx) => {
-      html += `<div class="flex flex-col min-w-0 ${idx > 0 ? 'border-l border-gray-200 dark:border-gray-700' : ''}" id="col-${esc(nr)}-${sys.key}">`;
-      // Column label
-      html += `<div class="px-3 py-1.5 bg-gray-50/60 dark:bg-gray-800/60 border-b border-gray-100 dark:border-gray-700/50">
-        <span class="text-[10px] font-semibold uppercase tracking-wider text-gray-400 flex items-center gap-1">
-          <span class="material-symbols-outlined" style="font-size:12px">${sys.icon}</span> ${sys.label}
-          <span id="column-status-${esc(nr)}-${sys.key}">${columnStatusLabel(nr, sys.key)}</span>
-        </span>
-      </div>`;
-      html += `<div class="p-3 flex-1">`;
-      html += renderUnifiedCell(nr, sys.key);
-      html += `</div></div>`;
-    });
-    html += `</div>`;
-
-    html += `</div>`;
-  });
-
-  container.innerHTML = html;
+function renderRows() {
+  document.getElementById('results-rows').innerHTML = searchErps.map(renderComparisonRow).join('');
 }
 
-/* ── Unified cell renderer — same structure for all 3 systems ─── */
-function renderUnifiedCell(nr, sysKey) {
-  const raw = searchData[nr]?.[sysKey];
-  const state = getCellState(nr, sysKey);
-  if (!raw) {
-    if (state === 'loading') {
-      const label = SYSTEMS.find(system => system.key === sysKey)?.label || 'System';
-      return loaderCell(`${label} wird geprüft...`);
-    }
-    if (state === 'pending') {
-      return loaderCell(sysKey === 'microtech'
-        ? 'Microtech durchsucht die Kundendaten...'
-        : 'Die Abfrage wartet noch...');
-    }
-    if (state === 'failed') {
-      return `<div class="text-xs text-amber-600 dark:text-amber-400 py-2">Ergebnis derzeit nicht verfügbar.</div>`;
-    }
-    return `<div class="text-xs text-gray-400 italic py-2">nicht gefunden</div>`;
+function renderComparisonRow(nr) {
+  const data = Object.fromEntries(SYSTEMS.map(system => [system.key, comparisonData(nr, system.key)]));
+  const values = key => SYSTEMS.map(system => data[system.key]?.[key]);
+  const nameDiff = comparisonDiff(values('name'));
+  const emailDiff = comparisonDiff(values('email'));
+  const addressCounts = SYSTEMS.map(system => data[system.key]?.addresses?.length || 0);
+  const addressGroups = addressComparisonGroups(nr);
+
+  let html = `<div class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden mb-8 shadow-sm" id="row-${esc(nr)}">`;
+  html += `<div class="bg-gray-50 dark:bg-gray-800 px-4 py-2 border-b border-gray-200 dark:border-gray-700 flex items-center gap-3">
+    <span class="font-mono font-semibold" style="font-size:2rem;line-height:1">${esc(nr)}</span>
+    <span id="row-spinner-${esc(nr)}" class="${isRowLoading(nr) ? '' : 'hidden'}">${spinner()}</span>
+    <span class="text-xs text-gray-400">Vergleich nach gemeinsamen Datenzeilen</span>
+  </div>`;
+  html += `<div class="comparison-matrix">
+    <div class="comparison-matrix-corner">Merkmal</div>
+    ${SYSTEMS.map(system => comparisonSystemHeader(nr, system)).join('')}
+    ${comparisonSection('Stammdaten', 'Die drei Werte beginnen und enden in derselben Zeile.')}
+    ${comparisonRow('Kennungen', SYSTEMS.map(system => {
+      const raw = searchData[nr]?.[system.key];
+      const customer = data[system.key];
+      return customer ? customerIdentifiers(nr, system.key, raw, customer) : comparisonUnavailable(nr, system.key);
+    }))}
+    ${comparisonRow('Name', SYSTEMS.map(system => {
+      const customer = data[system.key];
+      return customer ? comparisonValue(customer.name, {diff: nameDiff, title: customer.name}) : comparisonUnavailable(nr, system.key);
+    }))}
+    ${comparisonRow('E-Mail', SYSTEMS.map(system => {
+      const customer = data[system.key];
+      return customer ? comparisonValue(customer.email, {diff: emailDiff, title: customer.email}) : comparisonUnavailable(nr, system.key);
+    }))}
+    ${comparisonRow('Ergänzung', SYSTEMS.map(system => {
+      const customer = data[system.key];
+      return customer ? comparisonValue(customer.extra.join(' · ')) : comparisonUnavailable(nr, system.key);
+    }))}
+    ${comparisonSection('Adressen', `SW6 ${addressCounts[0]} · GC-Bridge ${addressCounts[1]} · Microtech ${addressCounts[2]}. Jede Zeile ist eine gemeinsame Zuordnung.`)}
+    ${comparisonRow('Auswahl', SYSTEMS.map(system => comparisonAddressActions(nr, system.key, data[system.key]?.addresses || [])), {cellClass: 'comparison-address-actions'})}
+  `;
+
+  if (addressGroups.length) {
+    html += addressGroups.map(group => comparisonRow(
+      group.label,
+      SYSTEMS.map(system => comparisonAddressCell(nr, system.key, group[system.key])),
+      {labelDetail: group.detail, labelClass: 'comparison-address-label', cellClass: 'comparison-address-cell'},
+    )).join('');
+  } else {
+    html += comparisonRow('Adressen', SYSTEMS.map(() => '<div class="comparison-address-empty">Keine Adresse vorhanden</div>'), {
+      labelClass: 'comparison-address-label', cellClass: 'comparison-address-cell',
+    });
   }
-  if (raw.error) return `<div class="text-xs text-red-500 py-2">Fehler: ${esc(raw.error)}</div>`;
-
-  const d = normalize(raw, sysKey);
-  if (!d) return '';
-  // Check what other systems have for diff highlighting
-  const others = SYSTEMS.filter(s => s.key !== sysKey).map(s => normalize(searchData[nr]?.[s.key], s.key)).filter(Boolean);
-  const nameDiff = others.length && others.some(o => o.name && d.name && o.name !== d.name);
-  const emailDiff = others.length && others.some(o => o.email && d.email && o.email !== d.email);
-
-  let h = `<div class="text-sm">`;
-
-  h += customerIdentifiers(nr, sysKey, raw, d);
-
-  h += `<div class="mt-5 space-y-1.5">
-    ${customerField('Name', d.name, { diff: nameDiff, title: d.name })}
-    ${customerField('E-Mail', d.email, { diff: emailDiff, title: d.email })}`;
-
-  d.extra.forEach(entry => {
-    const [label, ...valueParts] = entry.split(':');
-    h += customerField(label, valueParts.join(':').trim());
-  });
-
-  h += `</div></div>`;
-
-  // Addresses — collapsible
-  if (d.addresses.length) {
-    const canDeleteAddresses = sysKey === 'django' || sysKey === 'shopware';
-    const addrGroupId = `addr-group-${nr}-${sysKey}`;
-    let addrHeader = `${esc('Adressen')} (${d.addresses.length})`;
-
-    let addrContent = '';
-    if (canDeleteAddresses) {
-      addrContent += `<div class="flex items-center gap-2 mb-2 pb-1.5 border-b border-gray-100 dark:border-gray-700/50">
-        <label class="flex items-center gap-1.5 text-[10px] text-gray-400 cursor-pointer select-none">
-          <input type="checkbox" class="rounded" onchange="toggleAllAddr(this, '${addrGroupId}')"> Alle
-        </label>
-        <button onclick="deleteSelectedAddresses('${esc(nr)}', '${addrGroupId}', '${sysKey}')"
-          class="ml-auto px-2 py-0.5 text-[10px] rounded border border-red-300 dark:border-red-700 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition flex items-center gap-1 disabled:opacity-30"
-          id="del-btn-${addrGroupId}">
-          <span class="material-symbols-outlined" style="font-size:12px">delete</span> Markierte loeschen
-        </button>
-      </div>`;
-    }
-    addrContent += d.addresses.map((a, index) => {
-      const flags = standardAddressBadges(a);
-      const checkbox = canDeleteAddresses && a.id
-        ? `<input type="checkbox" value="${a.id}" class="rounded mt-0.5 addr-cb-${addrGroupId}" style="flex-shrink:0">`
-        : '';
-      const rowTone = index % 2
-        ? 'bg-white dark:bg-gray-800/20'
-        : 'bg-gray-50 dark:bg-gray-800/50';
-      return `<div class="flex gap-2 rounded border border-gray-100 p-3 dark:border-gray-700/50 ${rowTone}">
-        ${checkbox}
-        <div class="flex-1 min-w-0">
-          ${flags ? `<div class="mb-2 flex flex-wrap items-center justify-end gap-x-3 gap-y-1">${flags}</div>` : ''}
-          ${sysKey === 'shopware' ? `<dl class="merge-identifiers merge-address-identifiers">${identifierRows([['SW6-Adress-ID', a.id]])}</dl>` : ''}
-          ${sysKey === 'django' ? `<dl class="merge-identifiers merge-address-identifiers">${editableShopwareMapping('SW6-Adress-ID', a.apiId, 'update_shopware_address_id', 'address_id', a.id, nr)}${editableMicrotechMapping(a)}</dl>` : ''}
-          ${sysKey === 'microtech' ? microtechContacts(nr, a) : ''}
-          <div class="font-medium text-sm">${esc(a.label)}</div>
-          ${a.contactName ? `<div class="text-gray-400">${esc(a.contactName)}</div>` : ''}
-          <div class="text-gray-500">${esc(a.street)}</div>
-          <div class="text-gray-500">${esc(a.zip)} ${esc(a.city)} ${a.country ? esc(a.country) : ''}</div>
-          ${a.email ? `<div class="text-gray-400 truncate">${esc(a.email)}</div>` : ''}
-          ${a.phone ? `<div class="text-gray-400">${esc(a.phone)}</div>` : ''}
-        </div>
-      </div>`;
-    }).join('');
-
-    h += renderToggle(addrHeader, d.addresses.length, addrContent, `addresses-${nr}`);
-  }
-
-  return h;
+  html += `</div></div>`;
+  return html;
 }
 
 function renderToggle(label, count, content, group = '') {
@@ -1233,12 +1412,8 @@ async function refetchRow(oldNr, newNr) {
 }
 
 function renderRowCells(nr) {
-  SYSTEMS.forEach(sys => {
-    const cell = document.querySelector(`#col-${CSS.escape(nr)}-${sys.key} > div:last-child`);
-    if (cell) cell.innerHTML = renderUnifiedCell(nr, sys.key);
-  });
-  const rowSpinner = document.getElementById(`row-spinner-${nr}`);
-  if (rowSpinner) rowSpinner.classList.add('hidden');
+  const row = document.getElementById(`row-${nr}`);
+  if (row) row.outerHTML = renderComparisonRow(nr);
 }
 
 /* ── Address checkboxes & delete ──────────────────────── */
