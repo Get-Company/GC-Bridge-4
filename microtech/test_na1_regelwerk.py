@@ -76,3 +76,12 @@ def test_order_catalog_unchanged_and_trigger_seeded():
     assert engine_map.get("in_list") == "in_list"
     assert engine_map.get("not_in_list") == "not_in_list"
     assert RuleTrigger.objects.filter(code="address_write", is_active=True).exists()
+
+
+# --- Task 4: address engine mode setting ---------------------------------
+
+
+def test_address_mode_default_off():
+    from microtech.models import MicrotechSettings
+
+    assert MicrotechSettings.load().rule_engine_address_mode == MicrotechSettings.EngineMode.OFF
