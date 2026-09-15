@@ -184,6 +184,14 @@
     gap: .4rem;
     align-items: end;
   }
+  .microtech-pair-title {
+    grid-column: 1 / -1;
+    margin-bottom: -.15rem;
+    color: #2563eb;
+    font: 700 .62rem/1.2 sans-serif;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+  }
   .microtech-number-field label,
   .microtech-number-pair > div { min-width: 0; font: 500 .62rem/1.2 sans-serif; color: #64748b; }
   .microtech-number-field input,
@@ -200,7 +208,16 @@
     font: 500 .8rem/1.2 ui-monospace, monospace;
     color: #334155;
   }
-  .microtech-number-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .4rem; margin: .55rem 0; }
+  .microtech-number-pair {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .4rem;
+    margin: .55rem 0;
+    padding: .45rem;
+    border: 1px solid #bfdbfe;
+    border-radius: .4rem;
+    background: #eff6ff;
+  }
   .microtech-number-pair dt { margin: 0; }
   .microtech-number-pair dd { margin: 0; }
   .merge-identifier input { width: 100%; min-width: 0; padding: .35rem .5rem; border: 1px solid #cbd5e1; border-radius: .35rem; background: #fff; }
@@ -270,6 +287,8 @@
   .dark .microtech-number-field label { color: #94a3b8; }
   .dark .microtech-number-pair > div { color: #94a3b8; }
   .dark .microtech-number-value { background: #0f172a; border-color: #475569; color: #e2e8f0; }
+  .dark .microtech-pair-title { color: #93c5fd; }
+  .dark .microtech-number-pair { background: #172554; border-color: #1d4ed8; }
   .dark .merge-contact-list { border-color: #334155; }
   .dark .merge-contact { background: #1e293b66; }
   .dark .merge-contact-map { background: #0f172a; border-color: #475569; color: #e2e8f0; }
@@ -410,6 +429,7 @@ function editableShopwareMapping(label, value, action, idKey, idValue, erpNr) {
 function editableMicrotechMapping(address) {
   return `<div class="merge-identifier"><dt>microtech</dt><dd><div class="microtech-number-field"
       data-address-id="${esc(address.id)}">
+      <div class="microtech-pair-title">Microtech-Zuordnung</div>
       <label>AnsNr<input type="number" min="0" value="${esc(address.microtechAddressNumber)}" aria-label="microtech AnsNr" autocomplete="off"></label>
       <label>AnspNr<input type="number" min="0" value="${esc(address.microtechContactNumber)}" aria-label="microtech AnspNr" autocomplete="off"></label>
       <button type="button" onclick="updateMicrotechAddressMapping(this)">Speichern</button>
@@ -586,6 +606,7 @@ function microtechContacts(nr, address) {
   const contacts = address.contacts || [];
   const addressNumber = address.microtechAddressNumber === '' ? '—' : address.microtechAddressNumber;
   const numberPair = contactNumber => `<dl class="microtech-number-pair" aria-label="Microtech-Kennung">
+    <div class="microtech-pair-title">Microtech-Kennung</div>
     <div><dt>AnsNr</dt><dd class="microtech-number-value">${esc(addressNumber)}</dd></div>
     <div><dt>AnspNr</dt><dd class="microtech-number-value">${esc(contactNumber)}</dd></div>
   </dl>`;
@@ -599,7 +620,7 @@ function microtechContacts(nr, address) {
       ${microtechContactMapping(nr, address, contact)}
     </div>`;
   }).join('') : `<div class="merge-contact">${numberPair('—')}${microtechContactMapping(nr, address, null)}</div>`;
-  return `<div class="merge-contact-list"><h4>Ansprechpartner (${contacts.length})</h4>${contactRows}</div>`;
+  return `<div class="merge-contact-list"><h4>${contacts.length ? `Ansprechpartner (${contacts.length})` : 'Anschrift ohne Ansprechpartner'}</h4>${contactRows}</div>`;
 }
 
 /* ── Shared comparison matrix ────────────────────────── */
@@ -715,10 +736,14 @@ function addressComparisonGroups(nr) {
   const usedShopware = new Set();
   const groups = [];
 
-  const addressesForDjango = addresses => addresses.filter(address => {
-    const index = django.indexOf(address);
-    return index >= 0 && !usedDjango.has(index);
-  });
+  const valueForPair = value => value === '' || value === null || value === undefined ? '' : String(value);
+  const pairDetail = (ansNr, aspNr, suffix = '') =>
+    `AnsNr ${valueForPair(ansNr) || '—'} · AnspNr ${valueForPair(aspNr) || '—'}${suffix}`;
+  const djangoForPair = (ansNr, aspNr) => django.filter((address, index) =>
+    !usedDjango.has(index)
+    && valueForPair(address.microtechAddressNumber) === valueForPair(ansNr)
+    && valueForPair(address.microtechContactNumber) === valueForPair(aspNr)
+  );
   const shopwareFor = addresses => {
     const ids = new Set(addresses.map(address => String(address.apiId || '')).filter(Boolean));
     return shopware.filter((address, index) => ids.has(String(address.id || '')) && !usedShopware.has(index));
@@ -727,33 +752,36 @@ function addressComparisonGroups(nr) {
 
   microtech.forEach(address => {
     const ansNr = address.microtechAddressNumber;
-    const hasAnsNr = ansNr !== '' && ansNr !== null && ansNr !== undefined;
-    const local = hasAnsNr
-      ? addressesForDjango(django.filter(item => String(item.microtechAddressNumber) === String(ansNr)))
-      : [];
-    const sw = shopwareFor(local);
-    markUsed(local, django, usedDjango);
-    markUsed(sw, shopware, usedShopware);
-    groups.push({
-      label: `Adresse ${groups.length + 1}`,
-      detail: hasAnsNr ? `AnsNr ${ansNr}` : 'ohne AnsNr',
-      shopware: sw, django: local, microtech: [address],
+    const contacts = address.contacts?.length ? address.contacts : [null];
+    contacts.forEach(contact => {
+      const aspNr = contact?.microtechContactNumber ?? '';
+      const local = djangoForPair(ansNr, aspNr);
+      const sw = shopwareFor(local);
+      markUsed(local, django, usedDjango);
+      markUsed(sw, shopware, usedShopware);
+      groups.push({
+        label: `Adresse ${groups.length + 1}`,
+        detail: pairDetail(ansNr, aspNr),
+        shopware: sw,
+        django: local,
+        microtech: [{...address, contacts: contact ? [contact] : []}],
+      });
     });
   });
 
   django.forEach((address, index) => {
     if (usedDjango.has(index)) return;
     const ansNr = address.microtechAddressNumber;
-    const hasAnsNr = ansNr !== '' && ansNr !== null && ansNr !== undefined;
-    const local = hasAnsNr
-      ? addressesForDjango(django.filter(item => String(item.microtechAddressNumber) === String(ansNr)))
-      : [address];
+    const aspNr = address.microtechContactNumber;
+    const local = djangoForPair(ansNr, aspNr);
     const sw = shopwareFor(local);
     markUsed(local, django, usedDjango);
     markUsed(sw, shopware, usedShopware);
     groups.push({
       label: `Adresse ${groups.length + 1}`,
-      detail: hasAnsNr ? `AnsNr ${ansNr} · nicht in Microtech gefunden` : 'noch nicht zugeordnet',
+      detail: valueForPair(ansNr) || valueForPair(aspNr)
+        ? pairDetail(ansNr, aspNr, ' · nicht in Microtech gefunden')
+        : 'noch nicht zugeordnet',
       shopware: sw, django: local, microtech: [],
     });
   });

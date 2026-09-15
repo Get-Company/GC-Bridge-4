@@ -1142,6 +1142,10 @@ for (const hidden of ['Django-ID', 'ERP-ID', '2345', 'ERP-Kombi-ID', 'AnsId', 'A
 const addressHtml = editableShopwareMapping('SW6-Adress-ID', normalized.addresses[0].apiId, 'update_shopware_address_id', 'address_id', raw.addresses[0].id, '10001');
 assert.ok(addressHtml.includes(raw.addresses[0].api_id));
 assert.ok(addressHtml.includes('update_shopware_address_id'));
+const microtechMappingHtml = editableMicrotechMapping(normalized.addresses[0]);
+assert.ok(microtechMappingHtml.includes('Microtech-Zuordnung'));
+assert.ok(microtechMappingHtml.includes('AnsNr'));
+assert.ok(microtechMappingHtml.includes('AnspNr'));
 assert.equal(Object.hasOwn(normalized.addresses[0], 'addressNumber'), false);
 assert.equal(identifierRows([['Test', 0]]).includes('<dd>0</dd>'), true);
 assert.ok(identifierRows([['Test', '<script>']]).includes('&lt;script&gt;'));
@@ -1176,25 +1180,33 @@ searchData = {
   },
 };
 const groups = addressComparisonGroups('10001');
-assert.equal(groups.length, 2);
-assert.equal(groups[0].detail, 'AnsNr 0');
+assert.equal(groups.length, 3);
+assert.equal(groups[0].detail, 'AnsNr 0 · AnspNr 0');
 assert.equal(groups[0].shopware[0].id, 'sw-billing');
 assert.equal(groups[0].django[0].id, 11);
-assert.equal(groups[0].microtech[0].contacts.length, 2);
+assert.equal(groups[0].microtech[0].contacts.length, 1);
+assert.equal(groups[1].detail, 'AnsNr 0 · AnspNr 1');
+assert.equal(groups[1].django.length, 0);
+assert.equal(groups[1].microtech[0].contacts[0].name, 'Max Mustermann');
+assert.equal(groups[2].detail, 'AnsNr 1 · AnspNr 0');
+assert.equal(groups[2].django[0].id, 12);
 const microtechHtml = comparisonAddressCard('10001', 'microtech', groups[0].microtech[0]);
-assert.ok(microtechHtml.includes('Ansprechpartner (2)'));
+assert.ok(microtechHtml.includes('Ansprechpartner (1)'));
 assert.ok(microtechHtml.includes('Britta Heidel'));
-assert.ok(microtechHtml.includes('Max Mustermann'));
-assert.equal((microtechHtml.match(/microtech-number-pair/g) || []).length, 2);
+assert.equal(microtechHtml.includes('Max Mustermann'), false);
+assert.equal((microtechHtml.match(/microtech-number-pair/g) || []).length, 1);
 assert.ok(microtechHtml.includes('microtech-number-value'));
 assert.ok(microtechHtml.includes('AnspNr'));
+assert.ok(microtechHtml.includes('Microtech-Kennung'));
+const secondMicrotechHtml = comparisonAddressCard('10001', 'microtech', groups[1].microtech[0]);
+assert.ok(secondMicrotechHtml.includes('Max Mustermann'));
 const shopwareHtml = comparisonAddressCard('10001', 'shopware', groups[0].shopware[0]);
 assert.ok(shopwareHtml.includes('comparison-address-copy'));
 assert.ok(shopwareHtml.includes('adoptShopwareAddress'));
 assert.ok(shopwareHtml.includes('arrow_forward'));
 const comparisonHtml = renderComparisonRow('10001');
 assert.ok(comparisonHtml.includes('comparison-matrix'));
-assert.equal((comparisonHtml.match(/comparison-address-cell/g) || []).length, 6);
+assert.equal((comparisonHtml.match(/comparison-address-cell/g) || []).length, 9);
 assert.ok(comparisonHtml.includes('Jede Zeile ist eine gemeinsame Zuordnung.'));
 ''')
 
