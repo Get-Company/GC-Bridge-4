@@ -915,6 +915,13 @@ class ShopwareMergeBrowserStateTest(SimpleTestCase):
         self.assertNotIn("deleteMicrotechCustomer", template)
         self.assertNotIn("delete-microtech-customer", template)
 
+    def test_microtech_mapping_reads_the_microtech_field(self):
+        template = (Path(__file__).resolve().parents[1] / "templates/admin/customer_merge.html").read_text()
+        function = template.split("async function updateMicrotechAddressMapping(button)", 1)[1].split(
+            "async function assignMicrotechMapping", 1
+        )[0]
+        self.assertIn("button.closest('.microtech-number-field')", function)
+
     def run_js(self, assertions, *, saved=None):
         template = (Path(__file__).resolve().parents[1] / "templates/admin/customer_merge.html").read_text()
         badges = "function standardAddressBadges(" + template.split("function standardAddressBadges(", 1)[1].split("/* ── search", 1)[0]

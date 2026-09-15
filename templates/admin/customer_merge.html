@@ -1389,7 +1389,7 @@ function applyMicrotechMapping(erpNr, addressId, data) {
 }
 
 async function updateMicrotechAddressMapping(button) {
-  const field = button.closest('.customer-number-field');
+  const field = button.closest('.microtech-number-field');
   const inputs = field?.querySelectorAll('input') || [];
   const ansNr = inputs[0]?.value.trim();
   const aspNr = inputs[1]?.value.trim();
