@@ -717,8 +717,14 @@ UNFOLD = {
                 "collapsible": True,
                 "items": [
                     {
-                        "title": _("Einstellungen"),
+                        "title": _("Vorgang-Standardwerte"),
                         "icon": "settings",
+                        "link": reverse_lazy("admin:microtech_microtechsettings_changelist"),
+                        "permission": sidebar_model_view_permission("microtech", "MicrotechSettings"),
+                    },
+                    {
+                        "title": _("Regeln"),
+                        "icon": "rule_settings",
                         "link": reverse_lazy("admin:microtech_microtechorderrule_changelist"),
                         "permission": sidebar_model_view_permission("microtech", "MicrotechOrderRule"),
                     },

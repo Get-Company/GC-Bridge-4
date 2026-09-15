@@ -62,6 +62,8 @@ class OrderSyncWorkflowService(BaseService):
             # Vorgangsanlage nach Shopware geschrieben werden.
             return bool(state.get("is_new_customer"))
         if step == "probe_vorgang":
+            if state.get("force_vorgang_probe"):
+                return True
             return not bool(state.get("beleg_nr") or state.get("erp_order_id") or workflow.order.erp_order_id)
         if step == "clear_default_shipping_address":
             return bool(self._pending_default_clear_nrs(workflow, role="shipping"))
@@ -261,6 +263,34 @@ class OrderSyncWorkflowService(BaseService):
                     return vorgang_id
         return ""
 
+    @staticmethod
+    def _vorgangsart_from_vorgang_result(result: dict[str, Any] | None) -> object:
+        """Read ``VorgangArt`` from both GraphQL and dataset-record payloads."""
+
+        def extract(node: Any) -> object:
+            if not isinstance(node, dict):
+                return None
+            vorgang = node.get("vorgang")
+            if isinstance(vorgang, dict) and vorgang.get("vorgangArt") not in (None, ""):
+                return vorgang.get("vorgangArt")
+            for key in ("VorgangArt", "vorgangArt"):
+                if node.get(key) not in (None, ""):
+                    return node.get(key)
+            return None
+
+        root = result if isinstance(result, dict) else {}
+        data = root.get("data") if isinstance(root.get("data"), dict) else {}
+        for container in (root, data):
+            for key in ("", "vorgangJob", "requestVorgang", "createVorgang", "updateVorgang"):
+                value = extract(container if not key else container.get(key))
+                if value is not None:
+                    return value
+            for record in container.get("records") or []:
+                value = extract(record)
+                if value is not None:
+                    return value
+        return None
+
     def _build_customer_service(self) -> CustomerUpsertMicrotechService:
         """Erzeugt den bestehenden Customer-Upsert-Service für Payload-Builder-Reuse."""
         return CustomerUpsertMicrotechService()
@@ -298,11 +328,10 @@ class OrderSyncWorkflowService(BaseService):
         transaction and the orders worker.  A failed broker publication can
         therefore be recovered by the independent order reconciler.
 
-        ``allow_reexport`` covers the manual retry of an order whose Vorgang
-        was removed in Microtech: the stale BelegNr is cleared so that the
-        ``probe_vorgang`` step decides again.  A Vorgang that still exists is
-        found by that probe and updated, so the retry cannot create a
-        duplicate.
+        ``allow_reexport`` forces a fresh Microtech probe before an update.
+        Existing Beleg references stay intact until that probe has confirmed
+        that the remote Vorgang no longer exists. This lets the type guard
+        reject a converted document without losing its local reference.
         """
         from django.db import IntegrityError, transaction
 
@@ -312,6 +341,8 @@ class OrderSyncWorkflowService(BaseService):
             return None, False
 
         state = self._initial_workflow_state(order)
+        if allow_reexport:
+            state["force_vorgang_probe"] = True
         try:
             with transaction.atomic():
                 active = (
@@ -323,8 +354,6 @@ class OrderSyncWorkflowService(BaseService):
                     # Die Belegreferenzen bleiben stehen, solange ein aktiver
                     # Workflow sie noch braucht.
                     return active, False
-                if allow_reexport:
-                    self._clear_stale_beleg_references(order)
                 workflow = MicrotechOrderSyncWorkflow.objects.create(
                     order=order,
                     status=MicrotechOrderSyncWorkflow.Status.PENDING,
@@ -357,7 +386,11 @@ class OrderSyncWorkflowService(BaseService):
             )
             if workflow is None or workflow.status != MicrotechOrderSyncWorkflow.Status.PENDING:
                 return workflow
-            if (workflow.order.erp_order_id or "").strip() or not workflow.order.microtech_export_enabled:
+            force_vorgang_probe = bool((workflow.state or {}).get("force_vorgang_probe"))
+            if (
+                ((workflow.order.erp_order_id or "").strip() and not force_vorgang_probe)
+                or not workflow.order.microtech_export_enabled
+            ):
                 workflow.status = MicrotechOrderSyncWorkflow.Status.CANCELLED
                 workflow.error_message = workflow.order.microtech_export_exclusion_reason or "Microtech-Export nicht freigegeben."
                 workflow.save(update_fields=("status", "error_message", "updated_at"))
@@ -636,9 +669,23 @@ class OrderSyncWorkflowService(BaseService):
         elif step == "probe_vorgang":
             beleg = self._beleg_nr_from_vorgang_result(result)
             if beleg:
+                remote_vorgangsart_id = self._vorgangsart_from_vorgang_result(result)
+                remote_vorgangsart_id = OrderUpsertMicrotechService()._assert_remote_vorgangsart_allows_update(
+                    order=workflow.order,
+                    remote_vorgangsart_id=remote_vorgangsart_id,
+                )
                 state["beleg_nr"] = beleg
                 state["erp_order_id"] = beleg
+                state["remote_vorgangsart_id"] = remote_vorgangsart_id
+                state.pop("force_vorgang_probe", None)
                 OrderUpsertMicrotechService()._persist_erp_order_id(order=workflow.order, erp_order_id=beleg)
+            else:
+                self._clear_stale_beleg_references(workflow.order)
+                state.pop("beleg_nr", None)
+                state.pop("erp_order_id", None)
+                state.pop("erp_vorgang_id", None)
+                state.pop("remote_vorgangsart_id", None)
+                state.pop("force_vorgang_probe", None)
             vorgang_id = self._vorgang_id_from_vorgang_result(result)
             if vorgang_id:
                 state["erp_vorgang_id"] = vorgang_id
@@ -899,7 +946,7 @@ class OrderSyncWorkflowService(BaseService):
                 "indexField": "BelegNr",
                 "range": {"fromValues": [""], "toValues": ["ZZZZZZZZZZZZZZ"]},
                 "filter": f"AuftrNr = '{quoted_order_number}'",
-                "fields": ["BelegNr", "AuftrNr", "AdrNr", "Bez"],
+                "fields": ["BelegNr", "AuftrNr", "AdrNr", "Bez", "VorgangArt"],
                 "limit": 20,
             }
             job = MicrotechJobSentinelService().submit_dataset_records(
@@ -984,6 +1031,13 @@ class OrderSyncWorkflowService(BaseService):
         state = dict(workflow.state or {})
         if step == "probe_customer":
             state["is_new_customer"] = True
+        elif step == "probe_vorgang":
+            self._clear_stale_beleg_references(workflow.order)
+            state.pop("beleg_nr", None)
+            state.pop("erp_order_id", None)
+            state.pop("erp_vorgang_id", None)
+            state.pop("remote_vorgangsart_id", None)
+            state.pop("force_vorgang_probe", None)
         workflow.state = state
 
     @staticmethod

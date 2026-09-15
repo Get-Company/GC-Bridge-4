@@ -209,6 +209,40 @@ class AdvanceHandlerTest(TestCase):
 
         self.assertEqual(vorgang_id, "VORGANG-4712")
 
+    def test_vorgangsart_extractor_reads_dataset_record(self):
+        vorgangsart_id = OrderSyncWorkflowService._vorgangsart_from_vorgang_result(
+            {"records": [{"BelegNr": "WB26/326", "VorgangArt": "111"}]}
+        )
+
+        self.assertEqual(vorgangsart_id, "111")
+
+    @patch("orders.services.order_sync_workflow.OrderSyncWorkflowService.submit_step")
+    def test_advance_probe_vorgang_blocks_a_converted_document(self, mock_submit):
+        order = make_order()
+        order.erp_order_id = "RE-2026-42"
+        order.erp_vorgang_id = "Rechnung 2026-42"
+        order.save(update_fields=("erp_order_id", "erp_vorgang_id", "updated_at"))
+        workflow = MicrotechOrderSyncWorkflow.objects.create(
+            order=order,
+            status=MicrotechOrderSyncWorkflow.Status.WAITING,
+            current_step="probe_vorgang",
+        )
+        job = self._job(
+            workflow,
+            "probe_vorgang",
+            {"records": [{"BelegNr": "RE-2026-42", "VorgangArt": "120"}]},
+        )
+
+        OrderSyncWorkflowService().advance(job)
+
+        workflow.refresh_from_db()
+        order.refresh_from_db()
+        self.assertEqual(workflow.status, MicrotechOrderSyncWorkflow.Status.FAILED)
+        self.assertIn("Vorgangsart 120", workflow.error_message)
+        self.assertEqual(order.erp_order_id, "RE-2026-42")
+        self.assertEqual(order.erp_vorgang_id, "Rechnung 2026-42")
+        mock_submit.assert_not_called()
+
     @patch("orders.services.order_sync_workflow.OrderSyncWorkflowService.submit_step")
     def test_advance_ignores_stale_step(self, mock_submit):
         wf = MicrotechOrderSyncWorkflow.objects.create(
@@ -404,7 +438,7 @@ class StartAndSubmitTest(TestCase):
     @patch("orders.services.order_sync_workflow.MicrotechGraphQLClientService")
     @patch("orders.services.order_sync_workflow.MicrotechJobSentinelService.submit_wrapper_job")
     def test_start_reexports_order_with_stale_beleg_references(self, mock_submit, mock_client):
-        """Ein in Microtech geloeschter Vorgang darf erneut angelegt werden."""
+        """Ein Re-Export sondiert den Vorgang, ohne seine Referenzen vorab zu löschen."""
         mock_submit.return_value = MagicMock(pk=2)
         order = make_order()
         order.erp_order_id = "WB26/325"
@@ -414,12 +448,13 @@ class StartAndSubmitTest(TestCase):
         wf = OrderSyncWorkflowService().start_for_order(order)
 
         order.refresh_from_db()
-        self.assertEqual(order.erp_order_id, "")
-        self.assertEqual(order.erp_vorgang_id, "")
+        self.assertEqual(order.erp_order_id, "WB26/325")
+        self.assertEqual(order.erp_vorgang_id, "{1234}")
         self.assertEqual(wf.current_step, "write_customer")
         self.assertEqual(wf.status, MicrotechOrderSyncWorkflow.Status.WAITING)
-        # Ohne BelegNr sondiert der Workflow den Vorgang erneut, statt blind
-        # einen zweiten anzulegen.
+        self.assertTrue(wf.state["force_vorgang_probe"])
+        # Trotz gespeicherter BelegNr sondiert der Workflow den Vorgang erneut,
+        # statt blind zu aktualisieren.
         self.assertTrue(
             OrderSyncWorkflowService()._is_step_applicable(wf, "probe_vorgang")
         )

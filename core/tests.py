@@ -227,6 +227,20 @@ class AdminSidebarPermissionTest(SimpleTestCase):
         )
         self.assertTrue(item["has_permission"])
 
+    def test_microtech_vorgang_defaults_sidebar_entry_requires_view_permission(self):
+        item = self._sidebar_item(permissions=set(), title="Vorgang-Standardwerte")
+        self.assertFalse(item["has_permission"])
+        self.assertEqual(
+            str(item["link"]),
+            reverse("admin:microtech_microtechsettings_changelist"),
+        )
+
+        item = self._sidebar_item(
+            permissions={"microtech.view_microtechsettings"},
+            title="Vorgang-Standardwerte",
+        )
+        self.assertTrue(item["has_permission"])
+
     def test_email_category_sidebar_entry_requires_view_permission(self):
         request = self.factory.get(reverse("admin:index"))
         request.user = _SidebarUser(set())

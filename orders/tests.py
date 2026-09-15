@@ -19,12 +19,80 @@ from orders.services.order_rule_resolver import (
     ResolvedDatasetAction,
     ResolvedOrderRule,
 )
-from orders.services.order_upsert_microtech import OrderRuleDebugInfo, OrderUpsertMicrotechService
+from orders.services.order_upsert_microtech import (
+    MicrotechOrderDefaults,
+    OrderRuleDebugInfo,
+    OrderUpsertMicrotechService,
+)
 from orders.services.order_sync import OrderSyncService
 from products.models import Product
 
 
 class OrderGraphQLPayloadTest(SimpleTestCase):
+    def test_reexport_rejects_a_remote_document_with_another_vorgangsart(self):
+        order = Order(api_id="order-guard", order_number="SW-20001")
+        service = OrderUpsertMicrotechService()
+
+        with patch.object(
+            OrderUpsertMicrotechService,
+            "_load_order_defaults",
+            return_value=MicrotechOrderDefaults(order_type_number=111, payment_type_number=22, shipping_type_number=10),
+        ):
+            with self.assertRaisesRegex(ValueError, "Vorgangsart 120"):
+                service._assert_remote_vorgangsart_allows_update(
+                    order=order,
+                    remote_vorgangsart_id="120",
+                )
+
+    def test_reexport_accepts_the_configured_webshop_vorgangsart(self):
+        order = Order(api_id="order-guard", order_number="SW-20001")
+        service = OrderUpsertMicrotechService()
+
+        with patch.object(
+            OrderUpsertMicrotechService,
+            "_load_order_defaults",
+            return_value=MicrotechOrderDefaults(order_type_number=111, payment_type_number=22, shipping_type_number=10),
+        ):
+            actual = service._assert_remote_vorgangsart_allows_update(
+                order=order,
+                remote_vorgangsart_id="111",
+            )
+
+        self.assertEqual(actual, 111)
+
+    def test_graphql_reexport_does_not_update_a_converted_document(self):
+        order = Order(
+            api_id="order-guard",
+            order_number="SW-20001",
+            customer=Customer(erp_nr="1000"),
+        )
+        client = MagicMock()
+        client.request_vorgang.return_value = {"vorgang": {"vorgangArt": 120}}
+        service = OrderUpsertMicrotechService()
+
+        with (
+            patch(
+                "orders.services.order_upsert_microtech.resolve_order_rule_with_mode",
+                return_value=ResolvedOrderRule(),
+            ),
+            patch.object(service, "_ensure_customer_synced"),
+            patch.object(
+                OrderUpsertMicrotechService,
+                "_load_order_defaults",
+                return_value=MicrotechOrderDefaults(
+                    order_type_number=111,
+                    payment_type_number=22,
+                    shipping_type_number=10,
+                ),
+            ),
+            patch.object(service, "_build_graphql_positions", return_value=([], MagicMock())),
+            patch.object(service, "_refresh_erp_order_id_graphql", return_value="RE-2026-42"),
+        ):
+            with self.assertRaisesRegex(ValueError, "Vorgangsart 120"):
+                service._upsert_order_graphql(order=order, client=client)
+
+        client.update_vorgang.assert_not_called()
+
     def test_shopware_company_address_keeps_contact_name_in_name2(self):
         imported_address = SimpleNamespace(api_id="", name1="", name2="", save=MagicMock())
         address_data = {

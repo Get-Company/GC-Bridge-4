@@ -335,6 +335,14 @@ class OrderUpsertMicrotechService(BaseService):
 
         existing_beleg_nr = self._refresh_erp_order_id_graphql(order=order, client=client)
         if existing_beleg_nr:
+            remote_vorgangsart_id = self._read_remote_vorgangsart_graphql(
+                client=client,
+                beleg_nr=existing_beleg_nr,
+            )
+            self._assert_remote_vorgangsart_allows_update(
+                order=order,
+                remote_vorgangsart_id=remote_vorgangsart_id,
+            )
             job = client.update_vorgang(existing_beleg_nr, input_data)
             is_new = False
         else:
@@ -361,6 +369,42 @@ class OrderUpsertMicrotechService(BaseService):
             is_new=is_new,
             rule_debug=rule_debug,
         )
+
+    @staticmethod
+    def _read_remote_vorgangsart_graphql(*, client: MicrotechGraphQLClientService, beleg_nr: str) -> object:
+        """Read the current remote type before an existing Vorgang is updated."""
+        result = client.request_vorgang(beleg_nr)
+        vorgang = (result or {}).get("vorgang") or {}
+        return vorgang.get("vorgangArt")
+
+    @classmethod
+    def _assert_remote_vorgangsart_allows_update(
+        cls,
+        *,
+        order: Order,
+        remote_vorgangsart_id: object,
+    ) -> int:
+        """Reject updates once the webshop Vorgang has been converted in Microtech.
+
+        A manual re-export may update an existing order-type Vorgang, but must
+        never update a document that Microtech has converted to another type
+        (for example a Rechnung). The configured webshop order type is the
+        single source of truth for this check.
+        """
+        expected_vorgangsart_id = cls._load_order_defaults().order_type_number
+        actual_vorgangsart_id = cls._parse_positive_int(remote_vorgangsart_id)
+        if actual_vorgangsart_id is None:
+            raise ValueError(
+                "Microtech-Vorgangsart konnte vor dem Update nicht gelesen werden; "
+                "der Export wird vorsichtshalber abgebrochen."
+            )
+        if actual_vorgangsart_id != expected_vorgangsart_id:
+            raise ValueError(
+                f"Bestellung {order.order_number or order.pk} wird nicht erneut exportiert: "
+                f"Der Microtech-Vorgang hat Vorgangsart {actual_vorgangsart_id}, "
+                f"erwartet wird die konfigurierte Webshop-Vorgangsart {expected_vorgangsart_id}."
+            )
+        return actual_vorgangsart_id
 
     def _build_graphql_positions(
         self,
@@ -1459,6 +1503,15 @@ class OrderUpsertMicrotechService(BaseService):
         if parsed <= 0:
             return default
         return parsed
+
+    @staticmethod
+    def _parse_positive_int(value: object) -> int | None:
+        """Parse a required positive integer without silently applying a fallback."""
+        try:
+            parsed = int(str(value).strip())
+        except (TypeError, ValueError):
+            return None
+        return parsed if parsed > 0 else None
 
 
 __all__ = ["OrderRuleDebugInfo", "OrderUpsertMicrotechService", "OrderUpsertResult"]
