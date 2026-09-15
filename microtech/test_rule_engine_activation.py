@@ -124,3 +124,24 @@ def test_shared_detect_customer_type_matches_service():
     shared = detect_customer_type(order=order)
     service = OrderRuleResolverService()._detect_customer_type(order=order)
     assert shared == service
+
+
+# --- Task 3: mode setting + shadow-run model -----------------------------
+
+
+def test_engine_mode_default_off_and_choices():
+    from microtech.models import MicrotechSettings
+
+    s = MicrotechSettings.load()
+    assert s.rule_engine_order_mode == MicrotechSettings.EngineMode.OFF
+    values = {c[0] for c in MicrotechSettings.EngineMode.choices}
+    assert values == {"off", "shadow", "live"}
+
+
+def test_shadow_run_model_orders_newest_first():
+    from microtech.models import RuleEngineShadowRun
+
+    RuleEngineShadowRun.objects.create(order_number="X1", task_name="t", is_equal=True, changed_json="{}")
+    RuleEngineShadowRun.objects.create(order_number="X2", task_name="t", is_equal=False, changed_json="{}")
+    newest = list(RuleEngineShadowRun.objects.values_list("order_number", flat=True))[:2]
+    assert newest == ["X2", "X1"]

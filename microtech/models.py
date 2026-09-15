@@ -13,6 +13,18 @@ class MicrotechSettings(BaseModel):
     default_versandart_id = models.PositiveIntegerField(default=10, verbose_name=_("Standard Versandart-ID"))
     default_vorgangsart_id = models.PositiveIntegerField(default=111, verbose_name=_("Standard Vorgangsart-ID"))
 
+    class EngineMode(models.TextChoices):
+        OFF = "off", _("Aus (nur alter Resolver)")
+        SHADOW = "shadow", _("Schatten (alt maßgeblich, Engine vergleicht)")
+        LIVE = "live", _("Live (neue Engine maßgeblich)")
+
+    rule_engine_order_mode = models.CharField(
+        max_length=10,
+        choices=EngineMode.choices,
+        default=EngineMode.OFF,
+        verbose_name=_("Regel-Engine Modus (Bestellungen)"),
+    )
+
     # Backup-Fenster: waehrend eines microtech-Backups steht die COM-Verbindung
     # still. Das Flag haelt neue Microtech-Jobs auf, damit sie nicht ins Leere
     # laufen. Es wird ausschliesslich nach bestaetigter Rueckmeldung des
@@ -39,6 +51,30 @@ class MicrotechSettings(BaseModel):
     def load(cls) -> "MicrotechSettings":
         obj, _ = cls.objects.get_or_create(pk=1)
         return obj
+
+
+class RuleEngineShadowRun(BaseModel):
+    """Persisted comparison between legacy resolver and new engine per order.
+
+    Written while the engine runs in shadow or live mode; serves as the
+    verification gate before (and during) cutover.
+    """
+
+    order_number = models.CharField(max_length=64, blank=True, default="", verbose_name=_("Bestellnummer"))
+    task_name = models.CharField(max_length=128, blank=True, default="", verbose_name=_("Trigger-Task"))
+    engine_rule_id = models.IntegerField(null=True, blank=True, verbose_name=_("Engine-Regel-ID"))
+    legacy_rule_id = models.IntegerField(null=True, blank=True, verbose_name=_("Legacy-Regel-ID"))
+    is_equal = models.BooleanField(default=True, verbose_name=_("Übereinstimmung"))
+    changed_json = models.TextField(blank=True, default="", verbose_name=_("Abweichungen (JSON)"))
+
+    class Meta:
+        ordering = ("-created_at",)
+        verbose_name = _("Regel-Engine Schatten-Lauf")
+        verbose_name_plural = _("Regel-Engine Schatten-Läufe")
+
+    def __str__(self) -> str:
+        state = "=" if self.is_equal else "≠"
+        return f"{self.order_number or '?'} {state} (engine={self.engine_rule_id}, legacy={self.legacy_rule_id})"
 
 
 class MicrotechGraphQLJob(BaseModel):
