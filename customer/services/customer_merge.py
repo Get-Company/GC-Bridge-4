@@ -5,7 +5,7 @@ from typing import Any
 
 from loguru import logger
 
-from django.db import models
+from django.db import models, transaction
 
 from core.services import BaseService
 from customer.models import Address, Customer
@@ -1341,6 +1341,137 @@ class CustomerSyncDirectionService(BaseService):
             raise ValueError(f"Unbekannte Richtung: {direction}")
         return handler(erp_nr)
 
+    @staticmethod
+    def _apply_shopware_address(
+        address: Address,
+        address_data: dict[str, Any],
+        *,
+        customer: Customer,
+        default_billing_id: str,
+        default_shipping_id: str,
+    ) -> None:
+        """Copy the displayable address fields from a verified SW6 address."""
+        api_id = _to_str(address_data.get("id"))
+        country = address_data.get("country") or {}
+        if isinstance(country, dict):
+            country = country.get("attributes") or country
+        salutation = address_data.get("salutation") or {}
+        if isinstance(salutation, dict):
+            salutation = salutation.get("attributes") or salutation
+        salutation_name = _to_str(
+            salutation.get("displayName") if isinstance(salutation, dict) else ""
+        )
+        full_name = f"{_to_str(address_data.get('firstName'))} {_to_str(address_data.get('lastName'))}".strip()
+
+        address.api_id = api_id
+        address.title = salutation_name or address.title
+        address.name1 = _to_str(address_data.get("company")) or full_name
+        address.name2 = full_name if _to_str(address_data.get("company")) else ""
+        address.department = _to_str(address_data.get("department"))
+        address.street = _to_str(address_data.get("street"))
+        address.postal_code = _to_str(address_data.get("zipcode"))
+        address.city = _to_str(address_data.get("city"))
+        address.country_code = _to_str(country.get("iso")) if isinstance(country, dict) else ""
+        address.email = _to_str(address_data.get("email")) or customer.email
+        address.first_name = _to_str(address_data.get("firstName"))
+        address.last_name = _to_str(address_data.get("lastName"))
+        address.phone = _to_str(address_data.get("phoneNumber"))
+        address.is_invoice = api_id == default_billing_id
+        address.is_shipping = api_id == default_shipping_id
+
+    def import_shopware_address(self, *, erp_nr: str, shopware_address_id: str) -> dict[str, Any]:
+        """Copy exactly one confirmed Shopware address into the matching local customer.
+
+        This deliberately does not run the full customer import: a user clicking
+        the comparison-arrow must not have unrelated local address mappings
+        changed or removed as a side effect.
+        """
+        from orders.services.order_sync import _normalize_entity
+        from shopware.services import CustomerService
+
+        erp_nr = _to_str(erp_nr)
+        requested_address_id = _to_str(shopware_address_id).lower()
+        if not erp_nr:
+            raise ValueError("ERP-Nummer erforderlich.")
+        if not _UUID_RE.fullmatch(requested_address_id):
+            raise ValueError("Eine gültige Shopware-Adress-ID ist erforderlich.")
+
+        response = CustomerService().get_by_customer_number(erp_nr)
+        data = (response or {}).get("data", []) or []
+        if not data:
+            raise ValueError(f"Kunde {erp_nr} nicht in Shopware gefunden.")
+
+        raw = _normalize_entity(data[0])
+        shopware_customer_id = _to_str(raw.get("id")).lower()
+        if not _UUID_RE.fullmatch(shopware_customer_id):
+            raise ValueError("Shopware hat keine gültige Kunden-ID geliefert.")
+
+        addresses_raw = raw.get("addresses") or []
+        if isinstance(addresses_raw, dict):
+            addresses_raw = addresses_raw.get("data") or []
+        addresses_raw = _normalize_entity(addresses_raw) if isinstance(addresses_raw, list) else []
+        address_data = next(
+            (
+                candidate for candidate in addresses_raw
+                if isinstance(candidate, dict)
+                and _to_str(candidate.get("id")).lower() == requested_address_id
+            ),
+            None,
+        )
+        if not address_data:
+            raise ValueError("Die ausgewählte Adresse gehört nicht zum Shopware-Kunden.")
+
+        default_billing_id = _to_str(raw.get("defaultBillingAddressId")).lower()
+        default_shipping_id = _to_str(raw.get("defaultShippingAddressId")).lower()
+        with transaction.atomic():
+            customer = Customer.objects.select_for_update().filter(erp_nr=erp_nr).first()
+            if not customer:
+                raise ValueError(f"Kunde {erp_nr} nicht in Django gefunden.")
+            if customer.api_id and customer.api_id.lower() != shopware_customer_id:
+                raise ValueError(
+                    "Die lokale Shopware-Kunden-ID stimmt nicht mit dem SW6-Kunden überein. "
+                    "Bitte zuerst die Kunden-ID prüfen."
+                )
+            if Customer.objects.filter(api_id__iexact=shopware_customer_id).exclude(pk=customer.pk).exists():
+                raise ValueError("Die Shopware-Kunden-ID ist bereits einem anderen Django-Kunden zugeordnet.")
+
+            address = Address.objects.filter(
+                customer=customer, api_id__iexact=requested_address_id,
+            ).first()
+            if not address:
+                if Address.objects.filter(api_id__iexact=requested_address_id).exclude(customer=customer).exists():
+                    raise ValueError("Die Shopware-Adresse ist bereits einem anderen Django-Kunden zugeordnet.")
+                address = Address(customer=customer)
+
+            if not customer.api_id:
+                customer.api_id = shopware_customer_id
+                customer.save(update_fields=["api_id", "updated_at"])
+
+            self._apply_shopware_address(
+                address,
+                address_data,
+                customer=customer,
+                default_billing_id=default_billing_id,
+                default_shipping_id=default_shipping_id,
+            )
+            address.save()
+            if address.is_invoice:
+                customer.addresses.exclude(pk=address.pk).update(is_invoice=False)
+            if address.is_shipping:
+                customer.addresses.exclude(pk=address.pk).update(is_shipping=False)
+
+        logger.info(
+            "Shopware->Django: copied address {} for customer {} as local address {}",
+            requested_address_id,
+            erp_nr,
+            address.pk,
+        )
+        return {
+            "message": "Shopware-Adresse nach Django übernommen.",
+            "address_id": address.pk,
+            "shopware_address_id": requested_address_id,
+        }
+
     def _shopware_to_django(self, erp_nr: str) -> dict[str, Any]:
         """Import customer + addresses from Shopware into Django."""
         from shopware.services import CustomerService
@@ -1407,30 +1538,13 @@ class CustomerSyncDirectionService(BaseService):
                 addr = Address(customer=customer)
 
             addr.api_id = api_id
-            country = addr_data.get("country") or {}
-            if isinstance(country, dict):
-                country = country.get("attributes") or country
-            # Salutation from Shopware association
-            salutation = addr_data.get("salutation") or {}
-            if isinstance(salutation, dict):
-                salutation = salutation.get("attributes") or salutation
-            salutation_name = _os_to_str(salutation.get("displayName") if isinstance(salutation, dict) else "")
-
-            full_name = f"{_os_to_str(addr_data.get('firstName'))} {_os_to_str(addr_data.get('lastName'))}".strip()
-            addr.title = salutation_name or addr.title
-            addr.name1 = _os_to_str(addr_data.get("company")) or full_name
-            addr.name2 = full_name if _os_to_str(addr_data.get("company")) else ""
-            addr.department = _os_to_str(addr_data.get("department"))
-            addr.street = _os_to_str(addr_data.get("street"))
-            addr.postal_code = _os_to_str(addr_data.get("zipcode"))
-            addr.city = _os_to_str(addr_data.get("city"))
-            addr.country_code = _os_to_str(country.get("iso")) if isinstance(country, dict) else ""
-            addr.email = _os_to_str(addr_data.get("email")) or customer.email
-            addr.first_name = _os_to_str(addr_data.get("firstName"))
-            addr.last_name = _os_to_str(addr_data.get("lastName"))
-            addr.phone = _os_to_str(addr_data.get("phoneNumber"))
-            addr.is_invoice = (api_id == default_billing_id)
-            addr.is_shipping = (api_id == default_shipping_id)
+            self._apply_shopware_address(
+                addr,
+                addr_data,
+                customer=customer,
+                default_billing_id=default_billing_id,
+                default_shipping_id=default_shipping_id,
+            )
             addr.save()
             seen_addr_ids.add(addr.pk)
             addr_count += 1
@@ -1897,6 +2011,103 @@ class ShopwareCustomerMergeService(BaseService):
         if data.get("status") == "not_found" and data.get("operationId") == operation_id:
             return {"status": "not_found", "operationId": operation_id}
         return self._validate_result(data, operation_id=operation_id)
+
+    def cleanup_django_source_after_merge(
+        self, *, source_sw_id: str, target_sw_id: str,
+    ) -> dict[str, Any]:
+        """Remove the local source account after the plugin confirmed its deletion.
+
+        Local orders and addresses are assigned to the surviving local target
+        first. The source customer is only deleted once it has neither, mirroring
+        the confirmed Shopware merge without losing local address references.
+        """
+        source_sw_id = self._id(source_sw_id, "Shopware-Quellkunde")
+        target_sw_id = self._id(target_sw_id, "Shopware-Zielkunde")
+        if source_sw_id == target_sw_id:
+            raise ShopwareMergeError(
+                "Die lokale Bereinigung konnte nicht zugeordnet werden: Quelle und Ziel sind identisch.",
+                code="GC_MERGE_DJANGO_CLEANUP_INVALID", status=409,
+            )
+
+        with transaction.atomic():
+            source_customers = list(
+                Customer.objects.select_for_update().filter(api_id__iexact=source_sw_id)
+            )
+            if len(source_customers) > 1:
+                raise ShopwareMergeError(
+                    "Die lokale Bereinigung wurde nicht ausgeführt: Die Shopware-Quell-ID ist mehrfach in Django hinterlegt.",
+                    code="GC_MERGE_DJANGO_CLEANUP_AMBIGUOUS", status=409,
+                )
+            if not source_customers:
+                return {"status": "already_removed", "orders_moved": 0, "addresses_moved": 0}
+
+            target_customers = list(
+                Customer.objects.select_for_update().filter(api_id__iexact=target_sw_id)
+            )
+            if len(target_customers) != 1:
+                raise ShopwareMergeError(
+                    "Der Shopware-Merge ist abgeschlossen, aber der lokale Zielkunde ist nicht eindeutig. "
+                    "Der Django-Quellkunde wurde deshalb nicht gelöscht.",
+                    code="GC_MERGE_DJANGO_CLEANUP_TARGET_MISSING", status=409,
+                )
+
+            source = source_customers[0]
+            target = target_customers[0]
+            if source.pk == target.pk:
+                raise ShopwareMergeError(
+                    "Die lokale Bereinigung konnte nicht zugeordnet werden: Quelle und Ziel zeigen auf denselben Django-Kunden.",
+                    code="GC_MERGE_DJANGO_CLEANUP_INVALID", status=409,
+                )
+
+            source_addresses = list(source.addresses.select_for_update())
+            target_addresses = list(target.addresses.select_for_update())
+            target_shopware_address_ids = {
+                address.api_id.lower() for address in target_addresses if address.api_id
+            }
+            target_microtech_keys = {
+                (address.erp_ans_id, address.erp_asp_id)
+                for address in target_addresses
+                if address.erp_ans_id is not None
+            }
+            for address in source_addresses:
+                if address.api_id and address.api_id.lower() in target_shopware_address_ids:
+                    raise ShopwareMergeError(
+                        "Die lokale Bereinigung wurde nicht ausgeführt: Eine SW6-Adresse ist bereits beim Django-Zielkunden vorhanden.",
+                        code="GC_MERGE_DJANGO_CLEANUP_ADDRESS_CONFLICT", status=409,
+                    )
+                microtech_key = (address.erp_ans_id, address.erp_asp_id)
+                if address.erp_ans_id is not None and microtech_key in target_microtech_keys:
+                    raise ShopwareMergeError(
+                        "Die lokale Bereinigung wurde nicht ausgeführt: Eine Microtech-Adresszuordnung würde beim Zielkunden doppelt sein.",
+                        code="GC_MERGE_DJANGO_CLEANUP_ADDRESS_CONFLICT", status=409,
+                    )
+
+            source_addresses_query = Address.objects.filter(customer=source)
+            # The Shopware target keeps its own defaults. Do not turn a source
+            # default into a second local standard address while moving it.
+            if any(address.is_invoice for address in target_addresses):
+                source_addresses_query.update(is_invoice=False)
+            if any(address.is_shipping for address in target_addresses):
+                source_addresses_query.update(is_shipping=False)
+            addresses_moved = source_addresses_query.update(customer=target)
+            orders_moved = Order.objects.filter(customer=source).update(customer=target)
+            source_label = f"{source.erp_nr} ({source.name})"
+            source.delete()
+
+        logger.info(
+            "SW-MERGE-DJANGO-CLEANUP| moved {} addresses and {} orders from source {} to {}; source removed",
+            addresses_moved,
+            orders_moved,
+            source_label,
+            target.erp_nr,
+        )
+        return {
+            "status": "deleted",
+            "source": source_label,
+            "target_erp_nr": target.erp_nr,
+            "orders_moved": orders_moved,
+            "addresses_moved": addresses_moved,
+        }
 
 
 class ShopwareCustomerAddressService(BaseService):

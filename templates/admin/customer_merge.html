@@ -92,12 +92,32 @@
   .comparison-address-cell { background: #fff; }
   .comparison-address-card + .comparison-address-card { margin-top: .6rem; }
   .comparison-address-card {
+    position: relative;
     height: 100%;
     padding: .75rem;
     border: 1px solid #e2e8f0;
     border-radius: .55rem;
     background: #f8fafc;
   }
+  .comparison-address-copy {
+    position: absolute;
+    z-index: 2;
+    top: 50%;
+    right: -2.05rem;
+    display: inline-flex;
+    width: 2rem;
+    height: 2rem;
+    align-items: center;
+    justify-content: center;
+    transform: translateY(-50%);
+    border: 1px solid #bfdbfe;
+    border-radius: 999px;
+    background: #eff6ff;
+    color: #2563eb;
+    box-shadow: 0 1px 3px rgb(15 23 42 / .16);
+  }
+  .comparison-address-copy:hover { background: #dbeafe; }
+  .comparison-address-copy:disabled { cursor: wait; opacity: .55; }
   .comparison-address-card .merge-address-identifiers { margin: 0 0 .65rem; padding: 0; }
   .comparison-address-card .merge-identifier { grid-template-columns: 5.25rem minmax(0, 1fr); }
   .comparison-address-card .merge-contact-list { margin-top: .7rem; padding-top: .65rem; }
@@ -120,6 +140,8 @@
   .dark .comparison-value { color: #e2e8f0; }
   .dark .comparison-address-cell { background: #111827; }
   .dark .comparison-address-card { background: #1e293b; border-color: #334155; }
+  .dark .comparison-address-copy { border-color: #1d4ed8; background: #172554; color: #93c5fd; }
+  .dark .comparison-address-copy:hover { background: #1e3a8a; }
   .dark .comparison-address-card .merge-contact { background: #0f172a; }
   .dark .comparison-address-empty { color: #64748b; }
   @media (max-width: 1023px) {
@@ -132,9 +154,55 @@
   .merge-identifier dt { font-size: .7rem; color: #64748b; font-weight: 500; }
   .merge-identifier dd { margin: 0; font: 500 .8rem/1.6 ui-monospace, monospace; overflow-wrap: anywhere; color: #334155; }
   .merge-identifier .customer-number-field { display: flex; gap: .4rem; align-items: center; }
-  .merge-identifier .microtech-number-field { display: flex; gap: .4rem; align-items: end; }
-  .microtech-number-field label { flex: 1; min-width: 0; font: 500 .62rem/1.2 sans-serif; color: #64748b; }
-  .microtech-number-field input { margin-top: .2rem; }
+  .merge-identifier .shopware-id-field {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: .4rem;
+    align-items: start;
+  }
+  .shopware-id-field textarea,
+  .shopware-id-value {
+    box-sizing: border-box;
+    grid-column: 1 / -1;
+    width: 100%;
+    min-height: 3rem;
+    margin: 0;
+    padding: .45rem .5rem;
+    border: 1px solid #cbd5e1;
+    border-radius: .35rem;
+    background: #fff;
+    color: #334155;
+    font: 500 .8rem/1.35 ui-monospace, monospace;
+    overflow-wrap: anywhere;
+  }
+  .shopware-id-field textarea { resize: vertical; }
+  .shopware-id-value { display: block; }
+  .shopware-id-field button { grid-column: 2; justify-self: end; }
+  .merge-identifier .microtech-number-field {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+    gap: .4rem;
+    align-items: end;
+  }
+  .microtech-number-field label,
+  .microtech-number-pair > div { min-width: 0; font: 500 .62rem/1.2 sans-serif; color: #64748b; }
+  .microtech-number-field input,
+  .microtech-number-value {
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    min-height: 2rem;
+    margin-top: .2rem;
+    padding: .35rem .5rem;
+    border: 1px solid #cbd5e1;
+    border-radius: .35rem;
+    background: #fff;
+    font: 500 .8rem/1.2 ui-monospace, monospace;
+    color: #334155;
+  }
+  .microtech-number-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .4rem; margin: .55rem 0; }
+  .microtech-number-pair dt { margin: 0; }
+  .microtech-number-pair dd { margin: 0; }
   .merge-identifier input { width: 100%; min-width: 0; padding: .35rem .5rem; border: 1px solid #cbd5e1; border-radius: .35rem; background: #fff; }
   .merge-identifier button { flex-shrink: 0; font-size: .7rem; font-weight: 500; color: #2563eb; }
   .merge-address-identifiers { margin: .75rem 0 1rem; padding: .5rem .75rem; background: transparent; }
@@ -197,7 +265,11 @@
   .dark .merge-identifier dt { color: #94a3b8; }
   .dark .merge-identifier dd { color: #e2e8f0; }
   .dark .merge-identifier input { background: #0f172a; border-color: #475569; }
+  .dark .shopware-id-field textarea,
+  .dark .shopware-id-value { background: #0f172a; border-color: #475569; color: #e2e8f0; }
   .dark .microtech-number-field label { color: #94a3b8; }
+  .dark .microtech-number-pair > div { color: #94a3b8; }
+  .dark .microtech-number-value { background: #0f172a; border-color: #475569; color: #e2e8f0; }
   .dark .merge-contact-list { border-color: #334155; }
   .dark .merge-contact { background: #1e293b66; }
   .dark .merge-contact-map { background: #0f172a; border-color: #475569; color: #e2e8f0; }
@@ -329,9 +401,9 @@ function identifierRows(entries) {
   return entries.map(([label, value]) => `<div class="merge-identifier"><dt>${esc(label)}</dt><dd>${esc(value ?? '—') || '—'}</dd></div>`).join('');
 }
 function editableShopwareMapping(label, value, action, idKey, idValue, erpNr) {
-  return `<div class="merge-identifier"><dt>${esc(label)}</dt><dd><div class="customer-number-field">
-      <input type="text" value="${esc(value)}" aria-label="${esc(label)}" autocomplete="off"
-        data-erp-nr="${esc(erpNr)}" data-id-key="${esc(idKey)}" data-id-value="${esc(idValue)}">
+  return `<div class="merge-identifier"><dt>${esc(label)}</dt><dd><div class="customer-number-field shopware-id-field">
+      <textarea rows="2" aria-label="${esc(label)}" autocomplete="off"
+        data-erp-nr="${esc(erpNr)}" data-id-key="${esc(idKey)}" data-id-value="${esc(idValue)}">${esc(value)}</textarea>
       <button type="button" onclick="updateShopwareMapping(this, '${esc(action)}')">Speichern</button>
   </div></dd></div>`;
 }
@@ -348,8 +420,8 @@ function shopwareCustomerMapping(nr, raw) {
   const transfer = target?.id
     ? `<button type="button" data-erp-nr="${esc(nr)}" onclick="adoptShopwareCustomerId(this.dataset.erpNr, this)">Zu Django übernehmen</button>`
     : '';
-  return `<div class="merge-identifier"><dt>SW6-ID</dt><dd><div class="customer-number-field">
-      <span>${esc(raw.id || '—')}</span>${transfer}
+  return `<div class="merge-identifier"><dt>SW6-ID</dt><dd><div class="customer-number-field shopware-id-field">
+      <span class="shopware-id-value">${esc(raw.id || '—')}</span>${transfer}
   </div></dd></div>`;
 }
 function customerIdentifiers(nr, sysKey, raw, customer) {
@@ -357,8 +429,14 @@ function customerIdentifiers(nr, sysKey, raw, customer) {
   const ids = sysKey === 'django'
     ? editableShopwareMapping('SW6-ID', raw.api_id || '', 'update_shopware_id', 'customer_id', raw.id, nr)
     : sysKey === 'shopware' ? shopwareCustomerMapping(nr, raw) : [];
+  const deleteDjango = sysKey === 'django'
+    ? `<div class="mt-2 flex justify-end"><button type="button" onclick="deleteDjangoCustomer('${esc(nr)}', this)"
+        class="inline-flex items-center gap-1 text-xs text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300">
+        <span class="material-symbols-outlined" style="font-size:14px">delete</span>Django-Kunde löschen
+      </button></div>`
+    : '';
   return `<dl class="merge-identifiers merge-customer-identifiers" aria-label="Kennungen ${esc(sysKey)}">
-    <div class="merge-identifier"><dt>${esc(customer.customerNrLabel)}</dt><dd>${number}</dd></div>${Array.isArray(ids) ? identifierRows(ids) : ids}</dl>`;
+    <div class="merge-identifier"><dt>${esc(customer.customerNrLabel)}</dt><dd>${number}</dd></div>${Array.isArray(ids) ? identifierRows(ids) : ids}</dl>${deleteDjango}`;
 }
 function toggleSection(btn) {
   const shouldOpen = !btn.classList.contains('open');
@@ -507,18 +585,21 @@ function microtechContactMapping(nr, address, contact) {
 function microtechContacts(nr, address) {
   const contacts = address.contacts || [];
   const addressNumber = address.microtechAddressNumber === '' ? '—' : address.microtechAddressNumber;
-  const addressMapping = `<div class="merge-identifier"><dt>AnsNr</dt><dd>${esc(addressNumber)}</dd></div>`;
+  const numberPair = contactNumber => `<dl class="microtech-number-pair" aria-label="Microtech-Kennung">
+    <div><dt>AnsNr</dt><dd class="microtech-number-value">${esc(addressNumber)}</dd></div>
+    <div><dt>AnspNr</dt><dd class="microtech-number-value">${esc(contactNumber)}</dd></div>
+  </dl>`;
   const contactRows = contacts.length ? contacts.map(contact => {
     const number = contact.microtechContactNumber === '' ? '—' : contact.microtechContactNumber;
     const name = [contact.title, contact.name].filter(Boolean).join(' ') || 'Ohne Namen';
     return `<div class="merge-contact">
-      <div class="flex items-baseline justify-between gap-2"><span class="font-medium text-xs">${esc(name)}</span><span class="font-mono text-[10px] text-gray-400">AnspNr ${esc(number)}</span></div>
+      <div class="font-medium text-xs">${esc(name)}</div>
+      ${numberPair(number)}
       ${contact.email ? `<div class="mt-1 truncate text-[10px] text-gray-400">${esc(contact.email)}</div>` : ''}
       ${microtechContactMapping(nr, address, contact)}
     </div>`;
-  }).join('') : `<div class="merge-contact">${microtechContactMapping(nr, address, null)}</div>`;
-  return `<dl class="merge-identifiers merge-address-identifiers">${addressMapping}</dl>
-    <div class="merge-contact-list"><h4>Ansprechpartner (${contacts.length})</h4>${contactRows}</div>`;
+  }).join('') : `<div class="merge-contact">${numberPair('—')}${microtechContactMapping(nr, address, null)}</div>`;
+  return `<div class="merge-contact-list"><h4>Ansprechpartner (${contacts.length})</h4>${contactRows}</div>`;
 }
 
 /* ── Shared comparison matrix ────────────────────────── */
@@ -592,6 +673,12 @@ function comparisonAddressCard(nr, sysKey, address) {
   const checkbox = canDelete && address.id
     ? `<input type="checkbox" value="${address.id}" class="rounded mt-0.5 addr-cb-${groupId}" style="flex-shrink:0">`
     : '';
+  const copyToDjango = sysKey === 'shopware' && address.id && searchData[nr]?.django?.id
+    ? `<button type="button" class="comparison-address-copy" title="Diese SW6-Adresse nach Django kopieren"
+        aria-label="Diese SW6-Adresse nach Django kopieren" onclick="adoptShopwareAddress('${esc(nr)}', '${esc(address.id)}', this)">
+        <span class="material-symbols-outlined" style="font-size:18px">arrow_forward</span>
+      </button>`
+    : '';
   const mappings = sysKey === 'shopware'
     ? `<dl class="merge-identifiers merge-address-identifiers">${identifierRows([['SW6-Adress-ID', address.id]])}</dl>`
     : sysKey === 'django'
@@ -600,6 +687,7 @@ function comparisonAddressCard(nr, sysKey, address) {
   const microtechContactsHtml = sysKey === 'microtech' ? microtechContacts(nr, address) : '';
 
   return `<article class="comparison-address-card flex gap-2">
+    ${copyToDjango}
     ${checkbox}
     <div class="flex-1 min-w-0">
       ${flags ? `<div class="mb-2 flex flex-wrap items-center justify-end gap-x-3 gap-y-1">${flags}</div>` : ''}
@@ -1201,7 +1289,7 @@ async function updateCustomerNumber(erpNr, sysKey, button) {
 
 async function updateShopwareMapping(button, action) {
   const field = button.closest('.customer-number-field');
-  const input = field?.querySelector('input');
+  const input = field?.querySelector('input, textarea');
   const erpNr = input?.dataset.erpNr;
   const idKey = input?.dataset.idKey;
   const idValue = input?.dataset.idValue;
@@ -1368,6 +1456,53 @@ async function refetchRow(oldNr, newNr) {
   initializeRowStates([newNr], { microtechState: 'loading' });
   renderRows(false);
   await loadCells([newNr]);
+}
+
+async function adoptShopwareAddress(erpNr, shopwareAddressId, button) {
+  if (!searchData[erpNr]?.django?.id) {
+    alert('Der Kunde muss zuerst in Django vorhanden sein.');
+    return;
+  }
+  const idleLabel = button.innerHTML;
+  button.disabled = true;
+  button.innerHTML = spinner();
+  try {
+    const response = await fetch('/admin/customer-merge/api/adopt-shopware-address/', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF},
+      body: JSON.stringify({erp_nr: erpNr, shopware_address_id: shopwareAddressId}),
+    });
+    const data = await response.json();
+    if (!response.ok || data.error) throw new Error(data.error || 'Die Adresse konnte nicht übernommen werden.');
+    await refetchRow(erpNr, erpNr);
+  } catch (error) {
+    alert('Fehler: ' + error.message);
+  } finally {
+    button.disabled = false;
+    button.innerHTML = idleLabel;
+  }
+}
+
+async function deleteDjangoCustomer(erpNr, button) {
+  if (!confirm(`Django-Kunde ${erpNr} einschließlich seiner lokalen Adressen löschen?`)) return;
+  const idleLabel = button.innerHTML;
+  button.disabled = true;
+  button.innerHTML = `${spinner()} Lösche...`;
+  try {
+    const response = await fetch('/admin/customer-merge/api/delete-django-customer/', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF},
+      body: JSON.stringify({erp_nr: erpNr}),
+    });
+    const data = await response.json();
+    if (!response.ok || data.error) throw new Error(data.error || 'Der Django-Kunde konnte nicht gelöscht werden.');
+    await refetchRow(erpNr, erpNr);
+  } catch (error) {
+    alert('Fehler: ' + error.message);
+  } finally {
+    button.disabled = false;
+    button.innerHTML = idleLabel;
+  }
 }
 
 function renderRowCells(nr) {
@@ -1833,7 +1968,7 @@ function renderShopwareMergeSection() {
     options(selected.delete_sw_id || customers[0]?.id) + '</select></label>' +
     '<label>Zielkunde – SW6-ID bleibt erhalten<select id="sw-merge-keep" onchange="invalidateShopwareMergePreview()">' +
     options(selected.keep_sw_id || customers[1]?.id) + '</select></label></div>' +
-    '<p class="merge-launcher-note">Alle Adressen und Bestellzuordnungen werden übernommen. Keine Adresse wird zusammengefasst oder gelöscht. Die am Zielkunden eingestellten Standardadressen bleiben erhalten. Django und microtech bleiben unverändert.</p>' +
+    '<p class="merge-launcher-note">In SW6 werden alle Adressen und Bestellzuordnungen auf den Zielkunden übernommen. Die am Zielkunden eingestellten Standardadressen bleiben erhalten. Nach bestätigtem Merge übernimmt Django die lokalen Adressen und Bestellungen ebenfalls und löscht erst dann das leere Quellkonto. Microtech bleibt unverändert.</p>' +
     '<button type="button" id="sw-merge-preview-btn" onclick="loadShopwareMergePreview()" class="merge-preview-button">Vorschau laden</button>' +
     '</div></div>';
   invalidateShopwareMergePreview();
@@ -1930,11 +2065,22 @@ function completeShopwareMerge(data) {
   swMergePreview = null;
   const result = document.getElementById('sw-merge-result');
   result.classList.remove('hidden');
+  const cleanup = data.djangoCleanup || {};
+  const djangoOutcome = cleanup.status === 'deleted'
+    ? '<div class="mt-2 text-xs">Django: ' + Number(cleanup.addresses_moved || 0) + ' Adressen und ' +
+      Number(cleanup.orders_moved || 0) + ' Bestellungen auf den Zielkunden übernommen; Quellkonto gelöscht.</div>'
+    : cleanup.status === 'already_removed'
+      ? '<div class="mt-2 text-xs">Django-Quellkonto war bereits entfernt.</div>'
+      : cleanup.status === 'failed'
+        ? '<div class="mt-2 p-2 border border-amber-300 rounded text-xs text-amber-700 dark:text-amber-300">' +
+          'Shopware ist fertig, aber Django konnte den Quellkunden nicht sicher bereinigen: ' + esc(cleanup.message || 'Bitte die Zuordnungen prüfen.') +
+          '</div>'
+        : '';
   result.innerHTML = '<div class="p-3 border border-green-300 rounded text-sm text-green-700 dark:text-green-300">' +
     'Merge abgeschlossen und vollständig geprüft. Zielkunde: ' + esc(data.targetId) +
-    '. Quellkunde gelöscht. Übertragen: ' + data.addressesMoved + ' Adressen, ' + data.ordersMoved + ' Bestellzuordnungen. ' +
+    '. SW6-Quellkunde gelöscht. Übertragen: ' + data.addressesMoved + ' Adressen, ' + data.ordersMoved + ' Bestellzuordnungen. ' +
     (data.credentialsCopied ? 'E-Mail und Passwort-Hash wurden gemeinsam übernommen.' : 'Die Zugangsdaten des Zielkunden wurden beibehalten.') +
-    '</div>';
+    djangoOutcome + '</div>';
   setTimeout(doSearch, 1500);
 }
 

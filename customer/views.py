@@ -22,6 +22,32 @@ from customer.services.customer_merge import (
 )
 
 
+def _with_django_source_cleanup(
+    service: ShopwareCustomerMergeService, result: dict,
+) -> dict:
+    """Mirror a confirmed SW6 source-account deletion in the local database."""
+    if result.get("status") != "merged":
+        return result
+    source_id = result.get("sourceId")
+    target_id = result.get("targetId")
+    if not isinstance(source_id, str) or not isinstance(target_id, str):
+        raise ShopwareMergeError(
+            "Shopware hat ein unvollständiges Merge-Ergebnis geliefert; die lokale Bereinigung wurde nicht ausgeführt.",
+            code="GC_MERGE_DJANGO_CLEANUP_INVALID", status=502,
+        )
+    try:
+        cleanup = service.cleanup_django_source_after_merge(
+            source_sw_id=source_id,
+            target_sw_id=target_id,
+        )
+    except ShopwareMergeError as exc:
+        # The remote merge is already verified. Report an actionable local
+        # cleanup issue without misrepresenting the confirmed Shopware result.
+        logger.error("Confirmed Shopware merge needs local Django cleanup: {}", exc)
+        cleanup = {"status": "failed", "code": exc.code, "message": str(exc)}
+    return {**result, "djangoCleanup": cleanup}
+
+
 def customer_merge_view(request):
     context = {
         **admin.site.each_context(request),
@@ -332,6 +358,26 @@ def customer_delete_microtech_api(request):
         return JsonResponse({"error": str(exc)}, status=500)
 
 
+def customer_delete_django_api(request):
+    """Delete one customer from GC-Bridge only, after explicit UI confirmation."""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST erforderlich."}, status=405)
+    if not request.user.has_perm("customer.delete_customer"):
+        return JsonResponse({"error": "Keine Berechtigung zum Löschen von Kunden."}, status=403)
+    try:
+        body = json.loads(request.body)
+        erp_nr = str(body.get("erp_nr") or "").strip()
+        if not erp_nr:
+            return JsonResponse({"error": "AdrNr erforderlich."}, status=400)
+        result = CustomerDeleteService().delete_django(erp_nr)
+        return JsonResponse({"success": True, **result})
+    except ValueError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+    except Exception as exc:
+        logger.error("Django customer delete failed: {}\n{}", exc, traceback.format_exc())
+        return JsonResponse({"error": str(exc)}, status=500)
+
+
 def customer_delete_addresses_api(request):
     if request.method != "POST":
         return JsonResponse({"error": "POST erforderlich."}, status=405)
@@ -424,6 +470,7 @@ def customer_merge_shopware_api(request):
             if request.GET.get("action") != "status":
                 return JsonResponse({"error": "GET ist nur für die Statusabfrage erlaubt."}, status=400)
             result = service.status(operation_id=request.GET.get("operation_id", ""))
+            result = _with_django_source_cleanup(service, result)
             return JsonResponse({"success": True, **result})
 
         body = json.loads(request.body)
@@ -442,6 +489,7 @@ def customer_merge_shopware_api(request):
                 **selection, operation_id=body.get("operation_id", ""),
                 preview_token=body.get("preview_token", ""),
             )
+            result = _with_django_source_cleanup(service, result)
         else:
             raise ValueError("Bitte zuerst eine Vorschau abrufen und anschließend ausdrücklich bestätigen.")
         return JsonResponse({"success": True, **result})
@@ -504,3 +552,25 @@ def customer_sync_direction_api(request):
     except Exception as exc:
         logger.error("Sync direction failed: {}\n{}", exc, traceback.format_exc())
         return JsonResponse({"error": str(exc)}, status=500)
+
+
+def customer_adopt_shopware_address_api(request):
+    """Copy one selected SW6 address to its existing Django customer."""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST erforderlich."}, status=405)
+    try:
+        body = json.loads(request.body)
+        if not isinstance(body, dict):
+            raise ValueError("Ein JSON-Objekt ist erforderlich.")
+        erp_nr = str(body.get("erp_nr") or "").strip()
+        shopware_address_id = str(body.get("shopware_address_id") or "").strip()
+        result = CustomerSyncDirectionService().import_shopware_address(
+            erp_nr=erp_nr,
+            shopware_address_id=shopware_address_id,
+        )
+        return JsonResponse({"success": True, **result})
+    except ValueError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+    except Exception as exc:
+        logger.error("Shopware address import failed: {}\n{}", exc, traceback.format_exc())
+        return JsonResponse({"error": "Die Shopware-Adresse konnte nicht nach Django übernommen werden."}, status=500)

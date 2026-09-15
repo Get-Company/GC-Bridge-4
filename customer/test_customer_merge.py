@@ -672,6 +672,7 @@ class ShopwareCustomerMergeViewTest(SimpleTestCase):
             request = factory.get("/" + query)
         request.user = MagicMock()
         request.user.has_perms.return_value = permitted
+        request.user.has_perm.return_value = permitted
         return request
 
     @patch("customer.views.ShopwareCustomerMergeService")
@@ -696,7 +697,12 @@ class ShopwareCustomerMergeViewTest(SimpleTestCase):
     @patch("customer.views.ShopwareCustomerMergeService")
     def test_execute_passes_stable_operation_and_token(self, service_class):
         from customer.views import customer_merge_shopware_api
-        service_class.return_value.merge.return_value = {"status": "merged"}
+        service_class.return_value.merge.return_value = {
+            "status": "merged", "sourceId": "a" * 32, "targetId": "b" * 32,
+        }
+        service_class.return_value.cleanup_django_source_after_merge.return_value = {
+            "status": "deleted", "orders_moved": 2, "addresses_moved": 1,
+        }
         result = customer_merge_shopware_api(self.request({
             "action": "execute", "keep_sw_id": "b" * 32, "delete_sw_id": "a" * 32,
             "operation_id": "c" * 32, "preview_token": "snapshot",
@@ -704,6 +710,10 @@ class ShopwareCustomerMergeViewTest(SimpleTestCase):
         self.assertEqual(result.status_code, 200)
         self.assertEqual(service_class.return_value.merge.call_args.kwargs["operation_id"], "c" * 32)
         self.assertEqual(service_class.return_value.merge.call_args.kwargs["preview_token"], "snapshot")
+        service_class.return_value.cleanup_django_source_after_merge.assert_called_once_with(
+            source_sw_id="a" * 32, target_sw_id="b" * 32,
+        )
+        self.assertEqual(json.loads(result.content)["djangoCleanup"]["status"], "deleted")
 
     @patch("customer.views.ShopwareCustomerMergeService")
     def test_status_uses_get_without_starting_an_operation(self, service_class):
@@ -713,6 +723,23 @@ class ShopwareCustomerMergeViewTest(SimpleTestCase):
         self.assertEqual(result.status_code, 200)
         service_class.return_value.status.assert_called_once_with(operation_id="c" * 32)
         service_class.return_value.merge.assert_not_called()
+
+    @patch("customer.views.ShopwareCustomerMergeService")
+    def test_confirmed_status_retries_local_source_cleanup(self, service_class):
+        from customer.views import customer_merge_shopware_api
+        service_class.return_value.status.return_value = {
+            "status": "merged", "sourceId": "a" * 32, "targetId": "b" * 32,
+        }
+        service_class.return_value.cleanup_django_source_after_merge.return_value = {
+            "status": "already_removed", "orders_moved": 0, "addresses_moved": 0,
+        }
+        result = customer_merge_shopware_api(self.request(
+            method="get", query="?action=status&operation_id=" + "c" * 32,
+        ))
+        self.assertEqual(result.status_code, 200)
+        service_class.return_value.cleanup_django_source_after_merge.assert_called_once_with(
+            source_sw_id="a" * 32, target_sw_id="b" * 32,
+        )
 
     @patch("customer.views.ShopwareCustomerMergeService")
     def test_permission_denied_before_any_plugin_call(self, service_class):
@@ -745,6 +772,34 @@ class ShopwareCustomerMergeViewTest(SimpleTestCase):
         result = customer_merge_shopware_api(self.request({"action": "execute"}))
         self.assertEqual(result.status_code, 502)
         self.assertNotIn("secret", result.content.decode())
+
+
+class CustomerMergeDjangoMutationViewTest(SimpleTestCase):
+    def request(self, body, *, permitted=True):
+        request = RequestFactory().post("/", data=json.dumps(body), content_type="application/json")
+        request.user = MagicMock()
+        request.user.has_perm.return_value = permitted
+        return request
+
+    @patch("customer.views.CustomerSyncDirectionService")
+    def test_adopt_shopware_address_calls_single_address_import(self, service_class):
+        from customer.views import customer_adopt_shopware_address_api
+        service_class.return_value.import_shopware_address.return_value = {"address_id": 42}
+        result = customer_adopt_shopware_address_api(self.request({
+            "erp_nr": "10001", "shopware_address_id": "a" * 32,
+        }))
+        self.assertEqual(result.status_code, 200)
+        service_class.return_value.import_shopware_address.assert_called_once_with(
+            erp_nr="10001", shopware_address_id="a" * 32,
+        )
+
+    @patch("customer.views.CustomerDeleteService")
+    def test_delete_django_customer_uses_local_delete_service(self, service_class):
+        from customer.views import customer_delete_django_api
+        service_class.return_value.delete_django.return_value = {"deleted": "10001 (Test)"}
+        result = customer_delete_django_api(self.request({"erp_nr": "10001"}))
+        self.assertEqual(result.status_code, 200)
+        service_class.return_value.delete_django.assert_called_once_with("10001")
 
 
 class ShopwareMergeComparisonTest(SimpleTestCase):
@@ -1068,6 +1123,14 @@ const raw = {id: 42, erp_nr: '10001', erp_id: 2345, api_id: 'a'.repeat(32), addr
 const normalized = normalize(raw, 'django');
 const customerHtml = customerIdentifiers('10001', 'django', raw, normalized);
 for (const value of ['AdrNr', '10001', 'SW6-ID', raw.api_id, 'update_shopware_id']) assert.ok(customerHtml.includes(value), value);
+assert.ok(customerHtml.includes('Django-Kunde löschen'));
+assert.ok(customerHtml.includes('deleteDjangoCustomer'));
+assert.ok(customerHtml.includes('shopware-id-field'));
+assert.ok(customerHtml.includes('<textarea'));
+const shopwareHtml = shopwareCustomerMapping('10001', {id: raw.api_id});
+assert.ok(shopwareHtml.includes('shopware-id-field'));
+assert.ok(shopwareHtml.includes('shopware-id-value'));
+assert.ok(shopwareHtml.includes(raw.api_id));
 for (const hidden of ['Django-ID', 'ERP-ID', '2345', 'ERP-Kombi-ID', 'AnsId', 'AnsNr', 'AspId', 'AspNr']) assert.equal(customerHtml.includes(hidden), false, hidden);
 const addressHtml = editableShopwareMapping('SW6-Adress-ID', normalized.addresses[0].apiId, 'update_shopware_address_id', 'address_id', raw.addresses[0].id, '10001');
 assert.ok(addressHtml.includes(raw.addresses[0].api_id));
@@ -1090,7 +1153,7 @@ searchData = {
       {id: 'sw-billing', company: 'Beispiel GmbH', street: 'Rechnungsweg 1'},
       {id: 'sw-shipping', company: 'Beispiel GmbH', street: 'Lieferweg 2'},
     ]},
-    django: {addresses: [
+    django: {id: 71, addresses: [
       {id: 11, api_id: 'sw-billing', erp_ans_nr: 0, erp_asp_nr: 0, name1: 'Beispiel GmbH', street: 'Rechnungsweg 1'},
       {id: 12, api_id: 'sw-shipping', erp_ans_nr: 1, erp_asp_nr: 0, name1: 'Beispiel GmbH', street: 'Lieferweg 2'},
     ]},
@@ -1115,6 +1178,13 @@ const microtechHtml = comparisonAddressCard('10001', 'microtech', groups[0].micr
 assert.ok(microtechHtml.includes('Ansprechpartner (2)'));
 assert.ok(microtechHtml.includes('Britta Heidel'));
 assert.ok(microtechHtml.includes('Max Mustermann'));
+assert.equal((microtechHtml.match(/microtech-number-pair/g) || []).length, 2);
+assert.ok(microtechHtml.includes('microtech-number-value'));
+assert.ok(microtechHtml.includes('AnspNr'));
+const shopwareHtml = comparisonAddressCard('10001', 'shopware', groups[0].shopware[0]);
+assert.ok(shopwareHtml.includes('comparison-address-copy'));
+assert.ok(shopwareHtml.includes('adoptShopwareAddress'));
+assert.ok(shopwareHtml.includes('arrow_forward'));
 const comparisonHtml = renderComparisonRow('10001');
 assert.ok(comparisonHtml.includes('comparison-matrix'));
 assert.equal((comparisonHtml.match(/comparison-address-cell/g) || []).length, 6);
