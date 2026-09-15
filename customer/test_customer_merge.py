@@ -854,6 +854,12 @@ class ShopwareMergeBrowserStateTest(SimpleTestCase):
         self.assertIn('id="sw-merge-preview"', modal)
         self.assertIn('id="sw-merge-result"', modal)
 
+    def test_customer_merge_does_not_offer_microtech_customer_deletion(self):
+        template = (Path(__file__).resolve().parents[1] / "templates/admin/customer_merge.html").read_text()
+        self.assertNotIn("microtech-Kunde markieren", template)
+        self.assertNotIn("deleteMicrotechCustomer", template)
+        self.assertNotIn("delete-microtech-customer", template)
+
     def run_js(self, assertions, *, saved=None):
         template = (Path(__file__).resolve().parents[1] / "templates/admin/customer_merge.html").read_text()
         badges = "function standardAddressBadges(" + template.split("function standardAddressBadges(", 1)[1].split("/* ── search", 1)[0]

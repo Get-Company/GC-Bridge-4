@@ -352,20 +352,11 @@ function shopwareCustomerMapping(nr, raw) {
       <span>${esc(raw.id || '—')}</span>${transfer}
   </div></dd></div>`;
 }
-function microtechCustomerDeleteControl(nr) {
-  return `<div class="merge-identifier"><dt>Löschen</dt><dd><div class="flex flex-wrap items-center gap-2">
-      <label class="flex items-center gap-1 text-[10px] text-red-600 dark:text-red-400 cursor-pointer">
-        <input type="checkbox" class="rounded" onchange="this.closest('.merge-identifier').querySelector('button').disabled = !this.checked"> microtech-Kunde markieren
-      </label>
-      <button type="button" disabled class="text-red-600 dark:text-red-400" data-erp-nr="${esc(nr)}" onclick="deleteMicrotechCustomer(this.dataset.erpNr, this)">Kunde löschen</button>
-  </div></dd></div>`;
-}
 function customerIdentifiers(nr, sysKey, raw, customer) {
   const number = sysKey === 'microtech' ? esc(customer.customerNr) || '—' : editableCustomerNumberField(nr, sysKey, customer);
   const ids = sysKey === 'django'
     ? editableShopwareMapping('SW6-ID', raw.api_id || '', 'update_shopware_id', 'customer_id', raw.id, nr)
-    : sysKey === 'shopware' ? shopwareCustomerMapping(nr, raw)
-    : sysKey === 'microtech' ? microtechCustomerDeleteControl(nr) : [];
+    : sysKey === 'shopware' ? shopwareCustomerMapping(nr, raw) : [];
   return `<dl class="merge-identifiers merge-customer-identifiers" aria-label="Kennungen ${esc(sysKey)}">
     <div class="merge-identifier"><dt>${esc(customer.customerNrLabel)}</dt><dd>${number}</dd></div>${Array.isArray(ids) ? identifierRows(ids) : ids}</dl>`;
 }
@@ -1274,38 +1265,6 @@ async function adoptShopwareCustomerId(erpNr, button) {
     target.api_id = data.new_api_id || source.id;
     renderRowCells(erpNr);
     renderMergeSection();
-  } catch (error) {
-    alert('Fehler: ' + error.message);
-    renderRowCells(erpNr);
-  } finally {
-    button.disabled = false;
-    button.innerHTML = idleLabel;
-  }
-}
-
-async function deleteMicrotechCustomer(erpNr, button) {
-  const control = button.closest('.merge-identifier');
-  const confirmed = control?.querySelector('input[type="checkbox"]')?.checked;
-  if (!confirmed) {
-    alert('Bitte den microtech-Kunden zuerst markieren.');
-    return;
-  }
-  if (!confirm(`microtech-Kunde mit AdrNr ${erpNr} inklusive aller Anschriften und Ansprechpartner endgültig löschen?`)) return;
-
-  const idleLabel = button.innerHTML;
-  button.disabled = true;
-  button.innerHTML = spinner();
-  try {
-    const resp = await fetch('/admin/customer-merge/api/delete-microtech-customer/', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json','X-CSRFToken':CSRF},
-      body: JSON.stringify({erp_nr: erpNr}),
-    });
-    const data = await resp.json();
-    if (!resp.ok || data.error) throw new Error(data.error || 'microtech-Kunde konnte nicht gelöscht werden.');
-    delete searchData[erpNr].microtech;
-    setCellState(erpNr, 'microtech', 'not_found');
-    renderRowCells(erpNr);
   } catch (error) {
     alert('Fehler: ' + error.message);
     renderRowCells(erpNr);

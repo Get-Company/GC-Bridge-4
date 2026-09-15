@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="refresh" content="20">
+  <title>Classei wird aktualisiert</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #1d2b34;
+      --paper: #fffdf8;
+      --paper-shadow: #d8d0c1;
+      --blue: #126f9b;
+      --turquoise: #0d9a8b;
+      --yellow: #f5bd32;
+      --coral: #e45e49;
+      --muted: #5c6a70;
+    }
+    * { box-sizing: border-box; }
+    body {
+      display: grid;
+      min-height: 100vh;
+      margin: 0;
+      place-items: center;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 15% 15%, #fff6ce 0 6%, transparent 25%),
+        radial-gradient(circle at 85% 90%, #d8f0ec 0 8%, transparent 28%),
+        #edf1ef;
+      color: var(--ink);
+      font-family: Arial, Helvetica, sans-serif;
+    }
+    main { width: min(47rem, calc(100% - 2rem)); text-align: center; }
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: .65rem;
+      margin-bottom: 2rem;
+      color: var(--blue);
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: -.04em;
+    }
+    .brand-mark {
+      display: grid;
+      grid-template-columns: repeat(3, .36rem);
+      gap: .14rem;
+      align-items: end;
+      height: 1.35rem;
+    }
+    .brand-mark span { display: block; border-radius: .16rem .16rem 0 0; }
+    .brand-mark span:nth-child(1) { height: .72rem; background: var(--blue); }
+    .brand-mark span:nth-child(2) { height: 1.05rem; background: var(--turquoise); }
+    .brand-mark span:nth-child(3) { height: 1.35rem; background: var(--yellow); }
+    .organizer {
+      position: relative;
+      display: grid;
+      width: min(30rem, 100%);
+      height: 12.5rem;
+      margin: 0 auto 2.25rem;
+      place-items: center;
+    }
+    .folder {
+      position: absolute;
+      width: min(24rem, 82vw);
+      height: 8.1rem;
+      border: 2px solid color-mix(in srgb, var(--ink) 76%, transparent);
+      border-radius: .35rem .6rem .6rem .6rem;
+      background: var(--paper);
+      box-shadow: 0 .5rem 0 var(--paper-shadow), 0 1.05rem 1.6rem #1d2b3422;
+      transform-origin: 50% 100%;
+    }
+    .folder::before {
+      position: absolute;
+      top: -1.05rem;
+      left: 1rem;
+      width: 7.1rem;
+      height: 1.05rem;
+      border: 2px solid color-mix(in srgb, var(--ink) 76%, transparent);
+      border-bottom: 0;
+      border-radius: .35rem .45rem 0 0;
+      background: inherit;
+      content: "";
+    }
+    .folder:nth-child(1) { background: #f7d56d; transform: translate(-2.7rem, 1.3rem) rotate(-5deg); }
+    .folder:nth-child(2) { background: #a6d9d1; transform: translate(2.25rem, 1.15rem) rotate(5deg); }
+    .folder:nth-child(3) {
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--paper);
+      transform: translateY(.25rem);
+    }
+    .tabs {
+      position: absolute;
+      z-index: 3;
+      top: 1rem;
+      display: flex;
+      gap: .35rem;
+      align-items: end;
+    }
+    .tab {
+      width: 2.65rem;
+      height: 1.5rem;
+      border-radius: .32rem .32rem 0 0;
+      box-shadow: 0 -.12rem 0 #00000018 inset;
+      animation: sort-tabs 1.8s ease-in-out infinite alternate;
+    }
+    .tab:nth-child(1) { height: 1.05rem; background: var(--coral); animation-delay: -.9s; }
+    .tab:nth-child(2) { background: var(--yellow); animation-delay: -.45s; }
+    .tab:nth-child(3) { height: 1.25rem; background: var(--turquoise); animation-delay: -.1s; }
+    .tab:nth-child(4) { height: 1.7rem; background: var(--blue); animation-delay: -.65s; }
+    .folder-label {
+      display: flex;
+      gap: .48rem;
+      align-items: center;
+      color: var(--blue);
+      font-size: 1.4rem;
+      font-weight: 700;
+      letter-spacing: -.045em;
+    }
+    .folder-label::before {
+      display: inline-block;
+      width: .55rem;
+      height: 1.65rem;
+      border-radius: .1rem;
+      background: var(--yellow);
+      content: "";
+    }
+    @keyframes sort-tabs {
+      from { transform: translateY(0); }
+      to { transform: translateY(-.35rem); }
+    }
+    h1 { margin: 0; font-size: clamp(1.8rem, 5vw, 2.8rem); letter-spacing: -.045em; }
+    p { margin: .9rem auto 0; max-width: 34rem; color: var(--muted); font-size: 1rem; line-height: 1.65; }
+    .hint { font-size: .84rem; color: #748087; }
+    @media (prefers-reduced-motion: reduce) {
+      .tab { animation: none; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="brand" aria-label="Classei">
+      <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+      classei
+    </div>
+    <div class="organizer" aria-hidden="true">
+      <div class="folder"></div>
+      <div class="folder"></div>
+      <div class="folder"><span class="folder-label">Alles im Blick</span></div>
+      <div class="tabs"><span class="tab"></span><span class="tab"></span><span class="tab"></span><span class="tab"></span></div>
+    </div>
+    <h1>Wir bringen gerade alles in Ordnung.</h1>
+    <p>Classei wird aktualisiert und ist gleich wieder für Sie da.</p>
+    <p class="hint">Diese Seite aktualisiert sich automatisch.</p>
+  </main>
+</body>
+</html>
