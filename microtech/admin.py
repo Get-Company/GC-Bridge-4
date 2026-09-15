@@ -2,7 +2,7 @@ import json
 
 from django.contrib import admin, messages
 from django.db import models
-from django.http import HttpResponseRedirect, JsonResponse
+from django.http import HttpResponseForbidden, HttpResponseRedirect, JsonResponse
 from django.template.response import TemplateResponse
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
@@ -448,6 +448,11 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
                 "microtech_orderrule_editor_save",
                 self.rule_editor_save_view,
             ),
+            (
+                "rule-engine/verify/",
+                "microtech_orderrule_engine_verify",
+                self.rule_engine_verify_view,
+            ),
         )
 
     def rule_builder_view(self, request, **kwargs):
@@ -461,6 +466,42 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
             "changelist_url": reverse("admin:microtech_microtechorderrule_changelist"),
         }
         return TemplateResponse(request, "admin/microtech/rule_builder.html", context)
+
+    def rule_engine_verify_view(self, request, **kwargs):
+        from django.contrib import messages
+        from django.shortcuts import redirect
+        from microtech.models import MicrotechSettings, RuleEngineShadowRun
+
+        if not self.has_change_permission(request):
+            return HttpResponseForbidden("Keine Berechtigung.")
+
+        settings_obj = MicrotechSettings.load()
+        if request.method == "POST":
+            mode = request.POST.get("mode", "")
+            valid = {c[0] for c in MicrotechSettings.EngineMode.choices}
+            if mode in valid:
+                settings_obj.rule_engine_order_mode = mode
+                settings_obj.save(update_fields=["rule_engine_order_mode"])
+                messages.success(request, f"Regel-Engine-Modus auf '{mode}' gesetzt.")
+            else:
+                messages.error(request, "Ungültiger Modus.")
+            return redirect("admin:microtech_orderrule_engine_verify")
+
+        recent = list(RuleEngineShadowRun.objects.all()[:200])
+        diffs = [r for r in recent if not r.is_equal]
+        context = {
+            **self.admin_site.each_context(request),
+            "title": "Regel-Engine – Verifikation & Cutover",
+            "opts": self.model._meta,
+            "mode": settings_obj.rule_engine_order_mode,
+            "modes": MicrotechSettings.EngineMode.choices,
+            "recent": recent[:50],
+            "runs_total": RuleEngineShadowRun.objects.count(),
+            "diff_count": len(diffs),
+            "can_go_live": bool(recent) and not diffs,
+            "overview_url": reverse("admin:microtech_orderrule_builder"),
+        }
+        return TemplateResponse(request, "admin/microtech/rule_engine_verify.html", context)
 
     def rule_builder_meta_view(self, request, **kwargs):
         if not self.has_view_permission(request):

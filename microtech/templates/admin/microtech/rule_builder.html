@@ -13,9 +13,11 @@
     Zum grafischen Bearbeiten „Bearbeiten“ an einer Regel wählen; die klassische
     <a href="{{ changelist_url }}">Bestellregel-Liste</a> bleibt als Fallback.
   </p>
-  <p style="margin:0 0 18px;">
+  <p style="margin:0 0 18px;display:flex;gap:10px;flex-wrap:wrap;">
     <a class="rb-badge rb-badge-on" style="text-decoration:none;padding:6px 12px;"
        href="{% url 'admin:microtech_orderrule_editor_new' %}">+ Neue Regel (grafisch)</a>
+    <a class="rb-badge rb-badge-shadow" style="text-decoration:none;padding:6px 12px;"
+       href="{% url 'admin:microtech_orderrule_engine_verify' %}">⚙ Engine-Verifikation &amp; Cutover</a>
   </p>
 
   {% for rule in rules %}

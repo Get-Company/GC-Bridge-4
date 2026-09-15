@@ -250,3 +250,29 @@ def test_facade_off_mode_matches_legacy_for_order():
     assert facade.rule_id == legacy.rule_id
     assert facade.customer_type == legacy.customer_type
     assert facade.dataset_actions == legacy.dataset_actions
+
+
+# --- Task 6: admin verify view -------------------------------------------
+
+
+def test_verify_view_get_and_post_sets_mode(admin_client):
+    from django.urls import reverse
+    from microtech.models import MicrotechSettings
+
+    url = reverse("admin:microtech_orderrule_engine_verify")
+    assert admin_client.get(url).status_code == 200
+    resp = admin_client.post(url, {"mode": "shadow"})
+    assert resp.status_code in (200, 302)
+    assert MicrotechSettings.load().rule_engine_order_mode == "shadow"
+
+
+def test_verify_view_rejects_invalid_mode(admin_client):
+    from django.urls import reverse
+    from microtech.models import MicrotechSettings
+
+    s = MicrotechSettings.load()
+    s.rule_engine_order_mode = MicrotechSettings.EngineMode.OFF
+    s.save()
+    url = reverse("admin:microtech_orderrule_engine_verify")
+    admin_client.post(url, {"mode": "bogus"})
+    assert MicrotechSettings.load().rule_engine_order_mode == "off"
