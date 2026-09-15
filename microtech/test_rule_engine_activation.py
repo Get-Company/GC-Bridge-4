@@ -145,3 +145,79 @@ def test_shadow_run_model_orders_newest_first():
     RuleEngineShadowRun.objects.create(order_number="X2", task_name="t", is_equal=False, changed_json="{}")
     newest = list(RuleEngineShadowRun.objects.values_list("order_number", flat=True))[:2]
     assert newest == ["X2", "X1"]
+
+
+# --- Task 4: mode facade -------------------------------------------------
+
+
+def test_mode_off_returns_legacy_no_log(monkeypatch):
+    from microtech.models import MicrotechSettings, RuleEngineShadowRun
+    from microtech.rule_engine import dispatch
+
+    s = MicrotechSettings.load()
+    s.rule_engine_order_mode = MicrotechSettings.EngineMode.OFF
+    s.save()
+    order = _make_order()
+    monkeypatch.setattr(dispatch, "_legacy_resolve", lambda o: ResolvedOrderRule(rule_id=99, rule_name="legacy"))
+
+    def _boom(o):
+        raise AssertionError("engine must not run in off mode")
+
+    monkeypatch.setattr(dispatch, "resolve_order_rule", _boom)
+    result = dispatch.resolve_order_rule_with_mode(order)
+    assert result.rule_id == 99
+    assert RuleEngineShadowRun.objects.count() == 0
+
+
+def test_mode_shadow_logs_and_returns_legacy(monkeypatch):
+    from microtech.models import MicrotechSettings, RuleEngineShadowRun
+    from microtech.rule_engine import dispatch
+    from orders.services.order_rule_resolver import ResolvedDatasetAction
+
+    s = MicrotechSettings.load()
+    s.rule_engine_order_mode = MicrotechSettings.EngineMode.SHADOW
+    s.save()
+    order = _make_order()
+    monkeypatch.setattr(dispatch, "_legacy_resolve", lambda o: ResolvedOrderRule(
+        rule_id=1,
+        dataset_actions=(ResolvedDatasetAction(action_type="set_field", dataset_field_name="ZahlArt", target_value="10"),),
+    ))
+    monkeypatch.setattr(dispatch, "resolve_order_rule", lambda o: ResolvedOrderRule(
+        rule_id=2,
+        dataset_actions=(ResolvedDatasetAction(action_type="set_field", dataset_field_name="ZahlArt", target_value="22"),),
+    ))
+    result = dispatch.resolve_order_rule_with_mode(order)
+    assert result.rule_id == 1  # Legacy maßgeblich
+    run = RuleEngineShadowRun.objects.latest("created_at")
+    assert run.is_equal is False
+    assert '"ZahlArt"' in run.changed_json
+
+
+def test_mode_live_returns_engine(monkeypatch):
+    from microtech.models import MicrotechSettings
+    from microtech.rule_engine import dispatch
+
+    s = MicrotechSettings.load()
+    s.rule_engine_order_mode = MicrotechSettings.EngineMode.LIVE
+    s.save()
+    order = _make_order()
+    monkeypatch.setattr(dispatch, "_legacy_resolve", lambda o: ResolvedOrderRule(rule_id=1))
+    monkeypatch.setattr(dispatch, "resolve_order_rule", lambda o: ResolvedOrderRule(rule_id=2))
+    assert dispatch.resolve_order_rule_with_mode(order).rule_id == 2
+
+
+def test_mode_live_engine_error_falls_back_to_legacy(monkeypatch):
+    from microtech.models import MicrotechSettings
+    from microtech.rule_engine import dispatch
+
+    s = MicrotechSettings.load()
+    s.rule_engine_order_mode = MicrotechSettings.EngineMode.LIVE
+    s.save()
+    order = _make_order()
+    monkeypatch.setattr(dispatch, "_legacy_resolve", lambda o: ResolvedOrderRule(rule_id=1, rule_name="legacy"))
+
+    def _boom(o):
+        raise RuntimeError("engine down")
+
+    monkeypatch.setattr(dispatch, "resolve_order_rule", _boom)
+    assert dispatch.resolve_order_rule_with_mode(order).rule_id == 1

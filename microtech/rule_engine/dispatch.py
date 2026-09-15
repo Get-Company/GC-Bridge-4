@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 
 from loguru import logger
 
-from microtech.models import MicrotechOrderRule
+from microtech.models import MicrotechOrderRule, MicrotechSettings, RuleEngineShadowRun
 from microtech.rule_engine.context import EvaluationContext
 from microtech.rule_engine.evaluation import rule_matches
+from microtech.rule_engine.order_resolver import ORDER_CREATE_TASK, resolve_order_rule
 from microtech.rule_engine.templates import render_template
 
 
@@ -66,3 +68,80 @@ def shadow_compare(*, task_name, phase, root_instance, legacy_result: dict) -> d
     else:
         logger.info("Regelwerk Schatten-Diff leer für {} ({}).", task_name, phase)
     return diff
+
+
+# --- Order-path mode facade ------------------------------------------------
+#
+# Single switch for the live order path. ``off`` keeps the legacy resolver
+# authoritative (byte-identical to today); ``shadow`` runs the engine in
+# parallel and persists diffs while the legacy result stays authoritative;
+# ``live`` makes the engine authoritative (still logging diffs). Any engine
+# error degrades gracefully to the legacy result so the order path never breaks.
+
+
+def _legacy_resolve(order):
+    from orders.services.order_rule_resolver import OrderRuleResolverService
+
+    return OrderRuleResolverService().resolve_for_order(order=order)
+
+
+def _actions_map(resolved) -> dict:
+    out = {}
+    for a in getattr(resolved, "dataset_actions", ()) or ():
+        key = a.dataset_field_name or a.action_type
+        out[key] = a.target_value
+    return out
+
+
+def _persist_shadow_run(order, legacy, engine) -> None:
+    legacy_map, engine_map = _actions_map(legacy), _actions_map(engine)
+    keys = set(legacy_map) | set(engine_map)
+    changed = {
+        key: {"legacy": legacy_map.get(key), "engine": engine_map.get(key)}
+        for key in keys
+        if str(legacy_map.get(key, "")) != str(engine_map.get(key, ""))
+    }
+    is_equal = not changed and (legacy.rule_id == engine.rule_id)
+    try:
+        RuleEngineShadowRun.objects.create(
+            order_number=str(getattr(order, "order_number", "") or ""),
+            task_name=ORDER_CREATE_TASK,
+            engine_rule_id=engine.rule_id,
+            legacy_rule_id=legacy.rule_id,
+            is_equal=is_equal,
+            changed_json=json.dumps(changed, ensure_ascii=False),
+        )
+    except Exception:
+        logger.exception("Schatten-Lauf konnte nicht persistiert werden.")
+    if not is_equal:
+        logger.warning(
+            "Regelwerk Schatten-Diff (order={}): rule legacy={} engine={} changed={}",
+            getattr(order, "order_number", ""), legacy.rule_id, engine.rule_id, changed,
+        )
+
+
+def resolve_order_rule_with_mode(order):
+    """Resolve the order rule honouring the configured engine mode."""
+    try:
+        mode = MicrotechSettings.load().rule_engine_order_mode
+    except Exception:
+        logger.exception("Regel-Engine-Modus nicht ladbar → 'off'.")
+        mode = MicrotechSettings.EngineMode.OFF
+
+    if mode == MicrotechSettings.EngineMode.OFF:
+        return _legacy_resolve(order)
+
+    legacy = _legacy_resolve(order)
+    try:
+        engine = resolve_order_rule(order)
+    except Exception:
+        logger.exception(
+            "Regel-Engine-Auswertung fehlgeschlagen → Legacy maßgeblich (order={}).",
+            getattr(order, "order_number", ""),
+        )
+        return legacy
+
+    _persist_shadow_run(order, legacy, engine)
+    if mode == MicrotechSettings.EngineMode.LIVE:
+        return engine
+    return legacy
