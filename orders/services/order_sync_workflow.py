@@ -10,7 +10,7 @@ from microtech.models import MicrotechGraphQLJob
 from microtech.services import MicrotechJobSentinelService
 from microtech.services.graphql_client import MicrotechGraphQLClientService
 from orders.models import MicrotechOrderSyncWorkflow, Order
-from orders.services.order_rule_resolver import OrderRuleResolverService
+from microtech.rule_engine.dispatch import resolve_order_rule_with_mode
 from orders.services.order_upsert_microtech import OrderUpsertMicrotechService
 
 CONTINUATION_NAME = "microtech_order_sync_advance"
@@ -910,7 +910,7 @@ class OrderSyncWorkflowService(BaseService):
             )
         elif step == "write_vorgang":
             upsert = OrderUpsertMicrotechService()
-            resolved_rule = OrderRuleResolverService().resolve_for_order(order=order)
+            resolved_rule = resolve_order_rule_with_mode(order)
             positions, _rule_debug = upsert._build_graphql_positions(
                 order=order,
                 resolved_rule=resolved_rule,

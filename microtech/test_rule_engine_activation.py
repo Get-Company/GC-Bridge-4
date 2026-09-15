@@ -221,3 +221,32 @@ def test_mode_live_engine_error_falls_back_to_legacy(monkeypatch):
 
     monkeypatch.setattr(dispatch, "resolve_order_rule", _boom)
     assert dispatch.resolve_order_rule_with_mode(order).rule_id == 1
+
+
+# --- Task 5: order path wired through the facade --------------------------
+
+
+def test_upsert_module_imports_mode_facade():
+    from orders.services import order_upsert_microtech as oum
+    from orders.services import order_sync_workflow as osw
+
+    # Beide Module referenzieren die Fassade (Aufrufstellen umgestellt).
+    assert hasattr(oum, "resolve_order_rule_with_mode")
+    assert hasattr(osw, "resolve_order_rule_with_mode")
+
+
+def test_facade_off_mode_matches_legacy_for_order():
+    """off-Modus liefert exakt das Legacy-Ergebnis (byte-identisches Verhalten)."""
+    from microtech.models import MicrotechSettings
+    from microtech.rule_engine.dispatch import resolve_order_rule_with_mode
+    from orders.services.order_rule_resolver import OrderRuleResolverService
+
+    s = MicrotechSettings.load()
+    s.rule_engine_order_mode = MicrotechSettings.EngineMode.OFF
+    s.save()
+    order = _make_order()
+    facade = resolve_order_rule_with_mode(order)
+    legacy = OrderRuleResolverService().resolve_for_order(order=order)
+    assert facade.rule_id == legacy.rule_id
+    assert facade.customer_type == legacy.customer_type
+    assert facade.dataset_actions == legacy.dataset_actions

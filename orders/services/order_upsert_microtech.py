@@ -24,8 +24,8 @@ from orders.services.constants import (
     DEFAULT_SHIPPING_TYPE_NUMBER,
     DEFAULT_UNIT,
 )
+from microtech.rule_engine.dispatch import resolve_order_rule_with_mode
 from orders.services.order_rule_resolver import (
-    OrderRuleResolverService,
     ResolvedDatasetAction,
     ResolvedOrderRule,
 )
@@ -146,7 +146,7 @@ class OrderUpsertMicrotechService(BaseService):
         if isinstance(erp, MicrotechGraphQLClientService):
             return self._upsert_order_graphql(order=order, client=erp)
 
-        resolved_rule = OrderRuleResolverService().resolve_for_order(order=order)
+        resolved_rule = resolve_order_rule_with_mode(order)
         self._ensure_customer_synced(
             order,
             na1_mode=resolved_rule.na1_mode,
@@ -315,7 +315,7 @@ class OrderUpsertMicrotechService(BaseService):
         return ""
 
     def _upsert_order_graphql(self, *, order: Order, client: MicrotechGraphQLClientService) -> OrderUpsertResult:
-        resolved_rule = OrderRuleResolverService().resolve_for_order(order=order)
+        resolved_rule = resolve_order_rule_with_mode(order)
         self._ensure_customer_synced(
             order,
             na1_mode=resolved_rule.na1_mode,
