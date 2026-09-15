@@ -21,9 +21,31 @@ def _na1(context: EvaluationContext) -> str:
     return CustomerWebshopMappingService.resolve_na1(address=address)
 
 
+def _anreden(context: EvaluationContext) -> str:
+    """Comma-joined salutation tokens, usable as a ``not_in_list`` expected value."""
+    from microtech.models import RuleConstant
+
+    return ",".join(RuleConstant.get_list("anreden"))
+
+
+def _anrede(context: EvaluationContext) -> str:
+    """Private-address salutation: German salutation of title, else name1, else title."""
+    address = context.get("address")
+    if address is None:
+        address = context.root
+    svc = CustomerWebshopMappingService
+    return (
+        svc.translate_salutation_to_de(getattr(address, "title", ""))
+        or svc.translate_salutation_to_de(getattr(address, "name1", ""))
+        or str(getattr(address, "title", "") or "")
+    )
+
+
 RESOLVERS = {
     "steuerkategorie": _steuerkategorie,
     "na1": _na1,
+    "anreden": _anreden,
+    "anrede": _anrede,
 }
 
 

@@ -26,3 +26,31 @@ def test_parse_list_trims_and_drops_empty():
 
     assert parse_list(" herr , frau ,\n mr \n") == ["herr", "frau", "mr"]
     assert parse_list("") == []
+
+
+# --- Task 2: anrede constant + resolvers ---------------------------------
+
+
+def test_anreden_resolver_returns_seeded_salutations():
+    from microtech.rule_engine.context import EvaluationContext
+    from microtech.rule_engine.resolvers import resolve_named
+
+    ctx = EvaluationContext(object())
+    result = resolve_named("anreden", ctx)
+    tokens = {t.strip() for t in result.split(",")}
+    assert "herr" in tokens and "frau" in tokens and "mr" in tokens
+
+
+def test_anrede_resolver_from_address_context():
+    from customer.models import Customer, Address
+    from microtech.rule_engine.context import EvaluationContext
+    from microtech.rule_engine.resolvers import resolve_named
+
+    cust = Customer.objects.create()
+    addr = Address.objects.create(customer=cust, title="mr", name1="Max Mustermann")
+    ctx = EvaluationContext(addr)
+    assert resolve_named("anrede", ctx) == "Herr"
+
+    addr2 = Address.objects.create(customer=cust, title="", name1="Frau")
+    ctx2 = EvaluationContext(addr2)
+    assert resolve_named("anrede", ctx2) == "Frau"
