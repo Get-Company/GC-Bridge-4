@@ -33,6 +33,14 @@ class DjangoFieldDef:
     example: str = ""
     input_type: str = ""
     accepts_date_only: bool = False
+    context_root: str = "orders.Order"
+
+
+# Address (customer.Address) fields offered for the "Anschrift schreiben" trigger.
+_ADDRESS_FIELD_NAMES: tuple[str, ...] = (
+    "name1", "name2", "name3", "title", "first_name", "last_name",
+    "street", "postal_code", "city", "country_code", "department", "email", "phone",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,11 +84,13 @@ DEFAULT_OPERATOR_DEFS: tuple[OperatorDef, ...] = (
     OperatorDef(code="lt", name="<", engine_operator="lt"),
     OperatorDef(code="is_empty", name="ist leer", engine_operator="is_empty"),
     OperatorDef(code="is_not_empty", name="ist nicht leer", engine_operator="is_not_empty"),
+    OperatorDef(code="in_list", name="ist in Liste", engine_operator="in_list"),
+    OperatorDef(code="not_in_list", name="ist nicht in Liste", engine_operator="not_in_list"),
 )
 
 _ALLOWED_RELATIONS: tuple[str, ...] = ("customer", "billing_address", "shipping_address")
 _ALLOWED_ENGINE_OPERATORS_BY_VALUE_KIND: dict[str, frozenset[str]] = {
-    "string": frozenset({"eq", "ne", "contains", "is_empty", "is_not_empty"}),
+    "string": frozenset({"eq", "ne", "contains", "is_empty", "is_not_empty", "in_list", "not_in_list"}),
     "int": frozenset({"eq", "ne", "gt", "lt", "is_empty", "is_not_empty"}),
     "decimal": frozenset({"eq", "ne", "gt", "lt", "is_empty", "is_not_empty"}),
     "bool": frozenset({"eq", "ne", "is_empty", "is_not_empty"}),
@@ -619,6 +629,35 @@ def get_django_field_defs() -> list[DjangoFieldDef]:
         replace(item, catalog_id=catalog_ids.get(item.path))
         for item in defs
     ]
+
+
+def get_address_field_defs() -> list[DjangoFieldDef]:
+    """Fields offered for the address-write trigger (context_root customer.Address).
+
+    Built directly from the Address model, independent of the Order-rooted DB
+    catalog/policies. Paths are bare field names (e.g. ``name1``) resolved at
+    evaluation time against the Address context root.
+    """
+    from customer.models import Address
+
+    defs: list[DjangoFieldDef] = []
+    for name in _ADDRESS_FIELD_NAMES:
+        try:
+            field = Address._meta.get_field(name)
+        except Exception:
+            continue
+        value_kind = _field_value_kind(field)
+        defs.append(
+            DjangoFieldDef(
+                catalog_id=None,
+                path=name,
+                label=f"Anschrift - {field.verbose_name} ({name})",
+                value_kind=value_kind,
+                example=_default_example(value_kind),
+                context_root="customer.Address",
+            )
+        )
+    return defs
 
 
 def get_django_field_map() -> dict[str, DjangoFieldDef]:

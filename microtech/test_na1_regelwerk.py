@@ -54,3 +54,25 @@ def test_anrede_resolver_from_address_context():
     addr2 = Address.objects.create(customer=cust, title="", name1="Frau")
     ctx2 = EvaluationContext(addr2)
     assert resolve_named("anrede", ctx2) == "Frau"
+
+
+# --- Task 3: address trigger + context-aware field catalog ----------------
+
+
+def test_address_field_defs_expose_address_fields():
+    from microtech.rule_builder import get_address_field_defs
+
+    paths = {d.path for d in get_address_field_defs()}
+    assert {"name1", "title", "first_name", "last_name"} <= paths
+    assert all(d.context_root == "customer.Address" for d in get_address_field_defs())
+
+
+def test_order_catalog_unchanged_and_trigger_seeded():
+    from microtech.rule_builder import get_django_field_map, get_operator_engine_map
+    from microtech.models import RuleTrigger
+
+    assert "billing_address__country_code" in get_django_field_map()
+    engine_map = get_operator_engine_map()
+    assert engine_map.get("in_list") == "in_list"
+    assert engine_map.get("not_in_list") == "not_in_list"
+    assert RuleTrigger.objects.filter(code="address_write", is_active=True).exists()

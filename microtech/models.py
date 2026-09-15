@@ -616,6 +616,8 @@ class MicrotechOrderRuleOperator(BaseModel):
         AFTER = "after", _("nach")
         IS_TRUE = "is_true", _("ist wahr")
         IS_FALSE = "is_false", _("ist falsch")
+        IN_LIST = "in_list", _("ist in Liste")
+        NOT_IN_LIST = "not_in_list", _("ist nicht in Liste")
 
     code = models.CharField(max_length=64, unique=True, verbose_name=_("Code"))
     name = models.CharField(max_length=255, verbose_name=_("Name"))
