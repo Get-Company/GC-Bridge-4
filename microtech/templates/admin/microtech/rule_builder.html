@@ -3,14 +3,22 @@
 
 {% block extrastyle %}{{ block.super }}
   <link rel="stylesheet" href="{% static 'microtech/css/rule_builder_overview.css' %}">
+  <link rel="stylesheet" href="{% static 'microtech/css/rule_editor.css' %}">
+{% endblock %}
+
+{% block extrahead %}{{ block.super }}
+  <script src="{% static 'microtech/js/rule_editor.js' %}" defer></script>
 {% endblock %}
 
 {% block content %}
-<div class="rb-wrap">
+<div class="rb-wrap"
+     data-save-url="{% url 'admin:microtech_orderrule_editor_save' %}"
+     data-meta-url="{% url 'admin:microtech_orderrule_builder_meta' %}"
+     data-overview-url="{% url 'admin:microtech_orderrule_builder' %}">
   <p class="rb-intro">
-    Grafische Nur-Lese-Übersicht aller Bestellregeln: Trigger → Bedingungen (UND/ODER, verschachtelt) → Aktionen.
-    Die neue Engine ist projektweit noch abgeschaltet; Regeln mit dem Abzeichen „Engine aktiv“ sind für den neuen Pfad markiert.
-    Zum grafischen Bearbeiten „Bearbeiten“ an einer Regel wählen; die klassische
+    Grafische Übersicht aller Bestellregeln: Trigger → Bedingungen (UND/ODER, verschachtelt) → Aktionen.
+    Karte aufklappen und „Bearbeiten“ wählen, um die Regel direkt hier zu ändern und zu speichern.
+    Regeln mit dem Abzeichen „Engine aktiv“ sind für den neuen Pfad markiert; die klassische
     <a href="{{ changelist_url }}">Bestellregel-Liste</a> bleibt als Fallback.
   </p>
   <p style="margin:0 0 18px;display:flex;gap:10px;flex-wrap:wrap;">
@@ -34,12 +42,15 @@
         <span class="rb-badge {% if rule.is_active %}rb-badge-on{% else %}rb-badge-off{% endif %}">{% if rule.is_active %}aktiv{% else %}inaktiv{% endif %}</span>
         <span class="rb-badge rb-badge-phase">{{ rule.execution_phase }}</span>
         {% if rule.engine_enabled %}<span class="rb-badge rb-badge-on">Engine aktiv</span>{% else %}<span class="rb-badge rb-badge-off">Engine aus</span>{% endif %}
-        {% if rule.shadow_mode %}<span class="rb-badge rb-badge-shadow">Schatten-Modus</span>{% endif %}
-        <a class="rb-edit-btn" href="{% url 'admin:microtech_orderrule_editor' rule.id %}" data-no-toggle>✎ Bearbeiten</a>
+        <a class="rb-edit-btn" href="{% url 'admin:microtech_orderrule_editor' rule.id %}"
+           data-no-toggle data-inline-edit="{{ rule.id }}">✎ Bearbeiten</a>
       </div>
     </div>
 
     <div class="rb-rule-body">
+    {% with rid=rule.id|stringformat:"s" %}{% with eid="rule-edit-"|add:rid %}{{ rule.edit_json|json_script:eid }}{% endwith %}{% endwith %}
+    <div class="rb-inline-editor" hidden></div>
+    <div class="rb-readonly">
     <div class="rb-trigger">
       <div class="rb-trigger-label">Trigger</div>
       {% if rule.trigger %}
@@ -81,6 +92,7 @@
         <span class="rb-none">Keine Aktion definiert.</span>
       {% endfor %}
     </div>
+    </div>{# /rb-readonly #}
     </div>{# /rb-rule-body #}
   </div>
   {% empty %}
@@ -112,6 +124,39 @@
         ev.preventDefault();
         toggle(head.closest('[data-rule-card]'));
       }
+    });
+  });
+
+  // ---- inline editing ----
+  var wrap = document.querySelector('.rb-wrap');
+  var SAVE_URL = wrap.dataset.saveUrl, META_URL = wrap.dataset.metaUrl, OVERVIEW_URL = wrap.dataset.overviewUrl;
+
+  document.querySelectorAll('[data-inline-edit]').forEach(function (btn) {
+    btn.addEventListener('click', function (ev) {
+      ev.preventDefault();
+      var card = btn.closest('[data-rule-card]');
+      var host = card.querySelector('.rb-inline-editor');
+      var readonly = card.querySelector('.rb-readonly');
+      card.classList.remove('rb-collapsed'); // sicher aufgeklappt
+      if (host.dataset.mounted) return;       // läuft bereits
+      var dataEl = document.getElementById('rule-edit-' + btn.getAttribute('data-inline-edit'));
+      var ruleData;
+      try { ruleData = JSON.parse(dataEl.textContent); } catch (e) { return; }
+      if (!window.RuleEditor) return;
+      readonly.hidden = true;
+      host.hidden = false;
+      host.dataset.mounted = '1';
+      btn.textContent = '✎ in Bearbeitung';
+      window.RuleEditor.mount(host, {
+        ruleData: ruleData,
+        saveUrl: SAVE_URL, metaUrl: META_URL, overviewUrl: OVERVIEW_URL,
+        inline: true,
+        onSaved: function () { window.location.reload(); },
+        onCancel: function () {
+          host.hidden = true; host.innerHTML = ''; delete host.dataset.mounted;
+          readonly.hidden = false; btn.textContent = '✎ Bearbeiten';
+        },
+      });
     });
   });
 })();

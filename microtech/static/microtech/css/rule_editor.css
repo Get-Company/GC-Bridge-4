@@ -1,5 +1,6 @@
-/* Interactive rule editor. */
+/* Interactive rule editor (standalone page #rule-editor and inline .re-editor). */
 #rule-editor { max-width: 920px; margin: 0 auto; padding: 16px; background: #f1f5f9; border-radius: 12px; color: #334155; }
+.re-editor { background: #f8fafc; border: 1px solid #dbeafe; border-radius: 10px; padding: 14px; color: #334155; }
 .re-block { border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px 16px; margin: 0 0 14px; background: #fff; }
 .re-block-label { font-size: 10px; letter-spacing: .05em; text-transform: uppercase; font-weight: 600; margin-bottom: 10px; color: #475569; }
 .re-trigger .re-block-label { color: #4f46e5; }
@@ -8,10 +9,11 @@
 
 .re-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
 .re-row label { font-size: 12px; color: #6b7280; }
-#rule-editor input[type=text], #rule-editor input[type=number], #rule-editor select {
-  padding: 5px 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; background: #fff;
+#rule-editor input[type=text], #rule-editor input[type=number], #rule-editor select,
+.re-editor input[type=text], .re-editor input[type=number], .re-editor select {
+  padding: 5px 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; background: #fff; color: #334155;
 }
-#rule-editor input[type=text] { min-width: 140px; }
+#rule-editor input[type=text], .re-editor input[type=text] { min-width: 140px; }
 
 .re-group { border: 1px dashed #93c5fd; border-radius: 10px; padding: 10px; margin: 8px 0; background: rgba(219,234,254,.25); }
 .re-group.re-root { border-style: solid; border-color: #bfdbfe; background: #eff6ff; }
@@ -38,6 +40,8 @@
 .re-errors ul { margin: 4px 0 0 18px; }
 .re-savebar { display: flex; align-items: center; gap: 12px; margin-top: 16px; }
 .re-hint { font-size: 12px; color: #9ca3af; }
+.re-dirty { font-size: 12px; font-weight: 600; color: #b45309; }
+.re-dirty::before { content: ""; }
 
 .re-ac-wrap { position: relative; display: inline-block; }
 .re-ac-results { position: absolute; z-index: 30; top: 100%; left: 0; right: 0; background: #fff; border: 1px solid #cbd5e1; border-radius: 6px; max-height: 220px; overflow-y: auto; box-shadow: 0 6px 18px rgba(0,0,0,.08); }

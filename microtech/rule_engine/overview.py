@@ -10,6 +10,7 @@ import re
 
 from microtech.models import MicrotechOrderRule, MicrotechOrderRuleOperator
 from microtech.rule_builder import get_django_field_map
+from microtech.rule_engine.editor import serialize_rule_for_edit
 
 _VARIABLE_PATTERN = re.compile(r"\{\{.*?\}\}")
 
@@ -137,6 +138,7 @@ def serialize_rule(rule, field_map: dict, operator_map: dict) -> dict:
         "root_groups": root_groups,
         "actions": actions,
         "has_conditions": any(not g["is_empty"] for g in root_groups),
+        "edit_json": serialize_rule_for_edit(rule),
     }
 
 
