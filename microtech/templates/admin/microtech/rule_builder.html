@@ -19,21 +19,25 @@
   </p>
 
   {% for rule in rules %}
-  <div class="rb-rule{% if not rule.is_active %} rb-inactive{% endif %}">
-    <div class="rb-rule-head">
-      <div>
-        <div class="rb-rule-title">{{ rule.name }}</div>
-        <div class="rb-rule-meta">Priorität {{ rule.priority }} ·
-          <a href="{% url 'admin:microtech_orderrule_editor' rule.id %}">Bearbeiten</a></div>
+  <div class="rb-rule{% if not rule.is_active %} rb-inactive{% endif %} rb-collapsed" data-rule-card>
+    <div class="rb-rule-head" data-rule-toggle role="button" tabindex="0" aria-expanded="false">
+      <div class="rb-head-main">
+        <span class="rb-chevron" aria-hidden="true">▸</span>
+        <div>
+          <div class="rb-rule-title">{{ rule.name }}</div>
+          <div class="rb-rule-meta">Priorität {{ rule.priority }}{% if rule.trigger %} · {{ rule.trigger.label }}{% endif %}</div>
+        </div>
       </div>
       <div class="rb-flags">
         <span class="rb-badge {% if rule.is_active %}rb-badge-on{% else %}rb-badge-off{% endif %}">{% if rule.is_active %}aktiv{% else %}inaktiv{% endif %}</span>
         <span class="rb-badge rb-badge-phase">{{ rule.execution_phase }}</span>
         {% if rule.engine_enabled %}<span class="rb-badge rb-badge-on">Engine aktiv</span>{% else %}<span class="rb-badge rb-badge-off">Engine aus</span>{% endif %}
         {% if rule.shadow_mode %}<span class="rb-badge rb-badge-shadow">Schatten-Modus</span>{% endif %}
+        <a class="rb-edit-btn" href="{% url 'admin:microtech_orderrule_editor' rule.id %}" data-no-toggle>✎ Bearbeiten</a>
       </div>
     </div>
 
+    <div class="rb-rule-body">
     <div class="rb-trigger">
       <div class="rb-trigger-label">Trigger</div>
       {% if rule.trigger %}
@@ -75,9 +79,39 @@
         <span class="rb-none">Keine Aktion definiert.</span>
       {% endfor %}
     </div>
+    </div>{# /rb-rule-body #}
   </div>
   {% empty %}
   <div class="rb-empty">Noch keine Bestellregeln angelegt.</div>
   {% endfor %}
 </div>
+
+<script>
+(function () {
+  function isNoToggle(el) {
+    while (el && el !== document) {
+      if (el.hasAttribute && el.hasAttribute('data-no-toggle')) return true;
+      el = el.parentNode;
+    }
+    return false;
+  }
+  function toggle(card) {
+    var collapsed = card.classList.toggle('rb-collapsed');
+    var head = card.querySelector('[data-rule-toggle]');
+    if (head) head.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+  }
+  document.querySelectorAll('[data-rule-toggle]').forEach(function (head) {
+    head.addEventListener('click', function (ev) {
+      if (isNoToggle(ev.target)) return; // Bearbeiten-Button nicht abfangen
+      toggle(head.closest('[data-rule-card]'));
+    });
+    head.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Enter' || ev.key === ' ') {
+        ev.preventDefault();
+        toggle(head.closest('[data-rule-card]'));
+      }
+    });
+  });
+})();
+</script>
 {% endblock %}
