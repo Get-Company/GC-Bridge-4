@@ -1052,8 +1052,11 @@ async function addMicrotechResults(jobIds, searchId) {
       });
     });
     searchErps = uniqueErpNumbers(searchErps);
+    const candidateNumbers = searchProgress?.microtechCandidateNumbers || new Set();
     searchErps.forEach(erpNr => {
-      if (!searchData[erpNr]?.microtech) setCellState(erpNr, 'microtech', 'not_found');
+      if (!searchData[erpNr]?.microtech && candidateNumbers.has(String(erpNr))) {
+        setCellState(erpNr, 'microtech', 'not_found');
+      }
     });
     renderRows(false);
     renderSearchProgress();
@@ -1114,14 +1117,22 @@ async function doSearch() {
 
     const erpNrs = uniqueErpNumbers(resolveJson.erp_nrs || []);
     const microtechJobIds = (resolveJson.microtech_jobs || []).map(job => job.job_id).filter(Boolean);
+    const microtechCandidates = Number(resolveJson.search_summary?.microtech_candidates || 0);
+    const microtechCandidateNumbers = new Set(
+      (resolveJson.search_summary?.microtech_candidate_numbers || []).map(value => String(value)),
+    );
     searchErps = erpNrs;
     searchData = {};
     erpNrs.forEach(nr => { searchData[nr] = {}; });
-    initializeRowStates(erpNrs, { microtechState: microtechJobIds.length ? 'pending' : 'idle' });
+    initializeRowStates(erpNrs, { microtechState: 'idle' });
+    erpNrs.forEach(erpNr => {
+      if (microtechCandidateNumbers.has(String(erpNr))) setCellState(erpNr, 'microtech', 'pending');
+    });
     searchProgress.microtech = microtechJobIds.length
-      ? { state: 'pending', message: 'Die Suche in Microtech wurde gestartet.', found: 0 }
-      : { state: 'succeeded', message: 'Für diese Suche wurde keine Microtech-Abfrage gestartet.', found: 0 };
+      ? { state: 'pending', message: `Microtech prüft ${microtechCandidates} ermittelte bestehende AdrNr.`, found: 0 }
+      : { state: 'succeeded', message: 'Keine bestehende AdrNr für Microtech ermittelt; Neukunden ab AdrNr 900000 werden übersprungen.', found: 0 };
     searchProgress.resolved = resolveJson.search_summary || {};
+    searchProgress.microtechCandidateNumbers = microtechCandidateNumbers;
     renderRows(false);
     renderSearchProgress();
     void loadCells(erpNrs, LOCAL_SYSTEM_KEYS, searchId);

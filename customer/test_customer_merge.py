@@ -171,6 +171,38 @@ class CustomerIdUpdateViewTest(SimpleTestCase):
         service_class.return_value.update_microtech_address_mapping.assert_called_once_with(81, 7, 3)
 
 
+class CustomerMergeResolveViewTest(SimpleTestCase):
+    @patch("customer.views.CustomerMergeSearchService")
+    def test_email_results_drive_exact_microtech_lookups_only_for_existing_customers(self, service_class):
+        from customer.views import customer_merge_resolve_api
+
+        service = service_class.return_value
+        service.resolve_shopware_erp_numbers.return_value = ["13013", "950035"]
+        service.resolve_django_erp_numbers.return_value = ["13013"]
+        service.microtech_candidate_numbers.return_value = ["13013"]
+        service.start_microtech_resolution_search.return_value = [{"job_id": 5, "search_kind": "customer"}]
+
+        request = RequestFactory().get("/", {"email": "jeremy@example.com"})
+        response = customer_merge_resolve_api(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(json.loads(response.content)["erp_nrs"], ["13013", "950035"])
+        service.start_microtech_resolution_search.assert_called_once_with(customer_number="13013")
+        self.assertEqual(json.loads(response.content)["search_summary"]["microtech_candidates"], 1)
+
+    @patch("customer.views.CustomerMergeSearchService")
+    def test_new_customer_number_skips_single_microtech_cell_lookup(self, service_class):
+        from customer.views import customer_merge_search_cell_api
+
+        service_class.return_value.is_microtech_existing_customer_number.return_value = False
+        request = RequestFactory().get("/", {"erp_nr": "950035", "system": "microtech"})
+        response = customer_merge_search_cell_api(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(json.loads(response.content)["data"])
+        service_class.return_value.start_microtech_customer_search.assert_not_called()
+
+
 class CustomerMergeMicrotechSearchTest(SimpleTestCase):
     @patch.object(CustomerMergeSearchService, "start_microtech_customer_search")
     def test_customer_number_search_uses_exact_microtech_lookup(self, mock_search):
@@ -183,24 +215,17 @@ class CustomerMergeMicrotechSearchTest(SimpleTestCase):
         mock_search.assert_called_once_with("10001", purpose="resolve")
         self.assertEqual(jobs, [{"job_id": 123, "search_kind": "customer"}])
 
-    def test_name_search_uses_microtech_customer_and_contact_indexes(self):
-        requests = dict(CustomerMergeSearchService._microtech_resolution_requests("Müller"))
+    @patch.object(CustomerMergeSearchService, "start_microtech_customer_search")
+    def test_email_company_and_names_never_start_a_microtech_search(self, mock_search):
+        jobs = CustomerMergeSearchService().start_microtech_resolution_search(
+            email="?@example.com",
+            first_name="Jeremy ?",
+            last_name="Bennett",
+            company="? Beispiel GmbH ?",
+        )
 
-        self.assertEqual(requests["suchbegriff"]["dataset"], "Adressen")
-        self.assertEqual(requests["suchbegriff"]["indexField"], "SuchBeg")
-        self.assertEqual(requests["suchbegriff"]["range"]["fromValues"], ["Müller", ""])
-
-        self.assertEqual(requests["nachname"]["dataset"], "Ansprechpartner")
-        self.assertEqual(requests["nachname"]["indexField"], "NNa")
-        self.assertEqual(requests["nachname"]["range"]["fromValues"], ["Müller", ""])
-
-        self.assertEqual(requests["vorname"]["filter"], "VNa = 'Müller'")
-        self.assertIn("AdrNr", requests["vorname"]["fields"])
-
-    def test_first_name_filter_escapes_microtech_filter_quotes(self):
-        requests = dict(CustomerMergeSearchService._microtech_resolution_requests("O'Brien"))
-
-        self.assertEqual(requests["vorname"]["filter"], "VNa = 'O''Brien'")
+        self.assertEqual(jobs, [])
+        mock_search.assert_not_called()
 
     def test_customer_search_result_unwraps_and_deduplicates_full_customers(self):
         customers = CustomerMergeSearchService._microtech_customers_from_search_result(
@@ -379,27 +404,24 @@ class MicrotechResolutionRoutingTest(SimpleTestCase):
             {"job_id": 2, "search_kind": "customer"},
         ])
 
-    @patch.object(CustomerMergeSearchService, "_submit_address_records_search")
-    def test_company_uses_address_records_contains_search(self, mock_addr):
-        mock_addr.return_value = [{"job_id": 7, "search_kind": "address_records"}]
-
+    @patch.object(CustomerMergeSearchService, "start_microtech_customer_search")
+    def test_company_does_not_start_a_microtech_search(self, mock_search):
         jobs = CustomerMergeSearchService().start_microtech_resolution_search(
             company="? Insulation ?",
         )
 
-        mock_addr.assert_called_once_with("Insulation")
-        self.assertEqual(jobs, [{"job_id": 7, "search_kind": "address_records"}])
+        self.assertEqual(jobs, [])
+        mock_search.assert_not_called()
 
-    @patch.object(CustomerMergeSearchService, "_submit_address_records_search")
-    def test_wildcard_last_name_uses_address_records(self, mock_addr):
-        mock_addr.return_value = [{"job_id": 8, "search_kind": "address_records"}]
-
+    @patch.object(CustomerMergeSearchService, "start_microtech_customer_search")
+    def test_new_customer_numbers_are_not_looked_up_in_microtech(self, mock_search):
+        mock_search.return_value = {"job_id": 8}
         jobs = CustomerMergeSearchService().start_microtech_resolution_search(
-            last_name="JACKSON ?",
+            customer_number="13013, 900000, 950035",
         )
 
-        mock_addr.assert_called_once_with("JACKSON")
-        self.assertEqual(jobs, [{"job_id": 8, "search_kind": "address_records"}])
+        mock_search.assert_called_once_with("13013", purpose="resolve")
+        self.assertEqual(jobs, [{"job_id": 8, "search_kind": "customer"}])
 
 
 class ShopwareCustomerMergeTest(SimpleTestCase):

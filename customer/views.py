@@ -91,7 +91,10 @@ def customer_merge_resolve_api(request):
                 if erp_nr not in erp_nrs:
                     erp_nrs.append(erp_nr)
 
-        microtech_jobs = search_service.start_microtech_resolution_search(**criteria)
+        microtech_candidates = search_service.microtech_candidate_numbers(erp_nrs)
+        microtech_jobs = search_service.start_microtech_resolution_search(
+            customer_number=",".join(microtech_candidates),
+        )
         return JsonResponse(
             {
                 "erp_nrs": erp_nrs,
@@ -100,6 +103,8 @@ def customer_merge_resolve_api(request):
                 "search_summary": {
                     "shopware_found": len(resolved_sets.get("shopware", [])),
                     "django_found": len(resolved_sets.get("django", [])),
+                    "microtech_candidates": len(microtech_candidates),
+                    "microtech_candidate_numbers": microtech_candidates,
                     "microtech_search_started": bool(microtech_jobs),
                 },
             }
@@ -132,15 +137,20 @@ def customer_merge_resolve_api(request):
                 erp_nrs.append(nr)
                 seen.add(nr)
 
-    microtech_jobs: list[dict] = []
-    for term in terms:
-        microtech_jobs.extend(search_service.start_microtech_resolution_search(term))
+    microtech_candidates = search_service.microtech_candidate_numbers(erp_nrs)
+    microtech_jobs = search_service.start_microtech_resolution_search(
+        customer_number=",".join(microtech_candidates),
+    )
 
     return JsonResponse(
         {
             "erp_nrs": erp_nrs,
             "resolved_from": resolved_sets,
             "microtech_jobs": microtech_jobs,
+            "search_summary": {
+                "microtech_candidates": len(microtech_candidates),
+                "microtech_candidate_numbers": microtech_candidates,
+            },
         }
     )
 
@@ -158,6 +168,8 @@ def customer_merge_search_cell_api(request):
     elif system == "shopware":
         data = search_service.search_shopware(erp_nr)
     elif system == "microtech":
+        if not search_service.is_microtech_existing_customer_number(erp_nr):
+            return JsonResponse({"erp_nr": erp_nr, "system": system, "data": None})
         result = search_service.start_microtech_customer_search(erp_nr)
         if result.get("error"):
             return JsonResponse({"erp_nr": erp_nr, "system": system, "data": result})
@@ -233,6 +245,8 @@ def customer_merge_search_api(request):
         elif system == "shopware":
             return (system, nr, search_service.search_shopware(nr))
         else:
+            if not search_service.is_microtech_existing_customer_number(nr):
+                return (system, nr, None)
             result = search_service.start_microtech_customer_search(nr)
             if result.get("error"):
                 return (system, nr, result)

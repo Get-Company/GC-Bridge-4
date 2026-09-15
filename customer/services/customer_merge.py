@@ -14,6 +14,7 @@ from orders.models import Order
 _UUID_RE = re.compile(r"^[0-9a-f]{32}$|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
 _MICROTECH_SEARCH_SOURCE = "customer_merge_search"
 _MICROTECH_SEARCH_LIMIT = 20
+_MICROTECH_NEW_CUSTOMER_THRESHOLD = 900_000
 
 
 def _to_str(value: Any) -> str:
@@ -272,122 +273,36 @@ class CustomerMergeSearchService(BaseService):
         last_name: str = "",
         company: str = "",
     ) -> list[dict[str, Any]]:
-        """Queue Microtech searches through the GraphQL Sentinel.
+        """Queue exact Microtech lookups for known, existing customer numbers only.
 
-        An AdrNr uses the exact ``requestCustomer`` lookup (once per
-        comma-separated number). Company and any ``?``-wildcarded name use the
-        wrapper's ``searchAddressRecords`` contains search (matches AdrNr, first
-        name, last name and company/Na1). Plain (non-wildcard) email and names
-        use the exact ``searchCustomers`` query — Microtech has no contains
-        search on email. ``term`` remains available for the legacy free-text
-        DatasetReadInput API.
+        E-mail, company and name criteria are resolved exclusively in SW6 and
+        GC-Bridge. Their AdrNr results are handed here as ``customer_number``;
+        this prevents wildcard or broad GraphQL searches in Microtech.
         """
-        term = _to_str(term)
-        customer_number = _to_str(customer_number)
-        email = _to_str(email)
-        first_name = _to_str(first_name)
-        last_name = _to_str(last_name)
-        company = _to_str(company)
-        uses_structured_fields = any((customer_number, email, first_name, last_name, company))
-
-        if uses_structured_fields:
-            jobs: list[dict[str, Any]] = []
-
-            # ``requestCustomer`` is the exact, established AdrNr lookup and
-            # returns the complete customer object the merge cell needs.
-            numbers = _split_terms(customer_number)
-            if numbers:
-                for number in numbers:
-                    result = self.start_microtech_customer_search(number, purpose="resolve")
-                    if not result.get("error"):
-                        jobs.append({"job_id": result["job_id"], "search_kind": "customer"})
-                return jobs
-
-            # Company and any wildcarded name use the contains search
-            # (searchAddressRecords). Company is not part of CustomerSearchInput
-            # at all, so it can only be found this way.
-            contains_terms: list[str] = []
-            contains_terms.extend(_wildcard_segments(company))
-            if _has_wildcard(first_name):
-                contains_terms.extend(_wildcard_segments(first_name))
-            if _has_wildcard(last_name):
-                contains_terms.extend(_wildcard_segments(last_name))
-            for contains_term in dict.fromkeys(contains_terms):
-                jobs.extend(self._submit_address_records_search(contains_term))
-
-            # Plain (non-wildcard) email/name use the exact structured search.
-            exact_email = "" if _has_wildcard(email) else email
-            exact_first = "" if _has_wildcard(first_name) else first_name
-            exact_last = "" if _has_wildcard(last_name) else last_name
-            if exact_email or exact_first or exact_last:
-                search_criteria = {
-                    "customer_number": "",
-                    "email": exact_email,
-                    "first_name": exact_first,
-                    "last_name": exact_last,
-                }
-                try:
-                    from microtech.models import MicrotechGraphQLJob
-                    from microtech.services import MicrotechGraphQLClientService, MicrotechJobSentinelService
-
-                    client = MicrotechGraphQLClientService()
-                    job = MicrotechJobSentinelService().submit_wrapper_job(
-                        kind=MicrotechGraphQLJob.Kind.DATASET_RECORDS,
-                        operation="searchCustomers",
-                        submit=lambda: client.submit_search_customers(
-                            customer_number="",
-                            email=exact_email,
-                            first_name=exact_first,
-                            last_name=exact_last,
-                            limit=_MICROTECH_SEARCH_LIMIT,
-                        ),
-                        request_payload={**search_criteria, "limit": _MICROTECH_SEARCH_LIMIT},
-                        context={
-                            "source": _MICROTECH_SEARCH_SOURCE,
-                            "purpose": "resolve",
-                            "search_kind": "customers",
-                            "search_criteria": search_criteria,
-                        },
-                        continuation="",
-                        next_step="Warte auf Microtech-Kundensuche.",
-                        delete_after_completion=False,
-                    )
-                    jobs.append({"job_id": job.pk, "search_kind": "customers"})
-                except Exception as exc:
-                    logger.warning("Microtech structured customer search submit failed: {}", exc)
-
-            return jobs
-        else:
-            if not term or term.isdigit() or _UUID_RE.match(term):
-                return []
-            requests = self._microtech_resolution_requests(term)
-            search_criteria = {"term": term}
-
-        if not requests:
-            return []
-
-        from microtech.services import MicrotechJobSentinelService
-
-        sentinel = MicrotechJobSentinelService()
+        del email, first_name, last_name, company
+        numbers = _split_terms(customer_number) or _split_terms(term)
         jobs: list[dict[str, Any]] = []
-        for search_kind, input_data in requests:
-            try:
-                job = sentinel.submit_dataset_records(
-                    input_data=input_data,
-                    context={
-                        "source": _MICROTECH_SEARCH_SOURCE,
-                        "purpose": "resolve",
-                        "search_kind": search_kind,
-                        "search_criteria": search_criteria,
-                    },
-                    next_step="Warte auf Microtech-Suche.",
-                    delete_after_completion=False,
-                )
-            except Exception as exc:
-                logger.warning("Microtech {} search submit failed: {}", search_kind, exc)
-                continue
-            jobs.append({"job_id": job.pk, "search_kind": search_kind})
+        for number in self.microtech_candidate_numbers(numbers):
+            result = self.start_microtech_customer_search(number, purpose="resolve")
+            if not result.get("error") and not result.get("skipped"):
+                jobs.append({"job_id": result["job_id"], "search_kind": "customer"})
         return jobs
+
+    @staticmethod
+    def is_microtech_existing_customer_number(value: Any) -> bool:
+        """Whether an AdrNr can exist in Microtech rather than being a new customer."""
+        number = _to_str(value)
+        return number.isdigit() and int(number) < _MICROTECH_NEW_CUSTOMER_THRESHOLD
+
+    @classmethod
+    def microtech_candidate_numbers(cls, numbers: list[str]) -> list[str]:
+        """Return unique existing AdrNr values which may be fetched from Microtech."""
+        candidates: list[str] = []
+        for number in numbers:
+            number = _to_str(number)
+            if cls.is_microtech_existing_customer_number(number) and number not in candidates:
+                candidates.append(number)
+        return candidates
 
     def _submit_address_records_search(self, term: str) -> list[dict[str, Any]]:
         """Queue a Microtech contains search on AdrNr, names and company (Na1)."""
@@ -477,6 +392,8 @@ class CustomerMergeSearchService(BaseService):
         erp_nr = _to_str(erp_nr)
         if not erp_nr:
             return {"error": "ERP-Nummer erforderlich."}
+        if not self.is_microtech_existing_customer_number(erp_nr):
+            return {"skipped": True}
 
         try:
             from microtech.models import MicrotechGraphQLJob
