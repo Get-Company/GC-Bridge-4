@@ -1752,9 +1752,7 @@ async function deleteSelectedAddresses(erpNr, groupId, sysKey = 'django') {
 /* ── Merge section ───────────────────────────────────── */
 function renderMergeSection() {
   renderShopwareMergeSection();
-  // Django and Microtech merge semantics are intentionally defined separately.
-  // Until then this page exposes only the verified SW6 merge workflow.
-  document.getElementById('merge-section').innerHTML = '';
+  renderDjangoMergeSection();
 }
 
 function renderDjangoMergeSection() {
@@ -1785,13 +1783,13 @@ function renderDjangoMergeSection() {
     <div class="p-4 space-y-4">
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label class="block text-xs font-medium mb-1">Ziel-Kunde (bleibt erhalten):</label>
+          <label class="block text-xs font-medium mb-1">Richtiger Kunde (bleibt erhalten):</label>
           <select id="merge-target" class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm bg-white dark:bg-gray-800" onchange="updateMergeUI()">
             ${djangoErps.map(nr => `<option value="${esc(nr)}">${esc(nr)} — ${esc(searchData[nr].django.name)}</option>`).join('')}
           </select>
         </div>
         <div>
-          <label class="block text-xs font-medium mb-1">Quell-Kunde (wird geloescht):</label>
+          <label class="block text-xs font-medium mb-1">Falscher Kunde (wird gelöscht):</label>
           <select id="merge-source" class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm bg-white dark:bg-gray-800" onchange="updateMergeUI()">
             ${djangoErps.map((nr,i) => `<option value="${esc(nr)}" ${i===1?'selected':''}>${esc(nr)} — ${esc(searchData[nr].django.name)}</option>`).join('')}
           </select>

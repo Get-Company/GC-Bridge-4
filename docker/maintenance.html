@@ -136,20 +136,24 @@
     @keyframes refresh { to { transform: rotate(360deg); } }
     h1 { margin: 0; font-size: clamp(1.8rem, 5vw, 2.8rem); letter-spacing: -.045em; }
     p { margin: .9rem auto 0; max-width: 34rem; color: var(--muted); font-size: 1rem; line-height: 1.65; }
-    .refresh-note {
-      display: inline-flex;
-      gap: .65rem;
-      align-items: center;
-      margin-top: 1.55rem;
-      padding: .7rem 1rem;
+    .reload-status {
+      width: min(30rem, 100%);
+      margin: 1.55rem auto 0;
+      padding: 1rem 1.1rem;
       border: 1px solid #c9e2de;
-      border-radius: 999px;
+      border-radius: .8rem;
       background: #f4fbfa;
       color: #3f6464;
-      font-size: .88rem;
+      text-align: left;
+    }
+    .reload-heading {
+      display: flex;
+      gap: .7rem;
+      align-items: center;
+      font-size: .9rem;
       line-height: 1.35;
     }
-    .refresh-icon {
+    .reload-loader {
       display: grid;
       width: 1.45rem;
       height: 1.45rem;
@@ -163,8 +167,29 @@
       font-weight: 700;
       animation: refresh 2.4s linear infinite;
     }
+    .reload-message { display: block; margin-top: .18rem; color: var(--muted); font-size: .82rem; }
+    .reload-progress {
+      height: .48rem;
+      margin-top: .9rem;
+      overflow: hidden;
+      border-radius: 999px;
+      background: #d8ece8;
+    }
+    .reload-progress-bar {
+      width: 0;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--turquoise), var(--blue));
+      transition: width .1s linear;
+    }
+    .reload-countdown {
+      margin: .55rem 0 0;
+      color: #3f6464;
+      font-size: .78rem;
+      text-align: center;
+    }
     @media (prefers-reduced-motion: reduce) {
-      .tab, .refresh-icon { animation: none; }
+      .tab, .reload-loader { animation: none; }
     }
   </style>
 </head>
@@ -182,10 +207,40 @@
     </div>
     <h1>Wir bringen gerade alles in Ordnung.</h1>
     <p>Classei wird aktualisiert und ist gleich wieder für Sie da.</p>
-    <div class="refresh-note" role="status">
-      <span class="refresh-icon" aria-hidden="true">↻</span>
-      <span><strong>Sie müssen nichts tun.</strong> Diese Seite lädt sich automatisch alle 20 Sekunden neu.</span>
+    <div class="reload-status" role="status" aria-live="polite">
+      <div class="reload-heading">
+        <span class="reload-loader" aria-hidden="true">↻</span>
+        <span>
+          <strong>Sie müssen nichts tun.</strong>
+          <span class="reload-message">Wir prüfen automatisch, ob Classei wieder verfügbar ist.</span>
+        </span>
+      </div>
+      <div class="reload-progress" role="progressbar" aria-label="Nächster automatischer Ladeversuch" aria-valuemin="0" aria-valuemax="20" aria-valuenow="0">
+        <div class="reload-progress-bar" id="reload-progress-bar"></div>
+      </div>
+      <p class="reload-countdown">Automatischer Neuladeversuch in <strong id="reload-countdown">20</strong> Sekunden.</p>
     </div>
   </main>
+  <script>
+    (() => {
+      const refreshDelayMs = 20_000;
+      const startedAt = performance.now();
+      const countdown = document.getElementById("reload-countdown");
+      const progressBar = document.getElementById("reload-progress-bar");
+      const progress = progressBar.parentElement;
+
+      function updateReloadProgress(now) {
+        const elapsedMs = Math.min(now - startedAt, refreshDelayMs);
+        const elapsedSeconds = elapsedMs / 1_000;
+        const remainingSeconds = Math.max(0, Math.ceil((refreshDelayMs - elapsedMs) / 1_000));
+        progressBar.style.width = `${(elapsedMs / refreshDelayMs) * 100}%`;
+        progress.setAttribute("aria-valuenow", String(Math.floor(elapsedSeconds)));
+        countdown.textContent = String(remainingSeconds);
+        if (elapsedMs < refreshDelayMs) requestAnimationFrame(updateReloadProgress);
+      }
+
+      requestAnimationFrame(updateReloadProgress);
+    })();
+  </script>
 </body>
 </html>

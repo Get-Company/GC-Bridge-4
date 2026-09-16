@@ -1511,12 +1511,15 @@ assert.equal(stored.size, 1);
 assert.ok(elements.get('sw-merge-result').innerHTML.includes('passt nicht'));
 ''')
 
-    def test_page_entrypoint_does_not_expose_general_django_merge(self):
+    def test_page_entrypoint_exposes_general_django_merge(self):
         template = (Path(__file__).resolve().parents[1] / "templates/admin/customer_merge.html").read_text()
         entrypoint = template.split("function renderMergeSection()", 1)[1].split("function renderDjangoMergeSection()", 1)[0]
+
         self.assertIn("renderShopwareMergeSection();", entrypoint)
-        self.assertNotIn("renderDjangoMergeSection(", entrypoint)
-        self.assertIn("document.getElementById('merge-section').innerHTML = '';", entrypoint)
+        self.assertIn("renderDjangoMergeSection();", entrypoint)
+        self.assertNotIn("document.getElementById('merge-section').innerHTML = '';", entrypoint)
+        self.assertIn("Richtiger Kunde (bleibt erhalten):", template)
+        self.assertIn("Falscher Kunde (wird gelöscht):", template)
 
     def test_stale_preview_requires_new_preview_and_confirmation(self):
         self.run_js(r'''
