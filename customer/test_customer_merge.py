@@ -1451,6 +1451,8 @@ assert.equal((microtechHtml.match(/microtech-number-pair/g) || []).length, 1);
 assert.ok(microtechHtml.includes('microtech-number-value'));
 assert.ok(microtechHtml.includes('AnspNr'));
 assert.ok(microtechHtml.includes('Microtech-Kennung'));
+assert.equal(microtechHtml.includes('Zuordnungen &amp; Kennungen'), false);
+assert.equal(microtechHtml.includes('<details'), false);
 const secondMicrotechHtml = comparisonAddressCard('10001', 'microtech', groups[1].microtech[0]);
 assert.ok(secondMicrotechHtml.includes('Max Mustermann'));
 const shopwareHtml = comparisonAddressCard('10001', 'shopware', groups[0].shopware[0]);

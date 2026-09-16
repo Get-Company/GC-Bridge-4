@@ -793,10 +793,7 @@ function comparisonAddressCard(nr, sysKey, address, defaultActions = '') {
     ${checkbox}
     <div class="flex-1 min-w-0">
       ${flags ? `<div class="mb-2 flex flex-wrap items-center justify-end gap-x-3 gap-y-1">${flags}</div>` : ''}
-      ${mappings ? `<details class="mb-2">
-        <summary class="cursor-pointer text-[10px] font-semibold uppercase tracking-wider text-gray-400">Zuordnungen &amp; Kennungen</summary>
-        <div class="mt-2">${mappings}</div>
-      </details>` : ''}
+      ${mappings ? `<div class="mb-2">${mappings}</div>` : ''}
       <div class="font-medium text-sm">${esc(address.label) || '<span class="comparison-empty">Ohne Bezeichnung</span>'}</div>
       ${address.contactName ? `<div class="text-gray-400">${esc(address.contactName)}</div>` : ''}
       <div class="text-gray-500">${esc(address.street)}</div>
