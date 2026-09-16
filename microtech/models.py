@@ -30,6 +30,12 @@ class MicrotechSettings(BaseModel):
         default=EngineMode.OFF,
         verbose_name=_("Regel-Engine Modus (Anschriften)"),
     )
+    rule_engine_customer_mode = models.CharField(
+        max_length=10,
+        choices=EngineMode.choices,
+        default=EngineMode.OFF,
+        verbose_name=_("Regel-Engine Modus (Kunden)"),
+    )
 
     # Backup-Fenster: waehrend eines microtech-Backups steht die COM-Verbindung
     # still. Das Flag haelt neue Microtech-Jobs auf, damit sie nicht ins Leere

@@ -321,8 +321,7 @@ class CustomerUpsertMicrotechService(BaseService):
         billing_address: Address | None = None,
     ) -> dict[str, Any]:
         tax_address = billing_address or address
-        return self._drop_blank(
-            {
+        customer_input = {
                 "salutation": self._translate_salutation_to_de(address.title or address.name1),
                 "firstName": address.first_name,
                 "lastName": address.last_name,
@@ -345,8 +344,18 @@ class CustomerUpsertMicrotechService(BaseService):
                 "webshopDefaults": CustomerWebshopMappingService().get_microtech_defaults(
                     country_code=address.country_code,
                 ),
-            }
+        }
+        # Rule engine overlays CustomerInput fields (any of them at once) only in
+        # live mode; off/shadow keep the hardcoded values above.
+        from microtech.rule_engine.dispatch import resolve_customer_input_with_mode
+
+        overlay = resolve_customer_input_with_mode(
+            customer=customer, address=address, billing_address=billing_address,
+            code_values=customer_input,
         )
+        if overlay:
+            customer_input.update(overlay)
+        return self._drop_blank(customer_input)
 
     def _build_postal_address_input(
         self,

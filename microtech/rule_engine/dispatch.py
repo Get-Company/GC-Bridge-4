@@ -207,3 +207,59 @@ def resolve_address_na1_with_mode(address):
     if mode == MicrotechSettings.EngineMode.LIVE and engine_value:
         return engine_value
     return None
+
+
+# --- Customer-path input overlay (generic) --------------------------------
+#
+# Returns a {graphql_field: value} overlay for the GraphQL customer input.
+# In live mode it returns the engine's fields (any CustomerInput field at once);
+# in off/shadow it returns {} so the hardcoded input stays authoritative.
+
+
+def _persist_customer_shadow_run(customer, changed) -> None:
+    from microtech.rule_engine.customer_resolver import CUSTOMER_WRITE_TASK
+
+    try:
+        RuleEngineShadowRun.objects.create(
+            order_number=str(getattr(customer, "pk", "") or ""),
+            task_name=CUSTOMER_WRITE_TASK,
+            engine_rule_id=None,
+            legacy_rule_id=None,
+            is_equal=not changed,
+            changed_json=json.dumps(changed, ensure_ascii=False),
+        )
+    except Exception:
+        logger.exception("Kunden-Schatten-Lauf konnte nicht persistiert werden.")
+    if changed:
+        logger.warning("Kunden-Feld Schatten-Diff (customer={}): {}", getattr(customer, "pk", ""), changed)
+
+
+def resolve_customer_input_with_mode(*, customer, address, billing_address=None, code_values) -> dict:
+    """Overlay for the GraphQL customer input, honouring rule_engine_customer_mode."""
+    try:
+        mode = MicrotechSettings.load().rule_engine_customer_mode
+    except Exception:
+        logger.exception("Kunden-Engine-Modus nicht ladbar → 'off'.")
+        mode = MicrotechSettings.EngineMode.OFF
+
+    if mode == MicrotechSettings.EngineMode.OFF:
+        return {}
+
+    try:
+        from microtech.rule_engine.customer_resolver import resolve_customer_fields
+
+        engine = resolve_customer_fields(customer=customer, address=address, billing_address=billing_address)
+    except Exception:
+        logger.exception("Kunden-Engine-Auswertung fehlgeschlagen → Code-Fallback (customer={}).",
+                         getattr(customer, "pk", ""))
+        return {}
+
+    changed = {
+        key: {"code": (code_values or {}).get(key), "engine": value}
+        for key, value in engine.items()
+        if str((code_values or {}).get(key, "")) != str(value)
+    }
+    _persist_customer_shadow_run(customer, changed)
+    if mode == MicrotechSettings.EngineMode.LIVE:
+        return engine
+    return {}

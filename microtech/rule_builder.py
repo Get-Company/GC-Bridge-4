@@ -631,12 +631,14 @@ def get_django_field_defs() -> list[DjangoFieldDef]:
     ]
 
 
-def get_address_field_defs() -> list[DjangoFieldDef]:
-    """Fields offered for the address-write trigger (context_root customer.Address).
+def get_address_field_defs(context_root: str = "customer.Address") -> list[DjangoFieldDef]:
+    """Address fields offered for a trigger, tagged with ``context_root``.
 
     Built directly from the Address model, independent of the Order-rooted DB
     catalog/policies. Paths are bare field names (e.g. ``name1``) resolved at
-    evaluation time against the Address context root.
+    evaluation time against the (tax) address context. Used for both the
+    address-write trigger and the customer-write trigger (whose rules are
+    evaluated against the billing address).
     """
     from customer.models import Address
 
@@ -654,7 +656,7 @@ def get_address_field_defs() -> list[DjangoFieldDef]:
                 label=f"Anschrift - {field.verbose_name} ({name})",
                 value_kind=value_kind,
                 example=_default_example(value_kind),
-                context_root="customer.Address",
+                context_root=context_root,
             )
         )
     return defs

@@ -619,7 +619,10 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
                     ],
                     "context_root": item.context_root,
                 }
-                for item in get_address_field_defs()
+                for item in (
+                    get_address_field_defs("customer.Address")
+                    + get_address_field_defs("customer.Customer")
+                )
             ],
             "action_targets": [
                 {

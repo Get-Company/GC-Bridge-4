@@ -269,10 +269,17 @@ def test_meta_view_includes_address_fields_with_context_root(admin_client):
 
     url = reverse("admin:microtech_orderrule_builder_meta")
     data = json.loads(admin_client.get(url).content)
-    by_path = {f["path"]: f for f in data["django_fields"]}
-    assert by_path["name1"]["context_root"] == "customer.Address"
-    assert "not_in_list" in by_path["name1"]["allowed_operator_codes"]
-    assert by_path["billing_address__country_code"]["context_root"] == "orders.Order"
+    # name1 exists for the address context (also emitted for the customer context)
+    addr_name1 = next(
+        f for f in data["django_fields"]
+        if f["path"] == "name1" and f["context_root"] == "customer.Address"
+    )
+    assert "not_in_list" in addr_name1["allowed_operator_codes"]
+    order_country = next(
+        f for f in data["django_fields"]
+        if f["path"] == "billing_address__country_code"
+    )
+    assert order_country["context_root"] == "orders.Order"
     # trigger context roots available for the JS filter
     roots = {t["context_root"] for t in data["triggers"]}
     assert "customer.Address" in roots
@@ -381,3 +388,70 @@ def test_action_graphql_field_round_trip():
     rule = save_rule_from_payload(payload)
     data = serialize_rule_for_edit(MicrotechOrderRule.objects.get(pk=rule.pk))
     assert data["actions"][0]["graphql_field"] == "CustomerInput.taxCategory"
+
+
+# --- Customer path (taxCategory) wiring ----------------------------------
+
+
+def _customer_tax_rule(country="DE", tax_value="99"):
+    from microtech.models import (
+        MicrotechOrderRule, MicrotechOrderRuleAction,
+        MicrotechOrderRuleCondition, MicrotechOrderRuleConditionGroup, RuleTrigger,
+    )
+
+    trg = RuleTrigger.objects.get(code="customer_create")
+    rule = MicrotechOrderRule.objects.create(
+        name=f"{country}->{tax_value}", is_active=True, engine_enabled=True, trigger=trg,
+        execution_phase=MicrotechOrderRule.ExecutionPhase.BEFORE, priority=10)
+    g = MicrotechOrderRuleConditionGroup.objects.create(rule=rule, parent=None, logic="all")
+    MicrotechOrderRuleCondition.objects.create(
+        rule=rule, group=g, django_field_path="country_code", operator_code="eq", expected_value=country)
+    MicrotechOrderRuleAction.objects.create(
+        rule=rule, action_type=MicrotechOrderRuleAction.ActionType.SET_FIELD,
+        graphql_field="CustomerInput.taxCategory", target_value=tax_value)
+    return rule
+
+
+def test_resolve_customer_fields_by_billing_country():
+    from customer.models import Customer, Address
+    from microtech.rule_engine.customer_resolver import resolve_customer_fields
+
+    _customer_tax_rule(country="DE", tax_value="1")
+    cust = Customer.objects.create()
+    de = Address.objects.create(customer=cust, country_code="DE")
+    ch = Address.objects.create(customer=cust, country_code="CH")
+    assert resolve_customer_fields(customer=cust, address=de) == {"taxCategory": "1"}
+    # non-matching billing country, no fallback rule → no override
+    assert resolve_customer_fields(customer=cust, address=ch) == {}
+    # billing_address wins over address for the tax country
+    assert resolve_customer_fields(customer=cust, address=ch, billing_address=de) == {"taxCategory": "1"}
+
+
+def test_build_customer_input_overlays_only_in_live(monkeypatch):
+    from customer.models import Customer, Address
+    from customer.services.customer_upsert_microtech import CustomerUpsertMicrotechService
+    from microtech.models import MicrotechSettings
+
+    _customer_tax_rule(country="DE", tax_value="99")
+    cust = Customer.objects.create()
+    addr = Address.objects.create(customer=cust, country_code="DE", name1="ACME")
+    svc = CustomerUpsertMicrotechService()
+
+    s = MicrotechSettings.load(); s.rule_engine_customer_mode = MicrotechSettings.EngineMode.LIVE; s.save()
+    live = svc._build_customer_input(customer=cust, address=addr, billing_address=addr)
+    assert live["taxCategory"] == "99"  # engine overlay wins
+
+    s.rule_engine_customer_mode = MicrotechSettings.EngineMode.OFF; s.save()
+    off = svc._build_customer_input(customer=cust, address=addr, billing_address=addr)
+    assert off["taxCategory"] != "99"  # hardcoded resolve_tax_category value
+
+
+def test_meta_customer_context_has_address_fields(admin_client):
+    import json
+    from django.urls import reverse
+
+    url = reverse("admin:microtech_orderrule_builder_meta")
+    data = json.loads(admin_client.get(url).content)
+    customer_ctx = [f for f in data["django_fields"] if f["context_root"] == "customer.Customer"]
+    paths = {f["path"] for f in customer_ctx}
+    assert "country_code" in paths
