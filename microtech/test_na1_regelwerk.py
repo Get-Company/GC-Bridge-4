@@ -169,7 +169,7 @@ def test_resolve_address_fields_no_rule_returns_empty():
     assert resolve_address_fields(addr) == {}
 
 
-# --- Task 6: resolve_address_na1_with_mode facade ------------------------
+# --- Address-path generic overlay facade ---------------------------------
 
 
 class _FakeAddr:
@@ -184,7 +184,7 @@ def _set_address_mode(mode):
     s.save()
 
 
-def test_na1_facade_off_returns_none_no_engine(monkeypatch):
+def test_address_facade_off_returns_empty_no_engine(monkeypatch):
     from microtech.models import MicrotechSettings, RuleEngineShadowRun
     from microtech.rule_engine import dispatch, address_resolver
 
@@ -194,34 +194,32 @@ def test_na1_facade_off_returns_none_no_engine(monkeypatch):
         raise AssertionError("engine must not run in off mode")
 
     monkeypatch.setattr(address_resolver, "resolve_address_fields", _boom)
-    monkeypatch.setattr(dispatch, "_code_na1", _boom)
-    assert dispatch.resolve_address_na1_with_mode(_FakeAddr()) is None
+    assert dispatch.resolve_postal_address_with_mode(_FakeAddr(), code_values={}) == {}
     assert RuleEngineShadowRun.objects.filter(task_name=address_resolver.ADDRESS_WRITE_TASK).count() == 0
 
 
-def test_na1_facade_shadow_logs_and_returns_none(monkeypatch):
+def test_address_facade_shadow_logs_and_returns_empty(monkeypatch):
     from microtech.models import MicrotechSettings, RuleEngineShadowRun
     from microtech.rule_engine import dispatch, address_resolver
 
     _set_address_mode(MicrotechSettings.EngineMode.SHADOW)
-    monkeypatch.setattr(address_resolver, "resolve_address_fields", lambda a: {"Na1": "Firma"})
-    monkeypatch.setattr(dispatch, "_code_na1", lambda a: "Herr")
-    assert dispatch.resolve_address_na1_with_mode(_FakeAddr()) is None
+    monkeypatch.setattr(address_resolver, "resolve_address_fields", lambda a: {"name1": "Firma", "name3": "D"})
+    result = dispatch.resolve_postal_address_with_mode(_FakeAddr(), code_values={"name1": "Herr", "name3": ""})
+    assert result == {}  # shadow keeps code
     run = RuleEngineShadowRun.objects.filter(task_name=address_resolver.ADDRESS_WRITE_TASK).latest("created_at")
-    assert run.is_equal is False and "Na1" in run.changed_json
+    assert run.is_equal is False and "name1" in run.changed_json and "name3" in run.changed_json
 
 
-def test_na1_facade_live_returns_engine(monkeypatch):
+def test_address_facade_live_returns_engine_dict(monkeypatch):
     from microtech.models import MicrotechSettings
     from microtech.rule_engine import dispatch, address_resolver
 
     _set_address_mode(MicrotechSettings.EngineMode.LIVE)
-    monkeypatch.setattr(address_resolver, "resolve_address_fields", lambda a: {"Na1": "Firma"})
-    monkeypatch.setattr(dispatch, "_code_na1", lambda a: "Herr")
-    assert dispatch.resolve_address_na1_with_mode(_FakeAddr()) == "Firma"
+    monkeypatch.setattr(address_resolver, "resolve_address_fields", lambda a: {"name1": "Firma", "name3": "D"})
+    assert dispatch.resolve_postal_address_with_mode(_FakeAddr(), code_values={}) == {"name1": "Firma", "name3": "D"}
 
 
-def test_na1_facade_engine_error_returns_none(monkeypatch):
+def test_address_facade_engine_error_returns_empty(monkeypatch):
     from microtech.models import MicrotechSettings
     from microtech.rule_engine import dispatch, address_resolver
 
@@ -231,30 +229,29 @@ def test_na1_facade_engine_error_returns_none(monkeypatch):
         raise RuntimeError("engine down")
 
     monkeypatch.setattr(address_resolver, "resolve_address_fields", _boom)
-    assert dispatch.resolve_address_na1_with_mode(_FakeAddr()) is None
+    assert dispatch.resolve_postal_address_with_mode(_FakeAddr(), code_values={}) == {}
 
 
-# --- Task 7: wiring in _build_postal_address_input -----------------------
-
-
-def test_postal_address_input_uses_engine_na1_or_code(monkeypatch):
+def test_build_postal_address_input_overlays_any_field(monkeypatch):
     from customer.models import Customer, Address
     from customer.services.customer_upsert_microtech import CustomerUpsertMicrotechService
     from microtech.rule_engine import dispatch
 
     cust = Customer.objects.create()
     addr = Address.objects.create(customer=cust, title="mr", name1="Max Mustermann",
-                                  first_name="Max", last_name="Mustermann")
+                                  first_name="Max", last_name="Mustermann", name3="")
     svc = CustomerUpsertMicrotechService()
 
-    # Engine liefert Wert (live-Erfolg) → wird übernommen
-    monkeypatch.setattr(dispatch, "resolve_address_na1_with_mode", lambda a: "ENGINE")
+    # live overlay covers arbitrary fields (name1 AND name3) at once
+    monkeypatch.setattr(dispatch, "resolve_postal_address_with_mode",
+                        lambda a, *, code_values: {"name1": "ENGINE", "name3": "D"})
     out = svc._build_postal_address_input(
         address=addr, is_shipping=True, is_invoice=False, na1_mode="auto", na1_static_value="")
-    assert out["name1"] == "ENGINE"
+    assert out["name1"] == "ENGINE" and out["name3"] == "D"
 
-    # Engine None (off/shadow/Fehler) → Code-Wert (auto → Anrede "Herr")
-    monkeypatch.setattr(dispatch, "resolve_address_na1_with_mode", lambda a: None)
+    # empty overlay (off/shadow/error) → hardcoded code value (auto → "Herr")
+    monkeypatch.setattr(dispatch, "resolve_postal_address_with_mode",
+                        lambda a, *, code_values: {})
     out2 = svc._build_postal_address_input(
         address=addr, is_shipping=True, is_invoice=False, na1_mode="auto", na1_static_value="")
     assert out2["name1"] == "Herr"

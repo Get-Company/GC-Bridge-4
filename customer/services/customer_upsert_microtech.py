@@ -375,16 +375,10 @@ class CustomerUpsertMicrotechService(BaseService):
             na1_mode=na1_mode,
             na1_static_value=na1_static_value,
         ) or postal_mapping["name1"]
-        # Rule engine takes over Na1 only in live mode on success; otherwise the
-        # hardcoded value above stays authoritative (off/shadow, empty, error).
-        from microtech.rule_engine.dispatch import resolve_address_na1_with_mode
-
-        engine_na1 = resolve_address_na1_with_mode(address)
-        return self._drop_blank(
-            {
+        postal_input = {
                 "isDefaultShipping": bool(is_shipping),
                 "isDefaultBilling": bool(is_invoice),
-                "name1": engine_na1 if engine_na1 is not None else code_na1,
+                "name1": code_na1,
                 "name2": postal_mapping["name2"],
                 "name3": address.name3,
                 "street": address.street,
@@ -394,8 +388,15 @@ class CustomerUpsertMicrotechService(BaseService):
                 "phone": address.phone,
                 "department": address.department,
                 "country": address.country_code,
-            }
-        )
+        }
+        # Rule engine overlays PostalAddressInput fields (any of them at once)
+        # only in live mode; off/shadow keep the hardcoded values above.
+        from microtech.rule_engine.dispatch import resolve_postal_address_with_mode
+
+        overlay = resolve_postal_address_with_mode(address, code_values=postal_input)
+        if overlay:
+            postal_input.update(overlay)
+        return self._drop_blank(postal_input)
 
     def _build_contact_person_input(self, *, address: Address) -> dict[str, Any]:
         first_name = address.first_name or ""
