@@ -1,10 +1,12 @@
 import json
+import re
 from typing import Any
 from urllib.parse import urlencode
 
 from django import forms
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
+from django.db.models import Prefetch
 from django.http import HttpResponseRedirect
 from django.http import HttpResponse
 from django.http import JsonResponse
@@ -23,6 +25,7 @@ from unfold.forms import BaseDialogForm
 from unfold.sections import TemplateSection
 
 from core.admin import BaseAdmin, BaseTabularInline
+from customer.models import Address
 from customer.services.webshop_mapping import CustomerWebshopMappingService, EU_COUNTRY_CODES
 from microtech.services import microtech_connection
 from orders.models import MicrotechOrderSyncWorkflow, Order, OrderDetail
@@ -184,6 +187,7 @@ class OrderAdmin(BaseAdmin):
         "customer_display",
         "country_display",
         "address_reconciliation_status",
+        "address_system_link_status",
         "purchase_date",
         "order_state",
         "microtech_export_state",
@@ -230,7 +234,6 @@ class OrderAdmin(BaseAdmin):
     actions = ("sync_open_orders_from_shopware",)
     actions_row = (
         "customer_merge_row",
-        "address_reconciliation_row",
         "upsert_to_microtech_row",
         "export_swiss_customs_csv_row",
     )
@@ -240,7 +243,6 @@ class OrderAdmin(BaseAdmin):
             "icon": "more_vert",
             "items": (
                 "request_customer_change_detail",
-                "address_reconciliation_detail",
                 "upsert_to_microtech_detail",
                 "resume_microtech_sync_detail",
                 "abort_microtech_sync_detail",
@@ -253,8 +255,19 @@ class OrderAdmin(BaseAdmin):
     readonly_fields = ("customer", "customer_change_status", "microtech_sync_status")
 
     def get_queryset(self, request):
-        return super().get_queryset(request).select_related(
-            "customer", "billing_address", "shipping_address"
+        return (
+            super()
+            .get_queryset(request)
+            .select_related("customer", "billing_address", "shipping_address")
+            .prefetch_related(
+                Prefetch(
+                    "customer__addresses",
+                    queryset=Address.objects.only(
+                        "id", "customer_id", "api_id", "erp_ans_nr", "erp_asp_nr"
+                    ),
+                    to_attr="order_connection_addresses",
+                )
+            )
         )
 
     @staticmethod
@@ -316,23 +329,16 @@ class OrderAdmin(BaseAdmin):
 
     @admin.display(description="Adressabgleich")
     def address_reconciliation_status(self, obj: Order):
-        shipping = getattr(obj, "shipping_address", None)
-        billing = getattr(obj, "billing_address", None)
-        same_address = shipping is billing or (
-            shipping is not None and billing is not None and shipping.pk and shipping.pk == billing.pk
-        )
-        addresses = (
-            (("Lieferung & Rechnung", shipping),)
-            if same_address
-            else (("Lieferung", shipping), ("Rechnung", billing))
-        )
+        addresses = self._order_address_scopes(obj)
         open_items = []
         for label, address in addresses:
             if address is None:
                 open_items.append(f"{label}: Adresse fehlt")
-            elif not address.erp_ans_nr:
+            # Microtech's main address may legitimately use number 0.  The
+            # customer-merge UI accepts it, so only None means "not mapped".
+            elif address.erp_ans_nr is None:
                 open_items.append(f"{label}: Anschrift offen")
-            elif not address.erp_asp_nr:
+            elif address.erp_asp_nr is None:
                 open_items.append(f"{label}: Ansprechpartner offen")
 
         if not open_items:
@@ -342,6 +348,74 @@ class OrderAdmin(BaseAdmin):
             )
         return format_html(
             '<span title="{}" style="border:1px solid #fcd34d;border-radius:999px;padding:1px 6px;font-size:11px;line-height:16px;color:#92400e;background:#fffbeb;white-space:nowrap;">Abgleich nötig · {}</span>',
+            "; ".join(open_items),
+            len(open_items),
+        )
+
+    @staticmethod
+    def _order_address_scopes(obj: Order) -> tuple[tuple[str, Address | None], ...]:
+        shipping = getattr(obj, "shipping_address", None)
+        billing = getattr(obj, "billing_address", None)
+        same_address = shipping is billing or (
+            shipping is not None and billing is not None and shipping.pk and shipping.pk == billing.pk
+        )
+        return (
+            (("Lieferung & Rechnung", shipping),)
+            if same_address
+            else (("Lieferung", shipping), ("Rechnung", billing))
+        )
+
+    @staticmethod
+    def _has_shopware_address_id(address: Address) -> bool:
+        return bool(re.fullmatch(r"[0-9a-f]{32}", _to_str(address.api_id).lower()))
+
+    @classmethod
+    def _customer_addresses_for_connection(cls, obj: Order) -> tuple[Address, ...]:
+        customer = getattr(obj, "customer", None)
+        prefetched = getattr(customer, "order_connection_addresses", None)
+        if prefetched is not None:
+            return tuple(prefetched)
+        # The fallback keeps the display safe for direct calls in tests and
+        # custom admin views without adding a per-row database query.
+        return tuple(address for _label, address in cls._order_address_scopes(obj) if address is not None)
+
+    @admin.display(description="System-Verknüpfung")
+    def address_system_link_status(self, obj: Order):
+        """Show whether each order address has one SW6 and Microtech link."""
+        customer_addresses = self._customer_addresses_for_connection(obj)
+        open_items = []
+        for label, address in self._order_address_scopes(obj):
+            if address is None:
+                open_items.append(f"{label}: Django-Adresse fehlt")
+                continue
+            if not self._has_shopware_address_id(address):
+                open_items.append(f"{label}: SW6-ID offen")
+                continue
+            shopware_matches = sum(
+                self._has_shopware_address_id(candidate) and candidate.api_id.lower() == address.api_id.lower()
+                for candidate in customer_addresses
+            )
+            if shopware_matches != 1:
+                open_items.append(f"{label}: SW6-ID nicht eindeutig")
+                continue
+            if address.erp_ans_nr is None:
+                open_items.append(f"{label}: Microtech-AnsNr offen")
+                continue
+            microtech_matches = sum(
+                candidate.erp_ans_nr == address.erp_ans_nr
+                and candidate.erp_asp_nr == address.erp_asp_nr
+                for candidate in customer_addresses
+            )
+            if microtech_matches != 1:
+                open_items.append(f"{label}: Microtech-Zuordnung nicht eindeutig")
+
+        if not open_items:
+            return format_html(
+                '<span style="border:1px solid #86efac;border-radius:999px;padding:1px 6px;font-size:11px;line-height:16px;color:#166534;background:#f0fdf4;white-space:nowrap;">{}</span>',
+                "Eindeutig verknüpft",
+            )
+        return format_html(
+            '<span title="{}" style="border:1px solid #fcd34d;border-radius:999px;padding:1px 6px;font-size:11px;line-height:16px;color:#92400e;background:#fffbeb;white-space:nowrap;">Verknüpfung offen · {}</span>',
             "; ".join(open_items),
             len(open_items),
         )

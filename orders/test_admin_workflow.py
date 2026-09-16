@@ -26,9 +26,9 @@ class OrderAdminSearchTest(SimpleTestCase):
         self.assertEqual(detail_action_dropdown["title"], "Aktionen")
         self.assertEqual(detail_action_dropdown["icon"], "more_vert")
         self.assertIn("request_customer_change_detail", detail_action_dropdown["items"])
-        self.assertIn("address_reconciliation_detail", detail_action_dropdown["items"])
+        self.assertNotIn("address_reconciliation_detail", detail_action_dropdown["items"])
         self.assertIn("customer_merge_row", model_admin.actions_row)
-        self.assertIn("address_reconciliation_row", model_admin.actions_row)
+        self.assertNotIn("address_reconciliation_row", model_admin.actions_row)
         self.assertIn("abort_microtech_sync_detail", detail_action_dropdown["items"])
         self.assertIn("restart_microtech_sync_detail", detail_action_dropdown["items"])
         self.assertIn("customer", model_admin.readonly_fields)
@@ -107,6 +107,7 @@ class OrderAdminListDisplayTest(SimpleTestCase):
     def test_order_list_uses_native_pagination_with_twenty_results(self):
         self.assertIn("customer_display", self.model_admin.list_display)
         self.assertIn("country_display", self.model_admin.list_display)
+        self.assertIn("address_system_link_status", self.model_admin.list_display)
         self.assertEqual(self.model_admin.list_per_page, 20)
 
     def test_address_reconciliation_status_marks_missing_microtech_ids(self):
@@ -126,6 +127,44 @@ class OrderAdminListDisplayTest(SimpleTestCase):
         rendered = str(self.model_admin.address_reconciliation_status(order))
 
         self.assertIn("Zugeordnet", rendered)
+
+    def test_address_reconciliation_status_accepts_zero_as_a_microtech_mapping(self):
+        order = self._order(country_code="DE")
+        order.shipping_address = order.billing_address
+        order.billing_address.erp_ans_nr = 0
+        order.billing_address.erp_asp_nr = 0
+
+        rendered = str(self.model_admin.address_reconciliation_status(order))
+
+        self.assertIn("Zugeordnet", rendered)
+
+    def test_system_link_status_requires_one_shopware_and_microtech_mapping(self):
+        order = self._order(country_code="DE")
+        order.shipping_address = order.billing_address
+        address = order.billing_address
+        address.api_id = "a" * 32
+        address.erp_ans_nr = 0
+        address.erp_asp_nr = 0
+        order.customer.order_connection_addresses = [address]
+
+        rendered = str(self.model_admin.address_system_link_status(order))
+
+        self.assertIn("Eindeutig verknüpft", rendered)
+
+    def test_system_link_status_marks_duplicate_shopware_address_mapping(self):
+        order = self._order(country_code="DE")
+        order.shipping_address = order.billing_address
+        address = order.billing_address
+        address.api_id = "a" * 32
+        address.erp_ans_nr = 0
+        address.erp_asp_nr = 0
+        duplicate = Address(customer=order.customer, api_id=address.api_id, erp_ans_nr=1, erp_asp_nr=1)
+        order.customer.order_connection_addresses = [address, duplicate]
+
+        rendered = str(self.model_admin.address_system_link_status(order))
+
+        self.assertIn("Verknüpfung offen", rendered)
+        self.assertIn("SW6-ID nicht eindeutig", rendered)
 
 
 class AdminTriggerTest(TestCase):
