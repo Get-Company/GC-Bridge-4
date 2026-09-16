@@ -45,11 +45,15 @@
 .re-dsf-wrap { display: inline-block; }
 .re-dsf-select { min-width: 220px; max-width: 340px; }
 
+.re-ac-control { display: inline-flex; align-items: center; gap: 4px; }
 .re-ac-wrap { position: relative; display: inline-block; }
 .re-ac-results { position: absolute; z-index: 30; top: 100%; left: 0; right: 0; background: #fff; border: 1px solid #cbd5e1; border-radius: 6px; max-height: 220px; overflow-y: auto; box-shadow: 0 6px 18px rgba(0,0,0,.08); }
-.re-ac-item { padding: 6px 9px; font-size: 13px; cursor: pointer; }
+.re-ac-item { display: block; width: 100%; border: 0; padding: 6px 9px; font: inherit; font-size: 13px; text-align: left; color: inherit; background: #fff; cursor: pointer; }
 .re-ac-item:hover, .re-ac-item.re-ac-active { background: #eef2ff; }
 .re-ac-input { min-width: 240px; }
 .re-ac-name { font-weight: 600; color: #1e293b; }
 .re-ac-meta { color: #64748b; font-size: 12px; }
+.re-ac-empty { padding: 7px 9px; color: #64748b; font-size: 12px; }
+.re-ac-refresh { min-width: 30px; padding: 4px 7px; }
+.re-ac-source { color: #64748b; font-size: 11px; white-space: nowrap; }
 /* Immer helles Layout, unabhängig vom Admin-Dark-Mode. */

@@ -20,7 +20,7 @@
   var VALUELESS = ["is_empty", "is_not_empty", "is_true", "is_false", "empty", "not_empty"];
   var TWO_VALUE = ["between"];
   var ACTION_TYPES = [
-    ["set_field", "Feld setzen (GraphQL)"],
+    ["set_field", "Feld setzen"],
     ["create_extra_position", "Zusatzposition anlegen"],
     ["create_shipping_position", "Versandposition anlegen"],
   ];
@@ -67,21 +67,35 @@
     if (DSFIELDS) return Promise.resolve(DSFIELDS);
     if (DSFIELDS_PROMISE) return DSFIELDS_PROMISE;
     DSFIELDS_PROMISE = fetch(url, { credentials: "same-origin" })
-      .then(function (r) { return r.json(); })
-      .then(function (d) { DSFIELDS = (d && d.ok) ? (d.datasets || []) : []; return DSFIELDS; })
+      .then(function (response) { return response.json(); })
+      .then(function (data) {
+        DSFIELDS = (data && data.ok) ? (data.datasets || []) : [];
+        return DSFIELDS;
+      })
       .catch(function () { DSFIELDS = []; return DSFIELDS; });
     return DSFIELDS_PROMISE;
   }
 
   var GQLFIELDS = null;         // [{input_type, label, fields:[{name}]}]
   var GQLFIELDS_PROMISE = null;
-  function loadGraphqlFields(url) {
+  var GQLFIELD_SOURCE = "";
+  function loadGraphqlFields(url, refresh) {
+    if (refresh) {
+      GQLFIELDS = null;
+      GQLFIELDS_PROMISE = null;
+      GQLFIELD_SOURCE = "";
+      url += (url.indexOf("?") >= 0 ? "&" : "?") + "refresh=1";
+    }
     if (GQLFIELDS) return Promise.resolve(GQLFIELDS);
     if (GQLFIELDS_PROMISE) return GQLFIELDS_PROMISE;
     GQLFIELDS_PROMISE = fetch(url, { credentials: "same-origin" })
       .then(function (r) { return r.json(); })
-      .then(function (d) { GQLFIELDS = (d && d.ok) ? (d.groups || []) : []; return GQLFIELDS; })
-      .catch(function () { GQLFIELDS = []; return GQLFIELDS; });
+      .then(function (d) {
+        GQLFIELD_SOURCE = (d && d.ok) ? (d.source || "") : "";
+        GQLFIELDS = (d && d.ok) ? (d.groups || []) : [];
+        return GQLFIELDS;
+      })
+      .catch(function () { GQLFIELD_SOURCE = "unavailable"; GQLFIELDS = []; return GQLFIELDS; });
     return GQLFIELDS_PROMISE;
   }
 
@@ -90,7 +104,6 @@
     opts = opts || {};
     var SAVE_URL = opts.saveUrl;
     var OVERVIEW_URL = opts.overviewUrl;
-    var DSFIELD_URL = (opts.metaUrl || "").replace("rule-builder-meta", "dataset-field-autocomplete");
     var DSGROUP_URL = (opts.metaUrl || "").replace("rule-builder-meta", "dataset-fields-grouped");
     var GQLGROUP_URL = (opts.metaUrl || "").replace("rule-builder-meta", "graphql-fields-grouped");
     var inline = !!opts.inline;
@@ -131,19 +144,61 @@
       return null;
     }
     function fieldByPath(path) {
-      for (var i = 0; i < META.django_fields.length; i++) if (META.django_fields[i].path === path) return META.django_fields[i];
+      var contextRoot = currentContextRoot();
+      for (var i = 0; i < META.django_fields.length; i++) {
+        if (META.django_fields[i].path === path && (META.django_fields[i].context_root || "orders.Order") === contextRoot) {
+          return META.django_fields[i];
+        }
+      }
+      for (var j = 0; j < META.django_fields.length; j++) if (META.django_fields[j].path === path) return META.django_fields[j];
+      return null;
+    }
+    function currentTrigger() {
+      for (var i = 0; i < META.triggers.length; i++) {
+        if (String(META.triggers[i].id) === String(STATE.trigger_id)) return META.triggers[i];
+      }
       return null;
     }
     function currentContextRoot() {
-      if (!STATE.trigger_id) return "orders.Order";
-      for (var i = 0; i < META.triggers.length; i++) {
-        if (String(META.triggers[i].id) === String(STATE.trigger_id)) return META.triggers[i].context_root || "orders.Order";
-      }
-      return "orders.Order";
+      var trigger = currentTrigger();
+      return trigger ? (trigger.context_root || "orders.Order") : "orders.Order";
     }
     function fieldsForContext() {
       var ctx = currentContextRoot();
       return META.django_fields.filter(function (f) { return (f.context_root || "orders.Order") === ctx; });
+    }
+    function graphqlInputTypesForCurrentTrigger() {
+      var trigger = currentTrigger();
+      return trigger && Array.isArray(trigger.graphql_input_types) ? trigger.graphql_input_types : [];
+    }
+    function actionTargetKind() {
+      if (!currentTrigger()) return "";
+      if (graphqlInputTypesForCurrentTrigger().length) return "graphql";
+      return currentContextRoot() === "orders.Order" ? "dataset" : "";
+    }
+    function reconcileActionTargets() {
+      var kind = actionTargetKind();
+      var allowedTypes = graphqlInputTypesForCurrentTrigger();
+      STATE.actions.forEach(function (action) {
+        if (action.action_type !== "set_field") return;
+        if (kind === "graphql") {
+          action.dataset_field_id = null;
+          action.dataset_field_label = "";
+          var inputType = String(action.graphql_field || "").split(".")[0];
+          if (action.graphql_field && allowedTypes.indexOf(inputType) < 0) {
+            action.graphql_field = "";
+            action.graphql_field_label = "";
+          }
+        } else if (kind === "dataset") {
+          action.graphql_field = "";
+          action.graphql_field_label = "";
+        } else {
+          action.graphql_field = "";
+          action.graphql_field_label = "";
+          action.dataset_field_id = null;
+          action.dataset_field_label = "";
+        }
+      });
     }
 
     // ---------- rendering ----------
@@ -175,6 +230,7 @@
       });
       tsel.addEventListener("change", function () {
         STATE.trigger_id = tsel.value ? parseInt(tsel.value, 10) : null;
+        reconcileActionTargets();
         render();  // Feldlisten hängen vom Trigger-Kontext ab
       });
       r2.appendChild(tsel);
@@ -249,16 +305,23 @@
 
     function renderCondition(group, cond) {
       var row = el("div", "re-cond");
-      var fsel = el("select");
-      fsel.appendChild(opt("", "— Feld —", !cond.field_path));
-      fieldsForContext().forEach(function (f) { fsel.appendChild(opt(f.path, f.label || f.path, cond.field_path === f.path)); });
-      fsel.addEventListener("change", function () {
-        cond.field_path = fsel.value;
-        var f = fieldByPath(cond.field_path);
-        if (f && f.allowed_operator_codes && f.allowed_operator_codes.indexOf(cond.operator_code) < 0) cond.operator_code = "";
-        render();
-      });
-      row.appendChild(fsel);
+      row.appendChild(shopFieldPicker({
+        value: cond.field_path,
+        placeholder: "Shop-Feld suchen…",
+        onSelect: function (field) {
+          markDirty();
+          cond.field_path = field.path;
+          if (field.allowed_operator_codes && field.allowed_operator_codes.indexOf(cond.operator_code) < 0) {
+            cond.operator_code = "";
+          }
+          render();
+        },
+        onClear: function () {
+          cond.field_path = "";
+          cond.operator_code = "";
+          renderSummary();
+        },
+      }));
 
       var osel = el("select");
       osel.appendChild(opt("", "— Operator —", !cond.operator_code));
@@ -309,7 +372,7 @@
       row.appendChild(tsel);
 
       if (a.action_type === "set_field") {
-        row.appendChild(graphqlFieldPicker(a));
+        row.appendChild(actionFieldPicker(a));
         row.appendChild(el("span", "re-hint", "="));
         row.appendChild(valueEditor(a));
       } else {
@@ -341,79 +404,318 @@
       input.addEventListener("input", function () { a.target_value = input.value; renderSummary(); });
       wrap.appendChild(input);
 
-      var pick = el("select", "re-varpick");
-      pick.appendChild(opt("", "Variable einfügen…", true));
-      fieldsForContext().forEach(function (f) { pick.appendChild(opt(f.path, f.label || f.path)); });
-      pick.style.display = isVar ? "" : "none";
-      pick.addEventListener("change", function () {
-        if (!pick.value) return;
-        input.value = "{{ " + pick.value + " }}";
-        a.target_value = input.value; pick.value = ""; renderSummary();
+      var pick = shopFieldPicker({
+        placeholder: "Shop-Feld einfügen…",
+        clearAfterSelect: true,
+        onSelect: function (field) {
+          markDirty();
+          input.value = "{{ " + field.path + " }}";
+          a.target_value = input.value;
+          renderSummary();
+        },
       });
+      pick.style.display = isVar ? "" : "none";
       wrap.appendChild(pick);
       return wrap;
     }
 
-    // Searchable "GraphQL field" autocomplete (filters name / description / type).
-    function graphqlFieldPicker(a) {
+    // Searchable pickers -------------------------------------------------
+    // The source list comes from the bridge's current model metadata.  The
+    // GraphQL list is fetched from the Microtech API's live schema.
+    function searchablePicker(config) {
+      config = config || {};
       var wrap = el("span", "re-ac-wrap");
-      var input = el("input"); input.type = "text";
-      input.placeholder = "Feld suchen (Name/Beschreibung)…";
-      input.value = a.graphql_field_label || (a.graphql_field ? a.graphql_field.split(".").pop() : "");
-      input.className = "re-ac-input";
-      var results = el("div", "re-ac-results"); results.style.display = "none";
-      wrap.appendChild(input); wrap.appendChild(results);
+      var input = el("input", "re-ac-input");
+      input.type = "text";
+      input.placeholder = config.placeholder || "Feld suchen…";
+      input.autocomplete = "off";
+      input.setAttribute("role", "combobox");
+      input.setAttribute("aria-autocomplete", "list");
+      input.setAttribute("aria-expanded", "false");
+      var results = el("div", "re-ac-results");
+      results.setAttribute("role", "listbox");
+      results.style.display = "none";
+      wrap.appendChild(input);
+      wrap.appendChild(results);
 
-      var FLAT = [];
-      loadGraphqlFields(GQLGROUP_URL).then(function (groups) {
-        FLAT = [];
-        groups.forEach(function (g) {
-          g.fields.forEach(function (f) {
-            FLAT.push({
-              value: g.input_type + "." + f.name, name: f.name, type: g.input_type,
-              type_label: g.label, description: f.description || "",
-            });
-          });
-        });
-        if (document.activeElement === input) renderResults(input.value);
-      });
+      var items = config.items || [];
+      var selectedValue = config.value == null ? "" : String(config.value);
+      var activeIndex = -1;
+      var matches = [];
+      var emptyText = config.emptyText || "Keine passenden Felder.";
 
-      function renderResults(term) {
-        term = (term || "").trim().toLowerCase();
-        results.innerHTML = "";
-        var matches = FLAT.filter(function (it) {
+      function itemValue(item) { return String(config.itemValue(item)); }
+      function itemLabel(item) { return config.itemLabel(item) || itemValue(item); }
+      function itemMeta(item) { return config.itemMeta ? config.itemMeta(item) : ""; }
+      function setInputForSelectedValue() {
+        for (var i = 0; i < items.length; i++) {
+          if (itemValue(items[i]) === selectedValue) {
+            input.value = itemLabel(items[i]);
+            return;
+          }
+        }
+        input.value = config.initialText || "";
+      }
+      function filter(term) {
+        term = String(term || "").trim().toLowerCase();
+        return items.filter(function (item) {
           if (!term) return true;
-          return it.name.toLowerCase().indexOf(term) >= 0
-            || (it.description && it.description.toLowerCase().indexOf(term) >= 0)
-            || it.type.toLowerCase().indexOf(term) >= 0
-            || (it.type_label && it.type_label.toLowerCase().indexOf(term) >= 0);
+          return String(config.searchText(item) || "").toLowerCase().indexOf(term) >= 0;
         }).slice(0, 60);
-        if (!FLAT.length) { results.style.display = "none"; return; }
-        matches.forEach(function (it) {
-          var row = el("div", "re-ac-item");
-          var nm = el("span", "re-ac-name", it.name);
-          var meta = el("span", "re-ac-meta", " · " + it.type_label + (it.description ? " — " + it.description : ""));
-          row.appendChild(nm); row.appendChild(meta);
+      }
+      function choose(item) {
+        selectedValue = itemValue(item);
+        input.value = itemLabel(item);
+        results.style.display = "none";
+        input.setAttribute("aria-expanded", "false");
+        if (typeof config.onSelect === "function") config.onSelect(item);
+        if (config.clearAfterSelect) {
+          selectedValue = "";
+          input.value = "";
+        }
+      }
+      function renderResults(term) {
+        results.innerHTML = "";
+        matches = filter(term);
+        activeIndex = -1;
+        if (!items.length) {
+          results.appendChild(el("div", "re-ac-empty", emptyText));
+          results.style.display = "";
+          input.setAttribute("aria-expanded", "true");
+          return;
+        }
+        if (!matches.length) {
+          results.appendChild(el("div", "re-ac-empty", "Keine passenden Felder."));
+          results.style.display = "";
+          input.setAttribute("aria-expanded", "true");
+          return;
+        }
+        matches.forEach(function (item, index) {
+          var row = el("button", "re-ac-item");
+          row.type = "button";
+          row.setAttribute("role", "option");
+          row.appendChild(el("span", "re-ac-name", itemLabel(item)));
+          var meta = itemMeta(item);
+          if (meta) row.appendChild(el("span", "re-ac-meta", " · " + meta));
           row.addEventListener("mousedown", function (ev) {
             ev.preventDefault();
-            markDirty();
-            a.graphql_field = it.value; a.graphql_field_label = it.name;
-            input.value = it.name; results.style.display = "none";
-            renderSummary();
+            choose(item);
           });
+          row.addEventListener("mouseenter", function () { activeIndex = index; });
           results.appendChild(row);
         });
-        results.style.display = matches.length ? "" : "none";
+        results.style.display = "";
+        input.setAttribute("aria-expanded", "true");
+      }
+      function closeResults() {
+        results.style.display = "none";
+        input.setAttribute("aria-expanded", "false");
+      }
+      function setActive(index) {
+        for (var i = 0; i < results.children.length; i++) {
+          results.children[i].classList.toggle("re-ac-active", i === index);
+        }
       }
 
+      setInputForSelectedValue();
       input.addEventListener("input", function () {
-        a.graphql_field = ""; a.graphql_field_label = "";  // must re-pick to confirm
-        renderSummary();
+        if (selectedValue) {
+          selectedValue = "";
+          if (typeof config.onClear === "function") config.onClear();
+        }
         renderResults(input.value);
       });
       input.addEventListener("focus", function () { renderResults(input.value); });
-      input.addEventListener("blur", function () { setTimeout(function () { results.style.display = "none"; }, 150); });
-      return wrap;
+      input.addEventListener("blur", function () { setTimeout(closeResults, 150); });
+      input.addEventListener("keydown", function (event) {
+        if (event.key === "ArrowDown" && matches.length) {
+          event.preventDefault();
+          activeIndex = Math.min(activeIndex + 1, matches.length - 1);
+          setActive(activeIndex);
+        } else if (event.key === "ArrowUp" && matches.length) {
+          event.preventDefault();
+          activeIndex = Math.max(activeIndex - 1, 0);
+          setActive(activeIndex);
+        } else if (event.key === "Enter" && activeIndex >= 0 && matches[activeIndex]) {
+          event.preventDefault();
+          choose(matches[activeIndex]);
+        } else if (event.key === "Escape") {
+          closeResults();
+        }
+      });
+
+      return {
+        element: wrap,
+        input: input,
+        setItems: function (newItems) {
+          items = newItems || [];
+          setInputForSelectedValue();
+          if (document.activeElement === input) renderResults(input.value);
+        },
+        setEmptyText: function (text) {
+          emptyText = text || emptyText;
+          if (document.activeElement === input) renderResults(input.value);
+        },
+      };
+    }
+
+    function shopFieldPicker(config) {
+      config = config || {};
+      var selectedField = fieldByPath(config.value || "");
+      var picker = searchablePicker({
+        value: config.value || "",
+        initialText: selectedField ? (selectedField.label || selectedField.path) : (config.value || ""),
+        placeholder: config.placeholder || "Shop-Feld suchen…",
+        items: fieldsForContext(),
+        itemValue: function (field) { return field.path; },
+        itemLabel: function (field) { return field.label || field.path; },
+        itemMeta: function (field) {
+          return field.path + (field.value_kind ? " · " + field.value_kind : "") + (field.hint ? " — " + field.hint : "");
+        },
+        searchText: function (field) {
+          return [field.path, field.label, field.hint, field.example, field.value_kind].join(" ");
+        },
+        onSelect: config.onSelect,
+        onClear: config.onClear,
+        clearAfterSelect: !!config.clearAfterSelect,
+      });
+      return picker.element;
+    }
+
+    function actionFieldPicker(action) {
+      if (actionTargetKind() === "graphql") return graphqlFieldPicker(action);
+      if (actionTargetKind() === "dataset") return datasetFieldPicker(action);
+      return searchablePicker({
+        placeholder: "Zuerst einen Trigger wählen…",
+        emptyText: "Für diesen Trigger sind keine Zielfelder konfiguriert.",
+        items: [],
+        itemValue: function () { return ""; },
+        itemLabel: function () { return ""; },
+        searchText: function () { return ""; },
+      }).element;
+    }
+
+    function graphqlFieldPicker(action) {
+      var allowedTypes = graphqlInputTypesForCurrentTrigger();
+      var picker = searchablePicker({
+        value: action.graphql_field || "",
+        initialText: action.graphql_field_label || (action.graphql_field ? action.graphql_field.split(".").pop() : ""),
+        placeholder: "API-Feld suchen…",
+        emptyText: "API-Felder werden geladen…",
+        items: [],
+        itemValue: function (item) { return item.value; },
+        itemLabel: function (item) { return item.name; },
+        itemMeta: function (item) {
+          return item.typeLabel + (item.description ? " — " + item.description : "");
+        },
+        searchText: function (item) {
+          return [item.name, item.type, item.typeLabel, item.description].join(" ");
+        },
+        onSelect: function (item) {
+          markDirty();
+          action.graphql_field = item.value;
+          action.graphql_field_label = item.name;
+          action.dataset_field_id = null;
+          action.dataset_field_label = "";
+          renderSummary();
+        },
+        onClear: function () {
+          action.graphql_field = "";
+          action.graphql_field_label = "";
+          renderSummary();
+        },
+      });
+      var control = el("span", "re-ac-control");
+      control.appendChild(picker.element);
+      var refresh = el("button", "re-btn re-ac-refresh", "↻");
+      refresh.type = "button";
+      refresh.title = "Felder direkt aus der Microtech-API neu laden";
+      refresh.setAttribute("aria-label", refresh.title);
+      control.appendChild(refresh);
+      var sourceHint = el("span", "re-ac-source");
+      control.appendChild(sourceHint);
+
+      function load(refreshFromApi) {
+        picker.setEmptyText(refreshFromApi ? "API-Felder werden aktualisiert…" : "API-Felder werden geladen…");
+        loadGraphqlFields(GQLGROUP_URL, refreshFromApi).then(function (groups) {
+          var flat = [];
+          groups.forEach(function (group) {
+            if (allowedTypes.indexOf(group.input_type) < 0) return;
+            (group.fields || []).forEach(function (field) {
+              flat.push({
+                value: group.input_type + "." + field.name,
+                name: field.name,
+                type: group.input_type,
+                typeLabel: group.label || group.input_type,
+                description: field.description || "",
+              });
+            });
+          });
+          picker.setItems(flat);
+          picker.setEmptyText("Keine passenden API-Felder.");
+          sourceHint.textContent = GQLFIELD_SOURCE === "fallback"
+            ? "Fallback-Liste – API nicht erreichbar"
+            : (GQLFIELD_SOURCE === "introspection" ? "Microtech-API" : "API nicht erreichbar");
+        });
+      }
+      refresh.addEventListener("click", function () { load(true); });
+      load(false);
+      return control;
+    }
+
+    function datasetFieldPicker(action) {
+      var picker = searchablePicker({
+        value: action.dataset_field_id || "",
+        initialText: action.dataset_field_label || (action.dataset_field_id ? "Gewähltes Microtech-Feld" : ""),
+        placeholder: "Microtech-Feld suchen…",
+        emptyText: "Microtech-Felder werden geladen…",
+        items: [],
+        itemValue: function (item) { return item.id; },
+        itemLabel: function (item) { return item.label || item.fieldName; },
+        itemMeta: function (item) {
+          return item.datasetName + "." + item.fieldName + (item.fieldType ? " · " + item.fieldType : "");
+        },
+        searchText: function (item) {
+          return [item.datasetName, item.sourceIdentifier, item.fieldName, item.label, item.fieldType].join(" ");
+        },
+        onSelect: function (item) {
+          markDirty();
+          action.dataset_field_id = item.id;
+          action.dataset_field_label = item.label || item.fieldName;
+          action.graphql_field = "";
+          action.graphql_field_label = "";
+          renderSummary();
+        },
+        onClear: function () {
+          action.dataset_field_id = null;
+          action.dataset_field_label = "";
+          renderSummary();
+        },
+      });
+      loadDatasetFieldsForPicker();
+
+      function loadDatasetFieldsForPicker() {
+        loadDatasetFields(DSGROUP_URL)
+          .then(function (datasets) {
+            var flat = [];
+            (datasets || []).forEach(function (dataset) {
+              (dataset.fields || []).forEach(function (field) {
+                flat.push({
+                  id: field.id,
+                  fieldName: field.field_name,
+                  label: field.label || field.field_name,
+                  fieldType: field.field_type || "",
+                  datasetName: dataset.name || "Microtech",
+                  sourceIdentifier: dataset.source_identifier || "",
+                });
+              });
+            });
+            picker.setItems(flat);
+            picker.setEmptyText("Keine verfügbaren Microtech-Felder.");
+          })
+          .catch(function () { picker.setEmptyText("Microtech-Felder konnten nicht geladen werden."); });
+      }
+      return picker.element;
     }
 
     // ---------- summary ----------
@@ -439,7 +741,9 @@
       box.appendChild(el("div", "re-block-label", "Klartext-Vorschau"));
       var when = STATE.root_group ? summarizeGroup(STATE.root_group) : "";
       var actions = STATE.actions.map(function (a) {
-        if (a.action_type === "set_field") return "setze " + (a.graphql_field_label || a.graphql_field || "Feld") + " = " + (a.target_value || "?");
+        if (a.action_type === "set_field") {
+          return "setze " + (a.graphql_field_label || a.graphql_field || a.dataset_field_label || "Feld") + " = " + (a.target_value || "?");
+        }
         if (a.action_type === "create_shipping_position") return "Versandposition " + (a.target_value || "?");
         return "Zusatzposition " + (a.target_value || "?");
       });
@@ -533,7 +837,12 @@
   // ---------- state helpers ----------
   function newGroup(logic) { return { logic: logic || "all", children: [], conditions: [] }; }
   function newCondition() { return { field_path: "", operator_code: "", expected_value: "", expected_value_2: "" }; }
-  function newAction() { return { action_type: "set_field", graphql_field: "", graphql_field_label: "", dataset_field_id: null, target_value: "" }; }
+  function newAction() {
+    return {
+      action_type: "set_field", graphql_field: "", graphql_field_label: "",
+      dataset_field_id: null, dataset_field_label: "", target_value: "",
+    };
+  }
   function normalizeState(data) {
     var s = data ? JSON.parse(JSON.stringify(data)) : {};
     if (!s.actions) s.actions = [];

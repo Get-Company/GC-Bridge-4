@@ -10,6 +10,9 @@ class _Order:
     total = 750
     billing_address = _Addr()
 
+    def unsafe_method(self):
+        raise AssertionError("Rule evaluation must not call methods implicitly")
+
 
 class ContextTest(TestCase):
     def test_resolves_nested_path(self):
@@ -21,3 +24,6 @@ class ContextTest(TestCase):
         ctx = EvaluationContext(_Order())
         self.assertIsNone(ctx.get("billing_address__missing"))
         self.assertIsNone(ctx.get("nope"))
+
+    def test_callable_path_is_not_invoked(self):
+        self.assertIsNone(EvaluationContext(_Order()).get("unsafe_method"))

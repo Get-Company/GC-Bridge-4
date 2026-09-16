@@ -271,8 +271,15 @@ def test_meta_view_includes_address_fields_with_context_root(admin_client):
         f for f in data["django_fields"]
         if f["path"] == "name1" and f["context_root"] == "customer.Address"
     )
-    # allowed operator codes must match the seeded operator codes (equal/not_equal/...)
-    assert {"equal", "not_equal", "not_in_list", "empty"} <= set(addr_name1["allowed_operator_codes"])
+    # The picker uses actual operator codes from the engine, not obsolete UI aliases.
+    allowed_codes = set(addr_name1["allowed_operator_codes"])
+    operators = {item["code"]: item["engine_operator"] for item in data["operators"]}
+    assert allowed_codes
+    assert all(
+        operators[code] in {"eq", "ne", "contains", "is_empty", "is_not_empty", "in_list", "not_in_list"}
+        for code in allowed_codes
+    )
+    assert "empty" not in allowed_codes and "not_empty" not in allowed_codes
     order_country = next(
         f for f in data["django_fields"]
         if f["path"] == "billing_address__country_code"
@@ -281,6 +288,8 @@ def test_meta_view_includes_address_fields_with_context_root(admin_client):
     # trigger context roots available for the JS filter
     roots = {t["context_root"] for t in data["triggers"]}
     assert "customer.Address" in roots
+    address_trigger = next(t for t in data["triggers"] if t["code"] == "address_write")
+    assert address_trigger["graphql_input_types"] == ["PostalAddressInput"]
 
 
 def test_dataset_fields_grouped_endpoint(admin_client):
@@ -380,12 +389,31 @@ def test_action_graphql_field_round_trip():
         "name": "RT", "priority": 10, "is_active": True, "execution_phase": "before",
         "engine_enabled": True, "shadow_mode": True, "trigger_id": trg.id,
         "root_group": None,
-        "actions": [{"action_type": "set_field", "graphql_field": "CustomerInput.taxCategory",
+        "actions": [{"action_type": "set_field", "graphql_field": "PostalAddressInput.name1",
                      "dataset_field_id": None, "target_value": "2"}],
     }
     rule = save_rule_from_payload(payload)
     data = serialize_rule_for_edit(MicrotechOrderRule.objects.get(pk=rule.pk))
-    assert data["actions"][0]["graphql_field"] == "CustomerInput.taxCategory"
+    assert data["actions"][0]["graphql_field"] == "PostalAddressInput.name1"
+
+
+def test_editor_rejects_graphql_input_type_from_another_trigger():
+    from microtech.models import RuleTrigger
+    from microtech.rule_engine.editor import EditorValidationError, save_rule_from_payload
+
+    trigger = RuleTrigger.objects.get(code="address_write")
+    payload = {
+        "name": "Unpassendes Ziel", "priority": 10, "is_active": True,
+        "execution_phase": "before", "engine_enabled": True, "shadow_mode": True,
+        "trigger_id": trigger.id, "root_group": None,
+        "actions": [{
+            "action_type": "set_field", "graphql_field": "CustomerInput.taxCategory",
+            "dataset_field_id": None, "target_value": "2",
+        }],
+    }
+
+    with pytest.raises(EditorValidationError, match="CustomerInput ist fuer diesen Trigger nicht erlaubt"):
+        save_rule_from_payload(payload)
 
 
 # --- Customer path (taxCategory) wiring ----------------------------------

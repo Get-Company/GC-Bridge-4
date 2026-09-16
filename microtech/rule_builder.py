@@ -91,11 +91,11 @@ DEFAULT_OPERATOR_DEFS: tuple[OperatorDef, ...] = (
 _ALLOWED_RELATIONS: tuple[str, ...] = ("customer", "billing_address", "shipping_address")
 _ALLOWED_ENGINE_OPERATORS_BY_VALUE_KIND: dict[str, frozenset[str]] = {
     "string": frozenset({"eq", "ne", "contains", "is_empty", "is_not_empty", "in_list", "not_in_list"}),
-    "int": frozenset({"eq", "ne", "gt", "lt", "is_empty", "is_not_empty"}),
-    "decimal": frozenset({"eq", "ne", "gt", "lt", "is_empty", "is_not_empty"}),
-    "bool": frozenset({"eq", "ne", "is_empty", "is_not_empty"}),
-    "date": frozenset({"eq", "ne", "gt", "lt", "is_empty", "is_not_empty"}),
-    "datetime": frozenset({"eq", "ne", "gt", "lt", "is_empty", "is_not_empty"}),
+    "int": frozenset({"eq", "ne", "gt", "lt", "between", "is_empty", "is_not_empty"}),
+    "decimal": frozenset({"eq", "ne", "gt", "lt", "between", "is_empty", "is_not_empty"}),
+    "bool": frozenset({"eq", "ne", "is_true", "is_false", "is_empty", "is_not_empty"}),
+    "date": frozenset({"eq", "ne", "gt", "lt", "between", "before", "after", "is_empty", "is_not_empty"}),
+    "datetime": frozenset({"eq", "ne", "gt", "lt", "between", "before", "after", "is_empty", "is_not_empty"}),
 }
 
 RULE_ACTION_TARGET_CREATE_EXTRA_POSITION = "create_extra_position"

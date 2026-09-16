@@ -1,6 +1,6 @@
 from django.test import TestCase
 from microtech.rule_engine.context import EvaluationContext
-from microtech.rule_engine.templates import render_template
+from microtech.rule_engine.templates import TemplateValidationError, render_template, validate_template
 
 
 class _Order:
@@ -34,3 +34,10 @@ class TemplateTest(TestCase):
 
     def test_mixed_literal_and_variable(self):
         self.assertEqual(render_template("Auftrag {{ nr }}", self.ctx), "Auftrag 4711")
+
+    def test_validation_rejects_unknown_source_path(self):
+        with self.assertRaises(TemplateValidationError):
+            validate_template("{{ geheim }}", allowed_paths={"nr", "name"})
+
+    def test_validation_accepts_registered_transform(self):
+        validate_template("{{ anrede | anrede_de }}", allowed_paths={"anrede"})

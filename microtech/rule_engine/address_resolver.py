@@ -6,59 +6,25 @@ and returns the ``set_field`` actions of the first matching rule as a
 """
 from __future__ import annotations
 
-from microtech.models import MicrotechOrderRule, MicrotechOrderRuleAction
-from microtech.rule_engine.context import EvaluationContext
-from microtech.rule_engine.evaluation import rule_matches
-from microtech.rule_engine.templates import render_template
+from microtech.models import MicrotechOrderRuleAction
+from microtech.rule_engine.execution import RuleExecutionService
 
 ADDRESS_WRITE_TASK = "customer.microtech_postal_address"
 
 
 def resolve_address_fields(address) -> dict[str, str]:
-    context = EvaluationContext(address)
-    rules = (
-        MicrotechOrderRule.objects
-        .filter(
-            is_active=True,
-            engine_enabled=True,
-            execution_phase=MicrotechOrderRule.ExecutionPhase.BEFORE,
-            trigger__task_name=ADDRESS_WRITE_TASK,
-        )
-        .prefetch_related(
-            "condition_groups",
-            "condition_groups__conditions",
-            "condition_groups__children",
-            "actions",
-            "actions__dataset_field",
-        )
-        .order_by("priority", "id")
+    match = RuleExecutionService().resolve_first_match(
+        task_name=ADDRESS_WRITE_TASK,
+        phase="before",
+        root_instance=address,
     )
-    for rule in rules:
-        if not rule_matches(rule, context):
-            continue
-        result: dict[str, str] = {}
-        for action in sorted(
-            (a for a in rule.actions.all() if a.is_active),
-            key=lambda i: (i.priority, i.id),
-        ):
-            if str(action.action_type) != MicrotechOrderRuleAction.ActionType.SET_FIELD:
-                continue
-            field_name = _target_field_name(action)
-            if not field_name:
-                continue
-            result[field_name] = render_template(action.target_value or "", context)
-        return result
-    return {}
-
-
-def _target_field_name(action) -> str:
-    """Prefer the GraphQL field (last path segment), fall back to the dataset field."""
-    graphql_field = str(getattr(action, "graphql_field", "") or "").strip()
-    if graphql_field:
-        return graphql_field.rsplit(".", 1)[-1]
-    if action.dataset_field_id:
-        return str(action.dataset_field.field_name or "")
-    return ""
+    if match is None:
+        return {}
+    return {
+        action.field_path: action.value
+        for action in match.actions
+        if action.action_type == MicrotechOrderRuleAction.ActionType.SET_FIELD and action.field_path
+    }
 
 
 __all__ = ["resolve_address_fields", "ADDRESS_WRITE_TASK"]

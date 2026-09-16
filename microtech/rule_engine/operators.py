@@ -1,7 +1,12 @@
 from __future__ import annotations
 
-from orders.services.order_rule_resolver import (
-    OrderRuleResolverService, _to_bool, _to_date, _to_datetime, _to_decimal, _to_str,
+from microtech.rule_comparisons import (
+    evaluate_comparison,
+    to_bool as _to_bool,
+    to_date as _to_date,
+    to_datetime as _to_datetime,
+    to_decimal as _to_decimal,
+    to_str as _to_str,
 )
 
 
@@ -43,10 +48,10 @@ def evaluate_operator(operator, actual_value, expected_raw, expected_raw_2, valu
     if operator == "between":
         return _between(actual_value, expected_raw, expected_raw_2, value_kind)
     if operator == "before":
-        return OrderRuleResolverService._evaluate_condition(
+        return evaluate_comparison(
             operator="lt", actual_value=actual_value, expected_raw=expected_raw, value_kind=value_kind)
     if operator == "after":
-        return OrderRuleResolverService._evaluate_condition(
+        return evaluate_comparison(
             operator="gt", actual_value=actual_value, expected_raw=expected_raw, value_kind=value_kind)
     if operator == "is_true":
         return _to_bool(actual_value) is True
@@ -56,5 +61,5 @@ def evaluate_operator(operator, actual_value, expected_raw, expected_raw_2, valu
         return _in_list(actual_value, expected_raw)
     if operator == "not_in_list":
         return not _in_list(actual_value, expected_raw)
-    return OrderRuleResolverService._evaluate_condition(
+    return evaluate_comparison(
         operator=operator, actual_value=actual_value, expected_raw=expected_raw, value_kind=value_kind)

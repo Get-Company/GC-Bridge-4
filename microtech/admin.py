@@ -31,6 +31,7 @@ from microtech.models import (
     RuleTrigger,
 )
 from microtech.services import MicrotechJobSentinelService
+from microtech.graphql_schema import get_rule_trigger_input_types
 from microtech.rule_builder import (
     get_address_field_defs,
     get_allowed_operator_codes,
@@ -489,9 +490,17 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
             .prefetch_related("fields")
         ):
             fields = [
-                {"id": f.id, "field_name": f.field_name, "label": (f.label or f.field_name)}
+                {
+                    "id": f.id,
+                    "field_name": f.field_name,
+                    "label": (f.label or f.field_name),
+                    "field_type": f.field_type or "",
+                }
                 for f in sorted(
-                    (x for x in cat.fields.all() if x.is_active),
+                    (
+                        x for x in cat.fields.all()
+                        if x.is_active and x.can_access and not x.is_calc_field
+                    ),
                     key=lambda x: (x.priority, x.field_name, x.id),
                 )
             ]
@@ -558,6 +567,18 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
         django_fields = get_django_field_defs()
         django_field_map = {item.path: item for item in django_fields}
         operator_defs = get_operator_defs()
+        address_fields = (
+            get_address_field_defs("customer.Address")
+            + get_address_field_defs("customer.Customer")
+        )
+        address_field_maps = {
+            context_root: {
+                item.path: item
+                for item in address_fields
+                if item.context_root == context_root
+            }
+            for context_root in {item.context_root for item in address_fields}
+        }
         policies_by_field = {
             item.field_path: item
             for item in (
@@ -574,13 +595,16 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
             "ok": True,
             "operators": [
                 {
-                    "id": item.id,
+                    # Operator definitions can fall back to the built-in
+                    # catalog before an older installation has seeded its DB
+                    # rows.  The editor only needs the stable code here.
+                    "id": None,
                     "code": item.code,
                     "name": item.name,
                     "engine_operator": item.engine_operator,
                     "hint": item.hint,
                 }
-                for item in MicrotechOrderRuleOperator.objects.filter(is_active=True).order_by("priority", "id")
+                for item in operator_defs
             ],
             "django_fields": [
                 {
@@ -614,15 +638,20 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
                     "example": item.example,
                     "input_type": item.input_type,
                     "accepts_date_only": item.accepts_date_only,
-                    "allowed_operator_codes": [
-                        "not_empty", "empty", "equal", "not_equal", "contains", "in_list", "not_in_list",
-                    ],
+                    "allowed_operator_codes": sorted(
+                        get_allowed_operator_codes(
+                            field_path=item.path,
+                            django_field_map=address_field_maps[item.context_root],
+                            operator_defs=operator_defs,
+                            # Field policies are intentionally order-context
+                            # specific.  Bare address paths must not inherit
+                            # an unrelated order policy with the same name.
+                            policies_by_field={},
+                        )
+                    ),
                     "context_root": item.context_root,
                 }
-                for item in (
-                    get_address_field_defs("customer.Address")
-                    + get_address_field_defs("customer.Customer")
-                )
+                for item in address_fields
             ],
             "action_targets": [
                 {
@@ -643,6 +672,7 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
                     "label": item.label,
                     "task_name": item.task_name,
                     "context_root": item.context_root,
+                    "graphql_input_types": list(get_rule_trigger_input_types(item.task_name)),
                 }
                 for item in RuleTrigger.objects.filter(is_active=True).order_by("priority", "id")
             ],

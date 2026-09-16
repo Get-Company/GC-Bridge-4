@@ -7,6 +7,8 @@ for the sibling read-only overview serializer.
 """
 from __future__ import annotations
 
+import re
+
 from django.db import transaction
 
 from microtech.models import (
@@ -18,6 +20,24 @@ from microtech.models import (
     MicrotechOrderRuleOperator,
     RuleTrigger,
 )
+from microtech.graphql_schema import get_rule_trigger_input_types
+from microtech.rule_comparisons import to_bool, to_date, to_datetime, to_decimal
+from microtech.rule_builder import (
+    get_address_field_defs,
+    get_allowed_operator_codes,
+    get_django_field_map,
+    get_operator_engine_map,
+)
+from microtech.rule_engine.templates import TemplateValidationError, validate_template
+
+
+_ADDRESS_CONTEXT_ROOTS = {"customer.Address", "customer.Customer"}
+_VALUELESS_OPERATORS = {"is_empty", "is_not_empty", "is_true", "is_false"}
+_GRAPHQL_FIELD_PATTERN = re.compile(r"^[A-Za-z_]\w*\.[A-Za-z_]\w*$")
+
+
+def _as_text(value) -> str:
+    return "" if value is None else str(value)
 
 
 def _serialize_condition(condition) -> dict:
@@ -70,7 +90,19 @@ def serialize_rule_for_edit(rule) -> dict:
         (g for g in rule.condition_groups.all() if g.is_active and g.parent_id is None),
         key=lambda i: (i.priority, i.id),
     )
-    root_group = _serialize_group(root_groups[0]) if root_groups else None
+    if len(root_groups) == 1:
+        root_group = _serialize_group(root_groups[0])
+    elif root_groups:
+        # Existing data can contain several roots although the editor's
+        # contract is one tree.  The evaluator combines roots with AND, so a
+        # synthetic ALL root preserves the behaviour when the rule is saved.
+        root_group = {
+            "logic": MicrotechOrderRule.ConditionLogic.ALL,
+            "children": [_serialize_group(group) for group in root_groups],
+            "conditions": [],
+        }
+    else:
+        root_group = None
 
     actions = [
         _serialize_action(a)
@@ -109,14 +141,27 @@ class EditorValidationError(Exception):
 def _validate_payload(payload: dict) -> list[str]:
     errors: list[str] = []
 
+    if not isinstance(payload, dict):
+        return ["Regel-Payload muss ein JSON-Objekt sein."]
+
     valid_phases = {code for code, _label in MicrotechOrderRule.ExecutionPhase.choices}
     execution_phase = payload.get("execution_phase")
     if execution_phase not in valid_phases:
         errors.append(f"Ungueltige execution_phase: {execution_phase!r}")
 
     trigger_id = payload.get("trigger_id")
-    if trigger_id is not None and not RuleTrigger.objects.filter(pk=trigger_id).exists():
-        errors.append(f"Trigger existiert nicht: {trigger_id!r}")
+    trigger = None
+    if trigger_id is not None:
+        trigger = RuleTrigger.objects.filter(pk=trigger_id).first()
+        if trigger is None:
+            errors.append(f"Trigger existiert nicht: {trigger_id!r}")
+
+    if trigger is not None and trigger.context_root in _ADDRESS_CONTEXT_ROOTS:
+        field_map = {item.path: item for item in get_address_field_defs(trigger.context_root)}
+    else:
+        field_map = get_django_field_map()
+    allowed_paths = set(field_map)
+    operator_engine_map = get_operator_engine_map()
 
     active_operator_codes = set(
         MicrotechOrderRuleOperator.objects.filter(is_active=True).values_list("code", flat=True)
@@ -124,7 +169,43 @@ def _validate_payload(payload: dict) -> list[str]:
 
     valid_logic_values = {code for code, _label in MicrotechOrderRule.ConditionLogic.choices}
 
-    def _walk_group(group_payload) -> None:
+    def _validate_template_value(value, *, label: str) -> bool:
+        try:
+            validate_template(_as_text(value), allowed_paths=allowed_paths)
+        except TemplateValidationError as exc:
+            errors.append(f"{label}: {exc}")
+            return False
+        return True
+
+    def _validate_condition_values(*, engine_operator: str, value_kind: str, first, second, label: str) -> None:
+        first_value = _as_text(first).strip()
+        second_value = _as_text(second).strip()
+        if engine_operator in _VALUELESS_OPERATORS:
+            return
+        if not first_value:
+            errors.append(f"{label}: Vergleichswert darf nicht leer sein.")
+            return
+        if engine_operator == "between" and not second_value:
+            errors.append(f"{label}: Operator 'between' braucht zwei Vergleichswerte.")
+            return
+        if "{{" in first_value or "{{" in second_value:
+            return
+
+        parser = {
+            "int": to_decimal,
+            "decimal": to_decimal,
+            "bool": to_bool,
+            "date": to_date,
+            "datetime": to_datetime,
+        }.get(value_kind)
+        if parser is None:
+            return
+        if parser(first_value) is None:
+            errors.append(f"{label}: Vergleichswert passt nicht zum Feldtyp {value_kind}.")
+        if engine_operator == "between" and parser(second_value) is None:
+            errors.append(f"{label}: zweiter Vergleichswert passt nicht zum Feldtyp {value_kind}.")
+
+    def _walk_group(group_payload, *, location: str = "Bedingung") -> None:
         if not group_payload:
             return
         if not isinstance(group_payload, dict):
@@ -133,28 +214,101 @@ def _validate_payload(payload: dict) -> list[str]:
         logic = group_payload.get("logic")
         if logic not in valid_logic_values:
             errors.append(f"Ungueltige logic: {logic!r}")
-        for condition in group_payload.get("conditions", []) or []:
-            operator_code = condition.get("operator_code")
+        conditions = group_payload.get("conditions", []) or []
+        if not isinstance(conditions, list):
+            errors.append(f"{location}: conditions muss eine Liste sein.")
+            conditions = []
+        for position, condition in enumerate(conditions, start=1):
+            condition_label = f"{location} {position}"
+            if not isinstance(condition, dict):
+                errors.append(f"{condition_label}: muss ein Objekt sein.")
+                continue
+            field_path = str(condition.get("field_path") or "").strip()
+            field_def = field_map.get(field_path)
+            if field_def is None:
+                errors.append(f"{condition_label}: unbekannter Feldpfad {field_path!r}.")
+                continue
+            operator_code = str(condition.get("operator_code") or "").strip()
             if operator_code not in active_operator_codes:
-                errors.append(f"Ungueltiger operator_code: {operator_code!r}")
-        for child in group_payload.get("children", []) or []:
-            _walk_group(child)
+                errors.append(f"{condition_label}: ungueltiger operator_code {operator_code!r}.")
+                continue
+            allowed_operator_codes = get_allowed_operator_codes(
+                field_path=field_path,
+                django_field_map=field_map,
+            )
+            if operator_code not in allowed_operator_codes:
+                errors.append(f"{condition_label}: Operator ist fuer dieses Feld nicht erlaubt.")
+                continue
+            engine_operator = str(operator_engine_map.get(operator_code) or "")
+            if not engine_operator:
+                errors.append(f"{condition_label}: Operator hat keine Engine-Implementierung.")
+                continue
+            first_value = condition.get("expected_value", "")
+            second_value = condition.get("expected_value_2", "")
+            first_ok = _validate_template_value(first_value, label=condition_label)
+            second_ok = _validate_template_value(second_value, label=condition_label)
+            if first_ok and second_ok:
+                _validate_condition_values(
+                    engine_operator=engine_operator,
+                    value_kind=str(field_def.value_kind or "string"),
+                    first=first_value,
+                    second=second_value,
+                    label=condition_label,
+                )
+        children = group_payload.get("children", []) or []
+        if not isinstance(children, list):
+            errors.append(f"{location}: children muss eine Liste sein.")
+            return
+        for position, child in enumerate(children, start=1):
+            _walk_group(child, location=f"{location}.{position}")
 
     _walk_group(payload.get("root_group"))
 
     valid_action_types = {code for code, _label in MicrotechOrderRuleAction.ActionType.choices}
-    for action in payload.get("actions", []) or []:
+    actions = payload.get("actions", []) or []
+    if not isinstance(actions, list):
+        errors.append("actions muss eine Liste sein.")
+        actions = []
+    for position, action in enumerate(actions, start=1):
+        action_label = f"Aktion {position}"
+        if not isinstance(action, dict):
+            errors.append(f"{action_label}: muss ein Objekt sein.")
+            continue
         action_type = action.get("action_type")
         if action_type not in valid_action_types:
-            errors.append(f"Ungueltiger action_type: {action_type!r}")
+            errors.append(f"{action_label}: ungueltiger action_type {action_type!r}.")
             continue
         if action_type == MicrotechOrderRuleAction.ActionType.SET_FIELD:
             dataset_field_id = action.get("dataset_field_id")
             graphql_field = str(action.get("graphql_field") or "").strip()
-            if not dataset_field_id and not graphql_field:
-                errors.append("set_field-Aktion benoetigt ein Zielfeld (graphql_field oder dataset_field_id)")
-            elif dataset_field_id and not MicrotechDatasetField.objects.filter(pk=dataset_field_id).exists():
-                errors.append(f"Dataset-Feld existiert nicht: {dataset_field_id!r}")
+            if bool(dataset_field_id) == bool(graphql_field):
+                errors.append(f"{action_label}: set_field benoetigt genau ein Zielfeld.")
+            elif dataset_field_id and not MicrotechDatasetField.objects.filter(
+                pk=dataset_field_id, is_active=True, dataset__is_active=True,
+            ).exists():
+                errors.append(f"{action_label}: Dataset-Feld existiert nicht oder ist inaktiv.")
+            elif dataset_field_id and get_rule_trigger_input_types(
+                getattr(trigger, "task_name", "")
+            ):
+                errors.append(
+                    f"{action_label}: Dieser Trigger erwartet ein GraphQL-Zielfeld statt eines Dataset-Felds."
+                )
+            elif graphql_field and not _GRAPHQL_FIELD_PATTERN.fullmatch(graphql_field):
+                errors.append(f"{action_label}: ungueltiges GraphQL-Zielfeld {graphql_field!r}.")
+            elif graphql_field:
+                allowed_input_types = get_rule_trigger_input_types(
+                    getattr(trigger, "task_name", "")
+                )
+                input_type = graphql_field.split(".", 1)[0]
+                if not allowed_input_types:
+                    errors.append(
+                        f"{action_label}: Der gewaehlte Trigger unterstuetzt keine GraphQL-Zielfelder."
+                    )
+                elif input_type not in allowed_input_types:
+                    errors.append(
+                        f"{action_label}: {input_type} ist fuer diesen Trigger nicht erlaubt."
+                    )
+        _validate_template_value(action.get("target_value", ""), label=action_label)
 
     return errors
 
@@ -206,11 +360,17 @@ def save_rule_from_payload(payload: dict, *, rule: MicrotechOrderRule | None = N
         rule.trigger_id = payload.get("trigger_id")
         rule.save()
 
+        # Delete ungrouped legacy conditions as well.  Leaving them behind
+        # meant a later legacy fallback could evaluate stale conditions after a
+        # rule had been edited through the tree editor.
+        rule.conditions.all().delete()
         rule.condition_groups.all().delete()
         rule.actions.all().delete()
 
         root_group = payload.get("root_group")
         if root_group:
+            rule.condition_logic = root_group.get("logic", MicrotechOrderRule.ConditionLogic.ALL)
+            rule.save(update_fields=["condition_logic", "updated_at"])
             _fill_group(rule, MicrotechOrderRuleConditionGroup.objects.create(
                 rule=rule, parent=None, logic=root_group.get("logic", MicrotechOrderRule.ConditionLogic.ALL),
             ), root_group)

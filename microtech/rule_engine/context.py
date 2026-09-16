@@ -11,6 +11,9 @@ class EvaluationContext:
             if current is None or not hasattr(current, segment):
                 return None
             current = getattr(current, segment)
+            # Rule field paths are data paths.  Calling a method while resolving
+            # a condition or template can trigger hidden database work or side
+            # effects, so methods are intentionally never invoked implicitly.
             if callable(current):
-                current = current()
+                return None
         return current

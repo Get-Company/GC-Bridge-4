@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from datetime import date, datetime
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 
 from loguru import logger
 
 from core.services import BaseService
-from microtech.models import MicrotechOrderRule, MicrotechOrderRuleAction, MicrotechOrderRuleCondition
+from microtech.models import MicrotechOrderRule, MicrotechOrderRuleAction
+from microtech.rule_comparisons import (
+    evaluate_comparison,
+    to_str as _to_str,
+)
 from microtech.rule_builder import get_django_field_map, get_operator_engine_map, resolve_django_field_value
 from orders.models import Order
 
@@ -26,63 +29,6 @@ _SALUTATION_VALUES = {
     "male",
     "female",
 }
-
-_BOOL_TRUE_VALUES = {"1", "true", "yes", "on", "ja"}
-_BOOL_FALSE_VALUES = {"0", "false", "no", "off", "nein"}
-
-
-def _to_str(value: object) -> str:
-    if value is None:
-        return ""
-    return str(value).strip()
-
-
-def _to_decimal(value: object) -> Decimal | None:
-    text = _to_str(value)
-    if not text:
-        return None
-    try:
-        return Decimal(text.replace(",", "."))
-    except (InvalidOperation, ValueError):
-        return None
-
-
-def _to_bool(value: object) -> bool | None:
-    if isinstance(value, bool):
-        return value
-    text = _to_str(value).lower()
-    if text in _BOOL_TRUE_VALUES:
-        return True
-    if text in _BOOL_FALSE_VALUES:
-        return False
-    return None
-
-
-def _to_date(value: object) -> date | None:
-    if isinstance(value, datetime):
-        return value.date()
-    if isinstance(value, date):
-        return value
-    text = _to_str(value)
-    if not text:
-        return None
-    try:
-        return date.fromisoformat(text)
-    except ValueError:
-        return None
-
-
-def _to_datetime(value: object) -> datetime | None:
-    if isinstance(value, datetime):
-        return value
-    text = _to_str(value)
-    if not text:
-        return None
-    try:
-        return datetime.fromisoformat(text)
-    except ValueError:
-        return None
-
 
 def address_looks_like_company(address) -> bool:
     name1 = _to_str(getattr(address, "name1", ""))
@@ -280,68 +226,12 @@ class OrderRuleResolverService(BaseService):
         expected_raw: str,
         value_kind: str,
     ) -> bool:
-        if operator == "is_empty":
-            return actual_value is None or _to_str(actual_value) == ""
-
-        if operator == "is_not_empty":
-            return actual_value is not None and _to_str(actual_value) != ""
-
-        if operator == "ne":
-            return not cls._evaluate_condition(
-                operator="eq", actual_value=actual_value, expected_raw=expected_raw, value_kind=value_kind,
-            )
-
-        if operator == MicrotechOrderRuleCondition.Operator.CONTAINS:
-            if not expected_raw:
-                return True
-            return expected_raw.lower() in _to_str(actual_value).lower()
-
-        if value_kind in {"int", "decimal"}:
-            actual_decimal = _to_decimal(actual_value)
-            expected_decimal = _to_decimal(expected_raw)
-            if actual_decimal is None or expected_decimal is None:
-                return False
-            if operator == MicrotechOrderRuleCondition.Operator.GREATER_THAN:
-                return actual_decimal > expected_decimal
-            if operator == MicrotechOrderRuleCondition.Operator.LESS_THAN:
-                return actual_decimal < expected_decimal
-            return actual_decimal == expected_decimal
-
-        if value_kind == "bool":
-            actual_bool = _to_bool(actual_value)
-            expected_bool = _to_bool(expected_raw)
-            if actual_bool is None or expected_bool is None:
-                return False
-            return actual_bool == expected_bool
-
-        if value_kind == "date":
-            actual_date = _to_date(actual_value)
-            expected_date = _to_date(expected_raw)
-            if actual_date is None or expected_date is None:
-                return False
-            if operator == MicrotechOrderRuleCondition.Operator.GREATER_THAN:
-                return actual_date > expected_date
-            if operator == MicrotechOrderRuleCondition.Operator.LESS_THAN:
-                return actual_date < expected_date
-            return actual_date == expected_date
-
-        if value_kind == "datetime":
-            actual_dt = _to_datetime(actual_value)
-            expected_dt = _to_datetime(expected_raw)
-            if actual_dt is None or expected_dt is None:
-                return False
-            if operator == MicrotechOrderRuleCondition.Operator.GREATER_THAN:
-                return actual_dt > expected_dt
-            if operator == MicrotechOrderRuleCondition.Operator.LESS_THAN:
-                return actual_dt < expected_dt
-            return actual_dt == expected_dt
-
-        # string
-        if operator == MicrotechOrderRuleCondition.Operator.GREATER_THAN:
-            return _to_str(actual_value).lower() > expected_raw.lower()
-        if operator == MicrotechOrderRuleCondition.Operator.LESS_THAN:
-            return _to_str(actual_value).lower() < expected_raw.lower()
-        return _to_str(actual_value).lower() == expected_raw.lower()
+        return evaluate_comparison(
+            operator=operator,
+            actual_value=actual_value,
+            expected_raw=expected_raw,
+            value_kind=value_kind,
+        )
 
     @classmethod
     def _collect_dataset_actions(

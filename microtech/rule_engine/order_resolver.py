@@ -12,9 +12,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 from microtech.models import MicrotechOrderRule, MicrotechOrderRuleAction
-from microtech.rule_engine.context import EvaluationContext
-from microtech.rule_engine.evaluation import rule_matches
-from microtech.rule_engine.templates import render_template
+from microtech.rule_engine.execution import RuleExecutionService
 from orders.services.order_rule_resolver import (
     ResolvedDatasetAction,
     ResolvedOrderRule,
@@ -28,55 +26,29 @@ def detect_customer_type(order) -> str:
     return _detect_customer_type(order=order)
 
 
-def _dataset_action(action, context) -> ResolvedDatasetAction:
-    action_type = str(action.action_type or "")
-    value = render_template(action.target_value or "", context)
-    if action_type == MicrotechOrderRuleAction.ActionType.SET_FIELD and action.dataset_field_id:
-        field = action.dataset_field
-        dataset = field.dataset
+def _dataset_action(action) -> ResolvedDatasetAction:
+    if action.action_type == MicrotechOrderRuleAction.ActionType.SET_FIELD and action.dataset_field_name:
         return ResolvedDatasetAction(
-            action_type=action_type,
-            dataset_source_identifier=str(getattr(dataset, "source_identifier", "") or ""),
-            dataset_name=str(getattr(dataset, "name", "") or ""),
-            dataset_field_name=str(field.field_name or ""),
-            dataset_field_type=str(field.field_type or ""),
-            target_value=value,
+            action_type=action.action_type,
+            dataset_source_identifier=action.dataset_source_identifier,
+            dataset_name=action.dataset_name,
+            dataset_field_name=action.dataset_field_name,
+            dataset_field_type=action.dataset_field_type,
+            target_value=action.value,
         )
-    return ResolvedDatasetAction(action_type=action_type, target_value=value)
+    return ResolvedDatasetAction(action_type=action.action_type, target_value=action.value)
 
 
 def resolve_order_rule(order) -> ResolvedOrderRule:
-    context = EvaluationContext(order)
-    rules = (
-        MicrotechOrderRule.objects
-        .filter(
-            is_active=True,
-            engine_enabled=True,
-            execution_phase=MicrotechOrderRule.ExecutionPhase.BEFORE,
-            trigger__task_name=ORDER_CREATE_TASK,
-        )
-        .prefetch_related(
-            "condition_groups",
-            "condition_groups__conditions",
-            "condition_groups__children",
-            "actions",
-            "actions__dataset",
-            "actions__dataset_field",
-        )
-        .order_by("priority", "id")
-    )
     customer_type = detect_customer_type(order)
-    for rule in rules:
-        if not rule_matches(rule, context):
-            continue
-        actions = tuple(
-            _dataset_action(a, context)
-            for a in sorted(
-                (a for a in rule.actions.all() if a.is_active),
-                key=lambda i: (i.priority, i.id),
-            )
-        )
-        base = ResolvedOrderRule.from_rule(rule=rule, customer_type=customer_type)
+    match = RuleExecutionService().resolve_first_match(
+        task_name=ORDER_CREATE_TASK,
+        phase=MicrotechOrderRule.ExecutionPhase.BEFORE,
+        root_instance=order,
+    )
+    if match is not None:
+        actions = tuple(_dataset_action(action) for action in match.actions)
+        base = ResolvedOrderRule.from_rule(rule=match.rule, customer_type=customer_type)
         return replace(base, dataset_actions=actions)
     return ResolvedOrderRule(customer_type=customer_type)
 

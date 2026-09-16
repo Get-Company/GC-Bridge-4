@@ -1,62 +1,27 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
-
 from loguru import logger
 
-from microtech.models import MicrotechOrderRule, MicrotechSettings, RuleEngineShadowRun
-from microtech.rule_engine.context import EvaluationContext
-from microtech.rule_engine.evaluation import rule_matches
+from microtech.models import MicrotechSettings, RuleEngineShadowRun
+from microtech.rule_engine.execution import ResolvedRuleAction as ResolvedAction, RuleExecutionService
 from microtech.rule_engine.order_resolver import ORDER_CREATE_TASK, resolve_order_rule
-from microtech.rule_engine.templates import render_template
-
-
-@dataclass(frozen=True, slots=True)
-class ResolvedAction:
-    action_type: str
-    field_path: str
-    value: str
-
-
-def _first_matching_rule(*, task_name, phase, context):
-    rules = (
-        MicrotechOrderRule.objects
-        .filter(is_active=True, engine_enabled=True, execution_phase=phase, trigger__task_name=task_name)
-        .prefetch_related("condition_groups", "condition_groups__conditions",
-                          "actions", "actions__dataset_field")
-        .order_by("priority", "id")
-    )
-    for rule in rules:
-        if rule_matches(rule, context):
-            return rule
-    return None
-
-
-def _actions_for_rule(rule, context) -> list[ResolvedAction]:
-    resolved = []
-    for action in sorted((a for a in rule.actions.all() if a.is_active),
-                         key=lambda i: (i.priority, i.id)):
-        field_path = action.dataset_field.field_name if action.dataset_field_id else ""
-        resolved.append(ResolvedAction(
-            action_type=str(action.action_type),
-            field_path=str(field_path),
-            value=render_template(action.target_value or "", context),
-        ))
-    return resolved
 
 
 def resolve_actions(*, task_name, phase, root_instance) -> list[ResolvedAction]:
-    context = EvaluationContext(root_instance)
-    rule = _first_matching_rule(task_name=task_name, phase=phase, context=context)
-    if rule is None:
+    match = RuleExecutionService().resolve_first_match(
+        task_name=task_name,
+        phase=phase,
+        root_instance=root_instance,
+    )
+    if match is None:
         return []
-    return _actions_for_rule(rule, context)
+    return list(match.actions)
 
 
 def shadow_compare(*, task_name, phase, root_instance, legacy_result: dict) -> dict:
-    engine_actions = {a.field_path: a.value for a in resolve_actions(
-        task_name=task_name, phase=phase, root_instance=root_instance)}
+    engine_actions = _action_values_by_target(resolve_actions(
+        task_name=task_name, phase=phase, root_instance=root_instance))
     changed = {
         key: {"legacy": legacy_result.get(key), "engine": value}
         for key, value in engine_actions.items()
@@ -68,6 +33,19 @@ def shadow_compare(*, task_name, phase, root_instance, legacy_result: dict) -> d
     else:
         logger.info("Regelwerk Schatten-Diff leer für {} ({}).", task_name, phase)
     return diff
+
+
+def _action_values_by_target(actions) -> dict[str, str]:
+    """Keep repeated targets visible instead of overwriting them in a dict."""
+    values: dict[str, str] = {}
+    seen: dict[str, int] = {}
+    for action in actions:
+        base = str(action.field_path or action.action_type or "action")
+        sequence = seen.get(base, 0) + 1
+        seen[base] = sequence
+        key = base if sequence == 1 else f"{base}#{sequence}"
+        values[key] = action.value
+    return values
 
 
 # --- Order-path mode facade ------------------------------------------------
@@ -87,8 +65,16 @@ def _legacy_resolve(order):
 
 def _actions_map(resolved) -> dict:
     out = {}
+    seen: dict[str, int] = {}
     for a in getattr(resolved, "dataset_actions", ()) or ():
-        key = a.dataset_field_name or a.action_type
+        key_base = ":".join((
+            str(a.action_type or ""),
+            str(a.dataset_source_identifier or ""),
+            str(a.dataset_field_name or ""),
+        ))
+        sequence = seen.get(key_base, 0) + 1
+        seen[key_base] = sequence
+        key = key_base if sequence == 1 else f"{key_base}#{sequence}"
         out[key] = a.target_value
     return out
 

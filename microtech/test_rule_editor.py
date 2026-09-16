@@ -30,6 +30,18 @@ class SerializeForEditTest(TestCase):
         self.assertEqual((c["field_path"], c["operator_code"], c["expected_value"], c["expected_value_2"]),
                          ("total", "between", "5", "9"))
 
+    def test_multiple_roots_are_serialized_as_one_semantic_tree(self):
+        rule = MicrotechOrderRule.objects.create(name="Mehrere Wurzeln")
+        MicrotechOrderRuleConditionGroup.objects.create(
+            rule=rule, logic=MicrotechOrderRule.ConditionLogic.ALL)
+        MicrotechOrderRuleConditionGroup.objects.create(
+            rule=rule, logic=MicrotechOrderRule.ConditionLogic.ANY)
+
+        data = serialize_rule_for_edit(rule)
+
+        self.assertEqual(data["root_group"]["logic"], MicrotechOrderRule.ConditionLogic.ALL)
+        self.assertEqual(len(data["root_group"]["children"]), 2)
+
 
 class SaveFromPayloadTest(TestCase):
     def setUp(self):
@@ -70,6 +82,11 @@ class SaveFromPayloadTest(TestCase):
         with self.assertRaises(EditorValidationError):
             save_rule_from_payload(p)
 
+    def test_unknown_field_path_is_rejected(self):
+        p = self._payload(); p["root_group"]["conditions"][0]["field_path"] = "does_not_exist"
+        with self.assertRaises(EditorValidationError):
+            save_rule_from_payload(p)
+
     def test_unknown_dataset_field_id_raises_validation_error(self):
         p = self._payload()
         p["actions"] = [{"action_type": "set_field", "dataset_field_id": 999999, "target_value": "V"}]
@@ -87,6 +104,19 @@ class SaveFromPayloadTest(TestCase):
         p = self._payload(); p["root_group"]["children"] = ["not-a-dict"]
         with self.assertRaises(EditorValidationError):
             save_rule_from_payload(p)
+
+    def test_editor_save_removes_ungrouped_legacy_conditions(self):
+        rule = MicrotechOrderRule.objects.create(name="Alt")
+        MicrotechOrderRuleCondition.objects.create(
+            rule=rule, django_field_path="total", operator_code="eq", expected_value="1",
+        )
+        payload = self._payload()
+        payload["root_group"] = {"logic": "all", "children": [], "conditions": []}
+        payload["actions"] = []
+
+        save_rule_from_payload(payload, rule=rule)
+
+        self.assertEqual(rule.conditions.count(), 0)
 
 
 class MetaTriggersTest(TestCase):

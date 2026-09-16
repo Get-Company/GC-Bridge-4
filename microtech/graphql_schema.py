@@ -29,6 +29,14 @@ INPUT_TYPE_LABELS: dict[str, str] = {
     "PositionInput": "Position",
 }
 
+# A rule can only write to the input object that is consumed by its trigger.
+# Keeping the mapping next to the schema catalog gives the editor and server
+# validation one source of truth without baking Microtech field names into JS.
+RULE_TRIGGER_INPUT_TYPES: dict[str, tuple[str, ...]] = {
+    "customer.microtech_postal_address": ("PostalAddressInput",),
+    "customer.microtech_customer_upsert": ("CustomerInput",),
+}
+
 # Curated fallback — the fields the wrapper actually accepts (from
 # customer_upsert_microtech / order_upsert_microtech). Used when introspection
 # is unavailable.
@@ -121,4 +129,15 @@ def get_graphql_input_catalog(*, refresh: bool = False) -> dict:
     return catalog
 
 
-__all__ = ["introspect_input_fields", "get_graphql_input_catalog", "INPUT_TYPE_LABELS"]
+def get_rule_trigger_input_types(task_name: str) -> tuple[str, ...]:
+    """Return GraphQL input types that are meaningful for a rule trigger."""
+    return RULE_TRIGGER_INPUT_TYPES.get(str(task_name or "").strip(), ())
+
+
+__all__ = [
+    "INPUT_TYPE_LABELS",
+    "RULE_TRIGGER_INPUT_TYPES",
+    "get_graphql_input_catalog",
+    "get_rule_trigger_input_types",
+    "introspect_input_fields",
+]
