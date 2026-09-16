@@ -449,6 +449,13 @@ function editableCustomerNumberField(erpNr, sysKey, customer) {
       </button>
   </div>`;
 }
+function editableBridgeCustomerName(erpNr, raw, customer) {
+  return `<div class="customer-number-field">
+      <input type="text" value="${esc(customer.name)}" aria-label="Name GC-Bridge" autocomplete="off"
+        data-erp-nr="${esc(erpNr)}" data-customer-id="${esc(raw.id)}">
+      <button type="button" onclick="updateBridgeCustomerName(this)">Speichern</button>
+  </div>`;
+}
 function identifierRows(entries) {
   return entries.map(([label, value]) => `<div class="merge-identifier"><dt>${esc(label)}</dt><dd>${esc(value ?? '—') || '—'}</dd></div>`).join('');
 }
@@ -1328,8 +1335,11 @@ function renderComparisonRow(nr) {
       return customer ? customerIdentifiers(nr, system.key, raw, customer) : comparisonUnavailable(nr, system.key);
     }))}
     ${comparisonRow('Name', SYSTEMS.map(system => {
+      const raw = searchData[nr]?.[system.key];
       const customer = data[system.key];
-      return customer ? comparisonValue(customer.name, {diff: nameDiff, title: customer.name}) : comparisonUnavailable(nr, system.key);
+      return customer ? (system.key === 'django'
+        ? editableBridgeCustomerName(nr, raw, customer)
+        : comparisonValue(customer.name, {diff: nameDiff, title: customer.name})) : comparisonUnavailable(nr, system.key);
     }))}
     ${comparisonRow('E-Mail', SYSTEMS.map(system => {
       const customer = data[system.key];
@@ -1414,6 +1424,45 @@ async function updateCustomerNumber(erpNr, sysKey, button) {
     } else {
       await refetchRow(erpNr, data.new_erp_nr || value);
     }
+  } catch (error) {
+    alert('Fehler: ' + error.message);
+    renderRowCells(erpNr);
+  } finally {
+    button.disabled = false;
+    button.innerHTML = idleLabel;
+  }
+}
+
+async function updateBridgeCustomerName(button) {
+  const field = button.closest('.customer-number-field');
+  const input = field?.querySelector('input');
+  const erpNr = input?.dataset.erpNr;
+  const customerId = Number(input?.dataset.customerId);
+  const value = input?.value.trim();
+  const raw = searchData[erpNr]?.django;
+  if (!erpNr || !customerId || !raw) {
+    alert('Der Bridge-Kunde konnte nicht bestimmt werden. Bitte erneut suchen.');
+    return;
+  }
+  if (!value) {
+    alert('Bitte einen Namen eingeben.');
+    return;
+  }
+  if (value === (raw.name || '')) return;
+
+  const idleLabel = button.innerHTML;
+  button.disabled = true;
+  button.innerHTML = spinner();
+  try {
+    const resp = await fetch('/admin/customer-merge/api/update-ids/', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json','X-CSRFToken':CSRF},
+      body: JSON.stringify({action: 'update_django_name', customer_id: customerId, value}),
+    });
+    const data = await resp.json();
+    if (!resp.ok || data.error) throw new Error(data.error || 'Name konnte nicht gespeichert werden.');
+    raw.name = data.new_name || value;
+    renderRowCells(erpNr);
   } catch (error) {
     alert('Fehler: ' + error.message);
     renderRowCells(erpNr);
@@ -1715,7 +1764,8 @@ async function deleteSelectedAddresses(erpNr, groupId, sysKey = 'django') {
     return;
   }
   console.log(`[DELETE] ${ids.length} Adresse(n) ausgewaehlt:`, ids, `fuer Kunde ${erpNr}`);
-  if (!confirm(`${ids.length} Adresse(n) unwiderruflich loeschen?`)) return;
+  const target = isShopware ? 'in Shopware' : 'in GC-Bridge';
+  if (!confirm(`${ids.length} Adresse(n) unwiderruflich ${target} loeschen?`)) return;
 
   const btn = document.getElementById(`del-btn-${groupId}`);
   if (btn) { btn.disabled = true; btn.innerHTML = `${spinner()} Loesche...`; }
@@ -1743,7 +1793,7 @@ async function deleteSelectedAddresses(erpNr, groupId, sysKey = 'django') {
       alert('Teilweise Fehler:\n' + data.errors.join('\n'));
     }
     console.log(`[DELETE] Erfolgreich: ${data.deleted} Adressen geloescht. Lade Zeile neu...`);
-    // Re-fetch all cells (addresses changed in all systems)
+    // Re-fetch all cells after the selected system's addresses changed.
     await refetchRow(erpNr, erpNr);
     console.log(`[DELETE] Zeile neu geladen.`);
   } catch(e) {
@@ -2104,7 +2154,10 @@ function completeShopwareMerge(data) {
     '. SW6-Quellkunde gelöscht. Übertragen: ' + data.addressesMoved + ' Adressen, ' + data.ordersMoved + ' Bestellzuordnungen. ' +
     (data.credentialsCopied ? 'E-Mail und Passwort-Hash wurden gemeinsam übernommen.' : 'Die Zugangsdaten des Zielkunden wurden beibehalten.') +
     djangoOutcome + '</div>';
-  setTimeout(doSearch, 1500);
+  setTimeout(() => {
+    closeShopwareMergeModal();
+    doSearch();
+  }, 1500);
 }
 
 async function sendPendingShopwareMerge() {

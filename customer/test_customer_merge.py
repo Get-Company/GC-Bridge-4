@@ -52,6 +52,18 @@ def _sw_customer(
 
 class CustomerIdUpdateServiceTest(SimpleTestCase):
     @patch("customer.services.customer_merge.Customer")
+    def test_bridge_name_is_changed_only_in_django(self, customer_model):
+        customer = MagicMock(pk=7)
+        customer.name = "Alter Name"
+        customer_model.objects.filter.return_value.first.return_value = customer
+
+        result = CustomerIdUpdateService().update_django_name(7, "Neuer Name")
+
+        self.assertEqual(result, {"old_name": "Alter Name", "new_name": "Neuer Name"})
+        self.assertEqual(customer.name, "Neuer Name")
+        customer.save.assert_called_once_with(update_fields=["name", "updated_at"])
+
+    @patch("customer.services.customer_merge.Customer")
     @patch("shopware.services.CustomerService")
     def test_customer_shopware_mapping_never_changes_remote_customer_number(
         self, customer_service, customer_model
@@ -146,6 +158,22 @@ class CustomerDeleteServiceTest(SimpleTestCase):
 
 class CustomerIdUpdateViewTest(SimpleTestCase):
     @patch("customer.views.CustomerIdUpdateService")
+    def test_bridge_name_update_is_dispatched(self, service_class):
+        from customer.views import customer_update_ids_api
+
+        service_class.return_value.update_django_name.return_value = {"new_name": "Neuer Name"}
+        request = RequestFactory().post(
+            "/admin/customer-merge/api/update-ids/",
+            data=json.dumps({"action": "update_django_name", "customer_id": 81, "value": "Neuer Name"}),
+            content_type="application/json",
+        )
+
+        response = customer_update_ids_api(request)
+
+        self.assertEqual(response.status_code, 200)
+        service_class.return_value.update_django_name.assert_called_once_with(81, "Neuer Name")
+
+    @patch("customer.views.CustomerIdUpdateService")
     def test_microtech_address_mapping_is_dispatched(self, service_class):
         from customer.views import customer_update_ids_api
 
@@ -170,6 +198,27 @@ class CustomerIdUpdateViewTest(SimpleTestCase):
 
         self.assertEqual(response.status_code, 200)
         service_class.return_value.update_microtech_address_mapping.assert_called_once_with(81, 7, 3)
+
+
+class CustomerDeleteAddressesViewTest(SimpleTestCase):
+    @patch("customer.models.Address")
+    def test_django_address_delete_never_calls_shopware_or_microtech(self, address_model):
+        from customer.views import customer_delete_addresses_api
+
+        deletion_query = MagicMock()
+        address_model.objects.filter.side_effect = [[MagicMock(pk=81)], deletion_query]
+        request = RequestFactory().post(
+            "/admin/customer-merge/api/delete-addresses/",
+            data=json.dumps({"address_ids": [81]}),
+            content_type="application/json",
+        )
+
+        response = customer_delete_addresses_api(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(json.loads(response.content), {"success": True, "deleted": 1})
+        self.assertEqual(address_model.objects.filter.call_count, 2)
+        deletion_query.delete.assert_called_once_with()
 
 
 class CustomerMergeResolveViewTest(SimpleTestCase):
@@ -1188,6 +1237,7 @@ if (savedOperation) stored.set('gc-sw6-merge-operation-v1', JSON.stringify(saved
 let networkCalls = [];
 let confirmCount = 0;
 let refreshCount = 0;
+let scheduledTimers = [];
 const SYSTEMS = [
   {key: 'shopware', label: 'SW6', icon: 'shopping_bag'},
   {key: 'django', label: 'GC-Bridge', icon: 'database'},
@@ -1226,7 +1276,7 @@ const sandbox = {
   collectShopwareCustomers: () => [], shopwareCustomerById: () => null,
   confirm: () => { confirmCount++; return true; },
   alert: message => { throw new Error(message); },
-  setTimeout: () => 1, clearTimeout: () => {},
+  setTimeout: callback => { scheduledTimers.push(callback); return scheduledTimers.length; }, clearTimeout: () => {},
   doSearch: () => { refreshCount++; },
   fetch: async (url, options) => {
     const body = options.body ? JSON.parse(options.body) : null;
@@ -1240,6 +1290,8 @@ const sandbox = {
   nextResponse: async () => { throw new Error('simulated timeout'); },
   networkCalls, stored, elements,
   getConfirmCount: () => confirmCount,
+  getRefreshCount: () => refreshCount,
+  runScheduledTimers: () => { const callbacks = scheduledTimers.splice(0); callbacks.forEach(callback => callback()); },
 };
 const script = SCRIPT;
 const assertions = ASSERTIONS;
@@ -1376,13 +1428,15 @@ assert.ok(html.includes('Das Login-Paar des Zielkunden bleibt erhalten'));
 
     def test_identifier_cards_only_show_editable_shopware_mappings(self):
         self.run_js(r'''
-const raw = {id: 42, erp_nr: '10001', erp_id: 2345, api_id: 'a'.repeat(32), addresses: [{
+const raw = {id: 42, erp_nr: '10001', erp_id: 2345, name: 'Brückenname', api_id: 'a'.repeat(32), addresses: [{
   id: 81, api_id: 'c'.repeat(32), erp_nr: 10001, erp_ans_id: 75, erp_ans_nr: 2,
   erp_asp_id: 88, erp_asp_nr: 3, erp_combined_id: '10001-75-88',
 }]};
 const normalized = normalize(raw, 'django');
 const customerHtml = customerIdentifiers('10001', 'django', raw, normalized);
+const bridgeNameHtml = editableBridgeCustomerName('10001', raw, normalized);
 for (const value of ['AdrNr', '10001', 'SW6-ID', raw.api_id, 'update_shopware_id']) assert.ok(customerHtml.includes(value), value);
+for (const value of ['Name GC-Bridge', raw.name, 'updateBridgeCustomerName']) assert.ok(bridgeNameHtml.includes(value), value);
 assert.ok(customerHtml.includes('Django-Kunde löschen'));
 assert.ok(customerHtml.includes('deleteDjangoCustomer'));
 assert.ok(customerHtml.includes('shopware-id-field'));
@@ -1559,6 +1613,7 @@ assert.equal(getConfirmCount(), confirms, 'No re-execution without a new authori
 
     def test_successful_status_clears_pending_and_rejects_other_target(self):
         self.run_js(r'''
+openShopwareMergeModal();
 swMergePending = {action: 'execute', ...swMergeSelection(), operation_id: 'c'.repeat(32), preview_token: 'x'};
 stored.set(swMergeStorageKey, JSON.stringify(swMergePending));
 assert.throws(() => completeShopwareMerge({operationId: swMergePending.operation_id,
@@ -1569,6 +1624,10 @@ completeShopwareMerge({operationId: swMergePending.operation_id, sourceId: swMer
 assert.equal(swMergePending, null);
 assert.equal(stored.size, 0);
 assert.ok(elements.get('sw-merge-result').innerHTML.includes('Passwort-Hash wurden gemeinsam'));
+assert.equal(elements.get('sw-merge-modal').open, true, 'The success message remains visible briefly');
+runScheduledTimers();
+assert.equal(elements.get('sw-merge-modal').open, false);
+assert.equal(getRefreshCount(), 1);
 ''')
 
 

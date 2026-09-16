@@ -1045,7 +1045,25 @@ class CustomerDeleteService(BaseService):
 
 
 class CustomerIdUpdateService(BaseService):
-    """Updates customer numbers and Shopware IDs with system-specific validation."""
+    """Updates local customer fields and external identifiers with scoped validation."""
+
+    def update_django_name(self, customer_id: int, new_name: str) -> dict[str, str]:
+        """Change only the display name stored in GC-Bridge."""
+        customer = Customer.objects.filter(pk=customer_id).first()
+        if not customer:
+            raise ValueError("Kunde nicht gefunden.")
+
+        new_name = _to_str(new_name)
+        if not new_name:
+            raise ValueError("Name darf nicht leer sein.")
+        if len(new_name) > 255:
+            raise ValueError("Name darf höchstens 255 Zeichen lang sein.")
+
+        old_name = customer.name
+        customer.name = new_name
+        customer.save(update_fields=["name", "updated_at"])
+        logger.info("GC-Bridge customer name changed: customer={} {} -> {}", customer.pk, old_name, new_name)
+        return {"old_name": old_name, "new_name": new_name}
 
     def update_shopware_customer_number(
         self, shopware_id: str, new_customer_number: str

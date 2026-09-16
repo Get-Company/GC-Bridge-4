@@ -285,7 +285,11 @@ def customer_update_ids_api(request):
 
         service = CustomerIdUpdateService()
 
-        if action == "update_erp_nr":
+        if action == "update_django_name":
+            if not customer_id:
+                return JsonResponse({"error": "customer_id erforderlich."}, status=400)
+            result = service.update_django_name(int(customer_id), value)
+        elif action == "update_erp_nr":
             if not customer_id:
                 return JsonResponse({"error": "customer_id erforderlich."}, status=400)
             result = service.update_erp_nr(int(customer_id), value)
@@ -365,80 +369,28 @@ def customer_delete_django_api(request):
 
 
 def customer_delete_addresses_api(request):
+    """Delete explicitly selected addresses from GC-Bridge only."""
     if request.method != "POST":
         return JsonResponse({"error": "POST erforderlich."}, status=405)
     try:
         body = json.loads(request.body)
         address_ids = body.get("address_ids", [])
-        logger.info("Delete-addresses request: address_ids={}", address_ids)
+        logger.info("Delete-Django-addresses request: address_ids={}", address_ids)
         if not address_ids:
             return JsonResponse({"error": "Keine Adressen ausgewaehlt."}, status=400)
 
         from customer.models import Address
 
         addresses = list(Address.objects.filter(id__in=address_ids))
-        logger.info("Delete-addresses: found {} addresses in DB", len(addresses))
+        logger.info("Delete-Django-addresses: found {} addresses in DB", len(addresses))
         if not addresses:
             return JsonResponse({"error": "Keine Adressen gefunden."}, status=400)
 
-        errors = []
-
-        # Delete in Shopware
-        sw_ids = [a.api_id for a in addresses if a.api_id]
-        logger.info("Delete-addresses: {} Shopware-IDs to delete: {}", len(sw_ids), sw_ids)
-        if sw_ids:
-            try:
-                from shopware.services.shopware6 import Shopware6Service
-                sw = Shopware6Service()
-                for sw_id in sw_ids:
-                    try:
-                        logger.info("Delete-addresses: Shopware deleting {}", sw_id)
-                        sw.request_delete(f"/customer-address/{sw_id}")
-                        logger.info("Delete-addresses: Shopware deleted {}", sw_id)
-                    except Exception as exc:
-                        errors.append(f"Shopware {sw_id}: {exc}")
-                        logger.warning("Delete-addresses: Shopware {} failed: {}", sw_id, exc)
-            except Exception as exc:
-                errors.append(f"Shopware: {exc}")
-                logger.warning("Delete-addresses: Shopware init failed: {}", exc)
-        logger.info("Delete-addresses: Shopware phase done")
-
-        # Delete in Microtech
-        mt_addresses = [
-            (a.customer.erp_nr, a.erp_ans_nr, a.erp_asp_nr)
-            for a in addresses
-            if a.erp_ans_nr is not None
-        ]
-        logger.info("Delete-addresses: {} Microtech-Anschriften to delete: {}", len(mt_addresses), mt_addresses)
-        if mt_addresses:
-            try:
-                from microtech.services import microtech_connection
-                logger.info("Delete-addresses: Microtech connecting...")
-                with microtech_connection() as client:
-                    logger.info("Delete-addresses: Microtech connected")
-                    for erp_nr, ans_nr, asp_nr in mt_addresses:
-                        try:
-                            logger.info("Delete-addresses: Microtech deleting {}/{}", erp_nr, ans_nr)
-                            address_number = int(erp_nr)
-                            address_sub_number = int(ans_nr)
-                            if asp_nr is not None:
-                                client.delete_contact_person(address_number, address_sub_number, int(asp_nr))
-                            client.delete_postal_address(address_number, address_sub_number)
-                            logger.info("Delete-addresses: Microtech deleted {}/{}", erp_nr, ans_nr)
-                        except Exception as exc:
-                            errors.append(f"Microtech {erp_nr}/{ans_nr}: {exc}")
-                            logger.warning("Delete-addresses: Microtech {}/{} failed: {}", erp_nr, ans_nr, exc)
-            except Exception as exc:
-                errors.append(f"Microtech: {exc}")
-                logger.warning("Delete-addresses: Microtech connection failed: {}", exc)
-        logger.info("Delete-addresses: Microtech phase done")
-
-        # Delete in Django
         count = len(addresses)
-        logger.info("Delete-addresses: deleting {} addresses in Django...", count)
+        logger.info("Delete-Django-addresses: deleting {} addresses in Django", count)
         Address.objects.filter(id__in=address_ids).delete()
-        logger.info("Delete-addresses: DONE - deleted {} addresses, errors: {}", count, errors)
-        return JsonResponse({"success": True, "deleted": count, "errors": errors})
+        logger.info("Delete-Django-addresses: deleted {} addresses", count)
+        return JsonResponse({"success": True, "deleted": count})
     except Exception as exc:
         logger.error("Address delete failed: {}\n{}", exc, traceback.format_exc())
         return JsonResponse({"error": str(exc)}, status=500)
