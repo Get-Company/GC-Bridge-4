@@ -67,22 +67,20 @@ def customer_merge_resolve_api(request):
         "postal_code": request.GET.get("postal_code", "").strip(),
         "city": request.GET.get("city", "").strip(),
         "shopware_customer_id": request.GET.get("shopware_customer_id", "").strip(),
-        "shopware_address_id": request.GET.get("shopware_address_id", "").strip(),
     }
     if any(criteria.values()):
         search_service = CustomerMergeSearchService()
         shopware_id_numbers = (
-            search_service.resolve_shopware_id_erp_numbers(
+            search_service.resolve_shopware_customer_id_erp_numbers(
                 customer_id=criteria["shopware_customer_id"],
-                address_id=criteria["shopware_address_id"],
             )
-            if criteria["shopware_customer_id"] or criteria["shopware_address_id"]
+            if criteria["shopware_customer_id"]
             else []
         )
         lookup_criteria = {
             key: value
             for key, value in criteria.items()
-            if key not in {"shopware_customer_id", "shopware_address_id"}
+            if key != "shopware_customer_id"
         }
         customer_numbers = [
             number.strip()

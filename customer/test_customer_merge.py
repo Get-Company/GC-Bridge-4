@@ -288,7 +288,7 @@ class CustomerMergeResolveViewTest(SimpleTestCase):
 
         service = service_class.return_value
         customer_id = "a" * 32
-        service.resolve_shopware_id_erp_numbers.return_value = ["950009"]
+        service.resolve_shopware_customer_id_erp_numbers.return_value = ["950009"]
         service.resolve_shopware_erp_numbers.return_value = ["950009"]
         service.resolve_django_erp_numbers.return_value = []
         service.microtech_candidate_numbers.return_value = ["950009"]
@@ -304,10 +304,7 @@ class CustomerMergeResolveViewTest(SimpleTestCase):
         payload = json.loads(response.content)
         self.assertEqual(payload["erp_nrs"], ["950009"])
         self.assertEqual(payload["search_summary"]["shopware_ids_found"], 1)
-        service.resolve_shopware_id_erp_numbers.assert_called_once_with(
-            customer_id=customer_id,
-            address_id="",
-        )
+        service.resolve_shopware_customer_id_erp_numbers.assert_called_once_with(customer_id=customer_id)
         expected = {
             "customer_number": "950009",
             "email": "",
@@ -535,32 +532,12 @@ class SearchTermParsingTest(SimpleTestCase):
         customer_id = "a" * 32
         customer_service.return_value.get_by_id.return_value = _sw_customer(customer_id, "950009")
 
-        numbers = CustomerMergeSearchService().resolve_shopware_id_erp_numbers(
+        numbers = CustomerMergeSearchService().resolve_shopware_customer_id_erp_numbers(
             customer_id=customer_id
         )
 
         self.assertEqual(numbers, ["950009"])
         customer_service.return_value.get_by_id.assert_called_once_with(customer_id)
-
-    @patch("shopware.services.CustomerService")
-    def test_shopware_address_id_resolves_owner_customer_number(self, customer_service):
-        customer_id = "a" * 32
-        address_id = "b" * 32
-        customer_service.return_value.request_post.return_value = {
-            "data": [{"id": address_id, "customerId": customer_id}]
-        }
-        customer_service.return_value.get_by_id.return_value = _sw_customer(customer_id, "950009")
-
-        numbers = CustomerMergeSearchService().resolve_shopware_id_erp_numbers(
-            address_id=address_id
-        )
-
-        self.assertEqual(numbers, ["950009"])
-        customer_service.return_value.get_by_id.assert_called_once_with(customer_id)
-        self.assertEqual(
-            customer_service.return_value.request_post.call_args.args[0],
-            "/search/customer-address",
-        )
 
 
 class AddressSearchResultParsingTest(SimpleTestCase):
@@ -1285,13 +1262,12 @@ class ShopwareMergeBrowserStateTest(SimpleTestCase):
         self.assertIn("customerMergeSearchForm.addEventListener('submit', startCustomerMergeSearch);", template)
         self.assertIn("customerMergeSearchButton.addEventListener('click', event =>", template)
 
-    def test_customer_merge_search_supports_shopware_customer_and_address_ids(self):
+    def test_customer_merge_search_supports_shopware_customer_ids(self):
         template = (Path(__file__).resolve().parents[1] / "templates/admin/customer_merge.html").read_text()
 
         self.assertIn('id="search-shopware-customer-id"', template)
-        self.assertIn('id="search-shopware-address-id"', template)
         self.assertIn("shopware_customer_id: document.getElementById('search-shopware-customer-id').value.trim()", template)
-        self.assertIn("shopware_address_id: document.getElementById('search-shopware-address-id').value.trim()", template)
+        self.assertNotIn('id="search-shopware-address-id"', template)
 
     def test_microtech_mapping_reads_the_microtech_field(self):
         template = (Path(__file__).resolve().parents[1] / "templates/admin/customer_merge.html").read_text()
