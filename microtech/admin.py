@@ -615,7 +615,7 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
                     "input_type": item.input_type,
                     "accepts_date_only": item.accepts_date_only,
                     "allowed_operator_codes": [
-                        "is_not_empty", "is_empty", "eq", "ne", "contains", "in_list", "not_in_list",
+                        "not_empty", "empty", "equal", "not_equal", "contains", "in_list", "not_in_list",
                     ],
                     "context_root": item.context_root,
                 }

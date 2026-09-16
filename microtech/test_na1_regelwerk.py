@@ -271,7 +271,8 @@ def test_meta_view_includes_address_fields_with_context_root(admin_client):
         f for f in data["django_fields"]
         if f["path"] == "name1" and f["context_root"] == "customer.Address"
     )
-    assert "not_in_list" in addr_name1["allowed_operator_codes"]
+    # allowed operator codes must match the seeded operator codes (equal/not_equal/...)
+    assert {"equal", "not_equal", "not_in_list", "empty"} <= set(addr_name1["allowed_operator_codes"])
     order_country = next(
         f for f in data["django_fields"]
         if f["path"] == "billing_address__country_code"
