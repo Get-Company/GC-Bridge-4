@@ -1332,7 +1332,7 @@ const html = elements.get('sw-merge-section').innerHTML;
 for (const id of ['sw-merge-defaults', 'sw-merge-billing', 'sw-merge-shipping']) {
   assert.equal(html.includes(id), false);
 }
-assert.ok(html.includes('am Zielkunden eingestellten Standardadressen bleiben erhalten'));
+assert.ok(html.includes('Standardadressen des richtigen Kunden bleiben erhalten'));
 assert.equal(html.includes('id="sw-merge-btn"'), false, 'Merge can only be confirmed inside the modal');
 assert.equal(html.includes('id="sw-merge-preview"'), false, 'Preview content belongs to the modal');
 assert.ok(html.includes('>Vorschau laden</button>'));
@@ -1519,15 +1519,17 @@ assert.equal(stored.size, 1);
 assert.ok(elements.get('sw-merge-result').innerHTML.includes('passt nicht'));
 ''')
 
-    def test_page_entrypoint_exposes_general_django_merge(self):
+    def test_page_entrypoint_only_exposes_verified_shopware_merge(self):
         template = (Path(__file__).resolve().parents[1] / "templates/admin/customer_merge.html").read_text()
-        entrypoint = template.split("function renderMergeSection()", 1)[1].split("function renderDjangoMergeSection()", 1)[0]
+        entrypoint = template.split("function renderMergeSection()", 1)[1].split("/* ── Verified Shopware merge", 1)[0]
 
         self.assertIn("renderShopwareMergeSection();", entrypoint)
-        self.assertIn("renderDjangoMergeSection();", entrypoint)
-        self.assertNotIn("document.getElementById('merge-section').innerHTML = '';", entrypoint)
-        self.assertIn("Richtiger Kunde (bleibt erhalten):", template)
-        self.assertIn("Falscher Kunde (wird gelöscht):", template)
+        self.assertIn("document.getElementById('merge-section').innerHTML = '';", entrypoint)
+        self.assertNotIn("renderDjangoMergeSection", template)
+        self.assertNotIn('id="merge-sw-orders"', template)
+        self.assertNotIn("/admin/customer-merge/api/merge/", template)
+        self.assertIn("Falscher Kunde – wird nach Prüfung gelöscht", template)
+        self.assertIn("Richtiger Kunde – bleibt erhalten", template)
 
     def test_stale_preview_requires_new_preview_and_confirmation(self):
         self.run_js(r'''

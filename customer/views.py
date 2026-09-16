@@ -14,7 +14,6 @@ from customer.services.customer_merge import (
     CustomerDeleteService,
     CustomerIdUpdateService,
     CustomerMergeSearchService,
-    CustomerMergeService,
     CustomerSyncDirectionService,
     ShopwareCustomerAddressService,
     ShopwareCustomerMergeService,
@@ -271,36 +270,6 @@ def customer_merge_search_api(request):
                 logger.error("Search error: {}", exc)
 
     return JsonResponse({"results": results})
-
-
-def customer_merge_execute_api(request):
-    if request.method != "POST":
-        return JsonResponse({"error": "POST erforderlich."}, status=405)
-    try:
-        body = json.loads(request.body)
-        target_erp_nr = body.get("target_erp_nr", "").strip()
-        source_erp_nr = body.get("source_erp_nr", "").strip()
-        address_mapping = body.get("address_mapping", {})
-        merge_shopware = body.get("merge_shopware_orders", True)
-
-        if not target_erp_nr or not source_erp_nr:
-            return JsonResponse(
-                {"error": "Ziel- und Quell-ERP-Nummer erforderlich."}, status=400
-            )
-
-        service = CustomerMergeService()
-        result = service.merge_customers(
-            target_erp_nr=target_erp_nr,
-            source_erp_nr=source_erp_nr,
-            address_mapping=address_mapping,
-            merge_shopware_orders=merge_shopware,
-        )
-        return JsonResponse({"success": True, **result})
-    except ValueError as exc:
-        return JsonResponse({"error": str(exc)}, status=400)
-    except Exception as exc:
-        logger.error("Merge failed: {}\n{}", exc, traceback.format_exc())
-        return JsonResponse({"error": str(exc)}, status=500)
 
 
 def customer_update_ids_api(request):

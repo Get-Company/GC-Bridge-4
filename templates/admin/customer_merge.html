@@ -1760,191 +1760,15 @@ async function deleteSelectedAddresses(erpNr, groupId, sysKey = 'django') {
 
 /* ── Merge section ───────────────────────────────────── */
 function renderMergeSection() {
+  // The transactional Shopware plugin is the only merge implementation.  It
+  // verifies source/target, moves the data and confirms source deletion before
+  // Django mirrors the local references.  Do not reintroduce a local-only
+  // merge here: that path could leave Shopware and Django out of sync.
+  document.getElementById('merge-section').innerHTML = '';
   renderShopwareMergeSection();
-  renderDjangoMergeSection();
 }
 
-function renderDjangoMergeSection() {
-  const container = document.getElementById('merge-section');
-  const djangoErps = searchErps.filter(nr => searchData[nr]?.django && !searchData[nr].django.error);
-  if (djangoErps.length < 2) {
-    if (searchErps.length >= 2) {
-      const missing = searchErps.filter(nr => !searchData[nr]?.django || searchData[nr].django.error);
-      container.innerHTML = `<div class="border border-yellow-200 dark:border-yellow-700 rounded-lg p-4 text-sm text-yellow-700 dark:text-yellow-400 flex items-center gap-2">
-        <span class="material-symbols-outlined text-base">warning</span>
-        Merge nicht moeglich: ${missing.map(nr => '<strong>' + esc(nr) + '</strong>').join(', ')} nicht in Django gefunden.
-        Für einen Merge müssen beide Kunden in Django vorhanden sein.
-      </div>`;
-    } else {
-      container.innerHTML = '';
-    }
-    return;
-  }
-
-  container.innerHTML = `
-  <div class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-    <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
-      <h2 class="font-semibold text-sm uppercase tracking-wide text-gray-600 dark:text-gray-300 flex items-center gap-2">
-        <span class="material-symbols-outlined text-base">merge</span>
-        Kunden zusammenfuehren
-      </h2>
-    </div>
-    <div class="p-4 space-y-4">
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label class="block text-xs font-medium mb-1">Richtiger Kunde (bleibt erhalten):</label>
-          <select id="merge-target" class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm bg-white dark:bg-gray-800" onchange="updateMergeUI()">
-            ${djangoErps.map(nr => `<option value="${esc(nr)}">${esc(nr)} — ${esc(searchData[nr].django.name)}</option>`).join('')}
-          </select>
-        </div>
-        <div>
-          <label class="block text-xs font-medium mb-1">Falscher Kunde (wird gelöscht):</label>
-          <select id="merge-source" class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm bg-white dark:bg-gray-800" onchange="updateMergeUI()">
-            ${djangoErps.map((nr,i) => `<option value="${esc(nr)}" ${i===1?'selected':''}>${esc(nr)} — ${esc(searchData[nr].django.name)}</option>`).join('')}
-          </select>
-        </div>
-      </div>
-      <div id="merge-details"></div>
-      <div class="flex items-center gap-3">
-        <label class="flex items-center gap-2 text-sm cursor-pointer">
-          <input type="checkbox" id="merge-sw-orders" checked class="rounded">
-          Bestellungen in Shopware uebertragen
-        </label>
-      </div>
-      <button onclick="executeMerge()" id="merge-btn"
-        class="px-4 py-2 bg-red-600 text-white rounded text-sm font-medium
-               hover:bg-red-700 transition flex items-center gap-2 disabled:opacity-50">
-        <span class="material-symbols-outlined text-base">merge</span>
-        Merge ausfuehren
-      </button>
-      <div id="merge-result" class="hidden"></div>
-    </div>
-  </div>`;
-  updateMergeUI();
-}
-
-function updateMergeUI() {
-  const tgt = document.getElementById('merge-target')?.value;
-  const src = document.getElementById('merge-source')?.value;
-  const details = document.getElementById('merge-details');
-  if (!details || !tgt || !src || tgt === src) { if (details) details.innerHTML = ''; return; }
-
-  const td = searchData[tgt]?.django;
-  const sd = searchData[src]?.django;
-  if (!td || !sd) return;
-
-  let html = '';
-
-  // Password winner
-  const tsw = searchData[tgt]?.shopware;
-  const ssw = searchData[src]?.shopware;
-  if (tsw && ssw && !tsw.error && !ssw.error) {
-    const winner = (ssw.updatedAt||'') > (tsw.updatedAt||'') ? src : tgt;
-    html += `<div class="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded text-sm flex items-center gap-2">
-      <span class="material-symbols-outlined text-base">key</span>
-      Aktuelleres Passwort: <strong>${esc(winner)}</strong> — Login-E-Mail wird uebernommen.
-    </div>`;
-  }
-
-  // Address mapping
-  const srcAddrs = sd.addresses || [];
-  const tgtAddrs = td.addresses || [];
-  if (srcAddrs.length) {
-    html += `<div class="space-y-2">
-      <div class="text-xs font-semibold uppercase tracking-wider text-gray-500">Adress-Zuordnung</div>`;
-    srcAddrs.forEach(sa => {
-      const srcLbl = [sa.name1, sa.street, [sa.postal_code, sa.city].filter(Boolean).join(' ')].filter(Boolean).join(' — ');
-      html += `<div class="flex items-center gap-2 flex-wrap">
-        <div class="flex-1 min-w-48 border border-gray-200 dark:border-gray-600 rounded px-3 py-2 bg-gray-50 dark:bg-gray-800 text-xs">
-          <div class="text-[10px] text-gray-400 mb-0.5">Quelle (${esc(src)})</div>
-          <div class="font-medium">${esc(srcLbl)}</div>
-        </div>
-        <span class="material-symbols-outlined text-gray-400 text-sm">arrow_forward</span>
-        <select data-src-addr-id="${sa.id}" class="addr-mapping-select flex-1 min-w-48 border border-gray-300 dark:border-gray-600 rounded px-2 py-2 text-xs bg-white dark:bg-gray-800">
-          <option value="new">Als neue Adresse uebernehmen</option>
-          <option value="">Verwerfen</option>
-          ${tgtAddrs.map(ta => {
-            const tl = [ta.name1, ta.street, [ta.postal_code, ta.city].filter(Boolean).join(' ')].filter(Boolean).join(' — ');
-            return `<option value="${ta.id}">In Adresse ueberschreiben: ${esc(tl)}</option>`;
-          }).join('')}
-        </select>
-      </div>`;
-    });
-    html += `</div>`;
-  }
-
-  // Orders preview
-  const srcOrders = sd.orders || [];
-  if (srcOrders.length) {
-    html += `<div class="p-3 bg-gray-50 dark:bg-gray-800 rounded text-xs text-gray-500">
-      ${srcOrders.length} Bestellung(en) von <strong>${esc(src)}</strong> werden an <strong>${esc(tgt)}</strong> uebertragen.
-    </div>`;
-  }
-
-  details.innerHTML = html;
-}
-
-async function executeMerge() {
-  const tgt = document.getElementById('merge-target').value;
-  const src = document.getElementById('merge-source').value;
-  if (!tgt || !src || tgt === src) { alert('Bitte unterschiedliche Kunden waehlen.'); return; }
-  if (!confirm(`Kunde ${src} wird in ${tgt} zusammengefuehrt und anschliessend geloescht. Fortfahren?`)) return;
-
-  const btn = document.getElementById('merge-btn');
-  const res = document.getElementById('merge-result');
-  btn.disabled = true;
-  btn.innerHTML = `${spinner()} Merge laeuft...`;
-
-  const mapping = {};
-  document.querySelectorAll('.addr-mapping-select').forEach(s => { mapping[s.dataset.srcAddrId] = s.value || null; });
-
-  try {
-    const resp = await fetch('/admin/customer-merge/api/merge/', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json','X-CSRFToken':CSRF},
-      body: JSON.stringify({
-        target_erp_nr: tgt, source_erp_nr: src,
-        address_mapping: mapping,
-        merge_shopware_orders: document.getElementById('merge-sw-orders').checked,
-      }),
-    });
-    const data = await resp.json();
-    res.classList.remove('hidden');
-    if (data.error) {
-      let errLog = '';
-      if (data.log?.length) {
-        errLog = `<details class="mt-2"><summary class="text-[10px] text-gray-300 cursor-pointer hover:text-gray-500">Merge-Log (${data.log.length} Eintraege)</summary>
-          <pre class="mt-1 p-2 bg-gray-100 dark:bg-gray-900 rounded text-[10px] text-gray-600 dark:text-gray-400 overflow-x-auto max-h-64 overflow-y-auto font-mono whitespace-pre-wrap">${data.log.map(l => esc(l)).join('\n')}</pre>
-        </details>`;
-      }
-      res.innerHTML = `<div class="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-sm text-red-600 dark:text-red-400">${esc(data.error)}${errLog}</div>`;
-    } else {
-      let m = `Merge erfolgreich! Bestellungen: ${data.orders_moved}, Adressen: ${data.addresses_moved}`;
-      if (data.shopware_orders_moved) m += `, SW-Bestellungen: ${data.shopware_orders_moved}`;
-      if (data.shopware_source_deleted === true) m += ', SW-Quellkunde geloescht';
-      if (data.microtech_source_deleted === true) m += ', MT-Quellkunde geloescht';
-      if (data.microtech_target_synced === true) m += ', MT-Zielkunde aktualisiert';
-      let w = '';
-      if (data.errors?.length) w = `<div class="mt-1 text-yellow-600 dark:text-yellow-400 text-xs">${data.errors.map(e=>'· '+esc(e)).join('<br>')}</div>`;
-      let logHtml = '';
-      if (data.log?.length) {
-        logHtml = `<details class="mt-2"><summary class="text-[10px] text-gray-400 cursor-pointer hover:text-gray-600">Merge-Log (${data.log.length} Eintraege)</summary>
-          <pre class="mt-1 p-2 bg-gray-100 dark:bg-gray-900 rounded text-[10px] text-gray-600 dark:text-gray-400 overflow-x-auto max-h-64 overflow-y-auto font-mono whitespace-pre-wrap">${data.log.map(l => esc(l)).join('\n')}</pre>
-        </details>`;
-      }
-      res.innerHTML = `<div class="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded text-sm text-green-700 dark:text-green-400">${esc(m)}${w}${logHtml}</div>`;
-      setTimeout(doSearch, 1500);
-    }
-  } catch(e) {
-    res.classList.remove('hidden');
-    res.innerHTML = `<div class="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-sm text-red-600">${esc(e.message)}</div>`;
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = '<span class="material-symbols-outlined text-base">merge</span> Merge ausfuehren';
-  }
-}
-
-/* ── SW6-only merge ──────────────────────────────────── */
+/* ── Verified Shopware merge ─────────────────────────── */
 function collectShopwareCustomers() {
   const list = [];
   const seen = new Set();
@@ -2152,13 +1976,13 @@ function renderShopwareMergeSection() {
       ? '<option selected value="' + esc(selectedId) + '">SW6-ID: ' + esc(selectedId) + '</option>' : '');
   };
   container.innerHTML = '<div class="merge-launcher">' +
-    '<h2>SW6-Kunden zusammenführen</h2>' +
+    '<h2>Kunden zusammenführen</h2>' +
     '<div class="merge-launcher-body"><div class="merge-selection-grid">' +
-    '<label>Quellkunde – nach Prüfung löschen<select id="sw-merge-delete" onchange="invalidateShopwareMergePreview()">' +
+    '<label>Falscher Kunde – wird nach Prüfung gelöscht<select id="sw-merge-delete" onchange="invalidateShopwareMergePreview()">' +
     options(selected.delete_sw_id || customers[0]?.id) + '</select></label>' +
-    '<label>Zielkunde – SW6-ID bleibt erhalten<select id="sw-merge-keep" onchange="invalidateShopwareMergePreview()">' +
+    '<label>Richtiger Kunde – bleibt erhalten<select id="sw-merge-keep" onchange="invalidateShopwareMergePreview()">' +
     options(selected.keep_sw_id || customers[1]?.id) + '</select></label></div>' +
-    '<p class="merge-launcher-note">In SW6 werden alle Adressen und Bestellzuordnungen auf den Zielkunden übernommen. Die am Zielkunden eingestellten Standardadressen bleiben erhalten. Nach bestätigtem Merge übernimmt Django die lokalen Adressen und Bestellungen ebenfalls und löscht erst dann das leere Quellkonto. Microtech bleibt unverändert.</p>' +
+    '<p class="merge-launcher-note">Alle Adressen des falschen Kunden werden in SW6 zum richtigen Kunden übertragen. Die Standardadressen des richtigen Kunden bleiben erhalten. Das Shopware-Plugin bestimmt das zuletzt verwendete Login-Paar; E-Mail und Passwort bleiben dabei immer zusammen. Erst nach der bestätigten Löschung in SW6 übernimmt Django die lokalen Referenzen und löscht das lokale Quellkonto. Microtech bleibt unverändert.</p>' +
     '<button type="button" id="sw-merge-preview-btn" onclick="loadShopwareMergePreview()" class="merge-preview-button">Vorschau laden</button>' +
     '</div></div>';
   invalidateShopwareMergePreview();
