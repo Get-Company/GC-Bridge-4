@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from typing import Any
+from uuid import NAMESPACE_URL, uuid5
 
 from loguru import logger
 
@@ -1497,6 +1498,19 @@ class CustomerSyncDirectionService(BaseService):
             payload["phoneNumber"] = address.phone
         return payload
 
+    @staticmethod
+    def _generated_shopware_address_id(address: Address) -> str:
+        """Return a stable Shopware-compatible ID for one local address.
+
+        Shopware accepts client-generated 32-character hexadecimal IDs.  A
+        stable value makes the create operation safely retryable when SW6
+        responds successfully without a JSON body.
+        """
+        return uuid5(
+            NAMESPACE_URL,
+            f"gc-bridge://shopware/customer-address/{address.customer_id}/{address.pk}",
+        ).hex
+
     def export_django_address(self, *, erp_nr: str, django_address_id: int) -> dict[str, Any]:
         """Copy one confirmed Django address to its matching Shopware customer.
 
@@ -1578,11 +1592,10 @@ class CustomerSyncDirectionService(BaseService):
             service.request_patch(f"/customer-address/{shopware_address_id}", payload=payload)
             created = False
         else:
+            shopware_address_id = self._generated_shopware_address_id(address)
+            payload["id"] = shopware_address_id
             payload["customerId"] = shopware_customer_id
-            result = service.request_post("/customer-address", payload=payload)
-            shopware_address_id = self._shopware_entity_id(result)
-            if not shopware_address_id:
-                raise ValueError("Shopware hat keine ID für die angelegte Adresse geliefert.")
+            service.request_post("/customer-address", payload=payload)
             created = True
 
         default_updates: dict[str, str] = {}
@@ -1618,6 +1631,129 @@ class CustomerSyncDirectionService(BaseService):
             "address_id": django_address_id,
             "shopware_address_id": shopware_address_id,
             "created": created,
+        }
+
+    def set_address_default(
+        self,
+        *,
+        erp_nr: str,
+        django_address_id: int,
+        role: str,
+    ) -> dict[str, Any]:
+        """Set one fully mapped address as billing or shipping in all systems.
+
+        Django is the mapping hub: its address must carry both the Shopware
+        address ID and the Microtech address sub-number.  This prevents a
+        default selection from being applied to unrelated addresses.
+        """
+        from orders.services.order_sync import _normalize_entity
+        from microtech.services import microtech_connection
+        from shopware.services import CustomerService
+
+        erp_nr = _to_str(erp_nr)
+        if not erp_nr:
+            raise ValueError("ERP-Nummer erforderlich.")
+        try:
+            django_address_id = int(django_address_id)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Eine gültige Django-Adresse ist erforderlich.") from exc
+
+        role_fields = {
+            "billing": ("is_invoice", "defaultBillingAddressId", "defaultBillingAddressNumber"),
+            "shipping": ("is_shipping", "defaultShippingAddressId", "defaultShippingAddressNumber"),
+        }
+        if role not in role_fields:
+            raise ValueError("Rolle muss 'billing' oder 'shipping' sein.")
+        django_field, shopware_field, microtech_field = role_fields[role]
+
+        address = Address.objects.select_related("customer").filter(pk=django_address_id).first()
+        if not address:
+            raise ValueError("Django-Adresse nicht gefunden.")
+        customer = address.customer
+        if customer.erp_nr != erp_nr:
+            raise ValueError("Die ausgewählte Adresse gehört nicht zu diesem Django-Kunden.")
+        shopware_address_id = _to_str(address.api_id).lower()
+        if not _UUID_RE.fullmatch(shopware_address_id):
+            raise ValueError(
+                "Die Adresse ist noch nicht lückenlos mit Shopware verknüpft. "
+                "Bitte zuerst die SW6-Adresszuordnung herstellen."
+            )
+        try:
+            microtech_address_number = int(address.erp_ans_nr)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                "Die Adresse ist noch nicht lückenlos mit Microtech verknüpft. "
+                "Bitte zuerst die Microtech-Anschrift zuordnen."
+            ) from exc
+        if microtech_address_number < 0:
+            raise ValueError("Die Microtech-AnsNr darf nicht negativ sein.")
+
+        shopware_service = CustomerService()
+        response = shopware_service.get_by_customer_number(erp_nr)
+        data = (response or {}).get("data", []) or []
+        if not data:
+            raise ValueError(f"Kunde {erp_nr} nicht in Shopware gefunden.")
+        shopware_customer = _normalize_entity(data[0])
+        shopware_customer_id = _to_str(shopware_customer.get("id")).lower()
+        if not _UUID_RE.fullmatch(shopware_customer_id):
+            raise ValueError("Shopware hat keine gültige Kunden-ID geliefert.")
+        if customer.api_id and customer.api_id.lower() != shopware_customer_id:
+            raise ValueError(
+                "Die lokale Shopware-Kunden-ID stimmt nicht mit dem SW6-Kunden überein. "
+                "Bitte zuerst die Kunden-ID prüfen."
+            )
+
+        addresses_raw = shopware_customer.get("addresses") or []
+        if isinstance(addresses_raw, dict):
+            addresses_raw = addresses_raw.get("data") or []
+        addresses_raw = _normalize_entity(addresses_raw) if isinstance(addresses_raw, list) else []
+        shopware_address_ids = {
+            _to_str(item.get("id")).lower()
+            for item in addresses_raw
+            if isinstance(item, dict) and _to_str(item.get("id"))
+        }
+        if shopware_address_id not in shopware_address_ids:
+            raise ValueError("Die SW6-Adresse gehört nicht zu diesem Shopware-Kunden.")
+
+        # Both remote writes are performed before Django changes its local
+        # flags. A failed remote write therefore cannot make the comparison
+        # screen claim a fully synchronized default assignment.
+        shopware_service.update_customer(
+            shopware_customer_id,
+            {shopware_field: shopware_address_id},
+        )
+        with microtech_connection() as microtech_client:
+            microtech_client.update_customer(
+                erp_nr,
+                {microtech_field: microtech_address_number},
+            )
+
+        with transaction.atomic():
+            locked_customer = Customer.objects.select_for_update().filter(pk=customer.pk).first()
+            if not locked_customer:
+                raise ValueError("Django-Kunde wurde zwischenzeitlich geändert.")
+            locked_addresses = locked_customer.addresses
+            locked_addresses.update(**{django_field: False})
+            # One Microtech postal address can have multiple contact persons.
+            # All local rows for that Anschrift mirror its shared default role.
+            locked_addresses.filter(erp_ans_nr=microtech_address_number).update(**{django_field: True})
+
+        logger.info(
+            "Address default synchronized: customer={} role={} django_address={} shopware_address={} microtech_ans_nr={}",
+            erp_nr,
+            role,
+            django_address_id,
+            shopware_address_id,
+            microtech_address_number,
+        )
+        return {
+            "message": (
+                "Rechnungsadresse" if role == "billing" else "Lieferadresse"
+            ) + " in SW6, Django und Microtech gesetzt.",
+            "role": role,
+            "address_id": django_address_id,
+            "shopware_address_id": shopware_address_id,
+            "microtech_address_number": microtech_address_number,
         }
 
     def _shopware_to_django(self, erp_nr: str) -> dict[str, Any]:

@@ -1,5 +1,6 @@
 import json
 from typing import Any
+from urllib.parse import urlencode
 
 from django import forms
 from django.contrib import admin, messages
@@ -228,6 +229,7 @@ class OrderAdmin(BaseAdmin):
     actions_list = ("sync_open_orders_from_shopware_list",)
     actions = ("sync_open_orders_from_shopware",)
     actions_row = (
+        "customer_merge_row",
         "address_reconciliation_row",
         "upsert_to_microtech_row",
         "export_swiss_customs_csv_row",
@@ -535,6 +537,27 @@ class OrderAdmin(BaseAdmin):
     )
     def address_reconciliation_row(self, request, object_id: str):
         return HttpResponseRedirect(reverse("admin:orders_order_address_reconciliation", args=(object_id,)))
+
+    @action(
+        description="Kunden zusammenführen",
+        icon="merge",
+        variant=ActionVariant.WARNING,
+        permissions=("change",),
+    )
+    def customer_merge_row(self, request, object_id: str):
+        """Open customer merge with the order's AdrNr prefilled and searched."""
+        order = self.get_object(request, object_id)
+        erp_nr = _to_str(getattr(getattr(order, "customer", None), "erp_nr", ""))
+        if not erp_nr:
+            self.message_user(
+                request,
+                "Für diese Bestellung ist keine AdrNr hinterlegt.",
+                level=messages.WARNING,
+            )
+            return self._redirect_to_changelist()
+
+        customer_merge_url = reverse("admin:customer_merge")
+        return HttpResponseRedirect(f"{customer_merge_url}?{urlencode({'customer_number': erp_nr})}")
 
     def address_reconciliation_view(self, request, object_id: str, **kwargs):
         order = self.get_queryset(request).filter(pk=object_id).first()

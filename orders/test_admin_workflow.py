@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from django.contrib import admin as django_admin
 from django.test import RequestFactory
@@ -27,6 +27,7 @@ class OrderAdminSearchTest(SimpleTestCase):
         self.assertEqual(detail_action_dropdown["icon"], "more_vert")
         self.assertIn("request_customer_change_detail", detail_action_dropdown["items"])
         self.assertIn("address_reconciliation_detail", detail_action_dropdown["items"])
+        self.assertIn("customer_merge_row", model_admin.actions_row)
         self.assertIn("address_reconciliation_row", model_admin.actions_row)
         self.assertIn("abort_microtech_sync_detail", detail_action_dropdown["items"])
         self.assertIn("restart_microtech_sync_detail", detail_action_dropdown["items"])
@@ -34,6 +35,19 @@ class OrderAdminSearchTest(SimpleTestCase):
         self.assertIsNotNone(model_admin.request_customer_change_detail.dialog)
         self.assertIsNotNone(model_admin.abort_microtech_sync_detail.dialog)
         self.assertIsNotNone(model_admin.restart_microtech_sync_detail.dialog)
+
+    def test_customer_merge_row_action_opens_merge_with_order_adrnr(self):
+        model_admin = OrderAdmin(Order, django_admin.site)
+        order = Order(customer=Customer(erp_nr="100123"))
+        request = RequestFactory().get("/")
+        request.user = MagicMock()
+        request.user.has_perm.return_value = True
+
+        with patch.object(model_admin, "get_object", return_value=order):
+            response = model_admin.customer_merge_row(request, "1")
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response["Location"], "/admin/customer-merge/?customer_number=100123")
 
 
 class OrderAdminDeleteTest(SimpleTestCase):

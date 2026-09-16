@@ -720,7 +720,40 @@ function comparisonAddressActions(nr, sysKey, addresses) {
   </div>`;
 }
 
-function comparisonAddressCard(nr, sysKey, address) {
+function synchronizedDefaultActions(nr, group) {
+  const django = group.django || [];
+  const shopware = group.shopware || [];
+  const microtech = group.microtech || [];
+  if (django.length !== 1 || shopware.length !== 1 || microtech.length !== 1) return '';
+
+  const djangoAddress = django[0];
+  const shopwareAddress = shopware[0];
+  const microtechAddress = microtech[0];
+  const isFullyMapped = djangoAddress.id && djangoAddress.apiId
+    && String(djangoAddress.apiId).toLowerCase() === String(shopwareAddress.id || '').toLowerCase()
+    && djangoAddress.microtechAddressNumber !== ''
+    && String(djangoAddress.microtechAddressNumber) === String(microtechAddress.microtechAddressNumber);
+  if (!isFullyMapped) return '';
+
+  const roleButton = (role, label, icon, active) => `<button type="button"
+      data-default-current="${active ? 'true' : 'false'}"
+      title="${esc(label)} in SW6, GC-Bridge und Microtech setzen"
+      onclick="setSynchronizedAddressDefault('${esc(nr)}', '${esc(djangoAddress.id)}', '${role}', this)"
+      class="inline-flex items-center gap-1 rounded border px-2 py-1 text-[10px] font-medium transition
+        ${active
+          ? 'border-primary-500 bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
+          : 'border-gray-300 text-gray-500 hover:border-primary-400 hover:text-primary-700 dark:border-gray-600 dark:text-gray-300'}">
+      <span class="material-symbols-outlined" style="font-size:12px">${icon}</span>${label}
+    </button>`;
+  const billingActive = Boolean(djangoAddress.isBilling && shopwareAddress.isBilling && microtechAddress.isBilling);
+  const shippingActive = Boolean(djangoAddress.isShipping && shopwareAddress.isShipping && microtechAddress.isShipping);
+  return `<div class="mt-2 flex flex-wrap gap-1" aria-label="Standardadresse systemübergreifend setzen">
+    ${roleButton('billing', 'Rechnung', 'receipt_long', billingActive)}
+    ${roleButton('shipping', 'Lieferung', 'local_shipping', shippingActive)}
+  </div>`;
+}
+
+function comparisonAddressCard(nr, sysKey, address, defaultActions = '') {
   const canDelete = sysKey === 'django' || sysKey === 'shopware';
   const groupId = `addr-group-${nr}-${sysKey}`;
   const flags = standardAddressBadges(address);
@@ -762,6 +795,7 @@ function comparisonAddressCard(nr, sysKey, address) {
       ${address.email ? `<div class="text-gray-400 truncate">${esc(address.email)}</div>` : ''}
       ${address.phone ? `<div class="text-gray-400">${esc(address.phone)}</div>` : ''}
       ${microtechContactsHtml}
+      ${defaultActions}
     </div>
   </article>`;
 }
@@ -836,9 +870,9 @@ function addressComparisonGroups(nr) {
   return groups;
 }
 
-function comparisonAddressCell(nr, sysKey, addresses) {
+function comparisonAddressCell(nr, sysKey, addresses, defaultActions = '') {
   if (!addresses.length) return '<div class="comparison-address-empty">Keine zugeordnete Adresse</div>';
-  return addresses.map(address => comparisonAddressCard(nr, sysKey, address)).join('');
+  return addresses.map(address => comparisonAddressCard(nr, sysKey, address, defaultActions)).join('');
 }
 
 /* ── search ──────────────────────────────────────────── */
@@ -1201,6 +1235,16 @@ async function doSearch() {
   }
 }
 
+function startSearchFromOrderCustomer() {
+  const customerNumber = new URLSearchParams(window.location.search).get('customer_number')?.trim();
+  if (!customerNumber) return;
+
+  document.getElementById('search-customer-number').value = customerNumber;
+  void doSearch();
+}
+
+startSearchFromOrderCustomer();
+
 async function loadCells(erpNrs, systemKeys = SYSTEMS.map(sys => sys.key), searchId = activeSearchId) {
   const requests = erpNrs.flatMap(nr =>
     SYSTEMS
@@ -1296,7 +1340,12 @@ function renderComparisonRow(nr) {
   if (addressGroups.length) {
     html += addressGroups.map(group => comparisonRow(
       group.label,
-      SYSTEMS.map(system => comparisonAddressCell(nr, system.key, group[system.key])),
+      SYSTEMS.map(system => comparisonAddressCell(
+        nr,
+        system.key,
+        group[system.key],
+        synchronizedDefaultActions(nr, group),
+      )),
       {labelDetail: group.detail, labelClass: 'comparison-address-label', cellClass: 'comparison-address-cell'},
     )).join('');
   } else {
@@ -1580,6 +1629,34 @@ async function adoptDjangoAddress(erpNr, djangoAddressId, button) {
     });
     const data = await response.json();
     if (!response.ok || data.error) throw new Error(data.error || 'Die Adresse konnte nicht übernommen werden.');
+    await refetchRow(erpNr, erpNr);
+  } catch (error) {
+    alert('Fehler: ' + error.message);
+  } finally {
+    button.disabled = false;
+    button.innerHTML = idleLabel;
+  }
+}
+
+async function setSynchronizedAddressDefault(erpNr, djangoAddressId, role, button) {
+  if (button.dataset.defaultCurrent === 'true') return;
+  const idleLabel = button.innerHTML;
+  button.disabled = true;
+  button.innerHTML = spinner();
+  try {
+    const response = await fetch('/admin/customer-merge/api/set-address-default/', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF},
+      body: JSON.stringify({
+        erp_nr: erpNr,
+        django_address_id: djangoAddressId,
+        role,
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok || data.error) {
+      throw new Error(data.error || 'Die Standardadresse konnte nicht gesetzt werden.');
+    }
     await refetchRow(erpNr, erpNr);
   } catch (error) {
     alert('Fehler: ' + error.message);

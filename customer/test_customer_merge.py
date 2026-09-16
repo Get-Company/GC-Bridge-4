@@ -874,6 +874,7 @@ class CustomerSyncDirectionServiceTest(SimpleTestCase):
         customer = MagicMock(pk=7, erp_nr="10001", api_id="")
         address = MagicMock(
             pk=42,
+            customer_id=7,
             customer=customer,
             api_id="",
             name1="Beispiel GmbH",
@@ -898,7 +899,7 @@ class CustomerSyncDirectionServiceTest(SimpleTestCase):
         atomic.return_value.__exit__.return_value = False
 
         shopware_customer_id = "a" * 32
-        shopware_address_id = "b" * 32
+        shopware_address_id = CustomerSyncDirectionService._generated_shopware_address_id(address)
         customer_service.return_value.get_by_customer_number.return_value = {
             "data": [{
                 "id": shopware_customer_id,
@@ -907,7 +908,7 @@ class CustomerSyncDirectionServiceTest(SimpleTestCase):
         }
         customer_service.return_value.request_post.side_effect = [
             {"data": [{"id": "d" * 32}]},
-            {"data": {"id": shopware_address_id}},
+            {},
         ]
 
         result = CustomerSyncDirectionService().export_django_address(
@@ -918,6 +919,7 @@ class CustomerSyncDirectionServiceTest(SimpleTestCase):
         self.assertEqual(result["shopware_address_id"], shopware_address_id)
         create_call = customer_service.return_value.request_post.call_args_list[1]
         self.assertEqual(create_call.args[0], "/customer-address")
+        self.assertEqual(create_call.kwargs["payload"]["id"], shopware_address_id)
         self.assertEqual(create_call.kwargs["payload"]["customerId"], shopware_customer_id)
         self.assertEqual(create_call.kwargs["payload"]["street"], "Musterstraße 1")
         self.assertEqual(create_call.kwargs["payload"]["countryId"], "d" * 32)
@@ -931,6 +933,49 @@ class CustomerSyncDirectionServiceTest(SimpleTestCase):
         )
         self.assertEqual(customer.api_id, shopware_customer_id)
         self.assertEqual(address.api_id, shopware_address_id)
+
+    @patch("microtech.services.microtech_connection")
+    @patch("customer.services.customer_merge.transaction.atomic")
+    @patch("customer.services.customer_merge.Address")
+    @patch("customer.services.customer_merge.Customer")
+    @patch("shopware.services.CustomerService")
+    def test_set_address_default_writes_all_three_systems(
+        self, customer_service, customer_model, address_model, atomic, microtech_connection
+    ):
+        customer = MagicMock(pk=7, erp_nr="10001", api_id="a" * 32)
+        address = MagicMock(
+            pk=42,
+            customer=customer,
+            api_id="b" * 32,
+            erp_ans_nr=3,
+        )
+        address_model.objects.select_related.return_value.filter.return_value.first.return_value = address
+        customer_model.objects.select_for_update.return_value.filter.return_value.first.return_value = customer
+        atomic.return_value.__enter__.return_value = None
+        atomic.return_value.__exit__.return_value = False
+        customer_service.return_value.get_by_customer_number.return_value = {
+            "data": [{
+                "id": "a" * 32,
+                "attributes": {"addresses": [{"id": "b" * 32}]},
+            }],
+        }
+
+        result = CustomerSyncDirectionService().set_address_default(
+            erp_nr="10001", django_address_id=42, role="billing",
+        )
+
+        self.assertEqual(result["role"], "billing")
+        customer_service.return_value.update_customer.assert_called_once_with(
+            "a" * 32,
+            {"defaultBillingAddressId": "b" * 32},
+        )
+        microtech_connection.return_value.__enter__.return_value.update_customer.assert_called_once_with(
+            "10001",
+            {"defaultBillingAddressNumber": 3},
+        )
+        customer.addresses.update.assert_called_once_with(is_invoice=False)
+        customer.addresses.filter.assert_called_once_with(erp_ans_nr=3)
+        customer.addresses.filter.return_value.update.assert_called_once_with(is_invoice=True)
 
 
 class CustomerMergeDjangoMutationViewTest(SimpleTestCase):
@@ -964,6 +1009,20 @@ class CustomerMergeDjangoMutationViewTest(SimpleTestCase):
         self.assertEqual(result.status_code, 200)
         service_class.return_value.export_django_address.assert_called_once_with(
             erp_nr="10001", django_address_id=42,
+        )
+
+    @patch("customer.views.CustomerSyncDirectionService")
+    def test_set_address_default_dispatches_shared_default_sync(self, service_class):
+        from customer.views import customer_set_address_default_api
+
+        service_class.return_value.set_address_default.return_value = {"role": "shipping"}
+        result = customer_set_address_default_api(self.request({
+            "erp_nr": "10001", "django_address_id": 42, "role": "shipping",
+        }))
+
+        self.assertEqual(result.status_code, 200)
+        service_class.return_value.set_address_default.assert_called_once_with(
+            erp_nr="10001", django_address_id=42, role="shipping",
         )
 
     @patch("customer.views.CustomerDeleteService")
@@ -1087,6 +1146,14 @@ class ShopwareMergeBrowserStateTest(SimpleTestCase):
         self.assertNotIn("microtech-Kunde markieren", template)
         self.assertNotIn("deleteMicrotechCustomer", template)
         self.assertNotIn("delete-microtech-customer", template)
+
+    def test_customer_merge_prefills_and_searches_adrnr_from_order_link(self):
+        template = (Path(__file__).resolve().parents[1] / "templates/admin/customer_merge.html").read_text()
+
+        self.assertIn("function startSearchFromOrderCustomer()", template)
+        self.assertIn("new URLSearchParams(window.location.search).get('customer_number')", template)
+        self.assertIn("document.getElementById('search-customer-number').value = customerNumber;", template)
+        self.assertIn("startSearchFromOrderCustomer();", template)
 
     def test_microtech_mapping_reads_the_microtech_field(self):
         template = (Path(__file__).resolve().parents[1] / "templates/admin/customer_merge.html").read_text()

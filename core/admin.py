@@ -68,6 +68,7 @@ from customer.views import (
     customer_sync_direction_api,
     customer_adopt_shopware_address_api,
     customer_adopt_django_address_api,
+    customer_set_address_default_api,
     customer_merge_shopware_api,
 )
 
@@ -481,6 +482,7 @@ def _admin_get_urls():
         path("customer-merge/api/sync/", admin.site.admin_view(customer_sync_direction_api), name="customer_merge_sync"),
         path("customer-merge/api/adopt-shopware-address/", admin.site.admin_view(customer_adopt_shopware_address_api), name="customer_merge_adopt_shopware_address"),
         path("customer-merge/api/adopt-django-address/", admin.site.admin_view(customer_adopt_django_address_api), name="customer_merge_adopt_django_address"),
+        path("customer-merge/api/set-address-default/", admin.site.admin_view(customer_set_address_default_api), name="customer_merge_set_address_default"),
         path("customer-merge/api/merge-shopware/", admin.site.admin_view(customer_merge_shopware_api), name="customer_merge_shopware"),
         path("hr/calendar/", admin.site.admin_view(hr_calendar_view), name="hr_calendar"),
         path("hr/calendar/api/", admin.site.admin_view(hr_calendar_api), name="hr_calendar_api"),
