@@ -454,7 +454,40 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
                 "microtech_orderrule_engine_verify",
                 self.rule_engine_verify_view,
             ),
+            (
+                "dataset-fields-grouped/",
+                "microtech_orderrule_dataset_fields_grouped",
+                self.rule_dataset_fields_grouped_view,
+            ),
         )
+
+    def rule_dataset_fields_grouped_view(self, request, **kwargs):
+        """All active dataset fields grouped by dataset, for the target dropdown."""
+        if not self.has_view_permission(request):
+            return JsonResponse({"ok": False, "error": "Zugriff verweigert."}, status=403)
+        from microtech.models import MicrotechDatasetCatalog
+
+        datasets = []
+        for cat in (
+            MicrotechDatasetCatalog.objects
+            .filter(is_active=True)
+            .order_by("priority", "name", "id")
+            .prefetch_related("fields")
+        ):
+            fields = [
+                {"id": f.id, "field_name": f.field_name, "label": (f.label or f.field_name)}
+                for f in sorted(
+                    (x for x in cat.fields.all() if x.is_active),
+                    key=lambda x: (x.priority, x.field_name, x.id),
+                )
+            ]
+            if fields:
+                datasets.append({
+                    "source_identifier": cat.source_identifier,
+                    "name": cat.name,
+                    "fields": fields,
+                })
+        return JsonResponse({"ok": True, "datasets": datasets})
 
     def rule_builder_view(self, request, **kwargs):
         if not self.has_view_permission(request):

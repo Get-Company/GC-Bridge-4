@@ -61,12 +61,25 @@
     return META_PROMISE;
   }
 
+  var DSFIELDS = null;          // [{source_identifier, name, fields:[{id,field_name,label}]}]
+  var DSFIELDS_PROMISE = null;
+  function loadDatasetFields(url) {
+    if (DSFIELDS) return Promise.resolve(DSFIELDS);
+    if (DSFIELDS_PROMISE) return DSFIELDS_PROMISE;
+    DSFIELDS_PROMISE = fetch(url, { credentials: "same-origin" })
+      .then(function (r) { return r.json(); })
+      .then(function (d) { DSFIELDS = (d && d.ok) ? (d.datasets || []) : []; return DSFIELDS; })
+      .catch(function () { DSFIELDS = []; return DSFIELDS; });
+    return DSFIELDS_PROMISE;
+  }
+
   // ---------- one editor instance ----------
   function mount(container, opts) {
     opts = opts || {};
     var SAVE_URL = opts.saveUrl;
     var OVERVIEW_URL = opts.overviewUrl;
     var DSFIELD_URL = (opts.metaUrl || "").replace("rule-builder-meta", "dataset-field-autocomplete");
+    var DSGROUP_URL = (opts.metaUrl || "").replace("rule-builder-meta", "dataset-fields-grouped");
     var inline = !!opts.inline;
 
     var STATE = normalizeState(opts.ruleData);
@@ -328,43 +341,32 @@
       return wrap;
     }
 
+    // Grouped "Dataset → Feld" dropdown (optgroup per dataset).
     function datasetFieldPicker(a) {
-      var wrap = el("span", "re-ac-wrap");
-      var input = el("input"); input.type = "text"; input.placeholder = "Dataset-Feld suchen…";
-      input.value = a.dataset_field_label || (a.dataset_field_id ? "#" + a.dataset_field_id : "");
-      var results = el("div", "re-ac-results"); results.style.display = "none";
-      var timer = null;
-      function search() {
-        var term = input.value.trim();
-        fetch(DSFIELD_URL + "?term=" + encodeURIComponent(term), { credentials: "same-origin" })
-          .then(function (r) { return r.json(); })
-          .then(function (data) {
-            results.innerHTML = "";
-            (data.results || []).forEach(function (item) {
-              var it = el("div", "re-ac-item", item.text);
-              it.addEventListener("mousedown", function (ev) {
-                ev.preventDefault();
-                markDirty();
-                a.dataset_field_id = parseInt(item.id, 10);
-                a.dataset_field_label = item.text;
-                input.value = item.text;
-                results.style.display = "none";
-                renderSummary();
-              });
-              results.appendChild(it);
-            });
-            results.style.display = data.results && data.results.length ? "" : "none";
-          })
-          .catch(function () { results.style.display = "none"; });
-      }
-      input.addEventListener("input", function () {
-        a.dataset_field_id = null; a.dataset_field_label = "";
-        renderSummary();
-        clearTimeout(timer); timer = setTimeout(search, 200);
+      var wrap = el("span", "re-dsf-wrap");
+      var sel = el("select", "re-dsf-select");
+      sel.appendChild(opt("", "— Dataset-Feld wählen —", !a.dataset_field_id));
+      wrap.appendChild(sel);
+      loadDatasetFields(DSGROUP_URL).then(function (groups) {
+        groups.forEach(function (g) {
+          var og = document.createElement("optgroup");
+          og.label = g.name + (g.source_identifier ? "  (" + g.source_identifier + ")" : "");
+          g.fields.forEach(function (f) {
+            var label = f.field_name + (f.label && f.label !== f.field_name ? " — " + f.label : "");
+            var selected = String(a.dataset_field_id) === String(f.id);
+            if (selected) a.dataset_field_label = f.field_name;
+            og.appendChild(opt(String(f.id), label, selected));
+          });
+          sel.appendChild(og);
+        });
+        if (!groups.length) sel.appendChild(opt("", "(kein Dataset-Katalog geladen)", false));
       });
-      input.addEventListener("focus", search);
-      input.addEventListener("blur", function () { setTimeout(function () { results.style.display = "none"; }, 150); });
-      wrap.appendChild(input); wrap.appendChild(results);
+      sel.addEventListener("change", function () {
+        markDirty();
+        a.dataset_field_id = sel.value ? parseInt(sel.value, 10) : null;
+        a.dataset_field_label = sel.value ? sel.options[sel.selectedIndex].text : "";
+        renderSummary();
+      });
       return wrap;
     }
 

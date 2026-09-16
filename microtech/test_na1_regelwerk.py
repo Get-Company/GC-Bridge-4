@@ -276,3 +276,22 @@ def test_meta_view_includes_address_fields_with_context_root(admin_client):
     # trigger context roots available for the JS filter
     roots = {t["context_root"] for t in data["triggers"]}
     assert "customer.Address" in roots
+
+
+def test_dataset_fields_grouped_endpoint(admin_client):
+    import json
+    from django.urls import reverse
+    from microtech.models import MicrotechDatasetCatalog, MicrotechDatasetField
+
+    cat = MicrotechDatasetCatalog.objects.create(
+        code="adressen", name="Adressen", source_identifier="Adressen - Adressen", priority=10)
+    MicrotechDatasetField.objects.create(dataset=cat, field_name="UStKat", label="Steuerkategorie", priority=1)
+    MicrotechDatasetField.objects.create(dataset=cat, field_name="Na3", label="Name 3", priority=2)
+
+    url = reverse("admin:microtech_orderrule_dataset_fields_grouped")
+    data = json.loads(admin_client.get(url).content)
+    assert data["ok"] is True
+    adressen = next(d for d in data["datasets"] if d["name"] == "Adressen")
+    field_names = [f["field_name"] for f in adressen["fields"]]
+    assert field_names == ["UStKat", "Na3"]  # by priority
+    assert adressen["fields"][0]["label"] == "Steuerkategorie"
