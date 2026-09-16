@@ -47,17 +47,17 @@ class RuleMatch:
 
 
 class RuleExecutionService(BaseService):
-    """Find the first matching active engine rule for a trigger and phase."""
+    """Resolve every matching active engine rule for a trigger and phase."""
 
     model = MicrotechOrderRule
 
-    def resolve_first_match(
+    def resolve_matching_rules(
         self,
         *,
         task_name: str,
         phase: str,
         root_instance: object,
-    ) -> RuleMatch | None:
+    ) -> tuple[RuleMatch, ...]:
         context = EvaluationContext(root_instance)
         rules = (
             self.get_queryset()
@@ -80,6 +80,7 @@ class RuleExecutionService(BaseService):
         )
         field_maps: dict[str, dict] = {}
         operator_engine_map = get_operator_engine_map()
+        matches: list[RuleMatch] = []
         for rule in rules:
             context_root = str(getattr(rule.trigger, "context_root", "") or "")
             field_map = field_maps.get(context_root)
@@ -93,8 +94,23 @@ class RuleExecutionService(BaseService):
                 operator_engine_map=operator_engine_map,
             ):
                 continue
-            return RuleMatch(rule=rule, actions=self._resolve_actions(rule, context))
-        return None
+            matches.append(RuleMatch(rule=rule, actions=self._resolve_actions(rule, context)))
+        return tuple(matches)
+
+    def resolve_first_match(
+        self,
+        *,
+        task_name: str,
+        phase: str,
+        root_instance: object,
+    ) -> RuleMatch | None:
+        """Compatibility helper for callers that explicitly need only one rule."""
+        matches = self.resolve_matching_rules(
+            task_name=task_name,
+            phase=phase,
+            root_instance=root_instance,
+        )
+        return matches[0] if matches else None
 
     @staticmethod
     def _field_map_for_rule(rule: MicrotechOrderRule) -> dict:

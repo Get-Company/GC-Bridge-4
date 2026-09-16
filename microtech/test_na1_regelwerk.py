@@ -132,12 +132,22 @@ def _company_rule():
 
 
 def _private_fallback_rule():
-    """Fallback rule (no conditions) → Na1 = {{ @anrede }}."""
-    from microtech.models import MicrotechOrderRule, MicrotechOrderRuleAction
+    """Private addresses → Na1 = {{ @anrede }}."""
+    from microtech.models import (
+        MicrotechOrderRule, MicrotechOrderRuleAction,
+        MicrotechOrderRuleCondition, MicrotechOrderRuleConditionGroup,
+    )
 
     rule = MicrotechOrderRule.objects.create(
         name="Privat → Na1", is_active=True, engine_enabled=True, trigger=_address_trigger(),
         execution_phase=MicrotechOrderRule.ExecutionPhase.BEFORE, priority=100)
+    group = MicrotechOrderRuleConditionGroup.objects.create(rule=rule, parent=None, logic="all")
+    MicrotechOrderRuleCondition.objects.create(
+        rule=rule,
+        group=group,
+        django_field_path="customer__company",
+        operator_code="is_empty",
+    )
     MicrotechOrderRuleAction.objects.create(
         rule=rule, action_type=MicrotechOrderRuleAction.ActionType.SET_FIELD,
         dataset_field=_na1_field(), target_value="{{ @anrede }}")
@@ -150,13 +160,25 @@ def test_resolve_address_fields_company_and_private():
 
     _company_rule()
     _private_fallback_rule()
-    cust = Customer.objects.create()
+    company_customer = Customer.objects.create(company="ACME GmbH")
 
-    company = Address.objects.create(customer=cust, name1="ACME GmbH", title="", first_name="", last_name="")
+    company = Address.objects.create(
+        customer=company_customer,
+        name1="ACME GmbH",
+        title="",
+        first_name="",
+        last_name="",
+    )
     assert resolve_address_fields(company) == {"Na1": "Firma"}
 
+    private_customer = Customer.objects.create(company="")
     private = Address.objects.create(
-        customer=cust, name1="Max Mustermann", title="mr", first_name="Max", last_name="Mustermann")
+        customer=private_customer,
+        name1="Max Mustermann",
+        title="mr",
+        first_name="Max",
+        last_name="Mustermann",
+    )
     assert resolve_address_fields(private) == {"Na1": "Herr"}
 
 
@@ -208,6 +230,17 @@ def test_resolve_address_fields_uses_shopware_customer_company_for_na1_and_na2()
         execution_phase=MicrotechOrderRule.ExecutionPhase.BEFORE,
         priority=100,
     )
+    private_group = MicrotechOrderRuleConditionGroup.objects.create(
+        rule=private_rule,
+        parent=None,
+        logic="all",
+    )
+    MicrotechOrderRuleCondition.objects.create(
+        rule=private_rule,
+        group=private_group,
+        django_field_path="customer__company",
+        operator_code="is_empty",
+    )
     MicrotechOrderRuleAction.objects.create(
         rule=private_rule,
         action_type=MicrotechOrderRuleAction.ActionType.SET_FIELD,
@@ -238,6 +271,55 @@ def test_resolve_address_fields_uses_shopware_customer_company_for_na1_and_na2()
     assert resolve_address_fields(private_address) == {
         "name1": "Herr",
         "name2": "Max Mustermann",
+    }
+
+
+def test_resolve_address_fields_runs_all_matching_rules_and_last_value_wins():
+    from customer.models import Address, Customer
+    from microtech.models import MicrotechOrderRule, MicrotechOrderRuleAction
+    from microtech.rule_engine.address_resolver import resolve_address_fields
+
+    first = MicrotechOrderRule.objects.create(
+        name="Erster Wert",
+        is_active=True,
+        engine_enabled=True,
+        trigger=_address_trigger(),
+        execution_phase=MicrotechOrderRule.ExecutionPhase.BEFORE,
+        priority=10,
+    )
+    MicrotechOrderRuleAction.objects.create(
+        rule=first,
+        action_type=MicrotechOrderRuleAction.ActionType.SET_FIELD,
+        graphql_field="PostalAddressInput.name1",
+        target_value="Erster Wert",
+    )
+    later = MicrotechOrderRule.objects.create(
+        name="Spaeterer Wert",
+        is_active=True,
+        engine_enabled=True,
+        trigger=_address_trigger(),
+        execution_phase=MicrotechOrderRule.ExecutionPhase.BEFORE,
+        priority=20,
+    )
+    MicrotechOrderRuleAction.objects.create(
+        rule=later,
+        action_type=MicrotechOrderRuleAction.ActionType.SET_FIELD,
+        graphql_field="PostalAddressInput.name1",
+        target_value="Spaeterer Wert",
+    )
+    MicrotechOrderRuleAction.objects.create(
+        rule=later,
+        action_type=MicrotechOrderRuleAction.ActionType.SET_FIELD,
+        graphql_field="PostalAddressInput.name2",
+        target_value="Zusatz",
+    )
+
+    customer = Customer.objects.create()
+    address = Address.objects.create(customer=customer)
+
+    assert resolve_address_fields(address) == {
+        "name1": "Spaeterer Wert",
+        "name2": "Zusatz",
     }
 
 

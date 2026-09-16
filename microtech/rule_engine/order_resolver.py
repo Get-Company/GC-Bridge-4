@@ -1,11 +1,8 @@
 """Build the ``ResolvedOrderRule`` contract from the new rule engine.
 
-Reproduces the *lived* semantics of the legacy ``OrderRuleResolverService``
-(first matching active rule -> its dataset actions, plus customer type from the
-address heuristic) but selects rules through the new trigger/condition-group
-model and renders action values through the template layer. The return type is
-the same ``ResolvedOrderRule`` the Microtech upsert already consumes, so no
-downstream change is required.
+All matching active rules contribute their actions in priority order.  The
+return type is the same ``ResolvedOrderRule`` the Microtech upsert already
+consumes, so no downstream change is required.
 """
 from __future__ import annotations
 
@@ -41,14 +38,20 @@ def _dataset_action(action) -> ResolvedDatasetAction:
 
 def resolve_order_rule(order) -> ResolvedOrderRule:
     customer_type = detect_customer_type(order)
-    match = RuleExecutionService().resolve_first_match(
+    matches = RuleExecutionService().resolve_matching_rules(
         task_name=ORDER_CREATE_TASK,
         phase=MicrotechOrderRule.ExecutionPhase.BEFORE,
         root_instance=order,
     )
-    if match is not None:
-        actions = tuple(_dataset_action(action) for action in match.actions)
-        base = ResolvedOrderRule.from_rule(rule=match.rule, customer_type=customer_type)
+    if matches:
+        actions = tuple(
+            _dataset_action(action)
+            for match in matches
+            for action in match.actions
+        )
+        # Retain the first matching rule in the legacy-compatible debug fields;
+        # ``dataset_actions`` contains the actions from every matching rule.
+        base = ResolvedOrderRule.from_rule(rule=matches[0].rule, customer_type=customer_type)
         return replace(base, dataset_actions=actions)
     return ResolvedOrderRule(customer_type=customer_type)
 

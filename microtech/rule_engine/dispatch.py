@@ -9,14 +9,12 @@ from microtech.rule_engine.order_resolver import ORDER_CREATE_TASK, resolve_orde
 
 
 def resolve_actions(*, task_name, phase, root_instance) -> list[ResolvedAction]:
-    match = RuleExecutionService().resolve_first_match(
+    matches = RuleExecutionService().resolve_matching_rules(
         task_name=task_name,
         phase=phase,
         root_instance=root_instance,
     )
-    if match is None:
-        return []
-    return list(match.actions)
+    return [action for match in matches for action in match.actions]
 
 
 def shadow_compare(*, task_name, phase, root_instance, legacy_result: dict) -> dict:

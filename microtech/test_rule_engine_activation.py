@@ -86,6 +86,52 @@ def test_engine_builds_set_field_dataset_action():
     assert a.target_value == "22"
 
 
+def test_engine_collects_actions_from_every_matching_rule_in_priority_order():
+    from microtech.rule_engine.order_resolver import resolve_order_rule
+
+    trigger = _order_trigger()
+    first_dataset, first_field = _catalog("ZahlArt", "Integer")
+    first_rule = MicrotechOrderRule.objects.create(
+        name="Zahlungsart",
+        is_active=True,
+        engine_enabled=True,
+        trigger=trigger,
+        execution_phase=MicrotechOrderRule.ExecutionPhase.BEFORE,
+        priority=10,
+    )
+    MicrotechOrderRuleAction.objects.create(
+        rule=first_rule,
+        action_type=MicrotechOrderRuleAction.ActionType.SET_FIELD,
+        dataset=first_dataset,
+        dataset_field=first_field,
+        target_value="22",
+    )
+
+    second_dataset, second_field = _catalog("VersandArt", "Integer")
+    MicrotechOrderRuleAction.objects.create(
+        rule=MicrotechOrderRule.objects.create(
+            name="Versandart",
+            is_active=True,
+            engine_enabled=True,
+            trigger=trigger,
+            execution_phase=MicrotechOrderRule.ExecutionPhase.BEFORE,
+            priority=20,
+        ),
+        action_type=MicrotechOrderRuleAction.ActionType.SET_FIELD,
+        dataset=second_dataset,
+        dataset_field=second_field,
+        target_value="5",
+    )
+
+    resolved = resolve_order_rule(_make_order())
+
+    assert resolved.rule_id == first_rule.pk
+    assert [(action.dataset_field_name, action.target_value) for action in resolved.dataset_actions] == [
+        ("ZahlArt", "22"),
+        ("VersandArt", "5"),
+    ]
+
+
 def test_engine_no_match_returns_defaults_with_customer_type():
     from microtech.rule_engine.order_resolver import resolve_order_rule
 

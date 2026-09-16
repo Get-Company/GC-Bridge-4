@@ -12,7 +12,7 @@ class _Order:
 
 
 class DispatchTest(TestCase):
-    def _enabled_rule_with_action(self):
+    def _enabled_rule_with_action(self, *, priority=100, field_name="Na1", target_value="{{ firma }}"):
         # "order_create" is seeded by migration 0034_seed_triggers; use get_or_create to
         # avoid IntegrityError in the migrated test DB.
         trigger, _ = RuleTrigger.objects.get_or_create(
@@ -24,16 +24,17 @@ class DispatchTest(TestCase):
             },
         )
         rule = MicrotechOrderRule.objects.create(
-            name="R", trigger=trigger, engine_enabled=True, shadow_mode=False,
+            name=f"R {priority}", priority=priority, trigger=trigger,
+            engine_enabled=True, shadow_mode=False,
             execution_phase=MicrotechOrderRule.ExecutionPhase.BEFORE)
         MicrotechOrderRuleConditionGroup.objects.create(
             rule=rule, logic=MicrotechOrderRule.ConditionLogic.ALL)  # leer = trifft immer
         ds = MicrotechDatasetCatalog.objects.create(
-            code="Vorgang", name="Vorgang", source_identifier="Vorgang")
-        field = MicrotechDatasetField.objects.create(dataset=ds, field_name="Na1")
+            code=f"Vorgang-{priority}", name="Vorgang", source_identifier="Vorgang")
+        field = MicrotechDatasetField.objects.create(dataset=ds, field_name=field_name)
         MicrotechOrderRuleAction.objects.create(
             rule=rule, action_type=MicrotechOrderRuleAction.ActionType.SET_FIELD,
-            dataset=ds, dataset_field=field, target_value="{{ firma }}")
+            dataset=ds, dataset_field=field, target_value=target_value)
         return rule
 
     def test_resolve_actions_renders_template(self):
@@ -43,6 +44,21 @@ class DispatchTest(TestCase):
             phase=MicrotechOrderRule.ExecutionPhase.BEFORE, root_instance=_Order())
         self.assertEqual(len(actions), 1)
         self.assertEqual(actions[0].value, "ACME AG")
+
+    def test_resolve_actions_runs_every_matching_rule_in_priority_order(self):
+        self._enabled_rule_with_action(priority=10, field_name="Na1")
+        self._enabled_rule_with_action(priority=20, field_name="Na2", target_value="Zusatz")
+
+        actions = resolve_actions(
+            task_name="orders.microtech_order_upsert",
+            phase=MicrotechOrderRule.ExecutionPhase.BEFORE,
+            root_instance=_Order(),
+        )
+
+        self.assertEqual([(action.field_path, action.value) for action in actions], [
+            ("Na1", "ACME AG"),
+            ("Na2", "Zusatz"),
+        ])
 
     def test_shadow_compare_returns_diff_without_applying(self):
         rule = self._enabled_rule_with_action()
