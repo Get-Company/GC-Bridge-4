@@ -82,6 +82,18 @@ class OrderAdminListDisplayTest(SimpleTestCase):
         )
         return Order(api_id="admin-list-display", customer=customer, billing_address=billing_address)
 
+    @staticmethod
+    def _set_customer_defaults(
+        order: Order,
+        address: Address | None = None,
+        *additional: Address,
+    ) -> Address:
+        address = address or order.billing_address
+        address.is_shipping = True
+        address.is_invoice = True
+        order.customer.order_connection_addresses = [address, *additional]
+        return address
+
     def test_customer_column_shows_address_number_company_and_domestic_marker(self):
         order = self._order(country_code="DE", company="Muster GmbH")
 
@@ -112,6 +124,7 @@ class OrderAdminListDisplayTest(SimpleTestCase):
 
     def test_address_reconciliation_status_marks_missing_microtech_ids(self):
         order = self._order(country_code="DE")
+        self._set_customer_defaults(order)
 
         rendered = str(self.model_admin.address_reconciliation_status(order))
 
@@ -123,6 +136,7 @@ class OrderAdminListDisplayTest(SimpleTestCase):
         order.shipping_address = order.billing_address
         order.billing_address.erp_ans_nr = 1
         order.billing_address.erp_asp_nr = 1
+        self._set_customer_defaults(order)
 
         rendered = str(self.model_admin.address_reconciliation_status(order))
 
@@ -133,6 +147,7 @@ class OrderAdminListDisplayTest(SimpleTestCase):
         order.shipping_address = order.billing_address
         order.billing_address.erp_ans_nr = 0
         order.billing_address.erp_asp_nr = 0
+        self._set_customer_defaults(order)
 
         rendered = str(self.model_admin.address_reconciliation_status(order))
 
@@ -145,7 +160,7 @@ class OrderAdminListDisplayTest(SimpleTestCase):
         address.api_id = "a" * 32
         address.erp_ans_nr = 0
         address.erp_asp_nr = 0
-        order.customer.order_connection_addresses = [address]
+        self._set_customer_defaults(order, address)
 
         rendered = str(self.model_admin.address_system_link_status(order))
 
@@ -159,12 +174,31 @@ class OrderAdminListDisplayTest(SimpleTestCase):
         address.erp_ans_nr = 0
         address.erp_asp_nr = 0
         duplicate = Address(customer=order.customer, api_id=address.api_id, erp_ans_nr=1, erp_asp_nr=1)
-        order.customer.order_connection_addresses = [address, duplicate]
+        self._set_customer_defaults(order, address, duplicate)
 
         rendered = str(self.model_admin.address_system_link_status(order))
 
         self.assertIn("Verknüpfung offen", rendered)
         self.assertIn("SW6-ID nicht eindeutig", rendered)
+
+    def test_address_statuses_use_customer_defaults_not_order_address_snapshots(self):
+        order = self._order(country_code="DE")
+        order.shipping_address = order.billing_address
+        standard_address = Address(
+            customer=order.customer,
+            api_id="a" * 32,
+            erp_ans_nr=1,
+            erp_asp_nr=0,
+            is_shipping=True,
+            is_invoice=True,
+        )
+        order.customer.order_connection_addresses = [order.billing_address, standard_address]
+
+        reconciliation = str(self.model_admin.address_reconciliation_status(order))
+        system_link = str(self.model_admin.address_system_link_status(order))
+
+        self.assertIn("Zugeordnet", reconciliation)
+        self.assertIn("Eindeutig verknüpft", system_link)
 
 
 class AdminTriggerTest(TestCase):

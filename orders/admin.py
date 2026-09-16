@@ -263,7 +263,13 @@ class OrderAdmin(BaseAdmin):
                 Prefetch(
                     "customer__addresses",
                     queryset=Address.objects.only(
-                        "id", "customer_id", "api_id", "erp_ans_nr", "erp_asp_nr"
+                        "id",
+                        "customer_id",
+                        "api_id",
+                        "erp_ans_nr",
+                        "erp_asp_nr",
+                        "is_shipping",
+                        "is_invoice",
                     ),
                     to_attr="order_connection_addresses",
                 )
@@ -329,7 +335,7 @@ class OrderAdmin(BaseAdmin):
 
     @admin.display(description="Adressabgleich")
     def address_reconciliation_status(self, obj: Order):
-        addresses = self._order_address_scopes(obj)
+        addresses = self._customer_standard_address_scopes(obj)
         open_items = []
         for label, address in addresses:
             if address is None:
@@ -352,10 +358,25 @@ class OrderAdmin(BaseAdmin):
             len(open_items),
         )
 
-    @staticmethod
-    def _order_address_scopes(obj: Order) -> tuple[tuple[str, Address | None], ...]:
-        shipping = getattr(obj, "shipping_address", None)
-        billing = getattr(obj, "billing_address", None)
+    @classmethod
+    def _customer_standard_address_scopes(
+        cls,
+        obj: Order,
+        customer_addresses: tuple[Address, ...] | None = None,
+    ) -> tuple[tuple[str, Address | None], ...]:
+        """Return the customer's current shipping and billing defaults.
+
+        Order address foreign keys are immutable snapshots from the time of the
+        purchase. The status badges intentionally reflect the current customer
+        defaults configured in the customer-merge view instead.
+        """
+        addresses = (
+            customer_addresses
+            if customer_addresses is not None
+            else cls._customer_addresses_for_connection(obj)
+        )
+        shipping = next((address for address in addresses if address.is_shipping), None)
+        billing = next((address for address in addresses if address.is_invoice), None)
         same_address = shipping is billing or (
             shipping is not None and billing is not None and shipping.pk and shipping.pk == billing.pk
         )
@@ -375,16 +396,18 @@ class OrderAdmin(BaseAdmin):
         prefetched = getattr(customer, "order_connection_addresses", None)
         if prefetched is not None:
             return tuple(prefetched)
-        # The fallback keeps the display safe for direct calls in tests and
-        # custom admin views without adding a per-row database query.
-        return tuple(address for _label, address in cls._order_address_scopes(obj) if address is not None)
+        if customer is None:
+            return ()
+        # The changelist provides the prefetch above. This fallback keeps
+        # direct admin calls semantically identical to the changelist.
+        return tuple(customer.addresses.all())
 
     @admin.display(description="System-Verknüpfung")
     def address_system_link_status(self, obj: Order):
-        """Show whether each order address has one SW6 and Microtech link."""
+        """Show whether each customer default has one SW6 and Microtech link."""
         customer_addresses = self._customer_addresses_for_connection(obj)
         open_items = []
-        for label, address in self._order_address_scopes(obj):
+        for label, address in self._customer_standard_address_scopes(obj, customer_addresses):
             if address is None:
                 open_items.append(f"{label}: Django-Adresse fehlt")
                 continue
