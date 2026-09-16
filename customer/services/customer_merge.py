@@ -66,6 +66,51 @@ def _wildcard_segments(value: Any) -> list[str]:
 class CustomerMergeSearchService(BaseService):
     """Searches for customer data across Django, Shopware 6, and Microtech."""
 
+    def resolve_shopware_id_erp_numbers(
+        self, *, customer_id: str = "", address_id: str = ""
+    ) -> list[str]:
+        """Resolve exact SW6 customer or address IDs to their customer numbers."""
+        customer_ids = [value for value in _split_terms(customer_id) if _UUID_RE.fullmatch(value)]
+        address_ids = [value for value in _split_terms(address_id) if _UUID_RE.fullmatch(value)]
+        if not customer_ids and not address_ids:
+            return []
+
+        try:
+            from shopware.services import Criteria, CustomerService, EqualsFilter
+
+            service = CustomerService()
+        except Exception as exc:
+            logger.warning("Shopware ID resolve setup failed: {}", exc)
+            return []
+
+        customer_numbers: list[str] = []
+
+        def add_customer_numbers(response: Any) -> None:
+            for item in (response or {}).get("data", []) or []:
+                number = _to_str(_safe_attrs(item).get("customerNumber"))
+                if number and number not in customer_numbers:
+                    customer_numbers.append(number)
+
+        for value in customer_ids[:_MICROTECH_SEARCH_LIMIT]:
+            try:
+                add_customer_numbers(service.get_by_id(value))
+            except Exception as exc:
+                logger.warning("Shopware customer ID resolve failed: {}", exc)
+
+        for value in address_ids[:_MICROTECH_SEARCH_LIMIT]:
+            try:
+                criteria = Criteria(limit=1)
+                criteria.filter.append(EqualsFilter(field="id", value=value))
+                response = service.request_post("/search/customer-address", payload=criteria)
+                for item in (response or {}).get("data", []) or []:
+                    owner_id = _to_str(_safe_attrs(item).get("customerId"))
+                    if owner_id:
+                        add_customer_numbers(service.get_by_id(owner_id))
+            except Exception as exc:
+                logger.warning("Shopware address ID resolve failed: {}", exc)
+
+        return customer_numbers
+
     def resolve_django_erp_numbers(
         self,
         *,

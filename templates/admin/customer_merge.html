@@ -320,15 +320,29 @@
     <form id="customer-merge-search-form" class="space-y-4">
       <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h2 class="text-sm font-semibold text-gray-700 dark:text-gray-200">Kundensuche</h2>
-        <p class="text-xs text-gray-400">Mehrere ausgefüllte Felder werden mit UND verknüpft.</p>
+        <p class="text-xs text-gray-400">Mehrere ausgefüllte Felder werden mit UND verknüpft. SW6-IDs werden über die Kundennummer aufgelöst.</p>
       </div>
-      <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
+      <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
         <label class="flex flex-col gap-1 text-sm font-medium" for="search-customer-number">
           AdrNr / Kundennummer
           <input type="text" id="search-customer-number"
             class="border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm font-normal
                    bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-primary-500"
             placeholder="z. B. 10001, 10002">
+        </label>
+        <label class="flex flex-col gap-1 text-sm font-medium" for="search-shopware-customer-id">
+          SW6-Kunden-ID
+          <input type="text" id="search-shopware-customer-id"
+            class="border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm font-normal
+                   bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-primary-500"
+            placeholder="32-stellige SW6-ID">
+        </label>
+        <label class="flex flex-col gap-1 text-sm font-medium" for="search-shopware-address-id">
+          SW6-Adress-ID
+          <input type="text" id="search-shopware-address-id"
+            class="border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm font-normal
+                   bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-primary-500"
+            placeholder="32-stellige SW6-ID">
         </label>
         <label class="flex flex-col gap-1 text-sm font-medium" for="search-email">
           E-Mail
@@ -1173,6 +1187,8 @@ async function doSearch() {
   const searchId = ++activeSearchId;
   const criteria = {
     customer_number: document.getElementById('search-customer-number').value.trim(),
+    shopware_customer_id: document.getElementById('search-shopware-customer-id').value.trim(),
+    shopware_address_id: document.getElementById('search-shopware-address-id').value.trim(),
     email: document.getElementById('search-email').value.trim(),
     first_name: document.getElementById('search-first-name').value.trim(),
     last_name: document.getElementById('search-last-name').value.trim(),

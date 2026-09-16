@@ -66,14 +66,38 @@ def customer_merge_resolve_api(request):
         "street": request.GET.get("street", "").strip(),
         "postal_code": request.GET.get("postal_code", "").strip(),
         "city": request.GET.get("city", "").strip(),
+        "shopware_customer_id": request.GET.get("shopware_customer_id", "").strip(),
+        "shopware_address_id": request.GET.get("shopware_address_id", "").strip(),
     }
     if any(criteria.values()):
         search_service = CustomerMergeSearchService()
+        shopware_id_numbers = (
+            search_service.resolve_shopware_id_erp_numbers(
+                customer_id=criteria["shopware_customer_id"],
+                address_id=criteria["shopware_address_id"],
+            )
+            if criteria["shopware_customer_id"] or criteria["shopware_address_id"]
+            else []
+        )
+        lookup_criteria = {
+            key: value
+            for key, value in criteria.items()
+            if key not in {"shopware_customer_id", "shopware_address_id"}
+        }
+        customer_numbers = [
+            number.strip()
+            for number in lookup_criteria["customer_number"].split(",")
+            if number.strip()
+        ]
+        for number in shopware_id_numbers:
+            if number not in customer_numbers:
+                customer_numbers.append(number)
+        lookup_criteria["customer_number"] = ",".join(customer_numbers)
         resolved_sets: dict[str, list[str]] = {}
         with ThreadPoolExecutor(max_workers=2) as executor:
             future_map = {
-                executor.submit(search_service.resolve_shopware_erp_numbers, **criteria): "shopware",
-                executor.submit(search_service.resolve_django_erp_numbers, **criteria): "django",
+                executor.submit(search_service.resolve_shopware_erp_numbers, **lookup_criteria): "shopware",
+                executor.submit(search_service.resolve_django_erp_numbers, **lookup_criteria): "django",
             }
             for future in as_completed(future_map):
                 system = future_map[future]
@@ -84,8 +108,7 @@ def customer_merge_resolve_api(request):
                     resolved_sets[system] = []
 
         erp_nrs: list[str] = []
-        for number in criteria["customer_number"].split(","):
-            number = number.strip()
+        for number in customer_numbers:
             if number and number not in erp_nrs:
                 erp_nrs.append(number)
         for system in ("shopware", "django"):
@@ -100,10 +123,11 @@ def customer_merge_resolve_api(request):
         return JsonResponse(
             {
                 "erp_nrs": erp_nrs,
-                "resolved_from": resolved_sets,
+                "resolved_from": {**resolved_sets, "shopware_ids": shopware_id_numbers},
                 "microtech_jobs": microtech_jobs,
                 "search_summary": {
                     "shopware_found": len(resolved_sets.get("shopware", [])),
+                    "shopware_ids_found": len(shopware_id_numbers),
                     "django_found": len(resolved_sets.get("django", [])),
                     "microtech_candidates": len(microtech_candidates),
                     "microtech_candidate_numbers": microtech_candidates,
