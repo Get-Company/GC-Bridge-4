@@ -16,7 +16,7 @@ _CACHE_TTL = 600  # seconds
 
 _INTROSPECTION_QUERY = """
 query RuleBuilderIntrospection {
-  __schema { types { kind name inputFields { name } } }
+  __schema { types { kind name inputFields { name description } } }
 }
 """
 
@@ -51,8 +51,8 @@ _FALLBACK: dict[str, list[str]] = {
 }
 
 
-def introspect_input_fields() -> dict[str, list[str]]:
-    """Return {InputTypeName: [field, ...]} from the live GraphQL schema.
+def introspect_input_fields() -> dict[str, list[dict]]:
+    """Return {InputTypeName: [{name, description}, ...]} from the live GraphQL schema.
 
     Raises on transport/GraphQL errors so callers can decide to fall back.
     """
@@ -62,13 +62,14 @@ def introspect_input_fields() -> dict[str, list[str]]:
         _INTROSPECTION_QUERY, timeout=15, bypass_backup_mode=True
     )
     types = ((data or {}).get("__schema") or {}).get("types") or []
-    result: dict[str, list[str]] = {}
+    result: dict[str, list[dict]] = {}
     for entry in types:
         if not isinstance(entry, dict) or entry.get("kind") != "INPUT_OBJECT":
             continue
         name = str(entry.get("name") or "")
         fields = [
-            str((f or {}).get("name") or "")
+            {"name": str((f or {}).get("name") or ""),
+             "description": str((f or {}).get("description") or "")}
             for f in (entry.get("inputFields") or [])
             if (f or {}).get("name")
         ]
@@ -77,7 +78,13 @@ def introspect_input_fields() -> dict[str, list[str]]:
     return result
 
 
-def _group(raw: dict[str, list[str]]) -> list[dict]:
+def _normalize_field(item) -> dict:
+    if isinstance(item, dict):
+        return {"name": str(item.get("name") or ""), "description": str(item.get("description") or "")}
+    return {"name": str(item), "description": ""}
+
+
+def _group(raw: dict) -> list[dict]:
     """Group known input types (labelled + ordered) with their fields."""
     groups: list[dict] = []
     for type_name, label in INPUT_TYPE_LABELS.items():
@@ -87,7 +94,7 @@ def _group(raw: dict[str, list[str]]) -> list[dict]:
         groups.append({
             "input_type": type_name,
             "label": label,
-            "fields": [{"name": f} for f in fields],
+            "fields": [_normalize_field(f) for f in fields],
         })
     return groups
 

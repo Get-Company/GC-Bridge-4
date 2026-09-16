@@ -354,32 +354,65 @@
       return wrap;
     }
 
-    // Grouped "GraphQL Input-Typ → Feld" dropdown (optgroup per input type).
+    // Searchable "GraphQL field" autocomplete (filters name / description / type).
     function graphqlFieldPicker(a) {
-      var wrap = el("span", "re-dsf-wrap");
-      var sel = el("select", "re-dsf-select");
-      sel.appendChild(opt("", "— GraphQL-Feld wählen —", !a.graphql_field));
-      wrap.appendChild(sel);
+      var wrap = el("span", "re-ac-wrap");
+      var input = el("input"); input.type = "text";
+      input.placeholder = "Feld suchen (Name/Beschreibung)…";
+      input.value = a.graphql_field_label || (a.graphql_field ? a.graphql_field.split(".").pop() : "");
+      input.className = "re-ac-input";
+      var results = el("div", "re-ac-results"); results.style.display = "none";
+      wrap.appendChild(input); wrap.appendChild(results);
+
+      var FLAT = [];
       loadGraphqlFields(GQLGROUP_URL).then(function (groups) {
+        FLAT = [];
         groups.forEach(function (g) {
-          var og = document.createElement("optgroup");
-          og.label = g.label + " (" + g.input_type + ")";
           g.fields.forEach(function (f) {
-            var val = g.input_type + "." + f.name;
-            var selected = String(a.graphql_field) === val;
-            if (selected) a.graphql_field_label = f.name;
-            og.appendChild(opt(val, f.name, selected));
+            FLAT.push({
+              value: g.input_type + "." + f.name, name: f.name, type: g.input_type,
+              type_label: g.label, description: f.description || "",
+            });
           });
-          sel.appendChild(og);
         });
-        if (!groups.length) sel.appendChild(opt("", "(kein GraphQL-Schema geladen)", false));
+        if (document.activeElement === input) renderResults(input.value);
       });
-      sel.addEventListener("change", function () {
-        markDirty();
-        a.graphql_field = sel.value || "";
-        a.graphql_field_label = sel.value ? sel.options[sel.selectedIndex].text : "";
+
+      function renderResults(term) {
+        term = (term || "").trim().toLowerCase();
+        results.innerHTML = "";
+        var matches = FLAT.filter(function (it) {
+          if (!term) return true;
+          return it.name.toLowerCase().indexOf(term) >= 0
+            || (it.description && it.description.toLowerCase().indexOf(term) >= 0)
+            || it.type.toLowerCase().indexOf(term) >= 0
+            || (it.type_label && it.type_label.toLowerCase().indexOf(term) >= 0);
+        }).slice(0, 60);
+        if (!FLAT.length) { results.style.display = "none"; return; }
+        matches.forEach(function (it) {
+          var row = el("div", "re-ac-item");
+          var nm = el("span", "re-ac-name", it.name);
+          var meta = el("span", "re-ac-meta", " · " + it.type_label + (it.description ? " — " + it.description : ""));
+          row.appendChild(nm); row.appendChild(meta);
+          row.addEventListener("mousedown", function (ev) {
+            ev.preventDefault();
+            markDirty();
+            a.graphql_field = it.value; a.graphql_field_label = it.name;
+            input.value = it.name; results.style.display = "none";
+            renderSummary();
+          });
+          results.appendChild(row);
+        });
+        results.style.display = matches.length ? "" : "none";
+      }
+
+      input.addEventListener("input", function () {
+        a.graphql_field = ""; a.graphql_field_label = "";  // must re-pick to confirm
         renderSummary();
+        renderResults(input.value);
       });
+      input.addEventListener("focus", function () { renderResults(input.value); });
+      input.addEventListener("blur", function () { setTimeout(function () { results.style.display = "none"; }, 150); });
       return wrap;
     }
 

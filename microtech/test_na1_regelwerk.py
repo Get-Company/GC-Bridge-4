@@ -318,8 +318,8 @@ def test_introspection_parses_input_objects(monkeypatch):
     ]}}
     monkeypatch.setattr(MicrotechGraphQLClientService, "execute", lambda self, *a, **k: schema)
     raw = graphql_schema.introspect_input_fields()
-    assert raw["CustomerInput"] == ["taxCategory", "name1"]
-    assert raw["PostalAddressInput"] == ["name1", "country"]
+    assert [f["name"] for f in raw["CustomerInput"]] == ["taxCategory", "name1"]
+    assert [f["name"] for f in raw["PostalAddressInput"]] == ["name1", "country"]
     assert "Customer" not in raw  # non-input object skipped
 
 
