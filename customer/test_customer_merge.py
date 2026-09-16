@@ -1531,17 +1531,26 @@ assert.ok(addressGroupShopwareIdStatus({shopware: [{id: 'first'}], django: [{api
 searchData = {
   '10001': {
     shopware: {id: 'customer-id', customerNumber: '10001', addresses: [{id: 'address-id'}]},
-    django: {id: 71, api_id: 'CUSTOMER-ID', erp_nr: '10001', addresses: [
-      {id: 11, api_id: 'ADDRESS-ID', erp_ans_nr: 2, erp_asp_nr: 3},
+    django: {id: 71, api_id: 'wrong-customer-id', erp_nr: '10001', addresses: [
+      {id: 11, api_id: 'address-id', erp_ans_nr: 2, erp_asp_nr: 3},
     ]},
     microtech: {erp_nr: '10002', addresses: [{ans_nr: 2, contact_numbers: [3]}]},
   },
 };
-const html = renderComparisonRow('10001');
-assert.ok(html.includes('SW6-Kunden-ID'));
-assert.ok(html.includes('SW6-Adress-ID'));
-assert.ok(html.includes('≠ unterschiedlich'));
-assert.ok(html.includes('✓ identisch'));
+const mismatchHtml = renderComparisonRow('10001');
+assert.equal(mismatchHtml.includes('Kennungsabgleich'), false);
+assert.equal(mismatchHtml.includes('SW6-Kunden-ID'), false);
+assert.ok(mismatchHtml.includes('Kundennr.'));
+assert.ok(mismatchHtml.includes('SW6-ID'));
+assert.ok(mismatchHtml.includes('SW6-Adress-ID'));
+assert.ok(mismatchHtml.includes('≠ unterschiedlich'));
+assert.ok(mismatchHtml.includes('✓ identisch'));
+
+searchData['10001'].django.api_id = 'customer-id';
+searchData['10001'].microtech.erp_nr = '10001';
+const correctedHtml = renderComparisonRow('10001');
+assert.ok(correctedHtml.includes('✓ identisch'));
+assert.equal(correctedHtml.includes('≠ unterschiedlich'), false);
 ''')
 
     def test_address_comparison_groups_microtech_contacts_with_their_bridge_mapping(self):

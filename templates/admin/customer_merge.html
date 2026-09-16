@@ -169,7 +169,8 @@
   .merge-customer-identifiers { min-height: 11.5rem; }
   .merge-identifier { display: grid; grid-template-columns: 6.5rem minmax(0, 1fr); gap: .75rem; align-items: baseline; padding: .35rem 0; }
   .merge-identifier + .merge-identifier { border-top: 1px solid #e2e8f0; }
-  .merge-identifier dt { font-size: .7rem; color: #64748b; font-weight: 500; }
+  .merge-identifier dt { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem; font-size: .7rem; color: #64748b; font-weight: 500; }
+  .merge-identifier .comparison-identity-status { margin-top: 0; }
   .merge-identifier dd { margin: 0; font: 500 .8rem/1.6 ui-monospace, monospace; overflow-wrap: anywhere; color: #334155; }
   .merge-identifier .customer-number-field { display: flex; gap: .4rem; align-items: center; }
   .merge-identifier .shopware-id-field {
@@ -480,11 +481,14 @@ function editableBridgeCustomerName(erpNr, raw, customer) {
       <button type="button" onclick="updateBridgeCustomerName(this)">Speichern</button>
   </div>`;
 }
-function identifierRows(entries) {
-  return entries.map(([label, value]) => `<div class="merge-identifier"><dt>${esc(label)}</dt><dd>${esc(value ?? '—') || '—'}</dd></div>`).join('');
+function identifierLabel(label, status = '') {
+  return `${esc(label)}${status}`;
 }
-function editableShopwareMapping(label, value, action, idKey, idValue, erpNr) {
-  return `<div class="merge-identifier"><dt>${esc(label)}</dt><dd><div class="customer-number-field shopware-id-field">
+function identifierRows(entries) {
+  return entries.map(([label, value, status = '']) => `<div class="merge-identifier"><dt>${identifierLabel(label, status)}</dt><dd>${esc(value ?? '—') || '—'}</dd></div>`).join('');
+}
+function editableShopwareMapping(label, value, action, idKey, idValue, erpNr, status = '') {
+  return `<div class="merge-identifier"><dt>${identifierLabel(label, status)}</dt><dd><div class="customer-number-field shopware-id-field">
       <textarea rows="2" aria-label="${esc(label)}" autocomplete="off"
         data-erp-nr="${esc(erpNr)}" data-id-key="${esc(idKey)}" data-id-value="${esc(idValue)}">${esc(value)}</textarea>
       <button type="button" onclick="updateShopwareMapping(this, '${esc(action)}')">Speichern</button>
@@ -499,20 +503,20 @@ function editableMicrotechMapping(address) {
       <button type="button" onclick="updateMicrotechAddressMapping(this)">Speichern</button>
   </div></dd></div>`;
 }
-function shopwareCustomerMapping(nr, raw) {
+function shopwareCustomerMapping(nr, raw, status = '') {
   const target = searchData[nr]?.django;
   const transfer = target?.id
     ? `<button type="button" data-erp-nr="${esc(nr)}" onclick="adoptShopwareCustomerId(this.dataset.erpNr, this)">Zu Django übernehmen</button>`
     : '';
-  return `<div class="merge-identifier"><dt>SW6-ID</dt><dd><div class="customer-number-field shopware-id-field">
+  return `<div class="merge-identifier"><dt>${identifierLabel('SW6-ID', status)}</dt><dd><div class="customer-number-field shopware-id-field">
       <span class="shopware-id-value">${esc(raw.id || '—')}</span>${transfer}
   </div></dd></div>`;
 }
-function customerIdentifiers(nr, sysKey, raw, customer) {
+function customerIdentifiers(nr, sysKey, raw, customer, { customerNumberStatus = '', shopwareCustomerIdStatus = '' } = {}) {
   const number = sysKey === 'microtech' ? esc(customer.customerNr) || '—' : editableCustomerNumberField(nr, sysKey, customer);
   const ids = sysKey === 'django'
-    ? editableShopwareMapping('SW6-ID', raw.api_id || '', 'update_shopware_id', 'customer_id', raw.id, nr)
-    : sysKey === 'shopware' ? shopwareCustomerMapping(nr, raw) : [];
+    ? editableShopwareMapping('SW6-ID', raw.api_id || '', 'update_shopware_id', 'customer_id', raw.id, nr, shopwareCustomerIdStatus)
+    : sysKey === 'shopware' ? shopwareCustomerMapping(nr, raw, shopwareCustomerIdStatus) : [];
   const deleteDjango = sysKey === 'django'
     ? `<div class="mt-2 flex justify-end"><button type="button" onclick="deleteDjangoCustomer('${esc(nr)}', this)"
         class="inline-flex items-center gap-1 text-xs text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300">
@@ -520,7 +524,7 @@ function customerIdentifiers(nr, sysKey, raw, customer) {
       </button></div>`
     : '';
   return `<dl class="merge-identifiers merge-customer-identifiers" aria-label="Kennungen ${esc(sysKey)}">
-    <div class="merge-identifier"><dt>${esc(customer.customerNrLabel)}</dt><dd>${number}</dd></div>${Array.isArray(ids) ? identifierRows(ids) : ids}</dl>${deleteDjango}`;
+    <div class="merge-identifier"><dt>${identifierLabel(customer.customerNrLabel, customerNumberStatus)}</dt><dd>${number}</dd></div>${Array.isArray(ids) ? identifierRows(ids) : ids}</dl>${deleteDjango}`;
 }
 function toggleSection(btn) {
   const shouldOpen = !btn.classList.contains('open');
@@ -1365,8 +1369,8 @@ function renderComparisonRow(nr) {
   const emailDiff = comparisonDiff(values('email'));
   const customerNumberValues = values('customerNr');
   const shopwareCustomerIdValues = [data.shopware?.systemId, data.django?.systemId];
-  const customerNumberDiff = comparisonDiff(customerNumberValues);
-  const shopwareCustomerIdDiff = comparisonDiff(shopwareCustomerIdValues);
+  const customerNumberStatus = comparisonIdentityStatus(customerNumberValues);
+  const shopwareCustomerIdStatus = comparisonIdentityStatus(shopwareCustomerIdValues);
   const addressCounts = SYSTEMS.map(system => data[system.key]?.addresses?.length || 0);
   const addressGroups = addressComparisonGroups(nr);
 
@@ -1383,16 +1387,10 @@ function renderComparisonRow(nr) {
     ${comparisonRow('Kennungen', SYSTEMS.map(system => {
       const raw = searchData[nr]?.[system.key];
       const customer = data[system.key];
-      return customer ? customerIdentifiers(nr, system.key, raw, customer) : comparisonUnavailable(nr, system.key);
+      return customer
+        ? customerIdentifiers(nr, system.key, raw, customer, {customerNumberStatus, shopwareCustomerIdStatus})
+        : comparisonUnavailable(nr, system.key);
     }))}
-    ${hasComparableValues(customerNumberValues) ? comparisonRow('AdrNr', SYSTEMS.map(system => {
-      const customer = data[system.key];
-      return customer ? comparisonValue(customer.customerNr, {mono: true, diff: customerNumberDiff, title: customer.customerNr}) : comparisonUnavailable(nr, system.key);
-    }), {labelDetail: 'Kennungsabgleich', labelStatus: comparisonIdentityStatus(customerNumberValues)}) : ''}
-    ${hasComparableValues(shopwareCustomerIdValues) ? comparisonRow('SW6-Kunden-ID', SYSTEMS.map(system => {
-      const customer = data[system.key];
-      return customer ? comparisonValue(customer.systemId, {mono: true, diff: shopwareCustomerIdDiff, title: customer.systemId}) : comparisonUnavailable(nr, system.key);
-    }), {labelDetail: 'Kennungsabgleich', labelStatus: comparisonIdentityStatus(shopwareCustomerIdValues)}) : ''}
     ${comparisonRow('Name', SYSTEMS.map(system => {
       const raw = searchData[nr]?.[system.key];
       const customer = data[system.key];
