@@ -395,8 +395,8 @@
 
   {# -- Results area ------------------------------------------------- #}
   <div id="results-area" class="hidden space-y-4">
-    <div id="results-rows"></div>
     <div id="sw-merge-section"></div>
+    <div id="results-rows"></div>
     <div id="merge-section"></div>
   </div>
 </div>
@@ -1962,7 +1962,19 @@ function renderShopwareMergeSection() {
   const container = document.getElementById('sw-merge-section');
   if (!container || swMergeBusy) return;
   const customers = collectShopwareCustomers();
-  if (customers.length < 2 && !swMergePending) { container.innerHTML = ''; return; }
+  if (customers.length < 2 && !swMergePending) {
+    if (searchErps.length >= 2) {
+      container.innerHTML = '<div class="merge-launcher">' +
+        '<h2>Kunden zusammenführen</h2>' +
+        '<div class="merge-launcher-body"><p class="merge-launcher-note">' +
+        'Für die manuelle Auswahl müssen beide Suchtreffer jeweils eine unterschiedliche SW6-Kunden-ID haben. ' +
+        'Aktuell stehen ' + customers.length + ' von mindestens 2 SW6-Kunden bereit. ' +
+        'Es wurde keine Zusammenführung gestartet.</p></div></div>';
+    } else {
+      container.innerHTML = '';
+    }
+    return;
+  }
   const previous = swMergeSelection();
   const selected = swMergePending || {
     ...previous,

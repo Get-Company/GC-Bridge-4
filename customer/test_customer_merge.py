@@ -1140,6 +1140,7 @@ class ShopwareMergeBrowserStateTest(SimpleTestCase):
         self.assertIn('aria-labelledby="sw-merge-modal-title"', modal)
         self.assertIn('id="sw-merge-preview"', modal)
         self.assertIn('id="sw-merge-result"', modal)
+        self.assertLess(markup.index('id="sw-merge-section"'), markup.index('id="results-rows"'))
 
     def test_customer_merge_does_not_offer_microtech_customer_deletion(self):
         template = (Path(__file__).resolve().parents[1] / "templates/admin/customer_merge.html").read_text()
@@ -1333,6 +1334,10 @@ for (const id of ['sw-merge-defaults', 'sw-merge-billing', 'sw-merge-shipping'])
   assert.equal(html.includes(id), false);
 }
 assert.ok(html.includes('Standardadressen des richtigen Kunden bleiben erhalten'));
+assert.ok(html.includes('Falscher Kunde – wird nach Prüfung gelöscht'));
+assert.ok(html.includes('Richtiger Kunde – bleibt erhalten'));
+assert.ok(html.includes('id="sw-merge-delete"'));
+assert.ok(html.includes('id="sw-merge-keep"'));
 assert.equal(html.includes('id="sw-merge-btn"'), false, 'Merge can only be confirmed inside the modal');
 assert.equal(html.includes('id="sw-merge-preview"'), false, 'Preview content belongs to the modal');
 assert.ok(html.includes('>Vorschau laden</button>'));
