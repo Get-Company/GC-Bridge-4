@@ -55,6 +55,7 @@ def _serialize_action(action) -> dict:
     return {
         "action_type": action.action_type,
         "dataset_field_id": action.dataset_field_id,
+        "graphql_field": action.graphql_field or "",
         "target_value": action.target_value,
     }
 
@@ -149,9 +150,10 @@ def _validate_payload(payload: dict) -> list[str]:
             continue
         if action_type == MicrotechOrderRuleAction.ActionType.SET_FIELD:
             dataset_field_id = action.get("dataset_field_id")
-            if not dataset_field_id:
-                errors.append("set_field-Aktion benoetigt dataset_field_id")
-            elif not MicrotechDatasetField.objects.filter(pk=dataset_field_id).exists():
+            graphql_field = str(action.get("graphql_field") or "").strip()
+            if not dataset_field_id and not graphql_field:
+                errors.append("set_field-Aktion benoetigt ein Zielfeld (graphql_field oder dataset_field_id)")
+            elif dataset_field_id and not MicrotechDatasetField.objects.filter(pk=dataset_field_id).exists():
                 errors.append(f"Dataset-Feld existiert nicht: {dataset_field_id!r}")
 
     return errors
@@ -219,6 +221,7 @@ def save_rule_from_payload(payload: dict, *, rule: MicrotechOrderRule | None = N
                 priority=priority,
                 action_type=action_payload.get("action_type"),
                 dataset_field_id=action_payload.get("dataset_field_id"),
+                graphql_field=action_payload.get("graphql_field", "") or "",
                 target_value=action_payload.get("target_value", ""),
             )
 

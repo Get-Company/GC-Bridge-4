@@ -20,7 +20,7 @@
   var VALUELESS = ["is_empty", "is_not_empty", "is_true", "is_false", "empty", "not_empty"];
   var TWO_VALUE = ["between"];
   var ACTION_TYPES = [
-    ["set_field", "Dataset-Feld setzen"],
+    ["set_field", "Feld setzen (GraphQL)"],
     ["create_extra_position", "Zusatzposition anlegen"],
     ["create_shipping_position", "Versandposition anlegen"],
   ];
@@ -73,6 +73,18 @@
     return DSFIELDS_PROMISE;
   }
 
+  var GQLFIELDS = null;         // [{input_type, label, fields:[{name}]}]
+  var GQLFIELDS_PROMISE = null;
+  function loadGraphqlFields(url) {
+    if (GQLFIELDS) return Promise.resolve(GQLFIELDS);
+    if (GQLFIELDS_PROMISE) return GQLFIELDS_PROMISE;
+    GQLFIELDS_PROMISE = fetch(url, { credentials: "same-origin" })
+      .then(function (r) { return r.json(); })
+      .then(function (d) { GQLFIELDS = (d && d.ok) ? (d.groups || []) : []; return GQLFIELDS; })
+      .catch(function () { GQLFIELDS = []; return GQLFIELDS; });
+    return GQLFIELDS_PROMISE;
+  }
+
   // ---------- one editor instance ----------
   function mount(container, opts) {
     opts = opts || {};
@@ -80,6 +92,7 @@
     var OVERVIEW_URL = opts.overviewUrl;
     var DSFIELD_URL = (opts.metaUrl || "").replace("rule-builder-meta", "dataset-field-autocomplete");
     var DSGROUP_URL = (opts.metaUrl || "").replace("rule-builder-meta", "dataset-fields-grouped");
+    var GQLGROUP_URL = (opts.metaUrl || "").replace("rule-builder-meta", "graphql-fields-grouped");
     var inline = !!opts.inline;
 
     var STATE = normalizeState(opts.ruleData);
@@ -296,7 +309,7 @@
       row.appendChild(tsel);
 
       if (a.action_type === "set_field") {
-        row.appendChild(datasetFieldPicker(a));
+        row.appendChild(graphqlFieldPicker(a));
         row.appendChild(el("span", "re-hint", "="));
         row.appendChild(valueEditor(a));
       } else {
@@ -341,30 +354,30 @@
       return wrap;
     }
 
-    // Grouped "Dataset → Feld" dropdown (optgroup per dataset).
-    function datasetFieldPicker(a) {
+    // Grouped "GraphQL Input-Typ → Feld" dropdown (optgroup per input type).
+    function graphqlFieldPicker(a) {
       var wrap = el("span", "re-dsf-wrap");
       var sel = el("select", "re-dsf-select");
-      sel.appendChild(opt("", "— Dataset-Feld wählen —", !a.dataset_field_id));
+      sel.appendChild(opt("", "— GraphQL-Feld wählen —", !a.graphql_field));
       wrap.appendChild(sel);
-      loadDatasetFields(DSGROUP_URL).then(function (groups) {
+      loadGraphqlFields(GQLGROUP_URL).then(function (groups) {
         groups.forEach(function (g) {
           var og = document.createElement("optgroup");
-          og.label = g.name + (g.source_identifier ? "  (" + g.source_identifier + ")" : "");
+          og.label = g.label + " (" + g.input_type + ")";
           g.fields.forEach(function (f) {
-            var label = f.field_name + (f.label && f.label !== f.field_name ? " — " + f.label : "");
-            var selected = String(a.dataset_field_id) === String(f.id);
-            if (selected) a.dataset_field_label = f.field_name;
-            og.appendChild(opt(String(f.id), label, selected));
+            var val = g.input_type + "." + f.name;
+            var selected = String(a.graphql_field) === val;
+            if (selected) a.graphql_field_label = f.name;
+            og.appendChild(opt(val, f.name, selected));
           });
           sel.appendChild(og);
         });
-        if (!groups.length) sel.appendChild(opt("", "(kein Dataset-Katalog geladen)", false));
+        if (!groups.length) sel.appendChild(opt("", "(kein GraphQL-Schema geladen)", false));
       });
       sel.addEventListener("change", function () {
         markDirty();
-        a.dataset_field_id = sel.value ? parseInt(sel.value, 10) : null;
-        a.dataset_field_label = sel.value ? sel.options[sel.selectedIndex].text : "";
+        a.graphql_field = sel.value || "";
+        a.graphql_field_label = sel.value ? sel.options[sel.selectedIndex].text : "";
         renderSummary();
       });
       return wrap;
@@ -393,7 +406,7 @@
       box.appendChild(el("div", "re-block-label", "Klartext-Vorschau"));
       var when = STATE.root_group ? summarizeGroup(STATE.root_group) : "";
       var actions = STATE.actions.map(function (a) {
-        if (a.action_type === "set_field") return "setze " + (a.dataset_field_label || "Feld") + " = " + (a.target_value || "?");
+        if (a.action_type === "set_field") return "setze " + (a.graphql_field_label || a.graphql_field || "Feld") + " = " + (a.target_value || "?");
         if (a.action_type === "create_shipping_position") return "Versandposition " + (a.target_value || "?");
         return "Zusatzposition " + (a.target_value || "?");
       });
@@ -421,7 +434,9 @@
         trigger_id: STATE.trigger_id,
         root_group: STATE.root_group ? grp(STATE.root_group) : null,
         actions: STATE.actions.map(function (a) {
-          return { action_type: a.action_type, dataset_field_id: a.action_type === "set_field" ? a.dataset_field_id : null,
+          return { action_type: a.action_type,
+                   graphql_field: a.action_type === "set_field" ? (a.graphql_field || "") : "",
+                   dataset_field_id: a.action_type === "set_field" ? (a.dataset_field_id || null) : null,
                    target_value: a.target_value || "" };
         }),
       };
@@ -485,7 +500,7 @@
   // ---------- state helpers ----------
   function newGroup(logic) { return { logic: logic || "all", children: [], conditions: [] }; }
   function newCondition() { return { field_path: "", operator_code: "", expected_value: "", expected_value_2: "" }; }
-  function newAction() { return { action_type: "set_field", dataset_field_id: null, dataset_field_label: "", target_value: "" }; }
+  function newAction() { return { action_type: "set_field", graphql_field: "", graphql_field_label: "", dataset_field_id: null, target_value: "" }; }
   function normalizeState(data) {
     var s = data ? JSON.parse(JSON.stringify(data)) : {};
     if (!s.actions) s.actions = [];

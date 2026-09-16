@@ -195,7 +195,8 @@ def resolve_address_na1_with_mode(address):
     try:
         from microtech.rule_engine.address_resolver import resolve_address_fields
 
-        engine_value = resolve_address_fields(address).get("Na1")
+        engine_fields = resolve_address_fields(address)
+        engine_value = engine_fields.get("name1") or engine_fields.get("Na1")
         code_value = _code_na1(address)
     except Exception:
         logger.exception("Na1-Engine-Auswertung fehlgeschlagen → Code-Fallback (address={}).",

@@ -295,3 +295,89 @@ def test_dataset_fields_grouped_endpoint(admin_client):
     field_names = [f["field_name"] for f in adressen["fields"]]
     assert field_names == ["UStKat", "Na3"]  # by priority
     assert adressen["fields"][0]["label"] == "Steuerkategorie"
+
+
+# --- GraphQL schema catalog ----------------------------------------------
+
+
+def test_introspection_parses_input_objects(monkeypatch):
+    from microtech import graphql_schema
+    from microtech.services.graphql_client import MicrotechGraphQLClientService
+
+    schema = {"__schema": {"types": [
+        {"kind": "INPUT_OBJECT", "name": "CustomerInput",
+         "inputFields": [{"name": "taxCategory"}, {"name": "name1"}]},
+        {"kind": "OBJECT", "name": "Customer", "inputFields": None},
+        {"kind": "INPUT_OBJECT", "name": "PostalAddressInput",
+         "inputFields": [{"name": "name1"}, {"name": "country"}]},
+    ]}}
+    monkeypatch.setattr(MicrotechGraphQLClientService, "execute", lambda self, *a, **k: schema)
+    raw = graphql_schema.introspect_input_fields()
+    assert raw["CustomerInput"] == ["taxCategory", "name1"]
+    assert raw["PostalAddressInput"] == ["name1", "country"]
+    assert "Customer" not in raw  # non-input object skipped
+
+
+def test_catalog_falls_back_when_introspection_fails(monkeypatch):
+    from django.core.cache import cache
+    from microtech import graphql_schema
+
+    cache.clear()
+    monkeypatch.setattr(graphql_schema, "introspect_input_fields",
+                        lambda: (_ for _ in ()).throw(RuntimeError("wrapper down")))
+    catalog = graphql_schema.get_graphql_input_catalog(refresh=True)
+    assert catalog["source"] == "fallback"
+    types = {g["input_type"] for g in catalog["groups"]}
+    assert "CustomerInput" in types and "PostalAddressInput" in types
+
+
+def test_graphql_fields_endpoint(admin_client, monkeypatch):
+    import json
+    from django.core.cache import cache
+    from django.urls import reverse
+    from microtech import graphql_schema
+
+    cache.clear()
+    monkeypatch.setattr(graphql_schema, "introspect_input_fields",
+                        lambda: {"CustomerInput": ["taxCategory"]})
+    url = reverse("admin:microtech_orderrule_graphql_fields_grouped") + "?refresh=1"
+    data = json.loads(admin_client.get(url).content)
+    assert data["ok"] is True
+    cust = next(g for g in data["groups"] if g["input_type"] == "CustomerInput")
+    assert cust["fields"][0]["name"] == "taxCategory"
+
+
+def test_resolve_address_fields_keys_on_graphql_field():
+    from customer.models import Customer, Address
+    from microtech.models import (
+        MicrotechOrderRule, MicrotechOrderRuleAction, RuleTrigger,
+    )
+    from microtech.rule_engine.address_resolver import resolve_address_fields
+
+    trg = RuleTrigger.objects.get(code="address_write")
+    rule = MicrotechOrderRule.objects.create(
+        name="GraphQL Na1", is_active=True, engine_enabled=True, trigger=trg,
+        execution_phase=MicrotechOrderRule.ExecutionPhase.BEFORE, priority=5)
+    MicrotechOrderRuleAction.objects.create(
+        rule=rule, action_type=MicrotechOrderRuleAction.ActionType.SET_FIELD,
+        graphql_field="PostalAddressInput.name1", target_value="Firma")
+    cust = Customer.objects.create()
+    addr = Address.objects.create(customer=cust, name1="ACME GmbH")
+    assert resolve_address_fields(addr) == {"name1": "Firma"}
+
+
+def test_action_graphql_field_round_trip():
+    from microtech.models import MicrotechOrderRule, RuleTrigger
+    from microtech.rule_engine.editor import save_rule_from_payload, serialize_rule_for_edit
+
+    trg = RuleTrigger.objects.get(code="address_write")
+    payload = {
+        "name": "RT", "priority": 10, "is_active": True, "execution_phase": "before",
+        "engine_enabled": True, "shadow_mode": True, "trigger_id": trg.id,
+        "root_group": None,
+        "actions": [{"action_type": "set_field", "graphql_field": "CustomerInput.taxCategory",
+                     "dataset_field_id": None, "target_value": "2"}],
+    }
+    rule = save_rule_from_payload(payload)
+    data = serialize_rule_for_edit(MicrotechOrderRule.objects.get(pk=rule.pk))
+    assert data["actions"][0]["graphql_field"] == "CustomerInput.taxCategory"

@@ -459,7 +459,21 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
                 "microtech_orderrule_dataset_fields_grouped",
                 self.rule_dataset_fields_grouped_view,
             ),
+            (
+                "graphql-fields-grouped/",
+                "microtech_orderrule_graphql_fields_grouped",
+                self.rule_graphql_fields_grouped_view,
+            ),
         )
+
+    def rule_graphql_fields_grouped_view(self, request, **kwargs):
+        """GraphQL input fields grouped by input type, for the target dropdown."""
+        if not self.has_view_permission(request):
+            return JsonResponse({"ok": False, "error": "Zugriff verweigert."}, status=403)
+        from microtech.graphql_schema import get_graphql_input_catalog
+
+        refresh = request.GET.get("refresh") in ("1", "true", "yes")
+        return JsonResponse(get_graphql_input_catalog(refresh=refresh))
 
     def rule_dataset_fields_grouped_view(self, request, **kwargs):
         """All active dataset fields grouped by dataset, for the target dropdown."""

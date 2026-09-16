@@ -586,6 +586,13 @@ class MicrotechOrderRuleAction(BaseModel):
         blank=True,
         verbose_name=_("Dataset Feld"),
     )
+    graphql_field = models.CharField(
+        max_length=128,
+        blank=True,
+        default="",
+        verbose_name=_("GraphQL-Feld"),
+        help_text=_("Ziel im GraphQL-Schema, Form 'InputType.feld' (z. B. PostalAddressInput.name1)."),
+    )
     target_value = models.CharField(
         max_length=255,
         blank=True,

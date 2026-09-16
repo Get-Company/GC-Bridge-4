@@ -43,14 +43,22 @@ def resolve_address_fields(address) -> dict[str, str]:
         ):
             if str(action.action_type) != MicrotechOrderRuleAction.ActionType.SET_FIELD:
                 continue
-            if not action.dataset_field_id:
-                continue
-            field_name = str(action.dataset_field.field_name or "")
+            field_name = _target_field_name(action)
             if not field_name:
                 continue
             result[field_name] = render_template(action.target_value or "", context)
         return result
     return {}
+
+
+def _target_field_name(action) -> str:
+    """Prefer the GraphQL field (last path segment), fall back to the dataset field."""
+    graphql_field = str(getattr(action, "graphql_field", "") or "").strip()
+    if graphql_field:
+        return graphql_field.rsplit(".", 1)[-1]
+    if action.dataset_field_id:
+        return str(action.dataset_field.field_name or "")
+    return ""
 
 
 __all__ = ["resolve_address_fields", "ADDRESS_WRITE_TASK"]
