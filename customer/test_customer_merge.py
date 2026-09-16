@@ -1543,6 +1543,31 @@ assert.equal(microtech.addresses[0].microtechAddressNumber, 2);
 assert.deepEqual(microtech.addresses[0].contacts.map(contact => contact.microtechContactNumber), [1, 3]);
 ''')
 
+    def test_identifier_comparison_status_only_shows_for_filled_values(self):
+        self.run_js(r'''
+assert.ok(comparisonIdentityStatus(['same', 'SAME']).includes('✓ identisch'));
+assert.ok(comparisonIdentityStatus(['first', 'second']).includes('≠ unterschiedlich'));
+assert.equal(comparisonIdentityStatus(['only-one', '']), '');
+assert.ok(comparisonIdentityStatus([0, '0']).includes('✓ identisch'));
+assert.ok(addressGroupShopwareIdStatus({shopware: [{id: 'address'}], django: [{apiId: 'ADDRESS'}]}).includes('✓ identisch'));
+assert.ok(addressGroupShopwareIdStatus({shopware: [{id: 'first'}], django: [{apiId: 'second'}]}).includes('≠ unterschiedlich'));
+
+searchData = {
+  '10001': {
+    shopware: {id: 'customer-id', customerNumber: '10001', addresses: [{id: 'address-id'}]},
+    django: {id: 71, api_id: 'CUSTOMER-ID', erp_nr: '10001', addresses: [
+      {id: 11, api_id: 'ADDRESS-ID', erp_ans_nr: 2, erp_asp_nr: 3},
+    ]},
+    microtech: {erp_nr: '10002', addresses: [{ans_nr: 2, contact_numbers: [3]}]},
+  },
+};
+const html = renderComparisonRow('10001');
+assert.ok(html.includes('SW6-Kunden-ID'));
+assert.ok(html.includes('SW6-Adress-ID'));
+assert.ok(html.includes('≠ unterschiedlich'));
+assert.ok(html.includes('✓ identisch'));
+''')
+
     def test_address_comparison_groups_microtech_contacts_with_their_bridge_mapping(self):
         self.run_js(r'''
 searchData = {

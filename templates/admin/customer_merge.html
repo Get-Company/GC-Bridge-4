@@ -88,7 +88,7 @@
     flex-direction: column;
     gap: .25rem;
   }
-  .comparison-address-label span { font: 500 .65rem/1.3 ui-monospace, monospace; color: #94a3b8; }
+  .comparison-address-label .comparison-label-detail { font: 500 .65rem/1.3 ui-monospace, monospace; color: #94a3b8; }
   .comparison-address-cell { background: #fff; }
   .comparison-address-card + .comparison-address-card { margin-top: .6rem; }
   .comparison-address-card {
@@ -129,6 +129,21 @@
   .comparison-matrix .merge-identifiers { margin: 0; }
   .comparison-matrix .merge-customer-identifiers { min-height: 0; }
   .comparison-matrix .diff-highlight { margin-inline: -.25rem; padding-inline: .25rem; }
+  .comparison-identity-status {
+    display: inline-flex;
+    width: fit-content;
+    align-items: center;
+    margin-top: .35rem;
+    padding: .15rem .4rem;
+    border: 1px solid;
+    border-radius: 999px;
+    font-size: .62rem;
+    font-weight: 700;
+    letter-spacing: .01em;
+    line-height: 1.2;
+  }
+  .comparison-identity-match { border-color: #86efac; background: #f0fdf4; color: #15803d; }
+  .comparison-identity-different { border-color: #fbbf24; background: #fffbeb; color: #b45309; }
   .dark .comparison-matrix { border-color: #334155; }
   .dark .comparison-matrix-corner,
   .dark .comparison-system-header,
@@ -145,6 +160,8 @@
   .dark .comparison-address-copy:hover { background: #1e3a8a; }
   .dark .comparison-address-card .merge-contact { background: #0f172a; }
   .dark .comparison-address-empty { color: #64748b; }
+  .dark .comparison-identity-match { border-color: #166534; background: #052e16; color: #86efac; }
+  .dark .comparison-identity-different { border-color: #92400e; background: #451a03; color: #fcd34d; }
   @media (max-width: 1023px) {
     .comparison-matrix { grid-template-columns: minmax(7rem, .4fr) repeat(3, minmax(13rem, 1fr)); overflow-x: auto; }
   }
@@ -715,8 +732,24 @@ function comparisonDiff(values) {
   return new Set(present).size > 1;
 }
 
-function comparisonRow(label, cells, { labelDetail = '', labelClass = '', cellClass = '' } = {}) {
-  return `<div class="comparison-label ${labelClass}">${esc(label)}${labelDetail ? `<span>${esc(labelDetail)}</span>` : ''}</div>`
+function hasComparableValues(values) {
+  return values.filter(value => value !== '' && value !== null && value !== undefined).length >= 2;
+}
+
+function comparisonIdentityStatus(values) {
+  if (!hasComparableValues(values)) return '';
+  const normalized = values
+    .filter(value => value !== '' && value !== null && value !== undefined)
+    .map(value => String(value).trim().toLowerCase());
+  const matches = new Set(normalized).size === 1;
+  return `<span class="comparison-identity-status comparison-identity-${matches ? 'match' : 'different'}"
+    title="${matches ? 'Alle vorhandenen Kennungen stimmen überein' : 'Vorhandene Kennungen unterscheiden sich'}">
+    ${matches ? '✓ identisch' : '≠ unterschiedlich'}
+  </span>`;
+}
+
+function comparisonRow(label, cells, { labelDetail = '', labelStatus = '', labelClass = '', cellClass = '' } = {}) {
+  return `<div class="comparison-label ${labelClass}">${esc(label)}${labelDetail ? `<span class="comparison-label-detail">${esc(labelDetail)}</span>` : ''}${labelStatus}</div>`
     + cells.map(cell => `<div class="comparison-cell ${cellClass}">${cell}</div>`).join('');
 }
 
@@ -900,6 +933,12 @@ function addressComparisonGroups(nr) {
 function comparisonAddressCell(nr, sysKey, addresses, defaultActions = '') {
   if (!addresses.length) return '<div class="comparison-address-empty">Keine zugeordnete Adresse</div>';
   return addresses.map(address => comparisonAddressCard(nr, sysKey, address, defaultActions)).join('');
+}
+
+function addressGroupShopwareIdStatus(group) {
+  const shopwareAddress = group.shopware?.length === 1 ? group.shopware[0] : null;
+  const djangoAddress = group.django?.length === 1 ? group.django[0] : null;
+  return comparisonIdentityStatus([shopwareAddress?.id, djangoAddress?.apiId]);
 }
 
 /* ── search ──────────────────────────────────────────── */
@@ -1332,6 +1371,10 @@ function renderComparisonRow(nr) {
   const values = key => SYSTEMS.map(system => data[system.key]?.[key]);
   const nameDiff = comparisonDiff(values('name'));
   const emailDiff = comparisonDiff(values('email'));
+  const customerNumberValues = values('customerNr');
+  const shopwareCustomerIdValues = [data.shopware?.systemId, data.django?.systemId];
+  const customerNumberDiff = comparisonDiff(customerNumberValues);
+  const shopwareCustomerIdDiff = comparisonDiff(shopwareCustomerIdValues);
   const addressCounts = SYSTEMS.map(system => data[system.key]?.addresses?.length || 0);
   const addressGroups = addressComparisonGroups(nr);
 
@@ -1350,6 +1393,14 @@ function renderComparisonRow(nr) {
       const customer = data[system.key];
       return customer ? customerIdentifiers(nr, system.key, raw, customer) : comparisonUnavailable(nr, system.key);
     }))}
+    ${hasComparableValues(customerNumberValues) ? comparisonRow('AdrNr', SYSTEMS.map(system => {
+      const customer = data[system.key];
+      return customer ? comparisonValue(customer.customerNr, {mono: true, diff: customerNumberDiff, title: customer.customerNr}) : comparisonUnavailable(nr, system.key);
+    }), {labelDetail: 'Kennungsabgleich', labelStatus: comparisonIdentityStatus(customerNumberValues)}) : ''}
+    ${hasComparableValues(shopwareCustomerIdValues) ? comparisonRow('SW6-Kunden-ID', SYSTEMS.map(system => {
+      const customer = data[system.key];
+      return customer ? comparisonValue(customer.systemId, {mono: true, diff: shopwareCustomerIdDiff, title: customer.systemId}) : comparisonUnavailable(nr, system.key);
+    }), {labelDetail: 'Kennungsabgleich', labelStatus: comparisonIdentityStatus(shopwareCustomerIdValues)}) : ''}
     ${comparisonRow('Name', SYSTEMS.map(system => {
       const raw = searchData[nr]?.[system.key];
       const customer = data[system.key];
@@ -1378,7 +1429,12 @@ function renderComparisonRow(nr) {
         group[system.key],
         synchronizedDefaultActions(nr, group),
       )),
-      {labelDetail: group.detail, labelClass: 'comparison-address-label', cellClass: 'comparison-address-cell'},
+      {
+        labelDetail: group.detail,
+        labelStatus: addressGroupShopwareIdStatus(group),
+        labelClass: 'comparison-address-label',
+        cellClass: 'comparison-address-cell',
+      },
     )).join('');
   } else {
     html += comparisonRow('Adressen', SYSTEMS.map(() => '<div class="comparison-address-empty">Keine Adresse vorhanden</div>'), {
