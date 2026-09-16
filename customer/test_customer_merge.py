@@ -1155,6 +1155,14 @@ class ShopwareMergeBrowserStateTest(SimpleTestCase):
         self.assertIn("document.getElementById('search-customer-number').value = customerNumber;", template)
         self.assertIn("startSearchFromOrderCustomer();", template)
 
+    def test_customer_merge_search_button_bypasses_global_admin_loader(self):
+        template = (Path(__file__).resolve().parents[1] / "templates/admin/customer_merge.html").read_text()
+        search_button = template.split('id="search-btn"', 1)[1].split(">", 1)[0]
+
+        self.assertIn('data-admin-loader="off"', search_button)
+        self.assertIn("customerMergeSearchForm.addEventListener('submit', startCustomerMergeSearch);", template)
+        self.assertIn("customerMergeSearchButton.addEventListener('click', event =>", template)
+
     def test_microtech_mapping_reads_the_microtech_field(self):
         template = (Path(__file__).resolve().parents[1] / "templates/admin/customer_merge.html").read_text()
         function = template.split("async function updateMicrotechAddressMapping(button)", 1)[1].split(

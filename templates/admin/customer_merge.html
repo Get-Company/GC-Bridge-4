@@ -383,7 +383,7 @@
         </label>
       </div>
       <div class="flex justify-end">
-        <button type="submit" id="search-btn"
+        <button type="submit" id="search-btn" data-admin-loader="off"
           class="px-3 py-2 bg-primary-600 text-white rounded text-xs font-medium
                  hover:bg-primary-700 transition flex items-center justify-center gap-1.5 disabled:opacity-50">
           <span class="material-symbols-outlined text-sm">search</span>
@@ -518,9 +518,18 @@ function setSearchButtonLoading(isLoading) {
     : SEARCH_BUTTON_IDLE;
 }
 
-document.getElementById('customer-merge-search-form').addEventListener('submit', event => {
+const customerMergeSearchForm = document.getElementById('customer-merge-search-form');
+const customerMergeSearchButton = document.getElementById('search-btn');
+
+function startCustomerMergeSearch(event) {
   event.preventDefault();
   void doSearch();
+}
+
+customerMergeSearchForm.addEventListener('submit', startCustomerMergeSearch);
+customerMergeSearchButton.addEventListener('click', event => {
+  event.preventDefault();
+  if (!customerMergeSearchButton.disabled) void doSearch();
 });
 
 /* ── Normalize data into common format per system ───── */
