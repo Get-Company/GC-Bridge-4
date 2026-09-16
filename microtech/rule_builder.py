@@ -42,6 +42,10 @@ _ADDRESS_FIELD_NAMES: tuple[str, ...] = (
     "street", "postal_code", "city", "country_code", "department", "email", "phone",
 )
 
+# Customer fields that are meaningful when evaluating an individual address.
+# They intentionally remain a small, explicit set so the address picker stays focused.
+_ADDRESS_CUSTOMER_FIELD_NAMES: tuple[str, ...] = ("company",)
+
 
 @dataclass(frozen=True, slots=True)
 class DatasetDef:
@@ -640,7 +644,7 @@ def get_address_field_defs(context_root: str = "customer.Address") -> list[Djang
     address-write trigger and the customer-write trigger (whose rules are
     evaluated against the billing address).
     """
-    from customer.models import Address
+    from customer.models import Address, Customer
 
     defs: list[DjangoFieldDef] = []
     for name in _ADDRESS_FIELD_NAMES:
@@ -654,6 +658,24 @@ def get_address_field_defs(context_root: str = "customer.Address") -> list[Djang
                 catalog_id=None,
                 path=name,
                 label=f"Anschrift - {field.verbose_name} ({name})",
+                value_kind=value_kind,
+                example=_default_example(value_kind),
+                context_root=context_root,
+            )
+        )
+
+    for name in _ADDRESS_CUSTOMER_FIELD_NAMES:
+        try:
+            field = Customer._meta.get_field(name)
+        except Exception:
+            continue
+        value_kind = _field_value_kind(field)
+        path = f"customer__{name}"
+        defs.append(
+            DjangoFieldDef(
+                catalog_id=None,
+                path=path,
+                label=f"Kunde - {field.verbose_name} ({path})",
                 value_kind=value_kind,
                 example=_default_example(value_kind),
                 context_root=context_root,

@@ -84,6 +84,13 @@ class MicrotechOrderRuleFormsTest(TestCase):
         field = MicrotechOrderRuleDjangoField.objects.get(field_path="billing_address__country_code")
         self.assertEqual(field.label, "Rechnungsland")
 
+    def test_condition_field_catalog_includes_shopware_customer_company(self):
+        sync_django_field_catalog()
+
+        field = MicrotechOrderRuleDjangoField.objects.get(field_path="customer__company")
+
+        self.assertEqual(field.label, "Customer - Firma (Shopware) (customer__company)")
+
     def test_condition_form_keeps_datetime_input_for_existing_purchase_date_time_value(self):
         condition = MicrotechOrderRuleCondition(
             django_field_path="purchase_date",

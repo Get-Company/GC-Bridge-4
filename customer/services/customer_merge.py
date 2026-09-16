@@ -1845,6 +1845,8 @@ class CustomerSyncDirectionService(BaseService):
         first = _os_to_str(raw.get("firstName"))
         last = _os_to_str(raw.get("lastName"))
         company = _os_to_str(raw.get("company"))
+        if "company" in raw:
+            customer.company = company
         customer.name = company or f"{first} {last}".strip() or customer.name
         customer.email = _os_to_str(raw.get("email")) or customer.email
         customer.api_id = customer_id or customer.api_id

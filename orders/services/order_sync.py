@@ -274,6 +274,8 @@ class OrderSyncService(BaseService):
 
         nested_customer = customer_payload or _normalize_entity(order_customer.get("customer") or {})
         vat_ids = nested_customer.get("vatIds") or []
+        if "company" in nested_customer:
+            customer.company = _to_str(nested_customer.get("company"))
         customer.name = _to_str(nested_customer.get("firstName") or order_customer.get("firstName") or customer.name)
         customer.email = _to_str(order_customer.get("email") or nested_customer.get("email")) or customer.email
         customer.api_id = customer_id or customer.api_id

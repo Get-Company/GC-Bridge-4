@@ -9,6 +9,12 @@ class Customer(BaseModel):
     erp_nr = models.CharField(max_length=64, unique=True, verbose_name=_("ERP-Nummer"))
     erp_id = models.IntegerField(null=True, blank=True, unique=True, verbose_name=_("ERP-ID"))
     name = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Name"))
+    company = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        verbose_name=_("Firma (Shopware)"),
+    )
     email = models.EmailField(max_length=255, blank=True, default="", verbose_name=_("E-Mail"))
     api_id = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Shopware Kunden-ID"))
     shopware_customer_group = models.CharField(
