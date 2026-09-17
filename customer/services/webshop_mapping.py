@@ -161,8 +161,8 @@ class CustomerWebshopMappingService(BaseService):
         billing_country_code: str,
         vat_id: str,
         customer_group: str,
-    ) -> str:
-        """Resolve Microtech ``UStKat`` from the agreed Shopware rules.
+    ) -> int:
+        """Resolve the integer Microtech ``Adressen.UStKat`` value.
 
         The invoice country has priority.  Only the Italian B2B group with a
         VAT ID is tax category 3 within the EU; every other EU customer keeps
@@ -170,15 +170,15 @@ class CustomerWebshopMappingService(BaseService):
         """
         country_code = cls._to_text(billing_country_code).upper()
         if country_code == "DE":
-            return "1"
+            return 1
         if country_code == "CH" or country_code not in EU_COUNTRY_CODES:
-            return "2"
+            return 2
         if (
             cls._to_text(customer_group).casefold() == _ITALIAN_B2B_GROUP
             and bool(cls._to_text(vat_id))
         ):
-            return "3"
-        return "1"
+            return 3
+        return 1
 
     @classmethod
     @lru_cache(maxsize=2)

@@ -364,6 +364,14 @@ class CustomerUpsertMicrotechService(BaseService):
         )
         if overlay:
             customer_input.update(overlay)
+        # Rule action values are rendered as text.  ``Adressen.UStKat`` is an
+        # integer in Microtech, and GraphQL does not coerce JSON strings for an
+        # ``Int`` input field.  Convert only this typed CustomerInput field
+        # after all rules have been overlaid.
+        if "taxCategory" in customer_input:
+            customer_input["taxCategory"] = self._coerce_tax_category(
+                customer_input["taxCategory"]
+            )
         return self._drop_blank(customer_input)
 
     def _build_postal_address_input(
@@ -566,13 +574,27 @@ class CustomerUpsertMicrotechService(BaseService):
         return True
 
     @staticmethod
-    def _resolve_ustkat(country_code: str, vat_id: str, customer_group: str = "") -> str:
+    def _resolve_ustkat(country_code: str, vat_id: str, customer_group: str = "") -> int:
         """Compatibility helper for callers that previously used this method."""
         return CustomerWebshopMappingService.resolve_tax_category(
             billing_country_code=country_code,
             vat_id=vat_id,
             customer_group=customer_group,
         )
+
+    @staticmethod
+    def _coerce_tax_category(value: Any) -> int:
+        """Return a GraphQL-compatible integer for ``CustomerInput.taxCategory``."""
+        if isinstance(value, bool):
+            raise ValueError("CustomerInput.taxCategory must be an integer, not a boolean.")
+        if isinstance(value, int):
+            return value
+        try:
+            return int(_to_str(value))
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                "CustomerInput.taxCategory must be configured as an integer value."
+            ) from exc
 
     def _persist_anschrift_identity(
         self,

@@ -649,12 +649,13 @@ def test_build_customer_input_overlays_only_in_live(monkeypatch):
 
     s = MicrotechSettings.load(); s.rule_engine_customer_mode = MicrotechSettings.EngineMode.LIVE; s.save()
     live = svc._build_customer_input(customer=cust, address=addr, billing_address=addr)
-    assert live["taxCategory"] == "99"  # engine overlay wins
+    assert live["taxCategory"] == 99  # engine overlay wins and is sent as GraphQL Int
+    assert isinstance(live["taxCategory"], int)
     assert RuleEngineShadowRun.objects.filter(task_name=CUSTOMER_WRITE_TASK).count() == 0
 
     s.rule_engine_customer_mode = MicrotechSettings.EngineMode.OFF; s.save()
     off = svc._build_customer_input(customer=cust, address=addr, billing_address=addr)
-    assert off["taxCategory"] != "99"  # hardcoded resolve_tax_category value
+    assert off["taxCategory"] != 99  # hardcoded resolve_tax_category value
 
 
 def test_meta_customer_context_has_explicit_address_fields(admin_client):
