@@ -187,6 +187,25 @@ class OrderGraphQLPayloadTest(SimpleTestCase):
             ],
         )
 
+    def test_adressen_tax_category_rule_becomes_customer_input_override(self):
+        resolved_rule = ResolvedOrderRule(
+            dataset_actions=(
+                ResolvedDatasetAction(
+                    action_type=MicrotechOrderRuleAction.ActionType.SET_FIELD,
+                    dataset_source_identifier="Adressen - Adressen",
+                    dataset_name="Adressen",
+                    dataset_field_name="UStKat",
+                    dataset_field_type="Integer",
+                    target_value="3",
+                ),
+            ),
+        )
+
+        self.assertEqual(
+            OrderUpsertMicrotechService._customer_input_overrides_from_rule(resolved_rule),
+            {"taxCategory": "3"},
+        )
+
     def test_shipping_rule_uses_selected_article_and_order_shipping_costs(self):
         order = SimpleNamespace(
             details=SimpleNamespace(all=lambda: []),

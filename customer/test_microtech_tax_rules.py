@@ -64,6 +64,20 @@ class MicrotechCustomerTaxRuleTest(SimpleTestCase):
             {"TextKz1": 1, "TextKz2": 0, "TextKz3": 0, "TextKz4": 0, "TextKz5": 0},
         )
 
+    def test_order_specific_tax_category_override_is_sent_as_an_integer(self):
+        customer = Customer(erp_nr="100001", name="Beispiel AG")
+        address = Address(customer=customer, name1="Beispiel AG", country_code="DE")
+
+        payload = CustomerUpsertMicrotechService()._build_customer_input(
+            customer=customer,
+            address=address,
+            billing_address=address,
+            input_overrides={"taxCategory": "3"},
+        )
+
+        self.assertEqual(payload["taxCategory"], 3)
+        self.assertIsInstance(payload["taxCategory"], int)
+
     def test_customer_input_rejects_missing_billing_address_for_tax_category(self):
         customer = Customer(erp_nr="100001", name="Beispiel AG")
         shipping = Address(customer=customer, name1="Beispiel AG", country_code="CH")

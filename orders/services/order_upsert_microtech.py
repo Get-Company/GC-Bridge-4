@@ -151,6 +151,7 @@ class OrderUpsertMicrotechService(BaseService):
             order,
             na1_mode=resolved_rule.na1_mode,
             na1_static_value=resolved_rule.na1_static_value,
+            customer_input_overrides=self._customer_input_overrides_from_rule(resolved_rule),
             erp=erp,
         )
         order_defaults = self._load_order_defaults()
@@ -320,6 +321,7 @@ class OrderUpsertMicrotechService(BaseService):
             order,
             na1_mode=resolved_rule.na1_mode,
             na1_static_value=resolved_rule.na1_static_value,
+            customer_input_overrides=self._customer_input_overrides_from_rule(resolved_rule),
             erp=client,
         )
         order_defaults = self._load_order_defaults()
@@ -585,6 +587,7 @@ class OrderUpsertMicrotechService(BaseService):
         *,
         na1_mode: str = "auto",
         na1_static_value: str = "",
+        customer_input_overrides: dict[str, str] | None = None,
         erp: Any | None = None,
     ) -> None:
         customer = order.customer
@@ -600,6 +603,7 @@ class OrderUpsertMicrotechService(BaseService):
             billing_address=order.billing_address,
             na1_mode=na1_mode,
             na1_static_value=na1_static_value,
+            input_overrides=customer_input_overrides,
             erp=erp,
         )
         logger.info(
@@ -617,6 +621,37 @@ class OrderUpsertMicrotechService(BaseService):
 
         if not customer.erp_nr:
             raise ValueError("Customer ERP number could not be determined after upsert.")
+
+    @staticmethod
+    def _customer_input_overrides_from_rule(resolved_rule: ResolvedOrderRule) -> dict[str, str]:
+        """Translate supported customer-master dataset actions for GraphQL.
+
+        The order trigger has the order's invoice address in scope.  Its
+        ``Adressen.UStKat`` action must consequently be written during the
+        preceding customer upsert, not to the later ``Vorgang`` payload.
+        Other Adressen fields deliberately stay unsupported until the wrapper
+        exposes a typed GraphQL input for them.
+        """
+        overrides: dict[str, str] = {}
+        for action in resolved_rule.dataset_actions:
+            if action.action_type != MicrotechOrderRuleAction.ActionType.SET_FIELD:
+                continue
+            if not OrderUpsertMicrotechService._is_adressen_dataset_action(action):
+                continue
+            if (action.dataset_field_name or "").strip().casefold() != "ustkat":
+                logger.warning(
+                    "Order rule action for unsupported Adressen field '{}' ignored.",
+                    action.dataset_field_name,
+                )
+                continue
+            overrides["taxCategory"] = action.target_value
+        return overrides
+
+    @staticmethod
+    def _is_adressen_dataset_action(action: ResolvedDatasetAction) -> bool:
+        source = (action.dataset_source_identifier or "").strip().casefold()
+        name = (action.dataset_name or "").strip().casefold()
+        return source == "adressen - adressen" or name == "adressen"
 
     def _open_or_create_vorgang(
         self,

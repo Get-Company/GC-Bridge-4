@@ -866,10 +866,14 @@ class OrderSyncWorkflowService(BaseService):
             payload = {"customerNumber": state["erp_nr"]}
         elif step == "write_customer":
             operation = "upsertCustomer"
+            resolved_rule = resolve_order_rule_with_mode(order)
             input_data = customer_service._build_customer_input(
                 customer=order.customer,
                 address=shipping,
                 billing_address=billing,
+                input_overrides=OrderUpsertMicrotechService._customer_input_overrides_from_rule(
+                    resolved_rule
+                ),
             )
             submit = lambda: client.submit_upsert_customer(state["erp_nr"], input_data)
             payload = {"customerNumber": state["erp_nr"], "input": input_data}

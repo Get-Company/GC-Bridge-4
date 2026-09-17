@@ -2,6 +2,7 @@ from decimal import Decimal
 
 from django.db import IntegrityError
 from django.test import TestCase
+from unittest.mock import MagicMock, patch
 
 from customer.models import Address, Customer
 from orders.models import MicrotechOrderSyncWorkflow, Order
@@ -527,6 +528,38 @@ class StartAndSubmitTest(TestCase):
         self.assertEqual(called["context"]["step"], "write_customer")
         self.assertEqual(called["continuation"], "microtech_order_sync_advance")
         self.assertEqual(called["request_payload"]["input"]["taxCategory"], 3)
+
+    @patch("orders.services.order_sync_workflow.resolve_order_rule_with_mode")
+    @patch("orders.services.order_sync_workflow.MicrotechGraphQLClientService")
+    @patch("orders.services.order_sync_workflow.MicrotechJobSentinelService.submit_wrapper_job")
+    def test_customer_step_applies_adressen_tax_category_rule(
+        self,
+        mock_submit,
+        mock_client,
+        mock_resolve_rule,
+    ):
+        from microtech.models import MicrotechOrderRuleAction
+        from orders.services.order_rule_resolver import ResolvedDatasetAction, ResolvedOrderRule
+
+        mock_submit.return_value = MagicMock(pk=1)
+        mock_resolve_rule.return_value = ResolvedOrderRule(
+            dataset_actions=(
+                ResolvedDatasetAction(
+                    action_type=MicrotechOrderRuleAction.ActionType.SET_FIELD,
+                    dataset_source_identifier="Adressen - Adressen",
+                    dataset_name="Adressen",
+                    dataset_field_name="UStKat",
+                    dataset_field_type="Integer",
+                    target_value="3",
+                ),
+            ),
+        )
+        order = make_order()
+
+        OrderSyncWorkflowService().start_for_order(order)
+
+        input_data = mock_submit.call_args.kwargs["request_payload"]["input"]
+        self.assertEqual(input_data["taxCategory"], 3)
 
     @patch("orders.services.order_sync_workflow.MicrotechGraphQLClientService")
     @patch("orders.services.order_sync_workflow.MicrotechJobSentinelService.submit_wrapper_job")

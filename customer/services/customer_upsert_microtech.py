@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Mapping
 
 from core.services import BaseService
 from customer.models import Address, Customer
@@ -97,6 +97,7 @@ class CustomerUpsertMicrotechService(BaseService):
         billing_address: Address | None = None,
         na1_mode: str = "auto",
         na1_static_value: str = "",
+        input_overrides: Mapping[str, Any] | None = None,
         erp: Any | None = None,
     ) -> UpsertResult:
         if not isinstance(customer, Customer):
@@ -125,6 +126,7 @@ class CustomerUpsertMicrotechService(BaseService):
                     billing_address=billing_address,
                     na1_mode=na1_mode,
                     na1_static_value=na1_static_value,
+                    input_overrides=input_overrides,
                     erp=erp_connection,
                 )
 
@@ -136,6 +138,7 @@ class CustomerUpsertMicrotechService(BaseService):
             billing=billing,
             na1_mode=na1_mode,
             na1_static_value=na1_static_value,
+            input_overrides=input_overrides,
             client=erp,
         )
 
@@ -147,6 +150,7 @@ class CustomerUpsertMicrotechService(BaseService):
         billing: Address,
         na1_mode: str,
         na1_static_value: str,
+        input_overrides: Mapping[str, Any] | None,
         client: MicrotechGraphQLClientService,
     ) -> UpsertResult:
         erp_nr = _to_str(customer.erp_nr)
@@ -159,6 +163,7 @@ class CustomerUpsertMicrotechService(BaseService):
             customer=customer,
             address=shipping,
             billing_address=billing,
+            input_overrides=input_overrides,
         )
         is_new_customer = False
         existing_customer: dict[str, Any] = {}
@@ -324,6 +329,7 @@ class CustomerUpsertMicrotechService(BaseService):
         customer: Customer,
         address: Address,
         billing_address: Address | None = None,
+        input_overrides: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
         if billing_address is None:
             raise ValueError(
@@ -364,6 +370,11 @@ class CustomerUpsertMicrotechService(BaseService):
         )
         if overlay:
             customer_input.update(overlay)
+        # An order rule runs with the concrete billing address of this order.
+        # It therefore takes precedence over the general customer-write rules
+        # above, which may be evaluated outside an order context.
+        if input_overrides:
+            customer_input.update(input_overrides)
         # Rule action values are rendered as text.  ``Adressen.UStKat`` is an
         # integer in Microtech, and GraphQL does not coerce JSON strings for an
         # ``Int`` input field.  Convert only this typed CustomerInput field
