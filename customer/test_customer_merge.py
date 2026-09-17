@@ -142,6 +142,30 @@ class CustomerIdUpdateServiceTest(SimpleTestCase):
             ]
         )
 
+    @patch("customer.services.customer_merge.Address")
+    def test_microtech_mapping_persists_zero_as_a_valid_address_and_contact_number(self, address_model):
+        address = MagicMock(
+            pk=81,
+            erp_ans_nr=1,
+            erp_asp_nr=2,
+            erp_ans_id=75,
+            erp_asp_id=88,
+            erp_combined_id="10001-75-88",
+            customer=MagicMock(),
+        )
+        selected = MagicMock()
+        selected.filter.return_value.first.return_value = address
+        address_model.objects.select_related.return_value = selected
+        candidates = MagicMock()
+        candidates.filter.return_value.first.return_value = None
+        address_model.objects.filter.return_value.exclude.return_value = candidates
+
+        result = CustomerIdUpdateService().update_microtech_address_mapping(81, 0, 0)
+
+        self.assertEqual(result, {"old_mapping": {"ans_nr": 1, "asp_nr": 2}, "ans_nr": 0, "asp_nr": 0})
+        self.assertEqual(address.erp_ans_nr, 0)
+        self.assertEqual(address.erp_asp_nr, 0)
+
 
 class CustomerDeleteServiceTest(SimpleTestCase):
     @patch("microtech.services.microtech_connection")

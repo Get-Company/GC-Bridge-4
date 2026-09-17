@@ -8,23 +8,26 @@ class _FakeMicrotechClient:
     def __init__(self):
         self.update_postal_calls = []
         self.create_postal_calls = []
+        self.update_contact_calls = []
+        self.create_contact_calls = []
         self.update_customer_calls = []
+        self.customer = {
+            "customerNumber": "54346",
+            "erpAddressNumber": 54346,
+            "defaultShippingAddressNumber": 1,
+            "defaultBillingAddressNumber": 1,
+            "addresses": [
+                {
+                    "addressSubNumber": 1,
+                    "isDefaultShipping": True,
+                    "isDefaultBilling": True,
+                }
+            ],
+        }
 
     def request_customer(self, _erp_nr):
         return {
-            "customer": {
-                "customerNumber": "54346",
-                "erpAddressNumber": 54346,
-                "defaultShippingAddressNumber": 1,
-                "defaultBillingAddressNumber": 1,
-                "addresses": [
-                    {
-                        "addressSubNumber": 1,
-                        "isDefaultShipping": True,
-                        "isDefaultBilling": True,
-                    }
-                ],
-            }
+            "customer": self.customer,
         }
 
     def update_customer(self, customer_number, input_data):
@@ -39,8 +42,8 @@ class _FakeMicrotechClient:
         self.create_postal_calls.append((address_number, input_data))
         return {"postalAddress": {"addressNumber": address_number, "addressSubNumber": 3}}
 
-    @staticmethod
-    def create_contact_person(address_number, address_sub_number, _input_data):
+    def create_contact_person(self, address_number, address_sub_number, _input_data):
+        self.create_contact_calls.append((address_number, address_sub_number))
         return {
             "contactPerson": {
                 "addressNumber": address_number,
@@ -49,8 +52,8 @@ class _FakeMicrotechClient:
             }
         }
 
-    @staticmethod
-    def update_contact_person(address_number, address_sub_number, contact_number, _input_data):
+    def update_contact_person(self, address_number, address_sub_number, contact_number, _input_data):
+        self.update_contact_calls.append((address_number, address_sub_number, contact_number))
         return {
             "contactPerson": {
                 "addressNumber": address_number,
@@ -102,3 +105,44 @@ class CustomerUpsertMicrotechServiceTest(TestCase):
                 {"defaultShippingAddressNumber": 3, "defaultBillingAddressNumber": 3},
             ),
         )
+
+    def test_zero_address_and_contact_numbers_are_updated_in_place(self):
+        customer = Customer.objects.create(erp_nr="54346", name="Testkunde")
+        address = Address.objects.create(
+            customer=customer,
+            erp_nr=54346,
+            erp_ans_id=99,
+            erp_ans_nr=0,
+            erp_asp_id=0,
+            erp_asp_nr=0,
+            first_name="Max",
+            last_name="Mustermann",
+            country_code="DE",
+            is_shipping=True,
+            is_invoice=True,
+        )
+        client = _FakeMicrotechClient()
+        client.customer = {
+            "customerNumber": "54346",
+            "erpAddressNumber": 54346,
+            "addresses": [{"addressSubNumber": 0}],
+        }
+
+        result = CustomerUpsertMicrotechService()._upsert_customer_graphql(
+            customer=customer,
+            shipping=address,
+            billing=address,
+            na1_mode="auto",
+            na1_static_value="",
+            client=client,
+        )
+
+        address.refresh_from_db()
+        self.assertEqual(result.shipping_ans_nr, 0)
+        self.assertEqual(result.billing_ans_nr, 0)
+        self.assertFalse(client.create_postal_calls)
+        self.assertTrue(any(call[1] == 0 for call in client.update_postal_calls))
+        self.assertEqual(client.update_contact_calls, [(54346, 0, 0)])
+        self.assertFalse(client.create_contact_calls)
+        self.assertEqual(address.erp_ans_nr, 0)
+        self.assertEqual(address.erp_asp_nr, 0)

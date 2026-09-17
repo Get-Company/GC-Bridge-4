@@ -124,14 +124,18 @@ class OrderSyncWorkflowService(BaseService):
             for field in fields
         )
 
-    def _target_default_ans_nrs(self, workflow: MicrotechOrderSyncWorkflow) -> tuple[int, int]:
+    def _target_default_ans_nrs(self, workflow: MicrotechOrderSyncWorkflow) -> tuple[int | None, int | None]:
         """Liefert die Ziel-AnsNr für Standard-Liefer- und Rechnungsanschrift."""
         shipping, billing = self._resolve_addresses(workflow.order)
         state = workflow.state or {}
-        shipping_ans_nr = int(state.get("shipping_ans_nr") or 0) or (_to_int(shipping.erp_ans_nr) or 0)
-        billing_ans_nr = (
-            int(state.get("billing_ans_nr") or 0) or (_to_int(billing.erp_ans_nr) or 0) or shipping_ans_nr
-        )
+        shipping_ans_nr = _to_int(state.get("shipping_ans_nr"))
+        if shipping_ans_nr is None:
+            shipping_ans_nr = _to_int(shipping.erp_ans_nr)
+        billing_ans_nr = _to_int(state.get("billing_ans_nr"))
+        if billing_ans_nr is None:
+            billing_ans_nr = _to_int(billing.erp_ans_nr)
+        if billing_ans_nr is None:
+            billing_ans_nr = shipping_ans_nr
         return shipping_ans_nr, billing_ans_nr
 
     @staticmethod
@@ -143,8 +147,8 @@ class OrderSyncWorkflowService(BaseService):
         for address in customer.get("addresses") or []:
             if not isinstance(address, dict):
                 continue
-            ans_nr = _to_int(address.get("addressSubNumber")) or 0
-            if ans_nr <= 0:
+            ans_nr = _to_int(address.get("addressSubNumber"))
+            if ans_nr is None:
                 continue
             if address.get("isDefaultShipping"):
                 shipping_numbers.add(ans_nr)
@@ -177,7 +181,7 @@ class OrderSyncWorkflowService(BaseService):
                 for address in addresses
                 if isinstance(address, dict)
                 for sub_number in (_to_int(address.get("addressSubNumber")),)
-                if sub_number is not None and sub_number > 0
+                if sub_number is not None
             }
         )
 
@@ -188,14 +192,14 @@ class OrderSyncWorkflowService(BaseService):
         raw_values = state.get(plural_key)
         if not isinstance(raw_values, list):
             raw_values = [state.get(singular_key)]
-        return sorted({number for value in raw_values if (number := _to_int(value)) and number > 0})
+        return sorted({number for value in raw_values if (number := _to_int(value)) is not None})
 
     def _pending_default_clear_nrs(self, workflow: MicrotechOrderSyncWorkflow, *, role: str) -> list[int]:
         state = workflow.state or {}
         queue_key = f"pending_default_{role}_clear_ans_nrs"
         queued = state.get(queue_key)
         if isinstance(queued, list):
-            return sorted({number for value in queued if (number := _to_int(value)) and number > 0})
+            return sorted({number for value in queued if (number := _to_int(value)) is not None})
 
         shipping_ans_nr, billing_ans_nr = self._target_default_ans_nrs(workflow)
         target = shipping_ans_nr if role == "shipping" else billing_ans_nr
@@ -633,7 +637,7 @@ class OrderSyncWorkflowService(BaseService):
                 operation=job.operation if job else "",
             )
             key = "shipping_ans_nr" if step == "shipping_address" else "billing_ans_nr"
-            if sub:
+            if sub is not None:
                 state[key] = sub
                 self._persist_address_sub_number(workflow=workflow, address=address, sub_number=sub, result=result)
             if step == "shipping_address" and state.get("billing_same_as_shipping"):
@@ -643,17 +647,19 @@ class OrderSyncWorkflowService(BaseService):
             address = shipping if step == "shipping_contact" else billing
             sub_key = "shipping_ans_nr" if step == "shipping_contact" else "billing_ans_nr"
             address_step = "shipping_address" if step == "shipping_contact" else "billing_address"
-            sub = int(state.get(sub_key) or 0) or self._address_sub_number_from_result(
-                result,
-                step=address_step,
-                address=address,
-                operation=job.operation if job else "",
-            )
-            if sub:
+            sub = _to_int(state.get(sub_key))
+            if sub is None:
+                sub = self._address_sub_number_from_result(
+                    result,
+                    step=address_step,
+                    address=address,
+                    operation=job.operation if job else "",
+                )
+            if sub is not None:
                 state[sub_key] = sub
                 self._persist_address_sub_number(workflow=workflow, address=address, sub_number=sub, result=result)
-            contact_number = self._contact_number_from_result(result, address_sub_number=sub or None)
-            if contact_number:
+            contact_number = self._contact_number_from_result(result, address_sub_number=sub)
+            if contact_number is not None:
                 self._persist_contact_number(address=address, contact_number=contact_number)
         elif step in ("clear_default_shipping_address", "clear_default_billing_address"):
             if job is None:
@@ -815,8 +821,8 @@ class OrderSyncWorkflowService(BaseService):
                 na1_static_value="",
                 include_email=is_shipping,
             )
-            operation = "updatePostalAddress" if sub_number else "createPostalAddress"
-            if sub_number:
+            operation = "updatePostalAddress" if sub_number is not None else "createPostalAddress"
+            if sub_number is not None:
                 submit = lambda: client.submit_update_postal_address(address_number, sub_number, input_data)
                 payload = {"addressNumber": address_number, "addressSubNumber": sub_number, "input": input_data}
             else:
@@ -825,8 +831,10 @@ class OrderSyncWorkflowService(BaseService):
         elif step in ("shipping_contact", "billing_contact"):
             address = shipping if step == "shipping_contact" else billing
             sub_key = "shipping_ans_nr" if step == "shipping_contact" else "billing_ans_nr"
-            sub_number = int(state.get(sub_key) or 0) or (_to_int(address.erp_ans_nr) or 0)
-            if sub_number <= 0:
+            sub_number = _to_int(state.get(sub_key))
+            if sub_number is None:
+                sub_number = _to_int(address.erp_ans_nr)
+            if sub_number is None:
                 address_step = "shipping_address" if step == "shipping_contact" else "billing_address"
                 current_job = workflow.current_job
                 if current_job is not None:
@@ -835,8 +843,8 @@ class OrderSyncWorkflowService(BaseService):
                         step=address_step,
                         address=address,
                         operation=current_job.operation,
-                    ) or 0
-                    if sub_number > 0:
+                    )
+                    if sub_number is not None:
                         state = dict(state)
                         state[sub_key] = sub_number
                         workflow.state = state
@@ -847,14 +855,14 @@ class OrderSyncWorkflowService(BaseService):
                             result=current_job.result_payload or {},
                         )
                         workflow.save(update_fields=("state", "updated_at"))
-            if sub_number <= 0:
+            if sub_number is None:
                 raise ValueError(
                     f"{step} ohne bekannte Anschrift-Nummer (weder im Workflow-Zustand noch an der Adresse persistiert)."
                 )
             input_data = customer_service._build_contact_person_input(address=address)
             contact_number = _to_int(address.erp_asp_nr)
-            operation = "updateContactPerson" if contact_number else "createContactPerson"
-            if contact_number:
+            operation = "updateContactPerson" if contact_number is not None else "createContactPerson"
+            if contact_number is not None:
                 submit = lambda: client.submit_update_contact_person(
                     address_number,
                     sub_number,
@@ -874,9 +882,9 @@ class OrderSyncWorkflowService(BaseService):
             operation = "updatePostalAddress"
             role = "shipping" if step == "clear_default_shipping_address" else "billing"
             pending = self._pending_default_clear_nrs(workflow, role=role)
-            sub_number = pending[0] if pending else 0
+            sub_number = pending[0] if pending else None
             input_data = {"isDefaultShipping" if role == "shipping" else "isDefaultBilling": False}
-            if sub_number <= 0:
+            if sub_number is None:
                 raise ValueError(f"{step} ohne bekannte alte Standard-Anschrift.")
             state = dict(state)
             state[f"pending_default_{role}_clear_ans_nrs"] = pending
@@ -886,7 +894,7 @@ class OrderSyncWorkflowService(BaseService):
         elif step == "set_default_addresses":
             operation = "updateCustomer"
             shipping_ans_nr, billing_ans_nr = self._target_default_ans_nrs(workflow)
-            if shipping_ans_nr <= 0:
+            if shipping_ans_nr is None or billing_ans_nr is None:
                 raise ValueError(
                     "set_default_addresses ohne bekannte Anschrift-Nummer (weder im Workflow-Zustand "
                     "noch an der Adresse persistiert)."
@@ -1050,22 +1058,23 @@ class OrderSyncWorkflowService(BaseService):
     ) -> int | None:
         postal = (result or {}).get("postalAddress") or {}
         sub = _to_int(postal.get("addressSubNumber"))
-        if sub:
+        if sub is not None:
             return sub
 
         contact = (result or {}).get("contactPerson") or {}
         sub = _to_int(contact.get("addressSubNumber"))
-        if sub:
+        if sub is not None:
             return sub
 
         addresses = ((result or {}).get("customer") or {}).get("addresses") or []
         flag = "isDefaultShipping" if step == "shipping_address" else "isDefaultBilling"
         for candidate in addresses:
             candidate_sub = _to_int((candidate or {}).get("addressSubNumber"))
-            if candidate_sub and candidate.get(flag):
+            if candidate_sub is not None and candidate.get(flag):
                 return candidate_sub
         if len(addresses) == 1:
-            return _to_int((addresses[0] or {}).get("addressSubNumber")) or _to_int(address.erp_ans_nr)
+            candidate_sub = _to_int((addresses[0] or {}).get("addressSubNumber"))
+            return candidate_sub if candidate_sub is not None else _to_int(address.erp_ans_nr)
         if operation == "createPostalAddress":
             return None
         return _to_int(address.erp_ans_nr)
@@ -1144,14 +1153,14 @@ class OrderSyncWorkflowService(BaseService):
     def _contact_number_from_result(result: dict[str, Any], *, address_sub_number: int | None = None) -> int | None:
         contact = (result or {}).get("contactPerson") or {}
         contact_number = _to_int(contact.get("contactNumber"))
-        if contact_number:
+        if contact_number is not None:
             return contact_number
 
         postal = (result or {}).get("postalAddress") or {}
         postal_sub = _to_int(postal.get("addressSubNumber"))
-        if address_sub_number is None or not postal_sub or postal_sub == address_sub_number:
+        if address_sub_number is None or postal_sub is None or postal_sub == address_sub_number:
             contact_number = OrderSyncWorkflowService._contact_number_from_contacts(postal.get("contacts") or [])
-            if contact_number:
+            if contact_number is not None:
                 return contact_number
 
         addresses = ((result or {}).get("customer") or {}).get("addresses") or []
@@ -1159,7 +1168,7 @@ class OrderSyncWorkflowService(BaseService):
             if address_sub_number is not None and _to_int((candidate or {}).get("addressSubNumber")) != address_sub_number:
                 continue
             contact_number = OrderSyncWorkflowService._contact_number_from_contacts((candidate or {}).get("contacts") or [])
-            if contact_number:
+            if contact_number is not None:
                 return contact_number
         return None
 
@@ -1168,7 +1177,7 @@ class OrderSyncWorkflowService(BaseService):
         for contact in contacts:
             if (contact or {}).get("isDefault"):
                 contact_number = _to_int((contact or {}).get("contactNumber"))
-                if contact_number:
+                if contact_number is not None:
                     return contact_number
         if len(contacts) == 1:
             return _to_int((contacts[0] or {}).get("contactNumber"))

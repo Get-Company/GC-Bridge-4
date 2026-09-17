@@ -254,12 +254,12 @@ class CustomerUpsertMicrotechService(BaseService):
             include_email=include_email,
         )
         address_sub_number = _to_int(address.erp_ans_nr)
-        if address_sub_number and (
+        if address_sub_number is not None and (
             known_address_sub_numbers is None or address_sub_number in known_address_sub_numbers
         ):
             result = client.update_postal_address(address_number, address_sub_number, input_data)
         else:
-            if address_sub_number:
+            if address_sub_number is not None:
                 logger.warning(
                     "Lokale AnsNr {} der Adresse {} ist nicht mehr in Microtech vorhanden; "
                     "neue Anschrift wird angelegt.",
@@ -271,7 +271,7 @@ class CustomerUpsertMicrotechService(BaseService):
 
         postal_address = result.get("postalAddress") or {}
         resolved_sub_number = _to_int(postal_address.get("addressSubNumber"))
-        if resolved_sub_number is None and address_sub_number and known_address_sub_numbers is None:
+        if resolved_sub_number is None and address_sub_number is not None and known_address_sub_numbers is None:
             resolved_sub_number = address_sub_number
         if resolved_sub_number is None:
             raise ValueError("Microtech lieferte nach dem Anschriften-Upsert keine Anschrift-Nummer.")
@@ -302,15 +302,16 @@ class CustomerUpsertMicrotechService(BaseService):
     ) -> None:
         input_data = self._build_contact_person_input(address=address)
         contact_number = _to_int(address.erp_asp_nr)
-        if contact_number:
+        if contact_number is not None:
             result = client.update_contact_person(address_number, address_sub_number, contact_number, input_data)
         else:
             result = client.create_contact_person(address_number, address_sub_number, input_data)
         contact = result.get("contactPerson") or {}
+        resolved_contact_number = _to_int(contact.get("contactNumber"))
         self._persist_ansprechpartner_identity(
             address=address,
-            asp_id=_to_int(contact.get("contactNumber")) or address.erp_asp_id,
-            asp_nr=_to_int(contact.get("contactNumber")) or contact_number,
+            asp_id=resolved_contact_number if resolved_contact_number is not None else address.erp_asp_id,
+            asp_nr=resolved_contact_number if resolved_contact_number is not None else contact_number,
         )
 
     def _build_customer_input(
@@ -447,7 +448,7 @@ class CustomerUpsertMicrotechService(BaseService):
             for address in addresses
             if isinstance(address, dict)
             for sub_number in (_to_int(address.get("addressSubNumber")),)
-            if sub_number is not None and sub_number > 0
+            if sub_number is not None
         }
 
     @staticmethod
@@ -497,7 +498,7 @@ class CustomerUpsertMicrotechService(BaseService):
             if not isinstance(address, dict):
                 continue
             sub_number = _to_int(address.get("addressSubNumber"))
-            if sub_number is None or sub_number <= 0:
+            if sub_number is None:
                 continue
             if address.get("isDefaultShipping"):
                 defaults["shipping"].add(sub_number)
@@ -506,7 +507,7 @@ class CustomerUpsertMicrotechService(BaseService):
 
         for role, numbers in defaults.items():
             field = "isDefaultShipping" if role == "shipping" else "isDefaultBilling"
-            for sub_number in sorted(number for number in numbers if number is not None and number > 0):
+            for sub_number in sorted(number for number in numbers if number is not None):
                 client.update_postal_address(address_number, sub_number, {field: False})
 
     @staticmethod

@@ -341,6 +341,30 @@ class AdvanceHandlerTest(TestCase):
         self.assertEqual(wf.state["existing_default_shipping_ans_nrs"], [2, 4])
         self.assertEqual(wf.state["existing_default_billing_ans_nrs"], [4])
 
+    def test_apply_write_customer_keeps_zero_in_remote_address_inventory(self):
+        wf = MicrotechOrderSyncWorkflow.objects.create(
+            order=make_order(),
+            status=MicrotechOrderSyncWorkflow.Status.WAITING,
+            current_step="write_customer",
+            state={"requested_customer_number": "100001"},
+        )
+
+        OrderSyncWorkflowService()._apply_result(
+            wf,
+            "write_customer",
+            {
+                "customer": {
+                    "customerNumber": "100001",
+                    "erpAddressNumber": 100001,
+                    "addresses": [{"addressSubNumber": 0, "isDefaultShipping": True, "isDefaultBilling": True}],
+                }
+            },
+        )
+
+        self.assertEqual(wf.state["remote_address_sub_numbers"], [0])
+        self.assertEqual(wf.state["existing_default_shipping_ans_nrs"], [0])
+        self.assertEqual(wf.state["existing_default_billing_ans_nrs"], [0])
+
     def test_apply_address_result_persists_address_identity(self):
         order = make_order()
         wf = MicrotechOrderSyncWorkflow.objects.create(
@@ -385,6 +409,32 @@ class AdvanceHandlerTest(TestCase):
         self.assertEqual(order.shipping_address.erp_ans_nr, 12)
         self.assertEqual(order.shipping_address.erp_asp_nr, 3)
         self.assertEqual(order.shipping_address.erp_asp_id, 3)
+
+    def test_apply_contact_result_persists_zero_address_and_contact_identity(self):
+        order = make_order()
+        wf = MicrotechOrderSyncWorkflow.objects.create(
+            order=order,
+            status=MicrotechOrderSyncWorkflow.Status.WAITING,
+            current_step="shipping_contact",
+            state={"address_number": int(order.customer.erp_nr), "shipping_ans_nr": 0},
+        )
+
+        OrderSyncWorkflowService()._apply_result(
+            wf,
+            "shipping_contact",
+            {
+                "contactPerson": {
+                    "addressNumber": int(order.customer.erp_nr),
+                    "addressSubNumber": 0,
+                    "contactNumber": 0,
+                }
+            },
+        )
+
+        order.shipping_address.refresh_from_db()
+        self.assertEqual(order.shipping_address.erp_ans_nr, 0)
+        self.assertEqual(order.shipping_address.erp_asp_nr, 0)
+        self.assertEqual(order.shipping_address.erp_asp_id, 0)
 
     def test_apply_contact_result_reads_nested_customer_contacts(self):
         order = make_order()
@@ -793,6 +843,36 @@ class ContactStepTest(TestCase):
 
     @patch("orders.services.order_sync_workflow.MicrotechGraphQLClientService")
     @patch("orders.services.order_sync_workflow.MicrotechJobSentinelService.submit_wrapper_job")
+    def test_address_step_updates_a_remote_confirmed_zero_ans_nr(self, mock_submit, mock_client_cls):
+        mock_submit.return_value = MagicMock(pk=8)
+        order = make_order()
+        order.shipping_address.erp_ans_id = 12
+        order.shipping_address.erp_ans_nr = 0
+        order.shipping_address.erp_asp_id = 0
+        order.shipping_address.erp_asp_nr = 0
+        order.shipping_address.save()
+        wf = MicrotechOrderSyncWorkflow.objects.create(
+            order=order,
+            status=MicrotechOrderSyncWorkflow.Status.RUNNING,
+            state={
+                "erp_nr": order.customer.erp_nr,
+                "address_number": int(order.customer.erp_nr),
+                "remote_address_inventory_known": True,
+                "remote_address_sub_numbers": [0],
+            },
+        )
+
+        OrderSyncWorkflowService().submit_step(wf, "shipping_address")
+
+        order.shipping_address.refresh_from_db()
+        called = mock_submit.call_args.kwargs
+        self.assertEqual(called["operation"], "updatePostalAddress")
+        self.assertEqual(called["request_payload"]["addressSubNumber"], 0)
+        self.assertEqual(order.shipping_address.erp_ans_nr, 0)
+        self.assertEqual(order.shipping_address.erp_asp_nr, 0)
+
+    @patch("orders.services.order_sync_workflow.MicrotechGraphQLClientService")
+    @patch("orders.services.order_sync_workflow.MicrotechJobSentinelService.submit_wrapper_job")
     def test_address_step_creates_when_local_ans_nr_is_absent_from_microtech(self, mock_submit, mock_client_cls):
         mock_submit.return_value = MagicMock(pk=8)
         order = make_order()
@@ -839,6 +919,27 @@ class ContactStepTest(TestCase):
         called = mock_submit.call_args.kwargs
         self.assertEqual(called["operation"], "createContactPerson")
         self.assertEqual(called["request_payload"]["addressSubNumber"], 7)
+
+    @patch("orders.services.order_sync_workflow.MicrotechGraphQLClientService")
+    @patch("orders.services.order_sync_workflow.MicrotechJobSentinelService.submit_wrapper_job")
+    def test_shipping_contact_updates_zero_address_and_contact_number(self, mock_submit, mock_client_cls):
+        mock_submit.return_value = MagicMock(pk=6)
+        order = make_order()
+        order.shipping_address.erp_ans_nr = 0
+        order.shipping_address.erp_asp_nr = 0
+        order.shipping_address.save()
+        wf = MicrotechOrderSyncWorkflow.objects.create(
+            order=order,
+            status=MicrotechOrderSyncWorkflow.Status.RUNNING,
+            state={"erp_nr": order.customer.erp_nr, "address_number": int(order.customer.erp_nr), "shipping_ans_nr": 0},
+        )
+
+        OrderSyncWorkflowService().submit_step(wf, "shipping_contact")
+
+        called = mock_submit.call_args.kwargs
+        self.assertEqual(called["operation"], "updateContactPerson")
+        self.assertEqual(called["request_payload"]["addressSubNumber"], 0)
+        self.assertEqual(called["request_payload"]["contactNumber"], 0)
 
     @patch("orders.services.order_sync_workflow.MicrotechGraphQLClientService")
     @patch("orders.services.order_sync_workflow.MicrotechJobSentinelService.submit_wrapper_job")
