@@ -38,7 +38,7 @@ class DjangoFieldDef:
 
 # Address (customer.Address) fields offered for the "Anschrift schreiben" trigger.
 _ADDRESS_FIELD_NAMES: tuple[str, ...] = (
-    "name1", "name2", "name3", "title", "first_name", "last_name",
+    "company", "name1", "name2", "name3", "title", "first_name", "last_name",
     "street", "postal_code", "city", "country_code", "department", "email", "phone",
 )
 

@@ -1355,6 +1355,7 @@ class CustomerSyncDirectionService(BaseService):
 
         address.api_id = api_id
         address.title = salutation_name or address.title
+        address.company = _to_str(address_data.get("company"))
         address.name1 = _to_str(address_data.get("company")) or full_name
         address.name2 = full_name if _to_str(address_data.get("company")) else ""
         address.department = _to_str(address_data.get("department"))

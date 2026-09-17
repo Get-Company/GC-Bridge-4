@@ -81,6 +81,7 @@ class Address(BaseModel):
         blank=True,
         verbose_name=_("Ansprechpartner-Nummer"),
     )
+    company = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Firma"))
     name1 = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Name 1"))
     name2 = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Name 2"))
     name3 = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Name 3"))

@@ -479,6 +479,7 @@ class OrderSyncService(BaseService):
         full_name = f"{_to_str(address_data.get('firstName'))} {_to_str(address_data.get('lastName'))}".strip()
 
         address.erp_nr = _to_int(customer.erp_nr) or None
+        address.company = _to_str(address_data.get("company"))
         address.name1 = _to_str(address_data.get("company")) or _to_str(salutation.get("displayName"))
         address.name2 = full_name
         address.name3 = ""
