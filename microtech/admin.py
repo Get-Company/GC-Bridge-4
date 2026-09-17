@@ -528,7 +528,7 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
     def rule_engine_verify_view(self, request, **kwargs):
         from django.contrib import messages
         from django.shortcuts import redirect
-        from microtech.models import MicrotechSettings, RuleEngineShadowRun
+        from microtech.models import MicrotechSettings
 
         if not self.has_change_permission(request):
             return HttpResponseForbidden("Keine Berechtigung.")
@@ -536,27 +536,37 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
         settings_obj = MicrotechSettings.load()
         if request.method == "POST":
             mode = request.POST.get("mode", "")
-            valid = {c[0] for c in MicrotechSettings.EngineMode.choices}
+            valid = {
+                MicrotechSettings.EngineMode.OFF,
+                MicrotechSettings.EngineMode.LIVE,
+            }
             if mode in valid:
                 settings_obj.rule_engine_order_mode = mode
-                settings_obj.save(update_fields=["rule_engine_order_mode"])
-                messages.success(request, f"Regel-Engine-Modus auf '{mode}' gesetzt.")
+                settings_obj.rule_engine_address_mode = mode
+                settings_obj.rule_engine_customer_mode = mode
+                settings_obj.save(update_fields=[
+                    "rule_engine_order_mode",
+                    "rule_engine_address_mode",
+                    "rule_engine_customer_mode",
+                ])
+                messages.success(
+                    request,
+                    f"Regel-Engine für Bestellungen, Kunden und Anschriften auf '{mode}' gesetzt.",
+                )
             else:
-                messages.error(request, "Ungültiger Modus.")
+                messages.error(request, "Ungültiger Modus. Erlaubt sind nur 'off' und 'live'.")
             return redirect("admin:microtech_orderrule_engine_verify")
 
-        recent = list(RuleEngineShadowRun.objects.all()[:200])
-        diffs = [r for r in recent if not r.is_equal]
+        configured_modes = {
+            settings_obj.rule_engine_order_mode,
+            settings_obj.rule_engine_address_mode,
+            settings_obj.rule_engine_customer_mode,
+        }
         context = {
             **self.admin_site.each_context(request),
-            "title": "Regel-Engine – Verifikation & Cutover",
+            "title": "Regel-Engine ein-/ausschalten",
             "opts": self.model._meta,
-            "mode": settings_obj.rule_engine_order_mode,
-            "modes": MicrotechSettings.EngineMode.choices,
-            "recent": recent[:50],
-            "runs_total": RuleEngineShadowRun.objects.count(),
-            "diff_count": len(diffs),
-            "can_go_live": bool(recent) and not diffs,
+            "mode": configured_modes.pop() if len(configured_modes) == 1 else "mixed",
             "overview_url": reverse("admin:microtech_orderrule_builder"),
         }
         return TemplateResponse(request, "admin/microtech/rule_engine_verify.html", context)
@@ -773,7 +783,6 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
                     "trigger",
                     "execution_phase",
                     "engine_enabled",
-                    "shadow_mode",
                 ),
                 "description": (
                     "Prioritaet steuert die Reihenfolge. Die erste passende aktive Regel gewinnt."

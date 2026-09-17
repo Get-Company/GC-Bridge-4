@@ -8,25 +8,13 @@
     .rev-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px 18px; margin: 0 0 18px; }
     .rev-mode { display: inline-block; font-size: 13px; font-weight: 600; padding: 4px 12px; border-radius: 8px; }
     .rev-mode-off { background: #f1f5f9; color: #475569; }
-    .rev-mode-shadow { background: #ede9fe; color: #5b21b6; }
     .rev-mode-live { background: #dcfce7; color: #166534; }
+    .rev-mode-mixed { background: #fef3c7; color: #92400e; }
     .rev-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
-    .rev-stat { font-size: 14px; }
-    .rev-stat b { font-size: 18px; }
-    .rev-ok { color: #166534; }
-    .rev-bad { color: #991b1b; }
     .rev-btn { font-size: 13px; padding: 7px 14px; border-radius: 8px; border: none; cursor: pointer; color: #fff; font-weight: 500; }
-    .rev-btn-shadow { background: #7c3aed; }
     .rev-btn-live { background: #059669; }
     .rev-btn-off { background: #64748b; }
-    .rev-btn[disabled] { opacity: .4; cursor: not-allowed; }
     .rev-hint { font-size: 12px; color: #6b7280; line-height: 1.6; }
-    table.rev-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-    table.rev-table th, table.rev-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #eef2f7; vertical-align: top; }
-    table.rev-table th { color: #475569; font-weight: 600; }
-    .rev-diff-yes { color: #991b1b; font-weight: 600; }
-    .rev-diff-no { color: #166534; }
-    .rev-changed { font-family: ui-monospace, monospace; color: #4b5563; white-space: pre-wrap; word-break: break-word; }
   </style>
 {% endblock %}
 
@@ -35,33 +23,15 @@
 
   <div class="rev-card">
     <div class="rev-row">
-      <span>Aktueller Modus:</span>
+      <span>Aktueller Modus für Bestellungen, Kunden und Anschriften:</span>
       <span class="rev-mode rev-mode-{{ mode }}">{{ mode|upper }}</span>
       <a href="{{ overview_url }}" style="margin-left:auto;">← Zur Regel-Übersicht</a>
     </div>
     <p class="rev-hint">
-      <b>off</b> = nur der alte Resolver ist maßgeblich (heutiges Verhalten, nichts ändert sich live).
-      <b>shadow</b> = der alte Resolver bleibt maßgeblich, die neue Engine läuft mit und protokolliert Abweichungen.
-      <b>live</b> = die neue Engine ist maßgeblich (Regeln aus dem grafischen Editor werden angewendet).
-      Rollback jederzeit: Modus zurück auf <b>shadow</b> oder <b>off</b>.
+      <b>off</b> = die bisherigen festen Zuordnungen bleiben maßgeblich.
+      <b>live</b> = alle aktiven Regeln der neuen Engine werden unmittelbar angewendet.
+      Das Umschalten wirkt immer gemeinsam für Bestellungen, Kunden und Anschriften.
     </p>
-  </div>
-
-  <div class="rev-card">
-    <h3 style="margin-top:0;">Verifikation (Schatten-Läufe)</h3>
-    <div class="rev-row">
-      <span class="rev-stat">Läufe gesamt: <b>{{ runs_total }}</b></span>
-      <span class="rev-stat {% if diff_count %}rev-bad{% else %}rev-ok{% endif %}">
-        Abweichungen (letzte 200): <b>{{ diff_count }}</b>
-      </span>
-    </div>
-    {% if diff_count %}
-      <p class="rev-hint rev-bad">Es gibt Abweichungen zwischen altem Resolver und neuer Engine. Bitte prüfen, bevor auf <b>live</b> geschaltet wird.</p>
-    {% elif runs_total %}
-      <p class="rev-hint rev-ok">Keine Abweichungen in den letzten Läufen – Cutover auf <b>live</b> ist freigegeben.</p>
-    {% else %}
-      <p class="rev-hint">Noch keine Schatten-Läufe. Erst auf <b>shadow</b> schalten und echte Bestellungen laufen lassen.</p>
-    {% endif %}
   </div>
 
   <div class="rev-card">
@@ -69,38 +39,9 @@
     <form method="post" class="rev-row">
       {% csrf_token %}
       <button class="rev-btn rev-btn-off" name="mode" value="off" type="submit">Auf OFF</button>
-      <button class="rev-btn rev-btn-shadow" name="mode" value="shadow" type="submit">Auf SHADOW</button>
-      <button class="rev-btn rev-btn-live" name="mode" value="live" type="submit"
-              {% if not can_go_live %}disabled title="Erst Abweichungen auf 0 bringen"{% endif %}>Auf LIVE (Cutover)</button>
+      <button class="rev-btn rev-btn-live" name="mode" value="live" type="submit">Auf LIVE</button>
     </form>
-    {% if not can_go_live %}
-      <p class="rev-hint">„Auf LIVE" ist erst möglich, wenn Schatten-Läufe vorliegen und keine Abweichungen mehr auftreten.</p>
-    {% endif %}
-  </div>
-
-  <div class="rev-card">
-    <h3 style="margin-top:0;">Jüngste Läufe</h3>
-    {% if recent %}
-      <table class="rev-table">
-        <thead>
-          <tr><th>Zeit</th><th>Bestellung</th><th>Engine-Regel</th><th>Legacy-Regel</th><th>Status</th><th>Abweichung</th></tr>
-        </thead>
-        <tbody>
-          {% for r in recent %}
-          <tr>
-            <td>{{ r.created_at|date:"d.m. H:i:s" }}</td>
-            <td>{{ r.order_number|default:"–" }}</td>
-            <td>{{ r.engine_rule_id|default:"–" }}</td>
-            <td>{{ r.legacy_rule_id|default:"–" }}</td>
-            <td>{% if r.is_equal %}<span class="rev-diff-no">gleich</span>{% else %}<span class="rev-diff-yes">≠</span>{% endif %}</td>
-            <td class="rev-changed">{% if not r.is_equal %}{{ r.changed_json }}{% endif %}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    {% else %}
-      <p class="rev-hint">Keine Läufe protokolliert.</p>
-    {% endif %}
+    <p class="rev-hint">LIVE ist jederzeit direkt auswählbar, ohne vorherige Prüfung.</p>
   </div>
 
 </div>

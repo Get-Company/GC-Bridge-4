@@ -48,11 +48,10 @@ def _action_values_by_target(actions) -> dict[str, str]:
 
 # --- Order-path mode facade ------------------------------------------------
 #
-# Single switch for the live order path. ``off`` keeps the legacy resolver
-# authoritative (byte-identical to today); ``shadow`` runs the engine in
-# parallel and persists diffs while the legacy result stays authoritative;
-# ``live`` makes the engine authoritative (still logging diffs). Any engine
-# error degrades gracefully to the legacy result so the order path never breaks.
+# ``off`` keeps the legacy resolver authoritative. ``live`` evaluates only
+# the new engine, without a legacy comparison or shadow-run persistence. The
+# legacy ``shadow`` value remains a compatibility path for existing data, but
+# is deliberately no longer exposed by the global mode UI.
 
 
 def _legacy_resolve(order):
@@ -115,7 +114,6 @@ def resolve_order_rule_with_mode(order):
     if mode == MicrotechSettings.EngineMode.OFF:
         return _legacy_resolve(order)
 
-    legacy = _legacy_resolve(order)
     try:
         engine = resolve_order_rule(order)
     except Exception:
@@ -123,11 +121,12 @@ def resolve_order_rule_with_mode(order):
             "Regel-Engine-Auswertung fehlgeschlagen → Legacy maßgeblich (order={}).",
             getattr(order, "order_number", ""),
         )
-        return legacy
+        return _legacy_resolve(order)
 
-    _persist_shadow_run(order, legacy, engine)
     if mode == MicrotechSettings.EngineMode.LIVE:
         return engine
+    legacy = _legacy_resolve(order)
+    _persist_shadow_run(order, legacy, engine)
     return legacy
 
 
@@ -135,7 +134,8 @@ def resolve_order_rule_with_mode(order):
 #
 # Returns a {graphql_field: value} overlay for the GraphQL postal-address input.
 # In live mode it returns the engine's fields (any PostalAddressInput field at
-# once); in off/shadow it returns {} so the hardcoded input stays authoritative.
+# once) without comparing them with hardcoded values. Off keeps the hardcoded
+# input authoritative; the legacy shadow mode is compatibility-only.
 
 
 def _persist_address_shadow_run(address, changed) -> None:
@@ -176,22 +176,23 @@ def resolve_postal_address_with_mode(address, *, code_values) -> dict:
                          getattr(address, "pk", ""))
         return {}
 
+    if mode == MicrotechSettings.EngineMode.LIVE:
+        return engine
     changed = {
         key: {"code": (code_values or {}).get(key), "engine": value}
         for key, value in engine.items()
         if str((code_values or {}).get(key, "")) != str(value)
     }
     _persist_address_shadow_run(address, changed)
-    if mode == MicrotechSettings.EngineMode.LIVE:
-        return engine
     return {}
 
 
 # --- Customer-path input overlay (generic) --------------------------------
 #
 # Returns a {graphql_field: value} overlay for the GraphQL customer input.
-# In live mode it returns the engine's fields (any CustomerInput field at once);
-# in off/shadow it returns {} so the hardcoded input stays authoritative.
+# In live mode it returns the engine's fields (any CustomerInput field at once)
+# without comparing them with hardcoded values. Off keeps the hardcoded input
+# authoritative; the legacy shadow mode is compatibility-only.
 
 
 def _persist_customer_shadow_run(customer, changed) -> None:
@@ -232,12 +233,12 @@ def resolve_customer_input_with_mode(*, customer, address, billing_address=None,
                          getattr(customer, "pk", ""))
         return {}
 
+    if mode == MicrotechSettings.EngineMode.LIVE:
+        return engine
     changed = {
         key: {"code": (code_values or {}).get(key), "engine": value}
         for key, value in engine.items()
         if str((code_values or {}).get(key, "")) != str(value)
     }
     _persist_customer_shadow_run(customer, changed)
-    if mode == MicrotechSettings.EngineMode.LIVE:
-        return engine
     return {}

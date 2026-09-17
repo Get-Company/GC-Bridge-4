@@ -240,16 +240,20 @@ def test_mode_shadow_logs_and_returns_legacy(monkeypatch):
 
 
 def test_mode_live_returns_engine(monkeypatch):
-    from microtech.models import MicrotechSettings
+    from microtech.models import MicrotechSettings, RuleEngineShadowRun
     from microtech.rule_engine import dispatch
 
     s = MicrotechSettings.load()
     s.rule_engine_order_mode = MicrotechSettings.EngineMode.LIVE
     s.save()
     order = _make_order()
-    monkeypatch.setattr(dispatch, "_legacy_resolve", lambda o: ResolvedOrderRule(rule_id=1))
+    def _legacy_must_not_run(_order):
+        raise AssertionError("live must not compare the legacy resolver")
+
+    monkeypatch.setattr(dispatch, "_legacy_resolve", _legacy_must_not_run)
     monkeypatch.setattr(dispatch, "resolve_order_rule", lambda o: ResolvedOrderRule(rule_id=2))
     assert dispatch.resolve_order_rule_with_mode(order).rule_id == 2
+    assert RuleEngineShadowRun.objects.count() == 0
 
 
 def test_mode_live_engine_error_falls_back_to_legacy(monkeypatch):
@@ -301,15 +305,22 @@ def test_facade_off_mode_matches_legacy_for_order():
 # --- Task 6: admin verify view -------------------------------------------
 
 
-def test_verify_view_get_and_post_sets_mode(admin_client):
+def test_verify_view_sets_all_rule_paths_to_live_without_shadow_gate(admin_client):
     from django.urls import reverse
     from microtech.models import MicrotechSettings
 
     url = reverse("admin:microtech_orderrule_engine_verify")
-    assert admin_client.get(url).status_code == 200
-    resp = admin_client.post(url, {"mode": "shadow"})
+    response = admin_client.get(url)
+    assert response.status_code == 200
+    assert b"Auf SHADOW" not in response.content
+    assert b"Schatten" not in response.content
+
+    resp = admin_client.post(url, {"mode": "live"})
     assert resp.status_code in (200, 302)
-    assert MicrotechSettings.load().rule_engine_order_mode == "shadow"
+    settings_obj = MicrotechSettings.load()
+    assert settings_obj.rule_engine_order_mode == "live"
+    assert settings_obj.rule_engine_address_mode == "live"
+    assert settings_obj.rule_engine_customer_mode == "live"
 
 
 def test_verify_view_rejects_invalid_mode(admin_client):
@@ -320,7 +331,7 @@ def test_verify_view_rejects_invalid_mode(admin_client):
     s.rule_engine_order_mode = MicrotechSettings.EngineMode.OFF
     s.save()
     url = reverse("admin:microtech_orderrule_engine_verify")
-    admin_client.post(url, {"mode": "bogus"})
+    admin_client.post(url, {"mode": "shadow"})
     assert MicrotechSettings.load().rule_engine_order_mode == "off"
 
 

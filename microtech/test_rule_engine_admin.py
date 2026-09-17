@@ -70,5 +70,6 @@ class OrderRuleAdminEngineFieldsTest(TestCase):
         rule = MicrotechOrderRule.objects.create(name="R")
         html = self.client.get(
             reverse("admin:microtech_microtechorderrule_change", args=(rule.pk,))).content.decode()
-        for field in ("trigger", "execution_phase", "shadow_mode", "engine_enabled"):
+        for field in ("trigger", "execution_phase", "engine_enabled"):
             self.assertIn(f'name="{field}"', html)
+        self.assertNotIn('name="shadow_mode"', html)

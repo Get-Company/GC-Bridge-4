@@ -374,12 +374,13 @@ def test_address_facade_shadow_logs_and_returns_empty(monkeypatch):
 
 
 def test_address_facade_live_returns_engine_dict(monkeypatch):
-    from microtech.models import MicrotechSettings
+    from microtech.models import MicrotechSettings, RuleEngineShadowRun
     from microtech.rule_engine import dispatch, address_resolver
 
     _set_address_mode(MicrotechSettings.EngineMode.LIVE)
     monkeypatch.setattr(address_resolver, "resolve_address_fields", lambda a: {"name1": "Firma", "name3": "D"})
     assert dispatch.resolve_postal_address_with_mode(_FakeAddr(), code_values={}) == {"name1": "Firma", "name3": "D"}
+    assert RuleEngineShadowRun.objects.filter(task_name=address_resolver.ADDRESS_WRITE_TASK).count() == 0
 
 
 def test_address_facade_engine_error_returns_empty(monkeypatch):
@@ -638,7 +639,8 @@ def test_resolve_customer_fields_by_shipping_country():
 def test_build_customer_input_overlays_only_in_live(monkeypatch):
     from customer.models import Customer, Address
     from customer.services.customer_upsert_microtech import CustomerUpsertMicrotechService
-    from microtech.models import MicrotechSettings
+    from microtech.models import MicrotechSettings, RuleEngineShadowRun
+    from microtech.rule_engine.customer_resolver import CUSTOMER_WRITE_TASK
 
     _customer_tax_rule(country="DE", tax_value="99")
     cust = Customer.objects.create()
@@ -648,6 +650,7 @@ def test_build_customer_input_overlays_only_in_live(monkeypatch):
     s = MicrotechSettings.load(); s.rule_engine_customer_mode = MicrotechSettings.EngineMode.LIVE; s.save()
     live = svc._build_customer_input(customer=cust, address=addr, billing_address=addr)
     assert live["taxCategory"] == "99"  # engine overlay wins
+    assert RuleEngineShadowRun.objects.filter(task_name=CUSTOMER_WRITE_TASK).count() == 0
 
     s.rule_engine_customer_mode = MicrotechSettings.EngineMode.OFF; s.save()
     off = svc._build_customer_input(customer=cust, address=addr, billing_address=addr)

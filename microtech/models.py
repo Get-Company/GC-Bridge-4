@@ -66,10 +66,9 @@ class MicrotechSettings(BaseModel):
 
 
 class RuleEngineShadowRun(BaseModel):
-    """Persisted comparison between legacy resolver and new engine per order.
+    """Historical comparisons from the legacy shadow compatibility mode.
 
-    Written while the engine runs in shadow or live mode; serves as the
-    verification gate before (and during) cutover.
+    Normal off/live operation neither reads nor writes these records.
     """
 
     order_number = models.CharField(max_length=64, blank=True, default="", verbose_name=_("Bestellnummer"))
