@@ -1,3 +1,5 @@
+from uuid import uuid4
+
 from django.db import models
 from django.utils.html import strip_tags
 from django.utils.translation import gettext_lazy as _
@@ -618,6 +620,47 @@ class MicrotechOrderRuleAction(BaseModel):
             return f"{self.rule_id} | {self.action_type}({self.target_value})"
         field_name = self.dataset_field.field_name if self.dataset_field_id else "?"
         return f"{self.rule_id} | {field_name} = {self.target_value}"
+
+
+class RuleEngineExecutionLog(BaseModel):
+    """Per-rule audit history for every rule-engine evaluation."""
+
+    class Outcome(models.TextChoices):
+        APPLIED = "applied", _("Ausgeführt")
+        MATCHED_SHADOW = "matched_shadow", _("Trifft zu (Schattenmodus)")
+        SKIPPED_CONDITIONS = "skipped_conditions", _("Übersprungen: Bedingungen nicht erfüllt")
+        SKIPPED_INACTIVE = "skipped_inactive", _("Übersprungen: Regel inaktiv")
+        SKIPPED_ENGINE_DISABLED = "skipped_engine_disabled", _("Übersprungen: Engine an der Regel aus")
+        SKIPPED_MODE_OFF = "skipped_mode_off", _("Übersprungen: Engine-Modus aus")
+        SKIPPED_NO_ACTIONS = "skipped_no_actions", _("Übersprungen: keine aktive Aktion")
+
+    run_id = models.UUIDField(default=uuid4, editable=False, db_index=True, verbose_name=_("Lauf-ID"))
+    task_name = models.CharField(max_length=128, db_index=True, verbose_name=_("Trigger-Task"))
+    execution_phase = models.CharField(max_length=16, verbose_name=_("Phase"))
+    engine_mode = models.CharField(max_length=10, verbose_name=_("Engine-Modus"))
+    subject = models.CharField(max_length=128, blank=True, default="", verbose_name=_("Auslöser"))
+    rule = models.ForeignKey(
+        MicrotechOrderRule,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="execution_logs",
+        verbose_name=_("Regel"),
+    )
+    rule_name = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Regelname"))
+    outcome = models.CharField(max_length=32, choices=Outcome.choices, db_index=True, verbose_name=_("Ergebnis"))
+    reason = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Begründung"))
+    conditions_json = models.TextField(blank=True, default="", verbose_name=_("Geprüfte Bedingungen (JSON)"))
+    actions_json = models.TextField(blank=True, default="", verbose_name=_("Ausgeführte Aktionen (JSON)"))
+
+    class Meta:
+        ordering = ("-created_at",)
+        verbose_name = _("Regel-Engine Ausführung")
+        verbose_name_plural = _("Regel-Engine Ausführungen")
+        indexes = [models.Index(fields=("task_name", "created_at"))]
+
+    def __str__(self) -> str:
+        return f"{self.created_at:%Y-%m-%d %H:%M:%S} | {self.rule_name or '?'} | {self.outcome}"
 
 
 class MicrotechOrderRuleOperator(BaseModel):

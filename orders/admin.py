@@ -35,6 +35,7 @@ from orders.services import (
     OrderCustomerChangeService,
     OrderSyncWorkflowService,
     OrderUpsertMicrotechService,
+    OrderRuleTesterService,
     SwissCustomsCsvExportService,
 )
 from microtech.models import MicrotechGraphQLJob
@@ -243,6 +244,7 @@ class OrderAdmin(BaseAdmin):
             "icon": "more_vert",
             "items": (
                 "request_customer_change_detail",
+                "rule_tester_detail",
                 "upsert_to_microtech_detail",
                 "resume_microtech_sync_detail",
                 "abort_microtech_sync_detail",
@@ -606,6 +608,11 @@ class OrderAdmin(BaseAdmin):
                 self.address_reconciliation_view,
             ),
             (
+                "<path:object_id>/rule-tester/",
+                "orders_order_rule_tester",
+                self.rule_tester_view,
+            ),
+            (
                 "<path:object_id>/shopware-state-options/",
                 "orders_order_state_options",
                 self.shopware_state_options_view,
@@ -625,6 +632,15 @@ class OrderAdmin(BaseAdmin):
     )
     def address_reconciliation_detail(self, request, object_id: str):
         return HttpResponseRedirect(reverse("admin:orders_order_address_reconciliation", args=(object_id,)))
+
+    @action(
+        description="Regeln testen",
+        icon="rule",
+        variant=ActionVariant.WARNING,
+        permissions=("view",),
+    )
+    def rule_tester_detail(self, request, object_id: str):
+        return HttpResponseRedirect(reverse("admin:orders_order_rule_tester", args=(object_id,)))
 
     @action(
         description="Adressen abgleichen",
@@ -701,6 +717,32 @@ class OrderAdmin(BaseAdmin):
             "order_change_url": reverse("admin:orders_order_change", args=(order.pk,)),
         }
         return TemplateResponse(request, "orders/admin/address_reconciliation.html", context)
+
+    def rule_tester_view(self, request, object_id: str, **kwargs):
+        order = self.get_queryset(request).filter(pk=object_id).first()
+        if order is None:
+            return self._redirect_to_changelist()
+        if not self.has_view_permission(request, order):
+            raise PermissionDenied
+        try:
+            sections = OrderRuleTesterService().preview(order=order)
+            error = ""
+        except Exception as exc:
+            sections = []
+            error = str(exc)
+        return TemplateResponse(
+            request,
+            "orders/admin/rule_tester.html",
+            {
+                **self.admin_site.each_context(request),
+                "title": f"Regeltester · {order}",
+                "opts": self.model._meta,
+                "order": order,
+                "sections": sections,
+                "error": error,
+                "order_change_url": reverse("admin:orders_order_change", args=(order.pk,)),
+            },
+        )
 
     def microtech_sync_status_view(self, request, object_id: str, **kwargs):
         order = self.get_object(request, object_id)

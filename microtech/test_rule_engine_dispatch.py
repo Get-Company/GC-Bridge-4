@@ -3,8 +3,10 @@ from django.test import TestCase
 from microtech.models import (
     RuleTrigger, MicrotechOrderRule, MicrotechOrderRuleConditionGroup,
     MicrotechOrderRuleAction, MicrotechDatasetCatalog, MicrotechDatasetField,
+    RuleEngineExecutionLog,
 )
 from microtech.rule_engine.dispatch import resolve_actions, shadow_compare
+from microtech.rule_engine.execution import RuleExecutionService
 
 
 class _Order:
@@ -69,3 +71,27 @@ class DispatchTest(TestCase):
             phase=MicrotechOrderRule.ExecutionPhase.BEFORE, root_instance=_Order(),
             legacy_result={"Na1": "Alt"})
         self.assertIn("Na1", diff["changed"])
+
+    def test_audit_log_records_applied_and_skipped_rules(self):
+        applied = self._enabled_rule_with_action(priority=10)
+        disabled = self._enabled_rule_with_action(priority=20)
+        disabled.engine_enabled = False
+        disabled.save(update_fields=("engine_enabled",))
+        inactive = self._enabled_rule_with_action(priority=30)
+        inactive.is_active = False
+        inactive.save(update_fields=("is_active",))
+
+        matches = RuleExecutionService().resolve_matching_rules(
+            task_name="orders.microtech_order_upsert",
+            phase=MicrotechOrderRule.ExecutionPhase.BEFORE,
+            root_instance=_Order(),
+            audit_mode="live",
+            audit_subject="Bestellung TEST-1",
+        )
+
+        self.assertEqual([match.rule.id for match in matches], [applied.id])
+        logs = {entry.rule_id: entry for entry in RuleEngineExecutionLog.objects.all()}
+        self.assertEqual(logs[applied.id].outcome, RuleEngineExecutionLog.Outcome.APPLIED)
+        self.assertIn('"target": "Na1"', logs[applied.id].actions_json)
+        self.assertEqual(logs[disabled.id].outcome, RuleEngineExecutionLog.Outcome.SKIPPED_ENGINE_DISABLED)
+        self.assertEqual(logs[inactive.id].outcome, RuleEngineExecutionLog.Outcome.SKIPPED_INACTIVE)

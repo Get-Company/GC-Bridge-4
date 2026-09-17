@@ -112,10 +112,14 @@ def resolve_order_rule_with_mode(order):
         mode = MicrotechSettings.EngineMode.OFF
 
     if mode == MicrotechSettings.EngineMode.OFF:
+        try:
+            resolve_order_rule(order, audit_mode=mode)
+        except Exception:
+            logger.exception("Regel-Engine-Aus-Protokollierung fehlgeschlagen (order={}).", getattr(order, "order_number", ""))
         return _legacy_resolve(order)
 
     try:
-        engine = resolve_order_rule(order)
+        engine = resolve_order_rule(order, audit_mode=mode)
     except Exception:
         logger.exception(
             "Regel-Engine-Auswertung fehlgeschlagen → Legacy maßgeblich (order={}).",
@@ -165,12 +169,18 @@ def resolve_postal_address_with_mode(address, *, code_values) -> dict:
         mode = MicrotechSettings.EngineMode.OFF
 
     if mode == MicrotechSettings.EngineMode.OFF:
+        from microtech.rule_engine.address_resolver import resolve_address_fields
+
+        try:
+            resolve_address_fields(address, audit_mode=mode)
+        except Exception:
+            logger.exception("Regel-Engine-Aus-Protokollierung fehlgeschlagen (address={}).", getattr(address, "pk", ""))
         return {}
 
     try:
         from microtech.rule_engine.address_resolver import resolve_address_fields
 
-        engine = resolve_address_fields(address)
+        engine = resolve_address_fields(address, audit_mode=mode)
     except Exception:
         logger.exception("Anschrift-Engine-Auswertung fehlgeschlagen → Code-Fallback (address={}).",
                          getattr(address, "pk", ""))
@@ -222,12 +232,28 @@ def resolve_customer_input_with_mode(*, customer, address, billing_address=None,
         mode = MicrotechSettings.EngineMode.OFF
 
     if mode == MicrotechSettings.EngineMode.OFF:
+        from microtech.rule_engine.customer_resolver import resolve_customer_fields
+
+        try:
+            resolve_customer_fields(
+                customer=customer,
+                address=address,
+                billing_address=billing_address,
+                audit_mode=mode,
+            )
+        except Exception:
+            logger.exception("Regel-Engine-Aus-Protokollierung fehlgeschlagen (customer={}).", getattr(customer, "pk", ""))
         return {}
 
     try:
         from microtech.rule_engine.customer_resolver import resolve_customer_fields
 
-        engine = resolve_customer_fields(customer=customer, address=address, billing_address=billing_address)
+        engine = resolve_customer_fields(
+            customer=customer,
+            address=address,
+            billing_address=billing_address,
+            audit_mode=mode,
+        )
     except Exception:
         logger.exception("Kunden-Engine-Auswertung fehlgeschlagen → Code-Fallback (customer={}).",
                          getattr(customer, "pk", ""))

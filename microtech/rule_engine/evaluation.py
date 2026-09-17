@@ -74,3 +74,29 @@ def rule_matches(rule, context, *, field_map=None, operator_engine_map=None) -> 
         )
         for root in roots
     )
+
+
+def rule_condition_results(rule, context, *, field_map=None, operator_engine_map=None) -> tuple[dict, ...]:
+    """Return each active condition's result without exposing the source value."""
+    field_map = field_map or get_django_field_map()
+    operator_engine_map = operator_engine_map or get_operator_engine_map()
+    strict_fields = field_map is not None
+    return tuple(
+        {
+            "field": str(condition.django_field_path or ""),
+            "operator": str(condition.operator_code or ""),
+            "expected": render_template(condition.expected_value or "", context),
+            "expected_2": render_template(condition.expected_value_2 or "", context),
+            "matched": _evaluate_condition(
+                condition,
+                context,
+                field_map,
+                operator_engine_map,
+                strict_fields=strict_fields,
+            ),
+        }
+        for condition in sorted(
+            (item for item in rule.conditions.all() if item.is_active),
+            key=lambda item: (item.priority, item.id),
+        )
+    )

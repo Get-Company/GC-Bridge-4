@@ -7,9 +7,12 @@ objects happens here exactly once.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
+from uuid import uuid4
 
 from core.services import BaseService
-from microtech.models import MicrotechOrderRule
+from loguru import logger
+from microtech.models import MicrotechOrderRule, RuleEngineExecutionLog
 from microtech.rule_builder import (
     get_address_field_defs,
     get_customer_field_defs,
@@ -17,7 +20,7 @@ from microtech.rule_builder import (
     get_operator_engine_map,
 )
 from microtech.rule_engine.context import EvaluationContext
-from microtech.rule_engine.evaluation import rule_matches
+from microtech.rule_engine.evaluation import rule_condition_results, rule_matches
 from microtech.rule_engine.templates import render_template
 
 
@@ -52,10 +55,44 @@ class RuleMatch:
     actions: tuple[ResolvedRuleAction, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class RuleEvaluation:
+    """One rule's outcome within an engine run."""
+
+    rule: MicrotechOrderRule
+    actions: tuple[ResolvedRuleAction, ...]
+    conditions: tuple[dict, ...]
+    outcome: str
+    reason: str
+
+    @property
+    def matches(self) -> bool:
+        return self.outcome in {
+            RuleEngineExecutionLog.Outcome.APPLIED,
+            RuleEngineExecutionLog.Outcome.MATCHED_SHADOW,
+        }
+
+
 class RuleExecutionService(BaseService):
     """Resolve every matching active engine rule for a trigger and phase."""
 
     model = MicrotechOrderRule
+
+    def inspect_rules(
+        self,
+        *,
+        task_name: str,
+        phase: str,
+        root_instance: object,
+        mode: str,
+    ) -> tuple[RuleEvaluation, ...]:
+        """Return every rule outcome without applying actions or writing audit rows."""
+        return self._evaluate_rules(
+            task_name=task_name,
+            phase=phase,
+            root_instance=root_instance,
+            audit_mode=mode,
+        )
 
     def resolve_matching_rules(
         self,
@@ -63,13 +100,41 @@ class RuleExecutionService(BaseService):
         task_name: str,
         phase: str,
         root_instance: object,
+        audit_mode: str | None = None,
+        audit_subject: str = "",
     ) -> tuple[RuleMatch, ...]:
+        evaluations = self._evaluate_rules(
+            task_name=task_name,
+            phase=phase,
+            root_instance=root_instance,
+            audit_mode=audit_mode,
+        )
+        if audit_mode is not None:
+            self._persist_audit(
+                task_name=task_name,
+                phase=phase,
+                mode=audit_mode,
+                subject=audit_subject,
+                evaluations=evaluations,
+            )
+        return tuple(
+            RuleMatch(rule=evaluation.rule, actions=evaluation.actions)
+            for evaluation in evaluations
+            if evaluation.matches
+        )
+
+    def _evaluate_rules(
+        self,
+        *,
+        task_name: str,
+        phase: str,
+        root_instance: object,
+        audit_mode: str | None,
+    ) -> tuple[RuleEvaluation, ...]:
         context = EvaluationContext(root_instance)
         rules = (
             self.get_queryset()
             .filter(
-                is_active=True,
-                engine_enabled=True,
                 execution_phase=phase,
                 trigger__task_name=task_name,
             )
@@ -86,22 +151,128 @@ class RuleExecutionService(BaseService):
         )
         field_maps: dict[str, dict] = {}
         operator_engine_map = get_operator_engine_map()
-        matches: list[RuleMatch] = []
+        evaluations: list[RuleEvaluation] = []
         for rule in rules:
+            if audit_mode == "off":
+                evaluations.append(RuleEvaluation(
+                    rule=rule,
+                    actions=(),
+                    conditions=(),
+                    outcome=RuleEngineExecutionLog.Outcome.SKIPPED_MODE_OFF,
+                    reason="Der globale Engine-Modus ist AUS.",
+                ))
+                continue
+            if not rule.is_active:
+                evaluations.append(RuleEvaluation(
+                    rule=rule,
+                    actions=(),
+                    conditions=(),
+                    outcome=RuleEngineExecutionLog.Outcome.SKIPPED_INACTIVE,
+                    reason="Die Regel ist deaktiviert.",
+                ))
+                continue
+            if not rule.engine_enabled:
+                evaluations.append(RuleEvaluation(
+                    rule=rule,
+                    actions=(),
+                    conditions=(),
+                    outcome=RuleEngineExecutionLog.Outcome.SKIPPED_ENGINE_DISABLED,
+                    reason="Neue Engine aktiv ist an dieser Regel deaktiviert.",
+                ))
+                continue
             context_root = str(getattr(rule.trigger, "context_root", "") or "")
             field_map = field_maps.get(context_root)
             if field_map is None:
                 field_map = self._field_map_for_rule(rule)
                 field_maps[context_root] = field_map
+            conditions = rule_condition_results(
+                rule,
+                context,
+                field_map=field_map,
+                operator_engine_map=operator_engine_map,
+            )
             if not rule_matches(
                 rule,
                 context,
                 field_map=field_map,
                 operator_engine_map=operator_engine_map,
             ):
+                evaluations.append(RuleEvaluation(
+                    rule=rule,
+                    actions=(),
+                    conditions=conditions,
+                    outcome=RuleEngineExecutionLog.Outcome.SKIPPED_CONDITIONS,
+                    reason="Mindestens eine Bedingung trifft nicht zu.",
+                ))
                 continue
-            matches.append(RuleMatch(rule=rule, actions=self._resolve_actions(rule, context)))
-        return tuple(matches)
+            actions = self._resolve_actions(rule, context)
+            if not actions:
+                evaluations.append(RuleEvaluation(
+                    rule=rule,
+                    actions=(),
+                    conditions=conditions,
+                    outcome=RuleEngineExecutionLog.Outcome.SKIPPED_NO_ACTIONS,
+                    reason="Die Regel trifft zu, enthält aber keine aktive Aktion.",
+                ))
+                continue
+            evaluations.append(RuleEvaluation(
+                rule=rule,
+                actions=actions,
+                conditions=conditions,
+                outcome=(
+                    RuleEngineExecutionLog.Outcome.MATCHED_SHADOW
+                    if audit_mode == "shadow"
+                    else RuleEngineExecutionLog.Outcome.APPLIED
+                ),
+                reason=(
+                    "Die Regel trifft zu; im Schattenmodus wird sie nicht angewendet."
+                    if audit_mode == "shadow"
+                    else "Alle Bedingungen treffen zu; die Aktionen wurden angewendet."
+                ),
+            ))
+        return tuple(evaluations)
+
+    @staticmethod
+    def _persist_audit(
+        *,
+        task_name: str,
+        phase: str,
+        mode: str,
+        subject: str,
+        evaluations: tuple[RuleEvaluation, ...],
+    ) -> None:
+        if not evaluations:
+            return
+        run_id = uuid4()
+        try:
+            RuleEngineExecutionLog.objects.bulk_create([
+                RuleEngineExecutionLog(
+                    run_id=run_id,
+                    task_name=task_name,
+                    execution_phase=phase,
+                    engine_mode=mode,
+                    subject=subject,
+                    rule=evaluation.rule,
+                    rule_name=evaluation.rule.name,
+                    outcome=evaluation.outcome,
+                    reason=evaluation.reason,
+                    conditions_json=json.dumps(evaluation.conditions, ensure_ascii=False),
+                    actions_json=json.dumps([
+                        {
+                            "action_id": action.action_id,
+                            "action_type": action.action_type,
+                            "target": action.graphql_field or action.dataset_field_name,
+                            "value": action.value,
+                        }
+                        for action in evaluation.actions
+                    ], ensure_ascii=False),
+                )
+                for evaluation in evaluations
+            ])
+        except Exception:
+            # The audit trail must not stop a business-critical order/customer
+            # upsert when the log storage is temporarily unavailable.
+            logger.exception("Regel-Engine-Ausführungsprotokoll konnte nicht persistiert werden.")
 
     def resolve_first_match(
         self,
@@ -151,4 +322,4 @@ class RuleExecutionService(BaseService):
         return tuple(resolved)
 
 
-__all__ = ["ResolvedRuleAction", "RuleExecutionService", "RuleMatch"]
+__all__ = ["ResolvedRuleAction", "RuleEvaluation", "RuleExecutionService", "RuleMatch"]

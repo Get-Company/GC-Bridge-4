@@ -18,7 +18,7 @@ class CustomerRuleContext:
     billing_address: object | None
 
 
-def resolve_customer_fields(*, customer, address, billing_address=None) -> dict[str, str]:
+def resolve_customer_fields(*, customer, address, billing_address=None, audit_mode: str | None = None) -> dict[str, str]:
     """Resolve fields using explicit ``billing_address__`` / ``shipping_address__`` paths.
 
     ``address`` is the shipping address kept for backwards-compatible callers;
@@ -32,6 +32,8 @@ def resolve_customer_fields(*, customer, address, billing_address=None) -> dict[
             shipping_address=address,
             billing_address=billing_address,
         ),
+        audit_mode=audit_mode,
+        audit_subject=f"Kunde #{getattr(customer, 'pk', '') or '?'}",
     )
     return {
         action.field_path: action.value

@@ -1,0 +1,35 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+<div style="max-width:1200px;margin:0 auto;">
+  <p><a href="{{ order_change_url }}">← Zur Bestellung</a></p>
+  <h1>Regeltester: {{ order.order_number }}</h1>
+  <p>Dies ist eine Vorschau. Es werden weder Daten gespeichert noch GraphQL-Jobs ausgelöst.</p>
+  {% if error %}
+    <div class="errors"><p>{{ error }}</p></div>
+  {% endif %}
+  {% for section in sections %}
+    <section style="margin:20px 0;padding:18px;border:1px solid #dbe3ee;border-radius:10px;background:#fff;">
+      <h2 style="margin-top:0;">{{ section.title }}</h2>
+      <p><strong>Modus:</strong> {{ section.mode_display }} <code>{{ section.task_name }}</code></p>
+      {% if section.rules %}
+        <table style="width:100%;border-collapse:collapse;">
+          <thead><tr><th style="text-align:left;">Regel</th><th style="text-align:left;">Ergebnis</th><th style="text-align:left;">Geprüfte Bedingungen</th><th style="text-align:left;">Felder, die geschrieben würden</th></tr></thead>
+          <tbody>
+          {% for rule in section.rules %}
+            <tr>
+              <td><a href="{% url 'admin:microtech_microtechorderrule_change' rule.rule_id %}">{{ rule.rule_name }}</a></td>
+              <td>{{ rule.outcome }}</td>
+              <td>{{ rule.reason }}{% for condition in rule.conditions %}<div><code>{{ condition.field }}</code> {{ condition.operator }} {{ condition.expected }}: {% if condition.matched %}trifft zu{% else %}trifft nicht zu{% endif %}</div>{% endfor %}</td>
+              <td>{% for action in rule.actions %}<div><code>{{ action.target }}</code> = <strong>{{ action.value }}</strong></div>{% empty %}–{% endfor %}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p>Für diesen Trigger sind keine Regeln angelegt.</p>
+      {% endif %}
+    </section>
+  {% endfor %}
+</div>
+{% endblock %}

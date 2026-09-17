@@ -36,12 +36,16 @@ def _dataset_action(action) -> ResolvedDatasetAction:
     return ResolvedDatasetAction(action_type=action.action_type, target_value=action.value)
 
 
-def resolve_order_rule(order) -> ResolvedOrderRule:
+def resolve_order_rule(order, *, audit_mode: str | None = None) -> ResolvedOrderRule:
     customer_type = detect_customer_type(order)
     matches = RuleExecutionService().resolve_matching_rules(
         task_name=ORDER_CREATE_TASK,
         phase=MicrotechOrderRule.ExecutionPhase.BEFORE,
         root_instance=order,
+        audit_mode=audit_mode,
+        audit_subject=(
+            f"Bestellung {getattr(order, 'order_number', '') or getattr(order, 'pk', '') or '?'}"
+        ),
     )
     if matches:
         actions = tuple(

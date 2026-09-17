@@ -5,6 +5,7 @@ from .order_rule_resolver import OrderRuleResolverService, ResolvedOrderRule
 from .order_sync import OrderSyncService
 from .order_sync_workflow import CONTINUATION_NAME, OrderSyncWorkflowService
 from .order_upsert_microtech import OrderUpsertMicrotechService
+from .rule_tester import OrderRuleTesterService
 from .swiss_customs_csv import SwissCustomsCsvExportService
 
 __all__ = [
@@ -13,6 +14,7 @@ __all__ = [
     "OrderCustomerChangeService",
     "OrderAddressReconciliationService",
     "OrderRuleResolverService",
+    "OrderRuleTesterService",
     "OrderSyncService",
     "OrderSyncWorkflowService",
     "OrderUpsertMicrotechService",

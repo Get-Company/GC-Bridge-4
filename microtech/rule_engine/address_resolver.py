@@ -12,11 +12,13 @@ from microtech.rule_engine.execution import RuleExecutionService
 ADDRESS_WRITE_TASK = "customer.microtech_postal_address"
 
 
-def resolve_address_fields(address) -> dict[str, str]:
+def resolve_address_fields(address, *, audit_mode: str | None = None) -> dict[str, str]:
     matches = RuleExecutionService().resolve_matching_rules(
         task_name=ADDRESS_WRITE_TASK,
         phase="before",
         root_instance=address,
+        audit_mode=audit_mode,
+        audit_subject=f"Anschrift #{getattr(address, 'pk', '') or '?'}",
     )
     return {
         action.field_path: action.value

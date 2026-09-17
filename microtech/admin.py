@@ -27,6 +27,7 @@ from microtech.models import (
     MicrotechOrderRuleOperator,
     MicrotechSettings,
     MicrotechSwissCustomsFieldMapping,
+    RuleEngineExecutionLog,
     RuleConstant,
     RuleTrigger,
 )
@@ -263,6 +264,66 @@ class MicrotechGraphQLJobAdmin(BaseAdmin):
         service = MicrotechJobSentinelService()
         for job in queryset:
             service.delete_job(job_id=job.pk, delete_remote=True)
+
+
+@admin.register(RuleEngineExecutionLog)
+class RuleEngineExecutionLogAdmin(BaseAdmin):
+    """Read-only audit trail for every evaluated rule."""
+
+    list_display = (
+        "created_at",
+        "subject",
+        "task_name",
+        "engine_mode",
+        "rule_name",
+        "outcome",
+        "reason",
+    )
+    list_filter = ("task_name", "engine_mode", "execution_phase", "outcome")
+    search_fields = ("subject", "rule_name", "task_name", "run_id")
+    readonly_fields = BaseAdmin.readonly_fields + (
+        "run_id",
+        "task_name",
+        "execution_phase",
+        "engine_mode",
+        "subject",
+        "rule",
+        "rule_name",
+        "outcome",
+        "reason",
+        "conditions_json",
+        "actions_json",
+    )
+    fieldsets = (
+        (
+            "Regel-Auswertung",
+            {
+                "fields": (
+                    "run_id",
+                    "subject",
+                    "task_name",
+                    "execution_phase",
+                    "engine_mode",
+                    "rule",
+                    "rule_name",
+                    "outcome",
+                    "reason",
+                ),
+            },
+        ),
+        ("Bedingungen", {"fields": ("conditions_json",)}),
+        ("Aktionen", {"fields": ("actions_json",)}),
+        ("System", {"fields": ("created_at", "updated_at")}),
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_view_permission(self, request, obj=None):
+        return super().has_view_permission(request, obj=obj)
 
 
 @admin.register(MicrotechSettings)
@@ -785,7 +846,7 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
                     "engine_enabled",
                 ),
                 "description": (
-                    "Prioritaet steuert die Reihenfolge. Die erste passende aktive Regel gewinnt."
+                    "Prioritaet steuert die Reihenfolge. Alle passenden aktiven Regeln werden nacheinander ausgeführt."
                 ),
             },
         ),
