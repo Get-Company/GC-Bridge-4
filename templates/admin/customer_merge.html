@@ -583,9 +583,10 @@ function normalize(d, sys) {
         d.lastLogin ? `Login: ${d.lastLogin}` : '',
       ].filter(Boolean),
       addresses: (d.addresses || []).map(a => {
-        const n = [a.firstName, a.lastName].filter(Boolean).join(' ');
+        const n = [a.salutation, a.title, a.firstName, a.lastName].filter(Boolean).join(' ');
         return {
           id: a.id || '', label: a.company || n,
+          contactName: n,
           street: a.street||'', zip: a.zipcode||'', city: a.city||'', country: a.countryIso||'',
           email: a.email||'', isShipping: Boolean(a.is_shipping), isBilling: Boolean(a.is_invoice),
         };
@@ -846,7 +847,7 @@ function comparisonAddressCard(nr, sysKey, address, defaultActions = '') {
       ${flags ? `<div class="mb-2 flex flex-wrap items-center justify-end gap-x-3 gap-y-1">${flags}</div>` : ''}
       ${mappings ? `<div class="mb-2">${mappings}</div>` : ''}
       <div class="font-medium text-sm">${esc(address.label) || '<span class="comparison-empty">Ohne Bezeichnung</span>'}</div>
-      ${address.contactName ? `<div class="text-gray-400">${esc(address.contactName)}</div>` : ''}
+      ${address.contactName ? `<div class="text-gray-400"><span class="text-[10px] uppercase tracking-wide">Ansprechpartner:</span> ${esc(address.contactName)}</div>` : ''}
       <div class="text-gray-500">${esc(address.street)}</div>
       <div class="text-gray-500">${esc(address.zip)} ${esc(address.city)} ${address.country ? esc(address.country) : ''}</div>
       ${address.email ? `<div class="text-gray-400 truncate">${esc(address.email)}</div>` : ''}

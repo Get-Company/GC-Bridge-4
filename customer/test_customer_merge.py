@@ -486,7 +486,18 @@ class CustomerMergeMicrotechSearchTest(SimpleTestCase):
                     "customerNumber": "10001",
                     "defaultShippingAddressId": "shipping-id",
                     "defaultBillingAddressId": "billing-id",
-                    "addresses": [{"id": "shipping-id"}, {"id": "billing-id"}],
+                    "addresses": [
+                        {
+                            "id": "shipping-id",
+                            "attributes": {
+                                "firstName": "Max",
+                                "lastName": "Mustermann",
+                                "title": "Dr.",
+                                "salutation": {"attributes": {"displayName": "Herr"}},
+                            },
+                        },
+                        {"id": "billing-id"},
+                    ],
                 },
             }]
         }
@@ -495,6 +506,10 @@ class CustomerMergeMicrotechSearchTest(SimpleTestCase):
 
         self.assertTrue(customer["addresses"][0]["is_shipping"])
         self.assertFalse(customer["addresses"][0]["is_invoice"])
+        self.assertEqual(customer["addresses"][0]["salutation"], "Herr")
+        self.assertEqual(customer["addresses"][0]["title"], "Dr.")
+        self.assertEqual(customer["addresses"][0]["firstName"], "Max")
+        self.assertEqual(customer["addresses"][0]["lastName"], "Mustermann")
         self.assertTrue(customer["addresses"][1]["is_invoice"])
 
 
@@ -1541,6 +1556,8 @@ assert.deepEqual(microtech.extra, []);
 assert.equal(Object.hasOwn(microtech.addresses[0], 'identifiers'), false);
 assert.equal(microtech.addresses[0].microtechAddressNumber, 2);
 assert.deepEqual(microtech.addresses[0].contacts.map(contact => contact.microtechContactNumber), [1, 3]);
+const shopware = normalize({addresses: [{id: 'sw-address', company: 'Muster GmbH', salutation: 'Herr', title: 'Dr.', firstName: 'Max', lastName: 'Mustermann'}]}, 'shopware');
+assert.equal(shopware.addresses[0].contactName, 'Herr Dr. Max Mustermann');
 ''')
 
     def test_identifier_comparison_status_only_shows_for_filled_values(self):

@@ -373,6 +373,41 @@ class AdvanceHandlerTest(TestCase):
         self.assertEqual(wf.state["existing_default_shipping_ans_nrs"], [0])
         self.assertEqual(wf.state["existing_default_billing_ans_nrs"], [0])
 
+    def test_apply_new_customer_reuses_its_only_implicit_address_for_shipping_and_billing(self):
+        order = make_order()
+        workflow = MicrotechOrderSyncWorkflow.objects.create(
+            order=order,
+            status=MicrotechOrderSyncWorkflow.Status.WAITING,
+            current_step="write_customer",
+            state={
+                "requested_customer_number": "900001",
+                "is_new_customer": True,
+                "billing_same_as_shipping": True,
+            },
+        )
+
+        OrderSyncWorkflowService()._apply_result(
+            workflow,
+            "write_customer",
+            {
+                "customer": {
+                    "customerNumber": "100001",
+                    "erpAddressNumber": 100001,
+                    "addresses": [{"addressSubNumber": 2}],
+                }
+            },
+        )
+
+        order.shipping_address.refresh_from_db()
+        order.billing_address.refresh_from_db()
+        self.assertEqual(workflow.state["remote_address_sub_numbers"], [2])
+        self.assertEqual(workflow.state["shipping_ans_nr"], 2)
+        self.assertEqual(workflow.state["billing_ans_nr"], 2)
+        self.assertEqual(order.shipping_address.erp_nr, 100001)
+        self.assertEqual(order.shipping_address.erp_ans_nr, 2)
+        self.assertEqual(order.billing_address.erp_nr, 100001)
+        self.assertEqual(order.billing_address.erp_ans_nr, 2)
+
     def test_apply_address_result_persists_address_identity(self):
         order = make_order()
         wf = MicrotechOrderSyncWorkflow.objects.create(
@@ -492,6 +527,45 @@ class StartAndSubmitTest(TestCase):
         self.assertEqual(called["context"]["step"], "write_customer")
         self.assertEqual(called["continuation"], "microtech_order_sync_advance")
         self.assertEqual(called["request_payload"]["input"]["taxCategory"], 3)
+
+    @patch("orders.services.order_sync_workflow.MicrotechGraphQLClientService")
+    @patch("orders.services.order_sync_workflow.MicrotechJobSentinelService.submit_wrapper_job")
+    def test_new_customer_updates_its_implicit_address_instead_of_creating_a_second_one(
+        self,
+        mock_submit,
+        mock_client,
+    ):
+        mock_submit.return_value = MagicMock(pk=1)
+        order = make_order()
+        workflow = MicrotechOrderSyncWorkflow.objects.create(
+            order=order,
+            status=MicrotechOrderSyncWorkflow.Status.WAITING,
+            current_step="write_customer",
+            state={
+                "requested_customer_number": "900001",
+                "is_new_customer": True,
+                "billing_same_as_shipping": True,
+            },
+        )
+        service = OrderSyncWorkflowService()
+
+        service._apply_result(
+            workflow,
+            "write_customer",
+            {
+                "customer": {
+                    "customerNumber": "100001",
+                    "erpAddressNumber": 100001,
+                    "addresses": [{"addressSubNumber": 2}],
+                }
+            },
+        )
+        service.submit_step(workflow, "shipping_address")
+
+        called = mock_submit.call_args.kwargs
+        self.assertEqual(called["operation"], "updatePostalAddress")
+        self.assertEqual(called["request_payload"]["addressNumber"], 100001)
+        self.assertEqual(called["request_payload"]["addressSubNumber"], 2)
 
     @patch("orders.services.order_sync_workflow.MicrotechGraphQLClientService")
     @patch("orders.services.order_sync_workflow.MicrotechJobSentinelService.submit_wrapper_job")

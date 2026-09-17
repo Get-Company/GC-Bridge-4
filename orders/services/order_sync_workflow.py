@@ -188,6 +188,68 @@ class OrderSyncWorkflowService(BaseService):
         )
 
     @staticmethod
+    def _single_remote_address_sub_number(customer: dict[str, Any]) -> int | None:
+        """Return the sole address created implicitly by a new customer upsert.
+
+        ``upsertCustomer`` creates an initial Microtech Anschrift from the
+        postal fields in ``CustomerInput``.  It is safe to reuse that
+        Anschrift only when the response contains exactly one address.  A
+        missing or ambiguous response deliberately falls back to the explicit
+        postal-address creation path.
+        """
+        addresses = customer.get("addresses") if isinstance(customer, dict) else None
+        if not isinstance(addresses, list) or len(addresses) != 1:
+            return None
+        address = addresses[0]
+        if not isinstance(address, dict):
+            return None
+        return _to_int(address.get("addressSubNumber"))
+
+    def _adopt_implicit_new_customer_address(
+        self,
+        *,
+        workflow: MicrotechOrderSyncWorkflow,
+        state: dict[str, Any],
+        customer: dict[str, Any],
+    ) -> None:
+        """Reuse the one address created by ``upsertCustomer`` for shipping/billing.
+
+        A new customer may already have one Anschrift because the customer
+        mutation contains the address data.  Persisting that returned AnsNr
+        lets the following shipping step update it with the specialised
+        PostalAddressInput (and its rules) instead of creating a duplicate.
+        """
+        if not state.get("is_new_customer") or not state.get("billing_same_as_shipping"):
+            return
+
+        sub_number = self._single_remote_address_sub_number(customer)
+        if sub_number is None:
+            return
+
+        shipping, billing = self._resolve_addresses(workflow.order)
+        state["shipping_ans_nr"] = sub_number
+        state["billing_ans_nr"] = sub_number
+        self._persist_address_sub_number(
+            workflow=workflow,
+            address=shipping,
+            sub_number=sub_number,
+            result={
+                "customer": customer,
+                "postalAddress": {"addressNumber": state.get("address_number")},
+            },
+        )
+        if billing.pk != shipping.pk:
+            self._persist_address_sub_number(
+                workflow=workflow,
+                address=billing,
+                sub_number=sub_number,
+                result={
+                    "customer": customer,
+                    "postalAddress": {"addressNumber": state.get("address_number")},
+                },
+            )
+
+    @staticmethod
     def _default_numbers_from_state(state: dict[str, Any], *, role: str) -> list[int]:
         plural_key = f"existing_default_{role}_ans_nrs"
         singular_key = f"existing_default_{role}_ans_nr"
@@ -626,9 +688,11 @@ class OrderSyncWorkflowService(BaseService):
             state["address_number"] = resolved_address_number or _to_int(resolved_number) or state.get("address_number")
             self._remember_existing_default_ans_nrs(state, customer)
             self._remember_remote_address_sub_numbers(state, customer)
-            if state.get("is_new_customer"):
-                state["remote_address_inventory_known"] = True
-                state["remote_address_sub_numbers"] = []
+            self._adopt_implicit_new_customer_address(
+                workflow=workflow,
+                state=state,
+                customer=customer,
+            )
         elif step in ("shipping_address", "billing_address"):
             shipping, billing = self._resolve_addresses(workflow.order)
             address = shipping if step == "shipping_address" else billing

@@ -739,9 +739,12 @@ class CustomerMergeSearchService(BaseService):
                 a = _safe_attrs(addr)
                 country = _safe_attrs(a.get("country")) if isinstance(a.get("country"), dict) else {}
                 country_a = _safe_attrs(country) if country else {}
+                salutation = _safe_attrs(a.get("salutation")) if isinstance(a.get("salutation"), dict) else {}
                 address_id = _to_str(addr.get("id") or a.get("id"))
                 addresses.append({
                     "id": address_id,
+                    "salutation": _to_str(salutation.get("displayName")),
+                    "title": _to_str(a.get("title")),
                     "firstName": a.get("firstName", ""),
                     "lastName": a.get("lastName", ""),
                     "company": a.get("company", ""),
