@@ -566,7 +566,7 @@ class CustomerUpsertMicrotechService(BaseService):
         return True
 
     @staticmethod
-    def _resolve_ustkat(country_code: str, vat_id: str, customer_group: str = "") -> int:
+    def _resolve_ustkat(country_code: str, vat_id: str, customer_group: str = "") -> str:
         """Compatibility helper for callers that previously used this method."""
         return CustomerWebshopMappingService.resolve_tax_category(
             billing_country_code=country_code,

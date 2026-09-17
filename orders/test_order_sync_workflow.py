@@ -491,7 +491,7 @@ class StartAndSubmitTest(TestCase):
         self.assertEqual(called["kind"], MicrotechGraphQLJob.Kind.CUSTOMER_UPSERT)
         self.assertEqual(called["context"]["step"], "write_customer")
         self.assertEqual(called["continuation"], "microtech_order_sync_advance")
-        self.assertEqual(called["request_payload"]["input"]["taxCategory"], 3)
+        self.assertEqual(called["request_payload"]["input"]["taxCategory"], "3")
 
     @patch("orders.services.order_sync_workflow.MicrotechGraphQLClientService")
     @patch("orders.services.order_sync_workflow.MicrotechJobSentinelService.submit_wrapper_job")

@@ -9,12 +9,12 @@ class MicrotechCustomerTaxRuleTest(SimpleTestCase):
     def test_tax_category_uses_the_confirmed_country_group_and_vat_rules(self):
         resolve = CustomerUpsertMicrotechService._resolve_ustkat
 
-        self.assertEqual(resolve("DE", "DE123456789", "GC | Italien Firma B2B"), 1)
-        self.assertEqual(resolve("CH", "CHE123", "GC | Schweiz Firma B2B"), 2)
-        self.assertEqual(resolve("US", "US123", "Standard-Kundengruppe"), 2)
-        self.assertEqual(resolve("AT", "ATU12345678", "GC | Italien Firma B2B"), 3)
-        self.assertEqual(resolve("AT", "", "GC | Italien Firma B2B"), 1)
-        self.assertEqual(resolve("AT", "ATU12345678", "Standard-Kundengruppe"), 1)
+        self.assertEqual(resolve("DE", "DE123456789", "GC | Italien Firma B2B"), "1")
+        self.assertEqual(resolve("CH", "CHE123", "GC | Schweiz Firma B2B"), "2")
+        self.assertEqual(resolve("US", "US123", "Standard-Kundengruppe"), "2")
+        self.assertEqual(resolve("AT", "ATU12345678", "GC | Italien Firma B2B"), "3")
+        self.assertEqual(resolve("AT", "", "GC | Italien Firma B2B"), "1")
+        self.assertEqual(resolve("AT", "ATU12345678", "Standard-Kundengruppe"), "1")
 
     def test_customer_input_contains_vat_id_for_microtech_tax_rule(self):
         customer = Customer(
@@ -40,7 +40,7 @@ class MicrotechCustomerTaxRuleTest(SimpleTestCase):
 
         self.assertEqual(payload["country"], "CH")
         self.assertEqual(payload["vatId"], "ATU12345678")
-        self.assertEqual(payload["taxCategory"], 3)
+        self.assertEqual(payload["taxCategory"], "3")
 
     def test_customer_input_uses_webshop_default_mapping(self):
         customer = Customer(erp_nr="100001", name="Beispiel AG")
