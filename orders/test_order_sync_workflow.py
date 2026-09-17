@@ -1300,6 +1300,26 @@ class SubmitFailureTest(TestCase):
         self.assertEqual(wf.status, MicrotechOrderSyncWorkflow.Status.WAITING)
         self.assertEqual(wf.current_step, "write_customer")
 
+    @patch("orders.services.order_sync_workflow.MicrotechGraphQLClientService")
+    @patch("orders.services.order_sync_workflow.MicrotechJobSentinelService.submit_wrapper_job")
+    def test_start_retries_an_existing_failed_workflow(self, mock_submit, mock_client):
+        mock_submit.side_effect = RuntimeError("wrapper down")
+        order = make_order()
+        service = OrderSyncWorkflowService()
+
+        with self.assertRaises(RuntimeError):
+            service.start_for_order(order)
+        failed_workflow = MicrotechOrderSyncWorkflow.objects.get(order=order)
+
+        mock_submit.side_effect = None
+        mock_submit.return_value = MagicMock(pk=2)
+        retried_workflow = service.start_for_order(order)
+
+        failed_workflow.refresh_from_db()
+        self.assertEqual(retried_workflow.pk, failed_workflow.pk)
+        self.assertEqual(failed_workflow.status, MicrotechOrderSyncWorkflow.Status.WAITING)
+        self.assertEqual(failed_workflow.current_step, "write_customer")
+
 
 class AbortAndRestartTest(TestCase):
     def test_abort_cancels_workflow_with_nullable_current_job(self):

@@ -487,12 +487,20 @@ class OrderSyncWorkflowService(BaseService):
         order.save(update_fields=("erp_order_id", "erp_vorgang_id", "updated_at"))
 
     def start_for_order(self, order, *, allow_reexport: bool = True) -> MicrotechOrderSyncWorkflow:
-        """Manually create and immediately start a workflow for one order."""
+        """Start a workflow, or safely retry its failed current step."""
         workflow, created = self.ensure_pending_for_order(order, allow_reexport=allow_reexport)
         if workflow is None:
             reason = order.microtech_export_exclusion_reason or "Kein Grund dokumentiert."
             raise ValueError(f"Bestellung {order.pk} ist nicht für Microtech freigegeben: {reason}")
         if not created:
+            if workflow.status == MicrotechOrderSyncWorkflow.Status.FAILED:
+                logger.info(
+                    "Bestellung %s: fehlgeschlagener Sync-Workflow #%s wird beim erneuten Start fortgesetzt.",
+                    order.pk,
+                    workflow.pk,
+                )
+                self.resume(workflow)
+                return workflow
             raise ValueError(f"Für Bestellung {order.pk} läuft bereits ein Sync-Workflow (#{workflow.pk}).")
 
         return self.start_pending_workflow(workflow_id=workflow.pk) or workflow
