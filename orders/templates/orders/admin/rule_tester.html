@@ -1,33 +1,159 @@
 {% extends "admin/base_site.html" %}
 
+{% block extrahead %}{{ block.super }}
+<style>
+  .rt-wrap { max-width: 1100px; margin: 0 auto; }
+  .rt-wrap a { color: #2563eb; text-decoration: none; }
+  .rt-wrap a:hover { text-decoration: underline; }
+  .rt-intro { color: #475569; margin: 4px 0 18px; }
+  .rt-note {
+    display: flex; gap: 10px; align-items: flex-start;
+    background: #eff6ff; border: 1px solid #bfdbfe; color: #1e3a8a;
+    border-radius: 10px; padding: 12px 14px; margin: 0 0 20px; font-size: 13px; line-height: 1.5;
+  }
+  .rt-note .rt-note-icon { font-size: 16px; line-height: 1.2; }
+  .rt-error {
+    background: #fef2f2; border: 1px solid #fecaca; color: #991b1b;
+    border-radius: 10px; padding: 12px 14px; margin: 0 0 20px;
+  }
+  .rt-section {
+    margin: 0 0 22px; border: 1px solid #e2e8f0; border-radius: 12px;
+    background: #fff; overflow: hidden;
+  }
+  .rt-section-head {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+    padding: 14px 18px; background: #f8fafc; border-bottom: 1px solid #e2e8f0;
+  }
+  .rt-section-head h2 { margin: 0; font-size: 16px; flex: 1 1 auto; }
+  .rt-summary {
+    font-size: 12px; font-weight: 600; color: #334155;
+    background: #e2e8f0; border-radius: 999px; padding: 3px 10px; white-space: nowrap;
+  }
+  .rt-mode { font-size: 12px; color: #64748b; }
+  .rt-mode code { background: #f1f5f9; padding: 1px 6px; border-radius: 5px; }
+  .rt-mode-off { color: #92400e; }
+  .rt-empty { padding: 18px; color: #64748b; font-style: italic; }
+
+  .rt-rule {
+    display: grid; grid-template-columns: minmax(180px, 1fr) 1.4fr 1.2fr;
+    gap: 16px; padding: 14px 18px; border-top: 1px solid #f1f5f9;
+  }
+  .rt-rule:first-child { border-top: none; }
+  .rt-rule.rt-fired { background: #f6fdf9; }
+  .rt-col-label { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #94a3b8; margin: 0 0 6px; }
+  .rt-rule-name { font-weight: 600; }
+  .rt-reason { font-size: 12px; color: #64748b; margin-top: 6px; }
+
+  .rt-badge {
+    display: inline-flex; align-items: center; gap: 6px; margin-top: 6px;
+    font-size: 12px; font-weight: 600; border-radius: 999px; padding: 3px 10px; white-space: nowrap;
+  }
+  .rt-badge.fired { background: #dcfce7; color: #166534; border: 1px solid #86efac; }
+  .rt-badge.skipped { background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; }
+  .rt-badge .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+
+  .rt-cond { font-size: 13px; margin: 4px 0; display: flex; gap: 7px; align-items: baseline; }
+  .rt-cond .mark { font-weight: 700; line-height: 1; }
+  .rt-cond.ok .mark { color: #16a34a; }
+  .rt-cond.no .mark { color: #dc2626; }
+  .rt-cond code { background: #f1f5f9; padding: 1px 5px; border-radius: 5px; font-size: 12px; }
+  .rt-cond .op { color: #64748b; }
+  .rt-none { color: #94a3b8; font-size: 13px; }
+
+  .rt-action {
+    font-size: 13px; margin: 4px 0; padding: 6px 10px;
+    background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px;
+  }
+  .rt-action code { color: #334155; font-size: 12px; }
+  .rt-action .val { font-weight: 700; color: #166534; }
+  .rt-action-muted { background: #f8fafc; border-color: #e2e8f0; }
+  .rt-action-muted .val { color: #475569; }
+</style>
+{% endblock %}
+
 {% block content %}
-<div style="max-width:1200px;margin:0 auto;">
+<div class="rt-wrap">
   <p><a href="{{ order_change_url }}">← Zur Bestellung</a></p>
   <h1>Regeltester: {{ order.order_number }}</h1>
-  <p>Dies ist eine Vorschau. Es werden weder Daten gespeichert noch GraphQL-Jobs ausgelöst.</p>
+  <p class="rt-intro">Theoretische Vorschau. Es werden weder Daten gespeichert noch GraphQL-Jobs ausgelöst.</p>
+
+  <div class="rt-note">
+    <span class="rt-note-icon">ℹ️</span>
+    <span>Diese Vorschau wertet <strong>alle</strong> Regeln so aus, als liefe die Engine live –
+      unabhängig vom tatsächlichen Engine-Modus. So siehst du, welche Regeln <em>greifen würden</em>
+      und welche Werte sie setzen würden. Der real konfigurierte Modus ist je Bereich vermerkt.</span>
+  </div>
+
   {% if error %}
-    <div class="errors"><p>{{ error }}</p></div>
+    <div class="rt-error"><strong>Fehler:</strong> {{ error }}</div>
   {% endif %}
+
   {% for section in sections %}
-    <section style="margin:20px 0;padding:18px;border:1px solid #dbe3ee;border-radius:10px;background:#fff;">
-      <h2 style="margin-top:0;">{{ section.title }}</h2>
-      <p><strong>Modus:</strong> {{ section.mode_display }} <code>{{ section.task_name }}</code></p>
+    <section class="rt-section">
+      <div class="rt-section-head">
+        <h2>{{ section.title }}</h2>
+        <span class="rt-summary">{{ section.fired_count }} von {{ section.total_count }} Regeln würden greifen</span>
+        <span class="rt-mode {% if section.mode_is_off %}rt-mode-off{% endif %}">
+          Realer Modus: {{ section.mode_display }} · <code>{{ section.task_name }}</code>
+        </span>
+      </div>
+
       {% if section.rules %}
-        <table style="width:100%;border-collapse:collapse;">
-          <thead><tr><th style="text-align:left;">Regel</th><th style="text-align:left;">Ergebnis</th><th style="text-align:left;">Geprüfte Bedingungen</th><th style="text-align:left;">Felder, die geschrieben würden</th></tr></thead>
-          <tbody>
-          {% for rule in section.rules %}
-            <tr>
-              <td><a href="{% url 'admin:microtech_microtechorderrule_change' rule.rule_id %}">{{ rule.rule_name }}</a></td>
-              <td>{{ rule.outcome }}</td>
-              <td>{{ rule.reason }}{% for condition in rule.conditions %}<div><code>{{ condition.field }}</code> {{ condition.operator }} {{ condition.expected }}: {% if condition.matched %}trifft zu{% else %}trifft nicht zu{% endif %}</div>{% endfor %}</td>
-              <td>{% for action in rule.actions %}<div><code>{{ action.target }}</code> = <strong>{{ action.value }}</strong></div>{% empty %}–{% endfor %}</td>
-            </tr>
-          {% endfor %}
-          </tbody>
-        </table>
+        {% for rule in section.rules %}
+          <div class="rt-rule {% if rule.fired %}rt-fired{% endif %}">
+            <div>
+              <p class="rt-col-label">Regel</p>
+              <div class="rt-rule-name">
+                <a href="{% url 'admin:microtech_microtechorderrule_change' rule.rule_id %}">{{ rule.rule_name }}</a>
+              </div>
+              {% if rule.fired %}
+                <span class="rt-badge fired"><span class="dot"></span>Würde greifen</span>
+              {% else %}
+                <span class="rt-badge skipped"><span class="dot"></span>Greift nicht</span>
+              {% endif %}
+              <div class="rt-reason">{{ rule.reason }}</div>
+            </div>
+
+            <div>
+              <p class="rt-col-label">Geprüfte Bedingungen</p>
+              {% for condition in rule.conditions %}
+                <div class="rt-cond {% if condition.matched %}ok{% else %}no{% endif %}">
+                  <span class="mark">{% if condition.matched %}✓{% else %}✗{% endif %}</span>
+                  <span>
+                    <code>{{ condition.field }}</code>
+                    <span class="op">{{ condition.operator }}</span>
+                    <code>{{ condition.expected }}</code>{% if condition.expected_2 %} … <code>{{ condition.expected_2 }}</code>{% endif %}
+                  </span>
+                </div>
+              {% empty %}
+                <div class="rt-none">Keine aktiven Bedingungen (Regel greift immer).</div>
+              {% endfor %}
+            </div>
+
+            <div>
+              <p class="rt-col-label">Würde diese Werte setzen</p>
+              {% if rule.fired %}
+                {% for action in rule.actions %}
+                  <div class="rt-action">
+                    <code>{{ action.target }}</code> = <span class="val">{{ action.value|default:"(leer)" }}</span>
+                  </div>
+                {% empty %}
+                  <div class="rt-none">Keine Aktion hinterlegt.</div>
+                {% endfor %}
+              {% else %}
+                {% for action in rule.actions %}
+                  <div class="rt-action rt-action-muted">
+                    <code>{{ action.target }}</code> = <span class="val">{{ action.value|default:"(leer)" }}</span>
+                  </div>
+                {% empty %}
+                  <div class="rt-none">–</div>
+                {% endfor %}
+              {% endif %}
+            </div>
+          </div>
+        {% endfor %}
       {% else %}
-        <p>Für diesen Trigger sind keine Regeln angelegt.</p>
+        <p class="rt-empty">Für diesen Trigger sind keine Regeln angelegt.</p>
       {% endif %}
     </section>
   {% endfor %}

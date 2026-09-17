@@ -235,6 +235,7 @@ class OrderAdmin(BaseAdmin):
     actions = ("sync_open_orders_from_shopware",)
     actions_row = (
         "customer_merge_row",
+        "rule_tester_row",
         "upsert_to_microtech_row",
         "export_swiss_customs_csv_row",
     )
@@ -640,6 +641,15 @@ class OrderAdmin(BaseAdmin):
         permissions=("view",),
     )
     def rule_tester_detail(self, request, object_id: str):
+        return HttpResponseRedirect(reverse("admin:orders_order_rule_tester", args=(object_id,)))
+
+    @action(
+        description="Regeln testen",
+        icon="rule",
+        variant=ActionVariant.WARNING,
+        permissions=("view",),
+    )
+    def rule_tester_row(self, request, object_id: str):
         return HttpResponseRedirect(reverse("admin:orders_order_rule_tester", args=(object_id,)))
 
     @action(

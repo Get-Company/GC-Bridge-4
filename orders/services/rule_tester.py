@@ -39,29 +39,50 @@ class OrderRuleTesterService(BaseService):
             ("Rechnungsanschrift schreiben", ADDRESS_WRITE_TASK, settings.rule_engine_address_mode, billing),
             ("Vorgang schreiben", ORDER_CREATE_TASK, settings.rule_engine_order_mode, order),
         )
-        return [
-            {
-                "title": title,
-                "task_name": task_name,
-                "mode": mode,
-                "mode_display": MicrotechSettings.EngineMode(mode).label,
-                "rules": [self._serialize(evaluation) for evaluation in engine.inspect_rules(
+        result: list[dict[str, Any]] = []
+        for title, task_name, mode, context in sections:
+            # The tester is a *theoretical* preview: it must show whether each
+            # rule's conditions would match, independent of the live engine
+            # mode. Evaluating with the real mode (e.g. OFF) would short-circuit
+            # every rule to "Engine-Modus aus" and hide exactly what we want to
+            # inspect. We therefore evaluate as if LIVE and surface the real
+            # configured mode separately for context.
+            evaluations = [
+                self._serialize(evaluation)
+                for evaluation in engine.inspect_rules(
                     task_name=task_name,
                     phase=MicrotechOrderRule.ExecutionPhase.BEFORE,
                     root_instance=context,
-                    mode=mode,
-                )],
-            }
-            for title, task_name, mode, context in sections
-        ]
+                    mode=MicrotechSettings.EngineMode.LIVE,
+                )
+            ]
+            result.append(
+                {
+                    "title": title,
+                    "task_name": task_name,
+                    "mode": mode,
+                    "mode_display": MicrotechSettings.EngineMode(mode).label,
+                    "mode_is_off": mode == MicrotechSettings.EngineMode.OFF,
+                    "rules": evaluations,
+                    "fired_count": sum(1 for rule in evaluations if rule["fired"]),
+                    "total_count": len(evaluations),
+                }
+            )
+        return result
 
     @staticmethod
     def _serialize(evaluation) -> dict[str, Any]:
+        outcome_code = evaluation.outcome
+        fired = outcome_code in {
+            RuleEngineExecutionLog.Outcome.APPLIED,
+            RuleEngineExecutionLog.Outcome.MATCHED_SHADOW,
+        }
         return {
             "rule_id": evaluation.rule.pk,
             "rule_name": evaluation.rule.name,
-            "outcome": RuleEngineExecutionLog.Outcome(evaluation.outcome).label,
-            "outcome_code": evaluation.outcome,
+            "outcome": RuleEngineExecutionLog.Outcome(outcome_code).label,
+            "outcome_code": outcome_code,
+            "fired": fired,
             "reason": evaluation.reason,
             "conditions": evaluation.conditions,
             "actions": [
