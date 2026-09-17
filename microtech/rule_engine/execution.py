@@ -10,13 +10,19 @@ from dataclasses import dataclass
 
 from core.services import BaseService
 from microtech.models import MicrotechOrderRule
-from microtech.rule_builder import get_address_field_defs, get_django_field_map, get_operator_engine_map
+from microtech.rule_builder import (
+    get_address_field_defs,
+    get_customer_field_defs,
+    get_django_field_map,
+    get_operator_engine_map,
+)
 from microtech.rule_engine.context import EvaluationContext
 from microtech.rule_engine.evaluation import rule_matches
 from microtech.rule_engine.templates import render_template
 
 
-_ADDRESS_CONTEXT_ROOTS = {"customer.Address", "customer.Customer"}
+_ADDRESS_CONTEXT_ROOTS = {"customer.Address"}
+_CUSTOMER_CONTEXT_ROOT = "customer.Customer"
 
 
 @dataclass(frozen=True, slots=True)
@@ -117,6 +123,8 @@ class RuleExecutionService(BaseService):
         context_root = str(getattr(rule.trigger, "context_root", "") or "")
         if context_root in _ADDRESS_CONTEXT_ROOTS:
             return {item.path: item for item in get_address_field_defs(context_root)}
+        if context_root == _CUSTOMER_CONTEXT_ROOT:
+            return {item.path: item for item in get_customer_field_defs()}
         return get_django_field_map()
 
     @staticmethod

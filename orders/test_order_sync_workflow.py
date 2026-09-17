@@ -90,6 +90,14 @@ class NextStepResolverTest(TestCase):
 
         self.assertTrue(state["billing_same_as_shipping"])
 
+    def test_missing_order_billing_address_is_rejected_instead_of_using_shipping_address(self):
+        order = make_order()
+        order.billing_address = None
+        order.save(update_fields=("billing_address", "updated_at"))
+
+        with self.assertRaisesMessage(ValueError, "Rechnungsadresse"):
+            OrderSyncWorkflowService()._resolve_addresses(order)
+
     def test_all_done_returns_none(self):
         wf = self._wf(
             state={"is_new_customer": True},

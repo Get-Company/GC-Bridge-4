@@ -111,7 +111,11 @@ class CustomerUpsertMicrotechService(BaseService):
         if not shipping:
             raise ValueError("Customer has no address to sync.")
 
-        billing = billing_address or customer.billing_address or shipping
+        billing = billing_address or customer.billing_address
+        if billing is None:
+            raise ValueError(
+                "Customer has no billing address to sync. Tax category must always be resolved from the billing address."
+            )
 
         if erp is None:
             with microtech_connection() as erp_connection:
@@ -321,7 +325,11 @@ class CustomerUpsertMicrotechService(BaseService):
         address: Address,
         billing_address: Address | None = None,
     ) -> dict[str, Any]:
-        tax_address = billing_address or address
+        if billing_address is None:
+            raise ValueError(
+                "CustomerInput requires a billing address. Tax category must never fall back to the shipping address."
+            )
+        tax_address = billing_address
         customer_input = {
                 "salutation": self._translate_salutation_to_de(address.title or address.name1),
                 "firstName": address.first_name,

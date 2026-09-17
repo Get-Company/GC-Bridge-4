@@ -582,7 +582,11 @@ def test_editor_rejects_graphql_input_type_from_another_trigger():
 # --- Customer path (taxCategory) wiring ----------------------------------
 
 
-def _customer_tax_rule(country="DE", tax_value="99"):
+def _customer_tax_rule(
+    country="DE",
+    tax_value="99",
+    field_path="billing_address__country_code",
+):
     from microtech.models import (
         MicrotechOrderRule, MicrotechOrderRuleAction,
         MicrotechOrderRuleCondition, MicrotechOrderRuleConditionGroup, RuleTrigger,
@@ -594,7 +598,7 @@ def _customer_tax_rule(country="DE", tax_value="99"):
         execution_phase=MicrotechOrderRule.ExecutionPhase.BEFORE, priority=10)
     g = MicrotechOrderRuleConditionGroup.objects.create(rule=rule, parent=None, logic="all")
     MicrotechOrderRuleCondition.objects.create(
-        rule=rule, group=g, django_field_path="country_code", operator_code="eq", expected_value=country)
+        rule=rule, group=g, django_field_path=field_path, operator_code="eq", expected_value=country)
     MicrotechOrderRuleAction.objects.create(
         rule=rule, action_type=MicrotechOrderRuleAction.ActionType.SET_FIELD,
         graphql_field="CustomerInput.taxCategory", target_value=tax_value)
@@ -609,11 +613,26 @@ def test_resolve_customer_fields_by_billing_country():
     cust = Customer.objects.create()
     de = Address.objects.create(customer=cust, country_code="DE")
     ch = Address.objects.create(customer=cust, country_code="CH")
-    assert resolve_customer_fields(customer=cust, address=de) == {"taxCategory": "1"}
-    # non-matching billing country, no fallback rule → no override
-    assert resolve_customer_fields(customer=cust, address=ch) == {}
-    # billing_address wins over address for the tax country
+    # The explicit billing field is independent from the shipping address.
     assert resolve_customer_fields(customer=cust, address=ch, billing_address=de) == {"taxCategory": "1"}
+    assert resolve_customer_fields(customer=cust, address=de, billing_address=ch) == {}
+
+
+def test_resolve_customer_fields_by_shipping_country():
+    from customer.models import Customer, Address
+    from microtech.rule_engine.customer_resolver import resolve_customer_fields
+
+    _customer_tax_rule(
+        country="CH",
+        tax_value="2",
+        field_path="shipping_address__country_code",
+    )
+    cust = Customer.objects.create()
+    de = Address.objects.create(customer=cust, country_code="DE")
+    ch = Address.objects.create(customer=cust, country_code="CH")
+
+    assert resolve_customer_fields(customer=cust, address=ch, billing_address=de) == {"taxCategory": "2"}
+    assert resolve_customer_fields(customer=cust, address=de, billing_address=ch) == {}
 
 
 def test_build_customer_input_overlays_only_in_live(monkeypatch):
@@ -635,7 +654,7 @@ def test_build_customer_input_overlays_only_in_live(monkeypatch):
     assert off["taxCategory"] != "99"  # hardcoded resolve_tax_category value
 
 
-def test_meta_customer_context_has_address_fields(admin_client):
+def test_meta_customer_context_has_explicit_address_fields(admin_client):
     import json
     from django.urls import reverse
 
@@ -643,4 +662,5 @@ def test_meta_customer_context_has_address_fields(admin_client):
     data = json.loads(admin_client.get(url).content)
     customer_ctx = [f for f in data["django_fields"] if f["context_root"] == "customer.Customer"]
     paths = {f["path"] for f in customer_ctx}
-    assert "country_code" in paths
+    assert {"billing_address__country_code", "shipping_address__country_code"} <= paths
+    assert "country_code" not in paths

@@ -46,7 +46,11 @@ class MicrotechCustomerTaxRuleTest(SimpleTestCase):
         customer = Customer(erp_nr="100001", name="Beispiel AG")
         address = Address(customer=customer, name1="Beispiel AG", country_code="CH")
 
-        payload = CustomerUpsertMicrotechService()._build_customer_input(customer=customer, address=address)
+        payload = CustomerUpsertMicrotechService()._build_customer_input(
+            customer=customer,
+            address=address,
+            billing_address=address,
+        )
 
         self.assertEqual(payload["webshopDefaults"]["Status"], "Webshop-Kunde")
         self.assertEqual(payload["webshopDefaults"]["SuchBeg"], "CL")
@@ -58,6 +62,13 @@ class MicrotechCustomerTaxRuleTest(SimpleTestCase):
             },
             {"TextKz1": 1, "TextKz2": 0, "TextKz3": 0, "TextKz4": 0, "TextKz5": 0},
         )
+
+    def test_customer_input_rejects_missing_billing_address_for_tax_category(self):
+        customer = Customer(erp_nr="100001", name="Beispiel AG")
+        shipping = Address(customer=customer, name1="Beispiel AG", country_code="CH")
+
+        with self.assertRaisesMessage(ValueError, "billing address"):
+            CustomerUpsertMicrotechService()._build_customer_input(customer=customer, address=shipping)
 
     def test_german_customer_uses_german_webshop_mapping(self):
         values = CustomerWebshopMappingService().get_microtech_defaults(country_code="DE")

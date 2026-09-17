@@ -1,12 +1,7 @@
-"""Resolve CustomerInput fields from customer-write rules.
-
-Generic: returns the ``set_field`` actions of every matching rule as a
-``{graphql_field_name: value}`` map.  Rules run in priority order; a later
-action for the same field overrides an earlier value.  Conditions are evaluated
-against the tax address (billing address or the address itself), so rules can
-test e.g. ``country_code``.
-"""
+"""Resolve CustomerInput fields from customer-write rules."""
 from __future__ import annotations
+
+from dataclasses import dataclass
 
 from microtech.models import MicrotechOrderRuleAction
 from microtech.rule_engine.execution import RuleExecutionService
@@ -14,12 +9,29 @@ from microtech.rule_engine.execution import RuleExecutionService
 CUSTOMER_WRITE_TASK = "customer.microtech_customer_upsert"
 
 
+@dataclass(frozen=True, slots=True)
+class CustomerRuleContext:
+    """Explicit customer context with independent invoice and delivery paths."""
+
+    customer: object
+    shipping_address: object | None
+    billing_address: object | None
+
+
 def resolve_customer_fields(*, customer, address, billing_address=None) -> dict[str, str]:
-    tax_address = billing_address or address
+    """Resolve fields using explicit ``billing_address__`` / ``shipping_address__`` paths.
+
+    ``address`` is the shipping address kept for backwards-compatible callers;
+    it is never used as an implicit substitute for ``billing_address``.
+    """
     matches = RuleExecutionService().resolve_matching_rules(
         task_name=CUSTOMER_WRITE_TASK,
         phase="before",
-        root_instance=tax_address,
+        root_instance=CustomerRuleContext(
+            customer=customer,
+            shipping_address=address,
+            billing_address=billing_address,
+        ),
     )
     return {
         action.field_path: action.value
@@ -29,4 +41,4 @@ def resolve_customer_fields(*, customer, address, billing_address=None) -> dict[
     }
 
 
-__all__ = ["resolve_customer_fields", "CUSTOMER_WRITE_TASK"]
+__all__ = ["CustomerRuleContext", "resolve_customer_fields", "CUSTOMER_WRITE_TASK"]

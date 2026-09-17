@@ -25,13 +25,15 @@ from microtech.rule_comparisons import to_bool, to_date, to_datetime, to_decimal
 from microtech.rule_builder import (
     get_address_field_defs,
     get_allowed_operator_codes,
+    get_customer_field_defs,
     get_django_field_map,
     get_operator_engine_map,
 )
 from microtech.rule_engine.templates import TemplateValidationError, validate_template
 
 
-_ADDRESS_CONTEXT_ROOTS = {"customer.Address", "customer.Customer"}
+_ADDRESS_CONTEXT_ROOTS = {"customer.Address"}
+_CUSTOMER_CONTEXT_ROOT = "customer.Customer"
 _VALUELESS_OPERATORS = {"is_empty", "is_not_empty", "is_true", "is_false"}
 _GRAPHQL_FIELD_PATTERN = re.compile(r"^[A-Za-z_]\w*\.[A-Za-z_]\w*$")
 
@@ -158,6 +160,8 @@ def _validate_payload(payload: dict) -> list[str]:
 
     if trigger is not None and trigger.context_root in _ADDRESS_CONTEXT_ROOTS:
         field_map = {item.path: item for item in get_address_field_defs(trigger.context_root)}
+    elif trigger is not None and trigger.context_root == _CUSTOMER_CONTEXT_ROOT:
+        field_map = {item.path: item for item in get_customer_field_defs()}
     else:
         field_map = get_django_field_map()
     allowed_paths = set(field_map)

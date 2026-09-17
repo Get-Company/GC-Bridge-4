@@ -35,6 +35,7 @@ from microtech.graphql_schema import get_rule_trigger_input_types
 from microtech.rule_builder import (
     get_address_field_defs,
     get_allowed_operator_codes,
+    get_customer_field_defs,
     get_django_field_defs,
     get_operator_defs,
     get_rule_action_target_defs,
@@ -567,17 +568,17 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
         django_fields = get_django_field_defs()
         django_field_map = {item.path: item for item in django_fields}
         operator_defs = get_operator_defs()
-        address_fields = (
+        context_fields = (
             get_address_field_defs("customer.Address")
-            + get_address_field_defs("customer.Customer")
+            + get_customer_field_defs()
         )
-        address_field_maps = {
+        context_field_maps = {
             context_root: {
                 item.path: item
-                for item in address_fields
+                for item in context_fields
                 if item.context_root == context_root
             }
-            for context_root in {item.context_root for item in address_fields}
+            for context_root in {item.context_root for item in context_fields}
         }
         policies_by_field = {
             item.field_path: item
@@ -641,7 +642,7 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
                     "allowed_operator_codes": sorted(
                         get_allowed_operator_codes(
                             field_path=item.path,
-                            django_field_map=address_field_maps[item.context_root],
+                            django_field_map=context_field_maps[item.context_root],
                             operator_defs=operator_defs,
                             # Field policies are intentionally order-context
                             # specific.  Bare address paths must not inherit
@@ -651,7 +652,7 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
                     ),
                     "context_root": item.context_root,
                 }
-                for item in address_fields
+                for item in context_fields
             ],
             "action_targets": [
                 {

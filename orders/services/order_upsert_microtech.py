@@ -590,6 +590,8 @@ class OrderUpsertMicrotechService(BaseService):
         customer = order.customer
         if not customer:
             raise ValueError("Order has no customer assigned.")
+        if order.billing_address is None:
+            raise ValueError("Order has no billing address. Tax category must always use the order billing address.")
 
         logger.info("Syncing customer {} to Microtech before order upsert.", customer.pk)
         upsert_result = CustomerUpsertMicrotechService().upsert_customer(

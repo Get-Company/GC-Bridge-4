@@ -640,9 +640,7 @@ def get_address_field_defs(context_root: str = "customer.Address") -> list[Djang
 
     Built directly from the Address model, independent of the Order-rooted DB
     catalog/policies. Paths are bare field names (e.g. ``name1``) resolved at
-    evaluation time against the (tax) address context. Used for both the
-    address-write trigger and the customer-write trigger (whose rules are
-    evaluated against the billing address).
+    evaluation time against the address being written.
     """
     from customer.models import Address, Customer
 
@@ -679,6 +677,61 @@ def get_address_field_defs(context_root: str = "customer.Address") -> list[Djang
                 value_kind=value_kind,
                 example=_default_example(value_kind),
                 context_root=context_root,
+            )
+        )
+    return defs
+
+
+def get_customer_field_defs() -> list[DjangoFieldDef]:
+    """Fields available while writing a customer to Microtech.
+
+    A customer upsert has two independently meaningful addresses.  Keeping
+    their prefixes in the field path makes the rule's address source explicit:
+    ``billing_address__…`` is always the invoice address and
+    ``shipping_address__…`` is always the delivery address.  There is
+    intentionally no bare address alias here; an unspecific country field
+    would make tax rules dependent on a hidden fallback address.
+    """
+    from customer.models import Address, Customer
+
+    defs: list[DjangoFieldDef] = []
+    for relation, title in (
+        ("billing_address", "Rechnungsanschrift"),
+        ("shipping_address", "Lieferanschrift"),
+    ):
+        for name in _ADDRESS_FIELD_NAMES:
+            try:
+                field = Address._meta.get_field(name)
+            except Exception:
+                continue
+            path = f"{relation}__{name}"
+            defs.append(
+                _apply_django_field_ui_override(
+                    DjangoFieldDef(
+                        catalog_id=None,
+                        path=path,
+                        label=f"{title} - {field.verbose_name} ({path})",
+                        value_kind=_field_value_kind(field),
+                        example=_default_example(_field_value_kind(field)),
+                        context_root="customer.Customer",
+                    )
+                )
+            )
+
+    for name in _ADDRESS_CUSTOMER_FIELD_NAMES:
+        try:
+            field = Customer._meta.get_field(name)
+        except Exception:
+            continue
+        path = f"customer__{name}"
+        defs.append(
+            DjangoFieldDef(
+                catalog_id=None,
+                path=path,
+                label=f"Kunde - {field.verbose_name} ({path})",
+                value_kind=_field_value_kind(field),
+                example=_default_example(_field_value_kind(field)),
+                context_root="customer.Customer",
             )
         )
     return defs
@@ -829,6 +882,7 @@ __all__ = [
     "get_dataset_field_defs",
     "get_django_field_defs",
     "get_django_field_map",
+    "get_customer_field_defs",
     "get_operator_defs",
     "get_operator_engine_map",
     "get_rule_action_target_choices",

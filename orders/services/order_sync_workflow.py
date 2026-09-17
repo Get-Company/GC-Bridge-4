@@ -95,7 +95,9 @@ class OrderSyncWorkflowService(BaseService):
         shipping = order.shipping_address or order.customer.shipping_address
         if shipping is None:
             raise ValueError("Order hat keine Lieferadresse zum Synchronisieren.")
-        billing = order.billing_address or shipping
+        billing = order.billing_address
+        if billing is None:
+            raise ValueError("Order hat keine Rechnungsadresse zum Synchronisieren.")
         return shipping, billing
 
     @staticmethod
