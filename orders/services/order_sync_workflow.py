@@ -973,6 +973,16 @@ class OrderSyncWorkflowService(BaseService):
                 "defaultShippingAddressNumber": shipping_ans_nr,
                 "defaultBillingAddressNumber": billing_ans_nr,
             }
+            # ``updateCustomer`` writes ``UStKat`` even for a partial update.
+            # Retain the category selected for this order instead of allowing
+            # the wrapper to recalculate a fallback while only defaults change.
+            tax_category_overrides = OrderUpsertMicrotechService._customer_input_overrides_from_rule(
+                resolve_order_rule_with_mode(order)
+            )
+            if "taxCategory" in tax_category_overrides:
+                input_data["taxCategory"] = customer_service._coerce_tax_category(
+                    tax_category_overrides["taxCategory"]
+                )
             submit = lambda: client.submit_update_customer(state["erp_nr"], input_data)
             payload = {"customerNumber": state["erp_nr"], "input": input_data}
         else:

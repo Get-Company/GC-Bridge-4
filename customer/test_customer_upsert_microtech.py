@@ -102,7 +102,11 @@ class CustomerUpsertMicrotechServiceTest(TestCase):
             client.update_customer_calls[-1],
             (
                 "54346",
-                {"defaultShippingAddressNumber": 3, "defaultBillingAddressNumber": 3},
+                {
+                    "defaultShippingAddressNumber": 3,
+                    "defaultBillingAddressNumber": 3,
+                    "taxCategory": 1,
+                },
             ),
         )
 

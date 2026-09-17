@@ -1486,6 +1486,48 @@ class SetDefaultAddressesTest(TestCase):
         self.assertEqual(input_data["defaultShippingAddressNumber"], 3)
         self.assertEqual(input_data["defaultBillingAddressNumber"], 4)
 
+    @patch("orders.services.order_sync_workflow.resolve_order_rule_with_mode")
+    @patch("orders.services.order_sync_workflow.MicrotechGraphQLClientService")
+    @patch("orders.services.order_sync_workflow.MicrotechJobSentinelService.submit_wrapper_job")
+    def test_default_address_update_preserves_rule_tax_category(
+        self,
+        mock_submit,
+        mock_client,
+        mock_resolve_rule,
+    ):
+        from microtech.models import MicrotechOrderRuleAction
+        from orders.services.order_rule_resolver import ResolvedDatasetAction, ResolvedOrderRule
+
+        mock_submit.return_value = MagicMock(pk=3)
+        mock_resolve_rule.return_value = ResolvedOrderRule(
+            dataset_actions=(
+                ResolvedDatasetAction(
+                    action_type=MicrotechOrderRuleAction.ActionType.SET_FIELD,
+                    dataset_source_identifier="Adressen - Adressen",
+                    dataset_name="Adressen",
+                    dataset_field_name="UStKat",
+                    dataset_field_type="Integer",
+                    target_value="3",
+                ),
+            ),
+        )
+        order = make_order()
+        order.shipping_address.erp_ans_nr = "3"
+        order.shipping_address.save(update_fields=("erp_ans_nr",))
+        order.billing_address.erp_ans_nr = "4"
+        order.billing_address.save(update_fields=("erp_ans_nr",))
+        workflow = MicrotechOrderSyncWorkflow.objects.create(
+            order=order,
+            status=MicrotechOrderSyncWorkflow.Status.RUNNING,
+            state={"erp_nr": order.customer.erp_nr, "billing_same_as_shipping": False},
+        )
+
+        OrderSyncWorkflowService().submit_step(workflow, "set_default_addresses")
+
+        input_data = mock_submit.call_args.kwargs["request_payload"]["input"]
+        self.assertEqual(input_data["taxCategory"], 3)
+        self.assertIsInstance(input_data["taxCategory"], int)
+
     @patch("orders.services.order_sync_workflow.MicrotechGraphQLClientService")
     @patch("orders.services.order_sync_workflow.MicrotechJobSentinelService.submit_wrapper_job")
     def test_rejects_missing_ans_nr(self, mock_submit, mock_client):

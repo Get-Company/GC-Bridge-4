@@ -219,13 +219,16 @@ class CustomerUpsertMicrotechService(BaseService):
             address_number=address_number,
             customer=existing_customer,
         )
-        client.update_customer(
-            erp_nr,
-            {
-                "defaultShippingAddressNumber": shipping_ans_nr,
-                "defaultBillingAddressNumber": billing_ans_nr,
-            },
-        )
+        default_address_input = {
+            "defaultShippingAddressNumber": shipping_ans_nr,
+            "defaultBillingAddressNumber": billing_ans_nr,
+        }
+        # A partial CustomerInput update also writes ``UStKat`` in the wrapper.
+        # Carry over the resolved category from the preceding customer upsert,
+        # so setting address defaults cannot replace a rule value with a fallback.
+        if "taxCategory" in input_data:
+            default_address_input["taxCategory"] = input_data["taxCategory"]
+        client.update_customer(erp_nr, default_address_input)
 
         shopware_updated = False
         if is_new_customer:
