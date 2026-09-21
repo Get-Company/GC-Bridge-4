@@ -51,6 +51,27 @@ def _sw_customer(
 
 
 class CustomerIdUpdateServiceTest(SimpleTestCase):
+    @patch("microtech.services.microtech_connection")
+    @patch("shopware.services.CustomerService")
+    @patch("customer.services.customer_merge.Customer")
+    def test_erp_nr_changes_only_the_local_bridge_customer(
+        self, customer_model, customer_service, microtech_connection
+    ):
+        customer = MagicMock(pk=7, erp_nr="10001", api_id="a" * 32)
+        by_pk = MagicMock()
+        by_pk.first.return_value = customer
+        duplicates = MagicMock()
+        duplicates.exclude.return_value.first.return_value = None
+        customer_model.objects.filter.side_effect = [by_pk, duplicates]
+
+        result = CustomerIdUpdateService().update_erp_nr(7, "20002")
+
+        self.assertEqual(result, {"old_erp_nr": "10001", "new_erp_nr": "20002"})
+        self.assertEqual(customer.erp_nr, "20002")
+        customer.save.assert_called_once_with(update_fields=["erp_nr", "updated_at"])
+        customer_service.assert_not_called()
+        microtech_connection.assert_not_called()
+
     @patch("customer.services.customer_merge.Customer")
     def test_bridge_name_is_changed_only_in_django(self, customer_model):
         customer = MagicMock(pk=7)

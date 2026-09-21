@@ -1149,6 +1149,7 @@ class CustomerIdUpdateService(BaseService):
         }
 
     def update_erp_nr(self, customer_id: int, new_erp_nr: str) -> dict[str, Any]:
+        """Change the AdrNr only on the local GC-Bridge customer record."""
         customer = Customer.objects.filter(pk=customer_id).first()
         if not customer:
             raise ValueError("Kunde nicht gefunden.")
@@ -1162,57 +1163,16 @@ class CustomerIdUpdateService(BaseService):
             raise ValueError(f"ERP-Nummer {new_erp_nr} wird bereits von Kunde {existing.name} verwendet.")
 
         old_erp_nr = customer.erp_nr
-        steps = {"django": "ok", "shopware": "skipped", "microtech": "skipped"}
-
-        # 1) Shopware
-        if customer.api_id:
-            try:
-                from shopware.services import CustomerService
-                service = CustomerService()
-                check = service.get_by_customer_number(new_erp_nr)
-                check_data = (check or {}).get("data", []) or []
-                for item in check_data:
-                    item_id = item.get("id") or _safe_attrs(item).get("id", "")
-                    if item_id and item_id != customer.api_id:
-                        raise ValueError(
-                            f"Shopware: customerNumber {new_erp_nr} wird bereits "
-                            f"von Kunde {item_id} verwendet."
-                        )
-                service.update_customer_number(customer.api_id, new_erp_nr)
-                steps["shopware"] = "ok"
-            except ValueError:
-                raise
-            except Exception as exc:
-                steps["shopware"] = str(exc)
-
-        # 2) Microtech — GraphQL wrapper owns writes. There is no direct local
-        # AdrNr rename via COM anymore, so we upsert the target number below.
-        try:
-            from customer.services.customer_upsert_microtech import CustomerUpsertMicrotechService
-            from microtech.services import microtech_connection
-
-            customer.erp_nr = new_erp_nr
-            with microtech_connection() as client:
-                CustomerUpsertMicrotechService().upsert_customer(customer, erp=client)
-            customer.erp_nr = old_erp_nr
-            steps["microtech"] = "upserted"
-        except Exception as exc:
-            customer.erp_nr = old_erp_nr
-            steps["microtech"] = str(exc)
-
-        # 3) Django
         customer.erp_nr = new_erp_nr
         customer.save(update_fields=["erp_nr", "updated_at"])
 
-        # 4) Microtech full upsert (updates default addresses after local save)
-        if steps["microtech"] in ("upserted", "skipped"):
-            try:
-                self._django_to_microtech(new_erp_nr)
-            except Exception as exc:
-                steps["microtech_full_upsert"] = str(exc)
-
-        logger.info("ERP-Nr changed: {} -> {} (customer {}) steps={}", old_erp_nr, new_erp_nr, customer.pk, steps)
-        return {"old_erp_nr": old_erp_nr, "new_erp_nr": new_erp_nr, "steps": steps}
+        logger.info(
+            "GC-Bridge AdrNr changed: {} -> {} (customer {})",
+            old_erp_nr,
+            new_erp_nr,
+            customer.pk,
+        )
+        return {"old_erp_nr": old_erp_nr, "new_erp_nr": new_erp_nr}
 
     def update_shopware_id(self, customer_id: int, new_api_id: str) -> dict[str, Any]:
         customer = Customer.objects.filter(pk=customer_id).first()
