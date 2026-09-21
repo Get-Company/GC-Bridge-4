@@ -1330,7 +1330,8 @@ async function loadCells(erpNrs, systemKeys = SYSTEMS.map(sys => sys.key), searc
 
 async function fetchCell(nr, sysKey, searchId = activeSearchId) {
   try {
-    const resp = await fetch(`/admin/customer-merge/api/search-cell/?erp_nr=${encodeURIComponent(nr)}&system=${sysKey}`);
+    const shopwareCustomerId = sysKey === 'django' ? (searchData[nr]?.shopware?.id || '') : '';
+    const resp = await fetch(`/admin/customer-merge/api/search-cell/?erp_nr=${encodeURIComponent(nr)}&system=${sysKey}&shopware_customer_id=${encodeURIComponent(shopwareCustomerId)}`);
     const json = await resp.json();
     if (!resp.ok || json.error) throw new Error(json.error || 'Suche fehlgeschlagen.');
 
@@ -1695,15 +1696,20 @@ async function assignMicrotechMapping(select) {
 }
 
 async function refetchRow(oldNr, newNr) {
+  const previousShopware = searchData[oldNr]?.shopware;
   if (oldNr !== newNr) {
     delete searchData[oldNr];
     const idx = searchErps.indexOf(oldNr);
     if (idx >= 0) searchErps[idx] = newNr;
   }
-  searchData[newNr] = {};
+  // Retain the SW6 entity while refreshing Django.  A locally linked customer
+  // may have a different ERP number, so the Django lookup uses this SW6 ID as
+  // its fallback identifier.
+  searchData[newNr] = previousShopware ? {shopware: previousShopware} : {};
   initializeRowStates([newNr], { microtechState: 'loading' });
+  if (previousShopware) setCellState(newNr, 'shopware', 'found');
   renderRows(false);
-  await loadCells([newNr]);
+  await loadCells([newNr], previousShopware ? ['django'] : LOCAL_SYSTEM_KEYS);
 }
 
 async function adoptShopwareAddress(erpNr, shopwareCustomerId, shopwareAddressId, button) {

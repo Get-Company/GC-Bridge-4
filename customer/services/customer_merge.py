@@ -687,9 +687,25 @@ class CustomerMergeSearchService(BaseService):
                 return found
         return []
 
-    def search_django(self, erp_nr: str) -> dict[str, Any] | None:
+    def search_django(
+        self,
+        erp_nr: str,
+        *,
+        shopware_customer_id: str = "",
+    ) -> dict[str, Any] | None:
+        """Return the local customer for a comparison row.
+
+        A local customer's ERP number can differ from Shopware's customer
+        number while its Shopware ID is still the authoritative mapping.  In
+        that case a row initiated from Shopware must be able to show the local
+        record after an address import as well.
+        """
         try:
             customer = Customer.objects.filter(erp_nr=erp_nr).first()
+            if not customer and shopware_customer_id:
+                customer = Customer.objects.filter(
+                    api_id__iexact=shopware_customer_id.strip(),
+                ).first()
             if not customer:
                 return None
             addresses = list(

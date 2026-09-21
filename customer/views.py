@@ -185,12 +185,16 @@ def customer_merge_search_cell_api(request):
     """Phase 2: Search a single system for a single ERP number."""
     erp_nr = request.GET.get("erp_nr", "").strip()
     system = request.GET.get("system", "").strip()
+    shopware_customer_id = request.GET.get("shopware_customer_id", "").strip()
     if not erp_nr or not system:
         return JsonResponse({"error": "erp_nr und system erforderlich."}, status=400)
 
     search_service = CustomerMergeSearchService()
     if system == "django":
-        data = search_service.search_django(erp_nr)
+        data = search_service.search_django(
+            erp_nr,
+            shopware_customer_id=shopware_customer_id,
+        )
     elif system == "shopware":
         data = search_service.search_shopware(erp_nr)
     elif system == "microtech":
