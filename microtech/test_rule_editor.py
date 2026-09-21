@@ -5,8 +5,14 @@ from django.test import TestCase
 from django.urls import reverse
 
 from microtech.models import (
-    MicrotechOrderRule, MicrotechOrderRuleConditionGroup,
-    MicrotechOrderRuleCondition, MicrotechOrderRuleOperator, RuleTrigger,
+    MicrotechDatasetCatalog,
+    MicrotechDatasetField,
+    MicrotechOrderRule,
+    MicrotechOrderRuleAction,
+    MicrotechOrderRuleCondition,
+    MicrotechOrderRuleConditionGroup,
+    MicrotechOrderRuleOperator,
+    RuleTrigger,
 )
 from microtech.rule_engine.editor import (
     EditorValidationError, save_rule_from_payload, serialize_rule_for_edit,
@@ -41,6 +47,28 @@ class SerializeForEditTest(TestCase):
 
         self.assertEqual(data["root_group"]["logic"], MicrotechOrderRule.ConditionLogic.ALL)
         self.assertEqual(len(data["root_group"]["children"]), 2)
+
+    def test_serializes_dataset_target_with_area_and_short_name(self):
+        dataset = MicrotechDatasetCatalog.objects.create(
+            code="adressen", name="Adressen", source_identifier="Adressen - Adressen",
+        )
+        field = MicrotechDatasetField.objects.create(
+            dataset=dataset, field_name="UStKat", label="Umsatzsteuerkategorie",
+        )
+        rule = MicrotechOrderRule.objects.create(name="Steuer")
+        MicrotechOrderRuleAction.objects.create(
+            rule=rule,
+            action_type=MicrotechOrderRuleAction.ActionType.SET_FIELD,
+            dataset_field=field,
+            target_value="1",
+        )
+
+        action = serialize_rule_for_edit(rule)["actions"][0]
+
+        self.assertEqual(
+            action["dataset_field_label"],
+            "Umsatzsteuerkategorie · Adressen.UStKat",
+        )
 
 
 class SaveFromPayloadTest(TestCase):

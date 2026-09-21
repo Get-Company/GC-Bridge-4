@@ -81,7 +81,7 @@
       {% for a in rule.actions %}
         <div class="rb-action">
           <span class="rb-action-verb">{{ a.type_label }}</span>
-          {% if a.field %}<span class="rb-action-field">{{ a.field }}</span>{% endif %}
+          {% if a.field %}<span class="rb-action-field"{% if a.field_title %} title="{{ a.field_title }}"{% endif %}>{{ a.field }}</span>{% endif %}
           {% if a.value %}
             <span class="rb-action-verb">=</span>
             {% if a.value_is_variable %}<span class="rb-tag-var">Variable</span>{% else %}<span class="rb-tag-static">fester Wert</span>{% endif %}

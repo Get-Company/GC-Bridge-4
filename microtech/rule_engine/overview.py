@@ -27,7 +27,9 @@ def _field_label(path: str, field_map: dict) -> str:
         return "?"
     field_def = field_map.get(path)
     label = str(getattr(field_def, "label", "") or "").strip() if field_def else ""
-    return label or path
+    if not label or label == path:
+        return path
+    return f"{label} · {path}"
 
 
 def _operator_label(code: str, operator_map: dict) -> str:
@@ -87,17 +89,36 @@ def _serialize_group(group, field_map: dict, operator_map: dict) -> dict:
 def _serialize_action(action) -> dict:
     action_type = str(action.action_type or "")
     field_name = ""
+    field_title = ""
     if action.dataset_field_id:
         try:
-            field_name = str(action.dataset_field.field_name or "")
+            dataset_field = action.dataset_field
+            dataset_name = str(dataset_field.dataset.name or "Microtech")
+            technical_name = f"{dataset_name}.{dataset_field.field_name}"
+            label = str(dataset_field.label or dataset_field.field_name or "")
+            field_name = (
+                f"{label} · {technical_name}"
+                if label and label != technical_name
+                else technical_name
+            )
+            field_title = field_name
         except Exception:
             field_name = ""
+    elif action.graphql_field:
+        graphql_field = str(action.graphql_field)
+        field_name = f"{graphql_field.rsplit('.', 1)[-1]} · {graphql_field}"
+        target_scope = action.target_scope or "customer"
+        if target_scope != "customer":
+            scope_label = str(action.get_target_scope_display() or target_scope)
+            field_name = f"{scope_label} · {field_name}"
+        field_title = field_name
     target = str(action.target_value or "")
     return {
         "kind": "action",
         "type_code": action_type,
         "type_label": action.get_action_type_display(),
         "field": field_name,
+        "field_title": field_title,
         "value": target,
         "value_is_variable": _looks_like_variable(target),
         "is_active": action.is_active,

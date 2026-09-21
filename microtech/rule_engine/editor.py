@@ -78,10 +78,36 @@ def _serialize_group(group) -> dict:
 
 
 def _serialize_action(action) -> dict:
+    dataset_field_label = ""
+    if action.dataset_field_id:
+        try:
+            dataset_field = action.dataset_field
+            dataset_name = str(dataset_field.dataset.name or "Microtech")
+            field_name = str(dataset_field.field_name or "")
+            label = str(dataset_field.label or field_name)
+            technical_name = f"{dataset_name}.{field_name}" if field_name else dataset_name
+            dataset_field_label = (
+                f"{label} · {technical_name}"
+                if label and label != technical_name
+                else technical_name
+            )
+        except (AttributeError, MicrotechDatasetField.DoesNotExist):
+            # A deleted catalog entry must not prevent an existing rule from
+            # opening in the editor. Validation on save reports the missing ID.
+            dataset_field_label = ""
+
+    graphql_field = action.graphql_field or ""
+    graphql_field_label = ""
+    if graphql_field:
+        field_name = graphql_field.rsplit(".", 1)[-1]
+        graphql_field_label = f"{field_name} · {graphql_field}"
+
     return {
         "action_type": action.action_type,
         "dataset_field_id": action.dataset_field_id,
-        "graphql_field": action.graphql_field or "",
+        "dataset_field_label": dataset_field_label,
+        "graphql_field": graphql_field,
+        "graphql_field_label": graphql_field_label,
         "target_scope": action.target_scope,
         "target_value": action.target_value,
     }

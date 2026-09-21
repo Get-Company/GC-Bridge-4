@@ -50,7 +50,7 @@
 .re-ac-results { position: absolute; z-index: 30; top: 100%; left: 0; right: 0; background: #fff; border: 1px solid #cbd5e1; border-radius: 6px; max-height: 220px; overflow-y: auto; box-shadow: 0 6px 18px rgba(0,0,0,.08); }
 .re-ac-item { display: block; width: 100%; border: 0; padding: 6px 9px; font: inherit; font-size: 13px; text-align: left; color: inherit; background: #fff; cursor: pointer; }
 .re-ac-item:hover, .re-ac-item.re-ac-active { background: #eef2ff; }
-.re-ac-input { min-width: 240px; }
+.re-ac-input { min-width: 320px; max-width: 460px; }
 .re-ac-name { font-weight: 600; color: #1e293b; }
 .re-ac-meta { color: #64748b; font-size: 12px; }
 .re-ac-empty { padding: 7px 9px; color: #64748b; font-size: 12px; }

@@ -42,6 +42,32 @@
     var m = document.cookie.match("(^|;)\\s*" + name + "\\s*=\\s*([^;]+)");
     return m ? m.pop() : "";
   }
+  function fieldDisplay(label, technicalName) {
+    label = String(label || "").trim();
+    technicalName = String(technicalName || "").trim();
+    if (!label || label === technicalName) return technicalName || label;
+    return label + " · " + technicalName;
+  }
+  function shopFieldDisplay(field) {
+    return fieldDisplay(field.label || field.path, field.path);
+  }
+  function datasetFieldDisplay(field) {
+    return fieldDisplay(field.label || field.fieldName, field.datasetName + "." + field.fieldName);
+  }
+  function datasetFieldTitle(field) {
+    return [
+      datasetFieldDisplay(field),
+      field.sourceIdentifier,
+      field.fieldType,
+    ].filter(Boolean).join(" · ");
+  }
+  function graphqlFieldDisplay(field) {
+    return fieldDisplay(field.name, field.value);
+  }
+  function graphqlFieldDisplayFromValue(value) {
+    value = String(value || "").trim();
+    return value ? fieldDisplay(value.split(".").pop(), value) : "";
+  }
 
   // ---------- shared META cache ----------
   var META = null;              // {operators, django_fields, triggers}
@@ -461,14 +487,17 @@
       function itemValue(item) { return String(config.itemValue(item)); }
       function itemLabel(item) { return config.itemLabel(item) || itemValue(item); }
       function itemMeta(item) { return config.itemMeta ? config.itemMeta(item) : ""; }
+      function itemTitle(item) { return config.itemTitle ? config.itemTitle(item) : itemLabel(item); }
       function setInputForSelectedValue() {
         for (var i = 0; i < items.length; i++) {
           if (itemValue(items[i]) === selectedValue) {
             input.value = itemLabel(items[i]);
+            input.title = itemTitle(items[i]);
             return;
           }
         }
         input.value = config.initialText || "";
+        input.title = config.initialTitle || input.value;
       }
       function filter(term) {
         term = String(term || "").trim().toLowerCase();
@@ -480,6 +509,7 @@
       function choose(item) {
         selectedValue = itemValue(item);
         input.value = itemLabel(item);
+        input.title = itemTitle(item);
         results.style.display = "none";
         input.setAttribute("aria-expanded", "false");
         if (typeof config.onSelect === "function") config.onSelect(item);
@@ -535,6 +565,7 @@
       input.addEventListener("input", function () {
         if (selectedValue) {
           selectedValue = "";
+          input.title = "";
           if (typeof config.onClear === "function") config.onClear();
         }
         renderResults(input.value);
@@ -578,13 +609,17 @@
       var selectedField = fieldByPath(config.value || "");
       var picker = searchablePicker({
         value: config.value || "",
-        initialText: selectedField ? (selectedField.label || selectedField.path) : (config.value || ""),
-        placeholder: config.placeholder || "Shop-Feld suchen…",
+        initialText: selectedField ? shopFieldDisplay(selectedField) : (config.value || ""),
+        initialTitle: selectedField ? [shopFieldDisplay(selectedField), selectedField.value_kind, selectedField.hint].filter(Boolean).join(" · ") : "",
+        placeholder: config.placeholder || "Shop-Feld suchen (Name oder Pfad)…",
         items: fieldsForContext(),
         itemValue: function (field) { return field.path; },
-        itemLabel: function (field) { return field.label || field.path; },
+        itemLabel: function (field) { return shopFieldDisplay(field); },
         itemMeta: function (field) {
           return field.path + (field.value_kind ? " · " + field.value_kind : "") + (field.hint ? " — " + field.hint : "");
+        },
+        itemTitle: function (field) {
+          return [shopFieldDisplay(field), field.value_kind, field.hint].filter(Boolean).join(" · ");
         },
         searchText: function (field) {
           return [field.path, field.label, field.hint, field.example, field.value_kind].join(" ");
@@ -635,22 +670,26 @@
       var allowedTypes = graphqlInputTypesForCurrentTrigger(action);
       var picker = searchablePicker({
         value: action.graphql_field || "",
-        initialText: action.graphql_field_label || (action.graphql_field ? action.graphql_field.split(".").pop() : ""),
-        placeholder: "API-Feld suchen…",
+        initialText: action.graphql_field_label || graphqlFieldDisplayFromValue(action.graphql_field),
+        initialTitle: action.graphql_field_label || action.graphql_field || "",
+        placeholder: "API-Feld suchen (Name oder Typ)…",
         emptyText: "API-Felder werden geladen…",
         items: [],
         itemValue: function (item) { return item.value; },
-        itemLabel: function (item) { return item.name; },
+        itemLabel: function (item) { return graphqlFieldDisplay(item); },
         itemMeta: function (item) {
           return item.typeLabel + (item.description ? " — " + item.description : "");
         },
+        itemTitle: function (item) {
+          return [graphqlFieldDisplay(item), item.typeLabel, item.description].filter(Boolean).join(" · ");
+        },
         searchText: function (item) {
-          return [item.name, item.type, item.typeLabel, item.description].join(" ");
+          return [item.name, item.value, item.type, item.typeLabel, item.description].join(" ");
         },
         onSelect: function (item) {
           markDirty();
           action.graphql_field = item.value;
-          action.graphql_field_label = item.name;
+          action.graphql_field_label = graphqlFieldDisplay(item);
           action.dataset_field_id = null;
           action.dataset_field_label = "";
           renderSummary();
@@ -703,21 +742,23 @@
       var picker = searchablePicker({
         value: action.dataset_field_id || "",
         initialText: action.dataset_field_label || (action.dataset_field_id ? "Gewähltes Microtech-Feld" : ""),
-        placeholder: "Microtech-Feld suchen…",
+        initialTitle: action.dataset_field_label || "",
+        placeholder: "Microtech-Feld suchen (Name, Bereich oder Kurzname)…",
         emptyText: "Microtech-Felder werden geladen…",
         items: [],
         itemValue: function (item) { return item.id; },
-        itemLabel: function (item) { return item.label || item.fieldName; },
+        itemLabel: function (item) { return datasetFieldDisplay(item); },
         itemMeta: function (item) {
           return item.datasetName + "." + item.fieldName + (item.fieldType ? " · " + item.fieldType : "");
         },
+        itemTitle: function (item) { return datasetFieldTitle(item); },
         searchText: function (item) {
           return [item.datasetName, item.sourceIdentifier, item.fieldName, item.label, item.fieldType].join(" ");
         },
         onSelect: function (item) {
           markDirty();
           action.dataset_field_id = item.id;
-          action.dataset_field_label = item.label || item.fieldName;
+          action.dataset_field_label = datasetFieldDisplay(item);
           action.graphql_field = "";
           action.graphql_field_label = "";
           renderSummary();

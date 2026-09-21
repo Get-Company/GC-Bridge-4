@@ -3,6 +3,8 @@ from django.test import TestCase
 from django.urls import reverse
 
 from microtech.models import (
+    MicrotechDatasetCatalog,
+    MicrotechDatasetField,
     MicrotechOrderRule,
     MicrotechOrderRuleAction,
     MicrotechOrderRuleCondition,
@@ -56,6 +58,32 @@ class RuleBuilderOverviewSerializerTest(TestCase):
             target_value="{{ Kunde.Firma }}")
         r = serialize_rules_for_overview()[0]
         self.assertTrue(r["actions"][0]["value_is_variable"])
+
+    def test_dataset_action_identifies_area_and_short_name(self):
+        dataset = MicrotechDatasetCatalog.objects.create(
+            code="vorgang_vorgange",
+            name="Vorgang",
+            source_identifier="Vorgang - Vorgange",
+        )
+        field = MicrotechDatasetField.objects.create(
+            dataset=dataset,
+            field_name="UStKat",
+            label="Umsatzsteuerkategorie",
+        )
+        rule = MicrotechOrderRule.objects.create(name="Steuer")
+        MicrotechOrderRuleAction.objects.create(
+            rule=rule,
+            action_type=MicrotechOrderRuleAction.ActionType.SET_FIELD,
+            dataset_field=field,
+            target_value="1",
+        )
+
+        action = serialize_rules_for_overview()[0]["actions"][0]
+
+        self.assertEqual(
+            action["field"],
+            "Umsatzsteuerkategorie · Vorgang.UStKat",
+        )
 
 
 class RuleBuilderOverviewViewTest(TestCase):
