@@ -38,6 +38,8 @@ def _with_django_source_cleanup(
         cleanup = service.cleanup_django_source_after_merge(
             source_sw_id=source_id,
             target_sw_id=target_id,
+            source_erp_nr=str(result.get("sourceCustomerNumber") or ""),
+            target_erp_nr=str(result.get("targetCustomerNumber") or ""),
         )
     except ShopwareMergeError as exc:
         # The remote merge is already verified. Report an actionable local
@@ -515,17 +517,17 @@ def customer_sync_direction_api(request):
 
 
 def customer_adopt_shopware_address_api(request):
-    """Copy one selected SW6 address to its existing Django customer."""
+    """Copy one selected SW6 address and create its local customer when needed."""
     if request.method != "POST":
         return JsonResponse({"error": "POST erforderlich."}, status=405)
     try:
         body = json.loads(request.body)
         if not isinstance(body, dict):
             raise ValueError("Ein JSON-Objekt ist erforderlich.")
-        erp_nr = str(body.get("erp_nr") or "").strip()
+        shopware_customer_id = str(body.get("shopware_customer_id") or "").strip()
         shopware_address_id = str(body.get("shopware_address_id") or "").strip()
         result = CustomerSyncDirectionService().import_shopware_address(
-            erp_nr=erp_nr,
+            shopware_customer_id=shopware_customer_id,
             shopware_address_id=shopware_address_id,
         )
         return JsonResponse({"success": True, **result})

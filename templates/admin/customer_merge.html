@@ -821,9 +821,9 @@ function comparisonAddressCard(nr, sysKey, address, defaultActions = '') {
   const checkbox = canDelete && address.id
     ? `<input type="checkbox" value="${address.id}" class="rounded mt-0.5 addr-cb-${groupId}" style="flex-shrink:0">`
     : '';
-  const copyToDjango = sysKey === 'shopware' && address.id && searchData[nr]?.django?.id
+  const copyToDjango = sysKey === 'shopware' && address.id
     ? `<button type="button" class="comparison-address-copy" title="Diese SW6-Adresse nach Django kopieren"
-        aria-label="Diese SW6-Adresse nach Django kopieren" onclick="adoptShopwareAddress('${esc(nr)}', '${esc(address.id)}', this)">
+        aria-label="Diese SW6-Adresse nach Django kopieren" onclick="adoptShopwareAddress('${esc(nr)}', '${esc(searchData[nr]?.shopware?.id || '')}', '${esc(address.id)}', this)">
         <span class="material-symbols-outlined" style="font-size:18px">arrow_forward</span>
       </button>`
     : '';
@@ -1706,9 +1706,9 @@ async function refetchRow(oldNr, newNr) {
   await loadCells([newNr]);
 }
 
-async function adoptShopwareAddress(erpNr, shopwareAddressId, button) {
-  if (!searchData[erpNr]?.django?.id) {
-    alert('Der Kunde muss zuerst in Django vorhanden sein.');
+async function adoptShopwareAddress(erpNr, shopwareCustomerId, shopwareAddressId, button) {
+  if (!shopwareCustomerId) {
+    alert('Die Shopware-Kunden-ID fehlt. Bitte die Suche erneut ausführen.');
     return;
   }
   const idleLabel = button.innerHTML;
@@ -1718,7 +1718,10 @@ async function adoptShopwareAddress(erpNr, shopwareAddressId, button) {
     const response = await fetch('/admin/customer-merge/api/adopt-shopware-address/', {
       method: 'POST',
       headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF},
-      body: JSON.stringify({erp_nr: erpNr, shopware_address_id: shopwareAddressId}),
+      body: JSON.stringify({
+        shopware_customer_id: shopwareCustomerId,
+        shopware_address_id: shopwareAddressId,
+      }),
     });
     const data = await response.json();
     if (!response.ok || data.error) throw new Error(data.error || 'Die Adresse konnte nicht übernommen werden.');

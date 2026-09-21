@@ -1373,32 +1373,72 @@ class CustomerSyncDirectionService(BaseService):
         address.is_invoice = api_id == default_billing_id
         address.is_shipping = api_id == default_shipping_id
 
-    def import_shopware_address(self, *, erp_nr: str, shopware_address_id: str) -> dict[str, Any]:
+    @staticmethod
+    def _apply_shopware_customer(
+        customer: Customer,
+        customer_data: dict[str, Any],
+        *,
+        shopware_customer_id: str,
+    ) -> None:
+        """Copy the customer fields needed for a local SW6 customer record."""
+        vat_ids = customer_data.get("vatIds") or []
+        first_name = _to_str(customer_data.get("firstName"))
+        last_name = _to_str(customer_data.get("lastName"))
+        company = _to_str(customer_data.get("company"))
+        customer_group = customer_data.get("group") or {}
+
+        if "company" in customer_data:
+            customer.company = company
+        customer.name = company or f"{first_name} {last_name}".strip() or customer.name
+        customer.email = _to_str(customer_data.get("email")) or customer.email
+        customer.api_id = shopware_customer_id
+        if isinstance(customer_group, dict) and "displayGross" in customer_group:
+            customer.is_gross = bool(customer_group["displayGross"])
+        if isinstance(customer_group, dict):
+            customer.shopware_customer_group = (
+                _to_str(customer_group.get("name")) or customer.shopware_customer_group
+            )
+        if vat_ids:
+            customer.vat_id = _to_str(vat_ids[0]) or customer.vat_id
+
+    def import_shopware_address(
+        self,
+        *,
+        shopware_customer_id: str,
+        shopware_address_id: str,
+    ) -> dict[str, Any]:
         """Copy exactly one confirmed Shopware address into the matching local customer.
 
         This deliberately does not run the full customer import: a user clicking
         the comparison-arrow must not have unrelated local address mappings
-        changed or removed as a side effect.
+        changed or removed as a side effect.  If the customer is not yet in the
+        Bridge, a local customer is created and linked through the SW6 customer
+        ID before the selected address is added.
         """
         from orders.services.order_sync import _normalize_entity
         from shopware.services import CustomerService
 
-        erp_nr = _to_str(erp_nr)
+        requested_customer_id = _to_str(shopware_customer_id).lower()
         requested_address_id = _to_str(shopware_address_id).lower()
-        if not erp_nr:
-            raise ValueError("ERP-Nummer erforderlich.")
+        if not _UUID_RE.fullmatch(requested_customer_id):
+            raise ValueError("Eine gültige Shopware-Kunden-ID ist erforderlich.")
         if not _UUID_RE.fullmatch(requested_address_id):
             raise ValueError("Eine gültige Shopware-Adress-ID ist erforderlich.")
 
-        response = CustomerService().get_by_customer_number(erp_nr)
+        response = CustomerService().get_by_id(requested_customer_id)
         data = (response or {}).get("data", []) or []
         if not data:
-            raise ValueError(f"Kunde {erp_nr} nicht in Shopware gefunden.")
+            raise ValueError("Kunde nicht in Shopware gefunden.")
 
         raw = _normalize_entity(data[0])
-        shopware_customer_id = _to_str(raw.get("id")).lower()
-        if not _UUID_RE.fullmatch(shopware_customer_id):
+        resolved_customer_id = _to_str(raw.get("id")).lower()
+        if not _UUID_RE.fullmatch(resolved_customer_id):
             raise ValueError("Shopware hat keine gültige Kunden-ID geliefert.")
+        if resolved_customer_id != requested_customer_id:
+            raise ValueError("Die geladene Shopware-Kunden-ID stimmt nicht mit der Auswahl überein.")
+        customer_number = _to_str(raw.get("customerNumber"))
+        if not customer_number:
+            raise ValueError("Shopware hat keine Kundennummer für den Kunden geliefert.")
 
         addresses_raw = raw.get("addresses") or []
         if isinstance(addresses_raw, dict):
@@ -1418,16 +1458,37 @@ class CustomerSyncDirectionService(BaseService):
         default_billing_id = _to_str(raw.get("defaultBillingAddressId")).lower()
         default_shipping_id = _to_str(raw.get("defaultShippingAddressId")).lower()
         with transaction.atomic():
-            customer = Customer.objects.select_for_update().filter(erp_nr=erp_nr).first()
+            customer = Customer.objects.select_for_update().filter(
+                api_id__iexact=requested_customer_id,
+            ).first()
+            customer_created = False
             if not customer:
-                raise ValueError(f"Kunde {erp_nr} nicht in Django gefunden.")
-            if customer.api_id and customer.api_id.lower() != shopware_customer_id:
+                # A record with the same customer number but no SW6 ID can be
+                # safely linked. A different existing SW6 ID is never replaced.
+                customer = Customer.objects.select_for_update().filter(erp_nr=customer_number).first()
+                if customer and customer.api_id and customer.api_id.lower() != requested_customer_id:
+                    raise ValueError(
+                        "Die lokale Shopware-Kunden-ID stimmt nicht mit dem SW6-Kunden überein. "
+                        "Bitte zuerst die Kunden-ID prüfen."
+                    )
+                if not customer:
+                    customer = Customer(erp_nr=customer_number)
+                    customer_created = True
+
+            if customer.api_id and customer.api_id.lower() != requested_customer_id:
                 raise ValueError(
                     "Die lokale Shopware-Kunden-ID stimmt nicht mit dem SW6-Kunden überein. "
                     "Bitte zuerst die Kunden-ID prüfen."
                 )
-            if Customer.objects.filter(api_id__iexact=shopware_customer_id).exclude(pk=customer.pk).exists():
+            if Customer.objects.filter(api_id__iexact=requested_customer_id).exclude(pk=customer.pk).exists():
                 raise ValueError("Die Shopware-Kunden-ID ist bereits einem anderen Django-Kunden zugeordnet.")
+
+            self._apply_shopware_customer(
+                customer,
+                raw,
+                shopware_customer_id=requested_customer_id,
+            )
+            customer.save()
 
             address = Address.objects.filter(
                 customer=customer, api_id__iexact=requested_address_id,
@@ -1436,10 +1497,6 @@ class CustomerSyncDirectionService(BaseService):
                 if Address.objects.filter(api_id__iexact=requested_address_id).exclude(customer=customer).exists():
                     raise ValueError("Die Shopware-Adresse ist bereits einem anderen Django-Kunden zugeordnet.")
                 address = Address(customer=customer)
-
-            if not customer.api_id:
-                customer.api_id = shopware_customer_id
-                customer.save(update_fields=["api_id", "updated_at"])
 
             self._apply_shopware_address(
                 address,
@@ -1455,14 +1512,17 @@ class CustomerSyncDirectionService(BaseService):
                 customer.addresses.exclude(pk=address.pk).update(is_shipping=False)
 
         logger.info(
-            "Shopware->Django: copied address {} for customer {} as local address {}",
+            "Shopware->Django: copied address {} for SW6 customer {} as local address {} (customer_created={})",
             requested_address_id,
-            erp_nr,
+            requested_customer_id,
             address.pk,
+            customer_created,
         )
         return {
             "message": "Shopware-Adresse nach Django übernommen.",
             "address_id": address.pk,
+            "customer_id": customer.pk,
+            "customer_created": customer_created,
             "shopware_address_id": requested_address_id,
         }
 
@@ -2334,8 +2394,46 @@ class ShopwareCustomerMergeService(BaseService):
         if not isinstance(preview_token, str) or not preview_token or len(preview_token) > 4096:
             raise ValueError("Eine aktuelle, bestätigte Shopware-Vorschau ist erforderlich.")
         payload.update({"operationId": operation_id, "previewToken": preview_token})
+        # Read both ERP customer numbers while the accounts still exist. The
+        # merge deletes the source account, so the local cleanup can only fall
+        # back to the ERP number when it was captured beforehand.
+        customer_numbers = self._customer_numbers(payload["sourceId"], payload["targetId"])
         data = self._request("execute", payload=payload)
-        return self._validate_result(data, payload=payload, operation_id=operation_id)
+        result = self._validate_result(data, payload=payload, operation_id=operation_id)
+        return {**result, **customer_numbers}
+
+    def _customer_numbers(self, source_id: str, target_id: str) -> dict[str, str]:
+        """Return ``{sourceCustomerNumber, targetCustomerNumber}`` best effort.
+
+        Only used to help the local cleanup re-find Django customers whose
+        stored Shopware id drifted. A failure here must never abort the merge,
+        so any problem yields an empty mapping and the cleanup keeps relying on
+        ``api_id`` alone.
+        """
+        from shopware.services import CustomerService
+
+        try:
+            response = CustomerService()._request_with_retry(
+                "request_post", "/search/customer", payload={
+                    "ids": [source_id, target_id], "limit": 2,
+                    "includes": {"customer": ["id", "customerNumber"]},
+                },
+            )
+            by_id: dict[str, str] = {}
+            for item in (response or {}).get("data", []) or []:
+                attrs = _safe_attrs(item)
+                cid = _to_str(item.get("id") or attrs.get("id")).lower()
+                number = _to_str(attrs.get("customerNumber")).strip()[:64]
+                if cid and number:
+                    by_id[cid] = number
+            numbers: dict[str, str] = {}
+            if by_id.get(source_id):
+                numbers["sourceCustomerNumber"] = by_id[source_id]
+            if by_id.get(target_id):
+                numbers["targetCustomerNumber"] = by_id[target_id]
+            return numbers
+        except Exception:
+            return {}
 
     def status(self, *, operation_id: str) -> dict[str, Any]:
         operation_id = self._id(operation_id, "Vorgangs-ID")
@@ -2346,15 +2444,22 @@ class ShopwareCustomerMergeService(BaseService):
 
     def cleanup_django_source_after_merge(
         self, *, source_sw_id: str, target_sw_id: str,
+        source_erp_nr: str = "", target_erp_nr: str = "",
     ) -> dict[str, Any]:
         """Remove the local source account after the plugin confirmed its deletion.
 
         Local orders and addresses are assigned to the surviving local target
         first. The source customer is only deleted once it has neither, mirroring
         the confirmed Shopware merge without losing local address references.
+
+        Customers are matched primarily by their stored Shopware id (``api_id``).
+        When that drifted or was never synced, the ERP numbers captured before
+        the merge act as a fallback so the source is not silently left behind.
         """
         source_sw_id = self._id(source_sw_id, "Shopware-Quellkunde")
         target_sw_id = self._id(target_sw_id, "Shopware-Zielkunde")
+        source_erp_nr = _to_str(source_erp_nr).strip()
+        target_erp_nr = _to_str(target_erp_nr).strip()
         if source_sw_id == target_sw_id:
             raise ShopwareMergeError(
                 "Die lokale Bereinigung konnte nicht zugeordnet werden: Quelle und Ziel sind identisch.",
@@ -2370,12 +2475,22 @@ class ShopwareCustomerMergeService(BaseService):
                     "Die lokale Bereinigung wurde nicht ausgeführt: Die Shopware-Quell-ID ist mehrfach in Django hinterlegt.",
                     code="GC_MERGE_DJANGO_CLEANUP_AMBIGUOUS", status=409,
                 )
+            if not source_customers and source_erp_nr:
+                # Stored Shopware id drifted: fall back to the ERP number that
+                # was captured before the merge deleted the source account.
+                source_customers = list(
+                    Customer.objects.select_for_update().filter(erp_nr=source_erp_nr)
+                )
             if not source_customers:
                 return {"status": "already_removed", "orders_moved": 0, "addresses_moved": 0}
 
             target_customers = list(
                 Customer.objects.select_for_update().filter(api_id__iexact=target_sw_id)
             )
+            if len(target_customers) != 1 and target_erp_nr:
+                target_customers = list(
+                    Customer.objects.select_for_update().filter(erp_nr=target_erp_nr)
+                )
             if len(target_customers) != 1:
                 raise ShopwareMergeError(
                     "Der Shopware-Merge ist abgeschlossen, aber der lokale Zielkunde ist nicht eindeutig. "

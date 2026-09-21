@@ -696,7 +696,9 @@ class ShopwareCustomerMergeTest(SimpleTestCase):
         self.assertTrue(result["credentialsCopied"])
         self.assertEqual(result["addressesMoved"], 5)
         self.assertEqual(result["ordersMoved"], 501)
-        self.client._request_with_retry.assert_called_once_with(
+        # merge() also reads the ERP numbers up front, so assert the execute
+        # call specifically instead of expecting a single request.
+        self.client._request_with_retry.assert_any_call(
             "request_post", "/_action/gc-customer-merge/execute",
             payload={
                 "sourceId": self.source, "targetId": self.target,
@@ -706,6 +708,87 @@ class ShopwareCustomerMergeTest(SimpleTestCase):
         self.client.request_patch.assert_not_called()
         self.client.request_delete.assert_not_called()
         self.client.update_customer.assert_not_called()
+
+    def test_merge_captures_erp_customer_numbers_before_deletion(self):
+        def side_effect(method, path, payload=None):
+            if path == "/search/customer":
+                return {"data": [
+                    {"id": self.source, "attributes": {"customerNumber": "10001"}},
+                    {"id": self.target, "attributes": {"customerNumber": "10002"}},
+                ]}
+            return self.response()
+
+        self.client._request_with_retry.side_effect = side_effect
+        result = self.merge()
+        # The captured numbers ride along so the local cleanup can fall back to
+        # them when a stored Shopware id no longer matches.
+        self.assertEqual(result["sourceCustomerNumber"], "10001")
+        self.assertEqual(result["targetCustomerNumber"], "10002")
+
+    def test_customer_number_lookup_failure_never_blocks_merge(self):
+        def side_effect(method, path, payload=None):
+            if path == "/search/customer":
+                raise RuntimeError("SW6 search must never abort a confirmed merge")
+            return self.response()
+
+        self.client._request_with_retry.side_effect = side_effect
+        result = self.merge()
+        self.assertEqual(result["status"], "merged")
+        self.assertNotIn("sourceCustomerNumber", result)
+
+    @patch("customer.services.customer_merge.transaction.atomic")
+    @patch("customer.services.customer_merge.Order")
+    @patch("customer.services.customer_merge.Address")
+    @patch("customer.services.customer_merge.Customer")
+    def test_cleanup_falls_back_to_erp_number_when_api_id_drifted(
+        self, customer_model, address_model, order_model, atomic,
+    ):
+        source = MagicMock(pk=7, erp_nr="10001", api_id="")
+        source.name = "Quelle"
+        source.addresses.select_for_update.return_value = []
+        target = MagicMock(pk=8, erp_nr="10002", api_id=self.target)
+        target.name = "Ziel"
+        target.addresses.select_for_update.return_value = []
+
+        def by_key(**kwargs):
+            if kwargs.get("api_id__iexact") == self.source:
+                return []  # stored Shopware id no longer matches any local customer
+            if kwargs.get("erp_nr") == "10001":
+                return [source]
+            if kwargs.get("api_id__iexact") == self.target:
+                return [target]
+            return []
+
+        customer_model.objects.select_for_update.return_value.filter.side_effect = by_key
+        address_model.objects.filter.return_value.update.return_value = 3
+        order_model.objects.filter.return_value.update.return_value = 5
+        atomic.return_value.__enter__.return_value = None
+        atomic.return_value.__exit__.return_value = False
+
+        result = self.service.cleanup_django_source_after_merge(
+            source_sw_id=self.source, target_sw_id=self.target,
+            source_erp_nr="10001", target_erp_nr="10002",
+        )
+
+        self.assertEqual(result["status"], "deleted")
+        self.assertEqual(result["orders_moved"], 5)
+        self.assertEqual(result["addresses_moved"], 3)
+        source.delete.assert_called_once()
+        order_model.objects.filter.return_value.update.assert_called_once_with(customer=target)
+
+    @patch("customer.services.customer_merge.transaction.atomic")
+    @patch("customer.services.customer_merge.Customer")
+    def test_cleanup_without_erp_number_still_reports_already_removed(
+        self, customer_model, atomic,
+    ):
+        customer_model.objects.select_for_update.return_value.filter.return_value = []
+        atomic.return_value.__enter__.return_value = None
+        atomic.return_value.__exit__.return_value = False
+
+        result = self.service.cleanup_django_source_after_merge(
+            source_sw_id=self.source, target_sw_id=self.target,
+        )
+        self.assertEqual(result["status"], "already_removed")
 
     def test_target_credentials_can_be_retained(self):
         self.client._request_with_retry.return_value = self.response(copied=False)
@@ -925,6 +1008,7 @@ class ShopwareCustomerMergeViewTest(SimpleTestCase):
         from customer.views import customer_merge_shopware_api
         service_class.return_value.merge.return_value = {
             "status": "merged", "sourceId": "a" * 32, "targetId": "b" * 32,
+            "sourceCustomerNumber": "10001", "targetCustomerNumber": "10002",
         }
         service_class.return_value.cleanup_django_source_after_merge.return_value = {
             "status": "deleted", "orders_moved": 2, "addresses_moved": 1,
@@ -936,8 +1020,11 @@ class ShopwareCustomerMergeViewTest(SimpleTestCase):
         self.assertEqual(result.status_code, 200)
         self.assertEqual(service_class.return_value.merge.call_args.kwargs["operation_id"], "c" * 32)
         self.assertEqual(service_class.return_value.merge.call_args.kwargs["preview_token"], "snapshot")
+        # The captured ERP numbers are forwarded so the cleanup can fall back to
+        # them when the stored Shopware id no longer matches.
         service_class.return_value.cleanup_django_source_after_merge.assert_called_once_with(
             source_sw_id="a" * 32, target_sw_id="b" * 32,
+            source_erp_nr="10001", target_erp_nr="10002",
         )
         self.assertEqual(json.loads(result.content)["djangoCleanup"]["status"], "deleted")
 
@@ -963,8 +1050,11 @@ class ShopwareCustomerMergeViewTest(SimpleTestCase):
             method="get", query="?action=status&operation_id=" + "c" * 32,
         ))
         self.assertEqual(result.status_code, 200)
+        # The status recovery path has no pre-merge snapshot, so no ERP numbers
+        # are available and the cleanup relies on api_id alone.
         service_class.return_value.cleanup_django_source_after_merge.assert_called_once_with(
             source_sw_id="a" * 32, target_sw_id="b" * 32,
+            source_erp_nr="", target_erp_nr="",
         )
 
     @patch("customer.views.ShopwareCustomerMergeService")
@@ -1001,6 +1091,66 @@ class ShopwareCustomerMergeViewTest(SimpleTestCase):
 
 
 class CustomerSyncDirectionServiceTest(SimpleTestCase):
+    @patch("customer.services.customer_merge.transaction.atomic")
+    @patch("customer.services.customer_merge.Address")
+    @patch("customer.services.customer_merge.Customer")
+    @patch("shopware.services.CustomerService")
+    def test_import_shopware_address_creates_missing_local_customer_by_shopware_id(
+        self, customer_service, customer_model, address_model, atomic
+    ):
+        shopware_customer_id = "a" * 32
+        shopware_address_id = "b" * 32
+        customer = MagicMock(pk=7, erp_nr="10001", api_id="")
+        address = MagicMock(pk=42, is_invoice=False, is_shipping=False)
+        customer_model.return_value = customer
+        address_model.return_value = address
+        customer_model.objects.select_for_update.return_value.filter.return_value.first.side_effect = [
+            None,
+            None,
+        ]
+        customer_model.objects.filter.return_value.exclude.return_value.exists.return_value = False
+        address_model.objects.filter.return_value.first.return_value = None
+        address_model.objects.filter.return_value.exclude.return_value.exists.return_value = False
+        atomic.return_value.__enter__.return_value = None
+        atomic.return_value.__exit__.return_value = False
+        customer_service.return_value.get_by_id.return_value = {
+            "data": [{
+                "id": shopware_customer_id,
+                "attributes": {
+                    "customerNumber": "10001",
+                    "firstName": "Erika",
+                    "lastName": "Muster",
+                    "email": "erika@example.invalid",
+                    "addresses": [{
+                        "id": shopware_address_id,
+                        "attributes": {
+                            "firstName": "Erika",
+                            "lastName": "Muster",
+                            "street": "Musterstraße 1",
+                            "zipcode": "12345",
+                            "city": "Berlin",
+                        },
+                    }],
+                    "defaultBillingAddressId": shopware_address_id,
+                },
+            }],
+        }
+
+        result = CustomerSyncDirectionService().import_shopware_address(
+            shopware_customer_id=shopware_customer_id,
+            shopware_address_id=shopware_address_id,
+        )
+
+        self.assertTrue(result["customer_created"])
+        self.assertEqual(result["customer_id"], 7)
+        customer_service.return_value.get_by_id.assert_called_once_with(shopware_customer_id)
+        customer_model.assert_called_once_with(erp_nr="10001")
+        self.assertEqual(customer.api_id, shopware_customer_id)
+        self.assertEqual(customer.name, "Erika Muster")
+        self.assertEqual(address.api_id, shopware_address_id)
+        customer.save.assert_called_once_with()
+        address.save.assert_called_once_with()
+
     @patch("customer.services.customer_merge.transaction.atomic")
     @patch("customer.services.customer_merge.Address")
     @patch("customer.services.customer_merge.Customer")
@@ -1252,11 +1402,11 @@ class CustomerMergeDjangoMutationViewTest(SimpleTestCase):
         from customer.views import customer_adopt_shopware_address_api
         service_class.return_value.import_shopware_address.return_value = {"address_id": 42}
         result = customer_adopt_shopware_address_api(self.request({
-            "erp_nr": "10001", "shopware_address_id": "a" * 32,
+            "shopware_customer_id": "b" * 32, "shopware_address_id": "a" * 32,
         }))
         self.assertEqual(result.status_code, 200)
         service_class.return_value.import_shopware_address.assert_called_once_with(
-            erp_nr="10001", shopware_address_id="a" * 32,
+            shopware_customer_id="b" * 32, shopware_address_id="a" * 32,
         )
 
     @patch("customer.views.CustomerSyncDirectionService")
