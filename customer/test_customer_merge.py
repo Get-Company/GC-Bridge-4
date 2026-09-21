@@ -1071,6 +1071,131 @@ class CustomerSyncDirectionServiceTest(SimpleTestCase):
         self.assertEqual(customer.api_id, shopware_customer_id)
         self.assertEqual(address.api_id, shopware_address_id)
 
+    @patch("customer.services.customer_merge.transaction.atomic")
+    @patch("customer.services.customer_merge.Address")
+    @patch("customer.services.customer_merge.Customer")
+    @patch("shopware.services.CustomerService")
+    def test_export_django_address_patches_existing_shopware_address_by_id(
+        self, customer_service, customer_model, address_model, atomic
+    ):
+        customer = MagicMock(pk=7, erp_nr="10001", api_id="a" * 32)
+        address = MagicMock(
+            pk=42,
+            customer_id=7,
+            customer=customer,
+            api_id="b" * 32,
+            name1="Beispiel GmbH",
+            name2="Erika Muster",
+            first_name="Erika",
+            last_name="Muster",
+            street="Musterstraße 1",
+            postal_code="12345",
+            city="Berlin",
+            country_code="DE",
+            department="",
+            email="",
+            phone="",
+            is_invoice=False,
+            is_shipping=False,
+        )
+        address_model.objects.select_related.return_value.filter.return_value.first.return_value = address
+        address_model.objects.select_for_update.return_value.filter.return_value.first.return_value = address
+        customer_model.objects.filter.return_value.exclude.return_value.exists.return_value = False
+        customer_model.objects.select_for_update.return_value.filter.return_value.first.return_value = customer
+        atomic.return_value.__enter__.return_value = None
+        atomic.return_value.__exit__.return_value = False
+
+        shopware_customer_id = "a" * 32
+        customer_service.return_value.get_by_customer_number.return_value = {
+            "data": [{
+                "id": shopware_customer_id,
+                "attributes": {
+                    "salutationId": "c" * 32,
+                    "addresses": [{"id": "b" * 32}],
+                    "defaultBillingAddressId": "e" * 32,
+                    "defaultShippingAddressId": "e" * 32,
+                },
+            }],
+        }
+        customer_service.return_value.request_post.return_value = {"data": [{"id": "d" * 32}]}
+
+        result = CustomerSyncDirectionService().export_django_address(
+            erp_nr="10001", django_address_id=42,
+        )
+
+        self.assertFalse(result["created"])
+        self.assertEqual(result["shopware_address_id"], "b" * 32)
+        patch_call = customer_service.return_value.request_patch.call_args
+        self.assertEqual(patch_call.args[0], "/customer-address/" + "b" * 32)
+        self.assertEqual(patch_call.kwargs["payload"]["street"], "Musterstraße 1")
+        # An address without a default role must never rewrite existing defaults.
+        customer_service.return_value.update_customer.assert_not_called()
+
+    @patch("customer.services.customer_merge.transaction.atomic")
+    @patch("customer.services.customer_merge.Address")
+    @patch("customer.services.customer_merge.Customer")
+    @patch("shopware.services.CustomerService")
+    def test_export_django_address_reinserts_deleted_address_with_same_id(
+        self, customer_service, customer_model, address_model, atomic
+    ):
+        customer = MagicMock(pk=7, erp_nr="10001", api_id="a" * 32)
+        address = MagicMock(
+            pk=42,
+            customer_id=7,
+            customer=customer,
+            api_id="b" * 32,
+            name1="Beispiel GmbH",
+            name2="Erika Muster",
+            first_name="Erika",
+            last_name="Muster",
+            street="Musterstraße 1",
+            postal_code="12345",
+            city="Berlin",
+            country_code="DE",
+            department="",
+            email="",
+            phone="",
+            is_invoice=True,
+            is_shipping=True,
+        )
+        address_model.objects.select_related.return_value.filter.return_value.first.return_value = address
+        address_model.objects.select_for_update.return_value.filter.return_value.first.return_value = address
+        customer_model.objects.filter.return_value.exclude.return_value.exists.return_value = False
+        customer_model.objects.select_for_update.return_value.filter.return_value.first.return_value = customer
+        atomic.return_value.__enter__.return_value = None
+        atomic.return_value.__exit__.return_value = False
+
+        shopware_customer_id = "a" * 32
+        customer_service.return_value.get_by_customer_number.return_value = {
+            "data": [{
+                "id": shopware_customer_id,
+                "attributes": {"salutationId": "c" * 32, "addresses": []},
+            }],
+        }
+        customer_service.return_value.request_post.side_effect = [
+            {"data": [{"id": "d" * 32}]},
+            {},
+        ]
+
+        result = CustomerSyncDirectionService().export_django_address(
+            erp_nr="10001", django_address_id=42,
+        )
+
+        self.assertTrue(result["created"])
+        # The stored SW6 id is reused instead of generating a fresh one.
+        self.assertEqual(result["shopware_address_id"], "b" * 32)
+        create_call = customer_service.return_value.request_post.call_args_list[1]
+        self.assertEqual(create_call.args[0], "/customer-address")
+        self.assertEqual(create_call.kwargs["payload"]["id"], "b" * 32)
+        self.assertEqual(create_call.kwargs["payload"]["customerId"], shopware_customer_id)
+        customer_service.return_value.update_customer.assert_called_once_with(
+            shopware_customer_id,
+            {
+                "defaultBillingAddressId": "b" * 32,
+                "defaultShippingAddressId": "b" * 32,
+            },
+        )
+
     @patch("microtech.services.microtech_connection")
     @patch("customer.services.customer_merge.transaction.atomic")
     @patch("customer.services.customer_merge.Address")

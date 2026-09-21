@@ -1616,20 +1616,12 @@ class CustomerSyncDirectionService(BaseService):
             for item in shopware_addresses
             if _to_str(item.get("id"))
         }
-        location_key = f"{address.street}|{address.postal_code}".lower()
-        shopware_by_location = {
-            f"{_to_str(item.get('street'))}|{_to_str(item.get('zipcode'))}".lower(): item
-            for item in shopware_addresses
-            if _to_str(item.get("street")) or _to_str(item.get("zipcode"))
-        }
-        if address.api_id and address.api_id.lower() not in shopware_by_id:
-            raise ValueError(
-                "Die lokale SW6-Adress-ID gehört nicht zu diesem Shopware-Kunden. "
-                "Bitte zuerst die Adresszuordnung prüfen."
-            )
+        # The stored SW6 address id is the sole indicator: if it is set we upsert
+        # under exactly that id (patch when it still exists in SW6, otherwise
+        # insert it with the same id). When it is empty a fresh id is generated
+        # and a new address is created. Matching by street/zip is deliberately
+        # avoided so unrelated addresses at the same location are never touched.
         shopware_address = shopware_by_id.get(address.api_id.lower()) if address.api_id else None
-        if not shopware_address and location_key != "|":
-            shopware_address = shopware_by_location.get(location_key)
 
         country_id = self._shopware_country_id(service, address.country_code)
         salutation_id = self._shopware_salutation_id(service, raw)
@@ -1644,7 +1636,9 @@ class CustomerSyncDirectionService(BaseService):
             service.request_patch(f"/customer-address/{shopware_address_id}", payload=payload)
             created = False
         else:
-            shopware_address_id = self._generated_shopware_address_id(address)
+            # A stored SW6 id that no longer exists in SW6 is re-created under the
+            # same id; without a stored id a fresh one is generated.
+            shopware_address_id = _to_str(address.api_id) or self._generated_shopware_address_id(address)
             payload["id"] = shopware_address_id
             payload["customerId"] = shopware_customer_id
             service.request_post("/customer-address", payload=payload)
