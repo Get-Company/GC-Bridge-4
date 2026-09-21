@@ -223,22 +223,42 @@ def _persist_customer_shadow_run(customer, changed) -> None:
         logger.warning("Kunden-Feld Schatten-Diff (customer={}): {}", getattr(customer, "pk", ""), changed)
 
 
-def resolve_customer_input_with_mode(*, customer, address, billing_address=None, code_values) -> dict:
-    """Overlay for the GraphQL customer input, honouring rule_engine_customer_mode."""
+def _customer_engine_mode() -> str:
     try:
-        mode = MicrotechSettings.load().rule_engine_customer_mode
+        return MicrotechSettings.load().rule_engine_customer_mode
     except Exception:
         logger.exception("Kunden-Engine-Modus nicht ladbar → 'off'.")
-        mode = MicrotechSettings.EngineMode.OFF
+        return MicrotechSettings.EngineMode.OFF
+
+
+def resolve_customer_scope_with_mode(
+    *,
+    customer,
+    shipping_address,
+    billing_address,
+    address,
+    target_scope: str,
+    code_values,
+) -> dict:
+    """Return the live rule overlay for one customer-upsert destination.
+
+    The customer-upsert trigger has one shared condition context, but each
+    action is deliberately evaluated for exactly one target scope.  This keeps
+    a rule for ``billing_contact`` from leaking into the shipping contact, for
+    example.
+    """
+    mode = _customer_engine_mode()
 
     if mode == MicrotechSettings.EngineMode.OFF:
-        from microtech.rule_engine.customer_resolver import resolve_customer_fields
+        from microtech.rule_engine.customer_resolver import resolve_customer_scope_fields
 
         try:
-            resolve_customer_fields(
+            resolve_customer_scope_fields(
                 customer=customer,
-                address=address,
+                shipping_address=shipping_address,
                 billing_address=billing_address,
+                address=address,
+                target_scope=target_scope,
                 audit_mode=mode,
             )
         except Exception:
@@ -246,12 +266,14 @@ def resolve_customer_input_with_mode(*, customer, address, billing_address=None,
         return {}
 
     try:
-        from microtech.rule_engine.customer_resolver import resolve_customer_fields
+        from microtech.rule_engine.customer_resolver import resolve_customer_scope_fields
 
-        engine = resolve_customer_fields(
+        engine = resolve_customer_scope_fields(
             customer=customer,
-            address=address,
+            shipping_address=shipping_address,
             billing_address=billing_address,
+            address=address,
+            target_scope=target_scope,
             audit_mode=mode,
         )
     except Exception:
@@ -268,3 +290,99 @@ def resolve_customer_input_with_mode(*, customer, address, billing_address=None,
     }
     _persist_customer_shadow_run(customer, changed)
     return {}
+
+
+def resolve_customer_input_with_mode(*, customer, address, billing_address=None, code_values) -> dict:
+    """Overlay for CustomerInput, honouring ``rule_engine_customer_mode``."""
+    from microtech.models import MicrotechOrderRuleAction
+
+    return resolve_customer_scope_with_mode(
+        customer=customer,
+        shipping_address=address,
+        billing_address=billing_address,
+        address=address,
+        target_scope=MicrotechOrderRuleAction.TargetScope.CUSTOMER,
+        code_values=code_values,
+    )
+
+
+def resolve_customer_postal_address_with_mode(
+    *,
+    customer,
+    shipping_address,
+    billing_address,
+    address,
+    target_scope: str,
+    code_values,
+) -> dict:
+    """Overlay PostalAddressInput only for its selected shipping/billing scope."""
+    return resolve_customer_scope_with_mode(
+        customer=customer,
+        shipping_address=shipping_address,
+        billing_address=billing_address,
+        address=address,
+        target_scope=target_scope,
+        code_values=code_values,
+    )
+
+
+def resolve_customer_contact_person_with_mode(
+    *,
+    customer,
+    shipping_address,
+    billing_address,
+    address,
+    target_scope: str,
+    code_values,
+) -> dict:
+    """Overlay ContactPersonInput only for its selected shipping/billing scope."""
+    return resolve_customer_scope_with_mode(
+        customer=customer,
+        shipping_address=shipping_address,
+        billing_address=billing_address,
+        address=address,
+        target_scope=target_scope,
+        code_values=code_values,
+    )
+
+
+def ensure_customer_scope_email_targets_are_distinct_with_mode(
+    *,
+    customer,
+    shipping_address,
+    billing_address,
+    same_address: bool,
+) -> None:
+    """Reject an unfulfillable email rule when invoice and delivery share one ERP record.
+
+    Microtech stores a contact below one postal address.  If both business
+    roles point to the same address, changing either scoped email would also
+    change the other role.  Failing before the first GraphQL write is safer
+    than silently violating the billing-email protection.
+    """
+    if not same_address or _customer_engine_mode() != MicrotechSettings.EngineMode.LIVE:
+        return
+
+    from microtech.models import MicrotechOrderRuleAction
+    from microtech.rule_engine.customer_resolver import resolve_customer_scope_fields
+
+    for target_scope, address in (
+        (MicrotechOrderRuleAction.TargetScope.SHIPPING_ADDRESS, shipping_address),
+        (MicrotechOrderRuleAction.TargetScope.BILLING_ADDRESS, billing_address),
+        (MicrotechOrderRuleAction.TargetScope.SHIPPING_CONTACT, shipping_address),
+        (MicrotechOrderRuleAction.TargetScope.BILLING_CONTACT, billing_address),
+    ):
+        values = resolve_customer_scope_fields(
+            customer=customer,
+            shipping_address=shipping_address,
+            billing_address=billing_address,
+            address=address,
+            target_scope=target_scope,
+            audit_mode=None,
+        )
+        if "email" in values:
+            raise ValueError(
+                "Die E-Mail-Regel kann nicht sicher ausgeführt werden: Rechnungs- und "
+                "Lieferanschrift werden als dieselbe Microtech-Anschrift geführt. "
+                "Bitte getrennte Anschriften verwenden oder die E-Mail-Zielbereichsregel anpassen."
+            )

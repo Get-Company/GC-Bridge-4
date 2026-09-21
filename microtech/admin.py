@@ -32,7 +32,7 @@ from microtech.models import (
     RuleTrigger,
 )
 from microtech.services import MicrotechJobSentinelService
-from microtech.graphql_schema import get_rule_trigger_input_types
+from microtech.graphql_schema import get_rule_action_scopes, get_rule_trigger_input_types
 from microtech.rule_builder import (
     get_address_field_defs,
     get_allowed_operator_codes,
@@ -745,6 +745,14 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
                     "task_name": item.task_name,
                     "context_root": item.context_root,
                     "graphql_input_types": list(get_rule_trigger_input_types(item.task_name)),
+                    "graphql_scopes": [
+                        {
+                            "code": scope["code"],
+                            "label": scope["label"],
+                            "graphql_input_types": list(scope["graphql_input_types"]),
+                        }
+                        for scope in get_rule_action_scopes(item.task_name)
+                    ],
                 }
                 for item in RuleTrigger.objects.filter(is_active=True).order_by("priority", "id")
             ],

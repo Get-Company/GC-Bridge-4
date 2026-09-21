@@ -34,6 +34,7 @@ class ResolvedRuleAction:
 
     action_id: int
     action_type: str
+    target_scope: str
     graphql_field: str
     dataset_source_identifier: str
     dataset_name: str
@@ -102,12 +103,14 @@ class RuleExecutionService(BaseService):
         root_instance: object,
         audit_mode: str | None = None,
         audit_subject: str = "",
+        action_scope: str | None = None,
     ) -> tuple[RuleMatch, ...]:
         evaluations = self._evaluate_rules(
             task_name=task_name,
             phase=phase,
             root_instance=root_instance,
             audit_mode=audit_mode,
+            action_scope=action_scope,
         )
         if audit_mode is not None:
             self._persist_audit(
@@ -130,6 +133,7 @@ class RuleExecutionService(BaseService):
         phase: str,
         root_instance: object,
         audit_mode: str | None,
+        action_scope: str | None = None,
     ) -> tuple[RuleEvaluation, ...]:
         context = EvaluationContext(root_instance)
         rules = (
@@ -205,7 +209,7 @@ class RuleExecutionService(BaseService):
                     reason="Mindestens eine Bedingung trifft nicht zu.",
                 ))
                 continue
-            actions = self._resolve_actions(rule, context)
+            actions = self._resolve_actions(rule, context, action_scope=action_scope)
             if not actions:
                 evaluations.append(RuleEvaluation(
                     rule=rule,
@@ -261,6 +265,7 @@ class RuleExecutionService(BaseService):
                         {
                             "action_id": action.action_id,
                             "action_type": action.action_type,
+                            "target_scope": action.target_scope,
                             "target": action.graphql_field or action.dataset_field_name,
                             "value": action.value,
                         }
@@ -299,18 +304,26 @@ class RuleExecutionService(BaseService):
         return get_django_field_map()
 
     @staticmethod
-    def _resolve_actions(rule: MicrotechOrderRule, context: EvaluationContext) -> tuple[ResolvedRuleAction, ...]:
+    def _resolve_actions(
+        rule: MicrotechOrderRule,
+        context: EvaluationContext,
+        *,
+        action_scope: str | None = None,
+    ) -> tuple[ResolvedRuleAction, ...]:
         resolved: list[ResolvedRuleAction] = []
         for action in sorted(
             (item for item in rule.actions.all() if item.is_active),
             key=lambda item: (item.priority, item.id),
         ):
+            if action_scope is not None and action.target_scope != action_scope:
+                continue
             field = action.dataset_field if action.dataset_field_id else None
             dataset = field.dataset if field is not None else None
             resolved.append(
                 ResolvedRuleAction(
                     action_id=action.id,
                     action_type=str(action.action_type or ""),
+                    target_scope=str(action.target_scope or ""),
                     graphql_field=str(action.graphql_field or "").strip(),
                     dataset_source_identifier=str(getattr(dataset, "source_identifier", "") or ""),
                     dataset_name=str(getattr(dataset, "name", "") or ""),

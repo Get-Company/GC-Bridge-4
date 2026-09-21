@@ -563,6 +563,21 @@ class MicrotechOrderRuleAction(BaseModel):
         CREATE_EXTRA_POSITION = "create_extra_position", _("Zusatzposition anlegen")
         CREATE_SHIPPING_POSITION = "create_shipping_position", _("Versandposition anlegen")
 
+    class TargetScope(models.TextChoices):
+        """Where a customer-upsert action is applied.
+
+        An action such as ``ContactPersonInput.email`` needs more context than
+        its GraphQL input type supplies: a customer can have a delivery and an
+        invoice contact.  The scope makes this explicit while order actions
+        retain the backwards-compatible ``customer`` default and ignore it.
+        """
+
+        CUSTOMER = "customer", _("Kundenstamm")
+        SHIPPING_ADDRESS = "shipping_address", _("Lieferanschrift")
+        BILLING_ADDRESS = "billing_address", _("Rechnungsanschrift")
+        SHIPPING_CONTACT = "shipping_contact", _("Lieferansprechpartner")
+        BILLING_CONTACT = "billing_contact", _("Rechnungsansprechpartner")
+
     rule = models.ForeignKey(
         MicrotechOrderRule,
         on_delete=models.CASCADE,
@@ -599,6 +614,13 @@ class MicrotechOrderRuleAction(BaseModel):
         default="",
         verbose_name=_("GraphQL-Feld"),
         help_text=_("Ziel im GraphQL-Schema, Form 'InputType.feld' (z. B. PostalAddressInput.name1)."),
+    )
+    target_scope = models.CharField(
+        max_length=32,
+        choices=TargetScope.choices,
+        default=TargetScope.CUSTOMER,
+        verbose_name=_("Zielbereich"),
+        help_text=_("Beim Kunden-Upsert bestimmt dieser Bereich die konkrete Anschrift oder den Ansprechpartner."),
     )
     target_value = models.CharField(
         max_length=255,

@@ -20,7 +20,11 @@ from microtech.models import (
     MicrotechOrderRuleOperator,
     RuleTrigger,
 )
-from microtech.graphql_schema import get_rule_trigger_input_types
+from microtech.graphql_schema import (
+    get_rule_action_input_types,
+    get_rule_action_scopes,
+    get_rule_trigger_input_types,
+)
 from microtech.rule_comparisons import to_bool, to_date, to_datetime, to_decimal
 from microtech.rule_builder import (
     get_address_field_defs,
@@ -78,6 +82,7 @@ def _serialize_action(action) -> dict:
         "action_type": action.action_type,
         "dataset_field_id": action.dataset_field_id,
         "graphql_field": action.graphql_field or "",
+        "target_scope": action.target_scope,
         "target_value": action.target_value,
     }
 
@@ -285,6 +290,16 @@ def _validate_payload(payload: dict) -> list[str]:
         if action_type == MicrotechOrderRuleAction.ActionType.SET_FIELD:
             dataset_field_id = action.get("dataset_field_id")
             graphql_field = str(action.get("graphql_field") or "").strip()
+            target_scope = str(
+                action.get("target_scope") or MicrotechOrderRuleAction.TargetScope.CUSTOMER
+            ).strip()
+            scoped_action_defs = get_rule_action_scopes(
+                getattr(trigger, "task_name", "")
+            )
+            if scoped_action_defs and target_scope not in {
+                str(item["code"]) for item in scoped_action_defs
+            }:
+                errors.append(f"{action_label}: ungueltiger Zielbereich {target_scope!r}.")
             if bool(dataset_field_id) == bool(graphql_field):
                 errors.append(f"{action_label}: set_field benoetigt genau ein Zielfeld.")
             elif dataset_field_id and not MicrotechDatasetField.objects.filter(
@@ -300,8 +315,8 @@ def _validate_payload(payload: dict) -> list[str]:
             elif graphql_field and not _GRAPHQL_FIELD_PATTERN.fullmatch(graphql_field):
                 errors.append(f"{action_label}: ungueltiges GraphQL-Zielfeld {graphql_field!r}.")
             elif graphql_field:
-                allowed_input_types = get_rule_trigger_input_types(
-                    getattr(trigger, "task_name", "")
+                allowed_input_types = get_rule_action_input_types(
+                    getattr(trigger, "task_name", ""), target_scope
                 )
                 input_type = graphql_field.split(".", 1)[0]
                 if not allowed_input_types:
@@ -386,6 +401,10 @@ def save_rule_from_payload(payload: dict, *, rule: MicrotechOrderRule | None = N
                 action_type=action_payload.get("action_type"),
                 dataset_field_id=action_payload.get("dataset_field_id"),
                 graphql_field=action_payload.get("graphql_field", "") or "",
+                target_scope=(
+                    action_payload.get("target_scope")
+                    or MicrotechOrderRuleAction.TargetScope.CUSTOMER
+                ),
                 target_value=action_payload.get("target_value", ""),
             )
 

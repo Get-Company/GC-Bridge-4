@@ -167,20 +167,32 @@
       var ctx = currentContextRoot();
       return META.django_fields.filter(function (f) { return (f.context_root || "orders.Order") === ctx; });
     }
-    function graphqlInputTypesForCurrentTrigger() {
+    function graphqlScopesForCurrentTrigger() {
       var trigger = currentTrigger();
+      return trigger && Array.isArray(trigger.graphql_scopes) ? trigger.graphql_scopes : [];
+    }
+    function graphqlInputTypesForCurrentTrigger(action) {
+      var trigger = currentTrigger();
+      var scopes = graphqlScopesForCurrentTrigger();
+      if (scopes.length) {
+        var scopeCode = (action && action.target_scope) || "customer";
+        for (var i = 0; i < scopes.length; i++) {
+          if (scopes[i].code === scopeCode) return scopes[i].graphql_input_types || [];
+        }
+        return [];
+      }
       return trigger && Array.isArray(trigger.graphql_input_types) ? trigger.graphql_input_types : [];
     }
-    function actionTargetKind() {
+    function actionTargetKind(action) {
       if (!currentTrigger()) return "";
-      if (graphqlInputTypesForCurrentTrigger().length) return "graphql";
+      if (graphqlInputTypesForCurrentTrigger(action).length) return "graphql";
       return currentContextRoot() === "orders.Order" ? "dataset" : "";
     }
     function reconcileActionTargets() {
-      var kind = actionTargetKind();
-      var allowedTypes = graphqlInputTypesForCurrentTrigger();
       STATE.actions.forEach(function (action) {
         if (action.action_type !== "set_field") return;
+        var kind = actionTargetKind(action);
+        var allowedTypes = graphqlInputTypesForCurrentTrigger(action);
         if (kind === "graphql") {
           action.dataset_field_id = null;
           action.dataset_field_label = "";
@@ -372,6 +384,8 @@
       row.appendChild(tsel);
 
       if (a.action_type === "set_field") {
+        var scopePicker = actionScopePicker(a);
+        if (scopePicker) row.appendChild(scopePicker);
         row.appendChild(actionFieldPicker(a));
         row.appendChild(el("span", "re-hint", "="));
         row.appendChild(valueEditor(a));
@@ -582,9 +596,31 @@
       return picker.element;
     }
 
+    function actionScopePicker(action) {
+      var scopes = graphqlScopesForCurrentTrigger();
+      if (!scopes.length) return null;
+      var wrap = el("span", "re-scope-control");
+      var select = el("select");
+      select.title = "Zielbereich";
+      var current = action.target_scope || "customer";
+      scopes.forEach(function (scope) {
+        select.appendChild(opt(scope.code, scope.label || scope.code, current === scope.code));
+      });
+      select.addEventListener("change", function () {
+        markDirty();
+        action.target_scope = select.value;
+        action.graphql_field = "";
+        action.graphql_field_label = "";
+        reconcileActionTargets();
+        render();
+      });
+      wrap.appendChild(select);
+      return wrap;
+    }
+
     function actionFieldPicker(action) {
-      if (actionTargetKind() === "graphql") return graphqlFieldPicker(action);
-      if (actionTargetKind() === "dataset") return datasetFieldPicker(action);
+      if (actionTargetKind(action) === "graphql") return graphqlFieldPicker(action);
+      if (actionTargetKind(action) === "dataset") return datasetFieldPicker(action);
       return searchablePicker({
         placeholder: "Zuerst einen Trigger wählen…",
         emptyText: "Für diesen Trigger sind keine Zielfelder konfiguriert.",
@@ -596,7 +632,7 @@
     }
 
     function graphqlFieldPicker(action) {
-      var allowedTypes = graphqlInputTypesForCurrentTrigger();
+      var allowedTypes = graphqlInputTypesForCurrentTrigger(action);
       var picker = searchablePicker({
         value: action.graphql_field || "",
         initialText: action.graphql_field_label || (action.graphql_field ? action.graphql_field.split(".").pop() : ""),
@@ -742,7 +778,15 @@
       var when = STATE.root_group ? summarizeGroup(STATE.root_group) : "";
       var actions = STATE.actions.map(function (a) {
         if (a.action_type === "set_field") {
-          return "setze " + (a.graphql_field_label || a.graphql_field || a.dataset_field_label || "Feld") + " = " + (a.target_value || "?");
+          var scopeLabel = "";
+          var scopes = graphqlScopesForCurrentTrigger();
+          for (var i = 0; i < scopes.length; i++) {
+            if (scopes[i].code === (a.target_scope || "customer")) {
+              scopeLabel = (scopes[i].label || scopes[i].code) + ": ";
+              break;
+            }
+          }
+          return "setze " + scopeLabel + (a.graphql_field_label || a.graphql_field || a.dataset_field_label || "Feld") + " = " + (a.target_value || "?");
         }
         if (a.action_type === "create_shipping_position") return "Versandposition " + (a.target_value || "?");
         return "Zusatzposition " + (a.target_value || "?");
@@ -772,6 +816,7 @@
         root_group: STATE.root_group ? grp(STATE.root_group) : null,
         actions: STATE.actions.map(function (a) {
           return { action_type: a.action_type,
+                   target_scope: a.target_scope || "customer",
                    graphql_field: a.action_type === "set_field" ? (a.graphql_field || "") : "",
                    dataset_field_id: a.action_type === "set_field" ? (a.dataset_field_id || null) : null,
                    target_value: a.target_value || "" };
@@ -839,13 +884,16 @@
   function newCondition() { return { field_path: "", operator_code: "", expected_value: "", expected_value_2: "" }; }
   function newAction() {
     return {
-      action_type: "set_field", graphql_field: "", graphql_field_label: "",
+      action_type: "set_field", target_scope: "customer", graphql_field: "", graphql_field_label: "",
       dataset_field_id: null, dataset_field_label: "", target_value: "",
     };
   }
   function normalizeState(data) {
     var s = data ? JSON.parse(JSON.stringify(data)) : {};
     if (!s.actions) s.actions = [];
+    s.actions.forEach(function (action) {
+      if (!action.target_scope) action.target_scope = "customer";
+    });
     if (s.shadow_mode == null) s.shadow_mode = true;
     if (s.priority == null) s.priority = 100;
     if (!s.execution_phase) s.execution_phase = "before";

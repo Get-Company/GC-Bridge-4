@@ -46,6 +46,11 @@ _ADDRESS_FIELD_NAMES: tuple[str, ...] = (
 # They intentionally remain a small, explicit set so the address picker stays focused.
 _ADDRESS_CUSTOMER_FIELD_NAMES: tuple[str, ...] = ("company",)
 
+# The customer-upsert context additionally exposes the Shopware account email.
+# It is intentionally separate from the address-trigger list: address-only
+# rules must not accidentally gain access to unrelated customer data.
+_CUSTOMER_UPSERT_CUSTOMER_FIELD_NAMES: tuple[str, ...] = ("company", "email")
+
 
 @dataclass(frozen=True, slots=True)
 class DatasetDef:
@@ -688,9 +693,10 @@ def get_customer_field_defs() -> list[DjangoFieldDef]:
     A customer upsert has two independently meaningful addresses.  Keeping
     their prefixes in the field path makes the rule's address source explicit:
     ``billing_address__…`` is always the invoice address and
-    ``shipping_address__…`` is always the delivery address.  There is
-    intentionally no bare address alias here; an unspecific country field
-    would make tax rules dependent on a hidden fallback address.
+    ``shipping_address__…`` is always the delivery address.  The additional
+    ``address__…`` path is only the explicitly selected action target; there
+    is no unqualified address field that could make tax rules dependent on a
+    hidden fallback address.
     """
     from customer.models import Address, Customer
 
@@ -718,7 +724,29 @@ def get_customer_field_defs() -> list[DjangoFieldDef]:
                 )
             )
 
-    for name in _ADDRESS_CUSTOMER_FIELD_NAMES:
+    # ``address__…`` always refers to the concrete action scope.  It lets a
+    # shipping-contact action use that delivery address's email without
+    # coupling its template to a hardcoded relation name.
+    for name in _ADDRESS_FIELD_NAMES:
+        try:
+            field = Address._meta.get_field(name)
+        except Exception:
+            continue
+        path = f"address__{name}"
+        defs.append(
+            _apply_django_field_ui_override(
+                DjangoFieldDef(
+                    catalog_id=None,
+                    path=path,
+                    label=f"Zielbereich - {field.verbose_name} ({path})",
+                    value_kind=_field_value_kind(field),
+                    example=_default_example(_field_value_kind(field)),
+                    context_root="customer.Customer",
+                )
+            )
+        )
+
+    for name in _CUSTOMER_UPSERT_CUSTOMER_FIELD_NAMES:
         try:
             field = Customer._meta.get_field(name)
         except Exception:

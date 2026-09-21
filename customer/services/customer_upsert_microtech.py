@@ -159,6 +159,19 @@ class CustomerUpsertMicrotechService(BaseService):
                 "Customer.erp_nr is required for GraphQL Microtech upsert until the wrapper exposes number allocation."
             )
 
+        # A scoped delivery/billing email rule cannot be fulfilled if both
+        # roles collapse to one Microtech postal address.  Validate before the
+        # customer master record is written so the upsert stays atomic from the
+        # caller's perspective.
+        from microtech.rule_engine.dispatch import ensure_customer_scope_email_targets_are_distinct_with_mode
+
+        ensure_customer_scope_email_targets_are_distinct_with_mode(
+            customer=customer,
+            shipping_address=shipping,
+            billing_address=billing,
+            same_address=self._same_address(shipping, billing),
+        )
+
         input_data = self._build_customer_input(
             customer=customer,
             address=shipping,
@@ -199,6 +212,10 @@ class CustomerUpsertMicrotechService(BaseService):
             na1_static_value=na1_static_value,
             known_address_sub_numbers=known_address_sub_numbers,
             include_email=True,
+            customer=customer,
+            shipping_address=shipping,
+            billing_address=billing,
+            target_scope="shipping_address",
         )
         billing_ans_nr = shipping_ans_nr
         if not self._same_address(shipping, billing):
@@ -212,6 +229,10 @@ class CustomerUpsertMicrotechService(BaseService):
                 na1_static_value=na1_static_value,
                 known_address_sub_numbers=known_address_sub_numbers,
                 include_email=False,
+                customer=customer,
+                shipping_address=shipping,
+                billing_address=billing,
+                target_scope="billing_address",
             )
 
         self._clear_existing_default_flags(
@@ -256,6 +277,10 @@ class CustomerUpsertMicrotechService(BaseService):
         na1_static_value: str,
         known_address_sub_numbers: set[int] | None,
         include_email: bool,
+        customer: Customer | None = None,
+        shipping_address: Address | None = None,
+        billing_address: Address | None = None,
+        target_scope: str = "",
     ) -> int:
         input_data = self._build_postal_address_input(
             address=address,
@@ -264,6 +289,10 @@ class CustomerUpsertMicrotechService(BaseService):
             na1_mode=na1_mode,
             na1_static_value=na1_static_value,
             include_email=include_email,
+            customer=customer,
+            shipping_address=shipping_address,
+            billing_address=billing_address,
+            target_scope=target_scope,
         )
         address_sub_number = _to_int(address.erp_ans_nr)
         if address_sub_number is not None and (
@@ -301,6 +330,13 @@ class CustomerUpsertMicrotechService(BaseService):
             address_number=address_number,
             address_sub_number=resolved_sub_number,
             address=address,
+            customer=customer,
+            shipping_address=shipping_address,
+            billing_address=billing_address,
+            target_scope=(
+                "shipping_contact" if target_scope == "shipping_address"
+                else "billing_contact" if target_scope == "billing_address" else ""
+            ),
         )
         return resolved_sub_number
 
@@ -311,8 +347,18 @@ class CustomerUpsertMicrotechService(BaseService):
         address_number: int,
         address_sub_number: int,
         address: Address,
+        customer: Customer | None = None,
+        shipping_address: Address | None = None,
+        billing_address: Address | None = None,
+        target_scope: str = "",
     ) -> None:
-        input_data = self._build_contact_person_input(address=address)
+        input_data = self._build_contact_person_input(
+            address=address,
+            customer=customer,
+            shipping_address=shipping_address,
+            billing_address=billing_address,
+            target_scope=target_scope,
+        )
         contact_number = _to_int(address.erp_asp_nr)
         if contact_number is not None:
             result = client.update_contact_person(address_number, address_sub_number, contact_number, input_data)
@@ -397,6 +443,10 @@ class CustomerUpsertMicrotechService(BaseService):
         na1_mode: str,
         na1_static_value: str,
         include_email: bool | None = None,
+        customer: Customer | None = None,
+        shipping_address: Address | None = None,
+        billing_address: Address | None = None,
+        target_scope: str = "",
     ) -> dict[str, Any]:
         if include_email is None:
             include_email = is_shipping
@@ -426,10 +476,37 @@ class CustomerUpsertMicrotechService(BaseService):
 
         overlay = resolve_postal_address_with_mode(address, code_values=postal_input)
         if overlay:
+            # Invoice-address email is deliberately absent from the ordinary
+            # customer upsert.  A generic address rule must not accidentally
+            # reintroduce it; only an explicit billing-address scoped action
+            # may choose to do so.
+            if not include_email:
+                overlay.pop("email", None)
             postal_input.update(overlay)
+        if customer is not None and target_scope:
+            from microtech.rule_engine.dispatch import resolve_customer_postal_address_with_mode
+
+            scoped_overlay = resolve_customer_postal_address_with_mode(
+                customer=customer,
+                shipping_address=shipping_address,
+                billing_address=billing_address,
+                address=address,
+                target_scope=target_scope,
+                code_values=postal_input,
+            )
+            if scoped_overlay:
+                postal_input.update(scoped_overlay)
         return self._drop_blank(postal_input)
 
-    def _build_contact_person_input(self, *, address: Address) -> dict[str, Any]:
+    def _build_contact_person_input(
+        self,
+        *,
+        address: Address,
+        customer: Customer | None = None,
+        shipping_address: Address | None = None,
+        billing_address: Address | None = None,
+        target_scope: str = "",
+    ) -> dict[str, Any]:
         first_name = address.first_name or ""
         last_name = address.last_name or ""
         if not first_name and not last_name:
@@ -438,18 +515,30 @@ class CustomerUpsertMicrotechService(BaseService):
             last_name = tokens[1] if len(tokens) > 1 else ""
         salutation = CustomerWebshopMappingService.get_contact_person_salutation(address=address)
         display_name = " ".join(part for part in (salutation, first_name, last_name) if part)
-        return self._drop_blank(
-            {
-                "isDefault": True,
-                "salutation": salutation,
-                "firstName": first_name,
-                "lastName": last_name,
-                "displayName": display_name,
-                "department": address.department,
-                "email": address.email,
-                "phone": address.phone,
-            }
-        )
+        contact_input = {
+            "isDefault": True,
+            "salutation": salutation,
+            "firstName": first_name,
+            "lastName": last_name,
+            "displayName": display_name,
+            "department": address.department,
+            "email": address.email,
+            "phone": address.phone,
+        }
+        if customer is not None and target_scope:
+            from microtech.rule_engine.dispatch import resolve_customer_contact_person_with_mode
+
+            scoped_overlay = resolve_customer_contact_person_with_mode(
+                customer=customer,
+                shipping_address=shipping_address,
+                billing_address=billing_address,
+                address=address,
+                target_scope=target_scope,
+                code_values=contact_input,
+            )
+            if scoped_overlay:
+                contact_input.update(scoped_overlay)
+        return self._drop_blank(contact_input)
 
     @staticmethod
     def _drop_blank(data: dict[str, Any]) -> dict[str, Any]:

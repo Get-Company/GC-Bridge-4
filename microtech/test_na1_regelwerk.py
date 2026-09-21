@@ -454,6 +454,16 @@ def test_meta_view_includes_address_fields_with_context_root(admin_client):
     assert "customer.Address" in roots
     address_trigger = next(t for t in data["triggers"] if t["code"] == "address_write")
     assert address_trigger["graphql_input_types"] == ["PostalAddressInput"]
+    customer_trigger = next(t for t in data["triggers"] if t["code"] == "customer_create")
+    assert customer_trigger["graphql_input_types"] == [
+        "CustomerInput", "PostalAddressInput", "ContactPersonInput",
+    ]
+    assert {
+        scope["code"] for scope in customer_trigger["graphql_scopes"]
+    } == {
+        "customer", "shipping_address", "billing_address",
+        "shipping_contact", "billing_contact",
+    }
 
 
 def test_dataset_fields_grouped_endpoint(admin_client):
@@ -580,6 +590,29 @@ def test_editor_rejects_graphql_input_type_from_another_trigger():
         save_rule_from_payload(payload)
 
 
+def test_editor_accepts_customer_contact_scope_and_rejects_its_wrong_input_type():
+    from microtech.models import RuleTrigger
+    from microtech.rule_engine.editor import EditorValidationError, save_rule_from_payload
+
+    trigger = RuleTrigger.objects.get(code="customer_create")
+    payload = {
+        "name": "Rechnungsansprechpartner aus Kundenkonto", "priority": 10,
+        "is_active": True, "execution_phase": "before", "engine_enabled": True,
+        "shadow_mode": True, "trigger_id": trigger.id, "root_group": None,
+        "actions": [{
+            "action_type": "set_field", "target_scope": "billing_contact",
+            "graphql_field": "ContactPersonInput.email", "dataset_field_id": None,
+            "target_value": "{{ customer__email }}",
+        }],
+    }
+    rule = save_rule_from_payload(payload)
+    assert rule.actions.get().target_scope == "billing_contact"
+
+    payload["actions"][0]["graphql_field"] = "PostalAddressInput.email"
+    with pytest.raises(EditorValidationError, match="PostalAddressInput ist fuer diesen Trigger nicht erlaubt"):
+        save_rule_from_payload(payload)
+
+
 # --- Customer path (taxCategory) wiring ----------------------------------
 
 
@@ -636,6 +669,44 @@ def test_resolve_customer_fields_by_shipping_country():
     assert resolve_customer_fields(customer=cust, address=de, billing_address=ch) == {}
 
 
+def test_customer_scopes_resolve_account_and_shop_emails_separately():
+    from customer.models import Customer, Address
+    from microtech.models import (
+        MicrotechOrderRule, MicrotechOrderRuleAction, RuleTrigger,
+    )
+    from microtech.rule_engine.customer_resolver import resolve_customer_scope_fields
+
+    trigger = RuleTrigger.objects.get(code="customer_create")
+    rule = MicrotechOrderRule.objects.create(
+        name="E-Mail-Zielbereiche", is_active=True, engine_enabled=True,
+        trigger=trigger, execution_phase="before", priority=10,
+    )
+    MicrotechOrderRuleAction.objects.create(
+        rule=rule, action_type="set_field", target_scope="billing_contact",
+        graphql_field="ContactPersonInput.email", target_value="{{ customer__email }}",
+    )
+    MicrotechOrderRuleAction.objects.create(
+        rule=rule, action_type="set_field", target_scope="shipping_address",
+        graphql_field="PostalAddressInput.email", target_value="{{ address__email }}",
+    )
+    customer = Customer.objects.create(email="konto@example.test")
+    shipping = Address.objects.create(customer=customer, email="shop@example.test")
+    billing = Address.objects.create(customer=customer, email="rechnung@example.test")
+
+    assert resolve_customer_scope_fields(
+        customer=customer, shipping_address=shipping, billing_address=billing,
+        address=billing, target_scope="billing_contact",
+    ) == {"email": "konto@example.test"}
+    assert resolve_customer_scope_fields(
+        customer=customer, shipping_address=shipping, billing_address=billing,
+        address=shipping, target_scope="shipping_address",
+    ) == {"email": "shop@example.test"}
+    assert resolve_customer_scope_fields(
+        customer=customer, shipping_address=shipping, billing_address=billing,
+        address=billing, target_scope="billing_address",
+    ) == {}
+
+
 def test_build_customer_input_overlays_only_in_live(monkeypatch):
     from customer.models import Customer, Address
     from customer.services.customer_upsert_microtech import CustomerUpsertMicrotechService
@@ -666,5 +737,8 @@ def test_meta_customer_context_has_explicit_address_fields(admin_client):
     data = json.loads(admin_client.get(url).content)
     customer_ctx = [f for f in data["django_fields"] if f["context_root"] == "customer.Customer"]
     paths = {f["path"] for f in customer_ctx}
-    assert {"billing_address__country_code", "shipping_address__country_code"} <= paths
+    assert {
+        "billing_address__country_code", "shipping_address__country_code",
+        "address__email", "customer__email",
+    } <= paths
     assert "country_code" not in paths

@@ -34,8 +34,43 @@ INPUT_TYPE_LABELS: dict[str, str] = {
 # validation one source of truth without baking Microtech field names into JS.
 RULE_TRIGGER_INPUT_TYPES: dict[str, tuple[str, ...]] = {
     "customer.microtech_postal_address": ("PostalAddressInput",),
-    "customer.microtech_customer_upsert": ("CustomerInput",),
+    # A customer upsert writes the master customer first, then its postal
+    # addresses and their contacts.  The action scope below determines which
+    # concrete child object receives the selected input field.
+    "customer.microtech_customer_upsert": (
+        "CustomerInput",
+        "PostalAddressInput",
+        "ContactPersonInput",
+    ),
 }
+
+CUSTOMER_UPSERT_ACTION_SCOPES: tuple[dict[str, object], ...] = (
+    {
+        "code": "customer",
+        "label": "Kundenstamm",
+        "graphql_input_types": ("CustomerInput",),
+    },
+    {
+        "code": "shipping_address",
+        "label": "Lieferanschrift",
+        "graphql_input_types": ("PostalAddressInput",),
+    },
+    {
+        "code": "billing_address",
+        "label": "Rechnungsanschrift",
+        "graphql_input_types": ("PostalAddressInput",),
+    },
+    {
+        "code": "shipping_contact",
+        "label": "Lieferansprechpartner",
+        "graphql_input_types": ("ContactPersonInput",),
+    },
+    {
+        "code": "billing_contact",
+        "label": "Rechnungsansprechpartner",
+        "graphql_input_types": ("ContactPersonInput",),
+    },
+)
 
 # Curated fallback — the fields the wrapper actually accepts (from
 # customer_upsert_microtech / order_upsert_microtech). Used when introspection
@@ -134,10 +169,36 @@ def get_rule_trigger_input_types(task_name: str) -> tuple[str, ...]:
     return RULE_TRIGGER_INPUT_TYPES.get(str(task_name or "").strip(), ())
 
 
+def get_rule_action_scopes(task_name: str) -> tuple[dict[str, object], ...]:
+    """Return the destination scopes available to a trigger's rule actions."""
+    if str(task_name or "").strip() == "customer.microtech_customer_upsert":
+        return CUSTOMER_UPSERT_ACTION_SCOPES
+    return ()
+
+
+def get_rule_action_input_types(task_name: str, target_scope: str) -> tuple[str, ...]:
+    """Return writable input types for one action scope.
+
+    Non-customer triggers have no additional scope and retain their existing
+    trigger-wide input-type contract.
+    """
+    scopes = get_rule_action_scopes(task_name)
+    if not scopes:
+        return get_rule_trigger_input_types(task_name)
+    normalized_scope = str(target_scope or "").strip()
+    for scope in scopes:
+        if scope["code"] == normalized_scope:
+            return tuple(scope["graphql_input_types"])
+    return ()
+
+
 __all__ = [
     "INPUT_TYPE_LABELS",
     "RULE_TRIGGER_INPUT_TYPES",
+    "CUSTOMER_UPSERT_ACTION_SCOPES",
     "get_graphql_input_catalog",
+    "get_rule_action_input_types",
+    "get_rule_action_scopes",
     "get_rule_trigger_input_types",
     "introspect_input_fields",
 ]
