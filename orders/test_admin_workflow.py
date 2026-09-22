@@ -7,7 +7,7 @@ from django.test import SimpleTestCase, TestCase
 
 from core.admin import BaseAdmin
 from customer.models import Address, Customer
-from orders.admin import OrderAdmin, PayPalOrderAdmin
+from orders.admin import OrderAdmin, PayPalOrderAdmin, _render_state_dropdown
 from orders.models import MicrotechOrderSyncWorkflow, Order, PayPalOrder
 from orders.test_order_sync_workflow import make_order
 
@@ -117,6 +117,31 @@ class OrderAdminStatusTransitionTest(SimpleTestCase):
         self.assertTrue(payload["ok"])
         self.assertEqual(payload["current_state"], "in_progress")
         refresh_states.assert_called_once_with(order=order, service=order_service.return_value)
+
+    def test_state_controls_use_the_matching_order_admin_urls(self):
+        order = Order(pk=42, api_id="order-42", order_state="in_progress")
+        paypal_order = PayPalOrder(pk=43, api_id="order-43", order_state="in_progress")
+
+        order_html = str(_render_state_dropdown(obj=order, scope="order", current_state=order.order_state))
+        paypal_html = str(
+            _render_state_dropdown(
+                obj=paypal_order,
+                scope="order",
+                current_state=paypal_order.order_state,
+            )
+        )
+
+        self.assertIn("/admin/orders/order/42/shopware-state-options/", order_html)
+        self.assertIn("/admin/orders/order/42/shopware-set-state/", order_html)
+        self.assertIn("/admin/orders/paypalorder/43/shopware-state-options/", paypal_html)
+        self.assertIn("/admin/orders/paypalorder/43/shopware-set-state/", paypal_html)
+
+    def test_paypal_admin_redirects_stay_in_the_paypal_list(self):
+        model_admin = PayPalOrderAdmin(PayPalOrder, django_admin.site)
+
+        response = model_admin._redirect_to_changelist()
+
+        self.assertEqual(response.url, "/admin/orders/paypalorder/")
 
 
 class OrderAdminListDisplayTest(SimpleTestCase):

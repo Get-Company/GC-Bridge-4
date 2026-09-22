@@ -474,7 +474,6 @@
     // Populate immediately from local graph.
     if (!select.disabled) {
       populateSelect(control, select);
-      armLazyLoad(control, select);
       setFeedback(control, "Bereit. Status wählen.", "info");
     } else {
       setFeedback(control, "Keine API-ID vorhanden.", "error");

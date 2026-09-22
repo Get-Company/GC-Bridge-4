@@ -57,9 +57,14 @@ def _state_entity_id(*, order: Order, scope: str) -> str:
     return _to_str(order.api_transaction_id)
 
 
+def _object_admin_url_name(*, obj: Order, action: str) -> str:
+    """Return the custom admin URL name for the object's concrete admin view."""
+    return f"admin:{obj._meta.app_label}_{obj._meta.model_name}_{action}"
+
+
 def _render_state_dropdown(*, obj: Order, scope: str, current_state: str) -> str:
-    options_url = reverse("admin:orders_order_state_options", args=(obj.pk,))
-    set_url = reverse("admin:orders_order_set_state", args=(obj.pk,))
+    options_url = reverse(_object_admin_url_name(obj=obj, action="state_options"), args=(obj.pk,))
+    set_url = reverse(_object_admin_url_name(obj=obj, action="set_state"), args=(obj.pk,))
     has_entity_id = bool(_state_entity_id(order=obj, scope=scope))
 
     fallback = DEFAULT_TRANSITION_ACTIONS.get(scope, [])
@@ -104,8 +109,10 @@ class OrderExpandSection(TemplateSection):
                 "order_state_html": _render_state_dropdown(obj=obj, scope="order", current_state=obj.order_state),
                 "payment_state_html": _render_state_dropdown(obj=obj, scope="payment", current_state=obj.payment_state),
                 "shipping_state_html": _render_state_dropdown(obj=obj, scope="delivery", current_state=obj.shipping_state),
-                "transitions_meta_url": reverse("admin:orders_order_transitions_meta"),
-                "microtech_sync_status_url": reverse("admin:orders_order_microtech_sync_status", args=(obj.pk,)),
+                "transitions_meta_url": reverse(_object_admin_url_name(obj=obj, action="transitions_meta")),
+                "microtech_sync_status_url": reverse(
+                    _object_admin_url_name(obj=obj, action="microtech_sync_status"), args=(obj.pk,)
+                ),
                 "microtech_sync_status_text": OrderAdmin.microtech_sync_status_for_order(obj),
             },
         )
@@ -448,14 +455,14 @@ class OrderAdmin(BaseAdmin):
         js = ("orders/js/order_state_controls.js", "orders/js/microtech_sync_status.js")
 
     def _redirect_to_changelist(self) -> HttpResponseRedirect:
-        return HttpResponseRedirect(reverse("admin:orders_order_changelist"))
+        return HttpResponseRedirect(reverse(self._admin_url_name("changelist")))
 
     def _redirect_to_change_page(self, object_id: str) -> HttpResponseRedirect:
-        return HttpResponseRedirect(reverse("admin:orders_order_change", args=(object_id,)))
+        return HttpResponseRedirect(reverse(self._admin_url_name("change"), args=(object_id,)))
 
     def _redirect_after_dialog(self, request, object_id: str) -> HttpResponse:
         """Close an Unfold/htmx action dialog and reload the order change page."""
-        target = reverse("admin:orders_order_change", args=(object_id,))
+        target = reverse(self._admin_url_name("change"), args=(object_id,))
         if request.headers.get("HX-Request") == "true":
             response = HttpResponse(status=200)
             response["HX-Redirect"] = target
@@ -585,36 +592,37 @@ class OrderAdmin(BaseAdmin):
 
     def get_custom_urls(self):
         urls = super().get_custom_urls()
+        url_name_prefix = f"{self.opts.app_label}_{self.opts.model_name}"
         return (
             *urls,
             (
                 "shopware-transitions-meta/",
-                "orders_order_transitions_meta",
+                f"{url_name_prefix}_transitions_meta",
                 self.shopware_transitions_meta_view,
             ),
             (
                 "<path:object_id>/microtech-sync-status/",
-                "orders_order_microtech_sync_status",
+                f"{url_name_prefix}_microtech_sync_status",
                 self.microtech_sync_status_view,
             ),
             (
                 "<path:object_id>/address-reconciliation/",
-                "orders_order_address_reconciliation",
+                f"{url_name_prefix}_address_reconciliation",
                 self.address_reconciliation_view,
             ),
             (
                 "<path:object_id>/rule-tester/",
-                "orders_order_rule_tester",
+                f"{url_name_prefix}_rule_tester",
                 self.rule_tester_view,
             ),
             (
                 "<path:object_id>/shopware-state-options/",
-                "orders_order_state_options",
+                f"{url_name_prefix}_state_options",
                 self.shopware_state_options_view,
             ),
             (
                 "<path:object_id>/shopware-set-state/",
-                "orders_order_set_state",
+                f"{url_name_prefix}_set_state",
                 self.shopware_set_state_view,
             ),
         )
@@ -626,7 +634,7 @@ class OrderAdmin(BaseAdmin):
         permissions=("change",),
     )
     def address_reconciliation_detail(self, request, object_id: str):
-        return HttpResponseRedirect(reverse("admin:orders_order_address_reconciliation", args=(object_id,)))
+        return HttpResponseRedirect(reverse(self._admin_url_name("address_reconciliation"), args=(object_id,)))
 
     @action(
         description="Regeln testen",
@@ -635,7 +643,7 @@ class OrderAdmin(BaseAdmin):
         permissions=("view",),
     )
     def rule_tester_detail(self, request, object_id: str):
-        return HttpResponseRedirect(reverse("admin:orders_order_rule_tester", args=(object_id,)))
+        return HttpResponseRedirect(reverse(self._admin_url_name("rule_tester"), args=(object_id,)))
 
     @action(
         description="Regeln testen",
@@ -644,7 +652,7 @@ class OrderAdmin(BaseAdmin):
         permissions=("view",),
     )
     def rule_tester_row(self, request, object_id: str):
-        return HttpResponseRedirect(reverse("admin:orders_order_rule_tester", args=(object_id,)))
+        return HttpResponseRedirect(reverse(self._admin_url_name("rule_tester"), args=(object_id,)))
 
     @action(
         description="Adressen abgleichen",
@@ -653,7 +661,7 @@ class OrderAdmin(BaseAdmin):
         permissions=("change",),
     )
     def address_reconciliation_row(self, request, object_id: str):
-        return HttpResponseRedirect(reverse("admin:orders_order_address_reconciliation", args=(object_id,)))
+        return HttpResponseRedirect(reverse(self._admin_url_name("address_reconciliation"), args=(object_id,)))
 
     @action(
         description="Kunden zusammenführen",
@@ -703,7 +711,7 @@ class OrderAdmin(BaseAdmin):
                         level=messages.SUCCESS,
                     )
                     return HttpResponseRedirect(
-                        reverse("admin:orders_order_address_reconciliation", args=(order.pk,))
+                        reverse(self._admin_url_name("address_reconciliation"), args=(order.pk,))
                     )
         except ValueError as exc:
             self.message_user(request, str(exc), level=messages.ERROR)
@@ -718,7 +726,7 @@ class OrderAdmin(BaseAdmin):
             "opts": self.model._meta,
             "order": order,
             "comparison": comparison,
-            "order_change_url": reverse("admin:orders_order_change", args=(order.pk,)),
+            "order_change_url": reverse(self._admin_url_name("change"), args=(order.pk,)),
         }
         return TemplateResponse(request, "orders/admin/address_reconciliation.html", context)
 
@@ -744,7 +752,7 @@ class OrderAdmin(BaseAdmin):
                 "order": order,
                 "sections": sections,
                 "error": error,
-                "order_change_url": reverse("admin:orders_order_change", args=(order.pk,)),
+                "order_change_url": reverse(self._admin_url_name("change"), args=(order.pk,)),
             },
         )
 
