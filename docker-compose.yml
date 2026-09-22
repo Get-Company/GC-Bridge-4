@@ -91,14 +91,86 @@ services:
       POSTGRES_PORT: 5432
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/1
-      CELERY_MICROTECH_WORKER_CONCURRENCY: ${CELERY_MICROTECH_WORKER_CONCURRENCY:-2}
+      CELERY_MICROTECH_POLL_WORKER_CONCURRENCY: ${CELERY_MICROTECH_POLL_WORKER_CONCURRENCY:-2}
       LOGS_ROOT: /app/tmp/logs
       DB_BACKUP_DIR: /app/tmp/backups
       MICROTECH_GRAPHQL_URL: ${MICROTECH_GRAPHQL_URL:-http://10.0.0.5:4711/graphql/}
       RUN_DJANGO_CHECK: "false"
       RUN_COLLECTSTATIC: "false"
       RUN_MIGRATIONS: "false"
-    command: celery -A GC_Bridge_4 worker --loglevel=INFO --queues=microtech --hostname=microtech@%h --concurrency=${CELERY_MICROTECH_WORKER_CONCURRENCY:-2} -E
+    command: celery -A GC_Bridge_4 worker --loglevel=INFO --queues=microtech,microtech-poll --hostname=microtech-poll@%h --concurrency=${CELERY_MICROTECH_POLL_WORKER_CONCURRENCY:-2} -E
+    volumes:
+      - media:/app/media
+      - documents:/app/Dokumente
+      - applogs:/app/tmp/logs
+      - backups:/app/tmp/backups
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  celery-microtech-submit:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: gc-bridge-4:${APP_IMAGE_TAG:-latest}
+    container_name: gc_bridge_4_celery_microtech_submit
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-false}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
+      DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:-http://localhost}
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      CELERY_MICROTECH_SUBMIT_WORKER_CONCURRENCY: ${CELERY_MICROTECH_SUBMIT_WORKER_CONCURRENCY:-2}
+      LOGS_ROOT: /app/tmp/logs
+      DB_BACKUP_DIR: /app/tmp/backups
+      MICROTECH_GRAPHQL_URL: ${MICROTECH_GRAPHQL_URL:-http://10.0.0.5:4711/graphql/}
+      RUN_DJANGO_CHECK: "false"
+      RUN_COLLECTSTATIC: "false"
+      RUN_MIGRATIONS: "false"
+    command: celery -A GC_Bridge_4 worker --loglevel=INFO --queues=microtech-submit --hostname=microtech-submit@%h --concurrency=${CELERY_MICROTECH_SUBMIT_WORKER_CONCURRENCY:-2} -E
+    volumes:
+      - media:/app/media
+      - documents:/app/Dokumente
+      - applogs:/app/tmp/logs
+      - backups:/app/tmp/backups
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  celery-microtech-maintenance:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: gc-bridge-4:${APP_IMAGE_TAG:-latest}
+    container_name: gc_bridge_4_celery_microtech_maintenance
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-false}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
+      DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:-http://localhost}
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      CELERY_MICROTECH_MAINTENANCE_WORKER_CONCURRENCY: ${CELERY_MICROTECH_MAINTENANCE_WORKER_CONCURRENCY:-1}
+      LOGS_ROOT: /app/tmp/logs
+      DB_BACKUP_DIR: /app/tmp/backups
+      MICROTECH_GRAPHQL_URL: ${MICROTECH_GRAPHQL_URL:-http://10.0.0.5:4711/graphql/}
+      RUN_DJANGO_CHECK: "false"
+      RUN_COLLECTSTATIC: "false"
+      RUN_MIGRATIONS: "false"
+    command: celery -A GC_Bridge_4 worker --loglevel=INFO --queues=microtech-maintenance --hostname=microtech-maintenance@%h --concurrency=${CELERY_MICROTECH_MAINTENANCE_WORKER_CONCURRENCY:-1} -E
     volumes:
       - media:/app/media
       - documents:/app/Dokumente

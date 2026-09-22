@@ -832,10 +832,11 @@ class OrderStepTest(TestCase):
         with patch(
             "orders.services.order_upsert_microtech.OrderUpsertMicrotechService._build_graphql_positions",
             return_value=([], MagicMock()),
-        ):
+        ) as mock_positions:
             OrderSyncWorkflowService()._submit_order_step(wf, "write_vorgang")
 
         called = mock_submit.call_args.kwargs
+        self.assertFalse(mock_positions.call_args.kwargs["allow_remote_article_lookup"])
         self.assertEqual(called["kind"], MicrotechGraphQLJob.Kind.ORDER_UPSERT)
         self.assertEqual(called["operation"], "createVorgang")
         self.assertEqual(called["request_payload"]["input"]["customerNumber"], "10042")

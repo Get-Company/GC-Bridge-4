@@ -26,6 +26,7 @@
     var label = container.querySelector(".js-microtech-sync-label");
     var beleg = container.querySelector(".js-microtech-sync-beleg");
     var spinner = container.querySelector(".js-microtech-sync-spinner");
+    var detail = container.querySelector(".js-microtech-sync-detail");
 
     var status = text(payload.status_display, "-");
     if (label) {
@@ -33,6 +34,20 @@
     }
     if (beleg) {
       beleg.textContent = text(payload.erp_order_id, "-");
+    }
+    if (detail) {
+      var detailText = text(payload.current_job_error, text(payload.current_job_next_step, ""));
+      if (payload.current_job_next_submit_at) {
+        detailText = [detailText, "Nächster Übergabeversuch: " + new Date(payload.current_job_next_submit_at).toLocaleString()]
+          .filter(Boolean)
+          .join(" · ");
+      } else if (payload.current_job_next_poll_at) {
+        detailText = [detailText, "Nächste Statusabfrage: " + new Date(payload.current_job_next_poll_at).toLocaleString()]
+          .filter(Boolean)
+          .join(" · ");
+      }
+      detail.textContent = detailText;
+      setHidden(detail, !detailText);
     }
     setHidden(spinner, !payload.is_active && !ACTIVE_STATUSES[payload.status]);
   }

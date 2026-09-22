@@ -1300,6 +1300,11 @@ class OrderSyncWorkflowService(BaseService):
                 order=order,
                 resolved_rule=resolved_rule,
                 client=client,
+                # Die Workflow-Continuation läuft auf der orders-Queue. Für
+                # fehlende optionale Artikeltexte/-einheiten reicht der lokale
+                # Fallback; HTTP-Nachschlagen gehört ausschließlich in die
+                # isolierte GraphQL-Submit-/Poll-Pipeline.
+                allow_remote_article_lookup=False,
             )
             defaults = upsert._load_order_defaults()
             order_type_number = upsert._coerce_positive_int(
@@ -1566,6 +1571,12 @@ class OrderSyncWorkflowService(BaseService):
                     wf.save(update_fields=("status", "error_message", "step_log", "updated_at"))
                 logger.error("Order-Sync-Workflow #%s: %s", workflow.pk, error_message)
                 changed += 1
+                continue
+
+            # Ein neuer Sentinel-Job wird zunächst nur dauerhaft in die
+            # Submit-Outbox geschrieben. Solange er QUEUED ist, ist das kein
+            # Fehlerzustand des Workflows, sondern eine sichtbare Wartephase.
+            if job.status == MicrotechGraphQLJob.Status.QUEUED:
                 continue
 
             if not job.external_job_id:

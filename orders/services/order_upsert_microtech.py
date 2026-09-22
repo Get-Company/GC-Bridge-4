@@ -414,9 +414,10 @@ class OrderUpsertMicrotechService(BaseService):
         order: Order,
         resolved_rule: ResolvedOrderRule,
         client: MicrotechGraphQLClientService,
+        allow_remote_article_lookup: bool = True,
     ) -> tuple[list[dict[str, str]], OrderRuleDebugInfo]:
         details = self._sort_order_details(order.details.all())
-        artikel_service = MicrotechArtikelService(erp=client)
+        artikel_service = MicrotechArtikelService(erp=client) if allow_remote_article_lookup else None
         article_name_cache: dict[str, str] = {}
         article_raw_unit_cache: dict[str, str] = {}
         product_unit_map = self._build_product_unit_map(details)
@@ -904,7 +905,7 @@ class OrderUpsertMicrotechService(BaseService):
         *,
         detail: OrderDetail,
         erp_nr: str,
-        artikel_service: MicrotechArtikelService,
+        artikel_service: MicrotechArtikelService | None,
         product_unit_map: dict[str, str],
         article_name_cache: dict[str, str],
         article_raw_unit_cache: dict[str, str],
@@ -912,16 +913,17 @@ class OrderUpsertMicrotechService(BaseService):
         raw_unit = article_raw_unit_cache.get(erp_nr)
         if raw_unit is None:
             raw_unit = ""
-            try:
-                found = artikel_service.find(erp_nr, index_field="ArtNr") or artikel_service.find(erp_nr)
-                if found:
-                    raw_unit = str(artikel_service.get_unit(raw=True) or "").strip()
-                    article_name_cache.setdefault(erp_nr, str(artikel_service.get_name() or "").strip())
-            except Exception:
-                logger.exception(
-                    "Failed to load raw article unit (Einh) for erp_nr {} while building order positions.",
-                    erp_nr,
-                )
+            if artikel_service is not None:
+                try:
+                    found = artikel_service.find(erp_nr, index_field="ArtNr") or artikel_service.find(erp_nr)
+                    if found:
+                        raw_unit = str(artikel_service.get_unit(raw=True) or "").strip()
+                        article_name_cache.setdefault(erp_nr, str(artikel_service.get_name() or "").strip())
+                except Exception:
+                    logger.exception(
+                        "Failed to load raw article unit (Einh) for erp_nr {} while building order positions.",
+                        erp_nr,
+                    )
             article_raw_unit_cache[erp_nr] = raw_unit
 
         return raw_unit or product_unit_map.get(erp_nr) or (detail.unit or "").strip() or DEFAULT_UNIT
@@ -1339,7 +1341,7 @@ class OrderUpsertMicrotechService(BaseService):
         *,
         detail: OrderDetail,
         erp_nr: str,
-        artikel_service: MicrotechArtikelService,
+        artikel_service: MicrotechArtikelService | None,
         article_name_cache: dict[str, str],
         product_export_text_map: dict[str, str],
         append_customs_metadata: bool,
@@ -1361,15 +1363,16 @@ class OrderUpsertMicrotechService(BaseService):
             )
 
         article_name = ""
-        try:
-            found = artikel_service.find(erp_nr, index_field="ArtNr") or artikel_service.find(erp_nr)
-            if found:
-                article_name = str(artikel_service.get_name() or "").strip()
-        except Exception:
-            logger.exception(
-                "Failed to load article name (KuBez5) for erp_nr {} while building order positions.",
-                erp_nr,
-            )
+        if artikel_service is not None:
+            try:
+                found = artikel_service.find(erp_nr, index_field="ArtNr") or artikel_service.find(erp_nr)
+                if found:
+                    article_name = str(artikel_service.get_name() or "").strip()
+            except Exception:
+                logger.exception(
+                    "Failed to load article name (KuBez5) for erp_nr {} while building order positions.",
+                    erp_nr,
+                )
 
         article_name_cache[erp_nr] = article_name
         return OrderUpsertMicrotechService._append_export_metadata_to_position_name(

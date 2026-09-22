@@ -774,6 +774,9 @@ class OrderAdmin(BaseAdmin):
             "error_message": "",
             "current_job_status": "",
             "current_job_error": "",
+            "current_job_next_step": "",
+            "current_job_next_submit_at": "",
+            "current_job_next_poll_at": "",
             "updated_at": order.updated_at.isoformat() if order.updated_at else "",
         }
         if workflow is not None:
@@ -791,6 +794,9 @@ class OrderAdmin(BaseAdmin):
                     "error_message": workflow.error_message,
                     "current_job_status": job.get_status_display() if job else "",
                     "current_job_error": job.error_message if job else "",
+                    "current_job_next_step": job.next_step if job else "",
+                    "current_job_next_submit_at": job.next_submit_at.isoformat() if job and job.next_submit_at else "",
+                    "current_job_next_poll_at": job.next_poll_at.isoformat() if job and job.next_poll_at else "",
                     "updated_at": workflow.updated_at.isoformat() if workflow.updated_at else "",
                 }
             )

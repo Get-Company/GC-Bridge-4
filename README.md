@@ -152,6 +152,8 @@ SHOPWARE6_SECRET=
 
 MICROTECH_GRAPHQL_HOST=10.0.0.5
 MICROTECH_GRAPHQL_URL=http://10.0.0.5:8888/graphql/
+MICROTECH_GRAPHQL_CIRCUIT_FAILURE_THRESHOLD=3
+MICROTECH_GRAPHQL_CIRCUIT_RESET_SECONDS=300
 ```
 
 `MICROTECH_GRAPHQL_URL` has priority. If it is empty, GC-Bridge builds the endpoint from `MICROTECH_GRAPHQL_HOST`, optional `MICROTECH_GRAPHQL_PORT` defaulting to `8888`, optional `MICROTECH_GRAPHQL_SCHEME` defaulting to `http`, and optional `MICROTECH_GRAPHQL_PATH` defaulting to `graphql`.
@@ -162,11 +164,17 @@ Entrypoint flags:
 RUN_DJANGO_CHECK=true
 RUN_COLLECTSTATIC=true
 RUN_MIGRATIONS=true
-CELERY_WORKER_CONCURRENCY=2
+CELERY_MICROTECH_POLL_WORKER_CONCURRENCY=2
+CELERY_MICROTECH_SUBMIT_WORKER_CONCURRENCY=2
+CELERY_MICROTECH_MAINTENANCE_WORKER_CONCURRENCY=1
 ```
 
 The web service enables these by default. Celery worker and beat disable them.
-The Celery worker starts with `--concurrency=${CELERY_WORKER_CONCURRENCY:-2}`.
+Polling, GraphQL submissions and maintenance use separate Celery workers, so a
+stalled wrapper cannot exhaust the other queues. The circuit breaker opens
+after the configured number of transport errors and retries after its cooldown.
+For safe retries, the GraphQL wrapper must treat the `X-Idempotency-Key` request
+header as stable per mutation and return the originally accepted wrapper job.
 
 ## Celery Tasks
 

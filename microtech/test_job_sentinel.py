@@ -26,28 +26,62 @@ def _make_job(**overrides) -> MicrotechGraphQLJob:
 
 
 class TestJobSentinelSubmission(TestCase):
-    @patch("microtech.services.job_sentinel.MicrotechGraphQLClientService")
-    def test_submit_product_update_tracks_remote_job(self, mock_client_cls):
-        mock_client_cls.return_value.submit_update_product.return_value = ("remote-123", 45)
+    @patch.object(MicrotechJobSentinelService, "enqueue_graphql_submission")
+    def test_submit_product_update_persists_outbox_job_before_queueing(self, mock_enqueue):
+        with self.captureOnCommitCallbacks(execute=True):
+            job = MicrotechJobSentinelService().submit_product_update(
+                erp_number="A-1000",
+                input_data={"description": "Neu."},
+                context={"source": "test"},
+                next_step="Produkt schreiben.",
+            )
 
-        job = MicrotechJobSentinelService().submit_product_update(
-            erp_number="A-1000",
-            input_data={"description": "Neu."},
-            context={"source": "test"},
-            next_step="Produkt schreiben.",
-        )
-
-        mock_client_cls.return_value.submit_update_product.assert_called_once_with(
-            "A-1000",
-            {"description": "Neu."},
-        )
+        mock_enqueue.assert_called_once_with(job_id=job.pk)
         self.assertEqual(job.kind, MicrotechGraphQLJob.Kind.PRODUCT_UPDATE)
         self.assertEqual(job.operation, "updateProduct")
-        self.assertEqual(job.status, MicrotechGraphQLJob.Status.WAITING_WEBHOOK)
-        self.assertEqual(job.external_job_id, "remote-123")
+        self.assertEqual(job.status, MicrotechGraphQLJob.Status.QUEUED)
+        self.assertIsNone(job.external_job_id)
         self.assertEqual(job.request_payload, {"erpNumber": "A-1000", "input": {"description": "Neu."}})
         self.assertEqual(job.context, {"source": "test"})
+        self.assertIsNotNone(job.next_submit_at)
+
+    @patch("microtech.services.job_sentinel.MicrotechGraphQLClientService")
+    def test_submit_worker_hands_a_reserved_job_to_graphql(self, mock_client_cls):
+        job = MicrotechGraphQLJob.objects.create(
+            kind=MicrotechGraphQLJob.Kind.PRODUCT_UPDATE,
+            operation="updateProduct",
+            status=MicrotechGraphQLJob.Status.QUEUED,
+            request_payload={"erpNumber": "A-1000", "input": {"description": "Neu."}},
+            submission_task_id="submit-task",
+            submission_lease_expires_at=timezone.now() + timedelta(minutes=1),
+        )
+        mock_client_cls.return_value.submit_update_product.return_value = ("remote-123", 45)
+
+        result = MicrotechJobSentinelService().submit_queued_graphql_job(job_id=job.pk, task_id="submit-task")
+
+        self.assertTrue(result)
+        mock_client_cls.assert_called_once_with(idempotency_key=f"gc-bridge-graphql-job-{job.pk}")
+        mock_client_cls.return_value.submit_update_product.assert_called_once_with("A-1000", {"description": "Neu."})
+        job.refresh_from_db()
+        self.assertEqual(job.status, MicrotechGraphQLJob.Status.WAITING_WEBHOOK)
+        self.assertEqual(job.external_job_id, "remote-123")
+        self.assertEqual(job.submission_task_id, "")
         self.assertIsNotNone(job.next_poll_at)
+
+    @patch.object(MicrotechJobSentinelService, "enqueue_graphql_submission", return_value=True)
+    def test_submit_due_jobs_requeues_expired_submit_lease(self, mock_enqueue):
+        job = MicrotechGraphQLJob.objects.create(
+            kind=MicrotechGraphQLJob.Kind.PRODUCT_UPDATE,
+            operation="updateProduct",
+            status=MicrotechGraphQLJob.Status.QUEUED,
+            request_payload={"erpNumber": "A-1000", "input": {}},
+            submission_lease_expires_at=timezone.now() - timedelta(seconds=1),
+        )
+
+        count = MicrotechJobSentinelService().submit_due_jobs()
+
+        self.assertEqual(count, 1)
+        mock_enqueue.assert_called_once_with(job_id=job.pk)
 
 
 class TestJobSentinelWebhook(TestCase):

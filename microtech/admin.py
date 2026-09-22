@@ -79,6 +79,8 @@ class MicrotechGraphQLJobAdmin(BaseAdmin):
         "status_badge",
         "operation",
         "external_job_id",
+        "next_submit_at",
+        "submission_attempt",
         "running_since",
         "next_step_short",
         "continuation_status",
@@ -102,6 +104,11 @@ class MicrotechGraphQLJobAdmin(BaseAdmin):
         "status",
         "external_job_id",
         "external_job_history",
+        "submission_task_id",
+        "submission_lease_expires_at",
+        "next_submit_at",
+        "submission_attempt",
+        "submission_max_attempts",
         "continuation",
         "continuation_status",
         "continuation_task_id",
@@ -139,6 +146,7 @@ class MicrotechGraphQLJobAdmin(BaseAdmin):
                     "status",
                     "external_job_id",
                     "next_step",
+                    "submission_task_id",
                     "continuation",
                     "continuation_status",
                     "continuation_task_id",
@@ -152,6 +160,10 @@ class MicrotechGraphQLJobAdmin(BaseAdmin):
             {
                 "fields": (
                     "submitted_at",
+                    "next_submit_at",
+                    "submission_lease_expires_at",
+                    "submission_attempt",
+                    "submission_max_attempts",
                     "started_at",
                     "completed_at",
                     "webhook_received_at",
@@ -328,12 +340,30 @@ class RuleEngineExecutionLogAdmin(BaseAdmin):
 
 @admin.register(MicrotechSettings)
 class MicrotechSettingsAdmin(SingletonAdmin):
+    readonly_fields = BaseAdmin.readonly_fields + (
+        "graphql_circuit_open_until",
+        "graphql_consecutive_failures",
+        "graphql_last_failure_at",
+        "graphql_last_error",
+    )
     fieldsets = (
         (
             "Vorgang-Standardwerte",
             {
                 "fields": ("default_vorgangsart_id", "default_zahlungsart_id", "default_versandart_id"),
                 "description": "Standard-IDs fuer neue Microtech-Bestellungen (Vorgaenge).",
+            },
+        ),
+        (
+            "GraphQL-Verfügbarkeit",
+            {
+                "fields": (
+                    "graphql_circuit_open_until",
+                    "graphql_consecutive_failures",
+                    "graphql_last_failure_at",
+                    "graphql_last_error",
+                ),
+                "description": "Automatisch verwalteter Circuit Breaker für die Verbindung zum Microtech-Wrapper.",
             },
         ),
     )

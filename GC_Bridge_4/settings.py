@@ -66,6 +66,10 @@ MICROTECH_GRAPHQL_REQUEST_TIMEOUT = float(os.getenv("MICROTECH_GRAPHQL_REQUEST_T
 MICROTECH_GRAPHQL_POLL_TIMEOUT = float(os.getenv("MICROTECH_GRAPHQL_POLL_TIMEOUT", "180"))
 MICROTECH_GRAPHQL_POLL_INTERVAL = float(os.getenv("MICROTECH_GRAPHQL_POLL_INTERVAL", "2"))
 MICROTECH_GRAPHQL_WEBHOOK_SECRET = os.getenv("MICROTECH_GRAPHQL_WEBHOOK_SECRET", "").strip()
+MICROTECH_GRAPHQL_CIRCUIT_FAILURE_THRESHOLD = int(
+    os.getenv("MICROTECH_GRAPHQL_CIRCUIT_FAILURE_THRESHOLD", "3")
+)
+MICROTECH_GRAPHQL_CIRCUIT_RESET_SECONDS = int(os.getenv("MICROTECH_GRAPHQL_CIRCUIT_RESET_SECONDS", "300"))
 # Wartungsoperationen (Worker-Steuerung, Backup-Fenster) laufen synchron im
 # Wrapper und dauern bis zu mehreren Minuten. Sie brauchen deshalb ein eigenes
 # Zeitlimit, deutlich groesser als MICROTECH_GRAPHQL_REQUEST_TIMEOUT.
@@ -325,8 +329,15 @@ CELERY_TIMEZONE = TIME_ZONE
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 CELERY_TASK_DEFAULT_QUEUE = "microtech"
 CELERY_TASK_ROUTES = {
-    # Time-critical GraphQL polling and worker-control requests must never
-    # compete with full catalogue exports.
+    # HTTP submission, remote polling and long-lived maintenance calls have
+    # isolated workers. A stalled wrapper therefore cannot consume the order
+    # or catalogue queues, nor can a maintenance call block polling.
+    "microtech.submit_graphql_job": {"queue": "microtech-submit"},
+    "microtech.poll_graphql_job": {"queue": "microtech-poll"},
+    "microtech.poll_graphql_jobs": {"queue": "microtech-poll"},
+    "microtech.submit_due_graphql_jobs": {"queue": "microtech-poll"},
+    "microtech.submit_microtech_worker_operation": {"queue": "microtech-maintenance"},
+    "microtech.monitor_worker_health": {"queue": "microtech-maintenance"},
     "microtech.*": {"queue": "microtech"},
     # Order import, workflow progress and their reconciliation are isolated
     # from both GraphQL polling and bulk catalogue processing.
@@ -338,6 +349,11 @@ CELERY_TASK_ROUTES = {
     "bulk.*": {"queue": "bulk"},
 }
 CELERY_BEAT_SCHEDULE = {
+    "microtech-recover-pending-submissions-every-minute": {
+        "task": "microtech.submit_due_graphql_jobs",
+        "schedule": 60.0,
+        "options": {"queue": "microtech-poll"},
+    },
     "orders-reconcile-every-five-minutes": {
         "task": "orders.reconcile_order_sync_workflows",
         "schedule": 300.0,

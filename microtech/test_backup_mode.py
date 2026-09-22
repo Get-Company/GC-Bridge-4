@@ -48,17 +48,21 @@ class BackupModeGateTests(TestCase):
             "Ein abgewiesener Job darf keine Job-Row hinterlassen.",
         )
 
-    def test_wrapper_job_passes_when_no_window_is_open(self):
-        job = MicrotechJobSentinelService().submit_wrapper_job(
-            kind=MicrotechGraphQLJob.Kind.PRODUCT_READ,
-            operation="requestProducts",
-            submit=lambda: ("external-1", 5.0),
-            request_payload={},
-            context={},
-            continuation="",
-            next_step="",
-        )
-        self.assertEqual(job.external_job_id, "external-1")
+    @patch.object(MicrotechJobSentinelService, "enqueue_graphql_submission")
+    def test_wrapper_job_queues_when_no_window_is_open(self, mock_enqueue):
+        with self.captureOnCommitCallbacks(execute=True):
+            job = MicrotechJobSentinelService().submit_wrapper_job(
+                kind=MicrotechGraphQLJob.Kind.PRODUCT_READ,
+                operation="requestProducts",
+                submit=lambda: ("external-1", 5.0),
+                request_payload={},
+                context={},
+                continuation="",
+                next_step="",
+            )
+        self.assertIsNone(job.external_job_id)
+        self.assertEqual(job.status, MicrotechGraphQLJob.Status.QUEUED)
+        mock_enqueue.assert_called_once_with(job_id=job.pk)
 
     def test_maintenance_operations_pass_the_gate(self):
         _open_window()

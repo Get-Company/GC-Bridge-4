@@ -67,6 +67,9 @@ class MicrotechJobSentinelService(BaseService):
     # A remote-job poll is short-lived, so a two-minute dispatch backoff is
     # sufficient. Continuations use their own durable lifecycle below.
     POLL_DISPATCH_BACKOFF_SECONDS = 120
+    SUBMISSION_ERROR_BACKOFF_SECONDS = 300
+    SUBMISSION_DISPATCH_BACKOFF_SECONDS = 120
+    SUBMISSION_LEASE_SECONDS = 120
     CONTINUATION_LEASE_SECONDS = 300
     BULK_CONTINUATION_LEASE_SECONDS = 7_500
     CONTINUATION_LOCK_NAMESPACE = 82_641
@@ -85,45 +88,15 @@ class MicrotechJobSentinelService(BaseService):
         next_step: str = "",
         delete_after_completion: bool = True,
     ) -> MicrotechGraphQLJob:
-        job = MicrotechGraphQLJob.objects.create(
+        return self._queue_graphql_submission(
             kind=MicrotechGraphQLJob.Kind.DATASET_RECORDS,
             operation="requestDatasetRecords",
-            status=MicrotechGraphQLJob.Status.QUEUED,
             request_payload=input_data,
-            context=context or {},
-            continuation=str(continuation or "").strip(),
-            next_step=next_step or "Warte auf Microtech GraphQL Webhook.",
-            # Keep completed continuation rows for recovery and observability;
-            # scheduled cleanup removes their remote/local records later.
-            delete_after_completion=delete_after_completion and not bool(str(continuation or "").strip()),
+            context=context,
+            continuation=continuation,
+            next_step=next_step or "Warte auf die asynchrone GraphQL-Übergabe.",
+            delete_after_completion=delete_after_completion,
         )
-        client = MicrotechGraphQLClientService()
-        try:
-            external_job_id, retry_after = client.submit_dataset_job(input_data)
-        except Exception as exc:
-            job.status = MicrotechGraphQLJob.Status.FAILED
-            job.error_message = str(exc)
-            job.completed_at = timezone.now()
-            job.save(update_fields=("status", "error_message", "completed_at", "updated_at"))
-            raise
-
-        now = timezone.now()
-        job.external_job_id = external_job_id
-        job.status = MicrotechGraphQLJob.Status.WAITING_WEBHOOK
-        job.submitted_at = now
-        job.started_at = now
-        job.next_poll_at = now + timedelta(seconds=max(int(retry_after), 30))
-        job.save(
-            update_fields=(
-                "external_job_id",
-                "status",
-                "submitted_at",
-                "started_at",
-                "next_poll_at",
-                "updated_at",
-            )
-        )
-        return job
 
     def submit_product_update(
         self,
@@ -143,43 +116,15 @@ class MicrotechJobSentinelService(BaseService):
             "erpNumber": erp_number,
             "input": input_data,
         }
-        job = MicrotechGraphQLJob.objects.create(
+        return self._queue_graphql_submission(
             kind=MicrotechGraphQLJob.Kind.PRODUCT_UPDATE,
             operation="updateProduct",
-            status=MicrotechGraphQLJob.Status.QUEUED,
             request_payload=request_payload,
-            context=context or {},
-            continuation=str(continuation or "").strip(),
-            next_step=next_step or "Warte auf Microtech GraphQL Produkt-Update.",
-            delete_after_completion=delete_after_completion and not bool(str(continuation or "").strip()),
+            context=context,
+            continuation=continuation,
+            next_step=next_step or "Warte auf die asynchrone GraphQL-Übergabe.",
+            delete_after_completion=delete_after_completion,
         )
-        client = MicrotechGraphQLClientService()
-        try:
-            external_job_id, retry_after = client.submit_update_product(erp_number, input_data)
-        except Exception as exc:
-            job.status = MicrotechGraphQLJob.Status.FAILED
-            job.error_message = str(exc)
-            job.completed_at = timezone.now()
-            job.save(update_fields=("status", "error_message", "completed_at", "updated_at"))
-            raise
-
-        now = timezone.now()
-        job.external_job_id = external_job_id
-        job.status = MicrotechGraphQLJob.Status.WAITING_WEBHOOK
-        job.submitted_at = now
-        job.started_at = now
-        job.next_poll_at = now + timedelta(seconds=max(int(retry_after), 30))
-        job.save(
-            update_fields=(
-                "external_job_id",
-                "status",
-                "submitted_at",
-                "started_at",
-                "next_poll_at",
-                "updated_at",
-            )
-        )
-        return job
 
     def submit_product_batch_read(
         self,
@@ -195,46 +140,15 @@ class MicrotechJobSentinelService(BaseService):
         request_payload: dict[str, Any] = {"includeImages": bool(include_images)}
         if cleaned:
             request_payload["erpNumbers"] = cleaned
-        job = MicrotechGraphQLJob.objects.create(
+        return self._queue_graphql_submission(
             kind=MicrotechGraphQLJob.Kind.PRODUCT_READ,
             operation="requestProducts",
-            status=MicrotechGraphQLJob.Status.QUEUED,
             request_payload=request_payload,
-            context=context or {},
-            continuation=str(continuation or "").strip(),
-            next_step=next_step or "Warte auf Microtech GraphQL Produkt-Batch.",
-            delete_after_completion=delete_after_completion and not bool(str(continuation or "").strip()),
+            context=context,
+            continuation=continuation,
+            next_step=next_step or "Warte auf die asynchrone GraphQL-Übergabe.",
+            delete_after_completion=delete_after_completion,
         )
-        client = MicrotechGraphQLClientService()
-        try:
-            external_job_id, retry_after = client.submit_request_products(
-                erp_numbers=cleaned or None,
-                include_images=bool(include_images),
-            )
-        except Exception as exc:
-            job.status = MicrotechGraphQLJob.Status.FAILED
-            job.error_message = str(exc)
-            job.completed_at = timezone.now()
-            job.save(update_fields=("status", "error_message", "completed_at", "updated_at"))
-            raise
-
-        now = timezone.now()
-        job.external_job_id = external_job_id
-        job.status = MicrotechGraphQLJob.Status.WAITING_WEBHOOK
-        job.submitted_at = now
-        job.started_at = now
-        job.next_poll_at = now + timedelta(seconds=max(int(retry_after), 30))
-        job.save(
-            update_fields=(
-                "external_job_id",
-                "status",
-                "submitted_at",
-                "started_at",
-                "next_poll_at",
-                "updated_at",
-            )
-        )
-        return job
 
     def submit_wrapper_job(
         self,
@@ -248,13 +162,12 @@ class MicrotechJobSentinelService(BaseService):
         next_step: str,
         delete_after_completion: bool = True,
     ) -> MicrotechGraphQLJob:
-        """Generischer Sentinel-Submit für Continuation-Ketten.
+        """Persistiert eine Wrapper-Übergabe und überlässt den HTTP-Aufruf einem Worker.
 
-        Legt eine Job-Row mit Status QUEUED an, ruft das übergebene ``submit``-
-        Callable auf (das das externe Job-ID und retryAfterSeconds liefert) und
-        setzt anschließend ``external_job_id``, ``WAITING_WEBHOOK`` und
-        ``next_poll_at``. Bei einer Ausnahme wird der Job auf FAILED gesetzt
-        und die Ausnahme weitergeleitet.
+        ``submit`` bleibt vorübergehend für kompatible Aufrufer akzeptiert. Es
+        wird bewusst nicht ausgeführt: Lambdas sind nicht dauerhaft
+        serialisierbar. Die Operation und ihr Payload werden über
+        :meth:`_submit_saved_request` im Submit-Worker rekonstruiert.
         """
         # Waehrend eines Backup-Fensters steht die Verbindung zu microtech still;
         # neue Arbeit wird hier abgewiesen, statt spaeter ins Leere zu laufen.
@@ -262,6 +175,28 @@ class MicrotechJobSentinelService(BaseService):
 
         MicrotechBackupModeService.ensure_available(operation=operation)
 
+        return self._queue_graphql_submission(
+            kind=kind,
+            operation=operation,
+            request_payload=request_payload,
+            context=context,
+            continuation=continuation,
+            next_step=next_step or "Warte auf die asynchrone GraphQL-Übergabe.",
+            delete_after_completion=delete_after_completion,
+        )
+
+    def _queue_graphql_submission(
+        self,
+        *,
+        kind: str,
+        operation: str,
+        request_payload: dict[str, Any],
+        context: dict[str, Any] | None,
+        continuation: str,
+        next_step: str,
+        delete_after_completion: bool,
+    ) -> MicrotechGraphQLJob:
+        """Schreibt die fachliche Absicht zuerst dauerhaft und publiziert danach eine Celery-Task."""
         job = MicrotechGraphQLJob.objects.create(
             kind=kind,
             operation=operation,
@@ -269,44 +204,197 @@ class MicrotechJobSentinelService(BaseService):
             request_payload=request_payload,
             context=context or {},
             continuation=str(continuation or "").strip(),
-            next_step=next_step or "Warte auf Microtech GraphQL Job.",
+            next_step=next_step,
+            next_submit_at=timezone.now(),
+            # Keep completed continuation rows for recovery and observability;
+            # scheduled cleanup removes their remote/local records later.
             delete_after_completion=delete_after_completion and not bool(str(continuation or "").strip()),
         )
-        try:
-            external_job_id, retry_after = submit()
-        except Exception as exc:
-            job.status = MicrotechGraphQLJob.Status.FAILED
-            job.error_message = str(exc)
-            job.completed_at = timezone.now()
-            job.save(update_fields=("status", "error_message", "completed_at", "updated_at"))
-            raise
+        transaction.on_commit(lambda: self.enqueue_graphql_submission(job_id=job.pk))
+        return job
 
-        external_job_id = str(external_job_id or "").strip()
-        if not external_job_id:
-            error_message = f"Microtech GraphQL {operation} hat keine externe Job-ID zurueckgegeben."
-            job.status = MicrotechGraphQLJob.Status.FAILED
-            job.error_message = error_message
-            job.completed_at = timezone.now()
-            job.save(update_fields=("status", "error_message", "completed_at", "updated_at"))
-            raise GraphQLMicrotechError(error_message)
+    def enqueue_graphql_submission(self, *, job_id: int) -> bool:
+        """Reserviert genau eine persistierte Submit-Task; bei Brokerfehler bleibt der Job faellig."""
+        now = timezone.now()
+        task_id = str(uuid4())
+        with transaction.atomic():
+            job = MicrotechGraphQLJob.objects.select_for_update().filter(pk=job_id).first()
+            if (
+                job is None
+                or job.kind == MicrotechGraphQLJob.Kind.MAINTENANCE
+                or job.status != MicrotechGraphQLJob.Status.QUEUED
+                or job.external_job_id
+            ):
+                return False
+            if job.submission_lease_expires_at and job.submission_lease_expires_at > now:
+                return False
+            job.submission_task_id = task_id
+            job.submission_lease_expires_at = now + timedelta(seconds=self.SUBMISSION_LEASE_SECONDS)
+            job.next_submit_at = now + timedelta(seconds=self.SUBMISSION_DISPATCH_BACKOFF_SECONDS)
+            job.next_step = "GraphQL-Übergabe eingereiht."
+            job.save(
+                update_fields=(
+                    "submission_task_id",
+                    "submission_lease_expires_at",
+                    "next_submit_at",
+                    "next_step",
+                    "updated_at",
+                )
+            )
+
+        try:
+            from microtech.tasks import submit_graphql_job
+
+            submit_graphql_job.apply_async(args=(job_id,), task_id=task_id, queue="microtech-submit")
+        except Exception:
+            MicrotechGraphQLJob.objects.filter(
+                pk=job_id,
+                status=MicrotechGraphQLJob.Status.QUEUED,
+                submission_task_id=task_id,
+            ).update(
+                submission_task_id="",
+                submission_lease_expires_at=None,
+                next_submit_at=timezone.now(),
+                next_step="GraphQL-Übergabe konnte nicht eingereiht werden.",
+                updated_at=timezone.now(),
+            )
+            logger.exception("Microtech GraphQL Submit für Job %s konnte nicht bei Celery eingereiht werden.", job_id)
+            return False
+        return True
+
+    def submit_due_jobs(self, *, limit: int = 50) -> int:
+        """Reiht nach einem Prozess- oder Brokerfehler liegen gebliebene Submits erneut ein."""
+        if limit <= 0:
+            return 0
+        now = timezone.now()
+        job_ids = list(
+            MicrotechGraphQLJob.objects.filter(
+                status=MicrotechGraphQLJob.Status.QUEUED,
+                external_job_id__isnull=True,
+            )
+            .exclude(kind=MicrotechGraphQLJob.Kind.MAINTENANCE)
+            .filter(
+                Q(next_submit_at__lte=now)
+                | Q(next_submit_at__isnull=True)
+                | Q(submission_lease_expires_at__lte=now)
+            )
+            .order_by("next_submit_at", "created_at")
+            .values_list("pk", flat=True)[:limit]
+        )
+        return sum(1 for job_id in job_ids if self.enqueue_graphql_submission(job_id=job_id))
+
+    def submit_queued_graphql_job(self, *, job_id: int, task_id: str) -> bool:
+        """Übergibt einen reservierten Outbox-Job genau einmal an den GraphQL-Wrapper."""
+        task_id = str(task_id or "").strip()
+        if not task_id:
+            return False
+        with transaction.atomic():
+            job = MicrotechGraphQLJob.objects.select_for_update().filter(pk=job_id).first()
+            if (
+                job is None
+                or job.status != MicrotechGraphQLJob.Status.QUEUED
+                or job.external_job_id
+                or job.submission_task_id != task_id
+            ):
+                return False
+            job.submission_attempt += 1
+            job.submission_lease_expires_at = timezone.now() + timedelta(seconds=self.SUBMISSION_LEASE_SECONDS)
+            job.next_step = "Übergabe an Microtech GraphQL läuft."
+            job.save(update_fields=("submission_attempt", "submission_lease_expires_at", "next_step", "updated_at"))
+            attempt = job.submission_attempt
+            max_attempts = job.submission_max_attempts
+
+        try:
+            external_job_id, retry_after = self._submit_saved_request(job=job)
+            external_job_id = str(external_job_id or "").strip()
+            if not external_job_id:
+                raise GraphQLMicrotechError(
+                    f"Microtech GraphQL {job.operation} hat keine externe Job-ID zurueckgegeben."
+                )
+        except Exception as exc:
+            self._handle_submission_failure(
+                job_id=job_id,
+                task_id=task_id,
+                attempt=attempt,
+                max_attempts=max_attempts,
+                error=exc,
+            )
+            return False
 
         now = timezone.now()
-        job.external_job_id = external_job_id
-        job.status = MicrotechGraphQLJob.Status.WAITING_WEBHOOK
-        job.submitted_at = now
-        job.started_at = now
-        job.next_poll_at = now + timedelta(seconds=max(int(retry_after), 30))
-        job.save(
-            update_fields=(
-                "external_job_id",
-                "status",
-                "submitted_at",
-                "started_at",
-                "next_poll_at",
-                "updated_at",
-            )
+        updated = MicrotechGraphQLJob.objects.filter(
+            pk=job_id,
+            status=MicrotechGraphQLJob.Status.QUEUED,
+            submission_task_id=task_id,
+        ).update(
+            external_job_id=external_job_id,
+            status=MicrotechGraphQLJob.Status.WAITING_WEBHOOK,
+            submitted_at=now,
+            started_at=now,
+            next_poll_at=now + timedelta(seconds=max(int(retry_after), 30)),
+            next_submit_at=None,
+            submission_task_id="",
+            submission_lease_expires_at=None,
+            error_message="",
+            next_step="Warte auf Microtech GraphQL Webhook.",
+            updated_at=now,
         )
-        return job
+        return bool(updated)
+
+    def _handle_submission_failure(
+        self,
+        *,
+        job_id: int,
+        task_id: str,
+        attempt: int,
+        max_attempts: int,
+        error: Exception,
+    ) -> None:
+        from microtech.services.graphql_circuit_breaker import (
+            GraphQLMicrotechCircuitOpen,
+            MicrotechGraphQLCircuitBreakerService,
+        )
+
+        now = timezone.now()
+        retryable = MicrotechGraphQLCircuitBreakerService.is_retryable_transport_error(error)
+        if retryable and attempt < max_attempts:
+            retry_at = now + timedelta(
+                seconds=self.SUBMISSION_ERROR_BACKOFF_SECONDS + random.uniform(0, self.POLL_JITTER_SECONDS)
+            )
+            if isinstance(error, GraphQLMicrotechCircuitOpen):
+                retry_at = error.retry_at
+            MicrotechGraphQLJob.objects.filter(
+                pk=job_id,
+                status=MicrotechGraphQLJob.Status.QUEUED,
+                submission_task_id=task_id,
+            ).update(
+                error_message=str(error),
+                next_step="GraphQL nicht erreichbar; Übergabe wird erneut versucht.",
+                next_submit_at=retry_at,
+                # Ein geöffneter Circuit vermeidet bewusst einen HTTP-Aufruf;
+                # diese ausgelassene Übergabe darf das Retry-Budget nicht
+                # verbrauchen.
+                submission_attempt=max(0, attempt - 1) if isinstance(error, GraphQLMicrotechCircuitOpen) else attempt,
+                submission_task_id="",
+                submission_lease_expires_at=None,
+                updated_at=now,
+            )
+            return
+
+        MicrotechGraphQLJob.objects.filter(
+            pk=job_id,
+            status=MicrotechGraphQLJob.Status.QUEUED,
+            submission_task_id=task_id,
+        ).update(
+            status=MicrotechGraphQLJob.Status.FAILED,
+            error_message=str(error),
+            next_step="GraphQL-Übergabe fehlgeschlagen.",
+            next_submit_at=None,
+            submission_task_id="",
+            submission_lease_expires_at=None,
+            completed_at=now,
+            updated_at=now,
+        )
 
     def enqueue_microtech_worker_operation(
         self,
@@ -597,17 +685,20 @@ class MicrotechJobSentinelService(BaseService):
         return bool(updated)
 
     def poll_due_jobs(self, *, limit: int = 50) -> int:
+        dispatched_submissions = self.submit_due_jobs(limit=limit)
+        # Submit und Poll laufen auf separaten Workern. Ein Rueckstau in der
+        # Outbox darf daher die Beobachtung bereits angenommener Remote-Jobs
+        # nicht verdraengen.
         job_ids = self._claim_due_jobs(limit=limit)
         from microtech.tasks import poll_graphql_job
 
         for job_id in job_ids:
             poll_graphql_job.delay(job_id)
-        remaining = max(0, limit - len(job_ids))
-        continuation_ids = self._pending_continuation_ids(limit=remaining)
+        continuation_ids = self._pending_continuation_ids(limit=max(0, limit - len(job_ids)))
         dispatched_continuations = sum(
             1 for continuation_id in continuation_ids if self._dispatch_continuation(continuation_id)
         )
-        return len(job_ids) + dispatched_continuations
+        return dispatched_submissions + len(job_ids) + dispatched_continuations
 
     def _claim_due_jobs(self, *, limit: int) -> list[int]:
         """Reserviere faellige Jobs atomar und schiebe ihren naechsten Poll nach vorne.
@@ -994,11 +1085,30 @@ class MicrotechJobSentinelService(BaseService):
         return client.microtech_job(str(job.external_job_id))
 
     def _handle_poll_failure(self, *, job_id: int, attempt: int, max_attempts: int, error: Exception) -> None:
+        from microtech.services.graphql_circuit_breaker import (
+            GraphQLMicrotechCircuitOpen,
+            MicrotechGraphQLCircuitBreakerService,
+        )
+
         now = timezone.now()
         if self._is_remote_job_missing(error) and self._recover_missing_remote_job(
             job_id=job_id,
             error_message=str(error),
         ):
+            return
+        if MicrotechGraphQLCircuitBreakerService.is_retryable_transport_error(error):
+            retry_at = now + timedelta(seconds=self.POLL_ERROR_BACKOFF_SECONDS + random.uniform(0, self.POLL_JITTER_SECONDS))
+            if isinstance(error, GraphQLMicrotechCircuitOpen):
+                retry_at = error.retry_at
+            # Ein Wrapper-Ausfall ist kein fachlicher Job-Fehler. Der Poll
+            # bleibt deshalb offen und wird erst nach dem Circuit-Cooldown
+            # erneut versucht.
+            MicrotechGraphQLJob.objects.filter(pk=job_id).update(
+                error_message=str(error),
+                next_step="GraphQL nicht erreichbar; Poll wird erneut versucht.",
+                next_poll_at=retry_at,
+                updated_at=now,
+            )
             return
         if attempt >= max_attempts:
             MicrotechGraphQLJob.objects.filter(pk=job_id).update(
@@ -1110,7 +1220,10 @@ class MicrotechJobSentinelService(BaseService):
     @staticmethod
     def _submit_saved_request(*, job: MicrotechGraphQLJob) -> tuple[str, float]:
         """Map persisted request payloads to idempotent GraphQL submissions."""
-        client = MicrotechGraphQLClientService()
+        # Die lokale Job-ID ist dauerhaft und eindeutig. Sie bleibt bei jedem
+        # erneuten Submit desselben Jobs gleich und kann vom Wrapper zur
+        # Deduplizierung nach einem Antwort-Timeout verwendet werden.
+        client = MicrotechGraphQLClientService(idempotency_key=f"gc-bridge-graphql-job-{job.pk}")
         payload = dict(job.request_payload or {})
         operation = str(job.operation or "")
         if operation == "requestDatasetRecords":
@@ -1132,12 +1245,30 @@ class MicrotechJobSentinelService(BaseService):
                 last_name=str(payload.get("last_name") or ""),
                 limit=int(payload.get("limit") or 20),
             )
+        if operation == "searchAddressRecords":
+            return client.submit_search_address_records(
+                str(payload["search_term"]),
+                int(payload.get("limit_per_dataset") or 20),
+            )
         if operation == "upsertCustomer":
             return client.submit_upsert_customer(str(payload["customerNumber"]), dict(payload["input"]))
+        if operation == "createCustomer":
+            return client.submit_create_customer(str(payload["customerNumber"]), dict(payload["input"]))
         if operation == "updateCustomer":
             return client.submit_update_customer(str(payload["customerNumber"]), dict(payload["input"]))
+        if operation == "createPostalAddress":
+            return client.submit_create_postal_address(
+                int(payload["addressNumber"]),
+                dict(payload["input"]),
+            )
         if operation == "updatePostalAddress":
             return client.submit_update_postal_address(
+                int(payload["addressNumber"]),
+                int(payload["addressSubNumber"]),
+                dict(payload["input"]),
+            )
+        if operation == "createContactPerson":
+            return client.submit_create_contact_person(
                 int(payload["addressNumber"]),
                 int(payload["addressSubNumber"]),
                 dict(payload["input"]),
@@ -1151,6 +1282,8 @@ class MicrotechJobSentinelService(BaseService):
             )
         if operation == "requestVorgang":
             return client.submit_request_vorgang(str(payload["belegNr"]))
+        if operation == "createVorgang":
+            return client.submit_create_vorgang(dict(payload["input"]))
         if operation == "updateVorgang":
             return client.submit_update_vorgang(str(payload["belegNr"]), dict(payload["input"]))
         raise ValueError(f"Remote resubmit is unsafe or unsupported for operation '{operation}'.")

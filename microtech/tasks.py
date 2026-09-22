@@ -8,11 +8,22 @@ from celery import shared_task
 logger = logging.getLogger(__name__)
 
 
-@shared_task(name="microtech.submit_microtech_worker_operation")
+@shared_task(name="microtech.submit_microtech_worker_operation", soft_time_limit=330, time_limit=360)
 def submit_microtech_worker_operation(job_id: int) -> None:
     from microtech.services import MicrotechJobSentinelService
 
     MicrotechJobSentinelService().submit_queued_microtech_worker_operation(job_id=job_id)
+
+
+@shared_task(name="microtech.submit_graphql_job", bind=True, soft_time_limit=40, time_limit=50)
+def submit_graphql_job(task, job_id: int) -> bool:
+    """Send one persisted Sentinel outbox job without blocking a web or order worker."""
+    from microtech.services import MicrotechJobSentinelService
+
+    return MicrotechJobSentinelService().submit_queued_graphql_job(
+        job_id=job_id,
+        task_id=str(task.request.id or ""),
+    )
 
 
 def _process_graphql_job_result(*, job_id: int, task_id: str) -> None:
@@ -78,7 +89,15 @@ def poll_graphql_jobs(limit: int = 50) -> int:
     return MicrotechJobSentinelService().poll_due_jobs(limit=limit)
 
 
-@shared_task(name="microtech.poll_graphql_job")
+@shared_task(name="microtech.submit_due_graphql_jobs")
+def submit_due_graphql_jobs(limit: int = 50) -> int:
+    """Recover persisted GraphQL submissions after a worker or broker interruption."""
+    from microtech.services import MicrotechJobSentinelService
+
+    return MicrotechJobSentinelService().submit_due_jobs(limit=limit)
+
+
+@shared_task(name="microtech.poll_graphql_job", soft_time_limit=40, time_limit=50)
 def poll_graphql_job(job_id: int) -> bool:
     from microtech.services import MicrotechJobSentinelService
 
@@ -104,6 +123,11 @@ def monitor_worker_health() -> dict:
         result = MicrotechGraphQLClientService().microtech_worker_status()
         worker = dict(result.get("worker") or {})
     except Exception as exc:
+        from microtech.services.graphql_circuit_breaker import GraphQLMicrotechCircuitOpen
+
+        if isinstance(exc, GraphQLMicrotechCircuitOpen):
+            logger.info("Microtech-Worker-Status bis %s durch offenen GraphQL-Circuit ausgesetzt.", exc.retry_at)
+            return {"status": "circuit_open", "retry_at": exc.retry_at.isoformat()}
         logger.exception("Microtech-Worker-Status konnte nicht abgefragt werden.")
         create_task_issue(
             title="[Microtech] Worker-Status nicht erreichbar",

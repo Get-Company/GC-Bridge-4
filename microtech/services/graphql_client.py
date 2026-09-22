@@ -51,8 +51,14 @@ class MicrotechGraphQLClientService(BaseService):
     TERMINAL_SUCCESS = {"DONE", "SUCCEEDED", "SUCCESS"}
     TERMINAL_FAILED = {"FAILED", "ERROR", "CANCELLED"}
 
-    def __init__(self, *, config: MicrotechGraphQLConfig | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        config: MicrotechGraphQLConfig | None = None,
+        idempotency_key: str = "",
+    ) -> None:
         self.config = config or MicrotechGraphQLConfig.from_settings()
+        self.idempotency_key = str(idempotency_key or "").strip()
 
     def execute(
         self,
@@ -68,13 +74,28 @@ class MicrotechGraphQLClientService(BaseService):
 
             MicrotechBackupModeService.ensure_available()
 
-        response = requests.post(
-            self.config.url,
-            json={"query": query, "variables": variables or {}},
-            headers={"Content-Type": "application/json"},
-            timeout=timeout or self.config.request_timeout,
-        )
-        response.raise_for_status()
+        # Die Verfuegbarkeit wird vor jedem HTTP-Aufruf zentral geprueft.  Das
+        # verhindert, dass bei einem Wrapper-Ausfall alle Worker gleichzeitig
+        # in ihre jeweiligen Request-Timeouts laufen.
+        from microtech.services.graphql_circuit_breaker import MicrotechGraphQLCircuitBreakerService
+
+        circuit_breaker = MicrotechGraphQLCircuitBreakerService()
+        circuit_breaker.ensure_request_allowed()
+        headers = {"Content-Type": "application/json"}
+        if self.idempotency_key:
+            headers["X-Idempotency-Key"] = self.idempotency_key
+        try:
+            response = requests.post(
+                self.config.url,
+                json={"query": query, "variables": variables or {}},
+                headers=headers,
+                timeout=timeout or self.config.request_timeout,
+            )
+            response.raise_for_status()
+        except Exception as exc:
+            circuit_breaker.record_failure(exc)
+            raise
+        circuit_breaker.record_success()
         payload = response.json()
         errors = payload.get("errors") or []
         if errors:

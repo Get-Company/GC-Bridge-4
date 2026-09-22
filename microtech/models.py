@@ -50,6 +50,21 @@ class MicrotechSettings(BaseModel):
         max_length=150, blank=True, default="", verbose_name=_("Backup-Fenster geoeffnet von")
     )
 
+    # Globaler Schutz gegen einen nicht erreichbaren GraphQL-Wrapper.  Der
+    # Zustand liegt bewusst in der Datenbank, damit alle Celery-Prozesse den
+    # gleichen Circuit Breaker verwenden und ein Ausfall nicht pro Worker neu
+    # entdeckt werden muss.
+    graphql_circuit_open_until = models.DateTimeField(
+        blank=True, null=True, verbose_name=_("GraphQL Circuit Breaker offen bis")
+    )
+    graphql_consecutive_failures = models.PositiveIntegerField(
+        default=0, verbose_name=_("GraphQL aufeinanderfolgende Transportfehler")
+    )
+    graphql_last_failure_at = models.DateTimeField(
+        blank=True, null=True, verbose_name=_("Letzter GraphQL-Transportfehler")
+    )
+    graphql_last_error = models.TextField(blank=True, default="", verbose_name=_("Letzter GraphQL-Transportfehlertext"))
+
     class Meta:
         verbose_name = _("Microtech Konfiguration")
         verbose_name_plural = _("Microtech Konfiguration")
@@ -209,6 +224,17 @@ class MicrotechGraphQLJob(BaseModel):
         verbose_name=_("Remote max. Resubmits"),
     )
     submitted_at = models.DateTimeField(blank=True, null=True, db_index=True, verbose_name=_("Uebergeben am"))
+    submission_task_id = models.CharField(
+        max_length=255, blank=True, default="", verbose_name=_("Submit Celery-Task-ID")
+    )
+    submission_lease_expires_at = models.DateTimeField(
+        blank=True, null=True, db_index=True, verbose_name=_("Submit-Lease bis")
+    )
+    next_submit_at = models.DateTimeField(
+        blank=True, null=True, db_index=True, verbose_name=_("Naechste GraphQL-Uebergabe")
+    )
+    submission_attempt = models.PositiveIntegerField(default=0, verbose_name=_("Submit-Versuche"))
+    submission_max_attempts = models.PositiveIntegerField(default=5, verbose_name=_("Max. Submit-Versuche"))
     started_at = models.DateTimeField(blank=True, null=True, verbose_name=_("Gestartet am"))
     completed_at = models.DateTimeField(blank=True, null=True, verbose_name=_("Beendet am"))
     webhook_received_at = models.DateTimeField(blank=True, null=True, verbose_name=_("Webhook erhalten am"))
@@ -224,6 +250,7 @@ class MicrotechGraphQLJob(BaseModel):
         ordering = ("status", "submitted_at", "created_at")
         indexes = [
             models.Index(fields=("status", "next_poll_at"), name="microtech_gql_job_poll_idx"),
+            models.Index(fields=("status", "next_submit_at"), name="microtech_gql_job_submit_idx"),
             models.Index(fields=("kind", "status"), name="microtech_gql_job_kind_idx"),
             models.Index(
                 fields=("continuation_status", "continuation_lease_expires_at"),
