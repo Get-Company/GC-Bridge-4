@@ -1,7 +1,7 @@
 from decimal import Decimal
 from io import StringIO
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 from django.core.management import call_command
 from django.core.management.base import CommandError
@@ -24,9 +24,11 @@ from products.models import (
 )
 from shopware.management.commands.shopware_sync_products import (
     Command as ShopwareSyncProductsCommand,
+    _extract_product_price_payloads,
     _build_product_translations,
     _build_product_sync_payload,
     _shopware_translation_language_ids,
+    _sync_product_prices,
 )
 from shopware.management.commands.shopware_force_product_image_uploads import Command as ForceProductImageUploadsCommand
 from shopware.models import ShopwareSettings
@@ -428,6 +430,98 @@ class Shopware6ServiceTokenRetryTest(SimpleTestCase):
             },
             additional_query_params=None,
         )
+
+    def test_request_post_can_preserve_explicit_null_values(self):
+        client = MagicMock()
+        client.request_post.return_value = {"ok": True}
+        service = Shopware6Service.__new__(Shopware6Service)
+        service.client = client
+
+        service.request_post(
+            "/_action/sync",
+            payload={"quantityEnd": None},
+            preserve_none=True,
+        )
+
+        client.request_post.assert_called_once_with(
+            "/_action/sync",
+            payload={"quantityEnd": None},
+            additional_query_params=None,
+        )
+
+
+class Shopware6AdvancedPriceSyncTest(SimpleTestCase):
+    def test_extract_product_prices_removes_nested_association_from_product_payload(self):
+        product_payloads = [
+            {
+                "id": "product-1",
+                "productNumber": "A-1",
+                "prices": [{"id": "price-1", "productId": "product-1", "ruleId": "rule-1"}],
+            }
+        ]
+
+        price_payloads = _extract_product_price_payloads(product_payloads)
+
+        self.assertEqual(
+            price_payloads,
+            [{"id": "price-1", "productId": "product-1", "ruleId": "rule-1"}],
+        )
+        self.assertNotIn("prices", product_payloads[0])
+
+    def test_sync_writes_prices_before_cleaning_obsolete_rows(self):
+        service = MagicMock()
+        price_payloads = [
+            {"id": "price-1", "productId": "product-1", "ruleId": "rule-1"},
+            {"id": "price-2", "productId": "product-1", "ruleId": "rule-1"},
+            {"id": "price-3", "productId": "product-2", "ruleId": "rule-2"},
+        ]
+
+        _sync_product_prices(service=service, price_payloads=price_payloads)
+
+        self.assertEqual(
+            service.method_calls,
+            [
+                call.bulk_upsert_product_prices(price_payloads),
+                call.purge_product_prices_by_product_and_rule(
+                    product_ids=["product-1"],
+                    rule_ids=["rule-1"],
+                    keep_price_ids=["price-1", "price-2"],
+                ),
+                call.purge_product_prices_by_product_and_rule(
+                    product_ids=["product-2"],
+                    rule_ids=["rule-2"],
+                    keep_price_ids=["price-3"],
+                ),
+            ],
+        )
+
+    def test_product_service_uses_direct_product_price_sync_entity(self):
+        service = ProductService.__new__(ProductService)
+        service.bulk_upsert = MagicMock()
+
+        service.bulk_upsert_product_prices([{"id": "price-1"}])
+
+        service.bulk_upsert.assert_called_once_with(
+            [{"id": "price-1"}],
+            entity_name="product_price",
+            preserve_none=True,
+        )
+
+    def test_price_cleanup_keeps_successfully_upserted_price_ids(self):
+        service = ProductService.__new__(ProductService)
+        service.request_post = MagicMock(
+            return_value={"data": [{"id": "keep-price"}, {"id": "obsolete-price"}]}
+        )
+        service.request_delete = MagicMock()
+
+        deleted = service.purge_product_prices_by_product_and_rule(
+            product_ids=["product-1"],
+            rule_ids=["rule-1"],
+            keep_price_ids=["keep-price"],
+        )
+
+        self.assertEqual(deleted, 1)
+        service.request_delete.assert_called_once_with("/product-price/obsolete-price")
 
 
 class OrderServiceMicrotechWritebackTest(SimpleTestCase):
@@ -900,14 +994,25 @@ class ShopwareSyncProductsCommandBatchTest(TestCase):
         self.assertNotIn("id", initial_fallback_payload)
         self.assertEqual(resolved_payload["id"], "sku-4")
         self.assertIn("price", resolved_payload)
-        self.assertIn("prices", resolved_payload)
+        self.assertNotIn("prices", resolved_payload)
+        advanced_price_payloads = service.bulk_upsert_product_prices.call_args.args[0]
         self.assertEqual(
-            [entry["ruleId"] for entry in resolved_payload["prices"]],
+            [entry["ruleId"] for entry in advanced_price_payloads],
             ["rule-default", "rule-b2b"],
         )
-        service.purge_product_prices_by_product_and_rule.assert_called_once_with(
-            product_ids=["sku-4"],
-            rule_ids=["rule-default", "rule-b2b"],
+        service.purge_product_prices_by_product_and_rule.assert_has_calls(
+            [
+                call(
+                    product_ids=["sku-4"],
+                    rule_ids=["rule-default"],
+                    keep_price_ids=[advanced_price_payloads[0]["id"]],
+                ),
+                call(
+                    product_ids=["sku-4"],
+                    rule_ids=["rule-b2b"],
+                    keep_price_ids=[advanced_price_payloads[1]["id"]],
+                ),
+            ]
         )
         product.refresh_from_db()
         self.assertEqual(product.sku, "sku-4")

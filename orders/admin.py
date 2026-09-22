@@ -96,7 +96,6 @@ class OrderExpandSection(TemplateSection):
 
     def render(self) -> str:
         obj = self.instance
-        workflow = obj.microtech_sync_workflows.order_by("-created_at").first()
         return render_to_string(
             self.template_name,
             context={
@@ -108,12 +107,6 @@ class OrderExpandSection(TemplateSection):
                 "transitions_meta_url": reverse("admin:orders_order_transitions_meta"),
                 "microtech_sync_status_url": reverse("admin:orders_order_microtech_sync_status", args=(obj.pk,)),
                 "microtech_sync_status_text": OrderAdmin.microtech_sync_status_for_order(obj),
-                "microtech_sync_workflow_url": (
-                    reverse("admin:orders_microtechordersyncworkflow_change", args=(workflow.pk,))
-                    if workflow
-                    else ""
-                ),
-                "microtech_sync_workflow_id": workflow.pk if workflow else "",
             },
         )
 
@@ -247,9 +240,6 @@ class OrderAdmin(BaseAdmin):
                 "request_customer_change_detail",
                 "rule_tester_detail",
                 "upsert_to_microtech_detail",
-                "resume_microtech_sync_detail",
-                "abort_microtech_sync_detail",
-                "restart_microtech_sync_detail",
                 "export_swiss_customs_csv_detail",
             ),
         },
@@ -471,18 +461,18 @@ class OrderAdmin(BaseAdmin):
             return
 
         try:
-            workflow = OrderSyncWorkflowService().start_for_order(order)
-        except Exception as exc:
+            workflow = OrderSyncWorkflowService().start_or_resume_for_order(order)
+        except Exception:
             self.message_user(
                 request,
-                f"Microtech-Sync konnte nicht gestartet werden: {exc}",
+                "Microtech-Sync konnte nicht bearbeitet werden.",
                 level=messages.ERROR,
             )
             return
 
         self.message_user(
             request,
-            f"Microtech-Sync für Bestellung {order.order_number} gestartet (Workflow #{workflow.pk}).",
+            "Microtech-Sync wird bearbeitet.",
             level=messages.SUCCESS,
         )
 
@@ -521,10 +511,6 @@ class OrderAdmin(BaseAdmin):
             return "-"
 
         text = workflow.get_status_display()
-        if workflow.current_step:
-            text = f"{text} · {workflow.current_step}"
-        if workflow.error_message:
-            text = f"{text} · {workflow.error_message[:80]}"
         return text
 
     def _export_swiss_customs_csv(self, request, object_id: str) -> HttpResponse | None:
@@ -809,7 +795,7 @@ class OrderAdmin(BaseAdmin):
         return JsonResponse(payload)
 
     @action(
-        description="Bestellung in Microtech anlegen",
+        description="In Microtech anlegen",
         icon="upload",
         variant=ActionVariant.PRIMARY,
     )

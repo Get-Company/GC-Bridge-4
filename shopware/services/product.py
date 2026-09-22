@@ -158,7 +158,13 @@ class ProductService(Shopware6Service):
             option_map[product_id] = option_ids
         return option_map
 
-    def bulk_upsert(self, payload: list[dict], *, entity_name: str = "product") -> Any:
+    def bulk_upsert(
+        self,
+        payload: list[dict],
+        *,
+        entity_name: str = "product",
+        preserve_none: bool = False,
+    ) -> Any:
         if not payload:
             return None
         sync_payload = {
@@ -168,7 +174,23 @@ class ProductService(Shopware6Service):
                 "payload": payload,
             }
         }
-        return self.request_post(self.bulk_sync_path, payload=sync_payload)
+        return self.request_post(
+            self.bulk_sync_path,
+            payload=sync_payload,
+            preserve_none=preserve_none,
+        )
+
+    def bulk_upsert_product_prices(self, payload: list[dict]) -> Any:
+        """Write advanced prices as first-class Shopware ``product_price`` entities.
+
+        ``quantityEnd: null`` marks the last tier as unbounded, so null values
+        must not be removed by the generic request normalisation.
+        """
+        return self.bulk_upsert(
+            payload,
+            entity_name="product_price",
+            preserve_none=True,
+        )
 
     def bulk_upsert_media(self, payload: list[dict]) -> Any:
         return self.bulk_upsert(payload, entity_name="media")
@@ -247,11 +269,18 @@ class ProductService(Shopware6Service):
             value = entity["attributes"].get(field_name)
         return str(value or "").strip()
 
-    def purge_product_prices_by_product_and_rule(self, *, product_ids: list[str], rule_ids: list[str]) -> int:
+    def purge_product_prices_by_product_and_rule(
+        self,
+        *,
+        product_ids: list[str],
+        rule_ids: list[str],
+        keep_price_ids: list[str] | None = None,
+    ) -> int:
         product_ids = [str(value).strip() for value in (product_ids or []) if str(value).strip()]
         rule_ids = [str(value).strip() for value in (rule_ids or []) if str(value).strip()]
         if not product_ids or not rule_ids:
             return 0
+        keep_ids = {str(value).strip() for value in (keep_price_ids or []) if str(value).strip()}
 
         product_values = "|".join(sorted(set(product_ids)))
         rule_values = "|".join(sorted(set(rule_ids)))
@@ -290,10 +319,10 @@ class ProductService(Shopware6Service):
                 break
             page += 1
 
-        for price_id in sorted(set(price_ids)):
+        for price_id in sorted(set(price_ids) - keep_ids):
             self.request_delete(f"{self.product_price_base_path}/{price_id}")
 
-        return len(set(price_ids))
+        return len(set(price_ids) - keep_ids)
 
     def purge_product_media_by_product_ids(self, *, product_ids: list[str]) -> int:
         product_ids = [str(value).strip() for value in (product_ids or []) if str(value).strip()]

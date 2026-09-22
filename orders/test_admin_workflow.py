@@ -29,8 +29,9 @@ class OrderAdminSearchTest(SimpleTestCase):
         self.assertNotIn("address_reconciliation_detail", detail_action_dropdown["items"])
         self.assertIn("customer_merge_row", model_admin.actions_row)
         self.assertNotIn("address_reconciliation_row", model_admin.actions_row)
-        self.assertIn("abort_microtech_sync_detail", detail_action_dropdown["items"])
-        self.assertIn("restart_microtech_sync_detail", detail_action_dropdown["items"])
+        self.assertNotIn("resume_microtech_sync_detail", detail_action_dropdown["items"])
+        self.assertNotIn("abort_microtech_sync_detail", detail_action_dropdown["items"])
+        self.assertNotIn("restart_microtech_sync_detail", detail_action_dropdown["items"])
         self.assertIn("customer", model_admin.readonly_fields)
         self.assertIsNotNone(model_admin.request_customer_change_detail.dialog)
         self.assertIsNotNone(model_admin.abort_microtech_sync_detail.dialog)
@@ -211,12 +212,12 @@ class AdminTriggerTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response["HX-Redirect"], "/admin/orders/order/71/change/")
 
-    @patch("orders.admin.OrderSyncWorkflowService.start_for_order")
-    def test_run_upsert_starts_workflow(self, mock_start):
+    @patch("orders.admin.OrderSyncWorkflowService.start_or_resume_for_order")
+    def test_run_upsert_uses_one_button_workflow_trigger(self, mock_trigger):
         order = make_order()
         admin = OrderAdmin(Order, django_admin.site)
         request = type("Request", (), {})()
         with patch.object(admin, "get_object", return_value=order), patch.object(admin, "message_user"):
             admin._run_microtech_upsert(request, str(order.pk))
 
-        mock_start.assert_called_once_with(order)
+        mock_trigger.assert_called_once_with(order)

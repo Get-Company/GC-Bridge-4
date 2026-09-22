@@ -235,6 +235,25 @@ class CustomerUpsertMicrotechService(BaseService):
                 target_scope="billing_address",
             )
 
+        # A Vorgang is created with only the customer number.  Microtech then
+        # resolves the contact from the address's default contact, so a manual
+        # customer-merge assignment must replace any older default instead of
+        # leaving the first contact active alongside the selected one.
+        synced_contact_pairs = {
+            (shipping_ans_nr, _to_int(shipping.erp_asp_nr)),
+            (billing_ans_nr, _to_int(billing.erp_asp_nr)),
+        }
+        for address_sub_number, selected_contact_number in synced_contact_pairs:
+            if selected_contact_number is None:
+                continue
+            self._clear_existing_default_contact_flags(
+                client=client,
+                address_number=address_number,
+                customer=existing_customer,
+                address_sub_number=address_sub_number,
+                selected_contact_number=selected_contact_number,
+            )
+
         self._clear_existing_default_flags(
             client=client,
             address_number=address_number,
@@ -628,6 +647,34 @@ class CustomerUpsertMicrotechService(BaseService):
             field = "isDefaultShipping" if role == "shipping" else "isDefaultBilling"
             for sub_number in sorted(number for number in numbers if number is not None):
                 client.update_postal_address(address_number, sub_number, {field: False})
+
+    @staticmethod
+    def _clear_existing_default_contact_flags(
+        *,
+        client: MicrotechGraphQLClientService,
+        address_number: int,
+        customer: dict[str, Any],
+        address_sub_number: int,
+        selected_contact_number: int | None,
+    ) -> None:
+        """Ensure a selected contact is the only default for its address."""
+        for remote_address in customer.get("addresses") or []:
+            if not isinstance(remote_address, dict):
+                continue
+            if _to_int(remote_address.get("addressSubNumber")) != address_sub_number:
+                continue
+            for contact in remote_address.get("contacts") or []:
+                if not isinstance(contact, dict) or not contact.get("isDefault"):
+                    continue
+                contact_number = _to_int(contact.get("contactNumber"))
+                if contact_number is None or contact_number == selected_contact_number:
+                    continue
+                client.update_contact_person(
+                    address_number,
+                    address_sub_number,
+                    contact_number,
+                    {"isDefault": False},
+                )
 
     @staticmethod
     def _clear_stale_address_identity(address: Address) -> None:

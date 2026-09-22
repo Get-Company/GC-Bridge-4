@@ -409,6 +409,100 @@ class AdvanceHandlerTest(TestCase):
         self.assertEqual(order.billing_address.erp_nr, 100001)
         self.assertEqual(order.billing_address.erp_ans_nr, 2)
 
+    def test_apply_new_customer_reuses_its_matching_implicit_contact_once(self):
+        order = make_order()
+        order.shipping_address.title = "Herr"
+        order.billing_address.title = "Herr"
+        order.shipping_address.save(update_fields=("title",))
+        order.billing_address.save(update_fields=("title",))
+        workflow = MicrotechOrderSyncWorkflow.objects.create(
+            order=order,
+            status=MicrotechOrderSyncWorkflow.Status.WAITING,
+            current_step="write_customer",
+            state={
+                "requested_customer_number": "900001",
+                "is_new_customer": True,
+                "billing_same_as_shipping": True,
+                "billing_contact_same_as_shipping": True,
+            },
+        )
+
+        OrderSyncWorkflowService()._apply_result(
+            workflow,
+            "write_customer",
+            {
+                "customer": {
+                    "customerNumber": "100001",
+                    "erpAddressNumber": 100001,
+                    "addresses": [
+                        {
+                            "addressSubNumber": 2,
+                            "contacts": [
+                                {
+                                    "contactNumber": 7,
+                                    "isDefault": True,
+                                    "salutation": "Herr",
+                                    "firstName": "Max",
+                                    "lastName": "Mustermann",
+                                }
+                            ],
+                        }
+                    ],
+                }
+            },
+        )
+
+        order.shipping_address.refresh_from_db()
+        order.billing_address.refresh_from_db()
+        self.assertEqual(order.shipping_address.erp_asp_nr, 7)
+        self.assertEqual(order.billing_address.erp_asp_nr, 7)
+        self.assertFalse(OrderSyncWorkflowService()._is_step_applicable(workflow, "billing_contact"))
+
+    @patch("orders.services.order_sync_workflow.MicrotechGraphQLClientService")
+    @patch("orders.services.order_sync_workflow.MicrotechJobSentinelService.submit_wrapper_job")
+    def test_customer_merge_contact_becomes_the_only_default_for_order_creation(self, mock_submit, mock_client):
+        mock_submit.return_value = MagicMock(pk=1)
+        order = make_order()
+        order.shipping_address.erp_ans_nr = 12
+        order.shipping_address.erp_asp_nr = 7
+        order.shipping_address.save(update_fields=("erp_ans_nr", "erp_asp_nr"))
+        workflow = MicrotechOrderSyncWorkflow.objects.create(
+            order=order,
+            status=MicrotechOrderSyncWorkflow.Status.RUNNING,
+            state={
+                "erp_nr": order.customer.erp_nr,
+                "shipping_ans_nr": 12,
+                "billing_same_as_shipping": True,
+                "billing_contact_same_as_shipping": True,
+                "remote_default_contacts": [
+                    {"address_sub_number": 12, "contact_number": 3},
+                ],
+            },
+        )
+        service = OrderSyncWorkflowService()
+
+        self.assertEqual(service.next_step(workflow), "write_customer")
+        workflow.step_log = [
+            {"step": "write_customer", "status": "completed"},
+            {"step": "shipping_address", "status": "completed"},
+        ]
+        self.assertEqual(service.next_step(workflow), "clear_default_shipping_contact")
+
+        service.submit_step(workflow, "clear_default_shipping_contact")
+        cleanup_payload = mock_submit.call_args.kwargs["request_payload"]
+        self.assertEqual(cleanup_payload["contactNumber"], 3)
+        self.assertEqual(cleanup_payload["input"], {"isDefault": False})
+
+        cleanup_job = MagicMock(request_payload=cleanup_payload)
+        service._apply_result(workflow, "clear_default_shipping_contact", {}, job=cleanup_job)
+        workflow.step_log.append({"step": "clear_default_shipping_contact", "status": "completed"})
+        self.assertEqual(service.next_step(workflow), "shipping_contact")
+
+        service.submit_step(workflow, "shipping_contact")
+        selected_payload = mock_submit.call_args.kwargs["request_payload"]
+        self.assertEqual(selected_payload["contactNumber"], 7)
+        self.assertEqual(selected_payload["input"], {"isDefault": True})
+
     def test_apply_address_result_persists_address_identity(self):
         order = make_order()
         wf = MicrotechOrderSyncWorkflow.objects.create(
@@ -1264,6 +1358,61 @@ class ResumeTest(TestCase):
         # probe_customer ist bereits erledigt -> nicht erneut submitten, sondern den Folgeschritt
         mock_submit.assert_called_once()
         self.assertEqual(mock_submit.call_args.args[1], "write_customer")
+
+
+class OneButtonWorkflowTriggerTest(TestCase):
+    def test_creates_and_starts_a_new_workflow(self):
+        order = make_order()
+        service = OrderSyncWorkflowService()
+
+        with patch.object(service, "start_pending_workflow") as mock_start:
+            mock_start.side_effect = lambda *, workflow_id: MicrotechOrderSyncWorkflow.objects.get(pk=workflow_id)
+            workflow = service.start_or_resume_for_order(order)
+
+        mock_start.assert_called_once_with(workflow_id=workflow.pk)
+        self.assertEqual(workflow.status, MicrotechOrderSyncWorkflow.Status.PENDING)
+
+    def test_claims_an_existing_pending_workflow(self):
+        workflow = MicrotechOrderSyncWorkflow.objects.create(order=make_order())
+        service = OrderSyncWorkflowService()
+
+        with patch.object(service, "start_pending_workflow", return_value=workflow) as mock_start:
+            returned = service.start_or_resume_for_order(workflow.order)
+
+        self.assertEqual(returned.pk, workflow.pk)
+        mock_start.assert_called_once_with(workflow_id=workflow.pk)
+
+    def test_resumes_a_failed_workflow_at_its_current_step(self):
+        workflow = MicrotechOrderSyncWorkflow.objects.create(
+            order=make_order(),
+            status=MicrotechOrderSyncWorkflow.Status.FAILED,
+            current_step="shipping_address",
+        )
+        service = OrderSyncWorkflowService()
+
+        with patch.object(service, "resume") as mock_resume:
+            returned = service.start_or_resume_for_order(workflow.order)
+
+        self.assertEqual(returned.pk, workflow.pk)
+        mock_resume.assert_called_once_with(workflow)
+
+    def test_leaves_an_active_remote_workflow_untouched(self):
+        workflow = MicrotechOrderSyncWorkflow.objects.create(
+            order=make_order(),
+            status=MicrotechOrderSyncWorkflow.Status.WAITING,
+            current_step="shipping_address",
+        )
+        service = OrderSyncWorkflowService()
+
+        with (
+            patch.object(service, "start_pending_workflow") as mock_start,
+            patch.object(service, "resume") as mock_resume,
+        ):
+            returned = service.start_or_resume_for_order(workflow.order)
+
+        self.assertEqual(returned.pk, workflow.pk)
+        mock_start.assert_not_called()
+        mock_resume.assert_not_called()
 
 
 class SubmitFailureTest(TestCase):

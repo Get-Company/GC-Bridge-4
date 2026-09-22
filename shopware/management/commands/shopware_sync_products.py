@@ -405,6 +405,53 @@ def _build_product_sync_payload(
     return payload
 
 
+def _extract_product_price_payloads(product_payloads: list[dict]) -> list[dict]:
+    """Detach advanced prices from product payloads for direct entity writes.
+
+    The Shopware product update and the ``product_price`` update deliberately
+    use separate Sync API operations. This makes the advanced-price response
+    observable and avoids treating a nested association write as successful
+    while the actual price entities were not persisted.
+    """
+    price_payloads: list[dict] = []
+    for product_payload in product_payloads:
+        prices = product_payload.pop("prices", [])
+        if isinstance(prices, list):
+            price_payloads.extend(prices)
+    return price_payloads
+
+
+def _sync_product_prices(*, service: ProductService, price_payloads: list[dict]) -> None:
+    """Upsert desired price tiers, then remove only obsolete tiers.
+
+    A successful upsert is required before cleanup. Grouping by rule also
+    ensures that a channel with no valid price payload cannot delete a price
+    belonging to a different channel.
+    """
+    if not price_payloads:
+        return
+
+    service.bulk_upsert_product_prices(price_payloads)
+
+    cleanup_scopes: dict[str, dict[str, set[str]]] = {}
+    for price_payload in price_payloads:
+        product_id = str(price_payload.get("productId") or "").strip()
+        rule_id = str(price_payload.get("ruleId") or "").strip()
+        price_id = str(price_payload.get("id") or "").strip()
+        if not product_id or not rule_id or not price_id:
+            continue
+        scope = cleanup_scopes.setdefault(rule_id, {"product_ids": set(), "price_ids": set()})
+        scope["product_ids"].add(product_id)
+        scope["price_ids"].add(price_id)
+
+    for rule_id, scope in cleanup_scopes.items():
+        service.purge_product_prices_by_product_and_rule(
+            product_ids=sorted(scope["product_ids"]),
+            rule_ids=[rule_id],
+            keep_price_ids=sorted(scope["price_ids"]),
+        )
+
+
 def _append_media_payload(
     *,
     product: Product,
@@ -612,13 +659,7 @@ class Command(MonitoredBaseCommand):
                     continue
 
                 try:
-                    cleanup_product_ids = [str(payload.get("id")).strip() for payload in payloads if payload.get("id")]
-                    cleanup_rule_ids = [str(channel.rule_id_price).strip() for channel in channels if channel.rule_id_price]
-                    if cleanup_product_ids and cleanup_rule_ids:
-                        service.purge_product_prices_by_product_and_rule(
-                            product_ids=cleanup_product_ids,
-                            rule_ids=cleanup_rule_ids,
-                        )
+                    product_price_payloads = _extract_product_price_payloads(payloads)
                     if cleanup_media_product_ids:
                         if log_images:
                             logger.info(
@@ -679,6 +720,10 @@ class Command(MonitoredBaseCommand):
                                 batch_no,
                                 [payload.get("productNumber") for payload in payloads],
                             )
+                        _sync_product_prices(
+                            service=service,
+                            price_payloads=product_price_payloads,
+                        )
                     for synced_product, media_sync_hash in media_sync_hashes:
                         synced_product.shopware_image_sync_hash = media_sync_hash
                         synced_product.save(update_fields=["shopware_image_sync_hash", "updated_at"])
@@ -718,14 +763,12 @@ class Command(MonitoredBaseCommand):
                         fallback_media_entities: dict[str, dict] = {}
                         fallback_media_uploads: dict[str, dict] = {}
                         fallback_media_sync_hashes: list[tuple[Product, str]] = []
-                        resolved_fallback_product_ids: list[str] = []
                         resolved_fallback_media_ids: list[str] = []
                         for product in fallback_products:
                             resolved_sku = refreshed_map.get(product.erp_nr)
                             if resolved_sku:
                                 product.sku = resolved_sku
                                 product.save(update_fields=["sku"])
-                                resolved_fallback_product_ids.append(resolved_sku)
                                 resolved_fallback_payloads.append(
                                     _build_product_sync_payload(
                                         product=product,
@@ -778,14 +821,14 @@ class Command(MonitoredBaseCommand):
                                 ),
                                 object_id=str(product.pk),
                                 object_repr=f"Product {product.erp_nr}",
-                            )
-                        if resolved_fallback_payloads:
-                            if resolved_fallback_product_ids and cleanup_rule_ids:
-                                service.purge_product_prices_by_product_and_rule(
-                                    product_ids=resolved_fallback_product_ids,
-                                    rule_ids=cleanup_rule_ids,
                                 )
+                        if resolved_fallback_payloads:
+                            fallback_price_payloads = _extract_product_price_payloads(resolved_fallback_payloads)
                             service.bulk_upsert(resolved_fallback_payloads)
+                            _sync_product_prices(
+                                service=service,
+                                price_payloads=fallback_price_payloads,
+                            )
                         if resolved_fallback_media_ids:
                             if log_images:
                                 logger.info(

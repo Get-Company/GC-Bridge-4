@@ -117,8 +117,23 @@ class Shopware6Service(ShopwareBaseService):
         logger.debug("Shopware6 GET {} -> {}", path, result)
         return result
 
-    def request_post(self, path: str, payload: Any | None = None, additional_query_params: dict | None = None):
-        payload = self._normalize_payload(payload)
+    def request_post(
+        self,
+        path: str,
+        payload: Any | None = None,
+        additional_query_params: dict | None = None,
+        *,
+        preserve_none: bool = False,
+    ):
+        """POST a payload to Shopware.
+
+        Most calls use ``None`` to mean "do not send this field", so the
+        default normalisation removes empty values. Product-price updates are
+        different: ``quantityEnd: null`` is an explicit unlimited tier and
+        must reach Shopware unchanged.
+        """
+        if not preserve_none:
+            payload = self._normalize_payload(payload)
         logger.debug("Shopware6 POST {} payload={}", path, payload)
         result = self._request_with_retry(
             "request_post",

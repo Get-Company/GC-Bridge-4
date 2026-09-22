@@ -33,8 +33,10 @@ class OrderSyncWorkflowService(BaseService):
         "write_customer",
         "writeback_adrnr",
         "shipping_address",
+        "clear_default_shipping_contact",
         "shipping_contact",
         "billing_address",
+        "clear_default_billing_contact",
         "billing_contact",
         "clear_default_shipping_address",
         "clear_default_billing_address",
@@ -54,8 +56,20 @@ class OrderSyncWorkflowService(BaseService):
     def _is_step_applicable(self, workflow: MicrotechOrderSyncWorkflow, step: str) -> bool:
         """Prüft anhand des Workflow-Zustands, ob ein Step ausgeführt werden soll."""
         state = workflow.state or {}
-        if step in ("billing_address", "billing_contact"):
+        if step == "billing_address":
             return not bool(state.get("billing_same_as_shipping"))
+        if step in ("billing_contact", "clear_default_billing_contact"):
+            # Older persisted workflows only know the address flag.  A new
+            # workflow separates postal-address and contact identities, so two
+            # different contacts can share one Microtech Anschrift.
+            same_contact = state.get("billing_contact_same_as_shipping")
+            if same_contact is None:
+                same_contact = state.get("billing_same_as_shipping")
+            if same_contact:
+                return False
+        if step in ("clear_default_shipping_contact", "clear_default_billing_contact"):
+            role = "shipping" if step == "clear_default_shipping_contact" else "billing"
+            return bool(self._pending_default_contact_clear_refs(workflow, role=role))
         if step == "writeback_adrnr":
             # Die GraphQL-Resolution liefert für einen Shopware-Neukunden die
             # echte Microtech-Adressnummer zurück. Diese muss vor der
@@ -102,24 +116,30 @@ class OrderSyncWorkflowService(BaseService):
 
     @staticmethod
     def _same_address(shipping: Address, billing: Address) -> bool:
-        """Compare the complete local address identity, not only Django PKs."""
+        """Compare postal identity, independently from the selected contact."""
         if shipping is billing or (shipping.pk and shipping.pk == billing.pk):
             return True
         fields = (
             "name1",
             "name2",
             "name3",
-            "department",
             "street",
             "postal_code",
             "city",
             "country_code",
-            "email",
-            "phone",
-            "title",
-            "first_name",
-            "last_name",
         )
+        return all(
+            str(getattr(shipping, field, "") or "").strip().casefold()
+            == str(getattr(billing, field, "") or "").strip().casefold()
+            for field in fields
+        )
+
+    @staticmethod
+    def _same_contact(shipping: Address, billing: Address) -> bool:
+        """Return whether both local addresses describe the same person."""
+        if shipping is billing or (shipping.pk and shipping.pk == billing.pk):
+            return True
+        fields = ("title", "first_name", "last_name", "department", "email", "phone")
         return all(
             str(getattr(shipping, field, "") or "").strip().casefold()
             == str(getattr(billing, field, "") or "").strip().casefold()
@@ -249,6 +269,65 @@ class OrderSyncWorkflowService(BaseService):
                 },
             )
 
+        contact_number = self._matching_remote_contact_number(
+            customer=customer,
+            address_sub_number=sub_number,
+            address=shipping,
+        )
+        if contact_number is None:
+            return
+
+        # ``upsertCustomer`` can create a first contact together with its
+        # implicit address.  Reuse it when it is the same person rather than
+        # creating it again in the following shipping-contact step.
+        self._persist_contact_number(address=shipping, contact_number=contact_number)
+        if state.get("billing_contact_same_as_shipping") and billing.pk != shipping.pk:
+            self._persist_contact_number(address=billing, contact_number=contact_number)
+
+    @staticmethod
+    def _matching_remote_contact_number(
+        *,
+        customer: dict[str, Any],
+        address_sub_number: int,
+        address: Address,
+    ) -> int | None:
+        """Find an implicitly created remote contact with the local identity."""
+        expected = CustomerUpsertMicrotechService()._build_contact_person_input(address=address)
+        comparable_fields = ("salutation", "firstName", "lastName", "department", "email", "phone")
+
+        def normalize(field: str, value: Any) -> str:
+            normalized = str(value or "").strip().casefold()
+            # CustomerInput uses ``Herr`` while ContactPersonInput uses
+            # ``Herrn``. Both spellings describe the same Microtech contact.
+            return "herr" if field == "salutation" and normalized == "herrn" else normalized
+
+        expected_values = {
+            field: normalize(field, expected.get(field))
+            for field in comparable_fields
+            if expected.get(field) not in (None, "")
+        }
+        if not expected_values:
+            return None
+
+        candidates: list[dict[str, Any]] = []
+        for candidate_address in customer.get("addresses") or []:
+            if not isinstance(candidate_address, dict):
+                continue
+            if _to_int(candidate_address.get("addressSubNumber")) != address_sub_number:
+                continue
+            candidates.extend(contact for contact in candidate_address.get("contacts") or [] if isinstance(contact, dict))
+
+        for contact in sorted(candidates, key=lambda item: (not bool(item.get("isDefault")), _to_int(item.get("contactNumber")) or -1)):
+            contact_number = _to_int(contact.get("contactNumber"))
+            if contact_number is None:
+                continue
+            if all(
+                normalize(field, contact.get(field)) == value
+                for field, value in expected_values.items()
+            ):
+                return contact_number
+        return None
+
     @staticmethod
     def _default_numbers_from_state(state: dict[str, Any], *, role: str) -> list[int]:
         plural_key = f"existing_default_{role}_ans_nrs"
@@ -271,6 +350,99 @@ class OrderSyncWorkflowService(BaseService):
             number
             for number in self._default_numbers_from_state(state, role=role)
             if number != target
+        ]
+
+    @staticmethod
+    def _remember_remote_default_contacts(state: dict[str, Any], customer: dict[str, Any]) -> None:
+        """Remember default contacts so the manually selected one can replace them.
+
+        ``createVorgang`` receives a customer number only.  Microtech therefore
+        resolves the contact from the default contact of the selected address.
+        Keeping the snapshot lets the workflow clear an older default before it
+        activates the contact selected in the customer merge.
+        """
+        defaults: list[dict[str, int]] = []
+        for address in customer.get("addresses") or []:
+            if not isinstance(address, dict):
+                continue
+            address_sub_number = _to_int(address.get("addressSubNumber"))
+            if address_sub_number is None:
+                continue
+            for contact in address.get("contacts") or []:
+                if not isinstance(contact, dict) or not contact.get("isDefault"):
+                    continue
+                contact_number = _to_int(contact.get("contactNumber"))
+                if contact_number is not None:
+                    defaults.append(
+                        {
+                            "address_sub_number": address_sub_number,
+                            "contact_number": contact_number,
+                        }
+                    )
+        state["remote_default_contacts"] = defaults
+
+    def _target_contact_number(self, workflow: MicrotechOrderSyncWorkflow, *, role: str) -> int | None:
+        """Return the contact chosen for one order role, including shared pairs."""
+        shipping, billing = self._resolve_addresses(workflow.order)
+        address = shipping if role == "shipping" else billing
+        contact_number = _to_int(address.erp_asp_nr)
+        if contact_number is not None:
+            return contact_number
+
+        state = workflow.state or {}
+        same_contact = state.get("billing_contact_same_as_shipping")
+        if same_contact is None:
+            same_contact = state.get("billing_same_as_shipping")
+        if same_contact:
+            other = billing if role == "shipping" else shipping
+            return _to_int(other.erp_asp_nr)
+        return None
+
+    def _target_contact_address_sub_number(
+        self,
+        workflow: MicrotechOrderSyncWorkflow,
+        *,
+        role: str,
+    ) -> int | None:
+        shipping, billing = self._resolve_addresses(workflow.order)
+        address = shipping if role == "shipping" else billing
+        state = workflow.state or {}
+        key = "shipping_ans_nr" if role == "shipping" else "billing_ans_nr"
+        return _to_int(state.get(key)) if _to_int(state.get(key)) is not None else _to_int(address.erp_ans_nr)
+
+    def _pending_default_contact_clear_refs(
+        self,
+        workflow: MicrotechOrderSyncWorkflow,
+        *,
+        role: str,
+    ) -> list[dict[str, int]]:
+        """Return remote defaults that would otherwise override the chosen contact."""
+        state = workflow.state or {}
+        queue_key = f"pending_default_{role}_clear_contacts"
+        queued = state.get(queue_key)
+        if isinstance(queued, list):
+            return [
+                {"address_sub_number": address_sub_number, "contact_number": contact_number}
+                for item in queued
+                if isinstance(item, dict)
+                for address_sub_number in (_to_int(item.get("address_sub_number")),)
+                for contact_number in (_to_int(item.get("contact_number")),)
+                if address_sub_number is not None and contact_number is not None
+            ]
+
+        address_sub_number = self._target_contact_address_sub_number(workflow, role=role)
+        if address_sub_number is None:
+            return []
+        selected_contact_number = self._target_contact_number(workflow, role=role)
+        return [
+            {"address_sub_number": candidate_address_sub_number, "contact_number": candidate_contact_number}
+            for item in state.get("remote_default_contacts") or []
+            if isinstance(item, dict)
+            for candidate_address_sub_number in (_to_int(item.get("address_sub_number")),)
+            for candidate_contact_number in (_to_int(item.get("contact_number")),)
+            if candidate_address_sub_number == address_sub_number
+            and candidate_contact_number is not None
+            and candidate_contact_number != selected_contact_number
         ]
 
     @staticmethod
@@ -382,6 +554,9 @@ class OrderSyncWorkflowService(BaseService):
             # placeholder. It is written back before the order is created.
             "is_new_customer": self._is_provisional_customer_number(erp_nr),
             "billing_same_as_shipping": self._same_address(shipping, billing),
+            "billing_contact_same_as_shipping": (
+                self._same_address(shipping, billing) and self._same_contact(shipping, billing)
+            ),
         }
 
     def ensure_pending_for_order(
@@ -496,6 +671,28 @@ class OrderSyncWorkflowService(BaseService):
             raise ValueError(f"Für Bestellung {order.pk} läuft bereits ein Sync-Workflow (#{workflow.pk}).")
 
         return self.start_pending_workflow(workflow_id=workflow.pk) or workflow
+
+    def start_or_resume_for_order(self, order) -> MicrotechOrderSyncWorkflow:
+        """Make the order action idempotent for non-technical users.
+
+        A click never starts a second remote operation while one is still in
+        progress.  A durable PENDING workflow is claimed, a FAILED workflow
+        resumes its exact failed step, and an already RUNNING/WAITING workflow
+        is simply left to the Sentinel.  This keeps the UI to one action while
+        preserving the existing safeguards against duplicate orders.
+        """
+        workflow, created = self.ensure_pending_for_order(order, allow_reexport=True)
+        if workflow is None:
+            reason = order.microtech_export_exclusion_reason or "Kein Grund dokumentiert."
+            raise ValueError(f"Bestellung {order.pk} ist nicht für Microtech freigegeben: {reason}")
+
+        if created or workflow.status == MicrotechOrderSyncWorkflow.Status.PENDING:
+            return self.start_pending_workflow(workflow_id=workflow.pk) or workflow
+
+        if workflow.status == MicrotechOrderSyncWorkflow.Status.FAILED:
+            self.resume(workflow)
+
+        return workflow
 
     def recover_missing_remote_job(
         self,
@@ -666,6 +863,7 @@ class OrderSyncWorkflowService(BaseService):
                 state["address_number"] = _to_int(customer.get("erpAddressNumber")) or state.get("address_number")
                 self._remember_existing_default_ans_nrs(state, customer)
                 self._remember_remote_address_sub_numbers(state, customer)
+                self._remember_remote_default_contacts(state, customer)
         elif step == "write_customer":
             customer = (result or {}).get("customer") or {}
             requested_number = str(
@@ -688,6 +886,7 @@ class OrderSyncWorkflowService(BaseService):
             state["address_number"] = resolved_address_number or _to_int(resolved_number) or state.get("address_number")
             self._remember_existing_default_ans_nrs(state, customer)
             self._remember_remote_address_sub_numbers(state, customer)
+            self._remember_remote_default_contacts(state, customer)
             self._adopt_implicit_new_customer_address(
                 workflow=workflow,
                 state=state,
@@ -737,6 +936,21 @@ class OrderSyncWorkflowService(BaseService):
                 number
                 for number in self._pending_default_clear_nrs(workflow, role=role)
                 if number != submitted_sub_number
+            ]
+        elif step in ("clear_default_shipping_contact", "clear_default_billing_contact"):
+            if job is None:
+                raise ValueError(f"{step} ohne zugehörigen Microtech-Job.")
+            role = "shipping" if step == "clear_default_shipping_contact" else "billing"
+            queue_key = f"pending_default_{role}_clear_contacts"
+            payload = job.request_payload or {}
+            submitted_reference = (
+                _to_int(payload.get("addressSubNumber")),
+                _to_int(payload.get("contactNumber")),
+            )
+            state[queue_key] = [
+                reference
+                for reference in self._pending_default_contact_clear_refs(workflow, role=role)
+                if (reference["address_sub_number"], reference["contact_number"]) != submitted_reference
             ]
         elif step == "probe_vorgang":
             beleg = self._beleg_nr_from_vorgang_result(result)
@@ -806,6 +1020,8 @@ class OrderSyncWorkflowService(BaseService):
             cleanup_pending = step in (
                 "clear_default_shipping_address",
                 "clear_default_billing_address",
+                "clear_default_shipping_contact",
+                "clear_default_billing_contact",
             ) and self._is_step_applicable(workflow, step)
             self._log_step(workflow, step, "cleanup_pending" if cleanup_pending else "completed")
             workflow.error_message = ""
@@ -900,6 +1116,7 @@ class OrderSyncWorkflowService(BaseService):
                 payload = {"addressNumber": address_number, "input": input_data}
         elif step in ("shipping_contact", "billing_contact"):
             address = shipping if step == "shipping_contact" else billing
+            role = "shipping" if step == "shipping_contact" else "billing"
             sub_key = "shipping_ans_nr" if step == "shipping_contact" else "billing_ans_nr"
             sub_number = _to_int(state.get(sub_key))
             if sub_number is None:
@@ -929,8 +1146,11 @@ class OrderSyncWorkflowService(BaseService):
                 raise ValueError(
                     f"{step} ohne bekannte Anschrift-Nummer (weder im Workflow-Zustand noch an der Adresse persistiert)."
                 )
-            input_data = customer_service._build_contact_person_input(address=address)
-            contact_number = _to_int(address.erp_asp_nr)
+            contact_number = self._target_contact_number(workflow, role=role)
+            # A contact selected in the customer merge is authoritative.  The
+            # order sync must select it, not overwrite it with the first
+            # Shopware contact's profile data.
+            input_data = {"isDefault": True} if contact_number is not None else customer_service._build_contact_person_input(address=address)
             operation = "updateContactPerson" if contact_number is not None else "createContactPerson"
             if contact_number is not None:
                 submit = lambda: client.submit_update_contact_person(
@@ -948,6 +1168,31 @@ class OrderSyncWorkflowService(BaseService):
             else:
                 submit = lambda: client.submit_create_contact_person(address_number, sub_number, input_data)
                 payload = {"addressNumber": address_number, "addressSubNumber": sub_number, "input": input_data}
+        elif step in ("clear_default_shipping_contact", "clear_default_billing_contact"):
+            operation = "updateContactPerson"
+            role = "shipping" if step == "clear_default_shipping_contact" else "billing"
+            pending = self._pending_default_contact_clear_refs(workflow, role=role)
+            reference = pending[0] if pending else None
+            if reference is None:
+                raise ValueError(f"{step} ohne bekannten alten Standard-Ansprechpartner.")
+            state = dict(state)
+            state[f"pending_default_{role}_clear_contacts"] = pending
+            workflow.state = state
+            address_sub_number = reference["address_sub_number"]
+            contact_number = reference["contact_number"]
+            input_data = {"isDefault": False}
+            submit = lambda: client.submit_update_contact_person(
+                address_number,
+                address_sub_number,
+                contact_number,
+                input_data,
+            )
+            payload = {
+                "addressNumber": address_number,
+                "addressSubNumber": address_sub_number,
+                "contactNumber": contact_number,
+                "input": input_data,
+            }
         elif step in ("clear_default_shipping_address", "clear_default_billing_address"):
             operation = "updatePostalAddress"
             role = "shipping" if step == "clear_default_shipping_address" else "billing"
@@ -1000,7 +1245,12 @@ class OrderSyncWorkflowService(BaseService):
         workflow.status = MicrotechOrderSyncWorkflow.Status.WAITING
         workflow.current_step = step
         update_fields = ["status", "current_step", "updated_at"]
-        if step in ("clear_default_shipping_address", "clear_default_billing_address"):
+        if step in (
+            "clear_default_shipping_address",
+            "clear_default_billing_address",
+            "clear_default_shipping_contact",
+            "clear_default_billing_contact",
+        ):
             update_fields.append("state")
         if isinstance(job, MicrotechGraphQLJob):
             workflow.current_job = job

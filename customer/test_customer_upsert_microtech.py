@@ -9,6 +9,7 @@ class _FakeMicrotechClient:
         self.update_postal_calls = []
         self.create_postal_calls = []
         self.update_contact_calls = []
+        self.update_contact_inputs = []
         self.create_contact_calls = []
         self.update_customer_calls = []
         self.customer = {
@@ -52,8 +53,9 @@ class _FakeMicrotechClient:
             }
         }
 
-    def update_contact_person(self, address_number, address_sub_number, contact_number, _input_data):
+    def update_contact_person(self, address_number, address_sub_number, contact_number, input_data):
         self.update_contact_calls.append((address_number, address_sub_number, contact_number))
+        self.update_contact_inputs.append((address_number, address_sub_number, contact_number, input_data))
         return {
             "contactPerson": {
                 "addressNumber": address_number,
@@ -150,3 +152,38 @@ class CustomerUpsertMicrotechServiceTest(TestCase):
         self.assertFalse(client.create_contact_calls)
         self.assertEqual(address.erp_ans_nr, 0)
         self.assertEqual(address.erp_asp_nr, 0)
+
+    def test_selected_contact_replaces_an_older_default_contact(self):
+        customer = Customer.objects.create(erp_nr="54346", name="Testkunde")
+        address = Address.objects.create(
+            customer=customer,
+            erp_nr=54346,
+            erp_ans_nr=1,
+            erp_asp_id=3,
+            erp_asp_nr=3,
+            first_name="Max",
+            last_name="Mustermann",
+            country_code="DE",
+            is_shipping=True,
+            is_invoice=True,
+        )
+        client = _FakeMicrotechClient()
+        client.customer["addresses"][0]["contacts"] = [
+            {"contactNumber": 1, "isDefault": True},
+            {"contactNumber": 3, "isDefault": False},
+        ]
+
+        CustomerUpsertMicrotechService()._upsert_customer_graphql(
+            customer=customer,
+            shipping=address,
+            billing=address,
+            na1_mode="auto",
+            na1_static_value="",
+            input_overrides=None,
+            client=client,
+        )
+
+        self.assertIn(
+            (54346, 1, 1, {"isDefault": False}),
+            client.update_contact_inputs,
+        )

@@ -25,31 +25,14 @@
   function render(container, payload) {
     var label = container.querySelector(".js-microtech-sync-label");
     var beleg = container.querySelector(".js-microtech-sync-beleg");
-    var error = container.querySelector(".js-microtech-sync-error");
     var spinner = container.querySelector(".js-microtech-sync-spinner");
-    var workflowLink = container.querySelector(".js-microtech-sync-workflow-link");
 
     var status = text(payload.status_display, "-");
-    var step = text(payload.current_step, "");
-    var errorMessage = text(payload.error_message || payload.current_job_error, "");
-
     if (label) {
-      label.textContent = step ? status + " · " + step : status;
+      label.textContent = status;
     }
     if (beleg) {
       beleg.textContent = text(payload.erp_order_id, "-");
-    }
-    if (error) {
-      error.textContent = errorMessage;
-    }
-    if (workflowLink) {
-      if (payload.workflow_url) {
-        workflowLink.href = payload.workflow_url;
-        workflowLink.textContent = "Workflow #" + text(payload.workflow_id, "");
-        setHidden(workflowLink, false);
-      } else {
-        setHidden(workflowLink, true);
-      }
     }
     setHidden(spinner, !payload.is_active && !ACTIVE_STATUSES[payload.status]);
   }
@@ -77,10 +60,7 @@
         }
       })
       .catch(function (error) {
-        var errorNode = container.querySelector(".js-microtech-sync-error");
-        if (errorNode) {
-          errorNode.textContent = error.message || String(error);
-        }
+        window.console.warn(error.message || String(error));
         window.setTimeout(function () { poll(container); }, POLL_MS * 3);
       });
   }
