@@ -468,6 +468,8 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
                 return "Waehle zuerst eine fachliche Aktion."
             if obj.action_type == MicrotechOrderRuleAction.ActionType.CREATE_EXTRA_POSITION:
                 return "Legt eine Zusatzposition an. Zielwert = ERP-Nr der Position."
+            if obj.action_type == MicrotechOrderRuleAction.ActionType.CREATE_TEXT_POSITION:
+                return "Legt eine reine Textposition an. Zielwert = Bezeichnung der Position."
             if obj.action_type == MicrotechOrderRuleAction.ActionType.CREATE_SHIPPING_POSITION:
                 return "Legt eine Versandposition an. Artikel V oder F, Preis = Versandkosten."
             if obj.dataset_field_id and obj.dataset_id:

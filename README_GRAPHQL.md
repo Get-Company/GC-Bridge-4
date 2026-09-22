@@ -779,7 +779,10 @@ mutation {
 
 `CreateVorgangInput`: `vorgangArt` (Int, required), `customerNumber` (String, required), `orderNumber`, `description`, `date` (ISO 8601), `currency`, `positions` (list of `VorgangPositionInput`).
 
-`VorgangPositionInput`: `erpNumber` (required), `quantity` (required), `unit` (optional), `price` (optional, net unit price).
+`VorgangPositionInput` supports two mutually exclusive variants:
+
+- Article position: `erpNumber` and `quantity` (required), `unit` and `price` (optional, net unit price).
+- Pure text position: `name` (required). It is written only to `VorgangPosition.Bez`; no article number, quantity, unit, or price is set.
 
 ---
 

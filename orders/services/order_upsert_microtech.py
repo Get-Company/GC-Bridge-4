@@ -489,7 +489,15 @@ class OrderUpsertMicrotechService(BaseService):
         shipping_erp_nr: str = "",
     ) -> OrderRuleDebugInfo:
         extra_created: list[str] = []
+        text_created: list[str] = []
         for action in resolved_rule.dataset_actions:
+            if action.action_type == MicrotechOrderRuleAction.ActionType.CREATE_TEXT_POSITION:
+                name = (action.target_value or "").strip()
+                if not name:
+                    continue
+                positions.append(self._build_graphql_text_position(name=name))
+                text_created.append(name)
+                continue
             if action.action_type != MicrotechOrderRuleAction.ActionType.CREATE_EXTRA_POSITION:
                 continue
             erp_nr = (action.target_value or "").strip()
@@ -509,6 +517,8 @@ class OrderUpsertMicrotechService(BaseService):
                 notes.append(f"Versandposition '{shipping_erp_nr}' wurde mit den Versandkosten angelegt.")
             else:
                 notes.append(f"Versandposition '{shipping_erp_nr}' konfiguriert, aber keine Versandkosten vorhanden.")
+        if text_created:
+            notes.append(f"{len(text_created)} Textposition(en) wurden angelegt.")
         if any(
             action.action_type == MicrotechOrderRuleAction.ActionType.SET_FIELD
             for action in resolved_rule.dataset_actions
@@ -517,13 +527,16 @@ class OrderUpsertMicrotechService(BaseService):
         return replace(
             payment_info,
             dataset_actions_total=len(resolved_rule.dataset_actions),
-            dataset_actions_applied=len(extra_created) + int(shipping_action_applied),
+            dataset_actions_applied=len(extra_created) + len(text_created) + int(shipping_action_applied),
             dataset_create_position_requested=sum(
                 1
                 for action in resolved_rule.dataset_actions
-                if action.action_type == MicrotechOrderRuleAction.ActionType.CREATE_EXTRA_POSITION
+                if action.action_type in {
+                    MicrotechOrderRuleAction.ActionType.CREATE_EXTRA_POSITION,
+                    MicrotechOrderRuleAction.ActionType.CREATE_TEXT_POSITION,
+                }
             ),
-            dataset_create_position_applied=len(extra_created),
+            dataset_create_position_applied=len(extra_created) + len(text_created),
             dataset_created_position_erp_nrs=tuple(extra_created),
             dataset_actions_note=" ".join(notes),
         )
@@ -575,6 +588,11 @@ class OrderUpsertMicrotechService(BaseService):
     def _build_graphql_special_position(*, erp_nr: str) -> dict[str, str]:
         """Build a rule-generated position with the unit required by the Vorgang API."""
         return {"erpNumber": erp_nr, "quantity": "1", "unit": DEFAULT_UNIT}
+
+    @staticmethod
+    def _build_graphql_text_position(*, name: str) -> dict[str, str]:
+        """Build a pure text row; the wrapper writes ``name`` only to ``VorgangPosition.Bez``."""
+        return {"name": name}
 
     @staticmethod
     def _format_graphql_decimal(value: Decimal | None) -> str:
@@ -1023,6 +1041,39 @@ class OrderUpsertMicrotechService(BaseService):
                     "Order {}: created extra position with ERP-Nr '{}'.",
                     order.order_number,
                     erp_nr,
+                )
+                continue
+
+            if action.action_type == MicrotechOrderRuleAction.ActionType.CREATE_TEXT_POSITION:
+                create_position_requested += 1
+                name = (action.target_value or "").strip()
+                if not name:
+                    notes.append("create_text_position skipped: empty name")
+                    continue
+                position_dataset = so_vorgang.Positionen.DataSet
+                position_dataset.Append()
+                written = self._set_dataset_field(
+                    dataset=position_dataset,
+                    field_name="Bez",
+                    value=name,
+                    field_type_hint="Info",
+                )
+                if not written:
+                    position_dataset.Cancel()
+                    notes.append("create_text_position failed: VorgangPosition.Bez")
+                    logger.warning(
+                        "Order {}: failed to create text position with name '{}'.",
+                        order.order_number,
+                        name,
+                    )
+                    continue
+                position_dataset.Post()
+                create_position_applied += 1
+                applied += 1
+                logger.info(
+                    "Order {}: created text position with name '{}'.",
+                    order.order_number,
+                    name,
                 )
                 continue
 

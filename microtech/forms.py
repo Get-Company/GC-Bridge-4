@@ -24,6 +24,7 @@ from microtech.rule_builder import (
     is_dataset_field_allowed_for_action_target,
     resolve_rule_action_target,
     RULE_ACTION_TARGET_CREATE_EXTRA_POSITION,
+    RULE_ACTION_TARGET_CREATE_TEXT_POSITION,
     RULE_ACTION_TARGET_CREATE_SHIPPING_POSITION,
 )
 
@@ -409,6 +410,7 @@ class MicrotechOrderRuleActionForm(forms.ModelForm):
                 target_help = "Bestehende Sonderaktion ausserhalb der gefuehrten Targets. Bitte nur behalten oder bewusst umstellen."
         if selected_dataset_field is not None and selected_ui_action not in {
             RULE_ACTION_TARGET_CREATE_EXTRA_POSITION,
+            RULE_ACTION_TARGET_CREATE_TEXT_POSITION,
             RULE_ACTION_TARGET_CREATE_SHIPPING_POSITION,
         }:
             field_label = _to_str(selected_dataset_field.label) or _to_str(selected_dataset_field.field_name)
@@ -460,6 +462,14 @@ class MicrotechOrderRuleActionForm(forms.ModelForm):
             cleaned_data["dataset_field"] = None
             if not target_value:
                 self.add_error("target_value", "ERP-Nr fuer Zusatzposition ist erforderlich.")
+            return cleaned_data
+
+        if ui_action == RULE_ACTION_TARGET_CREATE_TEXT_POSITION:
+            cleaned_data["action_type"] = MicrotechOrderRuleAction.ActionType.CREATE_TEXT_POSITION
+            cleaned_data["dataset"] = None
+            cleaned_data["dataset_field"] = None
+            if not target_value:
+                self.add_error("target_value", "Bezeichnung fuer Textposition ist erforderlich.")
             return cleaned_data
 
         if ui_action == RULE_ACTION_TARGET_CREATE_SHIPPING_POSITION:

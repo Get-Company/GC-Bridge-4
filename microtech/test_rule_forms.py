@@ -13,6 +13,7 @@ from microtech.models import (
 )
 from microtech.rule_builder import (
     RULE_ACTION_TARGET_CREATE_EXTRA_POSITION,
+    RULE_ACTION_TARGET_CREATE_TEXT_POSITION,
     RULE_ACTION_TARGET_CREATE_SHIPPING_POSITION,
     RULE_ACTION_TARGET_VORGANG_FIELD,
     RULE_ACTION_TARGET_VORGANG_POSITION_FIELD,
@@ -200,6 +201,37 @@ class MicrotechOrderRuleFormsTest(TestCase):
                 "is_active": True,
                 "priority": 10,
                 "ui_action": RULE_ACTION_TARGET_CREATE_EXTRA_POSITION,
+                "target_value": "",
+            }
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("target_value", form.errors)
+
+    def test_action_form_accepts_name_for_create_text_position(self):
+        form = MicrotechOrderRuleActionForm(
+            data={
+                "is_active": True,
+                "priority": 10,
+                "ui_action": RULE_ACTION_TARGET_CREATE_TEXT_POSITION,
+                "target_value": ".",
+            }
+        )
+
+        self.assertTrue(form.is_valid(), msg=form.errors.as_json())
+        self.assertEqual(
+            form.cleaned_data["action_type"],
+            MicrotechOrderRuleAction.ActionType.CREATE_TEXT_POSITION,
+        )
+        self.assertIsNone(form.cleaned_data["dataset"])
+        self.assertIsNone(form.cleaned_data["dataset_field"])
+
+    def test_action_form_requires_name_for_create_text_position(self):
+        form = MicrotechOrderRuleActionForm(
+            data={
+                "is_active": True,
+                "priority": 10,
+                "ui_action": RULE_ACTION_TARGET_CREATE_TEXT_POSITION,
                 "target_value": "",
             }
         )

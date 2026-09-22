@@ -97,6 +97,31 @@ class SaveFromPayloadTest(TestCase):
         self.assertEqual(data["root_group"]["children"][0]["conditions"][0]["operator_code"], "between")
         self.assertEqual(data["actions"][0]["target_value"], "V")
 
+    def test_round_trip_text_position(self):
+        payload = self._payload()
+        payload["actions"] = [{
+            "action_type": "create_text_position",
+            "dataset_field_id": None,
+            "target_value": ".",
+        }]
+
+        rule = save_rule_from_payload(payload)
+        action = serialize_rule_for_edit(rule)["actions"][0]
+
+        self.assertEqual(action["action_type"], "create_text_position")
+        self.assertEqual(action["target_value"], ".")
+
+    def test_text_position_requires_a_name(self):
+        payload = self._payload()
+        payload["actions"] = [{
+            "action_type": "create_text_position",
+            "dataset_field_id": None,
+            "target_value": "",
+        }]
+
+        with self.assertRaises(EditorValidationError):
+            save_rule_from_payload(payload)
+
     def test_resave_replaces_tree(self):
         rule = save_rule_from_payload(self._payload())
         p2 = self._payload(); p2["root_group"]["children"] = []; p2["actions"] = []

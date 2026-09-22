@@ -353,6 +353,9 @@ def _validate_payload(payload: dict) -> list[str]:
                     errors.append(
                         f"{action_label}: {input_type} ist fuer diesen Trigger nicht erlaubt."
                     )
+        elif action_type == MicrotechOrderRuleAction.ActionType.CREATE_TEXT_POSITION:
+            if not str(action.get("target_value") or "").strip():
+                errors.append(f"{action_label}: Bezeichnung fuer Textposition ist erforderlich.")
         _validate_template_value(action.get("target_value", ""), label=action_label)
 
     return errors

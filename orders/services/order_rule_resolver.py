@@ -248,12 +248,13 @@ class OrderRuleResolverService(BaseService):
 
             if action_type in {
                 MicrotechOrderRuleAction.ActionType.CREATE_EXTRA_POSITION,
+                MicrotechOrderRuleAction.ActionType.CREATE_TEXT_POSITION,
                 MicrotechOrderRuleAction.ActionType.CREATE_SHIPPING_POSITION,
             }:
-                erp_nr = _to_str(action.target_value)
-                if not erp_nr:
+                target_value = _to_str(action.target_value)
+                if not target_value:
                     logger.warning(
-                        "Order {}: rule {} action {} ignored (missing ERP-Nr for {}).",
+                        "Order {}: rule {} action {} ignored (missing target value for {}).",
                         order_label,
                         rule.pk,
                         action.pk,
@@ -263,7 +264,7 @@ class OrderRuleResolverService(BaseService):
                 resolved.append(
                     ResolvedDatasetAction(
                         action_type=action_type,
-                        target_value=erp_nr,
+                        target_value=target_value,
                     )
                 )
                 continue

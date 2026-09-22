@@ -22,6 +22,7 @@
   var ACTION_TYPES = [
     ["set_field", "Feld setzen"],
     ["create_extra_position", "Zusatzposition anlegen"],
+    ["create_text_position", "Textposition anlegen"],
     ["create_shipping_position", "Versandposition anlegen"],
   ];
 
@@ -416,7 +417,10 @@
         row.appendChild(el("span", "re-hint", "="));
         row.appendChild(valueEditor(a));
       } else {
-        row.appendChild(el("span", "re-hint", a.action_type === "create_shipping_position" ? "Artikel (V/F)" : "ERP-Nr"));
+        var valueLabel = "ERP-Nr";
+        if (a.action_type === "create_shipping_position") valueLabel = "Artikel (V/F)";
+        if (a.action_type === "create_text_position") valueLabel = "Bezeichnung";
+        row.appendChild(el("span", "re-hint", valueLabel));
         row.appendChild(valueEditor(a));
       }
 
@@ -830,6 +834,7 @@
           return "setze " + scopeLabel + (a.graphql_field_label || a.graphql_field || a.dataset_field_label || "Feld") + " = " + (a.target_value || "?");
         }
         if (a.action_type === "create_shipping_position") return "Versandposition " + (a.target_value || "?");
+        if (a.action_type === "create_text_position") return "Textposition " + (a.target_value || "?");
         return "Zusatzposition " + (a.target_value || "?");
       });
       var text = (when ? "Wenn " + when : "Immer") + (actions.length ? ", dann " + actions.join(", ") : ", dann (keine Aktion)");

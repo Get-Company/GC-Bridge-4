@@ -588,6 +588,7 @@ class MicrotechOrderRuleAction(BaseModel):
     class ActionType(models.TextChoices):
         SET_FIELD = "set_field", _("Dataset Feld setzen")
         CREATE_EXTRA_POSITION = "create_extra_position", _("Zusatzposition anlegen")
+        CREATE_TEXT_POSITION = "create_text_position", _("Textposition anlegen")
         CREATE_SHIPPING_POSITION = "create_shipping_position", _("Versandposition anlegen")
 
     class TargetScope(models.TextChoices):
@@ -664,6 +665,7 @@ class MicrotechOrderRuleAction(BaseModel):
     def __str__(self) -> str:
         if self.action_type in {
             self.ActionType.CREATE_EXTRA_POSITION,
+            self.ActionType.CREATE_TEXT_POSITION,
             self.ActionType.CREATE_SHIPPING_POSITION,
         }:
             return f"{self.rule_id} | {self.action_type}({self.target_value})"

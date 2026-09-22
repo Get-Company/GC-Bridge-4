@@ -26,7 +26,7 @@ INPUT_TYPE_LABELS: dict[str, str] = {
     "PostalAddressInput": "Anschrift",
     "ContactPersonInput": "Ansprechpartner",
     "VorgangInput": "Vorgang (Bestellung)",
-    "PositionInput": "Position",
+    "VorgangPositionInput": "Position",
 }
 
 # A rule can only write to the input object that is consumed by its trigger.
@@ -90,7 +90,7 @@ _FALLBACK: dict[str, list[str]] = {
         "department", "email", "phone",
     ],
     "VorgangInput": ["orderNumber", "description", "currency", "vorgangArt", "customerNumber"],
-    "PositionInput": ["erpNumber", "quantity", "unit", "price"],
+    "VorgangPositionInput": ["erpNumber", "quantity", "unit", "price", "name"],
 }
 
 

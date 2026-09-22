@@ -187,6 +187,30 @@ class OrderGraphQLPayloadTest(SimpleTestCase):
             ],
         )
 
+    def test_text_position_contains_only_its_name(self):
+        positions: list[dict[str, str]] = []
+        resolved_rule = ResolvedOrderRule(
+            rule_id=6,
+            rule_name="P fuer PayPal",
+            dataset_actions=(
+                ResolvedDatasetAction(
+                    action_type=MicrotechOrderRuleAction.ActionType.CREATE_TEXT_POSITION,
+                    target_value=".",
+                ),
+            ),
+        )
+
+        debug = OrderUpsertMicrotechService()._build_graphql_rule_debug(
+            order=SimpleNamespace(order_number="ORDER-TRACE"),
+            resolved_rule=resolved_rule,
+            positions=positions,
+        )
+
+        self.assertEqual(positions, [{"name": "."}])
+        self.assertEqual(debug.dataset_create_position_requested, 1)
+        self.assertEqual(debug.dataset_create_position_applied, 1)
+        self.assertEqual(debug.dataset_created_position_erp_nrs, ())
+
     def test_adressen_tax_category_rule_becomes_customer_input_override(self):
         resolved_rule = ResolvedOrderRule(
             dataset_actions=(
@@ -708,6 +732,45 @@ class OrderUpsertRuleDebugTest(SimpleTestCase):
         self.assertEqual(debug.create_position_requested, 3)
         self.assertEqual(debug.create_position_applied, 2)
         self.assertEqual(debug.created_position_erp_nrs, ("P", "Q"))
+
+    def test_classic_text_position_writes_only_bezeichnung(self):
+        events: list[str] = []
+        field = SimpleNamespace(FieldType="Info", Text=None)
+        dataset = SimpleNamespace(
+            Append=lambda: events.append("append"),
+            Post=lambda: events.append("post"),
+            Cancel=lambda: events.append("cancel"),
+            Fields=SimpleNamespace(Item=lambda name: field),
+        )
+        article_calls: list[tuple] = []
+        so_vorgang = SimpleNamespace(
+            Positionen=SimpleNamespace(
+                Add=lambda *args: article_calls.append(args),
+                DataSet=dataset,
+            )
+        )
+        resolved_rule = ResolvedOrderRule(
+            rule_id=42,
+            rule_name="Textzeile",
+            dataset_actions=(
+                ResolvedDatasetAction(
+                    action_type=MicrotechOrderRuleAction.ActionType.CREATE_TEXT_POSITION,
+                    target_value=".",
+                ),
+            ),
+        )
+
+        debug = OrderUpsertMicrotechService()._apply_rule_dataset_actions(
+            order=SimpleNamespace(order_number="ORDER-TRACE", shipping_costs=Decimal("0")),
+            so_vorgang=so_vorgang,
+            resolved_rule=resolved_rule,
+        )
+
+        self.assertEqual(events, ["append", "post"])
+        self.assertEqual(field.Text, ".")
+        self.assertEqual(article_calls, [])
+        self.assertEqual(debug.create_position_requested, 1)
+        self.assertEqual(debug.create_position_applied, 1)
 
     def test_set_dataset_field_uses_integer_writer_for_integer_catalog_type(self):
         field = SimpleNamespace(FieldType="", AsInteger=None, AsString=None, AsFloat=None, Text=None)

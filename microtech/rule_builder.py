@@ -108,6 +108,7 @@ _ALLOWED_ENGINE_OPERATORS_BY_VALUE_KIND: dict[str, frozenset[str]] = {
 }
 
 RULE_ACTION_TARGET_CREATE_EXTRA_POSITION = "create_extra_position"
+RULE_ACTION_TARGET_CREATE_TEXT_POSITION = "create_text_position"
 RULE_ACTION_TARGET_CREATE_SHIPPING_POSITION = "create_shipping_position"
 RULE_ACTION_TARGET_VORGANG_FIELD = "set_vorgang_field"
 RULE_ACTION_TARGET_VORGANG_POSITION_FIELD = "set_vorgang_position_field"
@@ -119,6 +120,13 @@ DEFAULT_RULE_ACTION_TARGET_DEFS: tuple[RuleActionTargetDef, ...] = (
         action_type="create_extra_position",
         target_value_label="ERP-Nr",
         target_value_help="ERP-Nr der anzulegenden Zusatzposition, z. B. P.",
+    ),
+    RuleActionTargetDef(
+        code=RULE_ACTION_TARGET_CREATE_TEXT_POSITION,
+        label="Textposition anlegen",
+        action_type="create_text_position",
+        target_value_label="Bezeichnung",
+        target_value_help="Text, der als reine Bezeichnung ohne Artikelnummer, Menge und Einheit angelegt wird.",
     ),
     RuleActionTargetDef(
         code=RULE_ACTION_TARGET_CREATE_SHIPPING_POSITION,
@@ -271,6 +279,8 @@ def resolve_rule_action_target(
     normalized_action_type = str(action_type or "").strip()
     if normalized_action_type == "create_extra_position":
         return RULE_ACTION_TARGET_CREATE_EXTRA_POSITION
+    if normalized_action_type == "create_text_position":
+        return RULE_ACTION_TARGET_CREATE_TEXT_POSITION
     if normalized_action_type == "create_shipping_position":
         return RULE_ACTION_TARGET_CREATE_SHIPPING_POSITION
     if normalized_action_type != "set_field":
@@ -337,6 +347,7 @@ def filter_dataset_field_queryset_for_action_target(queryset, *, action_target: 
 
     if normalized_target in {
         RULE_ACTION_TARGET_CREATE_EXTRA_POSITION,
+        RULE_ACTION_TARGET_CREATE_TEXT_POSITION,
         RULE_ACTION_TARGET_CREATE_SHIPPING_POSITION,
     }:
         return queryset.none()
@@ -898,6 +909,7 @@ __all__ = [
     "OperatorDef",
     "RuleActionTargetDef",
     "RULE_ACTION_TARGET_CREATE_EXTRA_POSITION",
+    "RULE_ACTION_TARGET_CREATE_TEXT_POSITION",
     "RULE_ACTION_TARGET_CREATE_SHIPPING_POSITION",
     "RULE_ACTION_TARGET_VORGANG_FIELD",
     "RULE_ACTION_TARGET_VORGANG_POSITION_FIELD",

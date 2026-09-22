@@ -5,6 +5,7 @@
 
   const VALUELESS_OPERATORS = ["is_empty", "is_not_empty"];
   const ACTION_TARGET_CREATE_POSITION = "create_extra_position";
+  const ACTION_TARGET_CREATE_TEXT_POSITION = "create_text_position";
   const ACTION_TARGET_CREATE_SHIPPING_POSITION = "create_shipping_position";
   const ACTION_TARGET_VORGANG = "set_vorgang_field";
   const ACTION_TARGET_POSITION = "set_vorgang_position_field";
@@ -128,6 +129,7 @@
     const text = String(value || "").trim().toLowerCase();
     if (!text) return "";
     if (text === ACTION_TARGET_CREATE_POSITION) return ACTION_TARGET_CREATE_POSITION;
+    if (text === ACTION_TARGET_CREATE_TEXT_POSITION) return ACTION_TARGET_CREATE_TEXT_POSITION;
     if (text === ACTION_TARGET_CREATE_SHIPPING_POSITION) return ACTION_TARGET_CREATE_SHIPPING_POSITION;
     if (text === ACTION_TARGET_POSITION || text.includes("position")) return ACTION_TARGET_POSITION;
     if (text === ACTION_TARGET_VORGANG || text.includes("vorgang")) return ACTION_TARGET_VORGANG;
@@ -148,6 +150,7 @@
 
   function getActionLabel(actionTarget) {
     if (actionTarget === ACTION_TARGET_CREATE_POSITION) return "Zusatzposition anlegen";
+    if (actionTarget === ACTION_TARGET_CREATE_TEXT_POSITION) return "Textposition anlegen";
     if (actionTarget === ACTION_TARGET_CREATE_SHIPPING_POSITION) return "Versandposition anlegen";
     if (actionTarget === ACTION_TARGET_POSITION) return "Feld der Zusatzposition setzen";
     if (actionTarget === ACTION_TARGET_VORGANG) return "Vorgangsfeld setzen";
@@ -419,6 +422,11 @@
       return;
     }
 
+    if (actionTarget === ACTION_TARGET_CREATE_TEXT_POSITION) {
+      previewNode.textContent = "Legt eine reine Textposition an. Zielwert = Bezeichnung.";
+      return;
+    }
+
     if (actionTarget === ACTION_TARGET_CREATE_SHIPPING_POSITION) {
       previewNode.textContent = "Legt die Versandposition V oder F an. Preis = Versandkosten.";
       return;
@@ -461,6 +469,14 @@
       datasetFieldSelect.disabled = true;
       targetInput.placeholder = "ERP-Nr fuer Zusatzposition, z. B. P";
       targetInput.title = "Legt eine neue Zusatzposition in Microtech an.";
+      updateActionContextPreview(row, actionTarget, null, datasetFieldSelect);
+      return;
+    }
+
+    if (actionTarget === ACTION_TARGET_CREATE_TEXT_POSITION) {
+      datasetFieldSelect.disabled = true;
+      targetInput.placeholder = "Bezeichnung der Textposition, z. B. .";
+      targetInput.title = "Legt eine Textzeile ohne Artikelnummer, Menge und Einheit an.";
       updateActionContextPreview(row, actionTarget, null, datasetFieldSelect);
       return;
     }
@@ -527,6 +543,7 @@
 
     if (
       actionTarget === ACTION_TARGET_CREATE_POSITION
+      || actionTarget === ACTION_TARGET_CREATE_TEXT_POSITION
       || actionTarget === ACTION_TARGET_CREATE_SHIPPING_POSITION
     ) {
       if (!targetValue) return "";
