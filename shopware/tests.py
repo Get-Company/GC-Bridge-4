@@ -554,6 +554,33 @@ class OrderServiceMicrotechWritebackTest(SimpleTestCase):
         )
 
 
+class OrderServiceStateTransitionTest(SimpleTestCase):
+    def setUp(self):
+        self.service = OrderService.__new__(OrderService)
+        self.service.request_post = MagicMock()
+
+    def test_state_setters_use_shopware_action_routes(self):
+        self.service.set_order_state(order_id="order-1", action_name="complete")
+        self.service.set_delivery_state(delivery_id="delivery-1", action_name="ship")
+        self.service.set_transaction_state(transaction_id="transaction-1", action_name="paid")
+
+        self.assertEqual(
+            self.service.request_post.call_args_list,
+            [
+                call("/_action/order/order-1/state/complete"),
+                call("/_action/order_delivery/delivery-1/state/ship"),
+                call("/_action/order_transaction/transaction-1/state/paid"),
+            ],
+        )
+
+    def test_entity_transition_lookup_never_returns_generic_fallback_actions(self):
+        self.service.request_get = MagicMock(side_effect=RuntimeError("Shopware nicht erreichbar"))
+
+        actions = self.service.get_available_transition_actions(scope="order", entity_id="order-1")
+
+        self.assertEqual(actions, [])
+
+
 class Shopware6DashboardMetricServiceTest(SimpleTestCase):
     def test_customer_criteria_loads_the_customer_group(self):
         criteria = CustomerService.__new__(CustomerService)._base_customer_criteria()

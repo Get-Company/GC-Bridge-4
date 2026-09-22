@@ -1,3 +1,4 @@
+import json
 from unittest.mock import MagicMock, patch
 
 from django.contrib import admin as django_admin
@@ -71,6 +72,53 @@ class OrderAdminDeleteTest(SimpleTestCase):
         self.assertEqual(perms_needed, {Order._meta.verbose_name})
 
 
+class OrderAdminStatusTransitionTest(SimpleTestCase):
+    def setUp(self):
+        self.model_admin = OrderAdmin(Order, django_admin.site)
+        self.request_factory = RequestFactory()
+
+    def _request(self, *, method: str, payload: dict | None = None):
+        if method.upper() == "GET":
+            request = self.request_factory.get("/", data=payload or {})
+        else:
+            request = self.request_factory.post(
+                "/",
+                data=json.dumps(payload or {}),
+                content_type="application/json",
+            )
+        request.user = MagicMock()
+        request.user.has_perm.return_value = True
+        return request
+
+    @patch.object(OrderAdmin, "_refresh_local_states")
+    @patch("orders.admin.OrderService")
+    def test_set_state_passes_complete_to_the_order_setter(self, order_service, refresh_states):
+        order = Order(api_id="order-1", order_state="in_progress")
+        request = self._request(method="POST", payload={"scope": "order", "action": "complete"})
+
+        with patch.object(self.model_admin, "get_object", return_value=order):
+            response = self.model_admin.shopware_set_state_view(request, "1")
+
+        self.assertEqual(response.status_code, 200)
+        order_service.return_value.set_order_state.assert_called_once_with(order_id="order-1", action_name="complete")
+        refresh_states.assert_called_once_with(order=order, service=order_service.return_value)
+
+    @patch.object(OrderAdmin, "_refresh_local_states")
+    @patch("orders.admin.OrderService")
+    def test_state_options_use_the_refreshed_entity_state_as_fallback(self, order_service, refresh_states):
+        order = Order(api_id="order-1", order_state="in_progress")
+        order_service.return_value.get_available_transition_actions.return_value = [{"action": "complete"}]
+        request = self._request(method="GET", payload={"scope": "order"})
+
+        with patch.object(self.model_admin, "get_object", return_value=order):
+            response = self.model_admin.shopware_state_options_view(request, "1")
+
+        payload = json.loads(response.content)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["current_state"], "in_progress")
+        refresh_states.assert_called_once_with(order=order, service=order_service.return_value)
+
+
 class OrderAdminListDisplayTest(SimpleTestCase):
     def setUp(self):
         self.model_admin = OrderAdmin(Order, django_admin.site)
@@ -121,9 +169,12 @@ class OrderAdminListDisplayTest(SimpleTestCase):
 
     def test_order_list_uses_native_pagination_with_twenty_results(self):
         self.assertIn("customer_display", self.model_admin.list_display)
-        self.assertIn("payment_method", self.model_admin.list_display)
         self.assertIn("country_display", self.model_admin.list_display)
-        self.assertIn("address_system_link_status", self.model_admin.list_display)
+        self.assertIn("connection_status", self.model_admin.list_display)
+        self.assertNotIn("payment_method", self.model_admin.list_display)
+        self.assertNotIn("microtech_export_state", self.model_admin.list_display)
+        self.assertNotIn("address_reconciliation_status", self.model_admin.list_display)
+        self.assertNotIn("address_system_link_status", self.model_admin.list_display)
         self.assertEqual(self.model_admin.list_per_page, 20)
 
     def test_paypal_list_contains_customer_and_transaction_details(self):
@@ -134,16 +185,44 @@ class OrderAdminListDisplayTest(SimpleTestCase):
             model_admin.list_display,
             (
                 "order_number",
-                "customer_display",
+                "paypal_customer_details",
                 "paypal_transaction_id",
-                "payment_method",
                 "payment_state",
-                "erp_order_id",
                 "purchase_date",
             ),
         )
         self.assertIn("paypal_transaction_id", model_admin.search_fields)
         self.assertIn("customer__erp_nr", model_admin.search_fields)
+
+    def test_connection_column_stacks_both_link_badges(self):
+        order = self._order(country_code="DE")
+        order.shipping_address = order.billing_address
+        order.billing_address.api_id = "a" * 32
+        order.billing_address.erp_ans_nr = 0
+        order.billing_address.erp_asp_nr = 0
+        self._set_customer_defaults(order)
+
+        rendered = str(self.model_admin.connection_status(order))
+
+        self.assertIn("Zugeordnet", rendered)
+        self.assertIn("Eindeutig verknüpft", rendered)
+
+    def test_paypal_customer_details_include_adrnr_and_address(self):
+        order = self._order(country_code="DE", company="Muster GmbH")
+        order.billing_address.street = "Musterstraße 1"
+        order.billing_address.postal_code = "12345"
+        order.billing_address.city = "Musterstadt"
+        order.billing_address.phone = "+49 123 456"
+        order.billing_address.email = "erika@example.com"
+        model_admin = PayPalOrderAdmin(PayPalOrder, django_admin.site)
+
+        rendered = str(model_admin.paypal_customer_details(order))
+
+        self.assertIn("AdrNr: 100123", rendered)
+        self.assertIn("Muster GmbH", rendered)
+        self.assertIn("Musterstraße 1", rendered)
+        self.assertIn("12345 Musterstadt", rendered)
+        self.assertIn("erika@example.com", rendered)
 
     def test_address_reconciliation_status_marks_missing_microtech_ids(self):
         order = self._order(country_code="DE")

@@ -166,23 +166,21 @@ class OrderService(Shopware6Service):
         action_name = _to_str(action_name)
         if not order_id or not action_name:
             raise ValueError("order_id and action_name are required.")
-        return self.request_post(f"/_action/state-machine/order/{order_id}/state/{action_name}")
+        return self.request_post(f"/_action/order/{order_id}/state/{action_name}")
 
     def set_delivery_state(self, delivery_id: str, action_name: str) -> Any:
         delivery_id = _to_str(delivery_id)
         action_name = _to_str(action_name)
         if not delivery_id or not action_name:
             raise ValueError("delivery_id and action_name are required.")
-        return self.request_post(f"/_action/state-machine/order_delivery/{delivery_id}/state/{action_name}")
+        return self.request_post(f"/_action/order_delivery/{delivery_id}/state/{action_name}")
 
     def set_transaction_state(self, transaction_id: str, action_name: str) -> Any:
         transaction_id = _to_str(transaction_id)
         action_name = _to_str(action_name)
         if not transaction_id or not action_name:
             raise ValueError("transaction_id and action_name are required.")
-        return self.request_post(
-            f"/_action/state-machine/order_transaction/{transaction_id}/state/{action_name}"
-        )
+        return self.request_post(f"/_action/order_transaction/{transaction_id}/state/{action_name}")
 
     def get_available_transition_actions(self, *, scope: str, entity_id: str) -> list[dict[str, str]]:
         scope = _to_str(scope).lower()
@@ -204,8 +202,10 @@ class OrderService(Shopware6Service):
             if actions:
                 return actions
 
-        fallback = DEFAULT_TRANSITION_ACTIONS.get(scope, [])
-        return [{"action": value, "label": value.replace("_", " ")} for value in fallback]
+        # This endpoint is used to validate one concrete entity. Returning a
+        # generic fallback here would present transitions that Shopware may
+        # reject for that entity, so an unavailable lookup must remain empty.
+        return []
 
     # Shopware entity name per app scope, used in the state-machine routes.
     _SCOPE_TO_ENTITY: dict[str, str] = {

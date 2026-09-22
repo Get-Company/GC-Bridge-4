@@ -179,13 +179,10 @@ class OrderAdmin(BaseAdmin):
     list_display = (
         "order_number",
         "customer_display",
-        "payment_method",
         "country_display",
-        "address_reconciliation_status",
-        "address_system_link_status",
+        "connection_status",
         "purchase_date",
         "order_state",
-        "microtech_export_state",
         "microtech_sync_status",
     )
     list_per_page = 20
@@ -436,6 +433,15 @@ class OrderAdmin(BaseAdmin):
             '<span title="{}" style="border:1px solid #fcd34d;border-radius:999px;padding:1px 6px;font-size:11px;line-height:16px;color:#92400e;background:#fffbeb;white-space:nowrap;">Verknüpfung offen · {}</span>',
             "; ".join(open_items),
             len(open_items),
+        )
+
+    @admin.display(description="Verknüpfung")
+    def connection_status(self, obj: Order):
+        """Stack address reconciliation and system-link badges in one compact column."""
+        return format_html(
+            '<div style="display:flex;flex-direction:column;align-items:flex-start;gap:4px;">{}{}</div>',
+            self.address_reconciliation_status(obj),
+            self.address_system_link_status(obj),
         )
 
     class Media:
@@ -1011,8 +1017,23 @@ class OrderAdmin(BaseAdmin):
                 status=400,
             )
 
-        actions = OrderService().get_available_transition_actions(scope=scope, entity_id=entity_id)
+        service = OrderService()
+        # The local order state can be stale. Refresh it before exposing
+        # transitions so the selector is tied to Shopware's current entity
+        # state rather than a cached state-machine graph.
+        try:
+            self._refresh_local_states(order=order, service=service)
+        except Exception:  # pragma: no cover - remote runtime errors
+            pass
+
+        actions = service.get_available_transition_actions(scope=scope, entity_id=entity_id)
         current_state = next((_to_str(a.get("from_state")) for a in actions if a.get("from_state")), "")
+        if not current_state:
+            current_state = {
+                "order": _to_str(order.order_state),
+                "payment": _to_str(order.payment_state),
+                "delivery": _to_str(order.shipping_state),
+            }[scope]
         return JsonResponse(
             {"ok": True, "scope": scope, "actions": actions, "current_state": current_state}
         )
@@ -1135,11 +1156,9 @@ class PayPalOrderAdmin(OrderAdmin):
 
     list_display = (
         "order_number",
-        "customer_display",
+        "paypal_customer_details",
         "paypal_transaction_id",
-        "payment_method",
         "payment_state",
-        "erp_order_id",
         "purchase_date",
     )
     search_fields = (
@@ -1156,6 +1175,58 @@ class PayPalOrderAdmin(OrderAdmin):
 
     def get_queryset(self, request):
         return super().get_queryset(request).filter(paypal_transaction_id__gt="")
+
+    @admin.display(description="Kunde / Adresse", ordering="customer__erp_nr")
+    def paypal_customer_details(self, obj: Order):
+        customer = getattr(obj, "customer", None)
+        address = self._customer_address(obj)
+        if customer is None and address is None:
+            return "-"
+
+        customer_name = (
+            CustomerWebshopMappingService.resolve_na2(address=address)
+            if address is not None
+            else _to_str(getattr(customer, "name", ""))
+        )
+        customer_name = customer_name or _to_str(getattr(customer, "name", "")) or "-"
+        lines = [
+            format_html(
+                '<strong>AdrNr: {}</strong> · {}',
+                _to_str(getattr(customer, "erp_nr", "")) or "-",
+                customer_name,
+            )
+        ]
+
+        if address is not None:
+            address_name = " · ".join(
+                value
+                for value in (
+                    _to_str(address.name1),
+                    _to_str(address.name2),
+                    _to_str(address.name3),
+                    _to_str(address.department),
+                )
+                if value
+            )
+            if address_name and address_name != customer_name:
+                lines.append(format_html("{}", address_name))
+            if _to_str(address.street):
+                lines.append(format_html("{}", address.street))
+            city_line = " ".join(value for value in (_to_str(address.postal_code), _to_str(address.city)) if value)
+            if city_line:
+                lines.append(format_html("{}", city_line))
+            if _to_str(address.country_code):
+                lines.append(format_html("{}", _to_str(address.country_code).upper()))
+
+            contact_details = " · ".join(
+                value
+                for value in (_to_str(address.phone), _to_str(address.email) or _to_str(getattr(customer, "email", "")))
+                if value
+            )
+            if contact_details:
+                lines.append(format_html("{}", contact_details))
+
+        return format_html_join("<br>", "{}", ((line,) for line in lines))
 
     def has_module_permission(self, request):
         return request.user.has_module_perms(Order._meta.app_label)

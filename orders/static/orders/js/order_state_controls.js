@@ -249,20 +249,25 @@
     if (control.dataset.lazyArmed === "1") return;
     control.dataset.lazyArmed = "1";
 
-    var trigger = function () {
+    var trigger = function (event) {
       select.removeEventListener("focus", trigger);
       select.removeEventListener("mousedown", trigger);
-      loadOptionsFromServer(control, select);
+      // Do not open a dropdown containing only cached transitions. The
+      // following request loads the transitions valid for this exact entity.
+      if (event && event.type === "mousedown") event.preventDefault();
+      loadOptionsFromServer(control, select, false);
     };
     select.addEventListener("focus", trigger);
     select.addEventListener("mousedown", trigger);
   }
 
-  async function loadOptionsFromServer(control, select) {
-    if (control.dataset.optionsLoaded === "1") return;
+  async function loadOptionsFromServer(control, select, force) {
+    if (control.dataset.optionsLoaded === "1" && !force) return null;
     control.dataset.optionsLoaded = "1";
 
     var scope = control.dataset.scope;
+    select.disabled = true;
+    select.classList.add("js-sw-state-disabled");
     setFeedback(control, "Optionen werden von Shopware geladen…", "info");
     try {
       var url = control.dataset.optionsUrl + "?scope=" + encodeURIComponent(scope);
@@ -288,6 +293,7 @@
         appendOption(select, a.action, label(a.action) || a.label);
       });
       setFeedback(control, "Bereit. Status wählen.", "info");
+      return data;
     } catch (e) {
       control.dataset.optionsLoaded = "";
       clearOptions(select);
@@ -295,6 +301,7 @@
       select.disabled = true;
       select.classList.add("js-sw-state-disabled");
       setFeedback(control, "Optionen konnten nicht geladen werden.", "error");
+      return null;
     }
   }
 
@@ -427,24 +434,12 @@
       var payload = await response.json();
 
       if (!response.ok || !payload.ok) {
-        // Fetch fresh transitions from backend so the user sees only valid options.
-        var freshGraph = await fetchAndCacheTransitions();
-        if (freshGraph) {
-          repopulateAllControls();
-          var currentState = control.dataset.currentState || "";
-          var validActions = ((freshGraph[scope] || {})[currentState] || []);
-          var validStr = validActions.length
-            ? validActions.map(function (a) { return label(a); }).join(", ")
-            : "keine";
-          setFeedback(
-            control,
-            "Nicht möglich. Verfügbare Übergänge: " + validStr,
-            "error"
-          );
-        } else {
-          var message = (payload && payload.error) || "Status konnte nicht gesetzt werden.";
-          setFeedback(control, message, "error");
-        }
+        // Preserve Shopware's concrete error and refresh only this entity's
+        // transitions. A global graph cannot tell which transition currently
+        // applies to this order.
+        var message = (payload && payload.error) || "Status konnte nicht gesetzt werden.";
+        await loadOptionsFromServer(control, select, true);
+        setFeedback(control, message, "error");
         return;
       }
 
@@ -479,6 +474,7 @@
     // Populate immediately from local graph.
     if (!select.disabled) {
       populateSelect(control, select);
+      armLazyLoad(control, select);
       setFeedback(control, "Bereit. Status wählen.", "info");
     } else {
       setFeedback(control, "Keine API-ID vorhanden.", "error");
