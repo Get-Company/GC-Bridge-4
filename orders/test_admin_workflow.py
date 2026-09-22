@@ -6,8 +6,8 @@ from django.test import SimpleTestCase, TestCase
 
 from core.admin import BaseAdmin
 from customer.models import Address, Customer
-from orders.admin import OrderAdmin
-from orders.models import MicrotechOrderSyncWorkflow, Order
+from orders.admin import OrderAdmin, PayPalOrderAdmin
+from orders.models import MicrotechOrderSyncWorkflow, Order, PayPalOrder
 from orders.test_order_sync_workflow import make_order
 
 
@@ -121,9 +121,29 @@ class OrderAdminListDisplayTest(SimpleTestCase):
 
     def test_order_list_uses_native_pagination_with_twenty_results(self):
         self.assertIn("customer_display", self.model_admin.list_display)
+        self.assertIn("payment_method", self.model_admin.list_display)
         self.assertIn("country_display", self.model_admin.list_display)
         self.assertIn("address_system_link_status", self.model_admin.list_display)
         self.assertEqual(self.model_admin.list_per_page, 20)
+
+    def test_paypal_list_contains_customer_and_transaction_details(self):
+        model_admin = PayPalOrderAdmin(PayPalOrder, django_admin.site)
+
+        self.assertEqual(str(PayPalOrder._meta.verbose_name_plural), "PayPal")
+        self.assertEqual(
+            model_admin.list_display,
+            (
+                "order_number",
+                "customer_display",
+                "paypal_transaction_id",
+                "payment_method",
+                "payment_state",
+                "erp_order_id",
+                "purchase_date",
+            ),
+        )
+        self.assertIn("paypal_transaction_id", model_admin.search_fields)
+        self.assertIn("customer__erp_nr", model_admin.search_fields)
 
     def test_address_reconciliation_status_marks_missing_microtech_ids(self):
         order = self._order(country_code="DE")

@@ -144,6 +144,15 @@ class Order(BaseModel):
         return self.order_number or self.api_id
 
 
+class PayPalOrder(Order):
+    """Dedicated admin view of orders carrying a PayPal transaction reference."""
+
+    class Meta:
+        proxy = True
+        verbose_name = _("PayPal")
+        verbose_name_plural = _("PayPal")
+
+
 class OrderDetail(BaseModel):
     order = models.ForeignKey(
         Order,

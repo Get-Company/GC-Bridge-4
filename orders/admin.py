@@ -28,7 +28,7 @@ from core.admin import BaseAdmin, BaseTabularInline
 from customer.models import Address
 from customer.services.webshop_mapping import CustomerWebshopMappingService, EU_COUNTRY_CODES
 from microtech.services import microtech_connection
-from orders.models import MicrotechOrderSyncWorkflow, Order, OrderDetail
+from orders.models import MicrotechOrderSyncWorkflow, Order, OrderDetail, PayPalOrder
 from orders.services import (
     OrderAddressReconciliationService,
     OrderSyncService,
@@ -179,6 +179,7 @@ class OrderAdmin(BaseAdmin):
     list_display = (
         "order_number",
         "customer_display",
+        "payment_method",
         "country_display",
         "address_reconciliation_status",
         "address_system_link_status",
@@ -1120,6 +1121,50 @@ class OrderAdmin(BaseAdmin):
         entity = cls._as_entity(payload)
         state = cls._as_entity(entity.get("stateMachineState"))
         return _to_str(state.get("technicalName") or state.get("name"))
+
+
+@admin.register(PayPalOrder)
+class PayPalOrderAdmin(OrderAdmin):
+    """Dedicated list for orders that contain a PayPal transaction reference."""
+
+    list_display = (
+        "order_number",
+        "customer_display",
+        "paypal_transaction_id",
+        "payment_method",
+        "payment_state",
+        "erp_order_id",
+        "purchase_date",
+    )
+    search_fields = (
+        "order_number",
+        "paypal_transaction_id",
+        "customer__erp_nr",
+        "customer__name",
+        "customer__email",
+    )
+    list_filter = [
+        ("payment_state", FieldTextFilter),
+        ("purchase_date", RangeDateTimeFilter),
+    ]
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).filter(paypal_transaction_id__gt="")
+
+    def has_module_permission(self, request):
+        return request.user.has_module_perms(Order._meta.app_label)
+
+    def has_view_permission(self, request, obj=None):
+        return request.user.has_perm("orders.view_order")
+
+    def has_change_permission(self, request, obj=None):
+        return request.user.has_perm("orders.change_order")
+
+    def has_delete_permission(self, request, obj=None):
+        return request.user.has_perm("orders.delete_order")
+
+    def has_add_permission(self, request):
+        return False
 
 
 @admin.register(OrderDetail)
