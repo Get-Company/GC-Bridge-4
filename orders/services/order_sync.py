@@ -73,6 +73,12 @@ NEW_ORDER_TRANSITION = "process"
 NEW_ORDER_TO_STATE = "in_progress"
 
 
+PAYPAL_TRANSACTION_ID_CUSTOM_FIELDS = (
+    "swag_paypal_transaction_id",
+    "swag_paypal_order_id",
+)
+
+
 class OrderSyncService(BaseService):
     model = Order
 
@@ -163,6 +169,7 @@ class OrderSyncService(BaseService):
         order_defaults = {
             "api_delivery_id": _to_str(delivery.get("id")),
             "api_transaction_id": _to_str(payment_transaction.get("id")),
+            "paypal_transaction_id": self._paypal_transaction_id(payment_transaction),
             "sales_channel_id": sales_channel_id or _to_str(order_data.get("salesChannelId")),
             "order_number": _to_str(order_data.get("orderNumber")),
             "description": _to_str(order_data.get("customerComment")),
@@ -206,6 +213,20 @@ class OrderSyncService(BaseService):
             "addresses_upserted": addresses_count,
             "details_upserted": details_count,
         }
+
+    @staticmethod
+    def _paypal_transaction_id(payment_transaction: dict[str, Any]) -> str:
+        """Read the external PayPal reference stored by the Shopware PayPal plugin."""
+        custom_fields = payment_transaction.get("customFields") or {}
+        if not isinstance(custom_fields, dict):
+            return ""
+
+        normalized_fields = {str(key).casefold(): value for key, value in custom_fields.items()}
+        for field_name in PAYPAL_TRANSACTION_ID_CUSTOM_FIELDS:
+            transaction_id = _to_str(normalized_fields.get(field_name))
+            if transaction_id:
+                return transaction_id
+        return ""
 
     def promote_new_order_to_in_progress(
         self,

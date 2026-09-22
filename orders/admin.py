@@ -209,6 +209,7 @@ class OrderAdmin(BaseAdmin):
         "api_id",
         "erp_order_id",
         "erp_vorgang_id",
+        "paypal_transaction_id",
         "customer__erp_nr",
         "customer__name",
         "customer__email",

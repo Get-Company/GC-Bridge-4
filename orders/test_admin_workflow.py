@@ -15,6 +15,8 @@ class OrderAdminSearchTest(SimpleTestCase):
     def test_search_includes_customer_first_and_last_name(self):
         model_admin = OrderAdmin(Order, django_admin.site)
 
+        self.assertIn("paypal_transaction_id", model_admin.search_fields)
+        self.assertIn("customer__erp_nr", model_admin.search_fields)
         self.assertIn("customer__addresses__first_name", model_admin.search_fields)
         self.assertIn("customer__addresses__last_name", model_admin.search_fields)
         self.assertIn("customer__name", model_admin.search_fields)

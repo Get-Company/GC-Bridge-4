@@ -49,6 +49,24 @@
     {# ── Divider ─────────────────────────────────────────────────────────── #}
     <div class="hidden lg:block w-px bg-gray-200 dark:bg-gray-700 self-stretch"></div>
 
+    {# ── Payment reference ─────────────────────────────────────────────── #}
+    <div class="flex-shrink-0">
+        <div class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-3">Zahlungsreferenz</div>
+        <dl class="space-y-1 text-sm text-gray-700 dark:text-gray-300">
+            <div>
+                <dt class="inline text-gray-400 dark:text-gray-500">AdrNr:</dt>
+                <dd class="inline font-medium">{{ instance.customer.erp_nr|default:"-" }}</dd>
+            </div>
+            <div>
+                <dt class="inline text-gray-400 dark:text-gray-500">PayPal Transaktions-ID:</dt>
+                <dd class="inline font-mono break-all">{{ instance.paypal_transaction_id|default:"-" }}</dd>
+            </div>
+        </dl>
+    </div>
+
+    {# ── Divider ─────────────────────────────────────────────────────────── #}
+    <div class="hidden lg:block w-px bg-gray-200 dark:bg-gray-700 self-stretch"></div>
+
     {# ── Addresses ───────────────────────────────────────────────────────── #}
     <div class="flex flex-wrap gap-8 flex-1">
 

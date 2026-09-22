@@ -288,7 +288,12 @@ class OrderSyncWorkflowEnqueueTest(SimpleTestCase):
             "id": "shopware-order-1",
             "price": {"taxStatus": "net", "totalPrice": "10.00", "calculatedTaxes": []},
             "deliveries": [{"id": "delivery-1"}],
-            "transactions": [{"id": "transaction-1"}],
+            "transactions": [
+                {
+                    "id": "transaction-1",
+                    "customFields": {"swag_paypal_transaction_id": "paypal-transaction-1"},
+                }
+            ],
             "lineItems": [],
         }
 
@@ -319,6 +324,17 @@ class OrderSyncWorkflowEnqueueTest(SimpleTestCase):
         self.assertIsNone(result["workflow_id"])
         ensure_pending.assert_not_called()
         on_commit.assert_not_called()
+        self.assertEqual(
+            Order.objects.update_or_create.call_args.kwargs["defaults"]["paypal_transaction_id"],
+            "paypal-transaction-1",
+        )
+
+    def test_paypal_transaction_id_falls_back_to_paypal_order_reference(self):
+        transaction_id = OrderSyncService._paypal_transaction_id(
+            {"customFields": {"swag_paypal_order_id": "paypal-order-1"}}
+        )
+
+        self.assertEqual(transaction_id, "paypal-order-1")
 
 
 class OrderProductNumberResolutionTest(TestCase):

@@ -21,6 +21,13 @@ class Order(BaseModel):
         default="",
         verbose_name=_("Shopware Transaktions-ID"),
     )
+    paypal_transaction_id = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        db_index=True,
+        verbose_name=_("PayPal Transaktions-ID"),
+    )
     sales_channel_id = models.CharField(
         max_length=255,
         blank=True,
