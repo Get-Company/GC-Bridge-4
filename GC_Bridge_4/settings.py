@@ -522,6 +522,12 @@ UNFOLD = {
                         "permission": sidebar_model_view_permission("orders", "Order"),
                     },
                     {
+                        "title": _("PayPal"),
+                        "icon": "payments",
+                        "link": reverse_lazy("admin:orders_paypalorder_changelist"),
+                        "permission": sidebar_model_view_permission("orders", "Order"),
+                    },
+                    {
                         "title": _("Bestellpositionen"),
                         "icon": "receipt_long",
                         "link": reverse_lazy("admin:orders_orderdetail_changelist"),

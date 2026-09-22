@@ -207,6 +207,17 @@ class AdminSidebarPermissionTest(SimpleTestCase):
         )
         self.assertTrue(item["has_permission"])
 
+    def test_paypal_sidebar_entry_requires_order_view_permission(self):
+        item = self._sidebar_item(permissions=set(), title="PayPal")
+        self.assertFalse(item["has_permission"])
+
+        item = self._sidebar_item(
+            permissions={"orders.view_order"},
+            title="PayPal",
+        )
+        self.assertTrue(item["has_permission"])
+        self.assertEqual(str(item["link"]), reverse("admin:orders_paypalorder_changelist"))
+
     def test_variant_family_sidebar_entry_requires_view_permission(self):
         item = self._sidebar_item(permissions=set(), title="Variantenfamilien")
         self.assertFalse(item["has_permission"])
