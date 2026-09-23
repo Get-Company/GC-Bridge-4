@@ -427,8 +427,37 @@ class CustomerUpsertMicrotechService(BaseService):
                     country_code=address.country_code,
                 ),
         }
-        # Rule engine overlays CustomerInput fields (any of them at once) only in
-        # live mode; off/shadow keep the hardcoded values above.
+        from microtech.models import MicrotechOrderRuleAction
+        from microtech.rule_engine.mapping_resolver import resolve_customer_mapping_fields
+
+        webshop_defaults = customer_input.pop("webshopDefaults")
+        mapped_defaults = resolve_customer_mapping_fields(
+            customer=customer,
+            shipping_address=address,
+            billing_address=billing_address,
+            address=address,
+            target_scope=MicrotechOrderRuleAction.TargetScope.CUSTOMER_DEFAULTS,
+            code_values=webshop_defaults,
+        )
+        if mapped_defaults:
+            webshop_defaults = {
+                key: value
+                for key, value in mapped_defaults.items()
+                if value not in (None, "")
+            }
+        mapped_input = resolve_customer_mapping_fields(
+            customer=customer,
+            shipping_address=address,
+            billing_address=billing_address,
+            address=address,
+            target_scope=MicrotechOrderRuleAction.TargetScope.CUSTOMER,
+            code_values=customer_input,
+        )
+        if mapped_input:
+            customer_input = mapped_input
+        customer_input["webshopDefaults"] = webshop_defaults
+        # Conditional business rules overlay the standard mapping only in live
+        # mode; off/shadow retain the standard values assembled above.
         from microtech.rule_engine.dispatch import resolve_customer_input_with_mode
 
         overlay = resolve_customer_input_with_mode(
@@ -488,8 +517,8 @@ class CustomerUpsertMicrotechService(BaseService):
                 "department": address.department,
                 "country": address.country_code,
         }
-        # Rule engine overlays PostalAddressInput fields (any of them at once)
-        # only in live mode; off/shadow keep the hardcoded values above.
+        # Conditional address rules overlay the precomputed standard values
+        # only in live mode.
         from microtech.rule_engine.dispatch import resolve_postal_address_with_mode
 
         overlay = resolve_postal_address_with_mode(address, code_values=postal_input)
@@ -501,6 +530,19 @@ class CustomerUpsertMicrotechService(BaseService):
                 overlay.pop("email", None)
             postal_input.update(overlay)
         if customer is not None and target_scope:
+            from microtech.rule_engine.mapping_resolver import resolve_customer_mapping_fields
+
+            mapped_input = resolve_customer_mapping_fields(
+                customer=customer,
+                shipping_address=shipping_address,
+                billing_address=billing_address,
+                address=address,
+                target_scope=target_scope,
+                code_values=postal_input,
+            )
+            if mapped_input:
+                postal_input = mapped_input
+
             from microtech.rule_engine.dispatch import resolve_customer_postal_address_with_mode
 
             scoped_overlay = resolve_customer_postal_address_with_mode(
@@ -548,6 +590,19 @@ class CustomerUpsertMicrotechService(BaseService):
             "phone": address.phone,
         }
         if customer is not None and target_scope:
+            from microtech.rule_engine.mapping_resolver import resolve_customer_mapping_fields
+
+            mapped_input = resolve_customer_mapping_fields(
+                customer=customer,
+                shipping_address=shipping_address,
+                billing_address=billing_address,
+                address=address,
+                target_scope=target_scope,
+                code_values=contact_input,
+            )
+            if mapped_input:
+                contact_input = mapped_input
+
             from microtech.rule_engine.dispatch import resolve_customer_contact_person_with_mode
 
             scoped_overlay = resolve_customer_contact_person_with_mode(

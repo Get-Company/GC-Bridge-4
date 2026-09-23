@@ -85,13 +85,12 @@
               django_fields: data.django_fields || [],
               triggers: data.triggers || [],
               categories: data.categories || [],
-              occupied_targets: data.occupied_targets || [],
             }
-          : { operators: [], django_fields: [], triggers: [], categories: [], occupied_targets: [] };
+          : { operators: [], django_fields: [], triggers: [], categories: [] };
         return META;
       })
       .catch(function () {
-        META = { operators: [], django_fields: [], triggers: [], categories: [], occupied_targets: [] };
+        META = { operators: [], django_fields: [], triggers: [], categories: [] };
         return META;
       });
     return META_PROMISE;
@@ -231,16 +230,6 @@
       if (!currentTrigger()) return "";
       if (graphqlInputTypesForCurrentTrigger(action).length) return "graphql";
       return currentContextRoot() === "orders.Order" ? "dataset" : "";
-    }
-    function occupiedByOtherRule(targetKey) {
-      if (!targetKey) return null;
-      for (var i = 0; i < META.occupied_targets.length; i++) {
-        var item = META.occupied_targets[i];
-        if (String(item.trigger_id) !== String(STATE.trigger_id)) continue;
-        if (String(item.rule_id) === String(STATE.id)) continue;
-        if (item.target_key === targetKey) return item;
-      }
-      return null;
     }
     function reconcileActionTargets() {
       STATE.actions.forEach(function (action) {
@@ -772,9 +761,8 @@
                 typeLabel: group.label || group.input_type,
                 description: field.description || "",
               };
-              var targetKey = "graphql:" + (action.target_scope || "customer") + ":" + item.value;
               if (excludedFields.indexOf(item.value) >= 0 && item.value !== action.graphql_field) return;
-              if (!occupiedByOtherRule(targetKey) || item.value === action.graphql_field) flat.push(item);
+              flat.push(item);
             });
           });
           picker.setItems(flat);
@@ -836,9 +824,7 @@
                   datasetName: dataset.name || "Microtech",
                   sourceIdentifier: dataset.source_identifier || "",
                 };
-                if (!occupiedByOtherRule("dataset:" + item.id) || String(item.id) === String(action.dataset_field_id)) {
-                  flat.push(item);
-                }
+                flat.push(item);
               });
             });
             picker.setItems(flat);

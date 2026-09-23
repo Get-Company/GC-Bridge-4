@@ -21,7 +21,6 @@ from microtech.models import (
     MicrotechOrderRuleOperator,
     RuleTrigger,
 )
-from microtech.rule_mapping import action_target_key
 from microtech.graphql_schema import (
     get_rule_action_excluded_fields,
     get_rule_action_input_types,
@@ -34,6 +33,7 @@ from microtech.rule_builder import (
     get_allowed_operator_codes,
     get_customer_field_defs,
     get_django_field_map,
+    get_order_detail_field_defs,
     get_operator_engine_map,
 )
 from microtech.rule_engine.templates import TemplateValidationError, validate_template
@@ -41,6 +41,7 @@ from microtech.rule_engine.templates import TemplateValidationError, validate_te
 
 _ADDRESS_CONTEXT_ROOTS = {"customer.Address"}
 _CUSTOMER_CONTEXT_ROOT = "customer.Customer"
+_ORDER_DETAIL_CONTEXT_ROOT = "orders.OrderDetail"
 _VALUELESS_OPERATORS = {"is_empty", "is_not_empty", "is_true", "is_false"}
 _GRAPHQL_FIELD_PATTERN = re.compile(r"^[A-Za-z_]\w*\.[A-Za-z_]\w*$")
 
@@ -177,8 +178,6 @@ class EditorValidationError(Exception):
 
 def _validate_payload(
     payload: dict,
-    *,
-    rule: MicrotechOrderRule | None = None,
 ) -> list[str]:
     errors: list[str] = []
 
@@ -208,6 +207,8 @@ def _validate_payload(
         field_map = {item.path: item for item in get_address_field_defs(trigger.context_root)}
     elif trigger is not None and trigger.context_root == _CUSTOMER_CONTEXT_ROOT:
         field_map = {item.path: item for item in get_customer_field_defs()}
+    elif trigger is not None and trigger.context_root == _ORDER_DETAIL_CONTEXT_ROOT:
+        field_map = {item.path: item for item in get_order_detail_field_defs()}
     else:
         field_map = get_django_field_map()
     allowed_paths = set(field_map)
@@ -413,36 +414,6 @@ def _validate_payload(
                     f"(Aktionen {', '.join(str(item) for item in positions)})."
                 )
 
-        existing_rules = (
-            MicrotechOrderRule.objects
-            .filter(
-                is_active=True,
-                engine_enabled=True,
-                trigger_id=trigger.pk,
-            )
-            .prefetch_related("actions__dataset_field__dataset")
-        )
-        if rule is not None and rule.pk:
-            existing_rules = existing_rules.exclude(pk=rule.pk)
-
-        occupied_by_rule: dict[str, str] = {}
-        for existing_rule in existing_rules:
-            for existing_action in existing_rule.actions.all():
-                if not existing_action.is_active:
-                    continue
-                target_key = action_target_key(existing_action)
-                if target_key:
-                    occupied_by_rule.setdefault(target_key, existing_rule.name)
-
-        for target_key, positions in target_positions.items():
-            existing_rule_name = occupied_by_rule.get(target_key)
-            if not existing_rule_name:
-                continue
-            errors.append(
-                f"Aktion {positions[0]}: Das Zielfeld wird bereits von der "
-                f"Regel '{existing_rule_name}' beschrieben. Eine Doppelbelegung ist nicht erlaubt."
-            )
-
     return errors
 
 
@@ -476,7 +447,7 @@ def save_rule_from_payload(payload: dict, *, rule: MicrotechOrderRule | None = N
     a single ``transaction.atomic`` block: any validation failure raises
     ``EditorValidationError`` and leaves the database untouched.
     """
-    errors = _validate_payload(payload, rule=rule)
+    errors = _validate_payload(payload)
     if errors:
         raise EditorValidationError(errors)
 

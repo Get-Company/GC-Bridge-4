@@ -407,6 +407,15 @@ class MicrotechOrderRule(BaseModel):
         ANY = "any", _("ODER (||)")
 
     name = models.CharField(max_length=255, verbose_name=_("Name"))
+    system_key = models.CharField(
+        max_length=128,
+        unique=True,
+        null=True,
+        blank=True,
+        editable=False,
+        verbose_name=_("Systemschlüssel"),
+        help_text=_("Stabile Kennung für automatisch angelegte Standardmapping-Regeln."),
+    )
     is_active = models.BooleanField(default=True, verbose_name=_("Aktiv"))
     priority = models.PositiveIntegerField(default=100, verbose_name=_("Prioritaet"))
     condition_logic = models.CharField(
@@ -629,6 +638,9 @@ class MicrotechOrderRuleAction(BaseModel):
         BILLING_ADDRESS = "billing_address", _("Rechnungsanschrift")
         SHIPPING_CONTACT = "shipping_contact", _("Lieferansprechpartner")
         BILLING_CONTACT = "billing_contact", _("Rechnungsansprechpartner")
+        CUSTOMER_DEFAULTS = "customer_defaults", _("Kundenstandardwerte")
+        ORDER = "order", _("Vorgang")
+        POSITION = "position", _("Position")
 
     rule = models.ForeignKey(
         MicrotechOrderRule,
@@ -672,7 +684,7 @@ class MicrotechOrderRuleAction(BaseModel):
         choices=TargetScope.choices,
         default=TargetScope.CUSTOMER,
         verbose_name=_("Zielbereich"),
-        help_text=_("Beim Kunden-Upsert bestimmt dieser Bereich die konkrete Anschrift oder den Ansprechpartner."),
+        help_text=_("Bestimmt den konkreten Zielbereich des Mappings."),
     )
     target_value = models.CharField(
         max_length=255,

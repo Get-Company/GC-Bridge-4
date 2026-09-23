@@ -18,6 +18,7 @@ class CustomerRuleContext:
     shipping_address: object | None
     billing_address: object | None
     address: object | None = None
+    code_values: dict | None = None
 
 
 def resolve_customer_scope_fields(
@@ -27,6 +28,7 @@ def resolve_customer_scope_fields(
     billing_address,
     address,
     target_scope: str,
+    code_values: dict | None = None,
     audit_mode: str | None = None,
 ) -> dict[str, str]:
     """Resolve fields for one concrete customer-upsert destination.
@@ -47,6 +49,7 @@ def resolve_customer_scope_fields(
             shipping_address=shipping_address,
             billing_address=billing_address,
             address=address,
+            code_values=code_values or {},
         ),
         audit_mode=audit_mode,
         audit_subject=f"Kunde #{getattr(customer, 'pk', '') or '?'}",
@@ -69,6 +72,7 @@ def resolve_customer_fields(*, customer, address, billing_address=None, audit_mo
         billing_address=billing_address,
         address=address,
         target_scope=MicrotechOrderRuleAction.TargetScope.CUSTOMER,
+        code_values={},
         audit_mode=audit_mode,
     )
 

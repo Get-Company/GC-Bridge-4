@@ -259,6 +259,7 @@ def resolve_customer_scope_with_mode(
                 billing_address=billing_address,
                 address=address,
                 target_scope=target_scope,
+                code_values=code_values,
                 audit_mode=mode,
             )
         except Exception:
@@ -274,6 +275,7 @@ def resolve_customer_scope_with_mode(
             billing_address=billing_address,
             address=address,
             target_scope=target_scope,
+            code_values=code_values,
             audit_mode=mode,
         )
     except Exception:

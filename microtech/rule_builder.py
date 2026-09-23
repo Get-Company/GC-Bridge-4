@@ -46,10 +46,72 @@ _ADDRESS_FIELD_NAMES: tuple[str, ...] = (
 # They intentionally remain a small, explicit set so the address picker stays focused.
 _ADDRESS_CUSTOMER_FIELD_NAMES: tuple[str, ...] = ("company",)
 
-# The customer-upsert context additionally exposes the Shopware account email.
-# It is intentionally separate from the address-trigger list: address-only
-# rules must not accidentally gain access to unrelated customer data.
-_CUSTOMER_UPSERT_CUSTOMER_FIELD_NAMES: tuple[str, ...] = ("company", "email")
+# Customer data available to the complete customer mapping.  Address-only
+# rules deliberately keep the narrower list above.
+_CUSTOMER_UPSERT_CUSTOMER_FIELD_NAMES: tuple[str, ...] = (
+    "company",
+    "email",
+    "name",
+    "vat_id",
+    "shopware_customer_group",
+)
+
+_ORDER_CODE_VALUE_FIELDS: tuple[tuple[str, str], ...] = (
+    ("orderNumber", "string"),
+    ("description", "string"),
+    ("currency", "string"),
+    ("vorgangArt", "int"),
+    ("customerNumber", "string"),
+)
+
+_POSITION_CODE_VALUE_FIELDS: tuple[tuple[str, str], ...] = (
+    ("erpNumber", "string"),
+    ("quantity", "decimal"),
+    ("unit", "string"),
+    ("price", "decimal"),
+    ("name", "string"),
+)
+
+_CUSTOMER_CODE_VALUE_FIELDS: tuple[tuple[str, str], ...] = (
+    ("salutation", "string"),
+    ("firstName", "string"),
+    ("lastName", "string"),
+    ("name1", "string"),
+    ("name2", "string"),
+    ("name3", "string"),
+    ("street", "string"),
+    ("zipCode", "string"),
+    ("city", "string"),
+    ("email", "string"),
+    ("phone", "string"),
+    ("department", "string"),
+    ("country", "string"),
+    ("vatId", "string"),
+    ("taxCategory", "int"),
+    ("isDefaultShipping", "bool"),
+    ("isDefaultBilling", "bool"),
+    ("isDefault", "bool"),
+    ("displayName", "string"),
+    ("Status", "string"),
+    ("SuchBeg", "string"),
+    ("VsdArt", "int"),
+    ("VsdZWeise", "int"),
+    ("ZahlHBk", "int"),
+    ("ZahlBed", "string"),
+    ("SktoTg1", "int"),
+    ("SktoSz1", "decimal"),
+    ("NettoTg", "int"),
+    ("VtrNr", "int"),
+    ("GspKz", "int"),
+    ("RabKz", "int"),
+    ("ArtPrGrp", "int"),
+    ("TextKz1", "int"),
+    ("TextKz2", "int"),
+    ("TextKz3", "int"),
+    ("TextKz4", "int"),
+    ("TextKz5", "int"),
+    ("HistKz", "int"),
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -442,6 +504,32 @@ def _apply_django_field_ui_override(item: DjangoFieldDef) -> DjangoFieldDef:
     )
 
 
+def _code_value_field_defs(
+    fields: tuple[tuple[str, str], ...],
+    *,
+    context_root: str,
+) -> list[DjangoFieldDef]:
+    """Expose the already calculated legacy value as an editable rule source.
+
+    Some values (for example a resolved Microtech unit or the assembled
+    contact display name) are not a direct model field.  The mapping engine
+    receives those values through ``code_values`` so moving the assignment
+    into a rule does not change the established calculation.
+    """
+    return [
+        DjangoFieldDef(
+            catalog_id=None,
+            path=f"code_values__{field_name}",
+            label=f"Bisheriges Mapping - {field_name} (code_values__{field_name})",
+            value_kind=value_kind,
+            hint="Vom bisherigen Code berechneter Standardwert; in der Regel überschreibbar.",
+            example=_default_example(value_kind),
+            context_root=context_root,
+        )
+        for field_name, value_kind in fields
+    ]
+
+
 def _real_examples() -> dict[str, str]:
     """Fetch real example values from the most recent order."""
     try:
@@ -532,6 +620,13 @@ def _build_base_django_field_defs() -> list[DjangoFieldDef]:
                     example=examples.get(path, _default_example(value_kind)),
                 )
             )
+
+    base_defs.extend(
+        _code_value_field_defs(
+            _ORDER_CODE_VALUE_FIELDS,
+            context_root="orders.Order",
+        )
+    )
 
     unique_by_path: dict[str, DjangoFieldDef] = {}
     for item in base_defs:
@@ -773,7 +868,51 @@ def get_customer_field_defs() -> list[DjangoFieldDef]:
                 context_root="customer.Customer",
             )
         )
+    defs.extend(
+        _code_value_field_defs(
+            _CUSTOMER_CODE_VALUE_FIELDS,
+            context_root="customer.Customer",
+        )
+    )
     return defs
+
+
+def get_order_detail_field_defs() -> list[DjangoFieldDef]:
+    """Fields available while mapping one Shopware order position."""
+    from orders.models import OrderDetail
+
+    defs: list[DjangoFieldDef] = []
+    for path, field, label in _iter_field_defs_for_model(model=OrderDetail):
+        value_kind = _field_value_kind(field)
+        defs.append(
+            DjangoFieldDef(
+                catalog_id=None,
+                path=path,
+                label=f"Bestellposition - {label} ({path})",
+                value_kind=value_kind,
+                example=_default_example(value_kind),
+                context_root="orders.OrderDetail",
+            )
+        )
+    for path, field, label in _iter_field_defs_for_model(model=Order, prefix="order__"):
+        value_kind = _field_value_kind(field)
+        defs.append(
+            DjangoFieldDef(
+                catalog_id=None,
+                path=path,
+                label=f"Bestellung - {label} ({path})",
+                value_kind=value_kind,
+                example=_default_example(value_kind),
+                context_root="orders.OrderDetail",
+            )
+        )
+    defs.extend(
+        _code_value_field_defs(
+            _POSITION_CODE_VALUE_FIELDS,
+            context_root="orders.OrderDetail",
+        )
+    )
+    return sorted(defs, key=lambda item: item.label.lower())
 
 
 def get_django_field_map() -> dict[str, DjangoFieldDef]:
@@ -923,6 +1062,7 @@ __all__ = [
     "get_django_field_defs",
     "get_django_field_map",
     "get_customer_field_defs",
+    "get_order_detail_field_defs",
     "get_operator_defs",
     "get_operator_engine_map",
     "get_rule_action_target_choices",

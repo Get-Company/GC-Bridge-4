@@ -43,6 +43,7 @@ from microtech.rule_builder import (
     get_allowed_operator_codes,
     get_customer_field_defs,
     get_django_field_defs,
+    get_order_detail_field_defs,
     get_operator_defs,
     get_rule_action_target_defs,
 )
@@ -54,10 +55,9 @@ from microtech.rule_engine.editor import (
 from microtech.rule_engine.overview import serialize_rules_for_overview
 from microtech.rule_mapping import (
     build_mapping_checklist,
-    effective_target_assignments,
     ensure_default_rule_categories,
     friendly_trigger_label,
-    mapping_conflicts,
+    mapping_overlaps,
     next_category_code,
     next_rule_priority,
 )
@@ -662,7 +662,7 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
             "title": "Regel-Mappings",
             "category_panels": category_panels,
             "mapping_checklist": build_mapping_checklist(),
-            "mapping_conflicts": mapping_conflicts(),
+            "mapping_overlaps": mapping_overlaps(),
             "opts": self.model._meta,
             "organize_url": reverse("admin:microtech_orderrule_organize"),
         }
@@ -841,6 +841,7 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
         context_fields = (
             get_address_field_defs("customer.Address")
             + get_customer_field_defs()
+            + get_order_detail_field_defs()
         )
         context_field_maps = {
             context_root: {
@@ -965,16 +966,6 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
                     ],
                 }
                 for item in RuleTrigger.objects.filter(is_active=True).order_by("priority", "id")
-            ],
-            "occupied_targets": [
-                {
-                    "trigger_id": trigger_id,
-                    "target_key": target_key,
-                    **assignment,
-                }
-                for (trigger_id, target_key), assignments
-                in effective_target_assignments().items()
-                for assignment in assignments
             ],
         }
         return JsonResponse(payload)

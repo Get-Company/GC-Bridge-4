@@ -1325,16 +1325,16 @@ class OrderSyncWorkflowService(BaseService):
                 resolved_rule.vorgangsart_id,
                 defaults.order_type_number,
             )
-            input_data = {
-                "orderNumber": (order.order_number or "").strip() or (order.api_id or "").strip(),
-                "description": order.description or f"Shopware Bestellung {order.order_number}",
-                "currency": "EUR",
-                "positions": positions,
-            }
             kind = MicrotechGraphQLJob.Kind.ORDER_UPSERT
             resolved_customer_number = str(state.get("erp_nr") or "").strip()
             if not resolved_customer_number:
                 raise ValueError("Vorgangsanlage ohne aufgelöste Microtech-Kundennummer.")
+            input_data, create_input = upsert._build_graphql_order_inputs(
+                order=order,
+                positions=positions,
+                order_type_number=order_type_number,
+                customer_number=resolved_customer_number,
+            )
             existing_beleg_nr = str(
                 state.get("beleg_nr") or state.get("erp_order_id") or order.erp_order_id or ""
             ).strip()
@@ -1344,11 +1344,6 @@ class OrderSyncWorkflowService(BaseService):
                 payload = {"belegNr": existing_beleg_nr, "input": input_data}
             else:
                 operation = "createVorgang"
-                create_input = {
-                    **input_data,
-                    "vorgangArt": order_type_number,
-                    "customerNumber": resolved_customer_number,
-                }
                 submit = lambda: client.submit_create_vorgang(create_input)
                 payload = {"input": create_input}
             job = MicrotechJobSentinelService().submit_wrapper_job(

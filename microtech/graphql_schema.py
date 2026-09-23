@@ -11,7 +11,7 @@ from loguru import logger
 
 from django.core.cache import cache
 
-_CACHE_KEY = "microtech_graphql_input_catalog_v1"
+_CACHE_KEY = "microtech_graphql_input_catalog_v2"
 _CACHE_TTL = 600  # seconds
 
 _INTROSPECTION_QUERY = """
@@ -25,6 +25,7 @@ INPUT_TYPE_LABELS: dict[str, str] = {
     "CustomerInput": "Kunde",
     "PostalAddressInput": "Anschrift",
     "ContactPersonInput": "Ansprechpartner",
+    "WebshopDefaultsInput": "Kundenstandardwerte",
     "VorgangInput": "Vorgang (Bestellung)",
     "VorgangPositionInput": "Position",
 }
@@ -33,6 +34,14 @@ INPUT_TYPE_LABELS: dict[str, str] = {
 # Keeping the mapping next to the schema catalog gives the editor and server
 # validation one source of truth without baking Microtech field names into JS.
 RULE_TRIGGER_INPUT_TYPES: dict[str, tuple[str, ...]] = {
+    "orders.microtech_order_mapping": ("VorgangInput",),
+    "orders.microtech_order_position_mapping": ("VorgangPositionInput",),
+    "customer.microtech_customer_mapping": (
+        "CustomerInput",
+        "PostalAddressInput",
+        "ContactPersonInput",
+        "WebshopDefaultsInput",
+    ),
     "customer.microtech_postal_address": ("PostalAddressInput",),
     # A customer upsert writes the master customer first, then its postal
     # addresses and their contacts.  The action scope below determines which
@@ -72,6 +81,31 @@ CUSTOMER_UPSERT_ACTION_SCOPES: tuple[dict[str, object], ...] = (
     },
 )
 
+CUSTOMER_MAPPING_ACTION_SCOPES: tuple[dict[str, object], ...] = (
+    *CUSTOMER_UPSERT_ACTION_SCOPES,
+    {
+        "code": "customer_defaults",
+        "label": "Kundenstandardwerte",
+        "graphql_input_types": ("WebshopDefaultsInput",),
+    },
+)
+
+ORDER_MAPPING_ACTION_SCOPES: tuple[dict[str, object], ...] = (
+    {
+        "code": "order",
+        "label": "Vorgang",
+        "graphql_input_types": ("VorgangInput",),
+    },
+)
+
+ORDER_POSITION_MAPPING_ACTION_SCOPES: tuple[dict[str, object], ...] = (
+    {
+        "code": "position",
+        "label": "Position",
+        "graphql_input_types": ("VorgangPositionInput",),
+    },
+)
+
 # CustomerInput.email is intentionally excluded.  The wrapper can use that
 # value while creating its implicit default address, which would also change
 # the invoice-address email.  Email mappings must target the explicit shipping
@@ -79,6 +113,10 @@ CUSTOMER_UPSERT_ACTION_SCOPES: tuple[dict[str, object], ...] = (
 RULE_ACTION_EXCLUDED_FIELDS: dict[tuple[str, str], tuple[str, ...]] = {
     ("customer.microtech_customer_upsert", "customer"): ("CustomerInput.email",),
     ("customer.microtech_customer_upsert", "billing_address"): (
+        "PostalAddressInput.email",
+    ),
+    ("customer.microtech_customer_mapping", "customer"): ("CustomerInput.email",),
+    ("customer.microtech_customer_mapping", "billing_address"): (
         "PostalAddressInput.email",
     ),
 }
@@ -99,6 +137,12 @@ _FALLBACK: dict[str, list[str]] = {
     "ContactPersonInput": [
         "isDefault", "salutation", "firstName", "lastName", "displayName",
         "department", "email", "phone",
+    ],
+    "WebshopDefaultsInput": [
+        "Status", "SuchBeg", "VsdArt", "VsdZWeise", "ZahlHBk", "ZahlBed",
+        "SktoTg1", "SktoSz1", "NettoTg", "VtrNr", "GspKz", "RabKz",
+        "ArtPrGrp", "TextKz1", "TextKz2", "TextKz3", "TextKz4", "TextKz5",
+        "HistKz",
     ],
     "VorgangInput": ["orderNumber", "description", "currency", "vorgangArt", "customerNumber"],
     "VorgangPositionInput": ["erpNumber", "quantity", "unit", "price", "name"],
@@ -165,6 +209,9 @@ def get_graphql_input_catalog(*, refresh: bool = False) -> dict:
         raw = introspect_input_fields()
         if not raw:
             raise ValueError("empty introspection result")
+        # ``WebshopDefaultsInput`` is an integration-local nested mapping, not
+        # necessarily exposed by the remote schema introspection endpoint.
+        raw.setdefault("WebshopDefaultsInput", _FALLBACK["WebshopDefaultsInput"])
     except Exception as exc:  # noqa: BLE001 - any failure degrades to fallback
         logger.warning("GraphQL-Introspektion nicht verfügbar → kuratierter Fallback ({}).", exc)
         raw = _FALLBACK
@@ -182,8 +229,15 @@ def get_rule_trigger_input_types(task_name: str) -> tuple[str, ...]:
 
 def get_rule_action_scopes(task_name: str) -> tuple[dict[str, object], ...]:
     """Return the destination scopes available to a trigger's rule actions."""
-    if str(task_name or "").strip() == "customer.microtech_customer_upsert":
+    normalized_task = str(task_name or "").strip()
+    if normalized_task == "customer.microtech_customer_upsert":
         return CUSTOMER_UPSERT_ACTION_SCOPES
+    if normalized_task == "customer.microtech_customer_mapping":
+        return CUSTOMER_MAPPING_ACTION_SCOPES
+    if normalized_task == "orders.microtech_order_mapping":
+        return ORDER_MAPPING_ACTION_SCOPES
+    if normalized_task == "orders.microtech_order_position_mapping":
+        return ORDER_POSITION_MAPPING_ACTION_SCOPES
     return ()
 
 
@@ -214,6 +268,9 @@ __all__ = [
     "INPUT_TYPE_LABELS",
     "RULE_TRIGGER_INPUT_TYPES",
     "CUSTOMER_UPSERT_ACTION_SCOPES",
+    "CUSTOMER_MAPPING_ACTION_SCOPES",
+    "ORDER_MAPPING_ACTION_SCOPES",
+    "ORDER_POSITION_MAPPING_ACTION_SCOPES",
     "RULE_ACTION_EXCLUDED_FIELDS",
     "get_graphql_input_catalog",
     "get_rule_action_excluded_fields",

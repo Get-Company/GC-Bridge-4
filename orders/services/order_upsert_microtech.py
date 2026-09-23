@@ -327,13 +327,12 @@ class OrderUpsertMicrotechService(BaseService):
         order_defaults = self._load_order_defaults()
         order_type_number = self._coerce_positive_int(resolved_rule.vorgangsart_id, order_defaults.order_type_number)
         positions, rule_debug = self._build_graphql_positions(order=order, resolved_rule=resolved_rule, client=client)
-        description = order.description or f"Shopware Bestellung {order.order_number}"
-        input_data = {
-            "orderNumber": (order.order_number or "").strip() or (order.api_id or "").strip(),
-            "description": description,
-            "currency": "EUR",
-            "positions": positions,
-        }
+        input_data, create_input = self._build_graphql_order_inputs(
+            order=order,
+            positions=positions,
+            order_type_number=order_type_number,
+            customer_number=order.customer.erp_nr,
+        )
 
         existing_beleg_nr = self._refresh_erp_order_id_graphql(order=order, client=client)
         if existing_beleg_nr:
@@ -348,11 +347,6 @@ class OrderUpsertMicrotechService(BaseService):
             job = client.update_vorgang(existing_beleg_nr, input_data)
             is_new = False
         else:
-            create_input = {
-                **input_data,
-                "vorgangArt": order_type_number,
-                "customerNumber": order.customer.erp_nr,
-            }
             job = client.create_vorgang(create_input)
             is_new = True
 
@@ -371,6 +365,42 @@ class OrderUpsertMicrotechService(BaseService):
             is_new=is_new,
             rule_debug=rule_debug,
         )
+
+    def _build_graphql_order_inputs(
+        self,
+        *,
+        order: Order,
+        positions: list[dict[str, str]],
+        order_type_number: int,
+        customer_number: str,
+    ) -> tuple[dict, dict]:
+        """Build update/create inputs through the editable Vorgang mapping."""
+        code_input = {
+            "orderNumber": (order.order_number or "").strip() or (order.api_id or "").strip(),
+            "description": order.description or f"Shopware Bestellung {order.order_number}",
+            "currency": "EUR",
+            "vorgangArt": order_type_number,
+            "customerNumber": customer_number,
+        }
+        from microtech.rule_engine.mapping_resolver import resolve_order_mapping_fields
+
+        mapped_input = resolve_order_mapping_fields(order=order, code_values=code_input)
+        mapped_input = mapped_input or code_input
+        update_input = {
+            key: mapped_input[key]
+            for key in ("orderNumber", "description", "currency")
+            if key in mapped_input
+        }
+        update_input["positions"] = positions
+        create_input = {
+            **update_input,
+            "vorgangArt": self._coerce_positive_int(
+                mapped_input.get("vorgangArt"),
+                order_type_number,
+            ),
+            "customerNumber": mapped_input.get("customerNumber", customer_number),
+        }
+        return update_input, create_input
 
     @staticmethod
     def _read_remote_vorgangsart_graphql(*, client: MicrotechGraphQLClientService, beleg_nr: str) -> object:
@@ -443,7 +473,7 @@ class OrderUpsertMicrotechService(BaseService):
                 "unit": unit,
                 "price": self._format_graphql_decimal(detail.unit_price),
             }
-            self._resolve_position_name(
+            position_name = self._resolve_position_name(
                 detail=detail,
                 erp_nr=erp_nr,
                 artikel_service=artikel_service,
@@ -451,6 +481,21 @@ class OrderUpsertMicrotechService(BaseService):
                 product_export_text_map=product_export_text_map,
                 append_customs_metadata=append_customs_metadata,
             )
+            if position_name:
+                position["name"] = position_name
+
+            from microtech.rule_engine.mapping_resolver import resolve_order_position_mapping_fields
+
+            mapped_position = resolve_order_position_mapping_fields(
+                detail=detail,
+                code_values=position,
+            )
+            if mapped_position:
+                position = {
+                    key: value
+                    for key, value in mapped_position.items()
+                    if value not in (None, "")
+                }
             positions.append(position)
 
         configured_shipping_erp_nr = self._configured_shipping_erp_nr(resolved_rule=resolved_rule)

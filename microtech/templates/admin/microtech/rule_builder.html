@@ -27,21 +27,21 @@
     <button class="rb-primary" type="button" data-category-create>+ Kategorie</button>
   </div>
 
-  {% if mapping_conflicts %}
+  {% if mapping_overlaps %}
     <div class="rb-conflicts" role="alert">
-      <strong>Doppelte Zielfelder müssen bereinigt werden.</strong>
-      {% for conflict in mapping_conflicts %}
-        <div>{{ conflict.target }} · {{ conflict.phase }}: {{ conflict.rules|join:", " }}</div>
+      <strong>Mehrfach belegte Zielfelder – bitte Reihenfolge prüfen.</strong>
+      {% for overlap in mapping_overlaps %}
+        <div>{{ overlap.target }} · {{ overlap.phase }}: {{ overlap.rules|join:" → " }}</div>
       {% endfor %}
-      <small>Gleiche Auslöser sind erlaubt; nur das doppelte Schreiben desselben Feldes wird blockiert.</small>
+      <small>Das ist erlaubt. Treffen mehrere Bedingungen zu, gilt der Wert der später ausgeführten Regel.</small>
     </div>
   {% endif %}
 
   <details class="rb-checklist">
     <summary>Feldzuordnungen prüfen</summary>
     <p>
-      Die Checkliste bildet das bisherige Standard-Mapping aus dem Code ab.
-      Zugeordnete Felder sind durchgestrichen; zusätzliche Regeln werden direkt am Feld genannt.
+      Die Checkliste bildet das vollständige Standard-Mapping ab. Zugeordnete Felder sind
+      durchgestrichen; als Sicherheitsnetz bleibt der bisher berechnete Codewert verfügbar.
     </p>
     {% for group in mapping_checklist %}
       <section class="rb-check-group" data-check-category="{{ group.category_code }}">
@@ -51,7 +51,9 @@
             <li{% if field.assigned %} class="rb-field-assigned"{% endif %}>
               <span class="rb-field-name">{{ field.label }}</span>
               <code>{{ field.technical_name }}</code>
-              <span class="rb-field-source">Standard-Mapping{% if field.rule_names %} · Regel: {{ field.rule_names|join:", " }}{% endif %}</span>
+              <span class="rb-field-source">
+                {% if field.rule_names %}Regel: {{ field.rule_names|join:", " }}{% else %}Nicht als Regel zugeordnet{% endif %}
+              </span>
             </li>
           {% endfor %}
         </ul>
@@ -99,7 +101,7 @@
                 <div class="rb-rule-title">{{ rule.name }}</div>
                 <div class="rb-rule-meta">
                   {% if rule.trigger %}{{ rule.trigger.label }}{% else %}Kein Auslöser{% endif %}
-                  {% if not rule.has_conditions %} · Standard-Mapping{% endif %}
+                  {% if rule.is_system_mapping %} · System-Standard{% elif not rule.has_conditions %} · Standard-Mapping{% endif %}
                 </div>
               </div>
             </div>

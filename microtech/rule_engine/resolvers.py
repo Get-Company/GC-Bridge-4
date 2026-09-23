@@ -7,9 +7,17 @@ from microtech.rule_engine.context import EvaluationContext
 
 def _steuerkategorie(context: EvaluationContext) -> str:
     result = CustomerWebshopMappingService.resolve_tax_category(
-        billing_country_code=str(context.get("billing_country_code") or ""),
-        vat_id=str(context.get("vat_id") or ""),
-        customer_group=str(context.get("customer_group") or ""),
+        billing_country_code=str(
+            context.get("billing_address__country_code")
+            or context.get("billing_country_code")
+            or ""
+        ),
+        vat_id=str(context.get("customer__vat_id") or context.get("vat_id") or ""),
+        customer_group=str(
+            context.get("customer__shopware_customer_group")
+            or context.get("customer_group")
+            or ""
+        ),
     )
     return str(result)
 
