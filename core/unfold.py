@@ -41,5 +41,5 @@ def favicon(_request):
     return static("core/favicon.svg")
 
 
-def site_logo(_request):
+def site_icon(_request):
     return static("core/admin/classei-bridge-logo.png")
