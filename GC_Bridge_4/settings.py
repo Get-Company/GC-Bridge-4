@@ -802,6 +802,12 @@ UNFOLD = {
                         "permission": sidebar_model_view_permission("hr", "LeaveRequest"),
                     },
                     {
+                        "title": _("Reisekostenabrechnungen"),
+                        "icon": "receipt_long",
+                        "link": reverse_lazy("admin:hr_travelexpenseclaim_changelist"),
+                        "permission": sidebar_model_view_permission("hr", "TravelExpenseClaim"),
+                    },
+                    {
                         "title": _("Krankmeldungen"),
                         "icon": "healing",
                         "link": reverse_lazy("admin:hr_sickleave_changelist"),

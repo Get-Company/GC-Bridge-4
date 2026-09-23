@@ -2,12 +2,15 @@ from __future__ import annotations
 
 from datetime import date
 from decimal import Decimal
+from decimal import ROUND_HALF_UP
 import re
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator
 from django.db import models
 from django.db.models import Q
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from core.models import BaseModel
@@ -113,6 +116,67 @@ class EmployeeProfile(BaseModel):
 
     def __str__(self) -> str:
         return self.full_name
+
+
+class TravelExpenseClaim(BaseModel):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="travel_expense_claims",
+        verbose_name=_("Benutzer"),
+    )
+    name = models.CharField(max_length=200, verbose_name=_("Name"))
+    address = models.TextField(verbose_name=_("Anschrift"))
+    travel_date = models.DateField(default=timezone.localdate, verbose_name=_("Datum der Reise"))
+    travel_start = models.DateTimeField(verbose_name=_("Reisebeginn"))
+    travel_end = models.DateTimeField(verbose_name=_("Reiseende"))
+    purpose = models.TextField(verbose_name=_("Anlass"))
+    vehicle = models.CharField(max_length=120, verbose_name=_("Fahrzeug"))
+    license_plate = models.CharField(max_length=20, verbose_name=_("Kennzeichen"))
+    distance_km = models.DecimalField(
+        max_digits=9,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.01"))],
+        help_text=_("Kilometer der einfachen Fahrt."),
+        verbose_name=_("Gefahrene km (einfache Fahrt)"),
+    )
+    rate_per_km = models.DecimalField(
+        max_digits=6,
+        decimal_places=3,
+        validators=[MinValueValidator(Decimal("0.001"))],
+        help_text=_("Fahrtkostenpauschale in Euro pro Kilometer."),
+        verbose_name=_("Fahrtkostenpauschale (EUR/km)"),
+    )
+    round_trip = models.BooleanField(default=False, verbose_name=_("Hin- und Rückfahrt"))
+    settlement_place = models.CharField(max_length=120, verbose_name=_("Ort der Abrechnung"))
+    settlement_date = models.DateField(default=timezone.localdate, verbose_name=_("Datum der Abrechnung"))
+
+    class Meta:
+        verbose_name = _("Reisekostenabrechnung")
+        verbose_name_plural = _("Reisekostenabrechnungen")
+        ordering = ("-created_at", "-pk")
+
+    def clean(self) -> None:
+        if self.travel_start and self.travel_end and self.travel_end < self.travel_start:
+            raise ValidationError({"travel_end": _("Das Reiseende darf nicht vor dem Reisebeginn liegen.")})
+
+    @property
+    def number(self) -> str:
+        return f"{self.pk:06d}" if self.pk else "Wird nach dem Speichern vergeben"
+
+    @property
+    def fare_cost(self) -> Decimal:
+        return (self.distance_km * self.rate_per_km).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+    @property
+    def trip_total(self) -> Decimal:
+        multiplier = 2 if self.round_trip else 1
+        return (self.distance_km * self.rate_per_km * multiplier).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
+
+    def __str__(self) -> str:
+        return f"Reisekostenabrechnung Nr. {self.number} - {self.name}"
 
 
 class PublicHoliday(BaseModel):

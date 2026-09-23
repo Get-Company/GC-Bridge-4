@@ -6,9 +6,10 @@ import logging
 
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.http import HttpResponseRedirect
+from django.http import Http404, HttpResponse, HttpResponseRedirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from unfold.decorators import action
@@ -29,6 +30,7 @@ from hr.models import (
     SchoolHoliday,
     SickLeave,
     TimeAccountEntry,
+    TravelExpenseClaim,
     VacationEntitlement,
     WorkSchedule,
     WorkScheduleDay,
@@ -42,6 +44,7 @@ from hr.services import (
     TimeAccountService,
     WorkingTimeOverviewService,
 )
+from hr.services.travel_expense_pdf_service import TravelExpensePdfService
 
 logger = logging.getLogger(__name__)
 
@@ -903,6 +906,116 @@ class LeaveRequestAdmin(HrScopedAdminMixin, BaseAdmin):
             obj.employee = employee_profile
         obj.calculated_days = service.calculate_leave_days_for_request(obj)
         super().save_model(request, obj, form, change)
+
+
+@admin.register(TravelExpenseClaim)
+class TravelExpenseClaimAdmin(BaseAdmin):
+    actions_row = ("download_pdf_row",)
+    actions_detail = ("download_pdf_detail",)
+    readonly_fields = BaseAdmin.readonly_fields + (
+        "number_display", "name_display", "settlement_date_display", "fare_cost_display", "trip_total_display",
+    )
+    fieldsets = (
+        (None, {"fields": ("number_display", "name_display", "address")}),
+        (_("Reise"), {"fields": ("travel_date", "travel_start", "travel_end", "purpose")}),
+        (_("Fahrt"), {"fields": (
+            "vehicle", "license_plate", "distance_km", "rate_per_km", "round_trip",
+            "fare_cost_display", "trip_total_display",
+        )}),
+        (_("Abrechnung"), {"fields": ("settlement_place", "settlement_date_display")}),
+    )
+    list_display = ("number_display", "name", "travel_date", "vehicle", "trip_total_display", "settlement_date")
+    search_fields = ("name", "purpose", "vehicle", "license_plate", "user__username")
+    list_filter = (("travel_date", admin.DateFieldListFilter),)
+    date_hierarchy = "travel_date"
+
+    class Media:
+        js = ("hr/admin/travel_expense_claim.js",)
+
+    def _can_view_all(self, request) -> bool:
+        return AccessService().can_view_all_employees(request.user)
+
+    def get_queryset(self, request):
+        queryset = super().get_queryset(request).select_related("user")
+        return queryset if self._can_view_all(request) else queryset.filter(user=request.user)
+
+    def has_module_permission(self, request):
+        return request.user.is_active and request.user.is_staff
+
+    def has_view_permission(self, request, obj=None):
+        if not self.has_module_permission(request):
+            return False
+        return obj is None or self._can_view_all(request) or obj.user_id == request.user.pk
+
+    def has_add_permission(self, request):
+        return self.has_module_permission(request)
+
+    def has_change_permission(self, request, obj=None):
+        return self.has_view_permission(request, obj)
+
+    def has_delete_permission(self, request, obj=None):
+        return self.has_view_permission(request, obj)
+
+    def save_model(self, request, obj, form, change):
+        if not change:
+            obj.user = request.user
+            obj.name = request.user.get_full_name() or request.user.get_username()
+        super().save_model(request, obj, form, change)
+
+    @admin.display(description=_("Nr."))
+    def number_display(self, obj):
+        return obj.number if obj else "Wird nach dem Speichern vergeben"
+
+    @admin.display(description=_("Name"))
+    def name_display(self, obj):
+        return obj.name if obj else "Wird aus dem angemeldeten Benutzer übernommen"
+
+    @admin.display(description=_("Datum der Abrechnung"))
+    def settlement_date_display(self, obj):
+        return (obj.settlement_date if obj else timezone.localdate()).strftime("%d.%m.%Y")
+
+    @admin.display(description=_("Fahrtkosten (einfache Fahrt)"))
+    def fare_cost_display(self, obj):
+        if obj is None or obj.distance_km is None or obj.rate_per_km is None:
+            return "Wird automatisch berechnet"
+        return f"{obj.fare_cost:.2f} EUR"
+
+    @admin.display(description=_("Summe der Fahrt / Gesamtsumme"))
+    def trip_total_display(self, obj):
+        if obj is None or obj.distance_km is None or obj.rate_per_km is None:
+            return "Wird automatisch berechnet"
+        return f"{obj.trip_total:.2f} EUR"
+
+    def has_download_pdf_row_permission(self, request):
+        return self.has_view_permission(request)
+
+    def has_download_pdf_detail_permission(self, request, object_id=None):
+        if object_id is None:
+            return self.has_view_permission(request)
+        obj = self.get_object(request, str(object_id))
+        return obj is not None and self.has_view_permission(request, obj)
+
+    def _pdf_response(self, request, object_id):
+        obj = self.get_object(request, str(object_id))
+        if obj is None or not self.has_view_permission(request, obj):
+            raise Http404
+        response = HttpResponse(TravelExpensePdfService().render_pdf(obj), content_type="application/pdf")
+        response["Content-Disposition"] = f'inline; filename="reisekostenabrechnung-{obj.number}.pdf"'
+        return response
+
+    @action(
+        description=_("PDF drucken"), icon="picture_as_pdf", attrs={"target": "_blank"},
+        permissions=["download_pdf_row"],
+    )
+    def download_pdf_row(self, request, object_id):
+        return self._pdf_response(request, object_id)
+
+    @action(
+        description=_("PDF drucken"), icon="picture_as_pdf", attrs={"target": "_blank"},
+        permissions=["download_pdf_detail"],
+    )
+    def download_pdf_detail(self, request, object_id):
+        return self._pdf_response(request, object_id)
 
 
 @admin.register(SickLeave)
