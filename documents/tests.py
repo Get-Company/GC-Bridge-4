@@ -480,6 +480,25 @@ class DocumentWordImportServiceTest(SimpleTestCase):
         with self.assertRaisesMessage(ValueError, "offene Platzhalter"):
             self.service.validate_for_apply(job)
 
+    def test_apply_allows_human_reviewed_text_correction(self):
+        job = DocumentImportJob(
+            status=DocumentImportJob.Status.READY,
+            source_text="Datenschutzinformation,,,,,,",
+            result_html="<h2>Datenschutzinformation</h2>",
+        )
+
+        self.service.validate_for_apply(job)
+
+    def test_apply_rejects_placeholder_added_during_human_review(self):
+        job = DocumentImportJob(
+            status=DocumentImportJob.Status.READY,
+            source_text="Datenschutzinformation",
+            result_html="<h2>Datenschutzinformation</h2><p>&lt;Offener Platzhalter&gt;</p>",
+        )
+
+        with self.assertRaisesMessage(ValueError, "offene Platzhalter"):
+            self.service.validate_for_apply(job)
+
     @patch("documents.word_import_service.AIProviderService.rewrite_text_with_response")
     def test_execute_uses_immutable_prompt_snapshot(self, mock_rewrite):
         mock_rewrite.return_value = (

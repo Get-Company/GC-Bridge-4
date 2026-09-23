@@ -424,7 +424,19 @@ class DocumentWordImportService(BaseService):
     def _normalized_text(value: str) -> str:
         return " ".join(value.split())
 
-    def validate_result_html(self, job: DocumentImportJob) -> None:
+    def validate_result_html(
+        self,
+        job: DocumentImportJob,
+        *,
+        require_source_match: bool = True,
+    ) -> None:
+        """Validate safe HTML and, for AI output, enforce verbatim source text.
+
+        The AI result must match the extracted Word text exactly. During the
+        subsequent human review, authorized users may correct extraction or
+        formatting mistakes before approval; those reviewed edits still pass
+        the structural and placeholder safety checks below.
+        """
         soup = BeautifulSoup(job.result_html, "html.parser")
         allowed_tags = {
             "div",
@@ -456,6 +468,8 @@ class DocumentWordImportService(BaseService):
         ]
         if tags_with_invalid_attributes:
             raise ValueError("Das Importergebnis darf keine HTML-Attribute enthalten.")
+        if not require_source_match:
+            return
         rendered_text = self._normalized_text(soup.get_text(" ", strip=True))
         if job.source_blocks:
             source_text = self._normalized_text(
@@ -467,14 +481,20 @@ class DocumentWordImportService(BaseService):
             raise ValueError("Der Text des Importergebnisses weicht von der Word-Datei ab.")
 
     def unresolved_placeholders(self, job: DocumentImportJob) -> list[str]:
-        source = "\n".join(
-            self._effective_block_text(block)
-            for block in job.source_blocks
-        ) if job.source_blocks else job.source_text
+        if job.result_html:
+            source = BeautifulSoup(job.result_html, "html.parser").get_text("\n", strip=True)
+        else:
+            source = "\n".join(
+                self._effective_block_text(block)
+                for block in job.source_blocks
+            ) if job.source_blocks else job.source_text
         return list(dict.fromkeys(self.placeholder_pattern.findall(source)))
 
     def validate_for_apply(self, job: DocumentImportJob) -> None:
-        self.validate_result_html(job)
+        # Approval is the explicit human review boundary. Keep all HTML and
+        # placeholder protections, while allowing reviewed corrections to text
+        # that was malformed during Word extraction.
+        self.validate_result_html(job, require_source_match=False)
         unresolved = self.unresolved_placeholders(job)
         if unresolved:
             raise ValueError(

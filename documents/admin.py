@@ -906,7 +906,8 @@ class DocumentImportJobAdmin(BaseAdmin):
                 ),
                 "description": (
                     "Die KI darf ausschließlich eindeutig belegte Platzhalterwerte aus der bisherigen Fassung "
-                    "übernehmen. Bitte Struktur und Übernahmen prüfen und erst danach das Ergebnis freigeben."
+                    "übernehmen. Bitte Struktur und Übernahmen prüfen, erkennbare Importfehler im Ergebnis "
+                    "korrigieren und erst danach das Ergebnis freigeben."
                 ),
             },
         ),
