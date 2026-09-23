@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, timedelta
 from decimal import Decimal
 from io import BytesIO
 from unittest.mock import patch
@@ -8,7 +8,6 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.http import Http404
 from django.test import RequestFactory, SimpleTestCase
-from django.utils import timezone
 from pypdf import PdfReader
 from reportlab.lib.pagesizes import A4
 
@@ -23,10 +22,9 @@ class TravelExpenseClaimTest(SimpleTestCase):
         return TravelExpenseClaim(
             id=42,
             name="Erika Müller",
-            address="Musterstraße 1\n10115 Berlin",
             travel_date=date(2026, 9, 23),
-            travel_start=timezone.make_aware(datetime(2026, 9, 23, 8, 30)),
-            travel_end=timezone.make_aware(datetime(2026, 9, 23, 17, 0)),
+            travel_start=date(2026, 9, 23),
+            travel_end=date(2026, 9, 23),
             purpose="Kundentermin",
             vehicle="Privatwagen",
             license_plate="B-AB 123",
@@ -47,7 +45,7 @@ class TravelExpenseClaimTest(SimpleTestCase):
 
     def test_end_before_start_is_invalid(self):
         claim = self.make_claim()
-        claim.travel_end = claim.travel_start - timezone.timedelta(minutes=1)
+        claim.travel_end = claim.travel_start - timedelta(days=1)
         with self.assertRaises(ValidationError):
             claim.clean()
 
@@ -64,6 +62,8 @@ class TravelExpenseClaimTest(SimpleTestCase):
             "0,350 EUR/km", "86,42 EUR", "Unterschrift",
         ):
             self.assertIn(expected, text)
+        self.assertNotIn("Anschrift", text)
+        self.assertNotIn("Uhr", text)
 
     def test_admin_uses_logged_in_user_and_restricts_other_claims(self):
         user = get_user_model()(id=7, username="erika", first_name="Erika", last_name="Müller", is_staff=True)

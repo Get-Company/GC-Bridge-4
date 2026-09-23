@@ -4,7 +4,6 @@ from io import BytesIO
 from html import escape
 from pathlib import Path
 
-from django.utils import timezone
 import reportlab
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -71,8 +70,6 @@ class TravelExpensePdfService(BaseService):
             ]))
             return table
 
-        start = timezone.localtime(claim.travel_start) if timezone.is_aware(claim.travel_start) else claim.travel_start
-        end = timezone.localtime(claim.travel_end) if timezone.is_aware(claim.travel_end) else claim.travel_end
         story = [
             p("Reisekostenabrechnung", title),
             Spacer(1, 3 * mm),
@@ -82,13 +79,13 @@ class TravelExpensePdfService(BaseService):
             Spacer(1, 5 * mm),
             p("Angaben zur Person", section),
             Spacer(1, 2 * mm),
-            detail_row("Name", claim.name, "Anschrift", claim.address),
+            detail_row("Name", claim.name),
             Spacer(1, 2 * mm),
             p("Reise", section),
             Spacer(1, 2 * mm),
             detail_row("Datum", claim.travel_date.strftime("%d.%m.%Y"), "Anlass", claim.purpose),
-            detail_row("Reisebeginn", start.strftime("%d.%m.%Y, %H:%M Uhr"),
-                       "Reiseende", end.strftime("%d.%m.%Y, %H:%M Uhr")),
+            detail_row("Reisebeginn", claim.travel_start.strftime("%d.%m.%Y"),
+                       "Reiseende", claim.travel_end.strftime("%d.%m.%Y")),
             detail_row("Fahrzeug", claim.vehicle, "Kennzeichen", claim.license_plate),
             Spacer(1, 2 * mm),
             p("Fahrtkosten", section),

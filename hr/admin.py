@@ -916,7 +916,7 @@ class TravelExpenseClaimAdmin(BaseAdmin):
         "number_display", "name_display", "settlement_date_display", "fare_cost_display", "trip_total_display",
     )
     fieldsets = (
-        (None, {"fields": ("number_display", "name_display", "address")}),
+        (None, {"fields": ("number_display", "name_display")}),
         (_("Reise"), {"fields": ("travel_date", "travel_start", "travel_end", "purpose")}),
         (_("Fahrt"), {"fields": (
             "vehicle", "license_plate", "distance_km", "rate_per_km", "round_trip",

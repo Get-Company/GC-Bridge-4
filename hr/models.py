@@ -126,10 +126,9 @@ class TravelExpenseClaim(BaseModel):
         verbose_name=_("Benutzer"),
     )
     name = models.CharField(max_length=200, verbose_name=_("Name"))
-    address = models.TextField(verbose_name=_("Anschrift"))
     travel_date = models.DateField(default=timezone.localdate, verbose_name=_("Datum der Reise"))
-    travel_start = models.DateTimeField(verbose_name=_("Reisebeginn"))
-    travel_end = models.DateTimeField(verbose_name=_("Reiseende"))
+    travel_start = models.DateField(verbose_name=_("Reisebeginn"))
+    travel_end = models.DateField(verbose_name=_("Reiseende"))
     purpose = models.TextField(verbose_name=_("Anlass"))
     vehicle = models.CharField(max_length=120, verbose_name=_("Fahrzeug"))
     license_plate = models.CharField(max_length=20, verbose_name=_("Kennzeichen"))
