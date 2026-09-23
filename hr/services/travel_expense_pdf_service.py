@@ -143,7 +143,6 @@ class TravelExpensePdfService(BaseService):
             Spacer(1, 5 * mm),
             detail_row("Ort der Abrechnung", claim.settlement_place,
                        "Datum der Abrechnung", claim.settlement_date.strftime("%d.%m.%Y")),
-            detail_row("Auszahlung erfolgt", "Ja" if claim.paid_out else "Nein"),
             Spacer(1, 6 * mm),
             KeepTogether([signatures]),
         ])

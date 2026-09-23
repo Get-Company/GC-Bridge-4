@@ -127,8 +127,8 @@ class TravelExpenseClaim(BaseModel):
     )
     name = models.CharField(max_length=200, verbose_name=_("Name"))
     travel_date = models.DateField(default=timezone.localdate, verbose_name=_("Datum der Reise"))
-    travel_start = models.DateField(verbose_name=_("Reisebeginn"))
-    travel_end = models.DateField(verbose_name=_("Reiseende"))
+    travel_start = models.DateField(default=timezone.localdate, verbose_name=_("Reisebeginn"))
+    travel_end = models.DateField(default=timezone.localdate, verbose_name=_("Reiseende"))
     purpose = models.TextField(verbose_name=_("Anlass"))
     vehicle = models.CharField(max_length=120, verbose_name=_("Fahrzeug"))
     license_plate = models.CharField(max_length=20, verbose_name=_("Kennzeichen"))
@@ -149,7 +149,6 @@ class TravelExpenseClaim(BaseModel):
     round_trip = models.BooleanField(default=False, verbose_name=_("Hin- und Rückfahrt"))
     settlement_place = models.CharField(max_length=120, verbose_name=_("Ort der Abrechnung"))
     settlement_date = models.DateField(default=timezone.localdate, verbose_name=_("Datum der Abrechnung"))
-    paid_out = models.BooleanField(default=False, verbose_name=_("Auszahlung erfolgt"))
 
     class Meta:
         verbose_name = _("Reisekostenabrechnung")

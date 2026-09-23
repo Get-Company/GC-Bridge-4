@@ -14,8 +14,9 @@ from unfold.widgets import (
     UnfoldAdminTimeWidget,
 )
 
-from hr.models import EmployeeProfile, HolidayCalendar, WorkScheduleDay
+from hr.models import EmployeeProfile, HolidayCalendar, TravelExpenseClaim, WorkScheduleDay
 from hr.services import OpenHolidaysService
+from organization.models import CompanyProfile
 
 
 class OpenHolidaysImportForm(forms.Form):
@@ -74,6 +75,30 @@ class EmployeeProfileAdminForm(forms.ModelForm):
         widgets = {
             "color": UnfoldAdminColorInputWidget(),
         }
+
+
+class TravelExpenseClaimAdminForm(forms.ModelForm):
+    class Meta:
+        model = TravelExpenseClaim
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.company_city = ""
+        place_field = self.fields["settlement_place"]
+        place_field.disabled = True
+        place_field.required = False
+        if not self.instance.pk:
+            city = CompanyProfile.objects.filter(pk=1).values_list("city", flat=True).first()
+            self.company_city = (city or "").strip()
+            place_field.initial = self.company_city
+
+    def clean_settlement_place(self):
+        if not self.instance.pk:
+            if not self.company_city:
+                raise forms.ValidationError(_("Bitte zuerst einen Ort in den Firmendaten hinterlegen."))
+            return self.company_city
+        return self.cleaned_data["settlement_place"]
 
 
 class WorkScheduleDayInlineForm(forms.ModelForm):

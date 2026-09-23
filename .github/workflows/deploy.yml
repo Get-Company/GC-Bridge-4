@@ -57,6 +57,10 @@ jobs:
           run_logged docker compose run --rm --no-deps --entrypoint python web -c "from GC_Bridge_4.celery import app; assert app.conf.task_default_queue == 'microtech'; assert app.conf.task_routes['orders.*']['queue'] == 'orders'; assert app.conf.task_routes['products.*']['queue'] == 'bulk'; print('Celery routing verified')"
           run_logged docker compose run --rm --no-deps --entrypoint python mcp -c "import mcp_server.server; print('MCP import verified')"
 
+          if [ "$DEPLOY_TAG" = "v1.17.75" ]; then
+            run_logged docker compose run --rm --no-deps --entrypoint python web manage.py hr_reset_travel_expense_sequence
+          fi
+
           # Nginx stays up while the application containers are replaced. Its
           # static maintenance page intercepts temporary upstream 502/503/504
           # responses instead of exposing a gateway error to colleagues.

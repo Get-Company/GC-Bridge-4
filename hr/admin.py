@@ -17,7 +17,13 @@ from unfold.enums import ActionVariant
 from unfold.contrib.filters.admin import BooleanRadioFilter, RangeDateTimeFilter, RelatedDropdownFilter
 
 from core.admin import BaseAdmin, BaseTabularInline
-from hr.forms import EmployeeProfileAdminForm, EmployeeWorkingTimeOverviewForm, OpenHolidaysImportForm, WorkScheduleDayInlineForm
+from hr.forms import (
+    EmployeeProfileAdminForm,
+    EmployeeWorkingTimeOverviewForm,
+    OpenHolidaysImportForm,
+    TravelExpenseClaimAdminForm,
+    WorkScheduleDayInlineForm,
+)
 from hr.models import (
     CompanyHoliday,
     Department,
@@ -910,6 +916,7 @@ class LeaveRequestAdmin(HrScopedAdminMixin, BaseAdmin):
 
 @admin.register(TravelExpenseClaim)
 class TravelExpenseClaimAdmin(BaseAdmin):
+    form = TravelExpenseClaimAdminForm
     actions_row = ("download_pdf_row",)
     actions_detail = ("download_pdf_detail",)
     readonly_fields = BaseAdmin.readonly_fields + (
@@ -922,13 +929,11 @@ class TravelExpenseClaimAdmin(BaseAdmin):
             "vehicle", "license_plate", "distance_km", "rate_per_km", "round_trip",
             "fare_cost_display", "trip_total_display",
         )}),
-        (_("Abrechnung"), {"fields": ("settlement_place", "settlement_date_display", "paid_out")}),
+        (_("Abrechnung"), {"fields": ("settlement_place", "settlement_date_display")}),
     )
-    list_display = (
-        "number_display", "name", "travel_date", "vehicle", "trip_total_display", "paid_out", "settlement_date",
-    )
+    list_display = ("number_display", "name", "travel_date", "vehicle", "trip_total_display", "settlement_date")
     search_fields = ("name", "purpose", "vehicle", "license_plate", "user__username")
-    list_filter = (("travel_date", admin.DateFieldListFilter), ("paid_out", BooleanRadioFilter))
+    list_filter = (("travel_date", admin.DateFieldListFilter),)
     date_hierarchy = "travel_date"
 
     class Media:
@@ -953,21 +958,16 @@ class TravelExpenseClaimAdmin(BaseAdmin):
         return self.has_module_permission(request)
 
     def has_change_permission(self, request, obj=None):
-        if obj is not None and obj.paid_out and not self._can_view_all(request):
-            return False
         return self.has_view_permission(request, obj)
 
     def has_delete_permission(self, request, obj=None):
-        return self.has_change_permission(request, obj)
-
-    def get_readonly_fields(self, request, obj=None):
-        fields = super().get_readonly_fields(request, obj)
-        return fields if self._can_view_all(request) else fields + ("paid_out",)
+        return self.has_view_permission(request, obj)
 
     def save_model(self, request, obj, form, change):
         if not change:
             obj.user = request.user
             obj.name = request.user.get_full_name() or request.user.get_username()
+            obj.settlement_place = form.company_city
         super().save_model(request, obj, form, change)
 
     @admin.display(description=_("Nr."))
