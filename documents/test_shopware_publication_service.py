@@ -129,3 +129,36 @@ class DocumentShopwarePublicationServiceTests(SimpleTestCase):
 
         with self.assertRaisesMessage(ValueError, "Medienordner folder-id wurde nicht gefunden"):
             service._fetch_media_folder("folder-id")
+
+    def test_layout_publication_does_not_rebuild_page_without_text_element(self):
+        service = DocumentShopwarePublicationService.__new__(DocumentShopwarePublicationService)
+        service._fetch_cms_page = MagicMock(return_value={"id": "page-id"})
+        service._iter_slots = MagicMock(return_value=[])
+        service.request_post = MagicMock()
+
+        with self.assertRaisesMessage(ValueError, "genau ein Text-Element"):
+            service.publish_layout(
+                Document(shopware_cms_page_id="page-id"),
+                rendered_html="<p>AGB</p>",
+            )
+
+        service.request_post.assert_not_called()
+
+    def test_layout_publication_does_not_rebuild_page_with_multiple_text_elements(self):
+        service = DocumentShopwarePublicationService.__new__(DocumentShopwarePublicationService)
+        service._fetch_cms_page = MagicMock(return_value={"id": "page-id"})
+        service._iter_slots = MagicMock(
+            return_value=[
+                {"id": "slot-1", "config": {"content": {"source": "static", "value": "A"}}},
+                {"id": "slot-2", "config": {"content": {"source": "static", "value": "B"}}},
+            ]
+        )
+        service.request_post = MagicMock()
+
+        with self.assertRaisesMessage(ValueError, "2 Text-Elemente"):
+            service.publish_layout(
+                Document(shopware_cms_page_id="page-id"),
+                rendered_html="<p>AGB</p>",
+            )
+
+        service.request_post.assert_not_called()

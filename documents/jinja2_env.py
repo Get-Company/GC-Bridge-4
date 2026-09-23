@@ -42,18 +42,34 @@ def _build_price_list_attribute_rows(product) -> list[dict[str, str]]:
     return rows
 
 
-def _build_price_list_row(product, *, attributes: list[dict[str, str]] | None = None) -> dict:
+def _build_price_list_row(
+    product,
+    *,
+    attributes: list[dict[str, str]] | None = None,
+    price_override: dict | None = None,
+) -> dict:
     prices = list(getattr(product, "price_list_prices", []))
     price = prices[0] if prices else None
+    price_value = price_override.get("price") if price_override else price.price if price else None
+    rebate_quantity = (
+        price_override.get("rebate_quantity")
+        if price_override
+        else price.rebate_quantity if price else None
+    )
+    rebate_price = (
+        price_override.get("rebate_price")
+        if price_override
+        else price.rebate_price if price else None
+    )
     return {
         "erp_nr": (product.erp_nr or "").strip() or "-",
         "name": (product.name or "").strip() or "Ohne Bezeichnung",
         "attributes": attributes if attributes is not None else _build_price_list_attribute_rows(product),
         "factor": product.factor,
         "vpe_display": _build_price_list_vpe_display(product),
-        "price_display": _format_price_list_currency(price.price if price else None),
-        "rebate_quantity_display": _format_price_list_quantity(price.rebate_quantity if price else None),
-        "rebate_price_display": _format_price_list_currency(price.rebate_price if price else None),
+        "price_display": _format_price_list_currency(price_value),
+        "rebate_quantity_display": _format_price_list_quantity(rebate_quantity),
+        "rebate_price_display": _format_price_list_currency(rebate_price),
     }
 
 
@@ -100,20 +116,25 @@ def _duplicate_category_for_path(category_path: list, duplicate_categories: tupl
     return max(matches, key=lambda category: (category.level, category.lft, category.pk), default=None)
 
 
-def _variant_price_signature(product) -> tuple:
+def _variant_price_signature(product, *, price_overrides: dict[int, dict] | None = None) -> tuple:
     """Return every value that is displayed in the price columns for a product."""
     prices = list(getattr(product, "price_list_prices", []))
     price = prices[0] if prices else None
+    price_override = (price_overrides or {}).get(product.pk)
     return (
-        price.price if price else None,
-        price.rebate_quantity if price else None,
-        price.rebate_price if price else None,
+        price_override.get("price") if price_override else price.price if price else None,
+        price_override.get("rebate_quantity") if price_override else price.rebate_quantity if price else None,
+        price_override.get("rebate_price") if price_override else price.rebate_price if price else None,
         product.factor,
         (product.unit or "").strip(),
     )
 
 
-def _build_price_list_variant_summaries(products: list) -> dict[int, dict]:
+def _build_price_list_variant_summaries(
+    products: list,
+    *,
+    price_overrides: dict[int, dict] | None = None,
+) -> dict[int, dict]:
     """Map each variant-family member to a single representative price row.
 
     A family can have many concrete combinations (for example size, colour and
@@ -157,7 +178,10 @@ def _build_price_list_variant_summaries(products: list) -> dict[int, dict]:
         variants_by_price: dict[tuple, list] = {}
         for variant in displayed_variants:
             variants_by_price.setdefault(
-                _variant_price_signature(products_by_id[variant.product.pk]),
+                _variant_price_signature(
+                    products_by_id[variant.product.pk],
+                    price_overrides=price_overrides,
+                ),
                 [],
             ).append(variant)
 
@@ -203,6 +227,8 @@ def price_list_catalog_sections(
     root_level: int | None = None,
     active_only: bool = True,
     document=None,
+    product_ids: set[int] | None = None,
+    price_overrides: dict[int, dict] | None = None,
 ) -> list[dict]:
     """Build the price list below each technical category root.
 
@@ -256,6 +282,8 @@ def price_list_catalog_sections(
     )
     if active_only:
         product_queryset = product_queryset.filter(is_active=True)
+    if product_ids is not None:
+        product_queryset = product_queryset.filter(pk__in=product_ids)
     products = list(
         product_queryset.select_related("tax")
         .prefetch_related(
@@ -285,7 +313,10 @@ def price_list_catalog_sections(
     )
 
     duplicate_categories = _price_list_duplicate_categories(document)
-    variant_summaries = _build_price_list_variant_summaries(products)
+    variant_summaries = _build_price_list_variant_summaries(
+        products,
+        price_overrides=price_overrides,
+    )
     sections = []
     listed_product_ids: set[int] = set()
     listed_duplicate_category_product_ids: set[tuple[int, int]] = set()
@@ -355,6 +386,7 @@ def price_list_catalog_sections(
                     _build_price_list_row(
                         product,
                         attributes=variant_summary["attributes"] if variant_summary else None,
+                        price_override=(price_overrides or {}).get(product.pk),
                     )
                 )
                 if duplicate_category:
@@ -386,6 +418,9 @@ def build_env() -> jinja2.Environment:
     )
     @jinja2.pass_context
     def price_list_catalog_sections_for_document(context, *args, **kwargs):
+        snapshot_sections = context.get("price_list_sections")
+        if snapshot_sections is not None and not args and not kwargs:
+            return snapshot_sections
         kwargs.setdefault("document", context.get("document"))
         return price_list_catalog_sections(*args, **kwargs)
 

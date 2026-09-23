@@ -967,6 +967,29 @@ class PriceIncrease(BaseModel):
         default=Decimal("2.50"),
         verbose_name=_("Generelle Erhoehung (%)"),
     )
+    price_list_template = models.ForeignKey(
+        "documents.Document",
+        on_delete=models.PROTECT,
+        related_name="price_increases_as_template",
+        null=True,
+        blank=True,
+        limit_choices_to={
+            "document_type": "price_list",
+            "is_template": True,
+            "is_active": True,
+        },
+        verbose_name=_("Preislisten-Vorlage"),
+        help_text=_("Diese Vorlage wird für das Jahresdokument der Preiserhöhung verwendet."),
+    )
+    price_list_document = models.OneToOneField(
+        "documents.Document",
+        on_delete=models.SET_NULL,
+        related_name="generated_from_price_increase",
+        null=True,
+        blank=True,
+        editable=False,
+        verbose_name=_("Erzeugte Preisliste"),
+    )
     positions_synced_at = models.DateTimeField(
         null=True,
         blank=True,
@@ -990,6 +1013,14 @@ class PriceIncrease(BaseModel):
         super().clean()
         if self.sales_channel_id and not self.sales_channel.is_default:
             raise ValidationError({"sales_channel": _("Es darf nur der Standard-Verkaufskanal verwendet werden.")})
+        if self.price_list_template_id and (
+            not self.price_list_template.is_template
+            or not self.price_list_template.is_active
+            or self.price_list_template.document_type != "price_list"
+        ):
+            raise ValidationError(
+                {"price_list_template": _("Es muss eine aktive Preislisten-Vorlage ausgewählt werden.")}
+            )
 
     def save(self, *args, **kwargs):
         if not self.sales_channel_id:

@@ -2,6 +2,7 @@ from django import forms
 from django.contrib import admin, messages
 from django.core.files.uploadedfile import UploadedFile
 from django.http import FileResponse, Http404, HttpResponse, HttpResponseRedirect
+from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils.html import escape, format_html
 from django.utils.safestring import mark_safe
@@ -13,13 +14,17 @@ from unfold.decorators import action
 from unfold.enums import ActionVariant
 
 from core.admin import BaseAdmin, BaseTabularInline
+from ai.models import AIProviderConfig
 from documents.document_version_service import DocumentVersionService
 from documents.models import (
     Document,
+    DocumentImportJob,
     DocumentType,
     DocumentVersion,
 )
 from documents.services import DocumentPdfService, DocumentTemplateContextService
+from documents.tasks import run_document_word_import
+from documents.word_import_service import DocumentWordImportService
 
 
 class DocumentAdminForm(forms.ModelForm):
@@ -58,8 +63,8 @@ class DocumentAdminForm(forms.ModelForm):
             self.shopware_layout_choices,
             "Shopware Erlebniswelt (optional)",
             "Optional: Diese Seite nimmt das Dokument auf. Enthält sie genau ein Text-Element, wird nur "
-            "dessen Inhalt ersetzt - sonst wird ihr Aufbau durch ein einzelnes Text-Element "
-            "mit dem Dokument ersetzt. Nur für Seiten verwenden, die allein dem Dokument dienen.",
+            "dessen Inhalt ersetzt. Bei keinem oder mehreren Text-Elementen wird die Veröffentlichung "
+            "abgebrochen, damit der bestehende Seitenaufbau erhalten bleibt.",
             empty_label="Keine Erlebniswelt aktualisieren (nur PDF hochladen)",
         )
         self._configure_shopware_select(
@@ -134,6 +139,33 @@ class DocumentAdminForm(forms.ModelForm):
         )
 
 
+class DocumentWordImportForm(forms.Form):
+    provider = forms.ModelChoiceField(
+        label="KI-Provider",
+        queryset=AIProviderConfig.objects.filter(is_active=True).order_by("name"),
+        help_text="Die KI ordnet nur die Word-Struktur. Der juristische Text bleibt unverändert.",
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not self.is_bound:
+            self.initial["provider"] = self.fields["provider"].queryset.first()
+
+
+class DocumentImportJobAdminForm(forms.ModelForm):
+    class Meta:
+        model = DocumentImportJob
+        fields = "__all__"
+        widgets = {
+            "result_html": WysiwygWidget(
+                attrs={
+                    "data-document-editor": "html",
+                    "aria-label": "Importiertes HTML",
+                }
+            ),
+        }
+
+
 class DocumentVersionInline(BaseTabularInline):
     model = DocumentVersion
     extra = 0
@@ -205,7 +237,7 @@ class DocumentTypeAdmin(BaseAdmin):
 @admin.register(Document)
 class DocumentAdmin(BaseAdmin):
     form = DocumentAdminForm
-    autocomplete_fields = ("price_list_duplicate_categories",)
+    autocomplete_fields = ("price_list_duplicate_categories", "source_template")
     inlines = (DocumentVersionInline,)
     conditional_fields = {
         "price_list_duplicate_categories": "document_type == 'price_list'",
@@ -213,6 +245,7 @@ class DocumentAdmin(BaseAdmin):
     list_display = (
         "title",
         "document_type",
+        "is_template",
         "slug",
         "template_source_status",
         "is_active",
@@ -223,6 +256,7 @@ class DocumentAdmin(BaseAdmin):
     list_editable = ("is_active",)
     list_filter = [
         "document_type",
+        ("is_template", BooleanRadioFilter),
         ("is_active", BooleanRadioFilter),
     ]
     search_fields = ("title", "slug", "html_content", "css_content", "template_file", "pdf_filename")
@@ -236,6 +270,7 @@ class DocumentAdmin(BaseAdmin):
         "end_pdf_preview",
         "shopware_link_ids",
         "active_version_display",
+        "context_snapshot_display",
     )
     actions = ("generate_pdf",)
     actions_detail = (
@@ -244,6 +279,7 @@ class DocumentAdmin(BaseAdmin):
             "icon": "more_vert",
             "items": [
                 "create_version_detail",
+                "start_word_import_detail",
                 "generate_pdf_detail",
                 "publish_to_shopware_detail",
                 "preview_template_detail",
@@ -265,9 +301,13 @@ class DocumentAdmin(BaseAdmin):
                     "document_type",
                     "slug",
                     "title",
+                    "is_template",
+                    "source_template",
+                    "valid_from",
                     "is_active",
                     "price_list_duplicate_categories",
                     "active_version_display",
+                    "context_snapshot_display",
                 ),
                 "classes": ("tab",),
             },
@@ -285,8 +325,10 @@ class DocumentAdmin(BaseAdmin):
                 ),
                 "classes": ("tab",),
                 "description": (
-                    "DOCX- und RTF-Quelldateien lassen sich nach dem Speichern direkt im passenden Programm oeffnen. "
-                    "HTML wird im WYSIWYG-Editor gepflegt; das gespeicherte CSS wird dort geladen."
+                    "Bei AGB, Datenschutzerklärungen und Widerrufsbelehrungen kann eine gespeicherte "
+                    "DOCX-Datei über die Aktion "
+                    "„Word-Datei mit KI aufbereiten“ strukturiert und anschließend geprüft übernommen werden. "
+                    "RTF-Dateien dienen nur als Quelle zum Herunterladen. HTML wird im WYSIWYG-Editor gepflegt."
                 ),
             },
         ),
@@ -305,9 +347,8 @@ class DocumentAdmin(BaseAdmin):
                     "ausgewählt werden. „In Shopware veröffentlichen“ erzeugt bei jedem Klick ein aktuelles PDF "
                     "und überschreibt genau die ausgewählte Mediendatei. Ist eine Erlebniswelt ausgewählt, wird "
                     "auch deren HTML-Inhalt aktualisiert. Optional kann ein Zielordner für die PDF ausgewählt werden; ohne "
-                    "Auswahl bleibt ihr Ordner in Shopware erhalten. Bringt die Erlebniswelt nicht genau ein Text-Element mit, "
-                    "wird ihr gesamter Aufbau durch ein einzelnes Text-Element ersetzt - vorhandene "
-                    "Bilder, Videos und weitere Blöcke gehen dabei verloren."
+                    "Auswahl bleibt ihr Ordner in Shopware erhalten. Die Erlebniswelt muss genau ein Text-Element "
+                    "enthalten; andernfalls wird die Veröffentlichung abgebrochen und ihr Aufbau nicht verändert."
                 ),
             },
         ),
@@ -361,6 +402,10 @@ class DocumentAdmin(BaseAdmin):
             uploaded.seek(0)
             obj.html_content = uploaded.read().decode("utf-8")
             uploaded.seek(0)
+        elif change and "html_content" in form.changed_data and obj.template_file:
+            # An explicit editor change becomes authoritative. Keeping the old
+            # uploaded file attached would otherwise make the visible edit inert.
+            obj.template_file = ""
         super().save_model(request, obj, form, change)
 
     def get_form(self, request, obj=None, change=False, **kwargs):
@@ -427,6 +472,11 @@ class DocumentAdmin(BaseAdmin):
                 self.admin_site.admin_view(self.preview_template_view),
                 name="documents_document_preview_template",
             ),
+            path(
+                "<path:object_id>/word-import/",
+                self.admin_site.admin_view(self.word_import_view),
+                name="documents_document_word_import",
+            ),
         ] + super().get_urls()
 
     @admin.display(description="Template")
@@ -444,6 +494,21 @@ class DocumentAdmin(BaseAdmin):
         if not obj or not obj.active_version_id:
             return "Noch keine Version aktiviert"
         return obj.active_version
+
+    @admin.display(description="Daten-Snapshot")
+    def context_snapshot_display(self, obj: Document | None = None):
+        if not obj or not obj.context_snapshot:
+            return "Kein Snapshot"
+        source = obj.context_snapshot.get("price_list_source", {})
+        if source:
+            return format_html(
+                "<strong>{}</strong><br>Vorlage: {}<br>Positionen: {}<br>Erzeugt: {}",
+                source.get("price_increase_title", "Preiserhöhung"),
+                source.get("template_title", "-"),
+                source.get("row_count", "-"),
+                source.get("generated_at", "-"),
+            )
+        return "Snapshot vorhanden"
 
     @admin.display(description="Shopware IDs")
     def shopware_link_ids(self, obj: Document | None = None):
@@ -590,6 +655,55 @@ class DocumentAdmin(BaseAdmin):
             )
         return HttpResponse(html, content_type="text/html; charset=utf-8")
 
+    def word_import_view(self, request, object_id: str):
+        document = self.get_object(request, object_id)
+        if not document:
+            raise Http404("Dokument nicht gefunden.")
+        if not self.has_change_permission(request, document):
+            return HttpResponse(status=403)
+        if document.document_type not in DocumentWordImportService.supported_document_types:
+            self.message_user(
+                request,
+                "Der Word-Import ist nur für AGB, Datenschutzerklärungen "
+                "und Widerrufsbelehrungen vorgesehen.",
+                level=messages.ERROR,
+            )
+            return HttpResponseRedirect(reverse("admin:documents_document_change", args=(object_id,)))
+        if not document.source_docx:
+            self.message_user(
+                request,
+                "Bitte zuerst eine DOCX-Datei hinterlegen und das Dokument speichern.",
+                level=messages.ERROR,
+            )
+            return HttpResponseRedirect(reverse("admin:documents_document_change", args=(object_id,)))
+
+        form = DocumentWordImportForm(request.POST or None)
+        if request.method == "POST" and form.is_valid():
+            try:
+                job = DocumentWordImportService().create_job(
+                    document=document,
+                    provider=form.cleaned_data["provider"],
+                    requested_by=request.user,
+                )
+                async_result = run_document_word_import.delay(job.pk)
+                job.celery_task_id = getattr(async_result, "id", "") or ""
+                job.save(update_fields=("celery_task_id", "updated_at"))
+            except Exception as exc:
+                self.message_user(request, f"Word-Import konnte nicht gestartet werden: {exc}", level=messages.ERROR)
+            else:
+                self.message_user(request, "Word-Datei wird strukturiert. Das Ergebnis muss anschließend freigegeben werden.")
+                return HttpResponseRedirect(reverse("admin:documents_documentimportjob_change", args=(job.pk,)))
+
+        context = {
+            **self.admin_site.each_context(request),
+            "opts": self.model._meta,
+            "original": document,
+            "title": f"Word-Datei für {document.title} importieren",
+            "form": form,
+            "document": document,
+        }
+        return TemplateResponse(request, "admin/documents/document/word_import.html", context)
+
     @admin.action(description="PDF speichern")
     def generate_pdf(self, request, queryset):
         service = DocumentPdfService()
@@ -616,6 +730,14 @@ class DocumentAdmin(BaseAdmin):
             return HttpResponseRedirect(reverse("admin:documents_document_change", args=(object_id,)))
         self.message_user(request, f"Version {version.version_number} wurde als Entwurf angelegt.")
         return HttpResponseRedirect(reverse("admin:documents_documentversion_change", args=(version.pk,)))
+
+    @action(
+        description="Word-Datei mit KI aufbereiten",
+        icon="auto_awesome",
+        variant=ActionVariant.INFO,
+    )
+    def start_word_import_detail(self, request, object_id: str):
+        return HttpResponseRedirect(reverse("admin:documents_document_word_import", args=(object_id,)))
 
     @action(
         description="Vorschau",
@@ -666,6 +788,111 @@ class DocumentAdmin(BaseAdmin):
         return HttpResponseRedirect(reverse("admin:documents_document_change", args=(object_id,)))
 
 
+@admin.register(DocumentImportJob)
+class DocumentImportJobAdmin(BaseAdmin):
+    form = DocumentImportJobAdminForm
+    list_display = ("document", "status", "provider", "requested_by", "applied_at", "created_at")
+    list_filter = ("status", "provider")
+    search_fields = ("document__title", "document__slug", "source_text", "error_message")
+    readonly_fields = BaseAdmin.readonly_fields + (
+        "document",
+        "provider",
+        "status",
+        "source_text_display",
+        "source_blocks",
+        "rendered_prompt",
+        "provider_response",
+        "error_message",
+        "celery_task_id",
+        "requested_by",
+        "applied_at",
+    )
+    actions_detail = (
+        {
+            "title": "Freigabe",
+            "icon": "check_circle",
+            "items": ["apply_import_detail"],
+        },
+    )
+    fieldsets = (
+        (
+            "Word-Import",
+            {
+                "fields": (
+                    "document",
+                    "provider",
+                    "status",
+                    "requested_by",
+                    "source_text_display",
+                    "result_html",
+                    "applied_at",
+                ),
+                "description": (
+                    "Der Originaltext muss unverändert bleiben. Bitte Überschriften, Listen und Tabellen prüfen, "
+                    "speichern und erst danach das Ergebnis übernehmen."
+                ),
+            },
+        ),
+        (
+            "Technische Details",
+            {
+                "fields": (
+                    "source_blocks",
+                    "rendered_prompt",
+                    "provider_response",
+                    "error_message",
+                    "celery_task_id",
+                ),
+                "classes": ("collapse",),
+            },
+        ),
+        ("System", {"fields": BaseAdmin.readonly_fields}),
+    )
+
+    class Media:
+        css = {"all": ("documents/admin/document_editor.css",)}
+        js = ("documents/admin/document_editor.js",)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def get_readonly_fields(self, request, obj=None):
+        fields = super().get_readonly_fields(request, obj)
+        if obj and obj.status == DocumentImportJob.Status.APPLIED:
+            return (*fields, "result_html")
+        return fields
+
+    @admin.display(description="Word-Originaltext")
+    def source_text_display(self, obj: DocumentImportJob | None = None):
+        if not obj or not obj.source_text:
+            return "-"
+        return format_html(
+            '<pre style="white-space:pre-wrap;max-height:32rem;overflow:auto">{}</pre>',
+            obj.source_text,
+        )
+
+    @action(
+        description="Geprüftes Ergebnis übernehmen",
+        icon="check_circle",
+        variant=ActionVariant.PRIMARY,
+    )
+    def apply_import_detail(self, request, object_id: str):
+        job = self.get_object(request, object_id)
+        if not job:
+            self.message_user(request, "Word-Import nicht gefunden.", level=messages.ERROR)
+            return HttpResponseRedirect(reverse("admin:documents_documentimportjob_changelist"))
+        try:
+            DocumentWordImportService().apply(job)
+        except ValueError as exc:
+            self.message_user(request, str(exc), level=messages.ERROR)
+            return HttpResponseRedirect(reverse("admin:documents_documentimportjob_change", args=(object_id,)))
+        self.message_user(request, "Der geprüfte Word-Inhalt wurde als aktive Dokumentversion übernommen.")
+        return HttpResponseRedirect(reverse("admin:documents_document_change", args=(job.document_id,)))
+
+
 class DocumentVersionAdminForm(forms.ModelForm):
     class Meta:
         model = DocumentVersion
@@ -694,7 +921,13 @@ class DocumentVersionAdmin(BaseAdmin):
     list_display = ("document", "version_number", "label", "is_active", "activated_at", "updated_at")
     list_filter = (("is_active", BooleanRadioFilter),)
     search_fields = ("document__title", "document__slug", "label", "template_source", "css_content")
-    readonly_fields = BaseAdmin.readonly_fields + ("document", "version_number", "is_active", "activated_at")
+    readonly_fields = BaseAdmin.readonly_fields + (
+        "document",
+        "version_number",
+        "is_active",
+        "activated_at",
+        "context_snapshot",
+    )
     actions_detail = (
         {
             "title": "Veroeffentlichen",
@@ -706,7 +939,14 @@ class DocumentVersionAdmin(BaseAdmin):
         (
             "Version",
             {
-                "fields": ("document", "version_number", "label", "is_active", "activated_at"),
+                "fields": (
+                    "document",
+                    "version_number",
+                    "label",
+                    "valid_from",
+                    "is_active",
+                    "activated_at",
+                ),
                 "description": (
                     "Die aktive Version aktualisiert die verknüpfte PDF-Datei und zusätzlich die Erlebniswelt, "
                     "wenn diese am Dokument ausgewählt ist."
@@ -716,7 +956,7 @@ class DocumentVersionAdmin(BaseAdmin):
         (
             "Template",
             {
-                "fields": ("use_jinja2", "template_source", "css_content"),
+                "fields": ("use_jinja2", "template_source", "css_content", "context_snapshot"),
             },
         ),
         (

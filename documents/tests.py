@@ -14,9 +14,10 @@ from weasyprint import HTML as WeasyHTML
 from documents.admin import DocumentAdmin, DocumentAdminForm, DocumentTypeAdminForm
 from documents.jinja2_env import price_list_catalog_sections
 from documents.management.commands.init_documents import Command as InitDocumentsCommand
-from documents.models import Document, DocumentType
+from documents.models import Document, DocumentImportJob, DocumentType
 from documents.shopware_upload_service import DocumentShopwareUploadService
 from documents.services import DocumentPdfService
+from documents.word_import_service import DocumentWordImportService
 from unfold.contrib.forms.widgets import WysiwygWidget
 from products.models import (
     Category,
@@ -93,6 +94,21 @@ class DocumentRenderingTest(SimpleTestCase):
         self.assertNotIn("body { color: red; }", rendered)
         self.assertIn("<p>Juni</p>", rendered)
 
+    def test_document_render_uses_saved_price_list_snapshot(self):
+        document = Document(
+            title="Preisliste 2026",
+            html_content=(
+                "{% for section in price_list_catalog_sections() %}"
+                "<h2>{{ section.name }}</h2>"
+                "{% endfor %}"
+            ),
+            context_snapshot={"price_list_sections": [{"name": "Archivierung"}]},
+        )
+
+        rendered = document.render()
+
+        self.assertEqual(rendered, "<h2>Archivierung</h2>")
+
     def test_document_render_prefers_uploaded_template_file(self):
         with tempfile.TemporaryDirectory() as tmpdir, override_settings(MEDIA_ROOT=tmpdir):
             document = Document(
@@ -126,15 +142,21 @@ class DocumentRenderingTest(SimpleTestCase):
         self.assertIn("document_type", help_html)
         self.assertNotIn("Live-Vorschau", help_html)
 
-        media = str(admin_instance.media)
-        self.assertIn("documents/admin/document_editor.css", media)
-        self.assertIn("documents/admin/document_editor.js", media)
+        self.assertIn(
+            "documents/admin/document_editor.css",
+            admin_instance.Media.css["all"],
+        )
+        self.assertIn(
+            "documents/admin/document_editor.js",
+            admin_instance.Media.js,
+        )
         self.assertNotIn("template_preview_link", admin_instance.readonly_fields)
         self.assertNotIn("live_preview_button", admin_instance.readonly_fields)
         self.assertEqual(
             admin_instance.actions_detail[0]["items"],
             [
                 "create_version_detail",
+                "start_word_import_detail",
                 "generate_pdf_detail",
                 "publish_to_shopware_detail",
                 "preview_template_detail",
@@ -162,6 +184,7 @@ class DocumentRenderingTest(SimpleTestCase):
             "document_type == 'price_list'",
         )
         self.assertIn("price_list_duplicate_categories", admin_instance.autocomplete_fields)
+        self.assertIn("source_template", admin_instance.autocomplete_fields)
 
     def test_document_type_admin_uses_a_json_editor_for_settings(self):
         settings_field = DocumentTypeAdminForm.base_fields["settings"]
@@ -211,11 +234,87 @@ class DocumentInitializationCommandTest(SimpleTestCase):
         args, _ = command._upsert.call_args
         defaults = args[2]
         self.assertTrue(defaults["use_jinja2"])
+        self.assertTrue(defaults["is_template"])
         self.assertEqual(
             defaults["html_content"],
             Path("documents/templates/preisliste.html").read_text(encoding="utf-8"),
         )
         self.assertIn("price_list_catalog_sections()", defaults["html_content"])
+
+    def test_static_document_initialization_includes_withdrawal_notice(self):
+        command = InitDocumentsCommand()
+        command._upsert = MagicMock()
+
+        command._init_static_documents(Document, force=True)
+
+        definitions = {
+            call.args[1]: call.args[2]
+            for call in command._upsert.call_args_list
+        }
+        self.assertEqual(
+            definitions["widerrufsbelehrung"]["document_type"],
+            Document.DocumentType.WITHDRAWAL,
+        )
+
+
+class DocumentWordImportServiceTest(SimpleTestCase):
+    def setUp(self):
+        self.service = DocumentWordImportService()
+
+    def test_supports_privacy_documents(self):
+        self.assertIn(
+            Document.DocumentType.PRIVACY,
+            self.service.supported_document_types,
+        )
+
+    def test_extracts_and_renders_docx_blocks_without_rewriting_text(self):
+        xml = b"""<?xml version="1.0" encoding="UTF-8"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:body>
+            <w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Allgemeine Bedingungen</w:t></w:r></w:p>
+            <w:p><w:r><w:t>Der Vertrag gilt.</w:t></w:r></w:p>
+            <w:tbl><w:tr><w:tc><w:p><w:r><w:t>Land</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>Frist</w:t></w:r></w:p></w:tc></w:tr></w:tbl>
+          </w:body>
+        </w:document>"""
+
+        blocks = self.service._extract_blocks_from_xml(xml)
+        classified = self.service._validate_roles(
+            blocks,
+            {
+                "blocks": [
+                    {"id": "b0001", "role": "h2"},
+                    {"id": "b0002", "role": "p"},
+                    {"id": "b0003", "role": "table"},
+                ]
+            },
+        )
+        html = self.service.render_html(classified)
+        job = DocumentImportJob(
+            source_text="Allgemeine Bedingungen\n\nDer Vertrag gilt.\n\nLand Frist",
+            result_html=html,
+        )
+
+        self.service.validate_result_html(job)
+        self.assertIn("<h2>Allgemeine Bedingungen</h2>", html)
+        self.assertIn("<table>", html)
+
+    def test_rejects_changed_legal_text(self):
+        job = DocumentImportJob(
+            source_text="Der Vertrag gilt.",
+            result_html="<p>Der Vertrag gilt nicht.</p>",
+        )
+
+        with self.assertRaisesMessage(ValueError, "weicht von der Word-Datei ab"):
+            self.service.validate_result_html(job)
+
+    def test_rejects_html_attributes(self):
+        job = DocumentImportJob(
+            source_text="Mehr erfahren",
+            result_html='<p onclick="alert(1)">Mehr erfahren</p>',
+        )
+
+        with self.assertRaisesMessage(ValueError, "keine HTML-Attribute"):
+            self.service.validate_result_html(job)
 
     def test_django_document_template_supports_comment_tag(self):
         document = Document(

@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from django.conf import settings
 from django.core.validators import FileExtensionValidator
 from django.db import models
 from django.db.models import Q
@@ -43,6 +44,7 @@ class DocumentType(BaseModel):
         ("price_list", _("Preisliste")),
         ("order_form", _("Bestellschein")),
         ("terms", _("AGB")),
+        ("withdrawal", _("Widerrufsbelehrung")),
         ("privacy", _("Datenschutzerklärung")),
         ("imprint", _("Impressum")),
         ("other", _("Sonstiges")),
@@ -80,6 +82,7 @@ class Document(BaseModel):
         PRICE_LIST = "price_list", _("Preisliste")
         ORDER_FORM = "order_form", _("Bestellschein")
         TERMS = "terms", _("AGB")
+        WITHDRAWAL = "withdrawal", _("Widerrufsbelehrung")
         PRIVACY = "privacy", _("Datenschutzerklärung")
         IMPRINT = "imprint", _("Impressum")
         OTHER = "other", _("Sonstiges")
@@ -97,6 +100,33 @@ class Document(BaseModel):
     )
     slug = models.SlugField(max_length=120, unique=True, verbose_name=_("Slug"))
     title = models.CharField(max_length=255, verbose_name=_("Titel"))
+    is_template = models.BooleanField(
+        default=False,
+        db_index=True,
+        verbose_name=_("Vorlage"),
+        help_text=_("Vorlagen werden bei der Erzeugung neuer Dokumente ausgewählt und nicht selbst veröffentlicht."),
+    )
+    source_template = models.ForeignKey(
+        "self",
+        on_delete=models.PROTECT,
+        related_name="generated_documents",
+        null=True,
+        blank=True,
+        limit_choices_to={"is_template": True, "is_active": True},
+        verbose_name=_("Verwendete Vorlage"),
+    )
+    valid_from = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name=_("Gültig ab"),
+    )
+    context_snapshot = models.JSONField(
+        blank=True,
+        default=dict,
+        editable=False,
+        verbose_name=_("Daten-Snapshot"),
+        help_text=_("Eingefrorene Daten für reproduzierbare, erzeugte Dokumente."),
+    )
     template_file = models.FileField(
         upload_to=document_template_upload_to,
         blank=True,
@@ -218,7 +248,10 @@ class Document(BaseModel):
         return dict(settings) if isinstance(settings, dict) else {}
 
     def render(self, context: dict | None = None) -> str:
-        render_context = context or {}
+        render_context = {
+            **(self.context_snapshot if isinstance(self.context_snapshot, dict) else {}),
+            **(context or {}),
+        }
         # A document's saved CSS is authoritative.  The service can still pass
         # its default price-list CSS when this field is intentionally empty.
         css_content = self.css_content or render_context.get("css", "")
@@ -249,6 +282,12 @@ class DocumentVersion(BaseModel):
     template_source = models.TextField(verbose_name=_("HTML-Vorlage"))
     css_content = models.TextField(blank=True, default="", verbose_name=_("CSS"))
     use_jinja2 = models.BooleanField(default=True, verbose_name=_("Jinja2-Engine"))
+    valid_from = models.DateField(null=True, blank=True, verbose_name=_("Gültig ab"))
+    context_snapshot = models.JSONField(
+        blank=True,
+        default=dict,
+        verbose_name=_("Daten-Snapshot"),
+    )
     is_active = models.BooleanField(default=False, db_index=True, verbose_name=_("Aktiv"))
     activated_at = models.DateTimeField(null=True, blank=True, editable=False, verbose_name=_("Aktiviert am"))
 
@@ -271,3 +310,57 @@ class DocumentVersion(BaseModel):
     def __str__(self) -> str:
         label = f" · {self.label}" if self.label else ""
         return f"{self.document} · V{self.version_number}{label}"
+
+
+class DocumentImportJob(BaseModel):
+    """Auditable DOCX-to-HTML import that requires explicit approval."""
+
+    class Status(models.TextChoices):
+        QUEUED = "queued", _("In Arbeit")
+        READY = "ready", _("Ergebnis vorhanden")
+        APPLIED = "applied", _("Übernommen")
+        FAILED = "failed", _("Fehlgeschlagen")
+
+    document = models.ForeignKey(
+        Document,
+        on_delete=models.CASCADE,
+        related_name="import_jobs",
+        verbose_name=_("Dokument"),
+    )
+    provider = models.ForeignKey(
+        "ai.AIProviderConfig",
+        on_delete=models.PROTECT,
+        related_name="document_import_jobs",
+        verbose_name=_("KI"),
+    )
+    status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.QUEUED,
+        db_index=True,
+        verbose_name=_("Status"),
+    )
+    source_blocks = models.JSONField(blank=True, default=list, verbose_name=_("Extrahierte Word-Blöcke"))
+    source_text = models.TextField(blank=True, default="", verbose_name=_("Quelltext"))
+    result_html = models.TextField(blank=True, default="", verbose_name=_("Erzeugtes HTML"))
+    rendered_prompt = models.TextField(blank=True, default="", verbose_name=_("KI-Anfrage"))
+    provider_response = models.TextField(blank=True, default="", verbose_name=_("KI-Rückgabe (roh)"))
+    error_message = models.TextField(blank=True, default="", verbose_name=_("Fehler"))
+    celery_task_id = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Celery Task-ID"))
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="requested_document_import_jobs",
+        null=True,
+        blank=True,
+        verbose_name=_("Angefordert von"),
+    )
+    applied_at = models.DateTimeField(null=True, blank=True, verbose_name=_("Übernommen am"))
+
+    class Meta:
+        verbose_name = _("Word-Import")
+        verbose_name_plural = _("Word-Importe")
+        ordering = ("-created_at",)
+
+    def __str__(self) -> str:
+        return f"#{self.pk} · {self.document} · {self.get_status_display()}"

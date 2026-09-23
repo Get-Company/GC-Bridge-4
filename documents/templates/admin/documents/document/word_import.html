@@ -1,0 +1,56 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+  <div class="px-4 lg:px-12">
+    <div class="container mb-6 mx-auto -my-3 lg:mb-12">
+      <ul class="flex flex-wrap">
+        <li class="flex items-center">
+          <a href="{% url 'admin:index' %}" class="text-primary-600 dark:text-primary-500">{% translate "Home" %}</a>
+          <span class="material-symbols-outlined mx-2 text-base">chevron_right</span>
+        </li>
+        <li class="flex items-center">
+          <a href="{% url 'admin:documents_document_changelist' %}" class="text-primary-600 dark:text-primary-500">Dokumente</a>
+          <span class="material-symbols-outlined mx-2 text-base">chevron_right</span>
+        </li>
+        <li class="flex items-center">
+          <a href="{% url 'admin:documents_document_change' document.pk %}" class="text-primary-600 dark:text-primary-500">{{ document }}</a>
+          <span class="material-symbols-outlined mx-2 text-base">chevron_right</span>
+        </li>
+        <li>Word-Import</li>
+      </ul>
+    </div>
+  </div>
+{% endblock %}
+
+{% block content %}
+  <div class="container mx-auto px-4 lg:px-12">
+    <div class="bg-white border border-base-200 p-6 rounded-default shadow-xs dark:bg-base-900 dark:border-base-800 max-w-3xl">
+      <h1 class="font-semibold mb-2 text-xl">{{ title }}</h1>
+      <p class="mb-6 text-sm text-base-500 dark:text-base-400">
+        Die KI erkennt ausschließlich Überschriften, Absätze, Listen und Tabellen. Der Wortlaut aus
+        <strong>{{ document.source_docx.name }}</strong> wird technisch gegen Veränderungen geprüft.
+        Das Ergebnis wird erst nach einer separaten Sichtprüfung übernommen.
+      </p>
+
+      <form method="post" novalidate>
+        {% csrf_token %}
+        {{ form.non_field_errors }}
+        <div class="mb-6">
+          <label class="block font-medium mb-2" for="{{ form.provider.id_for_label }}">{{ form.provider.label }}</label>
+          {{ form.provider }}
+          {% if form.provider.help_text %}<p class="mt-2 text-sm text-base-500">{{ form.provider.help_text }}</p>{% endif %}
+          {{ form.provider.errors }}
+        </div>
+        <div class="flex gap-3">
+          <button type="submit" class="bg-primary-600 border border-transparent font-medium px-3 py-2 rounded-default text-white">
+            Strukturierung starten
+          </button>
+          <a href="{% url 'admin:documents_document_change' document.pk %}" class="border border-base-200 font-medium px-3 py-2 rounded-default dark:border-base-700">
+            Abbrechen
+          </a>
+        </div>
+      </form>
+    </div>
+  </div>
+{% endblock %}

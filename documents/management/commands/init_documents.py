@@ -37,6 +37,7 @@ class Command(MonitoredBaseCommand):
         defaults = {
             "document_type": Document.DocumentType.PRICE_LIST,
             "title": "Preisliste",
+            "is_template": True,
             "html_content": template_path.read_text(encoding="utf-8"),
             "css_content": "",
             "is_active": True,
@@ -67,6 +68,19 @@ class Command(MonitoredBaseCommand):
                     "document_type": Document.DocumentType.TERMS,
                     "title": "AGB",
                     "html_content": "<h1>AGB</h1><p>Bitte hier die allgemeinen Geschaeftsbedingungen eintragen.</p>",
+                    "css_content": "",
+                    "is_active": True,
+                },
+            ),
+            (
+                "widerrufsbelehrung",
+                {
+                    "document_type": Document.DocumentType.WITHDRAWAL,
+                    "title": "Widerrufsbelehrung",
+                    "html_content": (
+                        "<h1>Widerrufsbelehrung</h1>"
+                        "<p>Bitte hier die Widerrufsbelehrung eintragen.</p>"
+                    ),
                     "css_content": "",
                     "is_active": True,
                 },

@@ -24,6 +24,8 @@ class DocumentVersionService(BaseService):
             template_source=document.get_template_source(),
             css_content=document.css_content,
             use_jinja2=document.use_jinja2,
+            valid_from=document.valid_from,
+            context_snapshot=document.context_snapshot,
         )
 
     @transaction.atomic
@@ -48,6 +50,8 @@ class DocumentVersionService(BaseService):
         document.html_content = version.template_source
         document.css_content = version.css_content
         document.use_jinja2 = version.use_jinja2
+        document.valid_from = version.valid_from
+        document.context_snapshot = version.context_snapshot
         document.save(
             update_fields=(
                 "active_version",
@@ -55,6 +59,8 @@ class DocumentVersionService(BaseService):
                 "html_content",
                 "css_content",
                 "use_jinja2",
+                "valid_from",
+                "context_snapshot",
                 "updated_at",
             )
         )

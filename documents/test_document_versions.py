@@ -1,3 +1,4 @@
+from datetime import date
 from unittest.mock import patch
 
 from django.db import IntegrityError, transaction
@@ -20,12 +21,24 @@ class DocumentVersionServiceTests(TestCase):
             css_content="p { color: red; }",
             shopware_cms_page_id="cms-page-id",
             shopware_media_id="stable-media-id",
+            valid_from=date(2026, 1, 1),
+            context_snapshot={"price_list_sections": [{"name": "Alt"}]},
         )
         service = DocumentVersionService()
         first_version = service.create_from_document(document, label="Freigabe 1")
         document.html_content = "<p>V2</p>"
         document.css_content = "p { color: blue; }"
-        document.save(update_fields=("html_content", "css_content", "updated_at"))
+        document.valid_from = date(2026, 9, 1)
+        document.context_snapshot = {"price_list_sections": [{"name": "Neu"}]}
+        document.save(
+            update_fields=(
+                "html_content",
+                "css_content",
+                "valid_from",
+                "context_snapshot",
+                "updated_at",
+            )
+        )
         second_version = service.create_from_document(document, label="Freigabe 2")
         mock_publish.return_value = {
             "cms_page_id": "cms-page-id",
@@ -49,6 +62,8 @@ class DocumentVersionServiceTests(TestCase):
         self.assertEqual(document.active_version_id, second_version.pk)
         self.assertEqual(document.html_content, "<p>V2</p>")
         self.assertEqual(document.css_content, "p { color: blue; }")
+        self.assertEqual(document.valid_from, date(2026, 9, 1))
+        self.assertEqual(document.context_snapshot["price_list_sections"][0]["name"], "Neu")
         self.assertFalse(first_version.is_active)
         self.assertTrue(second_version.is_active)
         mock_publish.assert_called_once_with(document)

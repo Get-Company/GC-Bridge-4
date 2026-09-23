@@ -100,7 +100,13 @@ class DocumentPdfService(BaseService):
 
     def render_document_html(self, document: Document, context: dict | None = None) -> str:
         css_content = self.get_css_content(document)
-        render_context = {"document": document, "css": css_content, **(context or {})}
+        snapshot = document.context_snapshot if isinstance(document.context_snapshot, dict) else {}
+        render_context = {
+            **snapshot,
+            "document": document,
+            "css": css_content,
+            **(context or {}),
+        }
         if self.should_use_default_price_list_template(document):
             from documents.jinja2_env import build_env
 
@@ -120,6 +126,8 @@ class DocumentPdfService(BaseService):
 
     @classmethod
     def get_price_list_effective_date_text(cls, document: Document) -> str:
+        if document.valid_from:
+            return f"ab {document.valid_from:%m/%Y}"
         title = (document.title or "").strip().lower()
         numeric_match = re.search(r"(?<!\d)(0?[1-9]|1[0-2])[./\-\s]+(20\d{2})(?!\d)", title)
         if numeric_match:

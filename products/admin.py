@@ -70,6 +70,7 @@ from unfold.views import UnfoldModelAdminViewMixin
 from core.admin import BaseAdmin, BaseStackedInline, BaseTabularInline
 from core.admin_utils import log_admin_change
 from documents.models import Document
+from documents.price_list_service import PriceListDocumentService
 from mappei.models import MappeiPriceSnapshot, MappeiProductMapping
 from shopware.models import ShopwareSettings
 from .services import PriceIncreaseService
@@ -1062,6 +1063,7 @@ class PriceIncreaseAdmin(BaseAdmin):
         "title",
         "status",
         "sales_channel",
+        "price_list_document_link",
         "general_percentage",
         "position_count",
         "positions_synced_at",
@@ -1075,6 +1077,7 @@ class PriceIncreaseAdmin(BaseAdmin):
         ("applied_at", RangeDateTimeFilter),
     ]
     actions = ("export_order_form_pdf",)
+    autocomplete_fields = ("price_list_template",)
     actions_detail = [
         {
             "title": "Aktionen",
@@ -1083,6 +1086,7 @@ class PriceIncreaseAdmin(BaseAdmin):
                 "export_order_form_pdf_detail",
                 "reload_products_detail",
                 "apply_price_increase_detail",
+                "create_price_list_document_detail",
                 "sync_price_increase_prices_to_microtech_detail",
                 "restore_price_increase_detail",
             ],
@@ -1094,6 +1098,7 @@ class PriceIncreaseAdmin(BaseAdmin):
         "position_count",
         "positions_synced_at",
         "applied_at",
+        "price_list_document_link",
         "restore_notice",
     )
     fieldsets = (
@@ -1105,6 +1110,8 @@ class PriceIncreaseAdmin(BaseAdmin):
                     "status",
                     "sales_channel",
                     "general_percentage",
+                    "price_list_template",
+                    "price_list_document_link",
                     "position_count",
                     "positions_synced_at",
                     "applied_at",
@@ -1124,6 +1131,16 @@ class PriceIncreaseAdmin(BaseAdmin):
             return annotated_count
         return obj.position_count
 
+    @admin.display(description="Preisliste")
+    def price_list_document_link(self, obj: PriceIncrease | None):
+        if not obj or not obj.price_list_document_id:
+            return "Noch nicht angelegt"
+        return format_html(
+            '<a href="{}">{}</a>',
+            reverse("admin:documents_document_change", args=(obj.price_list_document_id,)),
+            obj.price_list_document,
+        )
+
     @admin.display(description="Hinweis zur Wiederherstellung")
     def restore_notice(self, obj: PriceIncrease | None):
         return (
@@ -1133,7 +1150,28 @@ class PriceIncreaseAdmin(BaseAdmin):
 
     def get_queryset(self, request):
         queryset = super().get_queryset(request)
-        return queryset.select_related("sales_channel").annotate(_position_count=Count("items"))
+        return queryset.select_related(
+            "sales_channel",
+            "price_list_template",
+            "price_list_document",
+        ).annotate(_position_count=Count("items"))
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "price_list_template":
+            templates = Document.objects.filter(
+                document_type=Document.DocumentType.PRICE_LIST,
+                is_template=True,
+                is_active=True,
+            ).order_by("title", "pk")
+            kwargs["queryset"] = templates
+            formfield = super().formfield_for_foreignkey(db_field, request, **kwargs)
+            formfield.required = True
+            if not formfield.initial:
+                current_template = templates.filter(slug=Document.Slug.PRICE_LIST).first() or templates.first()
+                if current_template:
+                    formfield.initial = current_template.pk
+            return formfield
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     def get_urls(self):
         positions_view = self.admin_site.admin_view(
@@ -3287,6 +3325,27 @@ class PriceIncreaseAdmin(BaseAdmin):
         except ValueError as exc:
             self.message_user(request, str(exc), level=messages.ERROR)
         return HttpResponseRedirect(reverse("admin:products_priceincrease_change", args=(object_id,)))
+
+    @action(
+        description="Preisliste für aktuelles Jahr anlegen",
+        icon="description",
+        variant=ActionVariant.PRIMARY,
+    )
+    def create_price_list_document_detail(self, request, object_id: str):
+        obj = self.get_object(request, object_id)
+        if not obj:
+            self.message_user(request, "Preiserhöhung nicht gefunden.", level=messages.ERROR)
+            return HttpResponseRedirect(reverse("admin:products_priceincrease_changelist"))
+        try:
+            document = PriceListDocumentService().create_from_price_increase(obj)
+        except ValueError as exc:
+            self.message_user(request, str(exc), level=messages.ERROR)
+            return HttpResponseRedirect(reverse("admin:products_priceincrease_change", args=(object_id,)))
+        self.message_user(
+            request,
+            f"{document.title} wurde mit der Vorlage „{obj.price_list_template}“ angelegt.",
+        )
+        return HttpResponseRedirect(reverse("admin:documents_document_change", args=(document.pk,)))
 
     @action(
         description="Produkte neu laden",

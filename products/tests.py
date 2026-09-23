@@ -2813,11 +2813,12 @@ class PriceIncreaseItemAdminListViewTest(TestCase):
         self.assertIn("Schritt: 6", vpe_display)
         self.assertIn("Preis pro 12 Stk", vpe_display)
 
-    def test_price_list_export_is_not_available_in_price_increase_admin(self):
+    def test_price_list_document_action_replaces_direct_pdf_export(self):
         admin_instance = PriceIncreaseAdmin(PriceIncrease, AdminSite())
 
         self.assertNotIn("export_price_list_pdf", admin_instance.actions)
         self.assertNotIn("export_price_list_pdf_detail", admin_instance.actions_detail[0]["items"])
+        self.assertIn("create_price_list_document_detail", admin_instance.actions_detail[0]["items"])
 
 
 class ProductAdminSpecialPriceActionTest(TestCase):
