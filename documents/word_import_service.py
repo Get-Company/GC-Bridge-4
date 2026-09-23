@@ -421,6 +421,110 @@ class DocumentWordImportService(BaseService):
         return "\n".join(html)
 
     @staticmethod
+    def _sentence_spacing(value: str) -> str:
+        """Restore an omitted space after an unambiguous sentence ending.
+
+        Word documents occasionally contain adjacent runs without the whitespace
+        that was visually present in the source. Requiring at least three lower-
+        case letters before the punctuation deliberately leaves abbreviations
+        such as ``z.B.`` and company names such as ``S.C.A.`` untouched.
+        """
+        return re.sub(
+            r'([a-z\u00e4\u00f6\u00fc\u00df]{3,}[.!?](?:["\u201d\u00bb)]*))(?=[A-Z\u00c4\u00d6\u00dc])',
+            r"\1 ",
+            value,
+        )
+
+    @staticmethod
+    def _block_start_pattern(value: str) -> re.Pattern[str] | None:
+        words = value.split()
+        if not words:
+            return None
+        # A longer marker prevents a repeated generic opening such as
+        # "Eine Weitergabe ..." from creating a false paragraph boundary.
+        marker_words = words[: min(10, len(words))]
+        if len(" ".join(marker_words)) < 24:
+            return None
+        return re.compile(r"\s+".join(re.escape(word) for word in marker_words))
+
+    @classmethod
+    def normalize_review_html(cls, html: str, source_blocks: list[dict]) -> str:
+        """Restore Word paragraph boundaries after visual-editor normalization.
+
+        Some rich-text editors merge adjacent ``p`` elements when a reviewer
+        corrects a document. The source blocks remain the authoritative map for
+        structure, so their opening words can safely restore those boundaries.
+        Only plain paragraphs are split; inline markup is left untouched. The
+        final character-sequence check guarantees that the operation changes
+        whitespace and HTML structure only, never the legal wording.
+        """
+        soup = BeautifulSoup(html or "", "html.parser")
+        before_characters = re.sub(r"\s+", "", soup.get_text("", strip=False))
+
+        start_patterns = []
+        for block in source_blocks or []:
+            if block.get("role") != "p":
+                continue
+            pattern = cls._block_start_pattern(cls._effective_block_text(block))
+            if pattern is not None:
+                start_patterns.append(pattern)
+
+        for paragraph in list(soup.find_all("p")):
+            # Rebuilding a paragraph containing inline markup could discard
+            # deliberate emphasis. Such paragraphs are therefore left intact.
+            if paragraph.find(True):
+                continue
+            text = paragraph.get_text("", strip=False)
+            boundaries = {
+                match.start()
+                for pattern in start_patterns
+                for match in pattern.finditer(text)
+                if match.start() > 0
+            }
+            if not boundaries:
+                continue
+            offsets = [0, *sorted(boundaries), len(text)]
+            parts = [
+                text[offsets[index]:offsets[index + 1]].strip()
+                for index in range(len(offsets) - 1)
+            ]
+            parts = [part for part in parts if part]
+            if len(parts) < 2:
+                continue
+            replacement = soup.new_tag("p")
+            replacement.string = parts[0]
+            paragraph.replace_with(replacement)
+            cursor = replacement
+            for part in parts[1:]:
+                next_paragraph = soup.new_tag("p")
+                next_paragraph.string = part
+                cursor.insert_after(next_paragraph)
+                cursor = next_paragraph
+
+        for text_node in list(soup.find_all(string=True)):
+            spaced = cls._sentence_spacing(str(text_node))
+            if spaced != str(text_node):
+                text_node.replace_with(spaced)
+
+        top_level_tags = [node for node in soup.contents if getattr(node, "name", None)]
+        has_legal_wrapper = (
+            len(top_level_tags) == 1
+            and top_level_tags[0].name == "div"
+            and top_level_tags[0].get("class") == ["legal-document"]
+        )
+        if not has_legal_wrapper:
+            wrapper = soup.new_tag("div")
+            wrapper["class"] = "legal-document"
+            for node in list(soup.contents):
+                wrapper.append(node.extract())
+            soup.append(wrapper)
+
+        after_characters = re.sub(r"\s+", "", soup.get_text("", strip=False))
+        if after_characters != before_characters:
+            raise ValueError("Die automatische Absatzkorrektur würde den Rechtstext verändern.")
+        return str(soup)
+
+    @staticmethod
     def _normalized_text(value: str) -> str:
         return " ".join(value.split())
 
@@ -551,6 +655,8 @@ class DocumentWordImportService(BaseService):
             job.source_blocks = resolved_blocks
             job.result_html = self.render_html(resolved_blocks)
             self.validate_result_html(job)
+            job.result_html = self.normalize_review_html(job.result_html, resolved_blocks)
+            self.validate_result_html(job, require_source_match=False)
             job.status = DocumentImportJob.Status.READY
             job.error_message = ""
         except Exception as exc:  # noqa: BLE001 - the complete failure belongs to the auditable job.
@@ -573,7 +679,9 @@ class DocumentWordImportService(BaseService):
     def apply(self, job: DocumentImportJob) -> DocumentImportJob:
         if job.status != DocumentImportJob.Status.READY:
             raise ValueError("Der Word-Import hat noch kein freigabefähiges Ergebnis.")
+        job.result_html = self.normalize_review_html(job.result_html, job.source_blocks)
         self.validate_for_apply(job)
+        job.save(update_fields=("result_html", "updated_at"))
         document = job.document
         document.template_file = ""
         document.html_content = job.result_html

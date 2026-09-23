@@ -203,6 +203,13 @@ class DocumentImportJobAdminForm(forms.ModelForm):
             ),
         }
 
+    def clean_result_html(self):
+        result_html = self.cleaned_data.get("result_html", "")
+        return DocumentWordImportService.normalize_review_html(
+            result_html,
+            self.instance.source_blocks,
+        )
+
 
 class DocumentVersionInline(BaseTabularInline):
     model = DocumentVersion

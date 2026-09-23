@@ -298,6 +298,46 @@ class DocumentWordImportServiceTest(SimpleTestCase):
         self.assertIn("<h2>Allgemeine Bedingungen</h2>", html)
         self.assertIn("<table>", html)
 
+    def test_normalizes_merged_word_paragraphs_without_changing_text(self):
+        blocks = [
+            {
+                "id": "b0001",
+                "kind": "paragraph",
+                "text": "Wir nehmen den Datenschutz ernst.",
+                "role": "p",
+            },
+            {
+                "id": "b0002",
+                "kind": "paragraph",
+                "text": "Unseren Datenschutzbeauftragten erreichen Sie unter info@classei.de.",
+                "role": "p",
+            },
+        ]
+
+        normalized = self.service.normalize_review_html(
+            "<p>Wir nehmen den Datenschutz ernst."
+            "Unseren Datenschutzbeauftragten erreichen Sie unter info@classei.de.</p>",
+            blocks,
+        )
+
+        self.assertIn("<p>Wir nehmen den Datenschutz ernst.</p>", normalized)
+        self.assertIn(
+            "<p>Unseren Datenschutzbeauftragten erreichen Sie unter info@classei.de.</p>",
+            normalized,
+        )
+        self.assertTrue(normalized.startswith('<div class="legal-document">'))
+
+    def test_normalizes_missing_sentence_space_but_keeps_abbreviations(self):
+        normalized = self.service.normalize_review_html(
+            "<p>Die Speicherung endet.Darüber informieren wir z.B. PayPal (Europe) S.à r.l. "
+            "et Cie, S.C.A.</p>",
+            [],
+        )
+
+        self.assertIn("endet. Darüber", normalized)
+        self.assertIn("z.B.", normalized)
+        self.assertIn("S.C.A.", normalized)
+
     def test_rejects_changed_legal_text(self):
         job = DocumentImportJob(
             source_text="Der Vertrag gilt.",
