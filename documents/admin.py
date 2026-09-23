@@ -13,12 +13,13 @@ from unfold.contrib.forms.widgets import WysiwygWidget
 from unfold.decorators import action
 from unfold.enums import ActionVariant
 
-from core.admin import BaseAdmin, BaseTabularInline
-from ai.models import AIProviderConfig
+from core.admin import BaseAdmin, BaseStackedInline, BaseTabularInline
+from ai.models import AIDocumentPrompt, AIProviderConfig
 from documents.document_version_service import DocumentVersionService
 from documents.models import (
     Document,
     DocumentImportJob,
+    DocumentPlaceholderValue,
     DocumentType,
     DocumentVersion,
 )
@@ -140,6 +141,11 @@ class DocumentAdminForm(forms.ModelForm):
 
 
 class DocumentWordImportForm(forms.Form):
+    prompt = forms.ModelChoiceField(
+        label="KI-Prompt",
+        queryset=AIDocumentPrompt.objects.filter(is_active=True).order_by("name"),
+        help_text="Der am Dokument hinterlegte Prompt ist vorausgewählt; sonst gilt der globale Standard.",
+    )
     provider = forms.ModelChoiceField(
         label="KI-Provider",
         queryset=AIProviderConfig.objects.filter(is_active=True).order_by("name"),
@@ -149,10 +155,39 @@ class DocumentWordImportForm(forms.Form):
         ),
     )
 
-    def __init__(self, *args, **kwargs):
+    def __init__(
+        self,
+        *args,
+        document=None,
+        placeholders=(),
+        placeholder_values=None,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
+        self.placeholder_field_map = {}
         if not self.is_bound:
+            prompt = getattr(document, "ai_document_prompt", None) or AIDocumentPrompt.get_default()
+            if prompt:
+                self.initial["prompt"] = prompt
             self.initial["provider"] = self.fields["provider"].queryset.first()
+        saved_values = placeholder_values or {}
+        for index, placeholder in enumerate(placeholders):
+            field_name = f"placeholder_value_{index}"
+            self.placeholder_field_map[field_name] = placeholder
+            self.fields[field_name] = forms.CharField(
+                label=placeholder,
+                required=False,
+                initial=saved_values.get(placeholder, ""),
+                help_text="Wird für alle Vorkommen im aktuellen Dokument gespeichert und eingesetzt.",
+                widget=forms.Textarea(attrs={"rows": 3, "class": "vLargeTextField"}),
+            )
+
+    def managed_placeholder_values(self) -> dict[str, str]:
+        return {
+            placeholder: str(self.cleaned_data.get(field_name, "")).strip()
+            for field_name, placeholder in self.placeholder_field_map.items()
+            if str(self.cleaned_data.get(field_name, "")).strip()
+        }
 
 
 class DocumentImportJobAdminForm(forms.ModelForm):
@@ -176,6 +211,13 @@ class DocumentVersionInline(BaseTabularInline):
     show_change_link = True
     fields = ("version_number", "label", "is_active", "activated_at", "created_at")
     readonly_fields = BaseTabularInline.readonly_fields + ("version_number", "label", "is_active", "activated_at")
+
+
+class DocumentPlaceholderValueInline(BaseStackedInline):
+    model = DocumentPlaceholderValue
+    extra = 0
+    fields = ("placeholder", "value", "is_active", "updated_at")
+    readonly_fields = BaseTabularInline.readonly_fields
 
 
 class DocumentTypeAdminForm(forms.ModelForm):
@@ -241,7 +283,7 @@ class DocumentTypeAdmin(BaseAdmin):
 class DocumentAdmin(BaseAdmin):
     form = DocumentAdminForm
     autocomplete_fields = ("price_list_duplicate_categories", "source_template")
-    inlines = (DocumentVersionInline,)
+    inlines = (DocumentPlaceholderValueInline, DocumentVersionInline)
     conditional_fields = {
         "price_list_duplicate_categories": "document_type == 'price_list'",
     }
@@ -323,6 +365,7 @@ class DocumentAdmin(BaseAdmin):
                     "template_file",
                     "template_source_status",
                     "source_docx",
+                    "ai_document_prompt",
                     "html_content",
                     "css_content",
                 ),
@@ -680,12 +723,34 @@ class DocumentAdmin(BaseAdmin):
             )
             return HttpResponseRedirect(reverse("admin:documents_document_change", args=(object_id,)))
 
-        form = DocumentWordImportForm(request.POST or None)
+        service = DocumentWordImportService()
+        try:
+            placeholders = service.extract_placeholders(document)
+        except ValueError as exc:
+            self.message_user(request, str(exc), level=messages.ERROR)
+            return HttpResponseRedirect(reverse("admin:documents_document_change", args=(object_id,)))
+        saved_placeholder_values = dict(
+            document.placeholder_values.filter(is_active=True).values_list("placeholder", "value")
+        )
+        form = DocumentWordImportForm(
+            request.POST or None,
+            document=document,
+            placeholders=placeholders,
+            placeholder_values=saved_placeholder_values,
+        )
         if request.method == "POST" and form.is_valid():
             try:
-                job = DocumentWordImportService().create_job(
+                managed_placeholder_values = form.managed_placeholder_values()
+                service.save_placeholder_values(
                     document=document,
+                    source_placeholders=placeholders,
+                    values=managed_placeholder_values,
+                )
+                job = service.create_job(
+                    document=document,
+                    prompt=form.cleaned_data["prompt"],
                     provider=form.cleaned_data["provider"],
+                    placeholder_values=managed_placeholder_values,
                     requested_by=request.user,
                 )
                 async_result = run_document_word_import.delay(job.pk)
@@ -703,6 +768,7 @@ class DocumentAdmin(BaseAdmin):
             "original": document,
             "title": f"Word-Datei für {document.title} importieren",
             "form": form,
+            "placeholder_fields": [form[name] for name in form.placeholder_field_map],
             "document": document,
         }
         return TemplateResponse(request, "admin/documents/document/word_import.html", context)
@@ -794,11 +860,12 @@ class DocumentAdmin(BaseAdmin):
 @admin.register(DocumentImportJob)
 class DocumentImportJobAdmin(BaseAdmin):
     form = DocumentImportJobAdminForm
-    list_display = ("document", "status", "provider", "requested_by", "applied_at", "created_at")
-    list_filter = ("status", "provider")
+    list_display = ("document", "status", "prompt", "provider", "requested_by", "applied_at", "created_at")
+    list_filter = ("status", "prompt", "provider")
     search_fields = ("document__title", "document__slug", "source_text", "error_message")
     readonly_fields = BaseAdmin.readonly_fields + (
         "document",
+        "prompt",
         "provider",
         "status",
         "replacement_summary_display",
@@ -806,6 +873,8 @@ class DocumentImportJobAdmin(BaseAdmin):
         "source_text_display",
         "source_blocks",
         "rendered_prompt",
+        "system_prompt_snapshot",
+        "placeholder_values_snapshot",
         "provider_response",
         "error_message",
         "celery_task_id",
@@ -825,6 +894,7 @@ class DocumentImportJobAdmin(BaseAdmin):
             {
                 "fields": (
                     "document",
+                    "prompt",
                     "provider",
                     "status",
                     "requested_by",
@@ -845,6 +915,8 @@ class DocumentImportJobAdmin(BaseAdmin):
             {
                 "fields": (
                     "source_blocks",
+                    "system_prompt_snapshot",
+                    "placeholder_values_snapshot",
                     "rendered_prompt",
                     "provider_response",
                     "error_message",
@@ -881,7 +953,7 @@ class DocumentImportJobAdmin(BaseAdmin):
             obj.source_text,
         )
 
-    @admin.display(description="Automatisch übernommene Angaben")
+    @admin.display(description="Übernommene Platzhalter")
     def replacement_summary_display(self, obj: DocumentImportJob | None = None):
         if not obj:
             return "-"
@@ -891,10 +963,22 @@ class DocumentImportJobAdmin(BaseAdmin):
             for replacement in block.get("replacements", [])
         ]
         if not replacements:
-            return "Keine Angaben automatisch übernommen."
-        lines = [
-            f"{replacement['placeholder']} → {replacement['value']}"
+            return "Keine Platzhalterwerte übernommen."
+        unique_replacements = {
+            (
+                replacement["placeholder"],
+                replacement["value"],
+                replacement.get("source", "ai_reference"),
+            )
             for replacement in replacements
+        }
+        source_labels = {
+            "managed": "Benutzerangabe",
+            "ai_reference": "KI aus bisheriger Fassung",
+        }
+        lines = [
+            f"{placeholder} → {value} [{source_labels.get(source, source)}]"
+            for placeholder, value, source in sorted(unique_replacements)
         ]
         return format_html('<pre style="white-space:pre-wrap">{}</pre>', "\n".join(lines))
 

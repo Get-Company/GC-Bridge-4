@@ -17,6 +17,7 @@ from unfold.widgets import UnfoldAdminSelect2Widget, UnfoldAdminTextareaWidget
 from core.admin import BaseAdmin
 
 from ai.models import (
+    AIDocumentPrompt,
     AIProviderConfig,
     AIRewriteJob,
     AIRewritePrompt,
@@ -197,6 +198,32 @@ class AIProviderConfigAdmin(BaseAdmin):
     list_display = ("name", "model_name", "base_url", "is_active", "created_at")
     search_fields = ("name", "model_name", "base_url")
     list_filter = ("is_active",)
+
+
+@admin.register(AIDocumentPrompt)
+class AIDocumentPromptAdmin(BaseAdmin):
+    list_display = ("name", "is_default", "is_active", "updated_at")
+    search_fields = ("name", "slug", "description", "system_prompt")
+    list_filter = ("is_default", "is_active")
+    prepopulated_fields = {"slug": ("name",)}
+    formfield_overrides = {
+        **BaseAdmin.formfield_overrides,
+        models.TextField: {"widget": UnfoldAdminTextareaWidget(attrs={"class": "font-mono", "rows": 20})},
+    }
+    fieldsets = (
+        (
+            "Prompt",
+            {
+                "fields": ("name", "slug", "description", "system_prompt"),
+                "description": (
+                    "Diese Anweisung wird beim Word-Import als System-Prompt verwendet. "
+                    "Die festen Sicherheitspruefungen des Imports bleiben unabhaengig davon aktiv."
+                ),
+            },
+        ),
+        ("Zuordnung", {"fields": ("is_default", "is_active")}),
+        ("System", {"fields": BaseAdmin.readonly_fields, "classes": ("collapse",)}),
+    )
 
 
 @admin.register(AITranslationConfig)

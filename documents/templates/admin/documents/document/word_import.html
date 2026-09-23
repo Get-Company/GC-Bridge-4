@@ -28,8 +28,9 @@
     <div class="bg-white border border-base-200 p-6 rounded-default shadow-xs dark:bg-base-900 dark:border-base-800 max-w-3xl">
       <h1 class="font-semibold mb-2 text-xl">{{ title }}</h1>
       <p class="mb-6 text-sm text-base-500 dark:text-base-400">
-        Die KI erkennt Überschriften, Absätze, Listen und Tabellen. Eindeutig belegbare Platzhalterwerte
-        übernimmt sie automatisch aus der bisherigen Dokumentfassung. Der übrige Wortlaut aus
+        Die KI erkennt Überschriften, Absätze, Listen und Tabellen. Gepflegte Platzhalterwerte werden
+        deterministisch eingesetzt; weitere eindeutig belegbare Werte kann die KI aus der bisherigen
+        Dokumentfassung übernehmen. Der übrige Wortlaut aus
         <strong>{{ document.source_docx.name }}</strong> wird technisch gegen Veränderungen geprüft.
         Offene Platzhalter sperren die Freigabe; veröffentlicht wird erst in einem separaten Schritt.
       </p>
@@ -37,12 +38,33 @@
       <form method="post" novalidate>
         {% csrf_token %}
         {{ form.non_field_errors }}
-        <div class="mb-6">
-          <label class="block font-medium mb-2" for="{{ form.provider.id_for_label }}">{{ form.provider.label }}</label>
-          {{ form.provider }}
-          {% if form.provider.help_text %}<p class="mt-2 text-sm text-base-500">{{ form.provider.help_text }}</p>{% endif %}
-          {{ form.provider.errors }}
-        </div>
+        {% for field in form.visible_fields %}
+          {% if field.name == "prompt" or field.name == "provider" %}
+            <div class="mb-6">
+              <label class="block font-medium mb-2" for="{{ field.id_for_label }}">{{ field.label }}</label>
+              {{ field }}
+              {% if field.help_text %}<p class="mt-2 text-sm text-base-500">{{ field.help_text }}</p>{% endif %}
+              {{ field.errors }}
+            </div>
+          {% endif %}
+        {% endfor %}
+        {% if placeholder_fields %}
+          <div class="border-t border-base-200 mb-6 pt-6 dark:border-base-700">
+            <h2 class="font-semibold mb-2 text-lg">Platzhalterwerte</h2>
+            <p class="mb-5 text-sm text-base-500 dark:text-base-400">
+              Diese Werte werden am Dokument gespeichert und bei künftigen Importen wieder vorgeschlagen.
+              Leere Felder bleiben offen und sperren später die Freigabe.
+            </p>
+            {% for field in placeholder_fields %}
+              <div class="mb-5">
+                <label class="block font-medium mb-2 break-words" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+                {% if field.help_text %}<p class="mt-2 text-sm text-base-500">{{ field.help_text }}</p>{% endif %}
+                {{ field.errors }}
+              </div>
+            {% endfor %}
+          </div>
+        {% endif %}
         <div class="flex gap-3">
           <button type="submit" class="bg-primary-600 border border-transparent font-medium px-3 py-2 rounded-default text-white">
             Strukturierung starten

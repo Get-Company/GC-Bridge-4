@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from django.conf import settings
-from django.core.validators import FileExtensionValidator
+from django.core.validators import FileExtensionValidator, RegexValidator
 from django.db import models
 from django.db.models import Q
 from django.template import Context, Template
@@ -141,6 +141,16 @@ class Document(BaseModel):
         verbose_name=_("DOCX-/RTF-Quelldatei"),
         help_text=_("Optional: zum Herunterladen und Bearbeiten im jeweiligen Programm hinterlegen."),
     )
+    ai_document_prompt = models.ForeignKey(
+        "ai.AIDocumentPrompt",
+        on_delete=models.SET_NULL,
+        related_name="documents",
+        null=True,
+        blank=True,
+        limit_choices_to={"is_active": True},
+        verbose_name=_("KI-Prompt für Word-Import"),
+        help_text=_("Optionaler Dokument-Prompt. Ohne Auswahl wird der aktive Standard-Prompt verwendet."),
+    )
     html_content = models.TextField(blank=True, default="", verbose_name=_("HTML"))
     css_content = models.TextField(blank=True, default="", verbose_name=_("CSS"))
     price_list_duplicate_categories = models.ManyToManyField(
@@ -268,6 +278,47 @@ class Document(BaseModel):
         return Template(source).render(Context(ctx))
 
 
+class DocumentPlaceholderValue(BaseModel):
+    """User-managed replacement for one literal placeholder in a document source."""
+
+    document = models.ForeignKey(
+        Document,
+        on_delete=models.CASCADE,
+        related_name="placeholder_values",
+        verbose_name=_("Dokument"),
+    )
+    placeholder = models.CharField(
+        max_length=502,
+        validators=[
+            RegexValidator(
+                regex=r"^<[^<>\r\n]{2,500}>$",
+                message=_("Der Platzhalter muss im Format <Bezeichnung> angegeben werden."),
+            )
+        ],
+        verbose_name=_("Platzhalter"),
+        help_text=_("Exakt wie in der Word-Datei, einschließlich der spitzen Klammern."),
+    )
+    value = models.TextField(
+        verbose_name=_("Wert"),
+        help_text=_("Wird bei jedem Vorkommen dieses Platzhalters im Dokument eingesetzt."),
+    )
+    is_active = models.BooleanField(default=True, db_index=True, verbose_name=_("Aktiv"))
+
+    class Meta:
+        verbose_name = _("Dokument-Platzhalterwert")
+        verbose_name_plural = _("Dokument-Platzhalterwerte")
+        ordering = ("document", "placeholder")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("document", "placeholder"),
+                name="documents_unique_placeholder_per_document",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.document}: {self.placeholder}"
+
+
 class DocumentVersion(BaseModel):
     """Immutable template snapshot that can be activated for a document."""
 
@@ -333,6 +384,14 @@ class DocumentImportJob(BaseModel):
         related_name="document_import_jobs",
         verbose_name=_("KI"),
     )
+    prompt = models.ForeignKey(
+        "ai.AIDocumentPrompt",
+        on_delete=models.PROTECT,
+        related_name="document_import_jobs",
+        null=True,
+        blank=True,
+        verbose_name=_("KI-Prompt"),
+    )
     status = models.CharField(
         max_length=16,
         choices=Status.choices,
@@ -344,6 +403,16 @@ class DocumentImportJob(BaseModel):
     source_text = models.TextField(blank=True, default="", verbose_name=_("Quelltext"))
     result_html = models.TextField(blank=True, default="", verbose_name=_("Erzeugtes HTML"))
     rendered_prompt = models.TextField(blank=True, default="", verbose_name=_("KI-Anfrage"))
+    system_prompt_snapshot = models.TextField(
+        blank=True,
+        default="",
+        verbose_name=_("System-Prompt zum Ausführungszeitpunkt"),
+    )
+    placeholder_values_snapshot = models.JSONField(
+        blank=True,
+        default=dict,
+        verbose_name=_("Verwendete Platzhalterwerte"),
+    )
     provider_response = models.TextField(blank=True, default="", verbose_name=_("KI-Rückgabe (roh)"))
     error_message = models.TextField(blank=True, default="", verbose_name=_("Fehler"))
     celery_task_id = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Celery Task-ID"))

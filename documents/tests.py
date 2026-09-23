@@ -380,6 +380,71 @@ class DocumentWordImportServiceTest(SimpleTestCase):
         with self.assertRaisesMessage(ValueError, "kommt nicht wortgleich"):
             self.service._validate_replacements(blocks, payload, "info@classei.de")
 
+    def test_applies_long_user_managed_placeholder_without_ai_guessing(self):
+        placeholder = (
+            "<Bitte Auftragsverarbeiter mit Namen und Anschrift jeweils mit der kurzen Angabe "
+            "der konkreten Beauftragung benennen>"
+        )
+        blocks = [
+            {
+                "id": "b0001",
+                "kind": "paragraph",
+                "text": f"Auftragsverarbeiter: {placeholder}",
+                "style": "",
+                "list_level": None,
+            }
+        ]
+        values = self.service._validate_managed_placeholder_values(
+            blocks,
+            {placeholder: "Beispiel GmbH, Musterstraße 1 – Hosting der Website"},
+        )
+        replacements = self.service._managed_replacements(blocks, values)
+        resolved = self.service._apply_replacements(
+            [{**blocks[0], "role": "p"}],
+            replacements,
+        )
+        html = self.service.render_html(resolved)
+        job = DocumentImportJob(source_blocks=resolved, result_html=html)
+
+        self.service.validate_result_html(job)
+        self.assertEqual(self.service.unresolved_placeholders(job), [])
+        self.assertEqual(resolved[0]["replacements"][0]["source"], "managed")
+        self.assertIn("Beispiel GmbH", html)
+
+    @patch("documents.word_import_service.AIProviderService.rewrite_text_with_response")
+    def test_managed_placeholder_overrides_ai_reference_replacement(self, mock_rewrite):
+        placeholder = "<E-Mail-Adresse>"
+        mock_rewrite.return_value = (
+            (
+                '{"blocks":[{"id":"b0001","role":"p"}],"replacements":['
+                '{"id":"b0001","placeholder":"<E-Mail-Adresse>",'
+                '"value":"alt@example.de","evidence":"alt@example.de"}]}'
+            ),
+            '{"choices":[]}',
+        )
+        job = MagicMock(
+            document=Document(title="Datenschutzerklärung", html_content="<p>alt@example.de</p>"),
+            provider=MagicMock(),
+            system_prompt_snapshot="Dokument-Prompt",
+            placeholder_values_snapshot={placeholder: "neu@example.de"},
+            source_blocks=[
+                {
+                    "id": "b0001",
+                    "kind": "paragraph",
+                    "text": f"Kontakt: {placeholder}",
+                    "style": "",
+                    "list_level": None,
+                }
+            ],
+            source_text=f"Kontakt: {placeholder}",
+        )
+
+        self.service.execute(job)
+
+        self.assertEqual(job.status, DocumentImportJob.Status.READY)
+        self.assertIn("neu@example.de", job.result_html)
+        self.assertNotIn("alt@example.de", job.result_html)
+
     def test_reports_unresolved_placeholders(self):
         job = DocumentImportJob(
             source_blocks=[
@@ -414,6 +479,37 @@ class DocumentWordImportServiceTest(SimpleTestCase):
 
         with self.assertRaisesMessage(ValueError, "offene Platzhalter"):
             self.service.validate_for_apply(job)
+
+    @patch("documents.word_import_service.AIProviderService.rewrite_text_with_response")
+    def test_execute_uses_immutable_prompt_snapshot(self, mock_rewrite):
+        mock_rewrite.return_value = (
+            '{"blocks":[{"id":"b0001","role":"p"}],"replacements":[]}',
+            '{"choices":[]}',
+        )
+        job = MagicMock(
+            document=Document(title="Datenschutzerklärung", html_content="<p>Bisherige Fassung</p>"),
+            provider=MagicMock(),
+            system_prompt_snapshot="Eigener Dokument-Prompt",
+            placeholder_values_snapshot={},
+            source_blocks=[
+                {
+                    "id": "b0001",
+                    "kind": "paragraph",
+                    "text": "Unveränderter Rechtstext.",
+                    "style": "",
+                    "list_level": None,
+                }
+            ],
+            source_text="Unveränderter Rechtstext.",
+        )
+
+        self.service.execute(job)
+
+        self.assertEqual(
+            mock_rewrite.call_args.kwargs["system_prompt"],
+            "Eigener Dokument-Prompt",
+        )
+        self.assertEqual(job.status, DocumentImportJob.Status.READY)
 
     def test_django_document_template_supports_comment_tag(self):
         document = Document(

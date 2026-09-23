@@ -11,26 +11,11 @@ from bs4 import BeautifulSoup
 from django.db import transaction
 from django.utils import timezone
 
+from ai.models import AIDocumentPrompt, DEFAULT_DOCUMENT_IMPORT_SYSTEM_PROMPT
 from ai.services.provider import AIProviderService
 from core.services import BaseService
 from documents.document_version_service import DocumentVersionService
-from documents.models import Document, DocumentImportJob
-
-
-DOCX_STRUCTURE_SYSTEM_PROMPT = """Du strukturierst deutsche Rechtstexte fuer eine Website.
-
-Du darfst keinen Text umschreiben, ergaenzen, kuerzen oder korrigieren. Ordne jedem vorhandenen Block eine semantische Rolle zu. Die Block-IDs und ihre Reihenfolge muessen exakt erhalten bleiben.
-
-Zusaetzlich darfst du Platzhalter im Format <...> mit Angaben aus der bisherigen Dokumentfassung befuellen. Eine Ersetzung ist nur erlaubt, wenn der vollstaendige Wert dort eindeutig und wortgleich vorkommt. Erfinde oder kombiniere keine Angaben. Kann ein Platzhalter nicht vollstaendig und sicher befuellt werden, lasse ihn offen und fuehre ihn nicht unter replacements auf.
-
-Erlaubte Rollen fuer Textbloecke: h2, h3, p, ol_item, ul_item.
-Fuer Tabellen ist ausschliesslich die Rolle table erlaubt.
-
-Gib ausschliesslich ein JSON-Objekt in diesem Format zurueck:
-{"blocks": [{"id": "b0001", "role": "h2"}], "replacements": [{"id": "b0002", "placeholder": "<E-Mail-Adresse>", "value": "info@example.de", "evidence": "info@example.de"}]}
-
-Jede uebergebene ID muss genau einmal und in unveraenderter Reihenfolge vorkommen. Gib kein HTML, kein Markdown und keine Erklaerung aus.
-"""
+from documents.models import Document, DocumentImportJob, DocumentPlaceholderValue
 
 
 class DocumentWordImportService(BaseService):
@@ -44,7 +29,7 @@ class DocumentWordImportService(BaseService):
         Document.DocumentType.WITHDRAWAL,
     }
     allowed_roles = {"h2", "h3", "p", "ol_item", "ul_item", "table"}
-    placeholder_pattern = re.compile(r"<[^<>\n]{2,200}>")
+    placeholder_pattern = re.compile(r"<[^<>\r\n]{2,500}>")
 
     @classmethod
     def _word_tag(cls, name: str) -> str:
@@ -142,8 +127,50 @@ class DocumentWordImportService(BaseService):
             raise ValueError("Die Word-Datei enthält keinen importierbaren Text.")
         return blocks
 
+    def extract_placeholders(self, document: Document) -> list[str]:
+        blocks = self.extract_docx_blocks(document)
+        return list(
+            dict.fromkeys(
+                placeholder
+                for block in blocks
+                for placeholder in self.placeholder_pattern.findall(block["text"])
+            )
+        )
+
     @transaction.atomic
-    def create_job(self, *, document: Document, provider, requested_by=None) -> DocumentImportJob:
+    def save_placeholder_values(
+        self,
+        *,
+        document: Document,
+        source_placeholders: list[str],
+        values: dict[str, str],
+    ) -> None:
+        active_values = self._validate_managed_placeholder_values(
+            source_blocks=[{"id": "source", "text": "\n".join(source_placeholders)}],
+            placeholder_values=values,
+        )
+        document.placeholder_values.filter(
+            placeholder__in=source_placeholders,
+        ).exclude(
+            placeholder__in=active_values,
+        ).update(is_active=False)
+        for placeholder, value in active_values.items():
+            DocumentPlaceholderValue.objects.update_or_create(
+                document=document,
+                placeholder=placeholder,
+                defaults={"value": value, "is_active": True},
+            )
+
+    @transaction.atomic
+    def create_job(
+        self,
+        *,
+        document: Document,
+        prompt: AIDocumentPrompt | None,
+        provider,
+        placeholder_values: dict[str, str] | None = None,
+        requested_by=None,
+    ) -> DocumentImportJob:
         if document.document_type not in self.supported_document_types:
             raise ValueError(
                 "Der Word-Import ist nur für AGB, Datenschutzerklärungen "
@@ -151,12 +178,25 @@ class DocumentWordImportService(BaseService):
             )
         if not provider.is_active:
             raise ValueError("Der ausgewählte KI-Provider ist nicht aktiv.")
+        prompt = prompt or document.ai_document_prompt or AIDocumentPrompt.get_default()
+        if not prompt:
+            raise ValueError("Bitte zuerst einen aktiven KI-Dokument-Prompt anlegen oder als Standard markieren.")
+        if not prompt.is_active:
+            raise ValueError("Der ausgewählte KI-Dokument-Prompt ist nicht aktiv.")
         blocks = self.extract_docx_blocks(document)
+        if placeholder_values is None:
+            placeholder_values = dict(
+                document.placeholder_values.filter(is_active=True).values_list("placeholder", "value")
+            )
+        placeholder_values = self._validate_managed_placeholder_values(blocks, placeholder_values)
         return self.model.objects.create(
             document=document,
+            prompt=prompt,
             provider=provider,
             source_blocks=blocks,
             source_text="\n\n".join(block["text"] for block in blocks),
+            system_prompt_snapshot=prompt.system_prompt,
+            placeholder_values_snapshot=placeholder_values,
             requested_by=requested_by,
             status=DocumentImportJob.Status.QUEUED,
         )
@@ -257,9 +297,49 @@ class DocumentWordImportService(BaseService):
                     "placeholder": placeholder,
                     "value": value.strip(),
                     "evidence": evidence.strip(),
+                    "source": "ai_reference",
                 }
             )
         return validated
+
+    def _validate_managed_placeholder_values(
+        self,
+        source_blocks: list[dict],
+        placeholder_values: dict[str, str],
+    ) -> dict[str, str]:
+        if not isinstance(placeholder_values, dict):
+            raise ValueError("Die gepflegten Platzhalterwerte sind ungültig.")
+        source_text = "\n".join(block["text"] for block in source_blocks)
+        validated = {}
+        for placeholder, value in placeholder_values.items():
+            if not isinstance(placeholder, str) or not self.placeholder_pattern.fullmatch(placeholder):
+                raise ValueError("Ein gepflegter Platzhalter hat nicht das Format <Bezeichnung>.")
+            if placeholder not in source_text:
+                raise ValueError(f"Der gepflegte Platzhalter {placeholder} kommt in der Word-Datei nicht vor.")
+            if not isinstance(value, str) or not value.strip():
+                continue
+            if "<" in value or ">" in value:
+                raise ValueError(f"Der Wert für {placeholder} darf keine spitzen Klammern enthalten.")
+            validated[placeholder] = value.strip()
+        return validated
+
+    @staticmethod
+    def _managed_replacements(
+        source_blocks: list[dict],
+        placeholder_values: dict[str, str],
+    ) -> list[dict]:
+        return [
+            {
+                "id": block["id"],
+                "placeholder": placeholder,
+                "value": value,
+                "evidence": "Am Dokument gepflegter Platzhalterwert",
+                "source": "managed",
+            }
+            for block in source_blocks
+            for placeholder, value in placeholder_values.items()
+            if placeholder in block["text"]
+        ]
 
     @staticmethod
     def _replace_in_rows(rows: list[list[str]], placeholder: str, value: str) -> list[list[str]]:
@@ -327,7 +407,8 @@ class DocumentWordImportService(BaseService):
                     close_list()
                     html.append(f"<{list_tag}>")
                     open_list = list_tag
-                html.append(f"<li>{escape(block['text']).replace(chr(10), '<br>')}</li>")
+                text = self._effective_block_text(block)
+                html.append(f"<li>{escape(text).replace(chr(10), '<br>')}</li>")
                 continue
             close_list()
             if role == "table":
@@ -411,7 +492,7 @@ class DocumentWordImportService(BaseService):
         try:
             result_text, provider_response = AIProviderService().rewrite_text_with_response(
                 provider=job.provider,
-                system_prompt=DOCX_STRUCTURE_SYSTEM_PROMPT,
+                system_prompt=job.system_prompt_snapshot or DEFAULT_DOCUMENT_IMPORT_SYSTEM_PROMPT,
                 user_prompt=job.rendered_prompt,
                 # Reasoning models only accept their default temperature. The
                 # deterministic safety boundary is enforced by the validators below.
@@ -421,7 +502,31 @@ class DocumentWordImportService(BaseService):
             job.provider_response = provider_response
             payload = self._parse_provider_json(result_text)
             classified_blocks = self._validate_roles(job.source_blocks, payload)
-            replacements = self._validate_replacements(job.source_blocks, payload, reference_text)
+            managed_values = self._validate_managed_placeholder_values(
+                job.source_blocks,
+                job.placeholder_values_snapshot,
+            )
+            managed_replacements = self._managed_replacements(job.source_blocks, managed_values)
+            managed_keys = {
+                (replacement["id"], replacement["placeholder"])
+                for replacement in managed_replacements
+            }
+            payload_replacements = payload.get("replacements", [])
+            if not isinstance(payload_replacements, list):
+                raise ValueError("Die KI-Rückgabe enthält keine gültige Liste 'replacements'.")
+            ai_payload = {
+                **payload,
+                "replacements": [
+                    replacement
+                    for replacement in payload_replacements
+                    if not (
+                        isinstance(replacement, dict)
+                        and (replacement.get("id"), replacement.get("placeholder")) in managed_keys
+                    )
+                ],
+            }
+            ai_replacements = self._validate_replacements(job.source_blocks, ai_payload, reference_text)
+            replacements = [*managed_replacements, *ai_replacements]
             resolved_blocks = self._apply_replacements(classified_blocks, replacements)
             job.source_blocks = resolved_blocks
             job.result_html = self.render_html(resolved_blocks)

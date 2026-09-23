@@ -3,7 +3,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
-from django.db import models
+from django.db import models, transaction
 from django.db.models import Q
 from django.utils.text import slugify
 from django.utils.translation import gettext_lazy as _
@@ -28,6 +28,22 @@ Sprachvariante: {{ locale_instruction }}
 
 Textsegmente (JSON):
 {{ segments_json }}
+"""
+
+
+DEFAULT_DOCUMENT_IMPORT_SYSTEM_PROMPT = """Du strukturierst deutsche Rechtstexte fuer eine Website.
+
+Du darfst keinen Text umschreiben, ergaenzen, kuerzen oder korrigieren. Ordne jedem vorhandenen Block eine semantische Rolle zu. Die Block-IDs und ihre Reihenfolge muessen exakt erhalten bleiben.
+
+Zusaetzlich darfst du Platzhalter im Format <...> mit Angaben aus der bisherigen Dokumentfassung befuellen. Eine Ersetzung ist nur erlaubt, wenn der vollstaendige Wert dort eindeutig und wortgleich vorkommt. Erfinde oder kombiniere keine Angaben. Kann ein Platzhalter nicht vollstaendig und sicher befuellt werden, lasse ihn offen und fuehre ihn nicht unter replacements auf.
+
+Erlaubte Rollen fuer Textbloecke: h2, h3, p, ol_item, ul_item.
+Fuer Tabellen ist ausschliesslich die Rolle table erlaubt.
+
+Gib ausschliesslich ein JSON-Objekt in diesem Format zurueck:
+{"blocks": [{"id": "b0001", "role": "h2"}], "replacements": [{"id": "b0002", "placeholder": "<E-Mail-Adresse>", "value": "info@example.de", "evidence": "info@example.de"}]}
+
+Jede uebergebene ID muss genau einmal und in unveraenderter Reihenfolge vorkommen. Gib kein HTML, kein Markdown und keine Erklaerung aus.
 """
 
 
@@ -97,6 +113,85 @@ class AIProviderConfig(BaseModel):
 
     def __str__(self) -> str:
         return f"{self.name} ({self.model_name})"
+
+
+class AIDocumentPrompt(BaseModel):
+    """Editable AI instruction for safe Word-to-HTML document imports."""
+
+    name = models.CharField(max_length=255, unique=True, verbose_name=_("Name"))
+    slug = models.SlugField(max_length=255, unique=True, blank=True, verbose_name=_("Slug"))
+    description = models.TextField(blank=True, default="", verbose_name=_("Beschreibung"))
+    system_prompt = models.TextField(
+        default=DEFAULT_DOCUMENT_IMPORT_SYSTEM_PROMPT,
+        verbose_name=_("System-Prompt"),
+        help_text=_(
+            "Steuert die Strukturierung. Unabhaengige Code-Pruefungen verhindern weiterhin "
+            "Textaenderungen und unbelegte Platzhalterwerte."
+        ),
+    )
+    is_default = models.BooleanField(
+        default=False,
+        db_index=True,
+        verbose_name=_("Standard für Dokumentimporte"),
+    )
+    is_active = models.BooleanField(default=True, db_index=True, verbose_name=_("Aktiv"))
+
+    class Meta:
+        verbose_name = _("KI-Dokument-Prompt")
+        verbose_name_plural = _("KI-Dokument-Prompts")
+        ordering = ("name",)
+        constraints = [
+            models.UniqueConstraint(
+                fields=("is_default",),
+                condition=Q(is_default=True),
+                name="ai_document_prompt_single_default",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return self.name
+
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            self.slug = slugify(self.name)[:255]
+        if not self.is_default:
+            return super().save(*args, **kwargs)
+        with transaction.atomic():
+            type(self).objects.filter(is_default=True).exclude(pk=self.pk).update(is_default=False)
+            return super().save(*args, **kwargs)
+
+    @classmethod
+    def get_default(cls):
+        return cls.objects.filter(is_active=True, is_default=True).order_by("name").first()
+
+    @classmethod
+    def ensure_default(cls):
+        default = cls.get_default()
+        if default:
+            return default
+        default = cls.objects.filter(is_default=True).order_by("name").first()
+        if default:
+            default.is_active = True
+            default.save(update_fields=("is_active", "updated_at"))
+            return default
+        prompt, created = cls.objects.get_or_create(
+            slug="sicherer-word-import-rechtstexte",
+            defaults={
+                "name": "Sicherer Word-Import für Rechtstexte",
+                "description": (
+                    "Strukturiert AGB, Datenschutzerklärungen und Widerrufsbelehrungen, "
+                    "ohne den anwaltlichen Text zu verändern."
+                ),
+                "system_prompt": DEFAULT_DOCUMENT_IMPORT_SYSTEM_PROMPT,
+                "is_default": True,
+                "is_active": True,
+            },
+        )
+        if not created and not prompt.is_default:
+            prompt.is_default = True
+            prompt.is_active = True
+            prompt.save(update_fields=("is_default", "is_active", "updated_at"))
+        return prompt
 
 
 class AITranslationConfig(BaseModel):
