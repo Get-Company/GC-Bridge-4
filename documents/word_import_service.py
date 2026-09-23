@@ -413,7 +413,9 @@ class DocumentWordImportService(BaseService):
                 provider=job.provider,
                 system_prompt=DOCX_STRUCTURE_SYSTEM_PROMPT,
                 user_prompt=job.rendered_prompt,
-                temperature=0,
+                # Reasoning models only accept their default temperature. The
+                # deterministic safety boundary is enforced by the validators below.
+                temperature=1,
                 response_format={"type": "json_object"},
             )
             job.provider_response = provider_response
