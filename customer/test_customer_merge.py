@@ -19,6 +19,7 @@ from customer.services.customer_merge import (
     _split_terms,
     _wildcard_segments,
 )
+from microtech.services.graphql_client import GraphQLMicrotechError
 
 
 def _sw_customer(
@@ -1458,6 +1459,20 @@ class CustomerMergeDjangoMutationViewTest(SimpleTestCase):
             erp_nr="10001", django_address_id=42, role="shipping",
         )
 
+    @patch("customer.views.CustomerSyncDirectionService")
+    def test_set_address_default_exposes_microtech_record_lock(self, service_class):
+        from customer.views import customer_set_address_default_api
+
+        lock_message = "Der Datensatz ist durch einen anderen Benutzer gesperrt."
+        service_class.return_value.set_address_default.side_effect = GraphQLMicrotechError(lock_message)
+
+        result = customer_set_address_default_api(self.request({
+            "erp_nr": "10001", "django_address_id": 42, "role": "shipping",
+        }))
+
+        self.assertEqual(result.status_code, 409)
+        self.assertIn(lock_message, json.loads(result.content)["error"])
+
     @patch("customer.views.CustomerDeleteService")
     def test_delete_django_customer_uses_local_delete_service(self, service_class):
         from customer.views import customer_delete_django_api
@@ -1610,6 +1625,38 @@ class ShopwareMergeBrowserStateTest(SimpleTestCase):
             "async function assignMicrotechMapping", 1
         )[0]
         self.assertIn("button.closest('.microtech-number-field')", function)
+
+    def test_row_refetch_reloads_microtech_instead_of_leaving_its_loader_pending(self):
+        template = (Path(__file__).resolve().parents[1] / "templates/admin/customer_merge.html").read_text()
+        function = "async function refetchRow(" + template.split(
+            "async function refetchRow(", 1
+        )[1].split("async function adoptShopwareAddress", 1)[0]
+        harness = f"""
+const assert = require('node:assert/strict');
+let searchData = {{'10001': {{shopware: {{id: 'sw-id'}}, microtech: {{erp_nr: '10001'}}}}}};
+let searchErps = ['10001'];
+const LOCAL_SYSTEM_KEYS = ['shopware', 'django'];
+let initialized = null;
+let loaded = null;
+function initializeRowStates(numbers, options) {{ initialized = {{numbers, options}}; }}
+function setCellState() {{}}
+function renderRows() {{}}
+async function loadCells(numbers, systems) {{ loaded = {{numbers, systems}}; }}
+{function}
+(async () => {{
+  await refetchRow('10001', '10001');
+  assert.equal(initialized.options.microtechState, 'loading');
+  assert.deepEqual(loaded.numbers, ['10001']);
+  assert.deepEqual(loaded.systems, ['django', 'microtech']);
+}})().catch(error => {{ console.error(error); process.exitCode = 1; }});
+"""
+        result = subprocess.run(
+            [shutil.which("node"), "-e", harness],
+            text=True,
+            capture_output=True,
+            timeout=10,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def run_js(self, assertions, *, saved=None):
         template = (Path(__file__).resolve().parents[1] / "templates/admin/customer_merge.html").read_text()

@@ -9,6 +9,7 @@ from django.http import JsonResponse
 from django.template.response import TemplateResponse
 from django.utils import timezone
 from loguru import logger
+from microtech.services.graphql_client import GraphQLMicrotechError
 
 from customer.services.customer_merge import (
     CustomerDeleteService,
@@ -580,6 +581,14 @@ def customer_set_address_default_api(request):
         return JsonResponse({"success": True, **result})
     except ValueError as exc:
         return JsonResponse({"error": str(exc)}, status=400)
+    except GraphQLMicrotechError as exc:
+        # Microtech returns an actionable message when the customer record is
+        # open and therefore locked.  Preserve that upstream business error so
+        # the admin user knows which record to close before retrying.
+        return JsonResponse(
+            {"error": f"Microtech hat die Änderung abgelehnt: {exc}"},
+            status=409,
+        )
     except Exception as exc:
         logger.error("Address default synchronization failed: {}\n{}", exc, traceback.format_exc())
         return JsonResponse({"error": "Die Standardadresse konnte nicht synchronisiert werden."}, status=500)

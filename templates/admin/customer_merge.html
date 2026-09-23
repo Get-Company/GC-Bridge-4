@@ -1709,7 +1709,15 @@ async function refetchRow(oldNr, newNr) {
   initializeRowStates([newNr], { microtechState: 'loading' });
   if (previousShopware) setCellState(newNr, 'shopware', 'found');
   renderRows(false);
-  await loadCells([newNr], previousShopware ? ['django'] : LOCAL_SYSTEM_KEYS);
+  // The mutation may have changed Microtech data as well (for example the
+  // default shipping/billing address).  The old implementation discarded the
+  // Microtech result, marked its cell as loading, but only refreshed Django and
+  // Shopware.  That left the Microtech column without data and with a permanent
+  // loader.  Always request a fresh Microtech snapshot for the rebuilt row.
+  await loadCells(
+    [newNr],
+    previousShopware ? ['django', 'microtech'] : [...LOCAL_SYSTEM_KEYS, 'microtech'],
+  );
 }
 
 async function adoptShopwareAddress(erpNr, shopwareCustomerId, shopwareAddressId, button) {
