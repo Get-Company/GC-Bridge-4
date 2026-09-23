@@ -380,6 +380,7 @@ UNFOLD = {
     "SITE_TITLE": "GC-Bridge Admin",
     "SITE_HEADER": "GC-Bridge",
     "SITE_SUBHEADER": "core.version.site_subheader_callback",
+    "SITE_LOGO": "core.unfold.site_logo",
     "SITE_SYMBOL": "hub",
     "SITE_URL": "/",
     "SITE_FAVICONS": [

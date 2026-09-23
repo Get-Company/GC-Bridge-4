@@ -39,3 +39,7 @@ def admin_button_loader_script(_request):
 
 def favicon(_request):
     return static("core/favicon.svg")
+
+
+def site_logo(_request):
+    return static("core/admin/classei-bridge-logo.png")
