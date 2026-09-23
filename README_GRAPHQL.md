@@ -767,6 +767,7 @@ mutation {
     description: "Testauftrag"
     date: "2024-01-15"
     currency: "EUR"
+    datasetFields: [{ name: "ZahlArt", value: "22" }]
     positions: [
       { erpNumber: "ART-001" quantity: "2" unit: "Stk" price: "49.90" }
       { erpNumber: "ART-002" quantity: "1" }
@@ -777,12 +778,13 @@ mutation {
 }
 ```
 
-`CreateVorgangInput`: `vorgangArt` (Int, required), `customerNumber` (String, required), `orderNumber`, `description`, `date` (ISO 8601), `currency`, `positions` (list of `VorgangPositionInput`).
+`CreateVorgangInput`: `vorgangArt` (Int, required), `customerNumber` (String, required), `orderNumber`, `description`, `date` (ISO 8601), `currency`, `positions` (list of `VorgangPositionInput`), `datasetFields` (Microtech-Feldnamen und Werte für den Vorgang).
 
 `VorgangPositionInput` supports two mutually exclusive variants:
 
 - Article position: `erpNumber` and `quantity` (required), `unit` and `price` (optional, net unit price).
 - Pure text position: `name` (required). It is written only to `VorgangPosition.Bez`; no article number, quantity, unit, or price is set.
+- Beide Positionsarten können `datasetFields` für Felder der `VorgangPosition` enthalten.
 
 ---
 
@@ -804,7 +806,7 @@ mutation {
 }
 ```
 
-`UpdateVorgangInput`: `orderNumber`, `description`, `date`, `currency`, `positions`. Pass `positions: []` to delete all positions; omit `positions` to leave them unchanged.
+`UpdateVorgangInput`: `customerNumber`, `orderNumber`, `description`, `date`, `currency`, `positions`, `datasetFields`. Pass `positions: []` to delete all positions; omit `positions` to leave them unchanged. Ohne `positions` lassen sich allein Vorgangsfelder aktualisieren.
 
 ---
 

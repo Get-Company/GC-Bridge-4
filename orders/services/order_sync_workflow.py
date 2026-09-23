@@ -1352,6 +1352,7 @@ class OrderSyncWorkflowService(BaseService):
                 positions=positions,
                 order_type_number=order_type_number,
                 customer_number=resolved_customer_number,
+                resolved_rule=resolved_rule,
             )
             existing_beleg_nr = str(
                 state.get("beleg_nr") or state.get("erp_order_id") or order.erp_order_id or ""

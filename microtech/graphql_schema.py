@@ -114,6 +114,7 @@ ORDER_POSITION_MAPPING_ACTION_SCOPES: tuple[dict[str, object], ...] = (
 RULE_ACTION_EXCLUDED_FIELDS: dict[tuple[str, str], tuple[str, ...]] = {
     ("customer.microtech_customer_upsert", "customer"): ("CustomerInput.email",),
     ("customer.microtech_customer_mapping", "customer"): ("CustomerInput.email",),
+    ("orders.microtech_order_position_mapping", "position"): ("VorgangPositionInput.datasetFields",),
 }
 
 # Curated fallback — the fields the wrapper actually accepts (from

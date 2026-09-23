@@ -39,6 +39,7 @@ from microtech.graphql_schema import (
     get_rule_trigger_input_types,
 )
 from microtech.rule_builder import (
+    WRITABLE_DATASET_FIELD_TYPES,
     get_address_field_defs,
     get_allowed_operator_codes,
     get_customer_field_defs,
@@ -614,6 +615,7 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
                     (
                         x for x in cat.fields.all()
                         if x.is_active and x.can_access and not x.is_calc_field
+                        and x.field_type in WRITABLE_DATASET_FIELD_TYPES
                     ),
                     key=lambda x: (x.priority, x.field_name, x.id),
                 )

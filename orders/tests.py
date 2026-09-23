@@ -87,6 +87,10 @@ class OrderGraphQLPayloadTest(SimpleTestCase):
             ),
             patch.object(service, "_build_graphql_positions", return_value=([], MagicMock())),
             patch.object(service, "_refresh_erp_order_id_graphql", return_value="RE-2026-42"),
+            patch(
+                "microtech.rule_engine.mapping_resolver.resolve_order_mapping_fields",
+                side_effect=lambda *, code_values, **kwargs: code_values,
+            ),
         ):
             with self.assertRaisesRegex(ValueError, "Vorgangsart 120"):
                 service._upsert_order_graphql(order=order, client=client)
@@ -210,6 +214,66 @@ class OrderGraphQLPayloadTest(SimpleTestCase):
         self.assertEqual(debug.dataset_create_position_requested, 1)
         self.assertEqual(debug.dataset_create_position_applied, 1)
         self.assertEqual(debug.dataset_created_position_erp_nrs, ())
+
+    def test_vorgang_dataset_rule_is_sent_to_create_and_update(self):
+        order = Order(api_id="order-field", order_number="SW-10159")
+        resolved_rule = ResolvedOrderRule(
+            dataset_actions=(
+                ResolvedDatasetAction(
+                    action_type=MicrotechOrderRuleAction.ActionType.SET_FIELD,
+                    dataset_source_identifier="Vorgang - Vorgange",
+                    dataset_field_name="ZahlArt",
+                    target_value="22",
+                ),
+            ),
+        )
+
+        with patch(
+            "microtech.rule_engine.mapping_resolver.resolve_order_mapping_fields",
+            side_effect=lambda *, code_values, **kwargs: code_values,
+        ):
+            update_input, create_input = OrderUpsertMicrotechService()._build_graphql_order_inputs(
+                order=order,
+                positions=[],
+                order_type_number=111,
+                customer_number="10005",
+                resolved_rule=resolved_rule,
+            )
+
+        expected = [{"name": "ZahlArt", "value": "22"}]
+        self.assertEqual(update_input["datasetFields"], expected)
+        self.assertEqual(create_input["datasetFields"], expected)
+
+    def test_position_dataset_rule_targets_the_last_created_extra_position(self):
+        positions: list[dict] = []
+        resolved_rule = ResolvedOrderRule(
+            dataset_actions=(
+                ResolvedDatasetAction(
+                    action_type=MicrotechOrderRuleAction.ActionType.CREATE_EXTRA_POSITION,
+                    target_value="P",
+                ),
+                ResolvedDatasetAction(
+                    action_type=MicrotechOrderRuleAction.ActionType.SET_FIELD,
+                    dataset_source_identifier="VorgangPosition - Vorgangspositionen",
+                    dataset_field_name="Bez",
+                    target_value="Hinweis",
+                ),
+                ResolvedDatasetAction(
+                    action_type=MicrotechOrderRuleAction.ActionType.CREATE_EXTRA_POSITION,
+                    target_value="Q",
+                ),
+            ),
+        )
+
+        debug = OrderUpsertMicrotechService()._build_graphql_rule_debug(
+            order=SimpleNamespace(order_number="ORDER-TRACE"),
+            resolved_rule=resolved_rule,
+            positions=positions,
+        )
+
+        self.assertEqual(positions[0]["datasetFields"], [{"name": "Bez", "value": "Hinweis"}])
+        self.assertNotIn("datasetFields", positions[1])
+        self.assertEqual(debug.dataset_set_field_applied, 1)
 
     def test_adressen_tax_category_rule_becomes_customer_input_override(self):
         resolved_rule = ResolvedOrderRule(
@@ -445,6 +509,8 @@ class OrderPositionUnitTest(TestCase):
         positions = self._build_positions()
 
         self.assertEqual(positions[0]["unit"], "Karton")
+        self.assertEqual(positions[0]["erpNumber"], "ERP-FACTOR-1")
+        self.assertNotIn("name", positions[0])
 
     def test_factor_does_not_change_the_microtech_article_unit(self):
         Product.objects.create(erp_nr="ERP-FACTOR-1", sku="sku-factor-1", factor=5, unit="Pack")

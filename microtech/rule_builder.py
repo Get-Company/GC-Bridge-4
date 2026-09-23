@@ -175,6 +175,14 @@ RULE_ACTION_TARGET_CREATE_SHIPPING_POSITION = "create_shipping_position"
 RULE_ACTION_TARGET_VORGANG_FIELD = "set_vorgang_field"
 RULE_ACTION_TARGET_VORGANG_POSITION_FIELD = "set_vorgang_position_field"
 
+# The worker accepts scalar COM dataset values. Array/list and generated ID
+# fields from the readable Microtech catalog are not editable rule targets.
+WRITABLE_DATASET_FIELD_TYPES = frozenset({
+    "UnicodeString", "WideString", "String", "Double", "Float", "Currency",
+    "Blob", "Info", "Memo", "Date", "DateTime", "Time", "Integer",
+    "Boolean", "Byte", "SmallInt",
+})
+
 DEFAULT_RULE_ACTION_TARGET_DEFS: tuple[RuleActionTargetDef, ...] = (
     RuleActionTargetDef(
         code=RULE_ACTION_TARGET_CREATE_EXTRA_POSITION,
@@ -439,13 +447,24 @@ def filter_dataset_field_queryset_for_action_target(queryset, *, action_target: 
         predicate |= name_predicate
     if not predicate.children:
         return queryset.none()
-    return queryset.filter(predicate, can_access=True, is_calc_field=False)
+    return queryset.filter(
+        predicate,
+        can_access=True,
+        is_calc_field=False,
+        field_type__in=WRITABLE_DATASET_FIELD_TYPES,
+    )
 
 
 def get_dataset_field_queryset_for_action_target(*, action_target: str):
     queryset = (
         MicrotechDatasetField.objects
-        .filter(is_active=True, dataset__is_active=True, can_access=True, is_calc_field=False)
+        .filter(
+            is_active=True,
+            dataset__is_active=True,
+            can_access=True,
+            is_calc_field=False,
+            field_type__in=WRITABLE_DATASET_FIELD_TYPES,
+        )
         .select_related("dataset")
         .order_by("dataset__priority", "dataset__name", "priority", "field_name", "id")
     )

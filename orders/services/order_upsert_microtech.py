@@ -332,6 +332,7 @@ class OrderUpsertMicrotechService(BaseService):
             positions=positions,
             order_type_number=order_type_number,
             customer_number=order.customer.erp_nr,
+            resolved_rule=resolved_rule,
         )
 
         existing_beleg_nr = self._refresh_erp_order_id_graphql(order=order, client=client)
@@ -373,6 +374,7 @@ class OrderUpsertMicrotechService(BaseService):
         positions: list[dict[str, str]],
         order_type_number: int,
         customer_number: str,
+        resolved_rule: ResolvedOrderRule,
     ) -> tuple[dict, dict]:
         """Build update/create inputs through the editable Vorgang mapping."""
         code_input = {
@@ -400,6 +402,15 @@ class OrderUpsertMicrotechService(BaseService):
             ),
             "customerNumber": mapped_input.get("customerNumber", customer_number),
         }
+        dataset_fields = [
+            {"name": action.dataset_field_name, "value": action.target_value}
+            for action in resolved_rule.dataset_actions
+            if action.action_type == MicrotechOrderRuleAction.ActionType.SET_FIELD
+            and self._is_vorgang_dataset_action(action)
+        ]
+        if dataset_fields:
+            update_input["datasetFields"] = dataset_fields
+            create_input["datasetFields"] = dataset_fields
         return update_input, create_input
 
     @staticmethod
@@ -496,6 +507,10 @@ class OrderUpsertMicrotechService(BaseService):
                     for key, value in mapped_position.items()
                     if value not in (None, "")
                 }
+            # The GraphQL wrapper accepts an article number or a text name,
+            # never both on one position. Article positions keep their number.
+            if position.get("erpNumber"):
+                position.pop("name", None)
             positions.append(position)
 
         configured_shipping_erp_nr = self._configured_shipping_erp_nr(resolved_rule=resolved_rule)
@@ -535,7 +550,28 @@ class OrderUpsertMicrotechService(BaseService):
     ) -> OrderRuleDebugInfo:
         extra_created: list[str] = []
         text_created: list[str] = []
+        last_extra_position: dict | None = None
+        set_field_requested = 0
+        set_field_applied = 0
+        notes: list[str] = []
         for action in resolved_rule.dataset_actions:
+            if action.action_type == MicrotechOrderRuleAction.ActionType.SET_FIELD:
+                set_field_requested += 1
+                if self._is_vorgang_dataset_action(action):
+                    set_field_applied += 1
+                elif self._is_vorgang_position_dataset_action(action):
+                    if last_extra_position is None:
+                        notes.append("VorgangPosition-Feld ohne Zusatzposition übersprungen.")
+                        continue
+                    last_extra_position.setdefault("datasetFields", []).append(
+                        {"name": action.dataset_field_name, "value": action.target_value}
+                    )
+                    set_field_applied += 1
+                elif not self._is_adressen_dataset_action(action):
+                    notes.append(
+                        f"Dataset {action.dataset_source_identifier or action.dataset_name} wird nicht unterstützt."
+                    )
+                continue
             if action.action_type == MicrotechOrderRuleAction.ActionType.CREATE_TEXT_POSITION:
                 name = (action.target_value or "").strip()
                 if not name:
@@ -549,6 +585,7 @@ class OrderUpsertMicrotechService(BaseService):
             if not erp_nr or erp_nr in extra_created:
                 continue
             positions.append(self._build_graphql_special_position(erp_nr=erp_nr))
+            last_extra_position = positions[-1]
             extra_created.append(erp_nr)
 
         payment_info = self._build_graphql_payment_position(
@@ -556,7 +593,6 @@ class OrderUpsertMicrotechService(BaseService):
             resolved_rule=resolved_rule,
             positions=positions,
         )
-        notes: list[str] = []
         if shipping_erp_nr:
             if shipping_action_applied:
                 notes.append(f"Versandposition '{shipping_erp_nr}' wurde mit den Versandkosten angelegt.")
@@ -564,15 +600,12 @@ class OrderUpsertMicrotechService(BaseService):
                 notes.append(f"Versandposition '{shipping_erp_nr}' konfiguriert, aber keine Versandkosten vorhanden.")
         if text_created:
             notes.append(f"{len(text_created)} Textposition(en) wurden angelegt.")
-        if any(
-            action.action_type == MicrotechOrderRuleAction.ActionType.SET_FIELD
-            for action in resolved_rule.dataset_actions
-        ):
-            notes.append("Dataset-Feldaktionen werden erst nach Wrapper-Erweiterung fuer Vorgang-Felder angewendet.")
         return replace(
             payment_info,
             dataset_actions_total=len(resolved_rule.dataset_actions),
-            dataset_actions_applied=len(extra_created) + len(text_created) + int(shipping_action_applied),
+            dataset_actions_applied=len(extra_created) + len(text_created) + int(shipping_action_applied) + set_field_applied,
+            dataset_set_field_requested=set_field_requested,
+            dataset_set_field_applied=set_field_applied,
             dataset_create_position_requested=sum(
                 1
                 for action in resolved_rule.dataset_actions
