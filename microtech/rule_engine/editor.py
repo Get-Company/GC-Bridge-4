@@ -375,7 +375,7 @@ def _validate_payload(
                 elif graphql_field in excluded_fields:
                     errors.append(
                         f"{action_label}: {graphql_field} ist in diesem Zielbereich gesperrt. "
-                        "E-Mail muss einer konkreten Lieferanschrift oder einem Ansprechpartner zugeordnet werden."
+                        "E-Mail muss einer konkreten Anschrift oder einem Ansprechpartner zugeordnet werden."
                     )
         elif action_type == MicrotechOrderRuleAction.ActionType.CREATE_TEXT_POSITION:
             if not str(action.get("target_value") or "").strip():

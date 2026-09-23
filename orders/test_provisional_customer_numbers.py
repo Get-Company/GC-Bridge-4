@@ -6,10 +6,11 @@ from orders.services.order_sync_workflow import OrderSyncWorkflowService
 
 
 class ProvisionalCustomerNumberWorkflowTest(SimpleTestCase):
-    def test_six_digit_number_from_900000_uses_new_customer_number_allocation(self):
+    def test_bridge_number_from_900000_uses_new_customer_number_allocation(self):
         self.assertTrue(OrderSyncWorkflowService._is_provisional_customer_number("900000"))
         self.assertTrue(OrderSyncWorkflowService._is_provisional_customer_number("950002"))
         self.assertTrue(OrderSyncWorkflowService._is_provisional_customer_number("999999"))
+        self.assertTrue(OrderSyncWorkflowService._is_provisional_customer_number("1000000"))
 
     def test_existing_customer_number_does_not_use_new_customer_number_allocation(self):
         self.assertFalse(OrderSyncWorkflowService._is_provisional_customer_number("899999"))

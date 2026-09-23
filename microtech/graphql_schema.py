@@ -108,17 +108,12 @@ ORDER_POSITION_MAPPING_ACTION_SCOPES: tuple[dict[str, object], ...] = (
 
 # CustomerInput.email is intentionally excluded.  The wrapper can use that
 # value while creating its implicit default address, which would also change
-# the invoice-address email.  Email mappings must target the explicit shipping
-# address or one of the contact scopes instead.
+# the invoice-address email.  Email mappings must target an explicit postal
+# address or contact. Billing postal email is written only for a new customer;
+# the postal payload builder omits it on every subsequent customer sync.
 RULE_ACTION_EXCLUDED_FIELDS: dict[tuple[str, str], tuple[str, ...]] = {
     ("customer.microtech_customer_upsert", "customer"): ("CustomerInput.email",),
-    ("customer.microtech_customer_upsert", "billing_address"): (
-        "PostalAddressInput.email",
-    ),
     ("customer.microtech_customer_mapping", "customer"): ("CustomerInput.email",),
-    ("customer.microtech_customer_mapping", "billing_address"): (
-        "PostalAddressInput.email",
-    ),
 }
 
 # Curated fallback — the fields the wrapper actually accepts (from

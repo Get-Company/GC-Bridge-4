@@ -49,6 +49,7 @@ ISO2_TO_NUMERIC = {
     "US": 840,
 }
 NOT_FOUND_FRAGMENTS = ("nicht gefunden", "not found", "wurde nicht gefunden")
+NEW_BRIDGE_CUSTOMER_NUMBER_MIN = 900_000
 
 
 def _to_str(value: Any) -> str:
@@ -64,6 +65,12 @@ def _to_int(value: Any) -> int | None:
         return int(value)
     except (TypeError, ValueError):
         return None
+
+
+def is_new_bridge_customer_number(value: Any) -> bool:
+    """Bridge numbers from 900000 are provisional, not Microtech AdrNr values."""
+    number_text = _to_str(value)
+    return number_text.isascii() and number_text.isdigit() and int(number_text) >= NEW_BRIDGE_CUSTOMER_NUMBER_MIN
 
 
 def _country_numeric(country_code: str) -> int | None:
@@ -158,6 +165,7 @@ class CustomerUpsertMicrotechService(BaseService):
             raise ValueError(
                 "Customer.erp_nr is required for GraphQL Microtech upsert until the wrapper exposes number allocation."
             )
+        bridge_new_customer = is_new_bridge_customer_number(erp_nr)
 
         # A scoped delivery/billing email rule cannot be fulfilled if both
         # roles collapse to one Microtech postal address.  Validate before the
@@ -202,6 +210,11 @@ class CustomerUpsertMicrotechService(BaseService):
         known_address_sub_numbers = (
             set() if is_new_customer else self._address_sub_numbers_from_customer(existing_customer)
         )
+        shipping_sub_number = _to_int(shipping.erp_ans_nr)
+        billing_sub_number = _to_int(billing.erp_ans_nr)
+        shared_postal_record = self._same_address(shipping, billing) or (
+            shipping_sub_number is not None and shipping_sub_number == billing_sub_number
+        )
         shipping_ans_nr = self._upsert_postal_address_graphql(
             client=client,
             address_number=address_number,
@@ -211,7 +224,9 @@ class CustomerUpsertMicrotechService(BaseService):
             na1_mode=na1_mode,
             na1_static_value=na1_static_value,
             known_address_sub_numbers=known_address_sub_numbers,
-            include_email=True,
+            # One shared postal record is also the invoice address. Protect
+            # its email when synchronizing an existing Microtech customer.
+            include_email=(bridge_new_customer and is_new_customer) or not shared_postal_record,
             customer=customer,
             shipping_address=shipping,
             billing_address=billing,
@@ -228,7 +243,9 @@ class CustomerUpsertMicrotechService(BaseService):
                 na1_mode=na1_mode,
                 na1_static_value=na1_static_value,
                 known_address_sub_numbers=known_address_sub_numbers,
-                include_email=False,
+                # The invoice email is initialized only with a newly created
+                # Microtech customer. Later syncs must not overwrite it.
+                include_email=bridge_new_customer and is_new_customer,
                 customer=customer,
                 shipping_address=shipping,
                 billing_address=billing,
@@ -523,9 +540,8 @@ class CustomerUpsertMicrotechService(BaseService):
 
         overlay = resolve_postal_address_with_mode(address, code_values=postal_input)
         if overlay:
-            # Invoice-address email is deliberately absent from the ordinary
-            # customer upsert.  A generic address rule must not accidentally
-            # reintroduce it.
+            # An existing invoice address, including a shared delivery/invoice
+            # record, must not receive an email from a generic address rule.
             if not include_email:
                 overlay.pop("email", None)
             postal_input.update(overlay)
@@ -555,9 +571,8 @@ class CustomerUpsertMicrotechService(BaseService):
             )
             if scoped_overlay:
                 postal_input.update(scoped_overlay)
-        # Keep this as the final safeguard as well: older saved rules may still
-        # contain a billing-address email action even though the editor now
-        # prevents creating or saving such a mapping.
+        # Keep this as the final safeguard: billing email rules are allowed,
+        # but must never write during an existing-customer sync.
         if not include_email:
             postal_input.pop("email", None)
         return self._drop_blank(postal_input)

@@ -91,6 +91,15 @@ class NextStepResolverTest(TestCase):
 
         self.assertTrue(state["billing_same_as_shipping"])
 
+    def test_different_postal_emails_require_separate_addresses(self):
+        order = make_order()
+        order.shipping_address.email = "delivery@example.test"
+        order.billing_address.email = "invoice@example.test"
+
+        state = OrderSyncWorkflowService()._initial_workflow_state(order)
+
+        self.assertFalse(state["billing_same_as_shipping"])
+
     def test_missing_order_billing_address_is_rejected_instead_of_using_shipping_address(self):
         order = make_order()
         order.billing_address = None

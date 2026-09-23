@@ -96,7 +96,7 @@ STANDARD_MAPPING_GROUPS: tuple[dict[str, object], ...] = (
         "task_name": "orders.microtech_order_position_mapping",
         "target_scope": "position",
         "input_type": "VorgangPositionInput",
-        "fields": ("erpNumber", "quantity", "unit", "price", "name"),
+        "fields": ("erpNumber", "quantity", "unit", "price"),
     },
     {
         "category_code": "kunde",
@@ -142,7 +142,7 @@ STANDARD_MAPPING_GROUPS: tuple[dict[str, object], ...] = (
         "input_type": "PostalAddressInput",
         "fields": (
             "isDefaultShipping", "isDefaultBilling", "name1", "name2", "name3",
-            "street", "zipCode", "city", "phone", "department", "country",
+            "street", "zipCode", "city", "email", "phone", "department", "country",
         ),
     },
     {
@@ -199,9 +199,34 @@ def _ensure_standard_mapping_rules(
 ) -> None:
     """Create the former code mapping once as grouped, editable rules.
 
-    ``system_key`` is the durable identity.  Existing standard rules are not
+    ``system_key`` is the durable identity. Existing standard rules are not
     rewritten on later page loads, so deliberate user edits remain intact.
     """
+    # One-time upgrade of the existing grouped billing rule. Changing its key
+    # preserves its ID and the user's other actions, while a later deliberate
+    # removal of the new email action is not silently undone on page reload.
+    old_billing_key = "standard_mapping.kunde.billing_address"
+    new_billing_key = "standard_mapping.kunde.billing_address_email_on_create"
+    old_billing_rule = MicrotechOrderRule.objects.filter(system_key=old_billing_key).first()
+    if old_billing_rule and not MicrotechOrderRule.objects.filter(system_key=new_billing_key).exists():
+        old_billing_rule.system_key = new_billing_key
+        old_billing_rule.save(update_fields=("system_key", "updated_at"))
+        if not old_billing_rule.actions.filter(
+            action_type=MicrotechOrderRuleAction.ActionType.SET_FIELD,
+            target_scope="billing_address",
+            graphql_field="PostalAddressInput.email",
+        ).exists():
+            last_priority = old_billing_rule.actions.aggregate(value=Max("priority"))["value"] or 0
+            MicrotechOrderRuleAction.objects.create(
+                rule=old_billing_rule,
+                priority=last_priority + 10,
+                action_type=MicrotechOrderRuleAction.ActionType.SET_FIELD,
+                graphql_field="PostalAddressInput.email",
+                target_scope="billing_address",
+                target_value="{{ code_values__email }}",
+                is_active=True,
+            )
+
     triggers: dict[str, RuleTrigger] = {}
     for definition in _STANDARD_MAPPING_TRIGGERS:
         trigger, _created = RuleTrigger.objects.get_or_create(
@@ -221,7 +246,10 @@ def _ensure_standard_mapping_rules(
         target_scope = str(definition["target_scope"])
         input_type = str(definition["input_type"])
         task_name = str(definition["task_name"])
-        system_key = f"standard_mapping.{category_code}.{target_scope}"
+        system_key = (
+            new_billing_key if target_scope == "billing_address"
+            else f"standard_mapping.{category_code}.{target_scope}"
+        )
         rule, created = MicrotechOrderRule.objects.get_or_create(
             system_key=system_key,
             defaults={
@@ -434,7 +462,11 @@ def build_mapping_checklist() -> list[dict[str, object]]:
                 field_rule_names.update(generic_address_sources.get(graphql_field, set()))
             fields.append({
                 "name": str(field_name),
-                "label": FIELD_LABELS.get(str(field_name), str(field_name)),
+                "label": (
+                    "E-Mail (nur bei Neukunden)"
+                    if scope == "billing_address" and field_name == "email"
+                    else FIELD_LABELS.get(str(field_name), str(field_name))
+                ),
                 "technical_name": graphql_field,
                 "code_mapped": True,
                 "rule_names": sorted(field_rule_names),

@@ -4,7 +4,11 @@ import logging
 from typing import Any
 
 from customer.models import Address
-from customer.services.customer_upsert_microtech import CustomerUpsertMicrotechService, _to_int
+from customer.services.customer_upsert_microtech import (
+    CustomerUpsertMicrotechService,
+    _to_int,
+    is_new_bridge_customer_number,
+)
 from core.services import BaseService
 from microtech.models import MicrotechGraphQLJob
 from microtech.services import MicrotechJobSentinelService
@@ -20,8 +24,6 @@ logger = logging.getLogger(__name__)
 # Fehlermeldungs-Fragmente, die einen Probe-Fehlschlag als fachliches
 # "nicht gefunden" (Branch) statt als technischen Fehler kennzeichnen.
 NOT_FOUND_FRAGMENTS = ("nicht gefunden", "not found", "wurde nicht gefunden")
-NEW_CUSTOMER_NUMBER_MIN = 900_000
-NEW_CUSTOMER_NUMBER_MAX = 999_999
 
 
 class OrderSyncWorkflowService(BaseService):
@@ -87,11 +89,8 @@ class OrderSyncWorkflowService(BaseService):
 
     @staticmethod
     def _is_provisional_customer_number(customer_number: object) -> bool:
-        """Return whether a six-digit Shopware number needs a Microtech AdrNr allocation."""
-        number_text = str(customer_number or "").strip()
-        if len(number_text) != 6 or not number_text.isascii() or not number_text.isdigit():
-            return False
-        return NEW_CUSTOMER_NUMBER_MIN <= int(number_text) <= NEW_CUSTOMER_NUMBER_MAX
+        """Return whether the Bridge number needs a Microtech AdrNr allocation."""
+        return is_new_bridge_customer_number(customer_number)
 
     def next_step(self, workflow: MicrotechOrderSyncWorkflow) -> str | None:
         """Liefert den nächsten ausstehenden und anwendbaren Step-Key, oder None wenn fertig."""
@@ -116,7 +115,11 @@ class OrderSyncWorkflowService(BaseService):
 
     @staticmethod
     def _same_address(shipping: Address, billing: Address) -> bool:
-        """Compare postal identity, independently from the selected contact."""
+        """Compare postal identity, independently from the selected contact.
+
+        Different postal emails require separate Microtech addresses so the
+        invoice email can be initialized without replacing the delivery one.
+        """
         if shipping is billing or (shipping.pk and shipping.pk == billing.pk):
             return True
         fields = (
@@ -127,6 +130,7 @@ class OrderSyncWorkflowService(BaseService):
             "postal_code",
             "city",
             "country_code",
+            "email",
         )
         return all(
             str(getattr(shipping, field, "") or "").strip().casefold()
@@ -549,9 +553,8 @@ class OrderSyncWorkflowService(BaseService):
             "erp_nr": erp_nr,
             "address_number": address_number,
             "requested_customer_number": erp_nr,
-            # A six-digit Shopware number is only a placeholder.  The
-            # GraphQL allocates a new Microtech AdrNr for this Shopware
-            # placeholder. It is written back before the order is created.
+            # Bridge numbers from 900000 are placeholders. GraphQL allocates
+            # a Microtech AdrNr, which is written back before order creation.
             "is_new_customer": self._is_provisional_customer_number(erp_nr),
             "billing_same_as_shipping": self._same_address(shipping, billing),
             "billing_contact_same_as_shipping": (
@@ -1096,7 +1099,18 @@ class OrderSyncWorkflowService(BaseService):
         elif step in ("shipping_address", "billing_address"):
             address = shipping if step == "shipping_address" else billing
             is_shipping = step == "shipping_address"
+            requested_customer_number = state.get("requested_customer_number")
+            bridge_new_customer = (
+                self._is_provisional_customer_number(requested_customer_number)
+                if requested_customer_number is not None
+                else bool(state.get("is_new_customer"))
+            )
             sub_number = self._verified_address_sub_number(workflow=workflow, address=address)
+            shipping_sub_number = _to_int(shipping.erp_ans_nr)
+            billing_sub_number = _to_int(billing.erp_ans_nr)
+            shared_postal_record = bool(state.get("billing_same_as_shipping")) or (
+                shipping_sub_number is not None and shipping_sub_number == billing_sub_number
+            )
             input_data = customer_service._build_postal_address_input(
                 address=address,
                 # Defaults are assigned exactly once in set_default_addresses,
@@ -1105,7 +1119,11 @@ class OrderSyncWorkflowService(BaseService):
                 is_invoice=False,
                 na1_mode="auto",
                 na1_static_value="",
-                include_email=is_shipping,
+                # A shared postal record also serves as the invoice address.
+                # Its email may only be initialized with a new customer.
+                include_email=bridge_new_customer or (
+                    is_shipping and not shared_postal_record
+                ),
                 customer=order.customer,
                 shipping_address=shipping,
                 billing_address=billing,
