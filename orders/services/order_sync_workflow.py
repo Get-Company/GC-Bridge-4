@@ -1106,6 +1106,10 @@ class OrderSyncWorkflowService(BaseService):
                 na1_mode="auto",
                 na1_static_value="",
                 include_email=is_shipping,
+                customer=order.customer,
+                shipping_address=shipping,
+                billing_address=billing,
+                target_scope=step,
             )
             operation = "updatePostalAddress" if sub_number is not None else "createPostalAddress"
             if sub_number is not None:
@@ -1150,7 +1154,17 @@ class OrderSyncWorkflowService(BaseService):
             # A contact selected in the customer merge is authoritative.  The
             # order sync must select it, not overwrite it with the first
             # Shopware contact's profile data.
-            input_data = {"isDefault": True} if contact_number is not None else customer_service._build_contact_person_input(address=address)
+            input_data = (
+                {"isDefault": True}
+                if contact_number is not None
+                else customer_service._build_contact_person_input(
+                    address=address,
+                    customer=order.customer,
+                    shipping_address=shipping,
+                    billing_address=billing,
+                    target_scope=step,
+                )
+            )
             operation = "updateContactPerson" if contact_number is not None else "createContactPerson"
             if contact_number is not None:
                 submit = lambda: client.submit_update_contact_person(

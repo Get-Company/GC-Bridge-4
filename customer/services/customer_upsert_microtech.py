@@ -414,7 +414,6 @@ class CustomerUpsertMicrotechService(BaseService):
                 "street": address.street,
                 "zipCode": address.postal_code,
                 "city": address.city,
-                "email": address.email or customer.email,
                 "phone": address.phone,
                 "department": address.department,
                 "country": address.country_code,
@@ -497,8 +496,7 @@ class CustomerUpsertMicrotechService(BaseService):
         if overlay:
             # Invoice-address email is deliberately absent from the ordinary
             # customer upsert.  A generic address rule must not accidentally
-            # reintroduce it; only an explicit billing-address scoped action
-            # may choose to do so.
+            # reintroduce it.
             if not include_email:
                 overlay.pop("email", None)
             postal_input.update(overlay)
@@ -515,6 +513,11 @@ class CustomerUpsertMicrotechService(BaseService):
             )
             if scoped_overlay:
                 postal_input.update(scoped_overlay)
+        # Keep this as the final safeguard as well: older saved rules may still
+        # contain a billing-address email action even though the editor now
+        # prevents creating or saving such a mapping.
+        if not include_email:
+            postal_input.pop("email", None)
         return self._drop_blank(postal_input)
 
     def _build_contact_person_input(

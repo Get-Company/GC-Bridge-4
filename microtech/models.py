@@ -370,6 +370,22 @@ class MicrotechSwissCustomsFieldMapping(BaseModel):
             )
 
 
+class MicrotechOrderRuleCategory(BaseModel):
+    code = models.CharField(max_length=64, unique=True, verbose_name=_("Code"))
+    name = models.CharField(max_length=120, unique=True, verbose_name=_("Name"))
+    priority = models.PositiveIntegerField(default=100, verbose_name=_("Reihenfolge"))
+    is_system = models.BooleanField(default=False, verbose_name=_("Systemkategorie"))
+    is_active = models.BooleanField(default=True, verbose_name=_("Aktiv"))
+
+    class Meta:
+        verbose_name = _("Regel-Mapping Kategorie")
+        verbose_name_plural = _("Regel-Mapping Kategorien")
+        ordering = ("priority", "name", "id")
+
+    def __str__(self) -> str:
+        return self.name
+
+
 class MicrotechOrderRule(BaseModel):
     class CustomerType(models.TextChoices):
         ANY = "any", _("Beliebig")
@@ -398,6 +414,14 @@ class MicrotechOrderRule(BaseModel):
         choices=ConditionLogic.choices,
         default=ConditionLogic.ALL,
         verbose_name=_("Bedingungslogik"),
+    )
+    category = models.ForeignKey(
+        MicrotechOrderRuleCategory,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="rules",
+        verbose_name=_("Kategorie"),
     )
 
     class ExecutionPhase(models.TextChoices):

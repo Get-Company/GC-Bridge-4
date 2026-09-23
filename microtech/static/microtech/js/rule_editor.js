@@ -80,11 +80,20 @@
       .then(function (r) { return r.json(); })
       .then(function (data) {
         META = (data && data.ok)
-          ? { operators: data.operators || [], django_fields: data.django_fields || [], triggers: data.triggers || [] }
-          : { operators: [], django_fields: [], triggers: [] };
+          ? {
+              operators: data.operators || [],
+              django_fields: data.django_fields || [],
+              triggers: data.triggers || [],
+              categories: data.categories || [],
+              occupied_targets: data.occupied_targets || [],
+            }
+          : { operators: [], django_fields: [], triggers: [], categories: [], occupied_targets: [] };
         return META;
       })
-      .catch(function () { META = { operators: [], django_fields: [], triggers: [] }; return META; });
+      .catch(function () {
+        META = { operators: [], django_fields: [], triggers: [], categories: [], occupied_targets: [] };
+        return META;
+      });
     return META_PROMISE;
   }
 
@@ -210,10 +219,28 @@
       }
       return trigger && Array.isArray(trigger.graphql_input_types) ? trigger.graphql_input_types : [];
     }
+    function graphqlExcludedFieldsForCurrentTrigger(action) {
+      var scopes = graphqlScopesForCurrentTrigger();
+      var scopeCode = (action && action.target_scope) || "customer";
+      for (var i = 0; i < scopes.length; i++) {
+        if (scopes[i].code === scopeCode) return scopes[i].excluded_fields || [];
+      }
+      return [];
+    }
     function actionTargetKind(action) {
       if (!currentTrigger()) return "";
       if (graphqlInputTypesForCurrentTrigger(action).length) return "graphql";
       return currentContextRoot() === "orders.Order" ? "dataset" : "";
+    }
+    function occupiedByOtherRule(targetKey) {
+      if (!targetKey) return null;
+      for (var i = 0; i < META.occupied_targets.length; i++) {
+        var item = META.occupied_targets[i];
+        if (String(item.trigger_id) !== String(STATE.trigger_id)) continue;
+        if (String(item.rule_id) === String(STATE.id)) continue;
+        if (item.target_key === targetKey) return item;
+      }
+      return null;
     }
     function reconcileActionTargets() {
       STATE.actions.forEach(function (action) {
@@ -247,25 +274,30 @@
       var box = elTrigger;
       box.className = "re-block re-trigger re-trigger-box";
       box.innerHTML = "";
-      box.appendChild(el("div", "re-block-label", "Grundregel & Trigger"));
+      box.appendChild(el("div", "re-block-label", "Mapping"));
 
       var r1 = el("div", "re-row");
       r1.appendChild(el("label", null, "Name"));
       var name = el("input"); name.type = "text"; name.value = STATE.name || ""; name.style.minWidth = "220px";
       name.addEventListener("input", function () { STATE.name = name.value; renderSummary(); });
       r1.appendChild(name);
-      r1.appendChild(el("label", null, "Priorität"));
-      var prio = el("input"); prio.type = "number"; prio.value = STATE.priority != null ? STATE.priority : 100; prio.style.width = "80px";
-      prio.addEventListener("input", function () { STATE.priority = parseInt(prio.value, 10) || 0; });
-      r1.appendChild(prio);
+      r1.appendChild(el("label", null, "Kategorie"));
+      var csel = el("select");
+      META.categories.forEach(function (category) {
+        csel.appendChild(opt(String(category.id), category.name, String(STATE.category_id) === String(category.id)));
+      });
+      csel.addEventListener("change", function () {
+        STATE.category_id = csel.value ? parseInt(csel.value, 10) : null;
+      });
+      r1.appendChild(csel);
       box.appendChild(r1);
 
       var r2 = el("div", "re-row");
-      r2.appendChild(el("label", null, "Trigger"));
+      r2.appendChild(el("label", null, "Auslöser"));
       var tsel = el("select");
-      tsel.appendChild(opt("", "— kein Trigger —", !STATE.trigger_id));
+      tsel.appendChild(opt("", "— bitte wählen —", !STATE.trigger_id));
       META.triggers.forEach(function (t) {
-        tsel.appendChild(opt(String(t.id), t.label + " (" + t.task_name + ")", String(STATE.trigger_id) === String(t.id)));
+        tsel.appendChild(opt(String(t.id), t.label, String(STATE.trigger_id) === String(t.id)));
       });
       tsel.addEventListener("change", function () {
         STATE.trigger_id = tsel.value ? parseInt(tsel.value, 10) : null;
@@ -273,19 +305,25 @@
         render();  // Feldlisten hängen vom Trigger-Kontext ab
       });
       r2.appendChild(tsel);
-
-      r2.appendChild(el("label", null, "Phase"));
-      var phase = el("select");
-      phase.appendChild(opt("before", "Vor dem Task", STATE.execution_phase === "before"));
-      phase.appendChild(opt("after", "Nach dem Task", STATE.execution_phase === "after"));
-      phase.addEventListener("change", function () { STATE.execution_phase = phase.value; });
-      r2.appendChild(phase);
+      r2.appendChild(checkbox("Aktiv", STATE.is_active, function (v) { STATE.is_active = v; }));
       box.appendChild(r2);
 
-      var r3 = el("div", "re-row");
-      r3.appendChild(checkbox("Regel aktiv", STATE.is_active, function (v) { STATE.is_active = v; }));
-      r3.appendChild(checkbox("Neue Engine aktiv", STATE.engine_enabled, function (v) { STATE.engine_enabled = v; }));
-      box.appendChild(r3);
+      var advanced = el("details", "re-advanced");
+      advanced.appendChild(el("summary", null, "Erweiterte Einstellungen"));
+      var advancedRow = el("div", "re-row");
+      advancedRow.appendChild(el("label", null, "Reihenfolge"));
+      var prio = el("input"); prio.type = "number"; prio.value = STATE.priority != null ? STATE.priority : 100; prio.style.width = "80px";
+      prio.addEventListener("input", function () { STATE.priority = parseInt(prio.value, 10) || 0; });
+      advancedRow.appendChild(prio);
+      advancedRow.appendChild(el("label", null, "Ausführung"));
+      var phase = el("select");
+      phase.appendChild(opt("before", "Vor der Übertragung", STATE.execution_phase === "before"));
+      phase.appendChild(opt("after", "Nach der Übertragung", STATE.execution_phase === "after"));
+      phase.addEventListener("change", function () { STATE.execution_phase = phase.value; });
+      advancedRow.appendChild(phase);
+      advancedRow.appendChild(checkbox("Regelverarbeitung aktiv", STATE.engine_enabled, function (v) { STATE.engine_enabled = v; }));
+      advanced.appendChild(advancedRow);
+      box.appendChild(advanced);
     }
 
     function checkbox(label, checked, onchange) {
@@ -397,6 +435,11 @@
       box.className = "re-block re-then re-actions-box";
       box.innerHTML = "";
       box.appendChild(el("div", "re-block-label", "Dann (Aktionen)"));
+      box.appendChild(el(
+        "p",
+        "re-hint re-action-hint",
+        "Zusammengehörige Felder bitte als mehrere Aktionen in dieser einen Regel sammeln."
+      ));
       STATE.actions.forEach(function (a) { box.appendChild(renderAction(a)); });
       var addA = el("button", "re-btn re-btn-add", "+ Aktion"); addA.type = "button";
       addA.addEventListener("click", function () { markDirty(); STATE.actions.push(newAction()); render(); });
@@ -672,6 +715,7 @@
 
     function graphqlFieldPicker(action) {
       var allowedTypes = graphqlInputTypesForCurrentTrigger(action);
+      var excludedFields = graphqlExcludedFieldsForCurrentTrigger(action);
       var picker = searchablePicker({
         value: action.graphql_field || "",
         initialText: action.graphql_field_label || graphqlFieldDisplayFromValue(action.graphql_field),
@@ -721,13 +765,16 @@
           groups.forEach(function (group) {
             if (allowedTypes.indexOf(group.input_type) < 0) return;
             (group.fields || []).forEach(function (field) {
-              flat.push({
+              var item = {
                 value: group.input_type + "." + field.name,
                 name: field.name,
                 type: group.input_type,
                 typeLabel: group.label || group.input_type,
                 description: field.description || "",
-              });
+              };
+              var targetKey = "graphql:" + (action.target_scope || "customer") + ":" + item.value;
+              if (excludedFields.indexOf(item.value) >= 0 && item.value !== action.graphql_field) return;
+              if (!occupiedByOtherRule(targetKey) || item.value === action.graphql_field) flat.push(item);
             });
           });
           picker.setItems(flat);
@@ -781,14 +828,17 @@
             var flat = [];
             (datasets || []).forEach(function (dataset) {
               (dataset.fields || []).forEach(function (field) {
-                flat.push({
+                var item = {
                   id: field.id,
                   fieldName: field.field_name,
                   label: field.label || field.field_name,
                   fieldType: field.field_type || "",
                   datasetName: dataset.name || "Microtech",
                   sourceIdentifier: dataset.source_identifier || "",
-                });
+                };
+                if (!occupiedByOtherRule("dataset:" + item.id) || String(item.id) === String(action.dataset_field_id)) {
+                  flat.push(item);
+                }
               });
             });
             picker.setItems(flat);
@@ -857,6 +907,7 @@
       return {
         id: STATE.id,
         name: STATE.name, priority: STATE.priority, is_active: STATE.is_active,
+        category_id: STATE.category_id,
         execution_phase: STATE.execution_phase, engine_enabled: STATE.engine_enabled, shadow_mode: STATE.shadow_mode,
         trigger_id: STATE.trigger_id,
         root_group: STATE.root_group ? grp(STATE.root_group) : null,
@@ -941,6 +992,7 @@
       if (!action.target_scope) action.target_scope = "customer";
     });
     if (s.shadow_mode == null) s.shadow_mode = true;
+    if (s.category_id == null) s.category_id = null;
     if (s.priority == null) s.priority = 100;
     if (!s.execution_phase) s.execution_phase = "before";
     return s;

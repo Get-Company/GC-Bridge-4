@@ -15,12 +15,15 @@ from microtech.models import (
     MicrotechDatasetField,
     MicrotechOrderRule,
     MicrotechOrderRuleAction,
+    MicrotechOrderRuleCategory,
     MicrotechOrderRuleCondition,
     MicrotechOrderRuleConditionGroup,
     MicrotechOrderRuleOperator,
     RuleTrigger,
 )
+from microtech.rule_mapping import action_target_key
 from microtech.graphql_schema import (
+    get_rule_action_excluded_fields,
     get_rule_action_input_types,
     get_rule_action_scopes,
     get_rule_trigger_input_types,
@@ -154,6 +157,7 @@ def serialize_rule_for_edit(rule) -> dict:
         "engine_enabled": rule.engine_enabled,
         "shadow_mode": rule.shadow_mode,
         "trigger_id": rule.trigger_id,
+        "category_id": rule.category_id,
         "root_group": root_group,
         "actions": actions,
     }
@@ -171,7 +175,11 @@ class EditorValidationError(Exception):
         super().__init__("; ".join(self.messages))
 
 
-def _validate_payload(payload: dict) -> list[str]:
+def _validate_payload(
+    payload: dict,
+    *,
+    rule: MicrotechOrderRule | None = None,
+) -> list[str]:
     errors: list[str] = []
 
     if not isinstance(payload, dict):
@@ -188,6 +196,13 @@ def _validate_payload(payload: dict) -> list[str]:
         trigger = RuleTrigger.objects.filter(pk=trigger_id).first()
         if trigger is None:
             errors.append(f"Trigger existiert nicht: {trigger_id!r}")
+
+    category_id = payload.get("category_id")
+    if category_id is not None and not MicrotechOrderRuleCategory.objects.filter(
+        pk=category_id,
+        is_active=True,
+    ).exists():
+        errors.append(f"Kategorie existiert nicht: {category_id!r}")
 
     if trigger is not None and trigger.context_root in _ADDRESS_CONTEXT_ROOTS:
         field_map = {item.path: item for item in get_address_field_defs(trigger.context_root)}
@@ -344,6 +359,9 @@ def _validate_payload(payload: dict) -> list[str]:
                 allowed_input_types = get_rule_action_input_types(
                     getattr(trigger, "task_name", ""), target_scope
                 )
+                excluded_fields = get_rule_action_excluded_fields(
+                    getattr(trigger, "task_name", ""), target_scope
+                )
                 input_type = graphql_field.split(".", 1)[0]
                 if not allowed_input_types:
                     errors.append(
@@ -353,10 +371,77 @@ def _validate_payload(payload: dict) -> list[str]:
                     errors.append(
                         f"{action_label}: {input_type} ist fuer diesen Trigger nicht erlaubt."
                     )
+                elif graphql_field in excluded_fields:
+                    errors.append(
+                        f"{action_label}: {graphql_field} ist in diesem Zielbereich gesperrt. "
+                        "E-Mail muss einer konkreten Lieferanschrift oder einem Ansprechpartner zugeordnet werden."
+                    )
         elif action_type == MicrotechOrderRuleAction.ActionType.CREATE_TEXT_POSITION:
             if not str(action.get("target_value") or "").strip():
                 errors.append(f"{action_label}: Bezeichnung fuer Textposition ist erforderlich.")
         _validate_template_value(action.get("target_value", ""), label=action_label)
+
+    if (
+        payload.get("is_active", True)
+        and payload.get("engine_enabled", False)
+        and trigger is not None
+    ):
+        target_positions: dict[str, list[int]] = {}
+        for position, action in enumerate(actions, start=1):
+            if not isinstance(action, dict):
+                continue
+            if action.get("action_type") != MicrotechOrderRuleAction.ActionType.SET_FIELD:
+                continue
+            dataset_field_id = action.get("dataset_field_id")
+            graphql_field = str(action.get("graphql_field") or "").strip()
+            if dataset_field_id:
+                target_key = f"dataset:{dataset_field_id}"
+            elif graphql_field:
+                scope = str(
+                    action.get("target_scope")
+                    or MicrotechOrderRuleAction.TargetScope.CUSTOMER
+                ).strip()
+                target_key = f"graphql:{scope}:{graphql_field}"
+            else:
+                continue
+            target_positions.setdefault(target_key, []).append(position)
+
+        for positions in target_positions.values():
+            if len(positions) > 1:
+                errors.append(
+                    "Dasselbe Zielfeld ist mehrfach in dieser Regel belegt "
+                    f"(Aktionen {', '.join(str(item) for item in positions)})."
+                )
+
+        existing_rules = (
+            MicrotechOrderRule.objects
+            .filter(
+                is_active=True,
+                engine_enabled=True,
+                trigger_id=trigger.pk,
+            )
+            .prefetch_related("actions__dataset_field__dataset")
+        )
+        if rule is not None and rule.pk:
+            existing_rules = existing_rules.exclude(pk=rule.pk)
+
+        occupied_by_rule: dict[str, str] = {}
+        for existing_rule in existing_rules:
+            for existing_action in existing_rule.actions.all():
+                if not existing_action.is_active:
+                    continue
+                target_key = action_target_key(existing_action)
+                if target_key:
+                    occupied_by_rule.setdefault(target_key, existing_rule.name)
+
+        for target_key, positions in target_positions.items():
+            existing_rule_name = occupied_by_rule.get(target_key)
+            if not existing_rule_name:
+                continue
+            errors.append(
+                f"Aktion {positions[0]}: Das Zielfeld wird bereits von der "
+                f"Regel '{existing_rule_name}' beschrieben. Eine Doppelbelegung ist nicht erlaubt."
+            )
 
     return errors
 
@@ -391,7 +476,7 @@ def save_rule_from_payload(payload: dict, *, rule: MicrotechOrderRule | None = N
     a single ``transaction.atomic`` block: any validation failure raises
     ``EditorValidationError`` and leaves the database untouched.
     """
-    errors = _validate_payload(payload)
+    errors = _validate_payload(payload, rule=rule)
     if errors:
         raise EditorValidationError(errors)
 
@@ -406,6 +491,8 @@ def save_rule_from_payload(payload: dict, *, rule: MicrotechOrderRule | None = N
         rule.engine_enabled = payload.get("engine_enabled", False)
         rule.shadow_mode = payload.get("shadow_mode", True)
         rule.trigger_id = payload.get("trigger_id")
+        if "category_id" in payload:
+            rule.category_id = payload.get("category_id")
         rule.save()
 
         # Delete ungrouped legacy conditions as well.  Leaving them behind

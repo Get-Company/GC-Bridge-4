@@ -72,6 +72,17 @@ CUSTOMER_UPSERT_ACTION_SCOPES: tuple[dict[str, object], ...] = (
     },
 )
 
+# CustomerInput.email is intentionally excluded.  The wrapper can use that
+# value while creating its implicit default address, which would also change
+# the invoice-address email.  Email mappings must target the explicit shipping
+# address or one of the contact scopes instead.
+RULE_ACTION_EXCLUDED_FIELDS: dict[tuple[str, str], tuple[str, ...]] = {
+    ("customer.microtech_customer_upsert", "customer"): ("CustomerInput.email",),
+    ("customer.microtech_customer_upsert", "billing_address"): (
+        "PostalAddressInput.email",
+    ),
+}
+
 # Curated fallback — the fields the wrapper actually accepts (from
 # customer_upsert_microtech / order_upsert_microtech). Used when introspection
 # is unavailable.
@@ -192,11 +203,20 @@ def get_rule_action_input_types(task_name: str, target_scope: str) -> tuple[str,
     return ()
 
 
+def get_rule_action_excluded_fields(task_name: str, target_scope: str) -> tuple[str, ...]:
+    return RULE_ACTION_EXCLUDED_FIELDS.get(
+        (str(task_name or "").strip(), str(target_scope or "").strip()),
+        (),
+    )
+
+
 __all__ = [
     "INPUT_TYPE_LABELS",
     "RULE_TRIGGER_INPUT_TYPES",
     "CUSTOMER_UPSERT_ACTION_SCOPES",
+    "RULE_ACTION_EXCLUDED_FIELDS",
     "get_graphql_input_catalog",
+    "get_rule_action_excluded_fields",
     "get_rule_action_input_types",
     "get_rule_action_scopes",
     "get_rule_trigger_input_types",

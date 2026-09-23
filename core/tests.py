@@ -238,6 +238,27 @@ class AdminSidebarPermissionTest(SimpleTestCase):
         )
         self.assertTrue(item["has_permission"])
 
+    def test_microtech_sidebar_contains_only_user_facing_entries(self):
+        request = self.factory.get(reverse("admin:index"))
+        request.user = _SidebarUser(is_superuser=True)
+
+        microtech_group = next(
+            group
+            for group in admin.site.get_sidebar_list(request)
+            if str(group.get("title")) == "Microtech"
+        )
+
+        self.assertEqual(
+            [str(item.get("title")) for item in microtech_group["items"]],
+            [
+                "Regel-Mappings",
+                "Vorgang-Standardwerte",
+                "Verbindung",
+                "GraphQL-Jobs",
+                "Schweiz-Zoll-Mapping",
+            ],
+        )
+
     def test_microtech_vorgang_defaults_sidebar_entry_requires_view_permission(self):
         item = self._sidebar_item(permissions=set(), title="Vorgang-Standardwerte")
         self.assertFalse(item["has_permission"])

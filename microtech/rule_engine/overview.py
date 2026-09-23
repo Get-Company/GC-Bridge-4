@@ -14,6 +14,7 @@ from microtech.rule_builder import (
     get_customer_field_defs,
     get_django_field_map,
 )
+from microtech.rule_mapping import friendly_trigger_label
 from microtech.rule_engine.editor import serialize_rule_for_edit
 
 _VARIABLE_PATTERN = re.compile(r"\{\{.*?\}\}")
@@ -144,7 +145,7 @@ def serialize_rule(rule, field_map: dict, operator_map: dict) -> dict:
     if rule.trigger_id:
         try:
             trigger = {
-                "label": rule.trigger.label,
+                "label": friendly_trigger_label(rule.trigger),
                 "code": rule.trigger.code,
                 "task_name": rule.trigger.task_name,
                 "context_root": rule.trigger.context_root,
@@ -153,6 +154,7 @@ def serialize_rule(rule, field_map: dict, operator_map: dict) -> dict:
             trigger = None
     return {
         "id": rule.pk,
+        "category_id": rule.category_id,
         "name": rule.name,
         "priority": rule.priority,
         "is_active": rule.is_active,
@@ -168,7 +170,7 @@ def serialize_rule(rule, field_map: dict, operator_map: dict) -> dict:
 
 
 def serialize_rules_for_overview() -> list[dict]:
-    """Serialise all order rules (active first, by priority) for the overview page."""
+    """Serialise all order rules in their stable execution order."""
     order_field_map = get_django_field_map()
     address_field_map = {item.path: item for item in get_address_field_defs("customer.Address")}
     customer_field_map = {item.path: item for item in get_customer_field_defs()}
@@ -186,7 +188,7 @@ def serialize_rules_for_overview() -> list[dict]:
             "actions__dataset_field",
         )
         .select_related("trigger")
-        .order_by("-is_active", "priority", "id")
+        .order_by("priority", "id")
     )
     field_map_by_context_root = {
         "customer.Address": address_field_map,

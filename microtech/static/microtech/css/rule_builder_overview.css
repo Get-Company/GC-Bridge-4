@@ -1,5 +1,5 @@
 /* Read-only graphical overview of Microtech order rules (vertical block builder). */
-.rb-wrap { max-width: 900px; margin: 0 auto; padding: 16px; background: #f1f5f9; border-radius: 12px; color: #334155; }
+.rb-wrap { max-width: 1180px; margin: 0 auto; padding: 16px; background: #f1f5f9; border-radius: 12px; color: #334155; }
 .rb-intro { font-size: 13px; color: #6b7280; margin: 0 0 20px; line-height: 1.6; }
 .rb-empty { padding: 24px; border: 1px dashed #cbd5e1; border-radius: 12px; color: #6b7280; text-align: center; }
 
@@ -71,4 +71,54 @@
 .rb-tag-static { font-size: 12px; padding: 2px 8px; border-radius: 6px; background: #f1f5f9; color: #475569; }
 .rb-tag-var { font-size: 12px; padding: 2px 8px; border-radius: 6px; background: #ede9fe; color: #5b21b6; }
 .rb-none { font-size: 12px; color: #9ca3af; font-style: italic; }
+
+.rb-page-head, .rb-category-head { display: flex; justify-content: space-between; align-items: center; gap: 18px; flex-wrap: wrap; }
+.rb-page-head { margin-bottom: 16px; }
+.rb-eyebrow { margin: 0 0 2px; color: #4f46e5; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.rb-page-head .rb-intro { margin: 0; max-width: 780px; }
+.rb-primary, .rb-category-actions button, .rb-copy-btn {
+  border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; color: #334155;
+  cursor: pointer; font-size: 12px; padding: 7px 12px; text-decoration: none;
+}
+.rb-primary { background: #4f46e5; border-color: #4f46e5; color: #fff; font-weight: 600; }
+.rb-danger { color: #991b1b !important; border-color: #fecaca !important; background: #fff7f7 !important; }
+
+.rb-conflicts { margin: 0 0 14px; padding: 12px 14px; border: 1px solid #fca5a5; border-radius: 10px; background: #fef2f2; color: #991b1b; font-size: 13px; }
+.rb-conflicts strong, .rb-conflicts small { display: block; }
+.rb-conflicts small { margin-top: 5px; color: #b91c1c; }
+
+.rb-checklist { margin: 0 0 18px; padding: 12px 14px; border: 1px solid #cbd5e1; border-radius: 10px; background: #fff; }
+.rb-checklist > summary { cursor: pointer; color: #1e293b; font-weight: 650; }
+.rb-checklist > p { color: #64748b; font-size: 12px; margin: 10px 0; }
+.rb-check-group h3 { margin: 12px 0 7px; color: #334155; font-size: 13px; }
+.rb-check-group ul { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 6px; margin: 0; padding: 0; list-style: none; }
+.rb-check-group li { display: grid; grid-template-columns: minmax(110px, 1fr) minmax(130px, 1.3fr); gap: 3px 10px; padding: 7px 9px; border: 1px solid #e2e8f0; border-radius: 7px; background: #f8fafc; font-size: 12px; }
+.rb-check-group code { color: #64748b; overflow-wrap: anywhere; }
+.rb-field-assigned .rb-field-name, .rb-field-assigned code { text-decoration: line-through; color: #64748b; }
+.rb-field-source { grid-column: 1 / -1; color: #15803d; font-size: 11px; }
+
+.rb-tabs { display: flex; gap: 4px; overflow-x: auto; border-bottom: 1px solid #cbd5e1; margin: 0 0 16px; }
+.rb-tab { border: 0; border-bottom: 3px solid transparent; background: transparent; color: #64748b; cursor: pointer; padding: 10px 14px 8px; white-space: nowrap; font-size: 13px; }
+.rb-tab span { display: inline-block; min-width: 20px; margin-left: 5px; padding: 1px 6px; border-radius: 999px; background: #e2e8f0; font-size: 11px; }
+.rb-tab-active { color: #4338ca; border-bottom-color: #4f46e5; font-weight: 650; }
+.rb-tab-active span { background: #e0e7ff; color: #3730a3; }
+.rb-panel-hidden { display: none; }
+.rb-category-head { margin-bottom: 12px; }
+.rb-category-head h2 { margin: 0; color: #0f172a; font-size: 18px; }
+.rb-category-head > div > span { color: #64748b; font-size: 12px; }
+.rb-category-actions { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+
+.rb-rule { margin-bottom: 12px; }
+.rb-drag-handle { color: #94a3b8; cursor: grab; font-weight: 700; letter-spacing: -3px; padding-right: 3px; }
+.rb-dragging { opacity: .42; border-color: #818cf8; }
+.rb-copy-btn { padding: 5px 10px; }
+.rb-move { display: inline-flex; align-items: center; gap: 5px; color: #64748b; font-size: 11px; }
+.rb-move select { max-width: 150px; border: 1px solid #cbd5e1; border-radius: 6px; background: #fff; color: #334155; padding: 4px 6px; font-size: 12px; }
+
+@media (max-width: 760px) {
+  .rb-rule-head { align-items: flex-start; }
+  .rb-flags { width: 100%; }
+  .rb-move { width: 100%; }
+  .rb-check-group ul { grid-template-columns: 1fr; }
+}
 /* Immer helles Layout, unabhängig vom Admin-Dark-Mode. */

@@ -14,98 +14,199 @@
 <div class="rb-wrap"
      data-save-url="{% url 'admin:microtech_orderrule_editor_save' %}"
      data-meta-url="{% url 'admin:microtech_orderrule_builder_meta' %}"
-     data-overview-url="{% url 'admin:microtech_orderrule_builder' %}">
-  <p class="rb-intro">
-    Grafische Übersicht aller Bestellregeln: Trigger → Bedingungen (UND/ODER, verschachtelt) → Aktionen.
-    Karte aufklappen und „Bearbeiten“ wählen, um die Regel direkt hier zu ändern und zu speichern.
-    Regeln mit dem Abzeichen „Engine aktiv“ sind für den neuen Pfad markiert; die klassische
-    <a href="{{ changelist_url }}">Bestellregel-Liste</a> bleibt als Fallback.
-  </p>
-  <p style="margin:0 0 18px;display:flex;gap:10px;flex-wrap:wrap;">
-    <a class="rb-badge rb-badge-on" style="text-decoration:none;padding:6px 12px;"
-       href="{% url 'admin:microtech_orderrule_editor_new' %}">+ Neue Regel (grafisch)</a>
-    <a class="rb-badge rb-badge-shadow" style="text-decoration:none;padding:6px 12px;"
-       href="{% url 'admin:microtech_orderrule_engine_verify' %}">⚙ Regel-Engine ein-/ausschalten</a>
-  </p>
+     data-overview-url="{% url 'admin:microtech_orderrule_builder' %}"
+     data-organize-url="{{ organize_url }}">
+  <div class="rb-page-head">
+    <div>
+      <p class="rb-eyebrow">Microtech</p>
+      <p class="rb-intro">
+        Alle Zuordnungen an einem Ort. Eine Regel ohne „Wenn“ ist das Standard-Mapping;
+        Bedingungen machen daraus eine Ausnahme. Regeln mit demselben Auslöser laufen in der angezeigten Reihenfolge.
+      </p>
+    </div>
+    <button class="rb-primary" type="button" data-category-create>+ Kategorie</button>
+  </div>
 
-  {% for rule in rules %}
-  <div class="rb-rule{% if not rule.is_active %} rb-inactive{% endif %} rb-collapsed" data-rule-card>
-    <div class="rb-rule-head" data-rule-toggle role="button" tabindex="0" aria-expanded="false">
-      <div class="rb-head-main">
-        <span class="rb-chevron" aria-hidden="true">▸</span>
+  {% if mapping_conflicts %}
+    <div class="rb-conflicts" role="alert">
+      <strong>Doppelte Zielfelder müssen bereinigt werden.</strong>
+      {% for conflict in mapping_conflicts %}
+        <div>{{ conflict.target }} · {{ conflict.phase }}: {{ conflict.rules|join:", " }}</div>
+      {% endfor %}
+      <small>Gleiche Auslöser sind erlaubt; nur das doppelte Schreiben desselben Feldes wird blockiert.</small>
+    </div>
+  {% endif %}
+
+  <details class="rb-checklist">
+    <summary>Feldzuordnungen prüfen</summary>
+    <p>
+      Die Checkliste bildet das bisherige Standard-Mapping aus dem Code ab.
+      Zugeordnete Felder sind durchgestrichen; zusätzliche Regeln werden direkt am Feld genannt.
+    </p>
+    {% for group in mapping_checklist %}
+      <section class="rb-check-group" data-check-category="{{ group.category_code }}">
+        <h3>{{ group.label }}</h3>
+        <ul>
+          {% for field in group.fields %}
+            <li{% if field.assigned %} class="rb-field-assigned"{% endif %}>
+              <span class="rb-field-name">{{ field.label }}</span>
+              <code>{{ field.technical_name }}</code>
+              <span class="rb-field-source">Standard-Mapping{% if field.rule_names %} · Regel: {{ field.rule_names|join:", " }}{% endif %}</span>
+            </li>
+          {% endfor %}
+        </ul>
+      </section>
+    {% endfor %}
+  </details>
+
+  <nav class="rb-tabs" aria-label="Mapping-Kategorien">
+    {% for panel in category_panels %}
+      <button type="button" class="rb-tab{% if forloop.first %} rb-tab-active{% endif %}"
+              data-category-tab="{{ panel.code }}" aria-selected="{% if forloop.first %}true{% else %}false{% endif %}">
+        {{ panel.name }} <span>{{ panel.rules|length }}</span>
+      </button>
+    {% endfor %}
+  </nav>
+
+  {% for panel in category_panels %}
+    <section class="rb-category-panel{% if not forloop.first %} rb-panel-hidden{% endif %}"
+             data-category-panel="{{ panel.code }}" data-category-id="{{ panel.id|default_if_none:'' }}">
+      <div class="rb-category-head">
         <div>
-          <div class="rb-rule-title">{{ rule.name }}</div>
-          <div class="rb-rule-meta">Priorität {{ rule.priority }}{% if rule.trigger %} · {{ rule.trigger.label }}{% endif %}</div>
+          <h2>{{ panel.name }}</h2>
+          <span>{{ panel.rules|length }} Regel{{ panel.rules|length|pluralize:"n" }}</span>
         </div>
-      </div>
-      <div class="rb-flags">
-        <span class="rb-badge {% if rule.is_active %}rb-badge-on{% else %}rb-badge-off{% endif %}">{% if rule.is_active %}aktiv{% else %}inaktiv{% endif %}</span>
-        <span class="rb-badge rb-badge-phase">{{ rule.execution_phase }}</span>
-        {% if rule.engine_enabled %}<span class="rb-badge rb-badge-on">Engine aktiv</span>{% else %}<span class="rb-badge rb-badge-off">Engine aus</span>{% endif %}
-        <a class="rb-edit-btn" href="{% url 'admin:microtech_orderrule_editor' rule.id %}"
-           data-no-toggle data-inline-edit="{{ rule.id }}">✎ Bearbeiten</a>
-      </div>
-    </div>
-
-    <div class="rb-rule-body">
-    {% with rid=rule.id|stringformat:"s" %}{% with eid="rule-edit-"|add:rid %}{{ rule.edit_json|json_script:eid }}{% endwith %}{% endwith %}
-    <div class="rb-inline-editor" hidden></div>
-    <div class="rb-readonly">
-    <div class="rb-trigger">
-      <div class="rb-trigger-label">Trigger</div>
-      {% if rule.trigger %}
-        <div class="rb-trigger-name">{{ rule.trigger.label }}</div>
-        <div class="rb-trigger-task">{{ rule.trigger.task_name }} · {{ rule.trigger.context_root }}</div>
-      {% else %}
-        <div class="rb-trigger-none">Kein Trigger gesetzt</div>
-      {% endif %}
-    </div>
-
-    <div class="rb-connector"></div>
-
-    <div class="rb-when">
-      <div class="rb-section-label">Wenn</div>
-      {% if rule.root_groups %}
-        {% for group in rule.root_groups %}
-          {% include "admin/microtech/_rule_group.html" with group=group is_sub=False %}
-        {% endfor %}
-      {% else %}
-        <span class="rb-none">Keine Bedingungsgruppe – Regel greift immer.</span>
-      {% endif %}
-    </div>
-
-    <div class="rb-connector"></div>
-
-    <div class="rb-then">
-      <div class="rb-section-label">Dann</div>
-      {% for a in rule.actions %}
-        <div class="rb-action">
-          <span class="rb-action-verb">{{ a.type_label }}</span>
-          {% if a.field %}<span class="rb-action-field"{% if a.field_title %} title="{{ a.field_title }}"{% endif %}>{{ a.field }}</span>{% endif %}
-          {% if a.value %}
-            <span class="rb-action-verb">=</span>
-            {% if a.value_is_variable %}<span class="rb-tag-var">Variable</span>{% else %}<span class="rb-tag-static">fester Wert</span>{% endif %}
-            <span class="rb-val">{{ a.value }}</span>
+        <div class="rb-category-actions">
+          {% if panel.id %}
+            <a class="rb-primary" href="{% url 'admin:microtech_orderrule_editor_new' %}?category={{ panel.id }}">+ Neue Regel</a>
+          {% endif %}
+          {% if not panel.is_system %}
+            <button type="button" data-category-rename data-category-id="{{ panel.id }}" data-category-name="{{ panel.name }}">Umbenennen</button>
+            <button type="button" class="rb-danger" data-category-delete data-category-id="{{ panel.id }}" data-category-name="{{ panel.name }}">Löschen</button>
           {% endif %}
         </div>
+      </div>
+
+      <div class="rb-rule-list" data-rule-list>
+      {% for rule in panel.rules %}
+        <div class="rb-rule{% if not rule.is_active %} rb-inactive{% endif %} rb-collapsed"
+             data-rule-card data-rule-id="{{ rule.id }}" draggable="true">
+          <div class="rb-rule-head" data-rule-toggle role="button" tabindex="0" aria-expanded="false">
+            <div class="rb-head-main">
+              <span class="rb-drag-handle" title="Zum Sortieren ziehen" aria-label="Zum Sortieren ziehen">⋮⋮</span>
+              <span class="rb-chevron" aria-hidden="true">▸</span>
+              <div>
+                <div class="rb-rule-title">{{ rule.name }}</div>
+                <div class="rb-rule-meta">
+                  {% if rule.trigger %}{{ rule.trigger.label }}{% else %}Kein Auslöser{% endif %}
+                  {% if not rule.has_conditions %} · Standard-Mapping{% endif %}
+                </div>
+              </div>
+            </div>
+            <div class="rb-flags">
+              <span class="rb-badge {% if rule.is_active %}rb-badge-on{% else %}rb-badge-off{% endif %}">{% if rule.is_active %}aktiv{% else %}Entwurf{% endif %}</span>
+              <a class="rb-edit-btn" href="{% url 'admin:microtech_orderrule_editor' rule.id %}"
+                 data-no-toggle data-inline-edit="{{ rule.id }}">Bearbeiten</a>
+              <label class="rb-move" data-no-toggle>
+                <span>Kopieren nach</span>
+                <select data-rule-copy="{{ rule.id }}">
+                  <option value="">Kategorie wählen …</option>
+                  {% for target in category_panels %}
+                    {% if target.id %}<option value="{{ target.id }}" data-category-code="{{ target.code }}">{{ target.name }}</option>{% endif %}
+                  {% endfor %}
+                </select>
+              </label>
+              <label class="rb-move" data-no-toggle>
+                <span>Verschiebe nach</span>
+                <select data-rule-move="{{ rule.id }}">
+                  {% for target in category_panels %}
+                    {% if target.id %}<option value="{{ target.id }}" data-category-code="{{ target.code }}"{% if target.id == panel.id %} selected{% endif %}>{{ target.name }}</option>{% endif %}
+                  {% endfor %}
+                </select>
+              </label>
+            </div>
+          </div>
+
+          <div class="rb-rule-body">
+            {% with rid=rule.id|stringformat:"s" %}{% with eid="rule-edit-"|add:rid %}{{ rule.edit_json|json_script:eid }}{% endwith %}{% endwith %}
+            <div class="rb-inline-editor" hidden></div>
+            <div class="rb-readonly">
+              <div class="rb-trigger">
+                <div class="rb-trigger-label">Auslöser</div>
+                {% if rule.trigger %}<div class="rb-trigger-name">{{ rule.trigger.label }}</div>{% else %}<div class="rb-trigger-none">Kein Auslöser gesetzt</div>{% endif %}
+              </div>
+
+              <div class="rb-connector"></div>
+              <div class="rb-when">
+                <div class="rb-section-label">Wenn</div>
+                {% if rule.root_groups %}
+                  {% for group in rule.root_groups %}{% include "admin/microtech/_rule_group.html" with group=group is_sub=False %}{% endfor %}
+                {% else %}
+                  <span class="rb-none">Keine Bedingung – diese Zuordnung gilt als Standard.</span>
+                {% endif %}
+              </div>
+
+              <div class="rb-connector"></div>
+              <div class="rb-then">
+                <div class="rb-section-label">Dann</div>
+                {% for a in rule.actions %}
+                  <div class="rb-action">
+                    <span class="rb-action-verb">{{ a.type_label }}</span>
+                    {% if a.field %}<span class="rb-action-field"{% if a.field_title %} title="{{ a.field_title }}"{% endif %}>{{ a.field }}</span>{% endif %}
+                    {% if a.value %}
+                      <span class="rb-action-verb">=</span>
+                      {% if a.value_is_variable %}<span class="rb-tag-var">Variable</span>{% else %}<span class="rb-tag-static">fester Wert</span>{% endif %}
+                      <span class="rb-val">{{ a.value }}</span>
+                    {% endif %}
+                  </div>
+                {% empty %}
+                  <span class="rb-none">Keine Aktion definiert.</span>
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+        </div>
       {% empty %}
-        <span class="rb-none">Keine Aktion definiert.</span>
+        <div class="rb-empty">In dieser Kategorie gibt es noch keine Regeln.</div>
       {% endfor %}
-    </div>
-    </div>{# /rb-readonly #}
-    </div>{# /rb-rule-body #}
-  </div>
-  {% empty %}
-  <div class="rb-empty">Noch keine Bestellregeln angelegt.</div>
+      </div>
+    </section>
   {% endfor %}
 </div>
 
 <script>
 (function () {
-  function isNoToggle(el) {
-    while (el && el !== document) {
-      if (el.hasAttribute && el.hasAttribute('data-no-toggle')) return true;
-      el = el.parentNode;
+  var wrap = document.querySelector('.rb-wrap');
+  if (!wrap) return;
+  var SAVE_URL = wrap.dataset.saveUrl;
+  var META_URL = wrap.dataset.metaUrl;
+  var OVERVIEW_URL = wrap.dataset.overviewUrl;
+  var ORGANIZE_URL = wrap.dataset.organizeUrl;
+
+  function getCookie(name) {
+    var match = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
+    return match ? match.pop() : '';
+  }
+  function postAction(payload) {
+    return fetch(ORGANIZE_URL, {
+      method: 'POST', credentials: 'same-origin',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken')},
+      body: JSON.stringify(payload)
+    }).then(function (response) {
+      return response.json().then(function (data) {
+        if (!response.ok || !data.ok) throw new Error((data.errors || [data.error || 'Aktion fehlgeschlagen.']).join('\n'));
+        return data;
+      });
+    });
+  }
+  function reloadAt(code) {
+    if (code) window.location.hash = code;
+    window.location.reload();
+  }
+  function isNoToggle(element) {
+    while (element && element !== document) {
+      if (element.hasAttribute && element.hasAttribute('data-no-toggle')) return true;
+      element = element.parentNode;
     }
     return false;
   }
@@ -114,48 +215,134 @@
     var head = card.querySelector('[data-rule-toggle]');
     if (head) head.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
   }
-  document.querySelectorAll('[data-rule-toggle]').forEach(function (head) {
-    head.addEventListener('click', function (ev) {
-      if (isNoToggle(ev.target)) return; // Bearbeiten-Button nicht abfangen
-      toggle(head.closest('[data-rule-card]'));
+  function activateCategory(code) {
+    var selected = null;
+    document.querySelectorAll('[data-category-tab]').forEach(function (tab) {
+      var active = tab.dataset.categoryTab === code;
+      tab.classList.toggle('rb-tab-active', active);
+      tab.setAttribute('aria-selected', active ? 'true' : 'false');
+      if (active) selected = tab.dataset.categoryTab;
     });
-    head.addEventListener('keydown', function (ev) {
-      if (ev.key === 'Enter' || ev.key === ' ') {
-        ev.preventDefault();
-        toggle(head.closest('[data-rule-card]'));
+    if (!selected) {
+      var first = document.querySelector('[data-category-tab]');
+      selected = first ? first.dataset.categoryTab : '';
+      if (selected && selected !== code) return activateCategory(selected);
+    }
+    document.querySelectorAll('[data-category-panel]').forEach(function (panel) {
+      panel.classList.toggle('rb-panel-hidden', panel.dataset.categoryPanel !== selected);
+    });
+    if (selected) window.history.replaceState(null, '', '#' + selected);
+  }
+
+  document.querySelectorAll('[data-category-tab]').forEach(function (tab) {
+    tab.addEventListener('click', function () { activateCategory(tab.dataset.categoryTab); });
+  });
+  activateCategory((window.location.hash || '').replace(/^#/, ''));
+
+  document.querySelectorAll('[data-rule-toggle]').forEach(function (head) {
+    head.addEventListener('click', function (event) {
+      if (!isNoToggle(event.target)) toggle(head.closest('[data-rule-card]'));
+    });
+    head.addEventListener('keydown', function (event) {
+      if ((event.key === 'Enter' || event.key === ' ') && !isNoToggle(event.target)) {
+        event.preventDefault(); toggle(head.closest('[data-rule-card]'));
       }
     });
   });
 
-  // ---- inline editing ----
-  var wrap = document.querySelector('.rb-wrap');
-  var SAVE_URL = wrap.dataset.saveUrl, META_URL = wrap.dataset.metaUrl, OVERVIEW_URL = wrap.dataset.overviewUrl;
+  var createButton = document.querySelector('[data-category-create]');
+  if (createButton) createButton.addEventListener('click', function () {
+    var name = window.prompt('Name der neuen Kategorie:');
+    if (!name) return;
+    postAction({action: 'category_create', name: name}).then(function () { reloadAt(''); }).catch(function (error) { window.alert(error.message); });
+  });
+  document.querySelectorAll('[data-category-rename]').forEach(function (button) {
+    button.addEventListener('click', function () {
+      var name = window.prompt('Neuer Kategoriename:', button.dataset.categoryName);
+      if (!name || name === button.dataset.categoryName) return;
+      postAction({action: 'category_rename', category_id: button.dataset.categoryId, name: name})
+        .then(function () { reloadAt(''); }).catch(function (error) { window.alert(error.message); });
+    });
+  });
+  document.querySelectorAll('[data-category-delete]').forEach(function (button) {
+    button.addEventListener('click', function () {
+      if (!window.confirm('Kategorie „' + button.dataset.categoryName + '“ wirklich löschen?')) return;
+      postAction({action: 'category_delete', category_id: button.dataset.categoryId})
+        .then(function () { reloadAt(''); }).catch(function (error) { window.alert(error.message); });
+    });
+  });
+  document.querySelectorAll('[data-rule-copy]').forEach(function (select) {
+    select.addEventListener('change', function () {
+      if (!select.value) return;
+      var code = select.options[select.selectedIndex].dataset.categoryCode;
+      postAction({action: 'rule_copy', rule_id: select.dataset.ruleCopy, category_id: select.value})
+        .then(function () { reloadAt(code); }).catch(function (error) { window.alert(error.message); select.value = ''; });
+    });
+  });
+  document.querySelectorAll('[data-rule-move]').forEach(function (select) {
+    select.addEventListener('change', function () {
+      var code = select.options[select.selectedIndex].dataset.categoryCode;
+      postAction({action: 'rule_move', rule_id: select.dataset.ruleMove, category_id: select.value})
+        .then(function () { reloadAt(code); }).catch(function (error) { window.alert(error.message); });
+    });
+  });
 
-  document.querySelectorAll('[data-inline-edit]').forEach(function (btn) {
-    btn.addEventListener('click', function (ev) {
-      ev.preventDefault();
-      var card = btn.closest('[data-rule-card]');
+  document.querySelectorAll('[data-rule-list]').forEach(function (list) {
+    var dragged = null;
+    list.querySelectorAll('[data-rule-card]').forEach(function (card) {
+      var handle = card.querySelector('.rb-drag-handle');
+      var handlePressed = false;
+      if (handle) {
+        handle.addEventListener('mousedown', function () { handlePressed = true; });
+        handle.addEventListener('mouseup', function () { handlePressed = false; });
+      }
+      card.addEventListener('dragstart', function (event) {
+        if (!handlePressed) { event.preventDefault(); return; }
+        dragged = card; card.classList.add('rb-dragging');
+        if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
+      });
+      card.addEventListener('dragend', function () { card.classList.remove('rb-dragging'); dragged = null; handlePressed = false; });
+    });
+    list.addEventListener('dragover', function (event) {
+      if (!dragged) return;
+      event.preventDefault();
+      var siblings = Array.from(list.querySelectorAll('[data-rule-card]:not(.rb-dragging)'));
+      var after = siblings.find(function (item) {
+        var rect = item.getBoundingClientRect();
+        return event.clientY < rect.top + rect.height / 2;
+      });
+      if (after) list.insertBefore(dragged, after); else list.appendChild(dragged);
+    });
+    list.addEventListener('drop', function (event) {
+      if (!dragged) return;
+      event.preventDefault();
+      var panel = list.closest('[data-category-panel]');
+      var ids = Array.from(list.querySelectorAll('[data-rule-card]')).map(function (card) { return card.dataset.ruleId; });
+      postAction({action: 'rule_reorder', category_id: panel.dataset.categoryId, rule_ids: ids})
+        .catch(function (error) { window.alert(error.message); window.location.reload(); });
+    });
+  });
+
+  document.querySelectorAll('[data-inline-edit]').forEach(function (button) {
+    button.addEventListener('click', function (event) {
+      event.preventDefault();
+      var card = button.closest('[data-rule-card]');
       var host = card.querySelector('.rb-inline-editor');
       var readonly = card.querySelector('.rb-readonly');
-      card.classList.remove('rb-collapsed'); // sicher aufgeklappt
-      if (host.dataset.mounted) return;       // läuft bereits
-      var dataEl = document.getElementById('rule-edit-' + btn.getAttribute('data-inline-edit'));
+      card.classList.remove('rb-collapsed');
+      if (host.dataset.mounted) return;
+      var dataElement = document.getElementById('rule-edit-' + button.dataset.inlineEdit);
       var ruleData;
-      try { ruleData = JSON.parse(dataEl.textContent); } catch (e) { return; }
+      try { ruleData = JSON.parse(dataElement.textContent); } catch (error) { return; }
       if (!window.RuleEditor) return;
-      readonly.hidden = true;
-      host.hidden = false;
-      host.dataset.mounted = '1';
-      btn.textContent = '✎ in Bearbeitung';
+      readonly.hidden = true; host.hidden = false; host.dataset.mounted = '1'; button.textContent = 'In Bearbeitung';
       window.RuleEditor.mount(host, {
-        ruleData: ruleData,
-        saveUrl: SAVE_URL, metaUrl: META_URL, overviewUrl: OVERVIEW_URL,
-        inline: true,
+        ruleData: ruleData, saveUrl: SAVE_URL, metaUrl: META_URL, overviewUrl: OVERVIEW_URL, inline: true,
         onSaved: function () { window.location.reload(); },
         onCancel: function () {
           host.hidden = true; host.innerHTML = ''; delete host.dataset.mounted;
-          readonly.hidden = false; btn.textContent = '✎ Bearbeiten';
-        },
+          readonly.hidden = false; button.textContent = 'Bearbeiten';
+        }
       });
     });
   });

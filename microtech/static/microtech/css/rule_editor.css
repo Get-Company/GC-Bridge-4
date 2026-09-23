@@ -40,6 +40,7 @@
 .re-errors ul { margin: 4px 0 0 18px; }
 .re-savebar { display: flex; align-items: center; gap: 12px; margin-top: 16px; }
 .re-hint { font-size: 12px; color: #9ca3af; }
+.re-action-hint { margin: -3px 0 9px; }
 .re-dirty { font-size: 12px; font-weight: 600; color: #b45309; }
 .re-dirty::before { content: ""; }
 .re-dsf-wrap { display: inline-block; }
@@ -56,4 +57,7 @@
 .re-ac-empty { padding: 7px 9px; color: #64748b; font-size: 12px; }
 .re-ac-refresh { min-width: 30px; padding: 4px 7px; }
 .re-ac-source { color: #64748b; font-size: 11px; white-space: nowrap; }
+.re-advanced { margin-top: 8px; padding-top: 7px; border-top: 1px solid #e2e8f0; }
+.re-advanced summary { cursor: pointer; color: #64748b; font-size: 12px; }
+.re-advanced[open] summary { margin-bottom: 9px; }
 /* Immer helles Layout, unabhängig vom Admin-Dark-Mode. */

@@ -1,7 +1,7 @@
 import json
 
 from django.contrib import admin, messages
-from django.db import models
+from django.db import models, transaction
 from django.http import HttpResponseForbidden, HttpResponseRedirect, JsonResponse
 from django.template.response import TemplateResponse
 from django.utils.html import format_html
@@ -20,6 +20,7 @@ from microtech.models import (
     MicrotechGraphQLJob,
     MicrotechOrderRule,
     MicrotechOrderRuleAction,
+    MicrotechOrderRuleCategory,
     MicrotechOrderRuleCondition,
     MicrotechOrderRuleConditionGroup,
     MicrotechOrderRuleDjangoField,
@@ -32,7 +33,11 @@ from microtech.models import (
     RuleTrigger,
 )
 from microtech.services import MicrotechJobSentinelService
-from microtech.graphql_schema import get_rule_action_scopes, get_rule_trigger_input_types
+from microtech.graphql_schema import (
+    get_rule_action_excluded_fields,
+    get_rule_action_scopes,
+    get_rule_trigger_input_types,
+)
 from microtech.rule_builder import (
     get_address_field_defs,
     get_allowed_operator_codes,
@@ -47,6 +52,15 @@ from microtech.rule_engine.editor import (
     serialize_rule_for_edit,
 )
 from microtech.rule_engine.overview import serialize_rules_for_overview
+from microtech.rule_mapping import (
+    build_mapping_checklist,
+    effective_target_assignments,
+    ensure_default_rule_categories,
+    friendly_trigger_label,
+    mapping_conflicts,
+    next_category_code,
+    next_rule_priority,
+)
 from microtech.views.autocomplete import (
     MicrotechDatasetFieldAutocompleteView,
     MicrotechOrderRuleOperatorAutocompleteView,
@@ -485,6 +499,7 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
     list_display = (
         "priority",
         "name",
+        "category",
         "is_active",
         "condition_logic",
         "updated_at",
@@ -543,6 +558,11 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
                 "builder/save/",
                 "microtech_orderrule_editor_save",
                 self.rule_editor_save_view,
+            ),
+            (
+                "builder/organize/",
+                "microtech_orderrule_organize",
+                self.rule_organize_view,
             ),
             (
                 "rule-engine/verify/",
@@ -609,14 +629,161 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
     def rule_builder_view(self, request, **kwargs):
         if not self.has_view_permission(request):
             return HttpResponseRedirect(reverse("admin:index"))
+        categories = ensure_default_rule_categories()
+        rules = serialize_rules_for_overview()
+        rules_by_category: dict[int | None, list[dict]] = {}
+        for rule in rules:
+            rules_by_category.setdefault(rule.get("category_id"), []).append(rule)
+        category_panels = [
+            {
+                "id": category.id,
+                "code": category.code,
+                "name": category.name,
+                "is_system": category.is_system,
+                "rules": rules_by_category.pop(category.id, []),
+            }
+            for category in categories
+        ]
+        uncategorized_rules = [
+            rule
+            for grouped_rules in rules_by_category.values()
+            for rule in grouped_rules
+        ]
+        if uncategorized_rules:
+            category_panels.append({
+                "id": None,
+                "code": "ohne-kategorie",
+                "name": "Ohne Kategorie",
+                "is_system": True,
+                "rules": uncategorized_rules,
+            })
         context = {
             **self.admin_site.each_context(request),
-            "title": "Regelwerk – grafische Übersicht",
-            "rules": serialize_rules_for_overview(),
+            "title": "Regel-Mappings",
+            "category_panels": category_panels,
+            "mapping_checklist": build_mapping_checklist(),
+            "mapping_conflicts": mapping_conflicts(),
             "opts": self.model._meta,
-            "changelist_url": reverse("admin:microtech_microtechorderrule_changelist"),
+            "organize_url": reverse("admin:microtech_orderrule_organize"),
         }
         return TemplateResponse(request, "admin/microtech/rule_builder.html", context)
+
+    def rule_organize_view(self, request, **kwargs):
+        if request.method != "POST":
+            return JsonResponse({"ok": False, "errors": ["Nur POST erlaubt."]}, status=405)
+        if not self.has_change_permission(request):
+            return JsonResponse({"ok": False, "errors": ["Zugriff verweigert."]}, status=403)
+
+        try:
+            payload = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({"ok": False, "errors": ["Ungültiges JSON."]}, status=400)
+
+        action = str(payload.get("action") or "").strip()
+        try:
+            with transaction.atomic():
+                if action == "category_create":
+                    name = str(payload.get("name") or "").strip()
+                    if not name:
+                        raise ValueError("Der Kategoriename darf nicht leer sein.")
+                    if len(name) > 120:
+                        raise ValueError("Der Kategoriename darf höchstens 120 Zeichen enthalten.")
+                    if MicrotechOrderRuleCategory.objects.filter(name__iexact=name).exists():
+                        raise ValueError("Eine Kategorie mit diesem Namen existiert bereits.")
+                    last_priority = (
+                        MicrotechOrderRuleCategory.objects
+                        .aggregate(value=models.Max("priority"))["value"]
+                        or 0
+                    )
+                    category = MicrotechOrderRuleCategory.objects.create(
+                        code=next_category_code(name),
+                        name=name,
+                        priority=int(last_priority) + 10,
+                    )
+                    return JsonResponse({"ok": True, "category_id": category.id})
+
+                category_id = payload.get("category_id")
+                category = MicrotechOrderRuleCategory.objects.filter(
+                    pk=category_id,
+                    is_active=True,
+                ).first()
+
+                if action in {"category_rename", "category_delete"}:
+                    if category is None:
+                        raise ValueError("Kategorie wurde nicht gefunden.")
+                    if category.is_system:
+                        raise ValueError("Die Standardkategorien können nicht umbenannt oder gelöscht werden.")
+
+                if action == "category_rename":
+                    name = str(payload.get("name") or "").strip()
+                    if not name:
+                        raise ValueError("Der Kategoriename darf nicht leer sein.")
+                    if len(name) > 120:
+                        raise ValueError("Der Kategoriename darf höchstens 120 Zeichen enthalten.")
+                    if MicrotechOrderRuleCategory.objects.filter(name__iexact=name).exclude(pk=category.pk).exists():
+                        raise ValueError("Eine Kategorie mit diesem Namen existiert bereits.")
+                    category.name = name
+                    category.save(update_fields=("name", "updated_at"))
+                    return JsonResponse({"ok": True})
+
+                if action == "category_delete":
+                    if category.rules.exists():
+                        raise ValueError("Die Kategorie enthält noch Regeln. Bitte diese zuerst verschieben.")
+                    category.delete()
+                    return JsonResponse({"ok": True})
+
+                if action in {"rule_copy", "rule_move", "rule_reorder"} and category is None:
+                    raise ValueError("Zielkategorie wurde nicht gefunden.")
+
+                if action == "rule_copy":
+                    source = self.get_object(request, payload.get("rule_id"))
+                    if source is None:
+                        raise ValueError("Regel wurde nicht gefunden.")
+                    rule_payload = serialize_rule_for_edit(source)
+                    rule_payload.update({
+                        "id": None,
+                        "name": f"{source.name} (Kopie)",
+                        "category_id": category.id,
+                        "priority": next_rule_priority(category),
+                        # A copy may initially share its targets.  Keeping it
+                        # inactive makes that a safe draft until edited.
+                        "is_active": False,
+                    })
+                    copied = save_rule_from_payload(rule_payload)
+                    return JsonResponse({"ok": True, "rule_id": copied.id})
+
+                if action == "rule_move":
+                    rule = self.get_object(request, payload.get("rule_id"))
+                    if rule is None:
+                        raise ValueError("Regel wurde nicht gefunden.")
+                    rule.category = category
+                    rule.priority = next_rule_priority(category)
+                    rule.save(update_fields=("category", "priority", "updated_at"))
+                    return JsonResponse({"ok": True})
+
+                if action == "rule_reorder":
+                    try:
+                        rule_ids = [int(value) for value in payload.get("rule_ids", [])]
+                    except (TypeError, ValueError):
+                        raise ValueError("Ungültige Reihenfolge.") from None
+                    category_rule_ids = set(category.rules.values_list("id", flat=True))
+                    if len(rule_ids) != len(set(rule_ids)) or set(rule_ids) != category_rule_ids:
+                        raise ValueError("Die übermittelte Reihenfolge ist unvollständig.")
+                    rules_by_id = {
+                        rule.id: rule
+                        for rule in category.rules.filter(id__in=rule_ids)
+                    }
+                    for priority, rule_id in enumerate(rule_ids, start=1):
+                        rule = rules_by_id[rule_id]
+                        rule.priority = priority * 10
+                        rule.save(update_fields=("priority", "updated_at"))
+                    return JsonResponse({"ok": True})
+
+                raise ValueError("Unbekannte Verwaltungsaktion.")
+        except EditorValidationError as exc:
+            return JsonResponse({"ok": False, "errors": exc.messages}, status=400)
+        except ValueError as exc:
+            return JsonResponse({"ok": False, "errors": [str(exc)]}, status=400)
 
     def rule_engine_verify_view(self, request, **kwargs):
         from django.contrib import messages
@@ -697,6 +864,14 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
         # a rule form scale with the catalog size.
         payload = {
             "ok": True,
+            "categories": [
+                {
+                    "id": category.id,
+                    "name": category.name,
+                    "is_system": category.is_system,
+                }
+                for category in ensure_default_rule_categories()
+            ],
             "operators": [
                 {
                     # Operator definitions can fall back to the built-in
@@ -773,7 +948,7 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
                 {
                     "id": item.id,
                     "code": item.code,
-                    "label": item.label,
+                    "label": friendly_trigger_label(item),
                     "task_name": item.task_name,
                     "context_root": item.context_root,
                     "graphql_input_types": list(get_rule_trigger_input_types(item.task_name)),
@@ -782,11 +957,24 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
                             "code": scope["code"],
                             "label": scope["label"],
                             "graphql_input_types": list(scope["graphql_input_types"]),
+                            "excluded_fields": list(
+                                get_rule_action_excluded_fields(item.task_name, scope["code"])
+                            ),
                         }
                         for scope in get_rule_action_scopes(item.task_name)
                     ],
                 }
                 for item in RuleTrigger.objects.filter(is_active=True).order_by("priority", "id")
+            ],
+            "occupied_targets": [
+                {
+                    "trigger_id": trigger_id,
+                    "target_key": target_key,
+                    **assignment,
+                }
+                for (trigger_id, target_key), assignments
+                in effective_target_assignments().items()
+                for assignment in assignments
             ],
         }
         return JsonResponse(payload)
@@ -795,19 +983,33 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
         if not self.has_view_permission(request):
             return HttpResponseRedirect(reverse("admin:index"))
 
+        categories = ensure_default_rule_categories()
         rule = self.get_object(request, object_id) if object_id else None
         if rule is not None:
             rule_json = serialize_rule_for_edit(rule)
         else:
+            requested_category = next(
+                (
+                    category
+                    for category in categories
+                    if str(category.id) == str(request.GET.get("category") or "")
+                ),
+                categories[0] if categories else None,
+            )
             rule_json = {
                 "id": None,
                 "name": "",
-                "priority": 100,
+                "priority": (
+                    next_rule_priority(requested_category)
+                    if requested_category is not None
+                    else 100
+                ),
                 "is_active": True,
                 "execution_phase": "before",
-                "engine_enabled": False,
-                "shadow_mode": True,
+                "engine_enabled": True,
+                "shadow_mode": False,
                 "trigger_id": None,
+                "category_id": requested_category.id if requested_category else None,
                 "root_group": None,
                 "actions": [],
             }
@@ -878,6 +1080,7 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
             {
                 "fields": (
                     "name",
+                    "category",
                     "is_active",
                     "priority",
                     "condition_logic",
