@@ -316,6 +316,105 @@ class DocumentWordImportServiceTest(SimpleTestCase):
         with self.assertRaisesMessage(ValueError, "keine HTML-Attribute"):
             self.service.validate_result_html(job)
 
+    def test_applies_only_evidence_backed_placeholder_values(self):
+        blocks = [
+            {
+                "id": "b0001",
+                "kind": "paragraph",
+                "text": "Kontakt: <E-Mail-Adresse>",
+                "style": "",
+                "list_level": None,
+            }
+        ]
+        payload = {
+            "blocks": [{"id": "b0001", "role": "p"}],
+            "replacements": [
+                {
+                    "id": "b0001",
+                    "placeholder": "<E-Mail-Adresse>",
+                    "value": "info@classei.de",
+                    "evidence": "info@classei.de",
+                }
+            ],
+        }
+
+        classified = self.service._validate_roles(blocks, payload)
+        replacements = self.service._validate_replacements(
+            blocks,
+            payload,
+            "Unseren Datenschutzbeauftragten erreichen Sie unter info@classei.de.",
+        )
+        resolved = self.service._apply_replacements(classified, replacements)
+        html = self.service.render_html(resolved)
+        job = DocumentImportJob(
+            source_blocks=resolved,
+            source_text="Kontakt: <E-Mail-Adresse>",
+            result_html=html,
+        )
+
+        self.service.validate_result_html(job)
+        self.assertEqual(resolved[0]["resolved_text"], "Kontakt: info@classei.de")
+        self.assertEqual(self.service.unresolved_placeholders(job), [])
+
+    def test_rejects_placeholder_value_without_reference_evidence(self):
+        blocks = [
+            {
+                "id": "b0001",
+                "kind": "paragraph",
+                "text": "Kontakt: <E-Mail-Adresse>",
+                "style": "",
+                "list_level": None,
+            }
+        ]
+        payload = {
+            "replacements": [
+                {
+                    "id": "b0001",
+                    "placeholder": "<E-Mail-Adresse>",
+                    "value": "erfunden@example.de",
+                    "evidence": "erfunden@example.de",
+                }
+            ]
+        }
+
+        with self.assertRaisesMessage(ValueError, "kommt nicht wortgleich"):
+            self.service._validate_replacements(blocks, payload, "info@classei.de")
+
+    def test_reports_unresolved_placeholders(self):
+        job = DocumentImportJob(
+            source_blocks=[
+                {
+                    "id": "b0001",
+                    "kind": "paragraph",
+                    "text": "Hoster: <Name; Adresse Hoster>",
+                }
+            ]
+        )
+
+        self.assertEqual(
+            self.service.unresolved_placeholders(job),
+            ["<Name; Adresse Hoster>"],
+        )
+
+    def test_apply_rejects_unresolved_placeholders(self):
+        blocks = [
+            {
+                "id": "b0001",
+                "kind": "paragraph",
+                "text": "Hoster: <Name; Adresse Hoster>",
+                "role": "p",
+            }
+        ]
+        job = DocumentImportJob(
+            status=DocumentImportJob.Status.READY,
+            source_blocks=blocks,
+            source_text="Hoster: <Name; Adresse Hoster>",
+            result_html=self.service.render_html(blocks),
+        )
+
+        with self.assertRaisesMessage(ValueError, "offene Platzhalter"):
+            self.service.validate_for_apply(job)
+
     def test_django_document_template_supports_comment_tag(self):
         document = Document(
             use_jinja2=False,

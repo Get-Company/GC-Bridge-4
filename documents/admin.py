@@ -143,7 +143,10 @@ class DocumentWordImportForm(forms.Form):
     provider = forms.ModelChoiceField(
         label="KI-Provider",
         queryset=AIProviderConfig.objects.filter(is_active=True).order_by("name"),
-        help_text="Die KI ordnet nur die Word-Struktur. Der juristische Text bleibt unverändert.",
+        help_text=(
+            "Die KI ordnet die Word-Struktur und übernimmt eindeutig belegbare Platzhalterwerte "
+            "aus der bisherigen Dokumentfassung. Der übrige juristische Text bleibt unverändert."
+        ),
     )
 
     def __init__(self, *args, **kwargs):
@@ -798,6 +801,8 @@ class DocumentImportJobAdmin(BaseAdmin):
         "document",
         "provider",
         "status",
+        "replacement_summary_display",
+        "unresolved_placeholders_display",
         "source_text_display",
         "source_blocks",
         "rendered_prompt",
@@ -823,13 +828,15 @@ class DocumentImportJobAdmin(BaseAdmin):
                     "provider",
                     "status",
                     "requested_by",
+                    "replacement_summary_display",
+                    "unresolved_placeholders_display",
                     "source_text_display",
                     "result_html",
                     "applied_at",
                 ),
                 "description": (
-                    "Der Originaltext muss unverändert bleiben. Bitte Überschriften, Listen und Tabellen prüfen, "
-                    "speichern und erst danach das Ergebnis übernehmen."
+                    "Die KI darf ausschließlich eindeutig belegte Platzhalterwerte aus der bisherigen Fassung "
+                    "übernehmen. Bitte Struktur und Übernahmen prüfen und erst danach das Ergebnis freigeben."
                 ),
             },
         ),
@@ -872,6 +879,38 @@ class DocumentImportJobAdmin(BaseAdmin):
         return format_html(
             '<pre style="white-space:pre-wrap;max-height:32rem;overflow:auto">{}</pre>',
             obj.source_text,
+        )
+
+    @admin.display(description="Automatisch übernommene Angaben")
+    def replacement_summary_display(self, obj: DocumentImportJob | None = None):
+        if not obj:
+            return "-"
+        replacements = [
+            replacement
+            for block in obj.source_blocks
+            for replacement in block.get("replacements", [])
+        ]
+        if not replacements:
+            return "Keine Angaben automatisch übernommen."
+        lines = [
+            f"{replacement['placeholder']} → {replacement['value']}"
+            for replacement in replacements
+        ]
+        return format_html('<pre style="white-space:pre-wrap">{}</pre>', "\n".join(lines))
+
+    @admin.display(description="Offene Platzhalter")
+    def unresolved_placeholders_display(self, obj: DocumentImportJob | None = None):
+        if not obj:
+            return "-"
+        unresolved = DocumentWordImportService().unresolved_placeholders(obj)
+        if not unresolved:
+            return format_html(
+                '<span style="color:#15803d;font-weight:600">{}</span>',
+                "Keine offenen Platzhalter",
+            )
+        return format_html(
+            '<span style="color:#b91c1c;font-weight:600">Freigabe gesperrt: {}</span>',
+            ", ".join(unresolved),
         )
 
     @action(

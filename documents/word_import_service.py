@@ -19,13 +19,15 @@ from documents.models import Document, DocumentImportJob
 
 DOCX_STRUCTURE_SYSTEM_PROMPT = """Du strukturierst deutsche Rechtstexte fuer eine Website.
 
-Du darfst keinen Text umschreiben, ergaenzen, kuerzen oder korrigieren. Ordne ausschliesslich jedem vorhandenen Block eine semantische Rolle zu. Die Block-IDs und ihre Reihenfolge muessen exakt erhalten bleiben.
+Du darfst keinen Text umschreiben, ergaenzen, kuerzen oder korrigieren. Ordne jedem vorhandenen Block eine semantische Rolle zu. Die Block-IDs und ihre Reihenfolge muessen exakt erhalten bleiben.
+
+Zusaetzlich darfst du Platzhalter im Format <...> mit Angaben aus der bisherigen Dokumentfassung befuellen. Eine Ersetzung ist nur erlaubt, wenn der vollstaendige Wert dort eindeutig und wortgleich vorkommt. Erfinde oder kombiniere keine Angaben. Kann ein Platzhalter nicht vollstaendig und sicher befuellt werden, lasse ihn offen und fuehre ihn nicht unter replacements auf.
 
 Erlaubte Rollen fuer Textbloecke: h2, h3, p, ol_item, ul_item.
 Fuer Tabellen ist ausschliesslich die Rolle table erlaubt.
 
 Gib ausschliesslich ein JSON-Objekt in diesem Format zurueck:
-{"blocks": [{"id": "b0001", "role": "h2"}]}
+{"blocks": [{"id": "b0001", "role": "h2"}], "replacements": [{"id": "b0002", "placeholder": "<E-Mail-Adresse>", "value": "info@example.de", "evidence": "info@example.de"}]}
 
 Jede uebergebene ID muss genau einmal und in unveraenderter Reihenfolge vorkommen. Gib kein HTML, kein Markdown und keine Erklaerung aus.
 """
@@ -42,6 +44,7 @@ class DocumentWordImportService(BaseService):
         Document.DocumentType.WITHDRAWAL,
     }
     allowed_roles = {"h2", "h3", "p", "ol_item", "ul_item", "table"}
+    placeholder_pattern = re.compile(r"<[^<>\n]{2,200}>")
 
     @classmethod
     def _word_tag(cls, name: str) -> str:
@@ -195,6 +198,109 @@ class DocumentWordImportService(BaseService):
             roles.append({**block, "role": role})
         return roles
 
+    @classmethod
+    def _reference_text(cls, document: Document) -> str:
+        source = document.get_template_source()
+        if not source:
+            return ""
+        return BeautifulSoup(source, "html.parser").get_text("\n", strip=True)
+
+    def _validate_replacements(
+        self,
+        source_blocks: list[dict],
+        payload: dict,
+        reference_text: str,
+    ) -> list[dict]:
+        replacements = payload.get("replacements", [])
+        if not isinstance(replacements, list):
+            raise ValueError("Die KI-Rückgabe enthält keine gültige Liste 'replacements'.")
+
+        blocks_by_id = {block["id"]: block for block in source_blocks}
+        normalized_reference = self._normalized_text(reference_text)
+        validated = []
+        seen = set()
+        for replacement in replacements:
+            if not isinstance(replacement, dict):
+                raise ValueError("Ein KI-Platzhalterersatz ist ungültig.")
+            block_id = replacement.get("id")
+            placeholder = replacement.get("placeholder")
+            value = replacement.get("value")
+            evidence = replacement.get("evidence")
+            if block_id not in blocks_by_id:
+                raise ValueError("Ein KI-Platzhalterersatz verweist auf einen unbekannten Word-Block.")
+            if not isinstance(placeholder, str) or not self.placeholder_pattern.fullmatch(placeholder):
+                raise ValueError("Die KI darf ausschließlich Platzhalter im Format <...> ersetzen.")
+            if placeholder not in blocks_by_id[block_id]["text"]:
+                raise ValueError("Die KI wollte einen nicht vorhandenen Platzhalter ersetzen.")
+            if not isinstance(value, str) or not value.strip() or "<" in value or ">" in value:
+                raise ValueError("Die KI hat einen ungültigen Platzhalterwert geliefert.")
+            if not isinstance(evidence, str) or not evidence.strip():
+                raise ValueError("Für einen KI-Platzhalterersatz fehlt der Beleg aus der bisherigen Fassung.")
+
+            normalized_value = self._normalized_text(value)
+            normalized_evidence = self._normalized_text(evidence)
+            if normalized_value not in normalized_reference:
+                raise ValueError(
+                    f"Der vorgeschlagene Wert für {placeholder} kommt nicht wortgleich in der bisherigen Fassung vor."
+                )
+            if normalized_evidence not in normalized_reference or normalized_value not in normalized_evidence:
+                raise ValueError(
+                    f"Der Beleg für {placeholder} lässt sich nicht in der bisherigen Fassung nachweisen."
+                )
+            key = (block_id, placeholder)
+            if key in seen:
+                raise ValueError("Die KI hat denselben Platzhalter mehrfach ersetzt.")
+            seen.add(key)
+            validated.append(
+                {
+                    "id": block_id,
+                    "placeholder": placeholder,
+                    "value": value.strip(),
+                    "evidence": evidence.strip(),
+                }
+            )
+        return validated
+
+    @staticmethod
+    def _replace_in_rows(rows: list[list[str]], placeholder: str, value: str) -> list[list[str]]:
+        return [
+            [cell.replace(placeholder, value) for cell in row]
+            for row in rows
+        ]
+
+    def _apply_replacements(
+        self,
+        classified_blocks: list[dict],
+        replacements: list[dict],
+    ) -> list[dict]:
+        replacements_by_id: dict[str, list[dict]] = {}
+        for replacement in replacements:
+            replacements_by_id.setdefault(replacement["id"], []).append(replacement)
+
+        resolved_blocks = []
+        for block in classified_blocks:
+            resolved = dict(block)
+            resolved_text = block["text"]
+            resolved_rows = [list(row) for row in block.get("rows", [])]
+            block_replacements = replacements_by_id.get(block["id"], [])
+            for replacement in block_replacements:
+                placeholder = replacement["placeholder"]
+                value = replacement["value"]
+                resolved_text = resolved_text.replace(placeholder, value)
+                if resolved_rows:
+                    resolved_rows = self._replace_in_rows(resolved_rows, placeholder, value)
+            if resolved_text != block["text"]:
+                resolved["resolved_text"] = resolved_text
+                resolved["replacements"] = block_replacements
+            if resolved_rows and resolved_rows != block.get("rows", []):
+                resolved["resolved_rows"] = resolved_rows
+            resolved_blocks.append(resolved)
+        return resolved_blocks
+
+    @staticmethod
+    def _effective_block_text(block: dict) -> str:
+        return block.get("resolved_text", block["text"])
+
     @staticmethod
     def _render_table(rows: list[list[str]]) -> str:
         rendered_rows = []
@@ -225,9 +331,10 @@ class DocumentWordImportService(BaseService):
                 continue
             close_list()
             if role == "table":
-                html.append(self._render_table(block["rows"]))
+                html.append(self._render_table(block.get("resolved_rows", block["rows"])))
             else:
-                html.append(f"<{role}>{escape(block['text']).replace(chr(10), '<br>')}</{role}>")
+                text = self._effective_block_text(block)
+                html.append(f"<{role}>{escape(text).replace(chr(10), '<br>')}</{role}>")
         close_list()
         html.append("</div>")
         return "\n".join(html)
@@ -269,14 +376,36 @@ class DocumentWordImportService(BaseService):
         if tags_with_invalid_attributes:
             raise ValueError("Das Importergebnis darf keine HTML-Attribute enthalten.")
         rendered_text = self._normalized_text(soup.get_text(" ", strip=True))
-        source_text = self._normalized_text(job.source_text)
+        if job.source_blocks:
+            source_text = self._normalized_text(
+                "\n\n".join(self._effective_block_text(block) for block in job.source_blocks)
+            )
+        else:
+            source_text = self._normalized_text(job.source_text)
         if rendered_text != source_text:
             raise ValueError("Der Text des Importergebnisses weicht von der Word-Datei ab.")
 
+    def unresolved_placeholders(self, job: DocumentImportJob) -> list[str]:
+        source = "\n".join(
+            self._effective_block_text(block)
+            for block in job.source_blocks
+        ) if job.source_blocks else job.source_text
+        return list(dict.fromkeys(self.placeholder_pattern.findall(source)))
+
+    def validate_for_apply(self, job: DocumentImportJob) -> None:
+        self.validate_result_html(job)
+        unresolved = self.unresolved_placeholders(job)
+        if unresolved:
+            raise ValueError(
+                "Das Importergebnis enthält noch offene Platzhalter: " + ", ".join(unresolved)
+            )
+
     def execute(self, job: DocumentImportJob) -> DocumentImportJob:
+        reference_text = self._reference_text(job.document)
         prompt_payload = {
             "document": job.document.title,
             "blocks": job.source_blocks,
+            "existing_document_reference": reference_text,
         }
         job.rendered_prompt = json.dumps(prompt_payload, ensure_ascii=False, indent=2)
         try:
@@ -290,7 +419,10 @@ class DocumentWordImportService(BaseService):
             job.provider_response = provider_response
             payload = self._parse_provider_json(result_text)
             classified_blocks = self._validate_roles(job.source_blocks, payload)
-            job.result_html = self.render_html(classified_blocks)
+            replacements = self._validate_replacements(job.source_blocks, payload, reference_text)
+            resolved_blocks = self._apply_replacements(classified_blocks, replacements)
+            job.source_blocks = resolved_blocks
+            job.result_html = self.render_html(resolved_blocks)
             self.validate_result_html(job)
             job.status = DocumentImportJob.Status.READY
             job.error_message = ""
@@ -300,6 +432,7 @@ class DocumentWordImportService(BaseService):
         job.save(
             update_fields=(
                 "rendered_prompt",
+                "source_blocks",
                 "result_html",
                 "provider_response",
                 "status",
@@ -313,7 +446,7 @@ class DocumentWordImportService(BaseService):
     def apply(self, job: DocumentImportJob) -> DocumentImportJob:
         if job.status != DocumentImportJob.Status.READY:
             raise ValueError("Der Word-Import hat noch kein freigabefähiges Ergebnis.")
-        self.validate_result_html(job)
+        self.validate_for_apply(job)
         document = job.document
         document.template_file = ""
         document.html_content = job.result_html

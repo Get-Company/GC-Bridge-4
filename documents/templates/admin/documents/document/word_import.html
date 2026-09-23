@@ -28,9 +28,10 @@
     <div class="bg-white border border-base-200 p-6 rounded-default shadow-xs dark:bg-base-900 dark:border-base-800 max-w-3xl">
       <h1 class="font-semibold mb-2 text-xl">{{ title }}</h1>
       <p class="mb-6 text-sm text-base-500 dark:text-base-400">
-        Die KI erkennt ausschließlich Überschriften, Absätze, Listen und Tabellen. Der Wortlaut aus
+        Die KI erkennt Überschriften, Absätze, Listen und Tabellen. Eindeutig belegbare Platzhalterwerte
+        übernimmt sie automatisch aus der bisherigen Dokumentfassung. Der übrige Wortlaut aus
         <strong>{{ document.source_docx.name }}</strong> wird technisch gegen Veränderungen geprüft.
-        Das Ergebnis wird erst nach einer separaten Sichtprüfung übernommen.
+        Offene Platzhalter sperren die Freigabe; veröffentlicht wird erst in einem separaten Schritt.
       </p>
 
       <form method="post" novalidate>
