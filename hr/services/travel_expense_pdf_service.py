@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from io import BytesIO
-from html import escape
+from html import escape, unescape
 from pathlib import Path
+import re
 
 import reportlab
+from django.utils.html import strip_tags
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle
@@ -19,6 +21,13 @@ from hr.models import TravelExpenseClaim
 
 class TravelExpensePdfService(BaseService):
     model = TravelExpenseClaim
+
+    @staticmethod
+    def _plain_description(value: str) -> str:
+        source = re.sub(r"(?i)<br\s*/?>", "\n", unescape(value or ""))
+        source = re.sub(r"(?i)</(?:p|div|li|h[1-6])\s*>", "\n", source)
+        plain = unescape(strip_tags(source)).replace("\xa0", " ")
+        return "\n".join(line.strip() for line in plain.splitlines() if line.strip())
 
     @staticmethod
     def _money(value, digits: int = 2) -> str:
@@ -83,7 +92,8 @@ class TravelExpensePdfService(BaseService):
             Spacer(1, 2 * mm),
             p("Reise", section),
             Spacer(1, 2 * mm),
-            detail_row("Datum", claim.travel_date.strftime("%d.%m.%Y"), "Anlass", claim.purpose),
+            detail_row("Datum", claim.travel_date.strftime("%d.%m.%Y"),
+                       "Anlass", self._plain_description(claim.purpose)),
             detail_row("Reisebeginn", claim.travel_start.strftime("%d.%m.%Y"),
                        "Reiseende", claim.travel_end.strftime("%d.%m.%Y")),
             detail_row("Fahrzeug", claim.vehicle, "Kennzeichen", claim.license_plate),
@@ -107,6 +117,22 @@ class TravelExpensePdfService(BaseService):
             ("TOPPADDING", (0, 0), (-1, -1), 9),
             ("BOTTOMPADDING", (0, 0), (-1, -1), 9),
         ]))
+        signatures = Table(
+            [["", "", ""],
+             [p("Unterschrift Mitarbeiter", small), "", p("Unterschrift Geschäftsführung", small)]],
+            colWidths=[76 * mm, 14 * mm, 76 * mm],
+            rowHeights=[13 * mm, 8 * mm],
+            hAlign="LEFT",
+        )
+        signatures.setStyle(TableStyle([
+            ("LINEABOVE", (0, 1), (0, 1), 0.7, ink),
+            ("LINEABOVE", (2, 1), (2, 1), 0.7, ink),
+            ("LEFTPADDING", (0, 0), (-1, -1), 0),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+            ("TOPPADDING", (0, 0), (-1, 0), 0),
+            ("TOPPADDING", (0, 1), (-1, 1), 5),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+        ]))
         story.extend([
             costs,
             Spacer(1, 5 * mm),
@@ -117,12 +143,9 @@ class TravelExpensePdfService(BaseService):
             Spacer(1, 5 * mm),
             detail_row("Ort der Abrechnung", claim.settlement_place,
                        "Datum der Abrechnung", claim.settlement_date.strftime("%d.%m.%Y")),
-            Spacer(1, 13 * mm),
-            KeepTogether([
-                HRFlowable(width=70 * mm, thickness=0.7, color=ink, hAlign="LEFT"),
-                Spacer(1, 2 * mm),
-                p("Unterschrift", small),
-            ]),
+            detail_row("Auszahlung erfolgt", "Ja" if claim.paid_out else "Nein"),
+            Spacer(1, 6 * mm),
+            KeepTogether([signatures]),
         ])
         document.build(story)
         return buffer.getvalue()

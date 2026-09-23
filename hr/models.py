@@ -149,6 +149,7 @@ class TravelExpenseClaim(BaseModel):
     round_trip = models.BooleanField(default=False, verbose_name=_("Hin- und Rückfahrt"))
     settlement_place = models.CharField(max_length=120, verbose_name=_("Ort der Abrechnung"))
     settlement_date = models.DateField(default=timezone.localdate, verbose_name=_("Datum der Abrechnung"))
+    paid_out = models.BooleanField(default=False, verbose_name=_("Auszahlung erfolgt"))
 
     class Meta:
         verbose_name = _("Reisekostenabrechnung")

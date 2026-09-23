@@ -59,11 +59,25 @@ class TravelExpenseClaimTest(SimpleTestCase):
         text = page.extract_text()
         for expected in (
             "Reisekostenabrechnung", "000042", "Erika Müller", "B-AB 123",
-            "0,350 EUR/km", "86,42 EUR", "Unterschrift",
+            "0,350 EUR/km", "86,42 EUR", "Auszahlung erfolgt", "Nein",
+            "Unterschrift Mitarbeiter", "Unterschrift Geschäftsführung",
         ):
             self.assertIn(expected, text)
         self.assertNotIn("Anschrift", text)
         self.assertNotIn("Uhr", text)
+
+    def test_pdf_renders_html_description_as_text_and_paid_status(self):
+        claim = self.make_claim()
+        claim.purpose = "<p>Kundentermin &amp; Gespräch</p><p>Weitere Notiz<br>zweite Zeile</p>"
+        claim.paid_out = True
+        text = PdfReader(BytesIO(TravelExpensePdfService().render_pdf(claim))).pages[0].extract_text()
+        self.assertIn("Kundentermin & Gespräch", text)
+        self.assertIn("Weitere Notiz", text)
+        self.assertIn("zweite Zeile", text)
+        self.assertIn("Auszahlung erfolgt", text)
+        self.assertIn("Ja", text)
+        self.assertNotIn("<p>", text)
+        self.assertNotIn("&amp;", text)
 
     def test_admin_uses_logged_in_user_and_restricts_other_claims(self):
         user = get_user_model()(id=7, username="erika", first_name="Erika", last_name="Müller", is_staff=True)
@@ -79,8 +93,14 @@ class TravelExpenseClaimTest(SimpleTestCase):
 
         with patch.object(model_admin, "_can_view_all", return_value=False):
             self.assertTrue(model_admin.has_view_permission(request, claim))
+            self.assertIn("paid_out", model_admin.get_readonly_fields(request, claim))
+            claim.paid_out = True
+            self.assertFalse(model_admin.has_change_permission(request, claim))
             claim.user_id = 8
             self.assertFalse(model_admin.has_view_permission(request, claim))
             with patch.object(model_admin, "get_object", return_value=claim):
                 with self.assertRaises(Http404):
                     model_admin._pdf_response(request, claim.pk)
+        with patch.object(model_admin, "_can_view_all", return_value=True):
+            self.assertNotIn("paid_out", model_admin.get_readonly_fields(request, claim))
+            self.assertTrue(model_admin.has_change_permission(request, claim))
