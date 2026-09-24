@@ -54,6 +54,12 @@ class RuleFieldUiLabelTest(SimpleTestCase):
             shop_field_ui_label("code_values__vorgangArt", "Bisheriges Mapping - vorgangArt (code_values__vorgangArt)"),
             "Bridge-Mapping: vorgangArt",
         )
+        self.assertEqual(
+            shop_field_ui_label(
+                "factor", "Artikel - Faktor (factor)", context_root="products.Product"
+            ),
+            "Artikel (Bridge): factor - Faktor",
+        )
 
     def test_microtech_field_uses_abbreviation_and_catalog_description(self):
         self.assertEqual(microtech_field_ui_label("ZahlArt", "Zahlungsart"), "ZahlArt - Zahlungsart")

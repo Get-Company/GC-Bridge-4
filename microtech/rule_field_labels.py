@@ -73,7 +73,7 @@ def _description(label: str, path: str) -> str:
         "Order - ", "Customer - ", "Billing Address - ",
         "Shipping Address - ", "Bestellung - ", "Bestellposition - ",
         "Anschrift - ", "Kunde - ", "Rechnungsanschrift - ",
-        "Lieferanschrift - ", "Zielbereich - ", "Bisheriges Mapping - ",
+        "Lieferanschrift - ", "Artikel - ", "Zielbereich - ", "Bisheriges Mapping - ",
     ):
         if text.startswith(prefix):
             text = text[len(prefix):]
@@ -110,6 +110,9 @@ def shop_field_ui_label(path: str, label: str, *, context_root: str = "orders.Or
     elif context_root == "orders.OrderDetail":
         scope, field_name, api_paths = "Bestellposition", path, _POSITION_API_PATHS
         api_prefix = "lineItems[]."
+    elif context_root == "products.Product":
+        scope, field_name, api_paths = "Artikel", path, {}
+        api_prefix = ""
     else:
         scope, field_name, api_paths = "Bestellung", path, _ORDER_API_PATHS
         api_prefix = ""
