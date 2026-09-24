@@ -934,6 +934,26 @@ def get_order_detail_field_defs() -> list[DjangoFieldDef]:
     return sorted(defs, key=lambda item: item.label.lower())
 
 
+def get_product_field_defs() -> list[DjangoFieldDef]:
+    """Fields available while mapping an article update."""
+    from products.models import Product
+
+    defs: list[DjangoFieldDef] = []
+    for path, field, label in _iter_field_defs_for_model(model=Product):
+        value_kind = _field_value_kind(field)
+        defs.append(
+            DjangoFieldDef(
+                catalog_id=None,
+                path=path,
+                label=f"Artikel - {label} ({path})",
+                value_kind=value_kind,
+                example=_default_example(value_kind),
+                context_root="products.Product",
+            )
+        )
+    return sorted(defs, key=lambda item: item.label.lower())
+
+
 def get_django_field_map() -> dict[str, DjangoFieldDef]:
     return {item.path: item for item in get_django_field_defs()}
 

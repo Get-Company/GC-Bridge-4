@@ -34,6 +34,7 @@ from microtech.rule_builder import (
     get_customer_field_defs,
     get_django_field_map,
     get_order_detail_field_defs,
+    get_product_field_defs,
     get_operator_engine_map,
 )
 from microtech.rule_engine.templates import TemplateValidationError, validate_template
@@ -43,6 +44,7 @@ from microtech.rule_field_labels import microtech_field_ui_label
 _ADDRESS_CONTEXT_ROOTS = {"customer.Address"}
 _CUSTOMER_CONTEXT_ROOT = "customer.Customer"
 _ORDER_DETAIL_CONTEXT_ROOT = "orders.OrderDetail"
+_PRODUCT_CONTEXT_ROOT = "products.Product"
 _VALUELESS_OPERATORS = {"is_empty", "is_not_empty", "is_true", "is_false"}
 _GRAPHQL_FIELD_PATTERN = re.compile(r"^[A-Za-z_]\w*\.[A-Za-z_]\w*$")
 
@@ -207,6 +209,8 @@ def _validate_payload(
         field_map = {item.path: item for item in get_customer_field_defs()}
     elif trigger is not None and trigger.context_root == _ORDER_DETAIL_CONTEXT_ROOT:
         field_map = {item.path: item for item in get_order_detail_field_defs()}
+    elif trigger is not None and trigger.context_root == _PRODUCT_CONTEXT_ROOT:
+        field_map = {item.path: item for item in get_product_field_defs()}
     else:
         field_map = get_django_field_map()
     allowed_paths = set(field_map)
@@ -355,6 +359,12 @@ def _validate_payload(
             elif graphql_field and not _GRAPHQL_FIELD_PATTERN.fullmatch(graphql_field):
                 errors.append(f"{action_label}: ungueltiges GraphQL-Zielfeld {graphql_field!r}.")
             elif graphql_field:
+                if (
+                    getattr(trigger, "task_name", "") == "products.microtech_product_mapping"
+                    and graphql_field != "UpdateProductInput.unit"
+                ):
+                    errors.append(f"{action_label}: Fuer Artikelregeln ist nur UpdateProductInput.unit erlaubt.")
+                    continue
                 allowed_input_types = get_rule_action_input_types(
                     getattr(trigger, "task_name", ""), target_scope
                 )

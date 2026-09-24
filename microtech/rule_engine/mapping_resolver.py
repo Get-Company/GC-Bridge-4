@@ -11,6 +11,7 @@ from microtech.rule_engine.execution import RuleExecutionService
 ORDER_MAPPING_TASK = "orders.microtech_order_mapping"
 ORDER_POSITION_MAPPING_TASK = "orders.microtech_order_position_mapping"
 CUSTOMER_MAPPING_TASK = "customer.microtech_customer_mapping"
+PRODUCT_MAPPING_TASK = "products.microtech_product_mapping"
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,11 +117,23 @@ def resolve_customer_mapping_fields(
     )
 
 
+def resolve_product_mapping_fields(*, product, code_values: dict) -> dict:
+    resolved = _resolve_mapping_fields(
+        task_name=PRODUCT_MAPPING_TASK,
+        root_instance=product,
+        code_values=code_values,
+        target_scope=MicrotechOrderRuleAction.TargetScope.PRODUCT,
+    )
+    return {"unit": resolved["unit"]} if "unit" in resolved else {}
+
+
 __all__ = [
     "CUSTOMER_MAPPING_TASK",
     "ORDER_MAPPING_TASK",
     "ORDER_POSITION_MAPPING_TASK",
+    "PRODUCT_MAPPING_TASK",
     "resolve_customer_mapping_fields",
     "resolve_order_mapping_fields",
     "resolve_order_position_mapping_fields",
+    "resolve_product_mapping_fields",
 ]

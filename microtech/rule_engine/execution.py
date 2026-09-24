@@ -18,6 +18,7 @@ from microtech.rule_builder import (
     get_customer_field_defs,
     get_django_field_map,
     get_order_detail_field_defs,
+    get_product_field_defs,
     get_operator_engine_map,
 )
 from microtech.rule_engine.context import EvaluationContext
@@ -28,6 +29,7 @@ from microtech.rule_engine.templates import render_template
 _ADDRESS_CONTEXT_ROOTS = {"customer.Address"}
 _CUSTOMER_CONTEXT_ROOT = "customer.Customer"
 _ORDER_DETAIL_CONTEXT_ROOT = "orders.OrderDetail"
+_PRODUCT_CONTEXT_ROOT = "products.Product"
 
 
 @dataclass(frozen=True, slots=True)
@@ -305,6 +307,8 @@ class RuleExecutionService(BaseService):
             return {item.path: item for item in get_customer_field_defs()}
         if context_root == _ORDER_DETAIL_CONTEXT_ROOT:
             return {item.path: item for item in get_order_detail_field_defs()}
+        if context_root == _PRODUCT_CONTEXT_ROOT:
+            return {item.path: item for item in get_product_field_defs()}
         return get_django_field_map()
 
     @staticmethod

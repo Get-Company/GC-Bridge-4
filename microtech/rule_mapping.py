@@ -10,6 +10,8 @@ from microtech.models import (
     MicrotechOrderRule,
     MicrotechOrderRuleAction,
     MicrotechOrderRuleCategory,
+    MicrotechOrderRuleCondition,
+    MicrotechOrderRuleConditionGroup,
     RuleTrigger,
 )
 
@@ -17,6 +19,7 @@ from microtech.models import (
 DEFAULT_RULE_CATEGORIES: tuple[dict[str, object], ...] = (
     {"code": "vorgang", "name": "Vorgang", "priority": 10},
     {"code": "kunde", "name": "Kunde", "priority": 20},
+    {"code": "artikel", "name": "Artikel", "priority": 30},
 )
 
 TRIGGER_LABELS: dict[str, str] = {
@@ -26,6 +29,7 @@ TRIGGER_LABELS: dict[str, str] = {
     "customer.microtech_customer_upsert": "Kunde",
     "customer.microtech_customer_mapping": "Kunde und Anschriften",
     "customer.microtech_postal_address": "Anschrift",
+    "products.microtech_product_mapping": "Artikel aktualisieren",
 }
 
 FIELD_LABELS: dict[str, str] = {
@@ -191,6 +195,13 @@ _STANDARD_MAPPING_TRIGGERS: tuple[dict[str, object], ...] = (
         "context_root": "customer.Customer",
         "priority": 7,
     },
+    {
+        "code": "product_mapping",
+        "label": "Artikel aktualisieren",
+        "task_name": "products.microtech_product_mapping",
+        "context_root": "products.Product",
+        "priority": 8,
+    },
 )
 
 
@@ -277,6 +288,39 @@ def _ensure_standard_mapping_rules(
             )
             for position, field_name in enumerate(definition["fields"], start=1)
         ])
+
+    product_rule, created = MicrotechOrderRule.objects.get_or_create(
+        system_key="standard_mapping.artikel.unit_percent_pieces",
+        defaults={
+            "name": "Einheit bei positivem Faktor: % Stck",
+            "category": categories["artikel"],
+            "trigger": triggers["products.microtech_product_mapping"],
+            "priority": 10,
+            "execution_phase": MicrotechOrderRule.ExecutionPhase.BEFORE,
+            "is_active": True,
+            "engine_enabled": True,
+            "shadow_mode": False,
+        },
+    )
+    if created:
+        group = MicrotechOrderRuleConditionGroup.objects.create(
+            rule=product_rule,
+            logic=MicrotechOrderRule.ConditionLogic.ALL,
+        )
+        MicrotechOrderRuleCondition.objects.create(
+            rule=product_rule,
+            group=group,
+            django_field_path="factor",
+            operator_code="gt",
+            expected_value="0",
+        )
+        MicrotechOrderRuleAction.objects.create(
+            rule=product_rule,
+            action_type=MicrotechOrderRuleAction.ActionType.SET_FIELD,
+            graphql_field="UpdateProductInput.unit",
+            target_scope=MicrotechOrderRuleAction.TargetScope.PRODUCT,
+            target_value="% Stck",
+        )
 
 
 def friendly_trigger_label(trigger) -> str:

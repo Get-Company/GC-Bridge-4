@@ -7,6 +7,8 @@ from django.core.management.base import CommandError
 
 from core.management.base import MonitoredBaseCommand
 from microtech.services import MicrotechProductPayloadService, microtech_connection
+from microtech.rule_mapping import ensure_default_rule_categories
+from microtech.rule_engine.mapping_resolver import resolve_product_mapping_fields
 from products.models import Price, Product
 from shopware.models import ShopwareSettings
 
@@ -64,6 +66,9 @@ class Command(MonitoredBaseCommand):
                     self.stderr.write(self.style.ERROR(f"Failed to update {erp_nr}: {str(e)}"))
 
     def _build_input_data(self, product: Product) -> dict[str, Any]:
+        if not getattr(self, "_product_rules_ready", False):
+            ensure_default_rule_categories()
+            self._product_rules_ready = True
         # Get default sales channel for prices
         default_channel = ShopwareSettings.objects.filter(is_active=True, is_default=True).first()
         price_entry = None
@@ -81,11 +86,7 @@ class Command(MonitoredBaseCommand):
 
         if product.factor is not None:
             input_data["factor"] = product.factor
-        if product.factor and product.factor > 0:
-            # Microtech only observes Sel6 when the unit is a percentage of
-            # pieces.  Use the canonical short spelling accepted by Microtech.
-            input_data["unit"] = "% Stck"
-        elif product.unit is not None:
+        if product.unit is not None:
             input_data["unit"] = product.unit
 
         if price_entry:
@@ -101,6 +102,8 @@ class Command(MonitoredBaseCommand):
                     special_end_date=price_entry.special_end_date.isoformat() if price_entry.special_end_date else None,
                 )
             )
+
+        input_data.update(resolve_product_mapping_fields(product=product, code_values=input_data))
 
         # Remove None values to avoid sending them if not explicitly needed,
         # but keep empty strings if that's the intent.

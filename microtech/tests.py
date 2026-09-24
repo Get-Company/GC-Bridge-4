@@ -12,6 +12,9 @@ from microtech.management.commands.microtech_sync_products import (
 )
 from microtech.management.commands.microtech_update_prices import Command as MicrotechUpdatePricesCommand
 from microtech.management.commands.microtech_update_product import Command as MicrotechUpdateProductCommand
+from microtech.graphql_schema import get_rule_action_input_types
+from microtech.models import MicrotechOrderRule
+from microtech.rule_builder import get_product_field_defs
 from microtech.services.base import MicrotechDatasetService
 from microtech.services.artikel import MicrotechArtikelService
 from microtech.services.expired_specials import MicrotechExpiredSpecialSyncService
@@ -39,6 +42,16 @@ class _FakeExpiredSpecialClient(MicrotechGraphQLClientService):
 
 
 class MicrotechArtikelServiceProductJobTest(SimpleTestCase):
+    def test_product_rule_fields_include_unit_and_factor(self):
+        fields = {item.path: item for item in get_product_field_defs()}
+        self.assertEqual(fields["unit"].value_kind, "string")
+        self.assertEqual(fields["factor"].value_kind, "int")
+        self.assertEqual(fields["unit"].context_root, "products.Product")
+        self.assertEqual(
+            get_rule_action_input_types("products.microtech_product_mapping", "product"),
+            ("UpdateProductInput",),
+        )
+
     def test_integer_conversion_accepts_integral_decimal_values(self):
         self.assertEqual(_to_int("150.00"), 150)
         self.assertIsNone(_to_int("150.50"))
@@ -649,6 +662,33 @@ class MicrotechSyncProductsCommandTest(TestCase):
                 }
             ],
         )
+
+    def test_update_product_unit_follows_editable_rule(self):
+        product = Product.objects.create(
+            erp_nr="1008-rule",
+            name="Regelartikel",
+            tax=self.tax_19,
+            factor=12,
+            unit="Stck",
+        )
+        command = MicrotechUpdateProductCommand()
+        self.assertEqual(command._build_input_data(product)["unit"], "% Stck")
+
+        rule = MicrotechOrderRule.objects.get(
+            system_key="standard_mapping.artikel.unit_percent_pieces"
+        )
+        action = rule.actions.get(graphql_field="UpdateProductInput.unit")
+        action.target_value = "% Stück"
+        action.save(update_fields=["target_value", "updated_at"])
+        self.assertEqual(command._build_input_data(product)["unit"], "% Stück")
+
+        product.factor = 0
+        self.assertEqual(command._build_input_data(product)["unit"], "Stck")
+
+        product.factor = 12
+        rule.is_active = False
+        rule.save(update_fields=["is_active", "updated_at"])
+        self.assertEqual(command._build_input_data(product)["unit"], "Stck")
 
     def test_update_prices_payload_writes_default_price_to_vk0(self):
         product = Product.objects.create(erp_nr="1009", name="Nur Preis")

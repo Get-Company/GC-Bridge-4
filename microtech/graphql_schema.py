@@ -11,7 +11,7 @@ from loguru import logger
 
 from django.core.cache import cache
 
-_CACHE_KEY = "microtech_graphql_input_catalog_v2"
+_CACHE_KEY = "microtech_graphql_input_catalog_v3"
 _CACHE_TTL = 600  # seconds
 
 _INTROSPECTION_QUERY = """
@@ -28,6 +28,7 @@ INPUT_TYPE_LABELS: dict[str, str] = {
     "WebshopDefaultsInput": "Kundenstandardwerte",
     "VorgangInput": "Vorgang (Bestellung)",
     "VorgangPositionInput": "Position",
+    "UpdateProductInput": "Artikel",
 }
 
 # A rule can only write to the input object that is consumed by its trigger.
@@ -36,6 +37,7 @@ INPUT_TYPE_LABELS: dict[str, str] = {
 RULE_TRIGGER_INPUT_TYPES: dict[str, tuple[str, ...]] = {
     "orders.microtech_order_mapping": ("VorgangInput",),
     "orders.microtech_order_position_mapping": ("VorgangPositionInput",),
+    "products.microtech_product_mapping": ("UpdateProductInput",),
     "customer.microtech_customer_mapping": (
         "CustomerInput",
         "PostalAddressInput",
@@ -106,6 +108,14 @@ ORDER_POSITION_MAPPING_ACTION_SCOPES: tuple[dict[str, object], ...] = (
     },
 )
 
+PRODUCT_MAPPING_ACTION_SCOPES: tuple[dict[str, object], ...] = (
+    {
+        "code": "product",
+        "label": "Artikel",
+        "graphql_input_types": ("UpdateProductInput",),
+    },
+)
+
 # CustomerInput.email is intentionally excluded.  The wrapper can use that
 # value while creating its implicit default address, which would also change
 # the invoice-address email.  Email mappings must target an explicit postal
@@ -142,6 +152,7 @@ _FALLBACK: dict[str, list[str]] = {
     ],
     "VorgangInput": ["orderNumber", "description", "currency", "vorgangArt", "customerNumber"],
     "VorgangPositionInput": ["erpNumber", "quantity", "unit", "price", "name"],
+    "UpdateProductInput": ["unit"],
 }
 
 
@@ -208,6 +219,8 @@ def get_graphql_input_catalog(*, refresh: bool = False) -> dict:
         # ``WebshopDefaultsInput`` is an integration-local nested mapping, not
         # necessarily exposed by the remote schema introspection endpoint.
         raw.setdefault("WebshopDefaultsInput", _FALLBACK["WebshopDefaultsInput"])
+        # The product mapping currently writes only the article unit.
+        raw["UpdateProductInput"] = _FALLBACK["UpdateProductInput"]
     except Exception as exc:  # noqa: BLE001 - any failure degrades to fallback
         logger.warning("GraphQL-Introspektion nicht verfügbar → kuratierter Fallback ({}).", exc)
         raw = _FALLBACK
@@ -234,6 +247,8 @@ def get_rule_action_scopes(task_name: str) -> tuple[dict[str, object], ...]:
         return ORDER_MAPPING_ACTION_SCOPES
     if normalized_task == "orders.microtech_order_position_mapping":
         return ORDER_POSITION_MAPPING_ACTION_SCOPES
+    if normalized_task == "products.microtech_product_mapping":
+        return PRODUCT_MAPPING_ACTION_SCOPES
     return ()
 
 
@@ -267,6 +282,7 @@ __all__ = [
     "CUSTOMER_MAPPING_ACTION_SCOPES",
     "ORDER_MAPPING_ACTION_SCOPES",
     "ORDER_POSITION_MAPPING_ACTION_SCOPES",
+    "PRODUCT_MAPPING_ACTION_SCOPES",
     "RULE_ACTION_EXCLUDED_FIELDS",
     "get_graphql_input_catalog",
     "get_rule_action_excluded_fields",

@@ -14,6 +14,7 @@ from microtech.rule_builder import (
     get_customer_field_defs,
     get_django_field_map,
     get_order_detail_field_defs,
+    get_product_field_defs,
 )
 from microtech.rule_mapping import friendly_trigger_label
 from microtech.rule_engine.editor import serialize_rule_for_edit
@@ -179,6 +180,7 @@ def serialize_rules_for_overview() -> list[dict]:
     address_field_map = {item.path: item for item in get_address_field_defs("customer.Address")}
     customer_field_map = {item.path: item for item in get_customer_field_defs()}
     position_field_map = {item.path: item for item in get_order_detail_field_defs()}
+    product_field_map = {item.path: item for item in get_product_field_defs()}
     operator_map = {
         op.code: op.name
         for op in MicrotechOrderRuleOperator.objects.all()
@@ -199,6 +201,7 @@ def serialize_rules_for_overview() -> list[dict]:
         "customer.Address": address_field_map,
         "customer.Customer": customer_field_map,
         "orders.OrderDetail": position_field_map,
+        "products.Product": product_field_map,
     }
     return [
         serialize_rule(

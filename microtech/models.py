@@ -641,6 +641,7 @@ class MicrotechOrderRuleAction(BaseModel):
         CUSTOMER_DEFAULTS = "customer_defaults", _("Kundenstandardwerte")
         ORDER = "order", _("Vorgang")
         POSITION = "position", _("Position")
+        PRODUCT = "product", _("Artikel")
 
     rule = models.ForeignKey(
         MicrotechOrderRule,

@@ -45,6 +45,7 @@ from microtech.rule_builder import (
     get_customer_field_defs,
     get_django_field_defs,
     get_order_detail_field_defs,
+    get_product_field_defs,
     get_operator_defs,
     get_rule_action_target_defs,
 )
@@ -872,6 +873,7 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
             get_address_field_defs("customer.Address")
             + get_customer_field_defs()
             + get_order_detail_field_defs()
+            + get_product_field_defs()
         )
         context_field_maps = {
             context_root: {
