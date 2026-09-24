@@ -1,0 +1,105 @@
+<mjml>
+  <mj-head>
+    <mj-font name="Roboto" href="https://assets.classei.de/css/emails_fonts.css" />
+    <mj-font name="DancingScript" href="https://assets.classei.de/css/emails_fonts.css" />
+    <mj-attributes>
+      <mj-all font-family="Roboto, Arial, sans-serif" color="#222222" />
+      <mj-body background-color="#f3f3f3" width="600px" />
+      <mj-section background-color="#ffffff" padding="20px" />
+      <mj-column padding="0" />
+      <mj-text font-size="16px" line-height="24px" padding="0" />
+      <mj-button background-color="#ff9933" color="#ffffff" font-weight="700" border-radius="3px" inner-padding="10px 22px" />
+      <mj-image padding="0" />
+    </mj-attributes>
+    <mj-style inline="inline">
+      h1 { font-family: DancingScript, cursive, Arial, sans-serif; font-weight: 400; color: #ff9933; }
+      h2 { color: #ff9933; }
+      p { margin: 0 0 14px 0; }
+      a { color: #ff9933; text-decoration: none; }
+    </mj-style>
+  </mj-head>
+  <mj-body>
+    <mj-section background-color="#ff9933" padding="5px 0">
+      <mj-column>
+        <mj-navbar base-url="https://www.classei-shop.com/" hamburger="hamburger" ico-color="#ffffff">
+          <mj-navbar-link color="#ffffff" font-weight="bold" href="Orga-Mappen?sPartner=email">ORGA-MAPPEN</mj-navbar-link>
+          <mj-navbar-link color="#ffffff" font-weight="bold" href="Orga-Tabs?sPartner=email">ORGA-TABS</mj-navbar-link>
+          <mj-navbar-link color="#ffffff" font-weight="bold" href="Orga-Boxen?sPartner=email">ORGA-BOXEN</mj-navbar-link>
+          <mj-navbar-link color="#ffffff" font-weight="bold" href="Fertig-Sets?sPartner=email">FERTIG-SETS</mj-navbar-link>
+        </mj-navbar>
+      </mj-column>
+    </mj-section>
+    <mj-section css-class="editor-logo" padding="0"><mj-column>
+      <mj-image width="600px" src="{{ content.logo_url }}" href="https://www.classei-shop.com/" alt="Logo der Büroorganisation Classei" />
+    </mj-column></mj-section>
+    <mj-section css-class="editor-headline" padding="20px"><mj-column>
+      <mj-text align="center"><h1 style="font-size:40px;line-height:42px">{{ content.headline }}</h1></mj-text>
+      <mj-text align="right" color="#8a8a8a"><span style="font-family:DancingScript,cursive;font-size:28px;line-height:36px">{{ content.subheadline }}</span></mj-text>
+    </mj-column></mj-section>
+    <mj-section css-class="editor-intro"><mj-column>
+      <mj-text><p>{{ content.salutation }} {{ recipient_name }},</p></mj-text>
+      <mj-text>{{ content.intro|linebreaksbr }}</mj-text>
+    </mj-column></mj-section>
+    <mj-section css-class="editor-products"><mj-column>
+      <mj-text align="center"><h2 style="font-size:30px">{{ content.product_heading }}</h2></mj-text>
+    </mj-column></mj-section>
+    {% for offer in offers %}
+    <mj-wrapper css-class="editor-product-{{ offer.id }}">
+      {% if offer.section_heading %}
+      <mj-section><mj-column><mj-text align="center"><h2 style="font-size:30px">{{ offer.section_heading }}</h2></mj-text></mj-column></mj-section>
+      {% endif %}
+      <mj-section><mj-column>
+        <mj-text><a href="{{ offer.url }}"><h4 style="font-size:24px;color:#222222">{{ offer.title }}</h4></a></mj-text>
+      </mj-column></mj-section>
+      <mj-section>
+        <mj-column width="52%">
+          <mj-text>{{ offer.description|linebreaksbr }}</mj-text>
+          <mj-button href="{{ offer.url }}">Mehr Infos zum Artikel</mj-button>
+          <mj-text padding-top="18px" align="center">
+            {% if offer.has_special %}{% if offer.list_price %}<span style="color:#777;text-decoration:line-through">{{ offer.list_price }} €</span><br />{% endif %}
+            <strong style="font-size:26px;color:#ff9933">{{ offer.current_price }} €</strong>
+            {% if offer.list_price %}<br /><strong style="color:#ff9933">− {{ offer.discount_pct }} %</strong>{% endif %}
+            {% else %}<strong style="font-size:24px;color:#ff9933">{{ offer.current_price|default:'Preis auf Anfrage' }}{% if offer.current_price %} €{% endif %}</strong>{% endif %}
+            <br />pro {{ offer.unit }}<br />
+            {% if offer.min_purchase and offer.purchase_unit %}<small>Mindestmenge: {{ offer.min_purchase }} · Bestellschritt: {{ offer.purchase_unit }}</small><br />{% endif %}
+            {% if offer.shipping_free %}<small style="color:#ff9933">Kostenloser Versand</small>{% else %}<small>zzgl. Versandkosten</small>{% endif %}
+            <br /><small>zzgl. MwSt.</small>
+          </mj-text>
+        </mj-column>
+        <mj-column width="48%">
+          {% for image_url in offer.images %}
+          <mj-image src="{{ image_url }}" href="{{ offer.url }}" alt="{{ offer.title }}" padding-bottom="8px" />
+          {% endfor %}
+        </mj-column>
+      </mj-section>
+    </mj-wrapper>
+    {% endfor %}
+    <mj-wrapper css-class="editor-order">
+      <mj-section><mj-column>
+        <mj-text align="center"><h2 style="font-size:34px">{{ content.order_heading }}</h2></mj-text>
+        <mj-text align="center">{{ content.order_text|linebreaksbr }}</mj-text>
+        <mj-text align="right" color="#ff9933">Oder schnell anrufen: +49 (0)8641 97 59 0</mj-text>
+      </mj-column></mj-section>
+      {% if offers %}
+      <mj-section><mj-column><mj-table>
+        {% for offer in offers %}
+        <tr style="border-bottom:1px dotted #ff9933">
+          <td style="padding:8px 0;vertical-align:top" width="10%">{{ forloop.counter }}</td>
+          <td style="padding:8px 0;vertical-align:top;color:#ff9933;font-weight:bold" width="48%">{{ offer.sku }} {{ offer.title }}</td>
+          <td style="padding:8px 0;vertical-align:top;text-align:right" width="42%">{% if offer.has_special %}Aktionspreis{% else %}Preis{% endif %}: {{ offer.current_price }} €<br />pro {{ offer.unit }}</td>
+        </tr>
+        {% endfor %}
+      </mj-table></mj-column></mj-section>
+      {% endif %}
+    </mj-wrapper>
+    <mj-section css-class="editor-footer"><mj-column>
+      <mj-text font-size="10px" line-height="16px">
+        <p>* <a href="https://www.classei-shop.com/Versandinformationen?sPartner=email">Nähere Infos zu Versandkosten</a></p>
+        <p>Classei-Organisation – Egon Heimann GmbH | Staudacher Str. 7e | 83250 Marquartstein | Deutschland<br />
+        Fon: +49 (0)8641 97 59 0 | Fax: +49 (0)8641 97 59 20 | E-Mail: <a href="mailto:info@classei.de">info@classei.de</a> | <a href="https://www.classei.de">Classei.de</a></p>
+        <p>Sie erhalten diese E-Mail, weil Sie unser Kunde/Interessent sind oder wir schon Kontakt hatten.
+        Wenn Sie keine Informationen mehr erhalten möchten, tragen Sie sich bitte {modify}hier{/modify} aus.</p>
+      </mj-text>
+    </mj-column></mj-section>
+  </mj-body>
+</mjml>

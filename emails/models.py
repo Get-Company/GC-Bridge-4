@@ -75,6 +75,10 @@ class EmailCampaignCategory(BaseModel):
 
 
 class EmailCampaign(BaseModel):
+    class LayoutMode(models.TextChoices):
+        COMPONENTS = "components", _("Komponenten (bisheriger Aufbau)")
+        SIMPLE = "simple", _("Einfacher Editor")
+
     class Status(models.TextChoices):
         DRAFT = "draft", _("Entwurf")
         READY = "ready", _("Bereit")
@@ -85,6 +89,10 @@ class EmailCampaign(BaseModel):
         verbose_name=_("Interner Titel"),
         help_text=_("Wird nicht in der E-Mail angezeigt."),
     )
+    layout_mode = models.CharField(
+        max_length=20, choices=LayoutMode.choices, default=LayoutMode.COMPONENTS
+    )
+    editor_content = models.JSONField(default=dict, blank=True)
     status = models.CharField(
         max_length=20,
         choices=Status.choices,

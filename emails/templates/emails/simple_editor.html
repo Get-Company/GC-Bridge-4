@@ -1,0 +1,111 @@
+{% load static %}
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ campaign.internal_title }} · E-Mail-Editor</title>
+  <link rel="stylesheet" href="{% static 'emails/simple_editor.css' %}">
+</head>
+<body>
+  <header class="toolbar">
+    <a class="back" href="{% url 'admin:emails_emailcampaign_changelist' %}">← Kampagnen</a>
+    <div class="toolbar-title"><strong>{{ campaign.internal_title }}</strong><span>Einfacher E-Mail-Editor</span></div>
+    <div id="save-status" role="status">Gespeichert</div>
+    <a class="button secondary" href="{% url 'admin:emails_emailcampaign_change' campaign.pk %}">Kampagnendaten</a>
+    <button id="refresh-preview" class="button" type="button">Vorschau aktualisieren</button>
+  </header>
+  <div class="intro-banner">Texte und Medien links bearbeiten. Die E-Mail rechts wird aus MJML und den aktuellen Produktdaten erstellt.</div>
+  <main class="editor-grid">
+    <div class="editor-track" id="editor-track">
+      <section class="editor-card" data-anchor="editor-logo">
+        <span class="eyebrow">Kopfbereich · Medien</span>
+        <h2>Logo</h2>
+        <label for="logo_url">Bild-URL</label>
+        <input id="logo_url" data-field="logo_url" type="url" value="{{ content.logo_url }}" placeholder="https://…">
+      </section>
+      <section class="editor-card" data-anchor="editor-headline">
+        <span class="eyebrow">Titel</span>
+        <h2>Überschrift</h2>
+        <label for="headline">Hauptüberschrift</label>
+        <input id="headline" data-field="headline" type="text" value="{{ content.headline }}">
+        <label for="subheadline">Unterzeile</label>
+        <input id="subheadline" data-field="subheadline" type="text" value="{{ content.subheadline }}">
+      </section>
+      <section class="editor-card" data-anchor="editor-intro">
+        <span class="eyebrow">Einleitung</span>
+        <h2>Begrüßung & Text</h2>
+        <label for="salutation">Anrede vor dem Empfängernamen</label>
+        <input id="salutation" data-field="salutation" type="text" value="{{ content.salutation }}">
+        <label for="intro">Einleitung</label>
+        <textarea id="intro" data-field="intro" rows="7">{{ content.intro }}</textarea>
+        <small>Leerzeilen werden als Absätze angezeigt. Der Empfängername wird beim Versand eingesetzt.</small>
+      </section>
+      <section class="editor-card" data-anchor="editor-products">
+        <span class="eyebrow">Produkte</span>
+        <h2>Produktauswahl</h2>
+        <label for="product_heading">Überschrift</label>
+        <input id="product_heading" data-field="product_heading" type="text" value="{{ content.product_heading }}">
+        <label for="product-search">Produkt hinzufügen</label>
+        <input id="product-search" type="search" autocomplete="off" placeholder="Artikelnummer oder Name eingeben…">
+        <div id="search-results" class="search-results" role="listbox"></div>
+      </section>
+      {% for item in campaign_products %}
+      <section class="editor-card product-card" data-anchor="editor-product-{{ item.pk }}" data-product-id="{{ item.pk }}" data-catalog-id="{{ item.product_id }}">
+        <span class="eyebrow">Produkt {{ forloop.counter }}</span>
+        <h2>{{ item.product.erp_nr }} · {{ item.product.name }}</h2>
+        <div class="row-actions">
+          <button type="button" data-action="up" aria-label="Produkt nach oben">↑</button>
+          <button type="button" data-action="down" aria-label="Produkt nach unten">↓</button>
+          <button type="button" data-action="remove" class="danger">Entfernen</button>
+        </div>
+        <label for="section-{{ item.pk }}">Abschnittsüberschrift · optional</label>
+        <input id="section-{{ item.pk }}" data-product-text="section_heading" type="text" placeholder="z. B. Klarsichtmappen">
+        <label for="title-{{ item.pk }}">Titel in der E-Mail</label>
+        <input id="title-{{ item.pk }}" data-product-text="title" type="text" placeholder="{{ item.product.name|default:item.product.erp_nr }}">
+        <label for="description-{{ item.pk }}">Beschreibung</label>
+        <textarea id="description-{{ item.pk }}" data-product-text="description" rows="4" placeholder="Aus dem Produktkatalog"></textarea>
+        <label for="media-{{ item.pk }}">Produktbilder · eine URL pro Zeile</label>
+        <textarea id="media-{{ item.pk }}" data-product-text="media_urls" rows="3" placeholder="Automatisch aus dem Produktkatalog"></textarea>
+        <div class="price-grid">
+          <div><label for="mode-{{ item.pk }}">Sonderpreis</label>
+            <select id="mode-{{ item.pk }}" data-price-mode>
+              <option value="none" {% if not item.special_price_override and not item.discount_pct %}selected{% endif %}>Katalogpreis</option>
+              <option value="price" {% if item.special_price_override %}selected{% endif %}>Neuer Preis €</option>
+              <option value="percent" {% if item.discount_pct %}selected{% endif %}>Rabatt %</option>
+            </select></div>
+          <div><label for="value-{{ item.pk }}">Wert</label>
+            <input id="value-{{ item.pk }}" data-price-value type="number" min="0.01" step="0.01" value="{% if item.special_price_override %}{{ item.special_price_override }}{% elif item.discount_pct %}{{ item.discount_pct }}{% endif %}" placeholder="z. B. 19,95"></div>
+        </div>
+        <small>Preis und Rabatt gelten nur für diese Kampagne.</small>
+      </section>
+      {% endfor %}
+      <section class="editor-card" data-anchor="editor-order">
+        <span class="eyebrow">Abschluss</span>
+        <h2>Bestellung</h2>
+        <label for="order_heading">Überschrift</label>
+        <input id="order_heading" data-field="order_heading" type="text" value="{{ content.order_heading }}">
+        <label for="order_text">Bestellhinweis</label>
+        <textarea id="order_text" data-field="order_text" rows="3">{{ content.order_text }}</textarea>
+        <small>Die Produktliste im Bestellbereich entsteht automatisch.</small>
+      </section>
+    </div>
+    <div class="preview-column">
+      <div class="preview-label">Live-Vorschau <span>600 px · MJML</span></div>
+      <iframe id="email-preview" title="E-Mail-Vorschau" sandbox="allow-same-origin"></iframe>
+    </div>
+  </main>
+  {{ content|json_script:"initial-content" }}
+  <script>
+    window.emailEditorConfig = {
+      save: "{% url 'admin:emails_emailcampaign_simple_save' campaign.pk %}",
+      preview: "{% url 'admin:emails_emailcampaign_simple_preview' campaign.pk %}",
+      search: "{% url 'admin:emails_emailcampaign_simple_search' campaign.pk %}",
+      add: "{% url 'admin:emails_emailcampaign_simple_product_add' campaign.pk %}",
+      productBase: "{% url 'admin:emails_emailcampaign_simple_editor' campaign.pk %}product/",
+      csrf: "{{ csrf_token }}"
+    };
+  </script>
+  <script src="{% static 'emails/simple_editor.js' %}"></script>
+</body>
+</html>

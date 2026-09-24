@@ -8,10 +8,10 @@ from copy import deepcopy
 
 from django import forms
 from django.contrib import admin
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db.models import Case, IntegerField, Max, Q, When
-from django.http import HttpResponse, JsonResponse
-from django.urls import path
+from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
+from django.urls import path, reverse
 from django.utils.html import format_html, format_html_join
 from django.utils.translation import gettext_lazy as _
 from django_json_widget.widgets import JSONEditorWidget
@@ -669,9 +669,9 @@ class EmailCampaignComponentInline(BaseStackedInline):
 class EmailCampaignAdmin(BaseAdmin):
     list_display = (
         "internal_title",
+        "editor_link",
         "category_list",
         "send_at",
-        "component_count",
         "product_count",
         "status",
         "created_at",
@@ -686,7 +686,7 @@ class EmailCampaignAdmin(BaseAdmin):
         (
             _("Kampagne"),
             {
-                "fields": ("internal_title", "categories", "status", "send_at"),
+                "fields": ("internal_title", "categories", "status", "send_at", "simple_editor_link"),
             },
         ),
         (
@@ -704,7 +704,26 @@ class EmailCampaignAdmin(BaseAdmin):
             },
         ),
     )
-    readonly_fields = BaseAdmin.readonly_fields + ("campaign_context_info",)
+    readonly_fields = BaseAdmin.readonly_fields + ("campaign_context_info", "simple_editor_link")
+
+    def get_inlines(self, request, obj=None):
+        return [] if obj is None or obj.layout_mode == EmailCampaign.LayoutMode.SIMPLE else super().get_inlines(request, obj)
+
+    @admin.display(description=_("Editor"))
+    def editor_link(self, obj):
+        if obj.layout_mode != EmailCampaign.LayoutMode.SIMPLE:
+            return "—"
+        url = reverse("admin:emails_emailcampaign_simple_editor", args=[obj.pk])
+        return format_html('<a href="{}">Öffnen</a>', url)
+
+    @admin.display(description=_("E-Mail gestalten"))
+    def simple_editor_link(self, obj):
+        if not obj or not obj.pk:
+            return "Nach dem Speichern öffnet sich der einfache Editor."
+        if obj.layout_mode != EmailCampaign.LayoutMode.SIMPLE:
+            return "Diese bestehende Kampagne verwendet den bisherigen Komponentenaufbau."
+        url = reverse("admin:emails_emailcampaign_simple_editor", args=[obj.pk])
+        return format_html('<a class="button" href="{}">Einfachen Editor öffnen →</a>', url)
 
     def get_queryset(self, request):
         return super().get_queryset(request).prefetch_related("categories")
@@ -715,6 +734,8 @@ class EmailCampaignAdmin(BaseAdmin):
 
     @admin.display(description=_("Produkte"))
     def product_count(self, obj: EmailCampaign) -> int:
+        if obj.layout_mode == EmailCampaign.LayoutMode.SIMPLE:
+            return obj.campaign_products.count()
         return obj.components.filter(
             Q(product__isnull=False) | Q(campaign_product__isnull=False)
         ).distinct().count()
@@ -751,6 +772,15 @@ class EmailCampaignAdmin(BaseAdmin):
             obj.delete()
 
     def save_model(self, request, obj, form, change):
+        if not change:
+            source_id = request.GET.get(self.copy_source_param)
+            if source_id:
+                source_campaign = self.get_object(request, source_id)
+                if source_campaign and source_campaign.layout_mode == EmailCampaign.LayoutMode.SIMPLE:
+                    obj.layout_mode = EmailCampaign.LayoutMode.SIMPLE
+                    obj.editor_content = deepcopy(source_campaign.editor_content)
+            else:
+                obj.layout_mode = EmailCampaign.LayoutMode.SIMPLE
         super().save_model(request, obj, form, change)
         if change:
             return
@@ -762,10 +792,20 @@ class EmailCampaignAdmin(BaseAdmin):
                 return
             if not self.has_view_or_change_permission(request, source_campaign):
                 raise PermissionDenied
-            _copy_campaign_components(source_campaign, obj)
+            if source_campaign.layout_mode == EmailCampaign.LayoutMode.SIMPLE:
+                _copy_campaign_products(source_campaign, obj)
+            else:
+                _copy_campaign_components(source_campaign, obj)
             return
 
-        self._ensure_default_components(obj)
+        if obj.layout_mode == EmailCampaign.LayoutMode.COMPONENTS:
+            self._ensure_default_components(obj)
+
+    def response_add(self, request, obj, post_url_continue=None):
+        if obj.layout_mode == EmailCampaign.LayoutMode.SIMPLE and "_addanother" not in request.POST:
+            url = reverse("admin:emails_emailcampaign_simple_editor", args=[obj.pk])
+            return HttpResponseRedirect(url)
+        return super().response_add(request, obj, post_url_continue)
 
     def _ensure_default_components(self, campaign: EmailCampaign) -> None:
         if campaign.components.exists():
@@ -790,6 +830,12 @@ class EmailCampaignAdmin(BaseAdmin):
     def get_urls(self):
         urls = super().get_urls()
         custom = [
+            path("<int:campaign_id>/editor/", self.admin_site.admin_view(self.simple_editor_view), name="emails_emailcampaign_simple_editor"),
+            path("<int:campaign_id>/editor/save/", self.admin_site.admin_view(self.simple_editor_save_view), name="emails_emailcampaign_simple_save"),
+            path("<int:campaign_id>/editor/preview/", self.admin_site.admin_view(self.simple_editor_preview_view), name="emails_emailcampaign_simple_preview"),
+            path("<int:campaign_id>/editor/search/", self.admin_site.admin_view(self.simple_editor_search_view), name="emails_emailcampaign_simple_search"),
+            path("<int:campaign_id>/editor/product/add/", self.admin_site.admin_view(self.simple_editor_product_add_view), name="emails_emailcampaign_simple_product_add"),
+            path("<int:campaign_id>/editor/product/<int:product_id>/", self.admin_site.admin_view(self.simple_editor_product_view), name="emails_emailcampaign_simple_product"),
             path(
                 "<int:campaign_id>/export-html/",
                 self.admin_site.admin_view(self.export_html_view),
@@ -797,6 +843,174 @@ class EmailCampaignAdmin(BaseAdmin):
             ),
         ]
         return custom + urls
+
+    def _editor_campaign(self, request, campaign_id):
+        from django.shortcuts import get_object_or_404
+
+        campaign = get_object_or_404(EmailCampaign, pk=campaign_id)
+        if not self.has_change_permission(request, campaign):
+            raise PermissionDenied
+        if campaign.layout_mode != EmailCampaign.LayoutMode.SIMPLE:
+            raise PermissionDenied
+        return campaign
+
+    def simple_editor_view(self, request, campaign_id):
+        from django.shortcuts import render
+        from emails.simple_editor import content_for
+
+        campaign = self._editor_campaign(request, campaign_id)
+        return render(request, "emails/simple_editor.html", {
+            "campaign": campaign,
+            "content": content_for(campaign),
+            "campaign_products": campaign.campaign_products.select_related("product").order_by("order", "id"),
+        })
+
+    def simple_editor_save_view(self, request, campaign_id):
+        from emails.simple_editor import DEFAULT_CONTENT, valid_media_url
+
+        campaign = self._editor_campaign(request, campaign_id)
+        if request.method != "POST":
+            return JsonResponse({"error": "POST erforderlich."}, status=405)
+        try:
+            payload = json.loads(request.body)
+            if not isinstance(payload, dict):
+                raise ValueError("Ungültige Daten.")
+            content = {**(campaign.editor_content or {})}
+            for key in DEFAULT_CONTENT:
+                if key == "product_texts":
+                    continue
+                if key in payload:
+                    content[key] = str(payload[key])[:10000]
+            if not valid_media_url(content.get("logo_url", DEFAULT_CONTENT["logo_url"])):
+                raise ValueError("Die Logo-URL muss mit http oder https beginnen.")
+            product_texts = payload.get("product_texts")
+            if isinstance(product_texts, dict):
+                allowed_ids = {str(pk) for pk in campaign.campaign_products.values_list("product_id", flat=True)}
+                for item in product_texts.values():
+                    if not isinstance(item, dict):
+                        continue
+                    for url in str(item.get("media_urls", "")).splitlines():
+                        if url.strip() and not valid_media_url(url):
+                            raise ValueError("Produktbilder benötigen eine gültige http- oder https-URL.")
+                content["product_texts"] = {
+                    key: {
+                        field: str(value)[:10000]
+                        for field, value in item.items() if field in {"section_heading", "title", "description", "media_urls"}
+                    }
+                    for key, item in product_texts.items()
+                    if key in allowed_ids and isinstance(item, dict)
+                }
+            campaign.editor_content = content
+            campaign.save(update_fields=["editor_content"])
+            return JsonResponse({"saved": True})
+        except (ValueError, TypeError) as exc:
+            return JsonResponse({"error": str(exc)}, status=400)
+
+    def simple_editor_preview_view(self, request, campaign_id):
+        from emails.simple_editor import build_simple_mjml
+
+        campaign = self._editor_campaign(request, campaign_id)
+        if request.method != "POST":
+            return JsonResponse({"error": "POST erforderlich."}, status=405)
+        try:
+            content = json.loads(request.body)
+            mjml = build_simple_mjml(campaign, override=content)
+            return JsonResponse({"html": compile_mjml_to_html(mjml)})
+        except Exception:
+            logger.exception("Simple email preview failed for campaign %s", campaign_id)
+            return JsonResponse({"error": "Vorschau konnte nicht erstellt werden."}, status=500)
+
+    def simple_editor_search_view(self, request, campaign_id):
+        from products.models import Product
+
+        self._editor_campaign(request, campaign_id)
+        query = request.GET.get("q", "").strip()[:100]
+        if len(query) < 2:
+            return JsonResponse({"products": []})
+        products = Product.objects.filter(is_archived=False).filter(
+            Q(erp_nr__icontains=query) | Q(sku__icontains=query) | Q(name__icontains=query)
+        ).order_by("erp_nr")[:12]
+        return JsonResponse({"products": [
+            {"id": product.pk, "label": f"{product.erp_nr} · {product.name or ''}"}
+            for product in products
+        ]})
+
+    def simple_editor_product_add_view(self, request, campaign_id):
+        from products.models import Product
+
+        campaign = self._editor_campaign(request, campaign_id)
+        if request.method != "POST":
+            return JsonResponse({"error": "POST erforderlich."}, status=405)
+        try:
+            payload = json.loads(request.body)
+            product = Product.objects.get(pk=payload.get("product_id"), is_archived=False)
+            campaign_product, _ = EmailCampaignProduct.objects.get_or_create(
+                campaign=campaign, product=product,
+                defaults={"order": campaign.campaign_products.count()},
+            )
+            return JsonResponse({"id": campaign_product.pk})
+        except (Product.DoesNotExist, ValueError, TypeError):
+            return JsonResponse({"error": "Produkt nicht gefunden."}, status=400)
+
+    def simple_editor_product_view(self, request, campaign_id, product_id):
+        from decimal import Decimal, InvalidOperation
+
+        campaign = self._editor_campaign(request, campaign_id)
+        if request.method != "POST":
+            return JsonResponse({"error": "POST erforderlich."}, status=405)
+        try:
+            item = campaign.campaign_products.get(pk=product_id)
+            payload = json.loads(request.body)
+            action = payload.get("action")
+            if action == "remove":
+                item.delete()
+                content = dict(campaign.editor_content or {})
+                product_texts = dict(content.get("product_texts") or {})
+                product_texts.pop(str(item.product_id), None)
+                content["product_texts"] = product_texts
+                campaign.editor_content = content
+                campaign.save(update_fields=["editor_content"])
+            elif action == "price":
+                mode = payload.get("mode")
+                value = str(payload.get("value", "")).replace(",", ".").strip()
+                amount = Decimal(value) if value else None
+                if amount is not None and (not amount.is_finite() or amount <= 0):
+                    raise ValueError("Der Wert muss größer als 0 sein.")
+                if mode == "price":
+                    if amount is not None:
+                        from emails.mjml import ProductEmailProxy, _campaign_sales_channel_ids
+
+                        list_price = ProductEmailProxy(
+                            item.product,
+                            sales_channel_ids=_campaign_sales_channel_ids(campaign),
+                        ).price
+                        if list_price is not None and amount >= list_price:
+                            raise ValueError("Der Sonderpreis muss unter dem Listenpreis liegen.")
+                    item.special_price_override, item.discount_pct = amount, None
+                elif mode == "percent":
+                    if amount is not None and amount >= 100:
+                        raise ValueError("Rabatt muss unter 100 % liegen.")
+                    item.special_price_override, item.discount_pct = None, amount
+                elif mode == "none":
+                    item.special_price_override = item.discount_pct = None
+                else:
+                    raise ValueError("Unbekannter Preismodus.")
+                item.full_clean()
+                item.save(update_fields=["special_price_override", "discount_pct"])
+            elif action in {"up", "down"}:
+                items = list(campaign.campaign_products.order_by("order", "id"))
+                index = next(i for i, row in enumerate(items) if row.pk == item.pk)
+                other = index + (-1 if action == "up" else 1)
+                if 0 <= other < len(items):
+                    items[index], items[other] = items[other], items[index]
+                    for position, row in enumerate(items):
+                        row.order = position
+                    EmailCampaignProduct.objects.bulk_update(items, ["order"])
+            else:
+                raise ValueError("Unbekannte Aktion.")
+            return JsonResponse({"saved": True})
+        except (EmailCampaignProduct.DoesNotExist, ValueError, InvalidOperation, StopIteration, ValidationError) as exc:
+            return JsonResponse({"error": str(exc)}, status=400)
 
     def export_html_view(self, request, campaign_id: int):
         try:

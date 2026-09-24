@@ -108,19 +108,19 @@ class ProductEmailProxy:
     def email_special_price(self) -> Decimal | None:
         if self._override is not None:
             return self._override
+        if self._discount_pct is not None:
+            list_price = self.price
+            if list_price is None:
+                return None
+            return _round_up_5ct(
+                list_price * (Decimal("100") - Decimal(str(self._discount_pct))) / Decimal("100")
+            ).quantize(Decimal("0.01"))
         entry = self._get_price_entry()
         if entry is not None and hasattr(entry, "get_special_price"):
             special_price = entry.get_special_price(as_float=False)
             if special_price is not None:
                 return special_price
-        if self._discount_pct is None:
-            return None
-        list_price = self.price
-        if list_price is None:
-            return None
-        return _round_up_5ct(
-            list_price * (Decimal("100") - Decimal(str(self._discount_pct))) / Decimal("100")
-        ).quantize(Decimal("0.01"))
+        return None
 
     @property
     def price(self) -> Decimal | None:
@@ -185,8 +185,11 @@ class ProductEmailProxy:
         return images[0] if images else None
 
     def _get_price_entry(self):
+        if "_cached_price_entry" in self.__dict__:
+            return self._cached_price_entry
         prices = getattr(self._product, "prices", None)
         if prices is None:
+            self._cached_price_entry = None
             return None
         queryset = prices.all()
         if self._sales_channel_ids:
@@ -196,9 +199,11 @@ class ProductEmailProxy:
                 .first()
             )
             if entry:
+                self._cached_price_entry = entry
                 return entry
         entry = queryset.filter(sales_channel__is_default=True).order_by("pk").first()
-        return entry or queryset.order_by("pk").first()
+        self._cached_price_entry = entry or queryset.order_by("pk").first()
+        return self._cached_price_entry
 
 
 def _campaign_sales_channel_ids(campaign: "EmailCampaign") -> tuple[int, ...]:
@@ -463,6 +468,10 @@ def render_campaign_mjml(
     recipient: "NewsletterRecipient | None" = None,
 ) -> str:
     """Renders a campaign to a MJML string using Jinja2 component templates."""
+    if getattr(campaign, "layout_mode", "components") == "simple":
+        from emails.simple_editor import build_simple_mjml
+
+        return build_simple_mjml(campaign, recipient=recipient)
     sales_channel_ids = _campaign_sales_channel_ids(campaign)
 
     components = _campaign_components(campaign)
