@@ -59,7 +59,7 @@ class RuleBuilderOverviewSerializerTest(TestCase):
         r = serialize_rules_for_overview()[0]
         self.assertTrue(r["actions"][0]["value_is_variable"])
 
-    def test_dataset_action_identifies_area_and_short_name(self):
+    def test_dataset_action_uses_abbreviation_and_short_description(self):
         dataset = MicrotechDatasetCatalog.objects.create(
             code="vorgang_vorgange",
             name="Vorgang",
@@ -82,7 +82,7 @@ class RuleBuilderOverviewSerializerTest(TestCase):
 
         self.assertEqual(
             action["field"],
-            "Umsatzsteuerkategorie · Vorgang.UStKat",
+            "UStKat - Umsatzsteuerkategorie",
         )
 
 

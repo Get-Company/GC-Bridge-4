@@ -17,6 +17,7 @@ from microtech.rule_builder import (
 )
 from microtech.rule_mapping import friendly_trigger_label
 from microtech.rule_engine.editor import serialize_rule_for_edit
+from microtech.rule_field_labels import microtech_field_ui_label, shop_field_ui_label
 
 _VARIABLE_PATTERN = re.compile(r"\{\{.*?\}\}")
 
@@ -29,9 +30,13 @@ def _field_label(path: str, field_map: dict) -> str:
         return "?"
     field_def = field_map.get(path)
     label = str(getattr(field_def, "label", "") or "").strip() if field_def else ""
-    if not label or label == path:
+    if not field_def:
         return path
-    return f"{label} · {path}"
+    return shop_field_ui_label(
+        path,
+        label,
+        context_root=getattr(field_def, "context_root", "orders.Order"),
+    )
 
 
 def _operator_label(code: str, operator_map: dict) -> str:
@@ -95,20 +100,17 @@ def _serialize_action(action) -> dict:
     if action.dataset_field_id:
         try:
             dataset_field = action.dataset_field
-            dataset_name = str(dataset_field.dataset.name or "Microtech")
-            technical_name = f"{dataset_name}.{dataset_field.field_name}"
-            label = str(dataset_field.label or dataset_field.field_name or "")
-            field_name = (
-                f"{label} · {technical_name}"
-                if label and label != technical_name
-                else technical_name
+            field_name = microtech_field_ui_label(
+                dataset_field.field_name,
+                dataset_field.label,
+                dataset_name=dataset_field.dataset.name,
             )
             field_title = field_name
         except Exception:
             field_name = ""
     elif action.graphql_field:
         graphql_field = str(action.graphql_field)
-        field_name = f"{graphql_field.rsplit('.', 1)[-1]} · {graphql_field}"
+        field_name = f"{graphql_field.rsplit('.', 1)[-1]} (GraphQL)"
         target_scope = action.target_scope or "customer"
         if target_scope != "customer":
             scope_label = str(action.get_target_scope_display() or target_scope)

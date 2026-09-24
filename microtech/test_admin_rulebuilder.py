@@ -156,7 +156,8 @@ class MicrotechOrderRuleAdminAutocompleteTest(TestCase):
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         rendered = " ".join(item.get("text", "") for item in payload.get("results", []))
-        self.assertIn("Vorgang.ZahlArt - Zahlungsart", rendered)
+        self.assertIn("ZahlArt - Zahlungsart", rendered)
+        self.assertNotIn("Vorgang.ZahlArt", rendered)
         self.assertNotIn("CalcFoo", rendered)
         self.assertNotIn("ReadOnlyFoo", rendered)
         self.assertNotIn("KuBez", rendered)
@@ -173,7 +174,7 @@ class MicrotechOrderRuleAdminAutocompleteTest(TestCase):
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         rendered = " ".join(item.get("text", "") for item in payload.get("results", []))
-        self.assertIn("Vorgang.ZahlArt - Zahlungsart", rendered)
+        self.assertIn("ZahlArt - Zahlungsart", rendered)
 
     def test_dataset_field_autocomplete_supports_label_search(self):
         response = self.client.get(
@@ -187,4 +188,4 @@ class MicrotechOrderRuleAdminAutocompleteTest(TestCase):
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         rendered = " ".join(item.get("text", "") for item in payload.get("results", []))
-        self.assertIn("Vorgang.ZahlArt - Zahlungsart", rendered)
+        self.assertIn("ZahlArt - Zahlungsart", rendered)

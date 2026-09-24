@@ -43,17 +43,13 @@
     var m = document.cookie.match("(^|;)\\s*" + name + "\\s*=\\s*([^;]+)");
     return m ? m.pop() : "";
   }
-  function fieldDisplay(label, technicalName) {
-    label = String(label || "").trim();
-    technicalName = String(technicalName || "").trim();
-    if (!label || label === technicalName) return technicalName || label;
-    return label + " · " + technicalName;
-  }
   function shopFieldDisplay(field) {
-    return fieldDisplay(field.label || field.path, field.path);
+    return field.label || field.path;
   }
   function datasetFieldDisplay(field) {
-    return fieldDisplay(field.label || field.fieldName, field.datasetName + "." + field.fieldName);
+    var name = String(field.fieldName || "").trim();
+    var label = String(field.label || "").trim();
+    return name && label && name !== label ? name + " - " + label : name || label;
   }
   function datasetFieldTitle(field) {
     return [
@@ -63,11 +59,11 @@
     ].filter(Boolean).join(" · ");
   }
   function graphqlFieldDisplay(field) {
-    return fieldDisplay(field.name, field.value);
+    return field.uiLabel || field.name || field.value;
   }
   function graphqlFieldDisplayFromValue(value) {
     value = String(value || "").trim();
-    return value ? fieldDisplay(value.split(".").pop(), value) : "";
+    return value ? value.split(".").pop() + " (GraphQL)" : "";
   }
 
   // ---------- shared META cache ----------
@@ -721,7 +717,7 @@
           return [graphqlFieldDisplay(item), item.typeLabel, item.description].filter(Boolean).join(" · ");
         },
         searchText: function (item) {
-          return [item.name, item.value, item.type, item.typeLabel, item.description].join(" ");
+          return [item.name, item.uiLabel, item.value, item.type, item.typeLabel, item.description].join(" ");
         },
         onSelect: function (item) {
           markDirty();
@@ -757,6 +753,7 @@
               var item = {
                 value: group.input_type + "." + field.name,
                 name: field.name,
+                uiLabel: field.ui_label || "",
                 type: group.input_type,
                 typeLabel: group.label || group.input_type,
                 description: field.description || "",
@@ -766,6 +763,11 @@
             });
           });
           picker.setItems(flat);
+          var selected = flat.find(function (item) { return item.value === action.graphql_field; });
+          if (selected) {
+            action.graphql_field_label = graphqlFieldDisplay(selected);
+            renderSummary();
+          }
           picker.setEmptyText("Keine passenden API-Felder.");
           sourceHint.textContent = GQLFIELD_SOURCE === "fallback"
             ? "Fallback-Liste – API nicht erreichbar"

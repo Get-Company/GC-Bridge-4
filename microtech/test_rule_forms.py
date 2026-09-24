@@ -91,6 +91,7 @@ class MicrotechOrderRuleFormsTest(TestCase):
         field = MicrotechOrderRuleDjangoField.objects.get(field_path="customer__company")
 
         self.assertEqual(field.label, "Customer - Firma (Shopware) (customer__company)")
+        self.assertEqual(str(field), "Kunde: customer.company - Firma (Shopware)")
 
     def test_condition_form_keeps_datetime_input_for_existing_purchase_date_time_value(self):
         condition = MicrotechOrderRuleCondition(

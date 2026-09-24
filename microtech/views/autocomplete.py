@@ -14,6 +14,7 @@ from microtech.rule_builder import (
     filter_dataset_field_queryset_for_action_target,
     get_allowed_operator_codes,
 )
+from microtech.rule_field_labels import shop_field_paths_matching_api
 from unfold.views import BaseAutocompleteView
 
 
@@ -38,6 +39,7 @@ class MicrotechOrderRuleDjangoFieldAutocompleteView(BaseAutocompleteView):
             | Q(label__icontains=query)
             | Q(hint__icontains=query)
             | Q(example__icontains=query)
+            | Q(field_path__in=shop_field_paths_matching_api(query))
         )
 
 

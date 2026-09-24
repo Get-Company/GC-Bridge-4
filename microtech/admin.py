@@ -54,6 +54,12 @@ from microtech.rule_engine.editor import (
     serialize_rule_for_edit,
 )
 from microtech.rule_engine.overview import serialize_rules_for_overview
+from microtech.rule_field_labels import (
+    graphql_field_ui_label,
+    microtech_list_labels,
+    shop_field_ui_label,
+    shop_field_paths_matching_api,
+)
 from microtech.rule_mapping import (
     build_mapping_checklist,
     ensure_default_rule_categories,
@@ -589,7 +595,28 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
         from microtech.graphql_schema import get_graphql_input_catalog
 
         refresh = request.GET.get("refresh") in ("1", "true", "yes")
-        return JsonResponse(get_graphql_input_catalog(refresh=refresh))
+        catalog = get_graphql_input_catalog(refresh=refresh)
+        groups = catalog.get("groups") or []
+        catalog_labels = microtech_list_labels()
+        display_groups = [
+            {
+                **group,
+                "fields": [
+                    {
+                        **field,
+                        "ui_label": graphql_field_ui_label(
+                            group.get("input_type") or "",
+                            field.get("name") or "",
+                            field.get("description") or "",
+                            catalog_labels,
+                        ),
+                    }
+                    for field in group.get("fields") or []
+                ],
+            }
+            for group in groups
+        ]
+        return JsonResponse({**catalog, "groups": display_groups})
 
     def rule_dataset_fields_grouped_view(self, request, **kwargs):
         """All active dataset fields grouped by dataset, for the target dropdown."""
@@ -598,6 +625,7 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
         from microtech.models import MicrotechDatasetCatalog
 
         datasets = []
+        catalog_labels = microtech_list_labels()
         for cat in (
             MicrotechDatasetCatalog.objects
             .filter(is_active=True)
@@ -608,7 +636,7 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
                 {
                     "id": f.id,
                     "field_name": f.field_name,
-                    "label": (f.label or f.field_name),
+                    "label": catalog_labels.get((cat.name, f.field_name), f.label or f.field_name),
                     "field_type": f.field_type or "",
                 }
                 for f in sorted(
@@ -892,7 +920,7 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
                 {
                     "id": item.catalog_id,
                     "path": item.path,
-                    "label": item.label,
+                    "label": shop_field_ui_label(item.path, item.label, context_root=item.context_root),
                     "value_kind": item.value_kind,
                     "hint": item.hint,
                     "example": item.example,
@@ -914,7 +942,7 @@ class MicrotechOrderRuleAdmin(BaseAdmin):
                 {
                     "id": None,
                     "path": item.path,
-                    "label": item.label,
+                    "label": shop_field_ui_label(item.path, item.label, context_root=item.context_root),
                     "value_kind": item.value_kind,
                     "hint": item.hint,
                     "example": item.example,
@@ -1122,6 +1150,13 @@ class MicrotechOrderRuleDjangoFieldAdmin(BaseAdmin):
     search_fields = ("field_path", "label", "hint", "example")
     list_filter = ("is_active", "value_kind")
     ordering = ("priority", "field_path", "id")
+
+    def get_search_results(self, request, queryset, search_term):
+        results, may_have_duplicates = super().get_search_results(request, queryset, search_term)
+        api_paths = shop_field_paths_matching_api(search_term)
+        if api_paths:
+            results = results | queryset.filter(field_path__in=api_paths)
+        return results, may_have_duplicates
     fieldsets = (
         (
             "Django Feldkatalog",

@@ -37,6 +37,7 @@ from microtech.rule_builder import (
     get_operator_engine_map,
 )
 from microtech.rule_engine.templates import TemplateValidationError, validate_template
+from microtech.rule_field_labels import microtech_field_ui_label
 
 
 _ADDRESS_CONTEXT_ROOTS = {"customer.Address"}
@@ -86,14 +87,11 @@ def _serialize_action(action) -> dict:
     if action.dataset_field_id:
         try:
             dataset_field = action.dataset_field
-            dataset_name = str(dataset_field.dataset.name or "Microtech")
             field_name = str(dataset_field.field_name or "")
-            label = str(dataset_field.label or field_name)
-            technical_name = f"{dataset_name}.{field_name}" if field_name else dataset_name
-            dataset_field_label = (
-                f"{label} · {technical_name}"
-                if label and label != technical_name
-                else technical_name
+            dataset_field_label = microtech_field_ui_label(
+                field_name,
+                dataset_field.label,
+                dataset_name=dataset_field.dataset.name,
             )
         except (AttributeError, MicrotechDatasetField.DoesNotExist):
             # A deleted catalog entry must not prevent an existing rule from
@@ -104,7 +102,7 @@ def _serialize_action(action) -> dict:
     graphql_field_label = ""
     if graphql_field:
         field_name = graphql_field.rsplit(".", 1)[-1]
-        graphql_field_label = f"{field_name} · {graphql_field}"
+        graphql_field_label = f"{field_name} (GraphQL)"
 
     return {
         "action_type": action.action_type,

@@ -92,22 +92,14 @@
 
   function getDatasetFieldDisplay(datasetFieldDef) {
     if (!datasetFieldDef) return "";
-    const datasetDef = datasetById(datasetFieldDef.dataset_id);
-    const datasetName = datasetDef ? datasetDef.name : "Microtech";
-    const base = `${datasetName}.${datasetFieldDef.field_name || ""}`;
+    const base = String(datasetFieldDef.field_name || "").trim();
     const label = String(datasetFieldDef.label || "").trim();
-    return label ? `${base} - ${label}` : base;
+    return label && label !== base ? `${base} - ${label}` : base;
   }
 
   function getDatasetFieldDisplayForSelect(select) {
     const datasetFieldDef = datasetFieldById(select ? select.value : "");
     return datasetFieldDef ? getDatasetFieldDisplay(datasetFieldDef) : getSelectedOptionText(select);
-  }
-
-  function datasetById(idValue) {
-    if (!RULE_META || !Array.isArray(RULE_META.datasets)) return null;
-    const id = String(idValue || "");
-    return RULE_META.datasets.find((item) => String(item.id) === id) || null;
   }
 
   function isRulebuilderOperator(element) {

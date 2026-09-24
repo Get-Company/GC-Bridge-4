@@ -601,17 +601,17 @@ class MicrotechDatasetField(BaseModel):
 
     @property
     def display_label(self) -> str:
-        dataset_name = "?"
+        from microtech.rule_field_labels import microtech_field_ui_label
+
+        dataset_name = ""
         if self.dataset_id:
             try:
-                dataset_name = self.dataset.name
+                dataset_name = str(self.dataset.name or "")
             except MicrotechDatasetCatalog.DoesNotExist:
-                dataset_name = "?"
-        base = f"{dataset_name}.{self.field_name}"
-        label = str(self.label or "").strip()
-        if label:
-            return f"{base} - {label}"
-        return base
+                pass
+        return microtech_field_ui_label(
+            self.field_name, self.label, dataset_name=dataset_name
+        )
 
     def __str__(self) -> str:
         return self.display_label
@@ -803,7 +803,9 @@ class MicrotechOrderRuleDjangoField(BaseModel):
         ordering = ("priority", "field_path", "id")
 
     def __str__(self) -> str:
-        return f"{self.label} [{self.field_path}]"
+        from microtech.rule_field_labels import shop_field_ui_label
+
+        return shop_field_ui_label(self.field_path, self.label)
 
 
 class MicrotechOrderRuleDjangoFieldPolicy(BaseModel):

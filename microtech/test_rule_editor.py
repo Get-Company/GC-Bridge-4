@@ -48,7 +48,7 @@ class SerializeForEditTest(TestCase):
         self.assertEqual(data["root_group"]["logic"], MicrotechOrderRule.ConditionLogic.ALL)
         self.assertEqual(len(data["root_group"]["children"]), 2)
 
-    def test_serializes_dataset_target_with_area_and_short_name(self):
+    def test_serializes_dataset_target_with_abbreviation_and_short_description(self):
         dataset = MicrotechDatasetCatalog.objects.create(
             code="adressen", name="Adressen", source_identifier="Adressen - Adressen",
         )
@@ -67,7 +67,7 @@ class SerializeForEditTest(TestCase):
 
         self.assertEqual(
             action["dataset_field_label"],
-            "Umsatzsteuerkategorie · Adressen.UStKat",
+            "UStKat - Umsatzsteuerkategorie",
         )
 
 
