@@ -1,0 +1,11 @@
+{% if offers %}
+<mj-section css-class="{{ editor_class }}"><mj-column><mj-table>
+  {% for offer in offers %}
+  <tr style="border-bottom:1px dotted #ff9933">
+    <td style="padding:8px 0;vertical-align:top" width="10%">{{ forloop.counter }}</td>
+    <td style="padding:8px 0;vertical-align:top;color:#ff9933;font-weight:bold" width="48%">{{ offer.sku }} {{ offer.title }}</td>
+    <td style="padding:8px 0;vertical-align:top;text-align:right" width="42%">{% if offer.has_special %}Aktionspreis{% else %}Preis{% endif %}: {{ offer.current_price }} €<br />pro {{ offer.unit }}</td>
+  </tr>
+  {% endfor %}
+</mj-table></mj-column></mj-section>
+{% endif %}

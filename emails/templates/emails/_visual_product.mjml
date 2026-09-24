@@ -1,0 +1,19 @@
+<mj-wrapper css-class="visual-product-{{ offer.id }} {{ editor_class }}">
+  {% if offer.section_heading %}<mj-section><mj-column><mj-text align="center" font-size="28px" color="#ff9933">{{ offer.section_heading }}</mj-text></mj-column></mj-section>{% endif %}
+  <mj-section><mj-column><mj-text font-size="24px" font-weight="bold">{{ offer.title }}</mj-text></mj-column></mj-section>
+  <mj-section>
+    <mj-column width="52%">
+      <mj-text>{{ offer.description|linebreaksbr }}</mj-text>
+      <mj-button href="{{ offer.url }}">Mehr Infos zum Artikel</mj-button>
+      <mj-text align="center" color="#ff9933" font-size="24px">
+        {% if offer.has_special and offer.list_price %}Listenpreis: {{ offer.list_price }} €<br />{% endif %}
+        {% if offer.current_price %}{{ offer.current_price }} €{% else %}Preis auf Anfrage{% endif %}
+        {% if offer.has_special and offer.list_price %}<br />− {{ offer.discount_pct }} %{% endif %}
+        <br />pro {{ offer.unit }}
+      </mj-text>
+    </mj-column>
+    <mj-column width="48%">
+      {% for image_url in offer.images %}<mj-image src="{{ image_url }}" href="{{ offer.url }}" alt="{{ offer.title }}" padding-bottom="8px" />{% endfor %}
+    </mj-column>
+  </mj-section>
+</mj-wrapper>

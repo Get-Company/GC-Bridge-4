@@ -1,0 +1,58 @@
+{% load static %}
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ campaign.internal_title }} · Visueller MJML-Editor</title>
+  <link rel="stylesheet" href="{% static 'emails/visual_editor.css' %}">
+</head>
+<body>
+  <header class="toolbar">
+    <a class="back" href="{% url 'admin:emails_emailcampaign_change' campaign.pk %}">← Kampagne</a>
+    <div class="title"><strong>{{ campaign.internal_title }}</strong><small>Visueller MJML-Editor</small></div>
+    <span id="save-status" role="status">Bereit</span>
+    <button type="button" id="undo" title="Rückgängig" aria-label="Rückgängig">↶</button>
+    <button type="button" id="redo" title="Wiederholen" aria-label="Wiederholen">↷</button>
+    <button type="button" id="refresh">Vorschau</button>
+    <button type="button" id="save" class="primary">Speichern</button>
+  </header>
+  {% if campaign.layout_mode != 'visual' %}
+  <div class="notice">{% if campaign.layout_mode == 'simple' %}Texte, Medien und Produkte aus dem einfachen Editor dienen als Ausgangspunkt.{% else %}Dieser Entwurf startet mit der Classei-Standardvorlage; bisherige Komponenten werden nicht übernommen.{% endif %} Erst „Speichern“ aktiviert den visuellen Aufbau für diese Kampagne.</div>
+  {% endif %}
+  <main class="workspace">
+    <aside class="palette panel">
+      <div class="panel-heading"><h2>Bausteine</h2><p>Auf eine passende Stelle ziehen oder anklicken.</p></div>
+      <div id="palette-list"></div>
+    </aside>
+    <section class="structure panel" aria-label="MJML-Dokument">
+      <div class="panel-heading"><h2>Dokument</h2><p>Head und Body werden getrennt gerendert. Bausteine lassen sich verschieben und verschachteln.</p></div>
+      <div id="document-tree"></div>
+    </section>
+    <aside class="inspector panel">
+      <div class="panel-heading"><h2>Eigenschaften</h2><p>Text und MJML-Attribute des gewählten Bausteins.</p></div>
+      <div id="node-inspector" class="inspector-content">Baustein auswählen.</div>
+    </aside>
+    <section class="preview panel" aria-label="Live-Vorschau">
+      <div class="preview-heading"><h2>Live-Vorschau</h2><button type="button" id="toggle-mjml">MJML anzeigen</button></div>
+      <iframe id="preview-frame" title="E-Mail-Vorschau" sandbox="allow-same-origin"></iframe>
+      <pre id="mjml-source" hidden></pre>
+    </section>
+  </main>
+  {{ document|json_script:"visual-document" }}
+  {{ schema|json_script:"visual-schema" }}
+  {{ products|json_script:"visual-products" }}
+  <script>
+    window.visualEditorConfig = {
+      save: "{% url 'admin:emails_emailcampaign_visual_save' campaign.pk %}",
+      preview: "{% url 'admin:emails_emailcampaign_visual_preview' campaign.pk %}",
+      search: "{% url 'admin:emails_emailcampaign_simple_search' campaign.pk %}",
+      add: "{% url 'admin:emails_emailcampaign_simple_product_add' campaign.pk %}",
+      productBase: "{% url 'admin:emails_emailcampaign_simple_editor' campaign.pk %}product/",
+      activeVisual: {% if campaign.layout_mode == 'visual' %}true{% else %}false{% endif %},
+      csrf: "{{ csrf_token }}"
+    };
+  </script>
+  <script src="{% static 'emails/visual_editor.js' %}"></script>
+</body>
+</html>

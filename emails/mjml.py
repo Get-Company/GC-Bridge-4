@@ -472,6 +472,10 @@ def render_campaign_mjml(
         from emails.simple_editor import build_simple_mjml
 
         return build_simple_mjml(campaign, recipient=recipient)
+    if getattr(campaign, "layout_mode", "components") == "visual":
+        from emails.visual_editor import render_visual_mjml
+
+        return render_visual_mjml((campaign.editor_content or {}).get("visual_document"), campaign=campaign, recipient=recipient)
     sales_channel_ids = _campaign_sales_channel_ids(campaign)
 
     components = _campaign_components(campaign)

@@ -78,6 +78,7 @@ class EmailCampaign(BaseModel):
     class LayoutMode(models.TextChoices):
         COMPONENTS = "components", _("Komponenten (bisheriger Aufbau)")
         SIMPLE = "simple", _("Einfacher Editor")
+        VISUAL = "visual", _("Visueller MJML-Editor")
 
     class Status(models.TextChoices):
         DRAFT = "draft", _("Entwurf")

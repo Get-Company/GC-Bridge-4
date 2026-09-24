@@ -17,6 +17,40 @@
     });
   });
 
+  function insertHeading(heading) {
+    const afterProduct = String(heading.after_product_id || '');
+    const card = document.createElement('section');
+    card.className = 'editor-card heading-card';
+    card.dataset.anchor = `editor-heading-${heading.id}`;
+    card.dataset.headingId = heading.id;
+    card.dataset.afterProductId = afterProduct;
+    card.innerHTML = `
+      <span class="eyebrow">Zwischenblock</span>
+      <h2>Zwischenüberschrift</h2>
+      <div class="row-actions"><button type="button" data-remove-heading class="danger">Entfernen</button></div>
+      <label for="heading-title-${heading.id}">Überschrift links</label>
+      <input id="heading-title-${heading.id}" data-heading-field="title" type="text" placeholder="z. B. Bestellformular">
+      <label for="heading-center-${heading.id}">Text mittig · optional</label>
+      <textarea id="heading-center-${heading.id}" data-heading-field="center_text" rows="2" placeholder="Einfach antworten und Anzahl eingeben"></textarea>
+      <label for="heading-right-${heading.id}">Text rechts · optional</label>
+      <textarea id="heading-right-${heading.id}" data-heading-field="right_text" rows="2" placeholder="oder schnell anrufen: …"></textarea>`;
+    card.querySelector('[data-heading-field="title"]').value = heading.title || '';
+    card.querySelector('[data-heading-field="center_text"]').value = heading.center_text || '';
+    card.querySelector('[data-heading-field="right_text"]').value = heading.right_text || '';
+    let anchor = afterProduct
+      ? Array.from(document.querySelectorAll('.product-card')).find(item => item.dataset.productId === afterProduct)
+      : document.querySelector('[data-anchor="editor-products"]');
+    if (!anchor) anchor = Array.from(document.querySelectorAll('.product-card')).at(-1) || document.querySelector('[data-anchor="editor-products"]');
+    while (anchor.nextElementSibling?.classList.contains('heading-card') &&
+           anchor.nextElementSibling.dataset.afterProductId === afterProduct) {
+      anchor = anchor.nextElementSibling;
+    }
+    anchor.after(card);
+    return card;
+  }
+
+  (initial.headings || []).forEach(insertHeading);
+
   function content() {
     const data = {};
     document.querySelectorAll('[data-field]').forEach(input => { data[input.dataset.field] = input.value; });
@@ -27,6 +61,13 @@
         custom[input.dataset.productText] = input.value;
       });
       data.product_texts[card.dataset.catalogId] = custom;
+    });
+    data.headings = Array.from(document.querySelectorAll('.heading-card')).map(card => {
+      const heading = {id: card.dataset.headingId, after_product_id: card.dataset.afterProductId};
+      card.querySelectorAll('[data-heading-field]').forEach(input => {
+        heading[input.dataset.headingField] = input.value;
+      });
+      return heading;
     });
     return data;
   }
@@ -64,6 +105,19 @@
     editTimer = setTimeout(() => { save(); preview(); }, 650);
   }
   document.querySelectorAll('[data-field],[data-product-text]').forEach(input => input.addEventListener('input', changed));
+  document.querySelectorAll('[data-add-heading]').forEach(button => button.addEventListener('click', () => {
+    const card = insertHeading({id: crypto.randomUUID(), after_product_id: button.dataset.afterProduct});
+    card.querySelector('[data-heading-field="title"]').focus();
+    changed();
+  }));
+  track.addEventListener('input', event => {
+    if (event.target.matches('[data-heading-field]')) changed();
+  });
+  track.addEventListener('click', event => {
+    if (!event.target.matches('[data-remove-heading]')) return;
+    event.target.closest('.heading-card').remove();
+    changed();
+  });
   document.getElementById('refresh-preview').addEventListener('click', preview);
 
   function align() {

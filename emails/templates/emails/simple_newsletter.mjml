@@ -43,6 +43,7 @@
     <mj-section css-class="editor-products"><mj-column>
       <mj-text align="center"><h2 style="font-size:30px">{{ content.product_heading }}</h2></mj-text>
     </mj-column></mj-section>
+    {% for heading in intro_headings %}{% include "emails/_interstitial.mjml" %}{% endfor %}
     {% for offer in offers %}
     <mj-wrapper css-class="editor-product-{{ offer.id }}">
       {% if offer.section_heading %}
@@ -73,12 +74,14 @@
         </mj-column>
       </mj-section>
     </mj-wrapper>
+    {% for heading in offer.headings_after %}{% include "emails/_interstitial.mjml" %}{% endfor %}
     {% endfor %}
+    {% for heading in tail_headings %}{% include "emails/_interstitial.mjml" %}{% endfor %}
     <mj-wrapper css-class="editor-order">
       <mj-section><mj-column>
-        <mj-text align="center"><h2 style="font-size:34px">{{ content.order_heading }}</h2></mj-text>
-        <mj-text align="center">{{ content.order_text|linebreaksbr }}</mj-text>
-        <mj-text align="right" color="#ff9933">Oder schnell anrufen: +49 (0)8641 97 59 0</mj-text>
+        <mj-text align="left" color="#000000" line-height="44px"><h2 style="font-size:34px;color:#ff9933">{{ content.order_heading }}</h2></mj-text>
+        <mj-text align="center"><p style="font-size:24px">{{ content.order_text|linebreaksbr }}</p></mj-text>
+        <mj-text align="right" color="#ff9933" font-size="24px" line-height="34px"><p>{{ content.order_phone|linebreaksbr }}</p></mj-text>
       </mj-column></mj-section>
       {% if offers %}
       <mj-section><mj-column><mj-table>

@@ -49,6 +49,7 @@
         <label for="product-search">Produkt hinzufügen</label>
         <input id="product-search" type="search" autocomplete="off" placeholder="Artikelnummer oder Name eingeben…">
         <div id="search-results" class="search-results" role="listbox"></div>
+        <button class="add-heading" data-add-heading data-after-product="" type="button">+ Zwischenüberschrift vor den Produkten</button>
       </section>
       {% for item in campaign_products %}
       <section class="editor-card product-card" data-anchor="editor-product-{{ item.pk }}" data-product-id="{{ item.pk }}" data-catalog-id="{{ item.product_id }}">
@@ -78,6 +79,7 @@
             <input id="value-{{ item.pk }}" data-price-value type="number" min="0.01" step="0.01" value="{% if item.special_price_override %}{{ item.special_price_override }}{% elif item.discount_pct %}{{ item.discount_pct }}{% endif %}" placeholder="z. B. 19,95"></div>
         </div>
         <small>Preis und Rabatt gelten nur für diese Kampagne.</small>
+        <button class="add-heading" data-add-heading data-after-product="{{ item.pk }}" type="button">+ Zwischenüberschrift danach</button>
       </section>
       {% endfor %}
       <section class="editor-card" data-anchor="editor-order">
@@ -87,6 +89,8 @@
         <input id="order_heading" data-field="order_heading" type="text" value="{{ content.order_heading }}">
         <label for="order_text">Bestellhinweis</label>
         <textarea id="order_text" data-field="order_text" rows="3">{{ content.order_text }}</textarea>
+        <label for="order_phone">Kontakttext rechts</label>
+        <textarea id="order_phone" data-field="order_phone" rows="2">{{ content.order_phone }}</textarea>
         <small>Die Produktliste im Bestellbereich entsteht automatisch.</small>
       </section>
     </div>
