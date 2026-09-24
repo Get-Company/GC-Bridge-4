@@ -1937,6 +1937,37 @@ assert.ok(correctedHtml.includes('✓ identisch'));
 assert.equal(correctedHtml.includes('≠ unterschiedlich'), false);
 ''')
 
+    def test_standard_address_badges_are_green_only_for_fully_mapped_defaults(self):
+        self.run_js(r'''
+searchData = {
+  '10001': {
+    shopware: {id: 'sw-customer', customerNumber: '10001', addresses: [
+      {id: 'sw-address', is_shipping: true, is_invoice: true},
+    ]},
+    django: {id: 71, api_id: 'sw-customer', erp_nr: '10001', addresses: [
+      {id: 11, api_id: 'sw-address', erp_ans_nr: 0, erp_asp_nr: 0, is_shipping: true, is_invoice: true},
+    ]},
+    microtech: {erp_nr: '10001', addresses: [
+      {ans_nr: 0, is_shipping: true, is_invoice: true, contacts: [{asp_nr: 0}]},
+    ]},
+  },
+};
+const greenBadges = html => (html.match(/bg-green-100/g) || []).length;
+assert.equal(greenBadges(renderComparisonRow('10001')), 6, 'Both roles are green in all three systems');
+
+searchData['10001'].microtech.addresses[0].is_invoice = false;
+const partlyStandard = renderComparisonRow('10001');
+assert.equal(greenBadges(partlyStandard), 3, 'Only the common shipping default is green');
+assert.ok(partlyStandard.includes('bg-violet-100'));
+
+searchData['10001'].django.addresses[0].api_id = 'different-sw-address';
+assert.equal(greenBadges(renderComparisonRow('10001')), 0, 'A broken SW6 link cannot be green');
+
+searchData['10001'].django.addresses[0].api_id = 'sw-address';
+searchData['10001'].django.addresses[0].erp_ans_nr = 1;
+assert.equal(greenBadges(renderComparisonRow('10001')), 0, 'A broken Microtech link cannot be green');
+''')
+
     def test_address_comparison_groups_microtech_contacts_with_their_bridge_mapping(self):
         self.run_js(r'''
 searchData = {

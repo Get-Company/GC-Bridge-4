@@ -649,13 +649,16 @@ function normalize(d, sys) {
   };
 }
 
-function standardAddressBadges(address) {
+function standardAddressBadges(address, synchronizedDefaults = {}) {
   const badges = [];
+  const linkedClass = 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300';
   if (address.isShipping) {
-    badges.push('<span class="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">Lieferadresse</span>');
+    const color = synchronizedDefaults.shipping ? linkedClass : 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300';
+    badges.push(`<span class="rounded-full px-2 py-0.5 text-[10px] font-semibold ${color}">Lieferadresse</span>`);
   }
   if (address.isBilling) {
-    badges.push('<span class="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-700 dark:bg-violet-900/40 dark:text-violet-300">Rechnungsadresse</span>');
+    const color = synchronizedDefaults.billing ? linkedClass : 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300';
+    badges.push(`<span class="rounded-full px-2 py-0.5 text-[10px] font-semibold ${color}">Rechnungsadresse</span>`);
   }
   return badges.length ? `<div class="flex flex-wrap gap-1">${badges.join('')}</div>` : '';
 }
@@ -781,11 +784,11 @@ function comparisonAddressActions(nr, sysKey, addresses) {
   </div>`;
 }
 
-function synchronizedDefaultActions(nr, group) {
+function synchronizedAddressDefaults(group) {
   const django = group.django || [];
   const shopware = group.shopware || [];
   const microtech = group.microtech || [];
-  if (django.length !== 1 || shopware.length !== 1 || microtech.length !== 1) return '';
+  if (django.length !== 1 || shopware.length !== 1 || microtech.length !== 1) return null;
 
   const djangoAddress = django[0];
   const shopwareAddress = shopware[0];
@@ -794,7 +797,19 @@ function synchronizedDefaultActions(nr, group) {
     && String(djangoAddress.apiId).toLowerCase() === String(shopwareAddress.id || '').toLowerCase()
     && djangoAddress.microtechAddressNumber !== ''
     && String(djangoAddress.microtechAddressNumber) === String(microtechAddress.microtechAddressNumber);
-  if (!isFullyMapped) return '';
+  if (!isFullyMapped) return null;
+
+  return {
+    billing: Boolean(djangoAddress.isBilling && shopwareAddress.isBilling && microtechAddress.isBilling),
+    shipping: Boolean(djangoAddress.isShipping && shopwareAddress.isShipping && microtechAddress.isShipping),
+  };
+}
+
+function synchronizedDefaultActions(nr, group) {
+  const defaults = synchronizedAddressDefaults(group);
+  if (!defaults) return '';
+
+  const djangoAddress = group.django[0];
 
   const roleButton = (role, label, icon, active) => `<button type="button"
       data-default-current="${active ? 'true' : 'false'}"
@@ -806,18 +821,16 @@ function synchronizedDefaultActions(nr, group) {
           : 'border-gray-300 text-gray-500 hover:border-primary-400 hover:text-primary-700 dark:border-gray-600 dark:text-gray-300'}">
       <span class="material-symbols-outlined" style="font-size:12px">${icon}</span>${label}
     </button>`;
-  const billingActive = Boolean(djangoAddress.isBilling && shopwareAddress.isBilling && microtechAddress.isBilling);
-  const shippingActive = Boolean(djangoAddress.isShipping && shopwareAddress.isShipping && microtechAddress.isShipping);
   return `<div class="mt-2 flex flex-wrap gap-1" aria-label="Standardadresse systemübergreifend setzen">
-    ${roleButton('billing', 'Rechnung', 'receipt_long', billingActive)}
-    ${roleButton('shipping', 'Lieferung', 'local_shipping', shippingActive)}
+    ${roleButton('billing', 'Rechnung', 'receipt_long', defaults.billing)}
+    ${roleButton('shipping', 'Lieferung', 'local_shipping', defaults.shipping)}
   </div>`;
 }
 
-function comparisonAddressCard(nr, sysKey, address, defaultActions = '') {
+function comparisonAddressCard(nr, sysKey, address, defaultActions = '', synchronizedDefaults = {}) {
   const canDelete = sysKey === 'django' || sysKey === 'shopware';
   const groupId = `addr-group-${nr}-${sysKey}`;
-  const flags = standardAddressBadges(address);
+  const flags = standardAddressBadges(address, synchronizedDefaults);
   const checkbox = canDelete && address.id
     ? `<input type="checkbox" value="${address.id}" class="rounded mt-0.5 addr-cb-${groupId}" style="flex-shrink:0">`
     : '';
@@ -928,9 +941,9 @@ function addressComparisonGroups(nr) {
   return groups;
 }
 
-function comparisonAddressCell(nr, sysKey, addresses, defaultActions = '') {
+function comparisonAddressCell(nr, sysKey, addresses, defaultActions = '', synchronizedDefaults = {}) {
   if (!addresses.length) return '<div class="comparison-address-empty">Keine zugeordnete Adresse</div>';
-  return addresses.map(address => comparisonAddressCard(nr, sysKey, address, defaultActions)).join('');
+  return addresses.map(address => comparisonAddressCard(nr, sysKey, address, defaultActions, synchronizedDefaults)).join('');
 }
 
 function addressGroupShopwareIdStatus(group) {
@@ -1413,21 +1426,25 @@ function renderComparisonRow(nr) {
   `;
 
   if (addressGroups.length) {
-    html += addressGroups.map(group => comparisonRow(
-      group.label,
-      SYSTEMS.map(system => comparisonAddressCell(
-        nr,
-        system.key,
-        group[system.key],
-        synchronizedDefaultActions(nr, group),
-      )),
-      {
-        labelDetail: group.detail,
-        labelStatus: addressGroupShopwareIdStatus(group),
-        labelClass: 'comparison-address-label',
-        cellClass: 'comparison-address-cell',
-      },
-    )).join('');
+    html += addressGroups.map(group => {
+      const synchronizedDefaults = synchronizedAddressDefaults(group) || {};
+      return comparisonRow(
+        group.label,
+        SYSTEMS.map(system => comparisonAddressCell(
+          nr,
+          system.key,
+          group[system.key],
+          synchronizedDefaultActions(nr, group),
+          synchronizedDefaults,
+        )),
+        {
+          labelDetail: group.detail,
+          labelStatus: addressGroupShopwareIdStatus(group),
+          labelClass: 'comparison-address-label',
+          cellClass: 'comparison-address-cell',
+        },
+      );
+    }).join('');
   } else {
     html += comparisonRow('Adressen', SYSTEMS.map(() => '<div class="comparison-address-empty">Keine Adresse vorhanden</div>'), {
       labelClass: 'comparison-address-label', cellClass: 'comparison-address-cell',
