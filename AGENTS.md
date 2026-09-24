@@ -12,6 +12,12 @@ These rules are mandatory for all contributors and tools.
 - Always let django makemigartions create the migration files. Do not wrcodexite the migrations by yourself.
 - For Django Unfold admin buttons and entry points, prefer the most appropriate native Unfold action type (especially changelist actions for model-wide operations) instead of custom template buttons whenever feasible. Reference: https://unfoldadmin.com/docs/actions/introduction/
 
+## Bridge web UI
+
+- The Bridge runs at `http://10.0.0.165/`; its admin UI is at `http://10.0.0.165/admin/`.
+- Interpret requests such as "öffne die Bridge" or "geh in die Bridge" as requests to open this web UI.
+- For requests to open or work on rules, use the graphical `Microtech → Regel-Mappings` page at `/admin/microtech/microtechorderrule/builder/`.
+
 ## Release tags
 
 - By default, increment only the patch version (the last number) for release/deployment tags, e.g. `v1.17.0` -> `v1.17.1`.
