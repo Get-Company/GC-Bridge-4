@@ -1698,6 +1698,7 @@ const sandbox = {
   assert, console, Uint8Array, AbortController, URLSearchParams,
   crypto: require('node:crypto').webcrypto,
   SYSTEMS, searchData,
+  ADDRESS_GROUP_PAGE_SIZE: 50, visibleAddressGroupCounts: new Map(),
   getCellState: () => 'found', isRowLoading: () => false,
   columnStatusLabel: () => 'geladen',
   CSRF: 'test-only',
@@ -2022,6 +2023,28 @@ const comparisonHtml = renderComparisonRow('10001');
 assert.ok(comparisonHtml.includes('comparison-matrix'));
 assert.equal((comparisonHtml.match(/comparison-address-cell/g) || []).length, 9);
 assert.ok(comparisonHtml.includes('Jede Zeile ist eine gemeinsame Zuordnung.'));
+''')
+
+    def test_large_address_comparison_renders_in_pages(self):
+        self.run_js(r'''
+searchData = {
+  '10001': {
+    shopware: {addresses: []},
+    django: {id: 71, addresses: []},
+    microtech: {addresses: Array.from({length: 120}, (_, index) => ({
+      ans_nr: index,
+      name1: `Adresse ${index}`,
+      contacts: [{asp_nr: 0, first_name: 'Kontakt', last_name: String(index)}],
+    }))},
+  },
+};
+let html = renderComparisonRow('10001');
+assert.equal((html.match(/comparison-address-cell/g) || []).length, 150);
+assert.ok(html.includes('Weitere 50 von 70 Adresszuordnungen anzeigen'));
+showMoreAddressGroups({dataset: {erpNr: '10001'}});
+html = elements.get('row-10001').outerHTML;
+assert.equal((html.match(/comparison-address-cell/g) || []).length, 300);
+assert.ok(html.includes('Weitere 20 von 20 Adresszuordnungen anzeigen'));
 ''')
 
     def test_modal_close_invalidates_preview_without_starting_merge(self):

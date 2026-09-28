@@ -54,6 +54,10 @@ class CustomerSyncService(BaseService):
 
         anschrift_service = MicrotechAnschriftService(erp=erp)
         ansprechpartner_service = MicrotechAnsprechpartnerService(erp=erp)
+        contacts_by_address = self._load_contacts_by_address(
+            ansprechpartner_service=ansprechpartner_service,
+            customer_erp_nr=customer_erp_nr,
+        )
 
         seen_local_address_ids: list[int] = []
         has_range = anschrift_service.set_range(
@@ -68,11 +72,7 @@ class CustomerSyncService(BaseService):
                     anschrift_service.range_next()
                     continue
 
-                contact_rows = self._load_contacts(
-                    ansprechpartner_service=ansprechpartner_service,
-                    customer_erp_nr=customer_erp_nr,
-                    ans_nr=ans_nr,
-                )
+                contact_rows = contacts_by_address.get(ans_nr, [])
                 if not contact_rows:
                     contact_rows = [self._empty_contact()]
 
@@ -146,23 +146,27 @@ class CustomerSyncService(BaseService):
         address.save()
         return address
 
-    def _load_contacts(
+    def _load_contacts_by_address(
         self,
         *,
         ansprechpartner_service: MicrotechAnsprechpartnerService,
         customer_erp_nr: str,
-        ans_nr: int,
-    ) -> list[dict[str, Any]]:
+    ) -> dict[int, list[dict[str, Any]]]:
+        """Read all contacts for one customer once and group them by AnsNr."""
         has_contacts = ansprechpartner_service.set_range(
-            from_range=[customer_erp_nr, ans_nr, 0],
-            to_range=[customer_erp_nr, ans_nr, 20],
+            from_range=[customer_erp_nr, 0, 0],
+            to_range=[customer_erp_nr, 999, 999_999],
         )
         if not has_contacts:
-            return []
+            return {}
 
-        contacts: list[dict[str, Any]] = []
+        contacts_by_address: dict[int, list[dict[str, Any]]] = {}
         while not ansprechpartner_service.range_eof():
-            contacts.append(
+            ans_nr = _to_int(ansprechpartner_service.get_field("AnsNr"))
+            if ans_nr is None:
+                ansprechpartner_service.range_next()
+                continue
+            contacts_by_address.setdefault(ans_nr, []).append(
                 {
                     "asp_id": _to_int(ansprechpartner_service.get_field("ID")),
                     "asp_nr": _to_int(ansprechpartner_service.get_field("AspNr")),
@@ -175,7 +179,7 @@ class CustomerSyncService(BaseService):
                 }
             )
             ansprechpartner_service.range_next()
-        return contacts
+        return contacts_by_address
 
     @staticmethod
     def _empty_contact() -> dict[str, Any]:

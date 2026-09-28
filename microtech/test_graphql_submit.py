@@ -103,6 +103,56 @@ class SubmitMutationTest(SimpleTestCase):
         self.assertIn("customerSearchJob", mock_execute.call_args.args[0])
         self.assertEqual(mock_execute.call_args.args[1], {"jobId": "job-123"})
 
+    @patch.object(MicrotechGraphQLClientService, "customer_search_job")
+    @patch.object(MicrotechGraphQLClientService, "execute")
+    def test_customer_search_poll_defers_full_result_until_done(self, mock_execute, mock_full):
+        mock_execute.return_value = {"customerSearchJob": {"status": "RUNNING"}}
+        client = MicrotechGraphQLClientService.__new__(MicrotechGraphQLClientService)
+
+        result = client.customer_search_job_for_poll("job-123")
+
+        self.assertEqual(result["status"], "RUNNING")
+        self.assertNotIn("customers", mock_execute.call_args.args[0])
+        mock_full.assert_not_called()
+
+    @patch.object(MicrotechGraphQLClientService, "customer_job")
+    @patch.object(MicrotechGraphQLClientService, "customer_job_status")
+    def test_customer_job_waits_with_status_only_before_fetching_full_result(self, mock_status, mock_full):
+        client = MicrotechGraphQLClientService.__new__(MicrotechGraphQLClientService)
+        mock_status.return_value = {"status": "RUNNING"}
+
+        result = client.customer_job_for_operation("job-123", "requestCustomer")
+
+        self.assertEqual(result, {"status": "RUNNING"})
+        mock_full.assert_not_called()
+
+    @patch.object(MicrotechGraphQLClientService, "postal_address_job")
+    @patch.object(MicrotechGraphQLClientService, "customer_job_status")
+    def test_postal_address_job_fetches_only_the_terminal_address_result(self, mock_status, mock_postal):
+        client = MicrotechGraphQLClientService.__new__(MicrotechGraphQLClientService)
+        mock_status.return_value = {"status": "DONE"}
+        mock_postal.return_value = {
+            "status": "DONE",
+            "postalAddress": {"addressNumber": 100012, "addressSubNumber": 7},
+        }
+
+        result = client.customer_job_for_operation("job-123", "updatePostalAddress")
+
+        self.assertEqual(result["postalAddress"]["addressSubNumber"], 7)
+        mock_postal.assert_called_once_with("job-123")
+
+    @patch.object(MicrotechGraphQLClientService, "execute")
+    def test_customer_status_query_does_not_request_address_tree(self, mock_execute):
+        mock_execute.return_value = {"customerJob": {"status": "RUNNING"}}
+        client = MicrotechGraphQLClientService.__new__(MicrotechGraphQLClientService)
+
+        client.customer_job_status("job-123")
+
+        query = mock_execute.call_args.args[0]
+        self.assertIn("CustomerJobStatus", query)
+        self.assertNotIn("addresses", query)
+        self.assertNotIn("contacts", query)
+
     @patch.object(MicrotechGraphQLClientService, "poll_job")
     @patch.object(MicrotechGraphQLClientService, "execute")
     def test_microtech_connection_uses_connection_mutation(self, mock_execute, mock_poll):

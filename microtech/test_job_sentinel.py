@@ -115,11 +115,27 @@ class TestJobSentinelWebhook(TestCase):
 
 @patch("microtech.services.job_sentinel.MicrotechGraphQLClientService")
 class TestJobSentinelLoopSafety(TestCase):
-    """Punkt 2 - der Poller darf niemals endlos laufen."""
+    """The poller tolerates slow jobs but still enforces a runtime deadline."""
 
     @patch.object(MicrotechJobSentinelService, "_fetch_remote_job", return_value={"status": "RUNNING"})
-    def test_marks_failed_when_max_attempts_reached_and_still_running(self, _fetch, _client):
+    def test_running_job_is_not_failed_only_because_poll_count_is_reached(self, _fetch, _client):
         job = _make_job(attempt=2, max_attempts=3)  # attempt wird auf 3 erhoeht
+
+        result = MicrotechJobSentinelService().poll_job_once(job_id=job.pk)
+
+        job.refresh_from_db()
+        self.assertTrue(result)
+        self.assertEqual(job.status, MicrotechGraphQLJob.Status.RUNNING)
+        self.assertIsNotNone(job.next_poll_at)
+        self.assertIsNone(job.completed_at)
+
+    @patch.object(MicrotechJobSentinelService, "_fetch_remote_job", return_value={"status": "RUNNING"})
+    def test_running_job_is_failed_after_runtime_deadline(self, _fetch, _client):
+        job = _make_job(
+            attempt=20,
+            max_attempts=3,
+            started_at=timezone.now() - timedelta(minutes=31),
+        )
 
         result = MicrotechJobSentinelService().poll_job_once(job_id=job.pk)
 
@@ -127,11 +143,11 @@ class TestJobSentinelLoopSafety(TestCase):
         self.assertTrue(result)
         self.assertEqual(job.status, MicrotechGraphQLJob.Status.FAILED)
         self.assertIsNone(job.next_poll_at)
-        self.assertTrue(job.error_message)
+        self.assertIn("maximale Laufzeit", job.error_message)
         self.assertIsNotNone(job.completed_at)
 
     @patch.object(MicrotechJobSentinelService, "_fetch_remote_job", return_value={"status": "RUNNING"})
-    def test_reschedules_when_under_max_attempts(self, _fetch, _client):
+    def test_reschedules_running_job_while_within_runtime(self, _fetch, _client):
         job = _make_job(attempt=0, max_attempts=3)
 
         MicrotechJobSentinelService().poll_job_once(job_id=job.pk)

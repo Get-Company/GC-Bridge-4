@@ -556,7 +556,11 @@ class MicrotechGraphQLClientService(BaseService):
             "requestCustomer",
             {"customerNumber": customer_number},
         )
-        return self.poll_job(str(accepted["jobId"]), query_job=self.customer_job, retry_after=accepted.get("retryAfterSeconds"))
+        return self._poll_customer_job(
+            str(accepted["jobId"]),
+            operation="requestCustomer",
+            retry_after=accepted.get("retryAfterSeconds"),
+        )
 
     def create_customer(self, customer_number: str, input_data: dict[str, Any]) -> dict[str, Any]:
         accepted = self._mutation_with_job(
@@ -570,7 +574,11 @@ class MicrotechGraphQLClientService(BaseService):
             "createCustomer",
             {"customerNumber": customer_number, "input": input_data},
         )
-        return self.poll_job(str(accepted["jobId"]), query_job=self.customer_job, retry_after=accepted.get("retryAfterSeconds"))
+        return self._poll_customer_job(
+            str(accepted["jobId"]),
+            operation="createCustomer",
+            retry_after=accepted.get("retryAfterSeconds"),
+        )
 
     def update_customer(self, customer_number: str, input_data: dict[str, Any]) -> dict[str, Any]:
         accepted = self._mutation_with_job(
@@ -584,7 +592,11 @@ class MicrotechGraphQLClientService(BaseService):
             "updateCustomer",
             {"customerNumber": customer_number, "input": input_data},
         )
-        return self.poll_job(str(accepted["jobId"]), query_job=self.customer_job, retry_after=accepted.get("retryAfterSeconds"))
+        return self._poll_customer_job(
+            str(accepted["jobId"]),
+            operation="updateCustomer",
+            retry_after=accepted.get("retryAfterSeconds"),
+        )
 
     def delete_customer(self, customer_number: str) -> dict[str, Any]:
         customer_number = str(customer_number or "").strip()
@@ -601,9 +613,9 @@ class MicrotechGraphQLClientService(BaseService):
             "deleteCustomer",
             {"customerNumber": customer_number},
         )
-        result = self.poll_job(
+        result = self._poll_customer_job(
             str(accepted["jobId"]),
-            query_job=self.customer_job,
+            operation="deleteCustomer",
             retry_after=accepted.get("retryAfterSeconds"),
         )
         if result.get("deleted") is not True:
@@ -628,7 +640,11 @@ class MicrotechGraphQLClientService(BaseService):
             "deletePostalAddress",
             {"addressNumber": address_number, "addressSubNumber": address_sub_number},
         )
-        return self.poll_job(str(accepted["jobId"]), query_job=self.customer_job, retry_after=accepted.get("retryAfterSeconds"))
+        return self._poll_customer_job(
+            str(accepted["jobId"]),
+            operation="deletePostalAddress",
+            retry_after=accepted.get("retryAfterSeconds"),
+        )
 
     def create_contact_person(self, address_number: int, address_sub_number: int, input_data: dict[str, Any]) -> dict[str, Any]:
         return self._contact_person_mutation("createContactPerson", address_number, address_sub_number, None, input_data)
@@ -656,7 +672,11 @@ class MicrotechGraphQLClientService(BaseService):
             "deleteContactPerson",
             {"addressNumber": address_number, "addressSubNumber": address_sub_number, "contactNumber": contact_number},
         )
-        return self.poll_job(str(accepted["jobId"]), query_job=self.customer_job, retry_after=accepted.get("retryAfterSeconds"))
+        return self._poll_customer_job(
+            str(accepted["jobId"]),
+            operation="deleteContactPerson",
+            retry_after=accepted.get("retryAfterSeconds"),
+        )
 
     def request_vorgang(self, beleg_nr: str) -> dict[str, Any]:
         accepted = self._mutation_with_job(
@@ -930,6 +950,108 @@ class MicrotechGraphQLClientService(BaseService):
         )
         return self._submit_accepted(accepted)
 
+    def customer_job_status(self, job_id: str) -> dict[str, Any]:
+        """Return only the cheap lifecycle fields for a customer-related job."""
+        data = self.execute(
+            """
+            query CustomerJobStatus($jobId: ID!) {
+              customerJob(jobId: $jobId) {
+                jobId status message deleted errorMessage
+              }
+            }
+            """,
+            {"jobId": job_id},
+        )
+        return data.get("customerJob") or {}
+
+    def customer_summary_job(self, job_id: str) -> dict[str, Any]:
+        """Return a customer mutation result without its address/contact tree."""
+        data = self.execute(
+            """
+            query CustomerSummaryJob($jobId: ID!) {
+              customerJob(jobId: $jobId) {
+                jobId status message deleted errorMessage
+                customer {
+                  customerNumber erpAddressNumber salutation firstName lastName
+                  name1 name2 name3 street zipCode city email phone department country
+                  defaultShippingAddressNumber defaultBillingAddressNumber source
+                }
+              }
+            }
+            """,
+            {"jobId": job_id},
+        )
+        return data.get("customerJob") or {}
+
+    def postal_address_job(self, job_id: str) -> dict[str, Any]:
+        """Return only the postal-address result of an address mutation."""
+        data = self.execute(
+            """
+            query PostalAddressJob($jobId: ID!) {
+              customerJob(jobId: $jobId) {
+                jobId status message deleted errorMessage
+                postalAddress {
+                  addressNumber addressSubNumber isDefaultShipping isDefaultBilling
+                  name1 street zipCode city email phone country
+                  contacts { contactNumber firstName lastName email phone }
+                }
+              }
+            }
+            """,
+            {"jobId": job_id},
+        )
+        return data.get("customerJob") or {}
+
+    def contact_person_job(self, job_id: str) -> dict[str, Any]:
+        """Return only the contact result of a contact mutation."""
+        data = self.execute(
+            """
+            query ContactPersonJob($jobId: ID!) {
+              customerJob(jobId: $jobId) {
+                jobId status message deleted errorMessage
+                contactPerson {
+                  addressNumber addressSubNumber contactNumber isDefault salutation
+                  firstName lastName displayName department email phone
+                }
+              }
+            }
+            """,
+            {"jobId": job_id},
+        )
+        return data.get("customerJob") or {}
+
+    def customer_job_for_operation(self, job_id: str, operation: str) -> dict[str, Any]:
+        """Poll cheaply and fetch the smallest useful terminal result."""
+        status_result = self.customer_job_status(job_id)
+        status = str(status_result.get("status") or "").upper()
+        if status not in self.TERMINAL_SUCCESS:
+            return status_result
+
+        if operation in {"createPostalAddress", "updatePostalAddress", "deletePostalAddress"}:
+            return self.postal_address_job(job_id)
+        if operation in {"createContactPerson", "updateContactPerson", "deleteContactPerson"}:
+            return self.contact_person_job(job_id)
+        if operation in {"createCustomer", "updateCustomer", "deleteCustomer"}:
+            return self.customer_summary_job(job_id)
+        # requestCustomer and upsertCustomer need the complete inventory. The
+        # order workflow uses it to reconcile existing address/contact numbers.
+        return self.customer_job(job_id)
+
+    def _poll_customer_job(
+        self,
+        job_id: str,
+        *,
+        operation: str,
+        retry_after: Any = None,
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
+        return self.poll_job(
+            job_id,
+            query_job=lambda current_job_id: self.customer_job_for_operation(current_job_id, operation),
+            retry_after=retry_after,
+            timeout=timeout,
+        )
+
     def customer_job(self, job_id: str) -> dict[str, Any]:
         data = self.execute(
             """
@@ -962,6 +1084,7 @@ class MicrotechGraphQLClientService(BaseService):
             }
             """,
             {"jobId": job_id},
+            timeout=float(getattr(settings, "MICROTECH_GRAPHQL_CUSTOMER_RESULT_TIMEOUT", 120.0)),
         )
         return data.get("customerJob") or {}
 
@@ -989,8 +1112,25 @@ class MicrotechGraphQLClientService(BaseService):
             }
             """,
             {"jobId": job_id},
+            timeout=float(getattr(settings, "MICROTECH_GRAPHQL_CUSTOMER_RESULT_TIMEOUT", 120.0)),
         )
         return data.get("customerSearchJob") or {}
+
+    def customer_search_job_for_poll(self, job_id: str) -> dict[str, Any]:
+        data = self.execute(
+            """
+            query CustomerSearchJobStatus($jobId: ID!) {
+              customerSearchJob(jobId: $jobId) {
+                jobId status message limitReached errorMessage
+              }
+            }
+            """,
+            {"jobId": job_id},
+        )
+        result = data.get("customerSearchJob") or {}
+        if str(result.get("status") or "").upper() in self.TERMINAL_SUCCESS:
+            return self.customer_search_job(job_id)
+        return result
 
     def vorgang_job(self, job_id: str) -> dict[str, Any]:
         data = self.execute(
@@ -1074,7 +1214,11 @@ class MicrotechGraphQLClientService(BaseService):
             """
             variables = {"addressNumber": address_number, "addressSubNumber": address_sub_number, "input": input_data}
         accepted = self._mutation_with_job(query, field, variables)
-        return self.poll_job(str(accepted["jobId"]), query_job=self.customer_job, retry_after=accepted.get("retryAfterSeconds"))
+        return self._poll_customer_job(
+            str(accepted["jobId"]),
+            operation=field,
+            retry_after=accepted.get("retryAfterSeconds"),
+        )
 
     def _contact_person_mutation(
         self,
@@ -1111,7 +1255,11 @@ class MicrotechGraphQLClientService(BaseService):
                 "input": input_data,
             }
         accepted = self._mutation_with_job(query, field, variables)
-        return self.poll_job(str(accepted["jobId"]), query_job=self.customer_job, retry_after=accepted.get("retryAfterSeconds"))
+        return self._poll_customer_job(
+            str(accepted["jobId"]),
+            operation=field,
+            retry_after=accepted.get("retryAfterSeconds"),
+        )
 
     def _coerce_interval(self, value: Any) -> float:
         try:

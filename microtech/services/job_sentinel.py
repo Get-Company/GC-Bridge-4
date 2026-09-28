@@ -72,6 +72,7 @@ class MicrotechJobSentinelService(BaseService):
     SUBMISSION_LEASE_SECONDS = 120
     CONTINUATION_LEASE_SECONDS = 300
     BULK_CONTINUATION_LEASE_SECONDS = 7_500
+    DEFAULT_REMOTE_JOB_MAX_RUNTIME_SECONDS = 30 * 60
     CONTINUATION_LOCK_NAMESPACE = 82_641
     CONTINUATION_QUEUE_BY_NAME = {
         "microtech_order_sync_advance": "orders",
@@ -776,8 +777,8 @@ class MicrotechJobSentinelService(BaseService):
             job.result_payload = remote
             self._apply_remote_status(job, remote)
             if not job.is_terminal:
-                if attempt >= max_attempts:
-                    self._mark_exhausted(job, remote, attempt)
+                if self._remote_job_runtime_exceeded(job):
+                    self._mark_runtime_exhausted(job, remote)
                 else:
                     job.next_poll_at = self._reschedule_at(remote)
             job.save()
@@ -1070,7 +1071,7 @@ class MicrotechJobSentinelService(BaseService):
     def _fetch_remote_job(cls, *, client: MicrotechGraphQLClientService, job: MicrotechGraphQLJob) -> dict[str, Any]:
         if job.kind == MicrotechGraphQLJob.Kind.DATASET_RECORDS:
             if job.operation == "searchCustomers":
-                return client.customer_search_job(str(job.external_job_id))
+                return client.customer_search_job_for_poll(str(job.external_job_id))
             if job.operation == "searchAddressRecords":
                 return client.address_search_job(str(job.external_job_id))
             return client.dataset_job(str(job.external_job_id))
@@ -1079,7 +1080,7 @@ class MicrotechJobSentinelService(BaseService):
         if job.kind == MicrotechGraphQLJob.Kind.PRODUCT_UPDATE:
             return client.product_job(str(job.external_job_id))
         if job.kind in {MicrotechGraphQLJob.Kind.CUSTOMER_READ, MicrotechGraphQLJob.Kind.CUSTOMER_UPSERT}:
-            return client.customer_job(str(job.external_job_id))
+            return client.customer_job_for_operation(str(job.external_job_id), job.operation)
         if job.kind in {MicrotechGraphQLJob.Kind.ORDER_READ, MicrotechGraphQLJob.Kind.ORDER_UPSERT}:
             return client.vorgang_job(str(job.external_job_id))
         return client.microtech_job(str(job.external_job_id))
@@ -1298,11 +1299,28 @@ class MicrotechJobSentinelService(BaseService):
         jitter = random.uniform(0, self.POLL_JITTER_SECONDS)
         return timezone.now() + timedelta(seconds=base + jitter)
 
-    def _mark_exhausted(self, job: MicrotechGraphQLJob, remote: dict[str, Any], attempt: int) -> None:
+    def _remote_job_runtime_exceeded(self, job: MicrotechGraphQLJob) -> bool:
+        try:
+            max_runtime = int(
+                getattr(
+                    settings,
+                    "MICROTECH_GRAPHQL_JOB_MAX_RUNTIME_SECONDS",
+                    self.DEFAULT_REMOTE_JOB_MAX_RUNTIME_SECONDS,
+                )
+            )
+        except (TypeError, ValueError):
+            max_runtime = self.DEFAULT_REMOTE_JOB_MAX_RUNTIME_SECONDS
+        started_at = job.started_at or job.submitted_at or job.created_at
+        return max_runtime > 0 and timezone.now() >= started_at + timedelta(seconds=max_runtime)
+
+    def _mark_runtime_exhausted(self, job: MicrotechGraphQLJob, remote: dict[str, Any]) -> None:
         remote_status = str(self._payload_value(remote, "status") or "").upper() or "unbekannt"
         job.status = MicrotechGraphQLJob.Status.FAILED
-        job.error_message = f"Job nach {attempt} Versuchen nicht abgeschlossen (Status: {remote_status})."
-        job.next_step = "Max. Versuche erreicht."
+        job.error_message = (
+            "Job hat die maximale Laufzeit überschritten "
+            f"(Status: {remote_status}, Polls: {job.attempt})."
+        )
+        job.next_step = "Maximale Job-Laufzeit erreicht."
         job.completed_at = timezone.now()
         job.next_poll_at = None
 

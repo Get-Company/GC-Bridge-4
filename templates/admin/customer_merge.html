@@ -455,6 +455,8 @@ let searchErps = [];
 let activeSearchId = 0;
 let searchProgress = null;
 const openAddressGroups = new Set();
+const ADDRESS_GROUP_PAGE_SIZE = 50;
+const visibleAddressGroupCounts = new Map();
 const SEARCH_BUTTON_IDLE = '<span class="material-symbols-outlined text-sm">search</span> Suchen';
 
 const SYSTEMS = [
@@ -881,18 +883,36 @@ function addressComparisonGroups(nr) {
   const groups = [];
 
   const valueForPair = value => value === '' || value === null || value === undefined ? '' : String(value);
+  const pairKey = (ansNr, aspNr) => `${valueForPair(ansNr)}\u0000${valueForPair(aspNr)}`;
   const pairDetail = (ansNr, aspNr, suffix = '') =>
     `AnsNr ${valueForPair(ansNr) || '—'} · AnspNr ${valueForPair(aspNr) || '—'}${suffix}`;
-  const djangoForPair = (ansNr, aspNr) => django.filter((address, index) =>
-    !usedDjango.has(index)
-    && valueForPair(address.microtechAddressNumber) === valueForPair(ansNr)
-    && valueForPair(address.microtechContactNumber) === valueForPair(aspNr)
-  );
+  const djangoByPair = new Map();
+  django.forEach((address, index) => {
+    const key = pairKey(address.microtechAddressNumber, address.microtechContactNumber);
+    if (!djangoByPair.has(key)) djangoByPair.set(key, []);
+    djangoByPair.get(key).push({address, index});
+  });
+  const shopwareById = new Map();
+  shopware.forEach((address, index) => {
+    const id = String(address.id || '');
+    if (!id) return;
+    if (!shopwareById.has(id)) shopwareById.set(id, []);
+    shopwareById.get(id).push({address, index});
+  });
+  const djangoForPair = (ansNr, aspNr) => (djangoByPair.get(pairKey(ansNr, aspNr)) || [])
+    .filter(entry => !usedDjango.has(entry.index))
+    .map(entry => entry.address);
   const shopwareFor = addresses => {
     const ids = new Set(addresses.map(address => String(address.apiId || '')).filter(Boolean));
-    return shopware.filter((address, index) => ids.has(String(address.id || '')) && !usedShopware.has(index));
+    const matches = [];
+    ids.forEach(id => (shopwareById.get(id) || []).forEach(entry => {
+      if (!usedShopware.has(entry.index)) matches.push(entry.address);
+    }));
+    return matches;
   };
-  const markUsed = (addresses, all, used) => addresses.forEach(address => used.add(all.indexOf(address)));
+  const djangoIndex = new Map(django.map((address, index) => [address, index]));
+  const shopwareIndex = new Map(shopware.map((address, index) => [address, index]));
+  const markUsed = (addresses, indexByAddress, used) => addresses.forEach(address => used.add(indexByAddress.get(address)));
 
   microtech.forEach(address => {
     const ansNr = address.microtechAddressNumber;
@@ -901,8 +921,8 @@ function addressComparisonGroups(nr) {
       const aspNr = contact?.microtechContactNumber ?? '';
       const local = djangoForPair(ansNr, aspNr);
       const sw = shopwareFor(local);
-      markUsed(local, django, usedDjango);
-      markUsed(sw, shopware, usedShopware);
+      markUsed(local, djangoIndex, usedDjango);
+      markUsed(sw, shopwareIndex, usedShopware);
       groups.push({
         label: `Adresse ${groups.length + 1}`,
         detail: pairDetail(ansNr, aspNr),
@@ -919,8 +939,8 @@ function addressComparisonGroups(nr) {
     const aspNr = address.microtechContactNumber;
     const local = djangoForPair(ansNr, aspNr);
     const sw = shopwareFor(local);
-    markUsed(local, django, usedDjango);
-    markUsed(sw, shopware, usedShopware);
+    markUsed(local, djangoIndex, usedDjango);
+    markUsed(sw, shopwareIndex, usedShopware);
     groups.push({
       label: `Adresse ${groups.length + 1}`,
       detail: valueForPair(ansNr) || valueForPair(aspNr)
@@ -1248,6 +1268,7 @@ async function doSearch() {
   };
   if (!Object.values(criteria).some(Boolean)) return;
   openAddressGroups.clear();
+  visibleAddressGroupCounts.clear();
 
   setSearchButtonLoading(true);
   document.getElementById('results-area').classList.remove('hidden');
@@ -1377,6 +1398,15 @@ function renderRows() {
   document.getElementById('results-rows').innerHTML = searchErps.map(renderComparisonRow).join('');
 }
 
+function showMoreAddressGroups(button) {
+  const nr = button?.dataset?.erpNr;
+  if (!nr) return;
+  const current = visibleAddressGroupCounts.get(nr) || ADDRESS_GROUP_PAGE_SIZE;
+  visibleAddressGroupCounts.set(nr, current + ADDRESS_GROUP_PAGE_SIZE);
+  const row = document.getElementById(`row-${nr}`);
+  if (row) row.outerHTML = renderComparisonRow(nr);
+}
+
 function renderComparisonRow(nr) {
   const data = Object.fromEntries(SYSTEMS.map(system => [system.key, comparisonData(nr, system.key)]));
   const values = key => SYSTEMS.map(system => data[system.key]?.[key]);
@@ -1388,6 +1418,11 @@ function renderComparisonRow(nr) {
   const shopwareCustomerIdStatus = comparisonIdentityStatus(shopwareCustomerIdValues);
   const addressCounts = SYSTEMS.map(system => data[system.key]?.addresses?.length || 0);
   const addressGroups = addressComparisonGroups(nr);
+  const visibleGroupCount = Math.min(
+    visibleAddressGroupCounts.get(nr) || ADDRESS_GROUP_PAGE_SIZE,
+    addressGroups.length,
+  );
+  const visibleAddressGroups = addressGroups.slice(0, visibleGroupCount);
 
   let html = `<div class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden mb-8 shadow-sm" id="row-${esc(nr)}">`;
   html += `<div class="bg-gray-50 dark:bg-gray-800 px-4 py-2 border-b border-gray-200 dark:border-gray-700 flex items-center gap-3">
@@ -1425,8 +1460,8 @@ function renderComparisonRow(nr) {
     ${comparisonRow('Auswahl', SYSTEMS.map(system => comparisonAddressActions(nr, system.key, data[system.key]?.addresses || [])), {cellClass: 'comparison-address-actions'})}
   `;
 
-  if (addressGroups.length) {
-    html += addressGroups.map(group => {
+  if (visibleAddressGroups.length) {
+    html += visibleAddressGroups.map(group => {
       const synchronizedDefaults = synchronizedAddressDefaults(group) || {};
       return comparisonRow(
         group.label,
@@ -1445,6 +1480,16 @@ function renderComparisonRow(nr) {
         },
       );
     }).join('');
+    if (visibleGroupCount < addressGroups.length) {
+      const remaining = addressGroups.length - visibleGroupCount;
+      const nextCount = Math.min(ADDRESS_GROUP_PAGE_SIZE, remaining);
+      html += `<div class="comparison-address-more" style="grid-column:1/-1;padding:1rem;text-align:center">
+        <button type="button" data-erp-nr="${esc(nr)}" onclick="showMoreAddressGroups(this)"
+          class="rounded border border-gray-300 px-3 py-1.5 text-xs text-gray-600 hover:border-primary-400 hover:text-primary-700 dark:border-gray-600 dark:text-gray-300">
+          Weitere ${nextCount} von ${remaining} Adresszuordnungen anzeigen
+        </button>
+      </div>`;
+    }
   } else {
     html += comparisonRow('Adressen', SYSTEMS.map(() => '<div class="comparison-address-empty">Keine Adresse vorhanden</div>'), {
       labelClass: 'comparison-address-label', cellClass: 'comparison-address-cell',
