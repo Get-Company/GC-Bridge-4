@@ -1198,11 +1198,8 @@ class PayPalOrderAdmin(OrderAdmin):
         )
         customer_name = customer_name or _to_str(getattr(customer, "name", "")) or "-"
         lines = [
-            format_html(
-                '<strong>AdrNr: {}</strong> · {}',
-                _to_str(getattr(customer, "erp_nr", "")) or "-",
-                customer_name,
-            )
+            f'AdrNr: {_to_str(getattr(customer, "erp_nr", "")) or "-"}',
+            customer_name,
         ]
 
         if address is not None:
@@ -1217,14 +1214,14 @@ class PayPalOrderAdmin(OrderAdmin):
                 if value
             )
             if address_name and address_name != customer_name:
-                lines.append(format_html("{}", address_name))
+                lines.append(address_name)
             if _to_str(address.street):
-                lines.append(format_html("{}", address.street))
+                lines.append(_to_str(address.street))
             city_line = " ".join(value for value in (_to_str(address.postal_code), _to_str(address.city)) if value)
             if city_line:
-                lines.append(format_html("{}", city_line))
+                lines.append(city_line)
             if _to_str(address.country_code):
-                lines.append(format_html("{}", _to_str(address.country_code).upper()))
+                lines.append(_to_str(address.country_code).upper())
 
             contact_details = " · ".join(
                 value
@@ -1232,9 +1229,9 @@ class PayPalOrderAdmin(OrderAdmin):
                 if value
             )
             if contact_details:
-                lines.append(format_html("{}", contact_details))
+                lines.append(contact_details)
 
-        return format_html_join("<br>", "{}", ((line,) for line in lines))
+        return " · ".join(lines)
 
     def has_module_permission(self, request):
         return request.user.has_module_perms(Order._meta.app_label)

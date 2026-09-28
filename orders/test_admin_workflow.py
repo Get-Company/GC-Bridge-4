@@ -248,6 +248,8 @@ class OrderAdminListDisplayTest(SimpleTestCase):
         self.assertIn("Musterstraße 1", rendered)
         self.assertIn("12345 Musterstadt", rendered)
         self.assertIn("erika@example.com", rendered)
+        self.assertNotIn("<", rendered)
+        self.assertNotIn(">", rendered)
 
     def test_address_reconciliation_status_marks_missing_microtech_ids(self):
         order = self._order(country_code="DE")
