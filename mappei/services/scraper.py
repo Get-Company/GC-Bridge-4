@@ -1,6 +1,7 @@
 """Mappei price scraper.
 
-Crawls https://www.mappei.de/de/sitemap, extracts product URLs,
+Crawls the XML sitemap published by https://www.mappei.de/robots.txt,
+extracts product URLs,
 then parses each product page for artikelnr, VPE, price and optional
 tiered prices (Staffelpreise).
 
@@ -9,9 +10,12 @@ compared to the previous snapshot (via MappeiPriceSnapshot.create_if_changed).
 """
 from __future__ import annotations
 
+import gzip
 import re
+import xml.etree.ElementTree as ET
 from decimal import Decimal, InvalidOperation
 from typing import Iterator
+from urllib.parse import urlsplit
 
 import requests
 from bs4 import BeautifulSoup
@@ -19,8 +23,8 @@ from django.utils import timezone
 from loguru import logger
 
 BASE_URL = "https://www.mappei.de"
-SITEMAP_PATH = "/de/sitemap"
-PRODUCT_URL_RE = re.compile(r"^/de/.+/\d{4,}(?:/\d+)?$")
+SITEMAP_URL = f"{BASE_URL}/de/sitemap.xml"
+PRODUCT_URL_RE = re.compile(r"^/de/.+/[^/]*\d[^/]*$")
 
 # Markers that indicate the end of the product header section
 END_MARKERS = [
@@ -45,39 +49,118 @@ RE_PRICE_VALUE = re.compile(r"(\d{1,3}(?:\.\d{3})*,\d{2})")
 
 
 def _parse_decimal(value: str) -> Decimal:
-    """Convert German price string '1.234,56' to Decimal."""
-    return Decimal(value.replace(".", "").replace(",", "."))
+    """Convert German display prices and machine-readable decimals."""
+    value = value.strip().replace("\xa0", "").replace("€", "")
+    if "," in value:
+        value = value.replace(".", "").replace(",", ".")
+    return Decimal(value)
 
 
-def _fetch(url: str, timeout: int = 15) -> str | None:
+class MappeiSitemapError(RuntimeError):
+    """Raised when Mappei's XML sitemap cannot provide product URLs."""
+
+
+def _request(url: str, timeout: int = 15) -> requests.Response | None:
     try:
         response = requests.get(url, timeout=timeout, headers={"User-Agent": "GC-Bridge/1.0"})
         response.raise_for_status()
-        return response.text
+        return response
     except Exception as exc:
         logger.warning("Failed to fetch {}: {}", url, exc)
         return None
 
 
-def _product_urls_from_sitemap() -> Iterator[str]:
-    """Yield absolute product URLs found on the sitemap page."""
-    html = _fetch(BASE_URL + SITEMAP_PATH)
-    if not html:
+def _fetch(url: str, timeout: int = 15) -> str | None:
+    response = _request(url, timeout=timeout)
+    return response.text if response is not None else None
+
+
+def _fetch_content(url: str, timeout: int = 15) -> bytes | None:
+    response = _request(url, timeout=timeout)
+    return response.content if response is not None else None
+
+
+def _xml_local_name(tag: str) -> str:
+    return tag.rsplit("}", 1)[-1]
+
+
+def _xml_child_text(element: ET.Element, name: str) -> str:
+    for child in element:
+        if _xml_local_name(child.tag) == name:
+            return (child.text or "").strip()
+    return ""
+
+
+def _parse_sitemap_xml(content: bytes, url: str) -> ET.Element:
+    try:
+        if content.startswith(b"\x1f\x8b"):
+            content = gzip.decompress(content)
+        return ET.fromstring(content)
+    except (OSError, ET.ParseError) as exc:
+        raise MappeiSitemapError(f"Invalid Mappei sitemap XML at {url}: {exc}") from exc
+
+
+def _is_allowed_sitemap_url(url: str) -> bool:
+    parsed = urlsplit(url)
+    return (
+        parsed.scheme in {"http", "https"}
+        and parsed.netloc.lower() == "www.mappei.de"
+        and parsed.path.startswith("/de/")
+    )
+
+
+def _iter_sitemap_entries(
+    sitemap_url: str,
+    *,
+    visited: set[str] | None = None,
+) -> Iterator[tuple[str, str]]:
+    visited = visited if visited is not None else set()
+    if sitemap_url in visited:
         return
-    soup = BeautifulSoup(html, "html.parser")
-    seen: set[str] = set()
-    for tag in soup.find_all("a", href=True):
-        href: str = tag["href"]
-        # Make absolute if relative
-        if href.startswith("/"):
-            path = href
-        elif href.startswith(BASE_URL):
-            path = href[len(BASE_URL):]
-        else:
+    visited.add(sitemap_url)
+
+    content = _fetch_content(sitemap_url)
+    if not content:
+        raise MappeiSitemapError(f"Mappei sitemap could not be fetched: {sitemap_url}")
+
+    root = _parse_sitemap_xml(content, sitemap_url)
+    root_name = _xml_local_name(root.tag)
+    if root_name == "sitemapindex":
+        for sitemap in root:
+            if _xml_local_name(sitemap.tag) != "sitemap":
+                continue
+            child_url = _xml_child_text(sitemap, "loc")
+            if child_url and _is_allowed_sitemap_url(child_url):
+                yield from _iter_sitemap_entries(child_url, visited=visited)
+        return
+
+    if root_name != "urlset":
+        raise MappeiSitemapError(f"Unexpected Mappei sitemap root at {sitemap_url}: {root_name}")
+
+    for entry in root:
+        if _xml_local_name(entry.tag) != "url":
             continue
-        if PRODUCT_URL_RE.match(path) and path not in seen:
-            seen.add(path)
-            yield BASE_URL + path
+        loc = _xml_child_text(entry, "loc")
+        if loc and _is_allowed_sitemap_url(loc):
+            yield loc, _xml_child_text(entry, "changefreq").lower()
+
+
+def _is_product_sitemap_entry(url: str, changefreq: str) -> bool:
+    path = urlsplit(url).path
+    if changefreq == "hourly":
+        return True
+    return not changefreq and bool(PRODUCT_URL_RE.fullmatch(path))
+
+
+def _product_urls_from_sitemap() -> Iterator[str]:
+    """Yield product URLs from Mappei's XML sitemap index."""
+    seen: set[str] = set()
+    for url, changefreq in _iter_sitemap_entries(SITEMAP_URL):
+        if _is_product_sitemap_entry(url, changefreq) and url not in seen:
+            seen.add(url)
+            yield url
+    if not seen:
+        raise MappeiSitemapError("Mappei sitemap contained no product URLs.")
 
 
 def _extract_product_header(text: str) -> str:
@@ -118,6 +201,32 @@ def _extract_description(soup) -> str:
     return ""
 
 
+def _extract_artikelnr(soup, header: str) -> str:
+    sku = soup.find(attrs={"itemprop": "sku"})
+    if sku:
+        value = (sku.get("content") or sku.get_text(strip=True) or "").strip()
+        if value:
+            return value
+    match = RE_ARTIKELNR.search(header)
+    return match.group(1).strip() if match else ""
+
+
+def _extract_structured_staffeln(soup) -> list[dict]:
+    staffeln: list[dict] = []
+    for row in soup.select(".product-block-prices-row"):
+        quantity = row.find("meta", attrs={"itemprop": "priceFromAmount"})
+        price = row.find("meta", attrs={"itemprop": "priceNetto"})
+        if not quantity or not price:
+            continue
+        try:
+            ab_pakete = int(Decimal(str(quantity.get("content", "")).strip()))
+            paketpreis = _parse_decimal(str(price.get("content", "")))
+        except (InvalidOperation, ValueError):
+            continue
+        staffeln.append({"ab_pakete": ab_pakete, "paketpreis": paketpreis})
+    return sorted(staffeln, key=lambda item: item["ab_pakete"])
+
+
 def _parse_product_page(html: str, url: str) -> dict | None:
     """Parse a product page and return a data dict or None on failure."""
     soup = BeautifulSoup(html, "html.parser")
@@ -128,11 +237,10 @@ def _parse_product_page(html: str, url: str) -> dict | None:
     header = _extract_product_header(text)
 
     # --- Artikelnummer ---
-    m = RE_ARTIKELNR.search(header)
-    if not m:
+    artikelnr = _extract_artikelnr(soup, header)
+    if not artikelnr:
         logger.debug("No artikelnr found at {}", url)
         return None
-    artikelnr = m.group(1).strip()
 
     # --- VPE ---
     vpe_menge: int | None = None
@@ -145,10 +253,22 @@ def _parse_product_page(html: str, url: str) -> dict | None:
         except ValueError:
             pass
 
-    # --- Staffelblock detection ---
+    structured_staffeln = _extract_structured_staffeln(soup)
+    if structured_staffeln:
+        return _build_staffel_result(
+            staffeln=structured_staffeln,
+            artikelnr=artikelnr,
+            url=url,
+            image_url=image_url,
+            name=name,
+            description=description,
+            vpe_menge=vpe_menge,
+            vpe_einheit=vpe_einheit,
+        )
+
+    # --- Legacy text fallback ---
     has_staffel = bool(
         re.search(r"Anzahl", header, re.IGNORECASE)
-        and re.search(r"Paketpreis", header, re.IGNORECASE)
         and re.search(r"Stückpreis", header, re.IGNORECASE)
         and RE_STAFFEL_START.search(header)
     )
@@ -248,6 +368,34 @@ def _parse_with_staffel(
         logger.debug("Staffel detected but no rows parsed at {}", url)
         return None
 
+    return _build_staffel_result(
+        staffeln=staffeln,
+        artikelnr=artikelnr,
+        url=url,
+        image_url=image_url,
+        name=name,
+        description=description,
+        vpe_menge=vpe_menge,
+        vpe_einheit=vpe_einheit,
+    )
+
+
+def _build_staffel_result(
+    *,
+    staffeln: list[dict],
+    artikelnr: str,
+    url: str,
+    image_url: str,
+    name: str,
+    description: str,
+    vpe_menge: int | None,
+    vpe_einheit: str,
+) -> dict:
+    """Build normalized snapshot data from package quantities and net prices."""
+    staffeln = sorted(staffeln, key=lambda item: item["ab_pakete"])
+    has_staffel = len(staffeln) > 1
+    partial_success = False
+
     # Umrechnung Pakete → Stück
     if vpe_menge:
         for s in staffeln:
@@ -259,12 +407,12 @@ def _parse_with_staffel(
 
     preis = staffeln[0]["paketpreis"]
     paketpreise = [s["paketpreis"] for s in staffeln]
-    staffelpreis_min = min(paketpreise)
-    staffelpreis_max = max(paketpreise)
+    staffelpreis_min = min(paketpreise) if has_staffel else None
+    staffelpreis_max = max(paketpreise) if has_staffel else None
 
     stueck_values = [s["ab_stueck"] for s in staffeln if s["ab_stueck"] is not None]
-    staffelpreismenge_min = min(stueck_values) if stueck_values else None
-    staffelpreismenge_max = max(stueck_values) if stueck_values else None
+    staffelpreismenge_min = min(stueck_values) if has_staffel and stueck_values else None
+    staffelpreismenge_max = max(stueck_values) if has_staffel and stueck_values else None
 
     return {
         "artikelnr": artikelnr,
@@ -274,7 +422,7 @@ def _parse_with_staffel(
         "description": description,
         "vpe_menge": vpe_menge,
         "vpe_einheit": vpe_einheit,
-        "hat_staffel": True,
+        "hat_staffel": has_staffel,
         "preis": preis,
         "staffelpreismenge_min": staffelpreismenge_min,
         "staffelpreismenge_max": staffelpreismenge_max,
