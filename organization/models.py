@@ -1,3 +1,5 @@
+from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db.models import Q
 from django.utils.translation import gettext_lazy as _
@@ -61,6 +63,11 @@ class OrganizationRole(BaseModel):
 
 
 class OrganizationContact(BaseModel):
+    class SmtpSecurity(models.TextChoices):
+        STARTTLS = "starttls", _("STARTTLS")
+        SSL = "ssl", _("SSL/TLS")
+        NONE = "none", _("Keine")
+
     company = models.ForeignKey(
         CompanyProfile,
         on_delete=models.CASCADE,
@@ -87,6 +94,47 @@ class OrganizationContact(BaseModel):
     is_public = models.BooleanField(default=True, verbose_name=_("Oeffentlich sichtbar"))
     sort_order = models.PositiveIntegerField(default=1000, db_index=True, verbose_name=_("Sortierung"))
     notes = models.TextField(blank=True, default="", verbose_name=_("Interne Notizen"))
+    smtp_host = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        verbose_name=_("SMTP-Server"),
+        help_text=_("Zum Beispiel smtp.office365.com"),
+    )
+    smtp_port = models.PositiveIntegerField(
+        default=587,
+        validators=(MinValueValidator(1), MaxValueValidator(65535)),
+        verbose_name=_("SMTP-Port"),
+    )
+    smtp_username = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        verbose_name=_("SMTP-Benutzername"),
+    )
+    smtp_password = models.CharField(
+        max_length=500,
+        blank=True,
+        default="",
+        verbose_name=_("SMTP-Passwort"),
+    )
+    smtp_security = models.CharField(
+        max_length=16,
+        choices=SmtpSecurity.choices,
+        default=SmtpSecurity.STARTTLS,
+        verbose_name=_("SMTP-Verschlüsselung"),
+    )
+    smtp_sender_email = models.EmailField(
+        blank=True,
+        default="",
+        verbose_name=_("SMTP-Absenderadresse"),
+        help_text=_("Leer lassen, um die E-Mail-Adresse des Ansprechpartners zu verwenden."),
+    )
+    smtp_timeout = models.PositiveSmallIntegerField(
+        default=30,
+        validators=(MinValueValidator(1), MaxValueValidator(300)),
+        verbose_name=_("SMTP-Timeout in Sekunden"),
+    )
 
     class Meta:
         verbose_name = _("Ansprechpartner")
@@ -114,6 +162,33 @@ class OrganizationContact(BaseModel):
     @property
     def display_phone(self) -> str:
         return self.public_phone or self.employee_profile.phone
+
+    @property
+    def smtp_from_email(self) -> str:
+        return self.smtp_sender_email or self.display_email
+
+    @property
+    def smtp_is_configured(self) -> bool:
+        credentials_complete = bool(self.smtp_username) == bool(self.smtp_password)
+        return bool(self.smtp_host and self.smtp_from_email and credentials_complete)
+
+    def clean(self) -> None:
+        super().clean()
+        errors: dict[str, str] = {}
+        if bool(self.smtp_username) != bool(self.smtp_password):
+            message = _("SMTP-Benutzername und SMTP-Passwort müssen gemeinsam gepflegt werden.")
+            errors["smtp_username"] = message
+            errors["smtp_password"] = message
+        if not self.smtp_host and any(
+            (self.smtp_username, self.smtp_password, self.smtp_sender_email)
+        ):
+            errors["smtp_host"] = _("Für die SMTP-Zugangsdaten ist ein SMTP-Server erforderlich.")
+        if self.smtp_host and not self.smtp_from_email:
+            errors["smtp_sender_email"] = _(
+                "Bitte eine SMTP-Absenderadresse oder eine E-Mail-Adresse beim Ansprechpartner hinterlegen."
+            )
+        if errors:
+            raise ValidationError(errors)
 
 
 class LegalDocument(BaseModel):

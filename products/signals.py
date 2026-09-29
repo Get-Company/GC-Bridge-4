@@ -7,6 +7,7 @@ from django.db.models.signals import m2m_changed, post_delete, post_save, pre_sa
 from django.dispatch import Signal, receiver
 from loguru import logger
 
+from organization.models import OrganizationContact
 from products.models import (
     Category,
     MaboxExportSettings,
@@ -48,6 +49,25 @@ def disable_mabox_export_schedule(sender, instance: MaboxExportSettings, **kwarg
     transaction.on_commit(
         lambda config_id=instance.pk: MaboxExportScheduleService().synchronize(config_id)
     )
+
+
+@receiver(
+    post_save,
+    sender=OrganizationContact,
+    dispatch_uid="products_sync_mabox_export_schedule_after_contact_change",
+)
+def synchronize_mabox_export_schedule_after_contact_change(
+    sender,
+    instance: OrganizationContact,
+    **kwargs,
+) -> None:
+    config_ids = tuple(
+        MaboxExportSettings.objects.filter(sender_id=instance.pk).values_list("pk", flat=True)
+    )
+    for config_id in config_ids:
+        transaction.on_commit(
+            lambda config_id=config_id: MaboxExportScheduleService().synchronize(config_id)
+        )
 
 
 PRODUCT_AUTO_SYNC_FIELDS = (

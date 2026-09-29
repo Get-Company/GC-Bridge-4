@@ -527,11 +527,14 @@ class MaboxExportSettings(BaseModel):
         verbose_name=_("Nachricht"),
         help_text=_("Verfügbare Platzhalter: {date}, {month}"),
     )
-    from_email = models.EmailField(
+    sender = models.ForeignKey(
+        "organization.OrganizationContact",
+        on_delete=models.PROTECT,
+        related_name="mabox_export_settings",
+        null=True,
         blank=True,
-        default="",
-        verbose_name=_("Absender-Adresse"),
-        help_text=_("Leer lassen, um DEFAULT_FROM_EMAIL aus der Serverkonfiguration zu verwenden."),
+        verbose_name=_("Versendender Ansprechpartner"),
+        help_text=_("Die SMTP-Zugangsdaten werden beim ausgewählten Ansprechpartner gepflegt."),
     )
     last_sent_at = models.DateTimeField(
         null=True,
@@ -591,6 +594,18 @@ class MaboxExportSettings(BaseModel):
                 {
                     "recipient_emails": _(
                         "Für den aktiven Versand ist ein Empfänger erforderlich."
+                    )
+                }
+            )
+        if self.is_active and not self.sender_id:
+            raise ValidationError(
+                {"sender": _("Für den aktiven Versand ist ein Ansprechpartner erforderlich.")}
+            )
+        if self.sender_id and not self.sender.smtp_is_configured:
+            raise ValidationError(
+                {
+                    "sender": _(
+                        "Beim ausgewählten Ansprechpartner ist SMTP noch nicht vollständig eingerichtet."
                     )
                 }
             )

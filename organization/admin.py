@@ -1,14 +1,19 @@
 from django.contrib import admin
+from django.contrib import messages
 from django.contrib.admin.models import ADDITION, CHANGE, DELETION, LogEntry
+from django.forms import PasswordInput
 from django.http import HttpResponseRedirect
 from django.urls import reverse
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 
 from unfold.contrib.filters.admin import BooleanRadioFilter
+from unfold.decorators import action
+from unfold.enums import ActionVariant
 
 from core.admin import BaseAdmin, BaseTabularInline
 from organization.models import CompanyProfile, LegalDocument, OrganizationContact, OrganizationRole
+from organization.services import OrganizationContactSmtpService
 
 
 class SingletonAdmin(BaseAdmin):
@@ -115,6 +120,7 @@ class OrganizationRoleAdmin(BaseAdmin):
 
 @admin.register(OrganizationContact)
 class OrganizationContactAdmin(BaseAdmin):
+    actions_detail = ("test_smtp_connection",)
     list_display = (
         "employee_profile",
         "role",
@@ -123,6 +129,7 @@ class OrganizationContactAdmin(BaseAdmin):
         "display_phone",
         "is_primary",
         "is_public",
+        "smtp_status",
         "sort_order",
     )
     list_editable = ("is_primary", "is_public", "sort_order")
@@ -142,6 +149,85 @@ class OrganizationContactAdmin(BaseAdmin):
     ]
     autocomplete_fields = ("company", "employee_profile", "role")
     ordering = ("sort_order", "role__name", "employee_profile__user__last_name")
+    fieldsets = (
+        (
+            "Ansprechpartner",
+            {
+                "fields": (
+                    "company",
+                    "employee_profile",
+                    "role",
+                    "title",
+                    "public_email",
+                    "public_phone",
+                    "is_primary",
+                    "is_public",
+                    "sort_order",
+                    "notes",
+                )
+            },
+        ),
+        (
+            "SMTP-Versand",
+            {
+                "fields": (
+                    "smtp_host",
+                    "smtp_port",
+                    "smtp_security",
+                    "smtp_username",
+                    "smtp_password",
+                    "smtp_sender_email",
+                    "smtp_timeout",
+                ),
+                "description": (
+                    "Diese Zugangsdaten werden verwendet, wenn der Ansprechpartner "
+                    "als Absender eines automatischen Exports ausgewählt wird."
+                ),
+            },
+        ),
+        (
+            "System",
+            {
+                "fields": BaseAdmin.readonly_fields,
+                "classes": ("collapse",),
+            },
+        ),
+    )
+
+    @admin.display(boolean=True, description="SMTP eingerichtet")
+    def smtp_status(self, obj: OrganizationContact) -> bool:
+        return obj.smtp_is_configured
+
+    def formfield_for_dbfield(self, db_field, request, **kwargs):
+        if db_field.name == "smtp_password":
+            kwargs["widget"] = PasswordInput(render_value=True)
+        return super().formfield_for_dbfield(db_field, request, **kwargs)
+
+    @action(
+        description="SMTP-Verbindung testen",
+        icon="wifi_tethering",
+        variant=ActionVariant.PRIMARY,
+    )
+    def test_smtp_connection(self, request, object_id: str):
+        contact = self.get_object(request, object_id)
+        if contact is None:
+            self.message_user(request, "Ansprechpartner nicht gefunden.", level=messages.ERROR)
+            return self._redirect_to_changelist()
+        try:
+            OrganizationContactSmtpService().test_connection(contact)
+        except Exception as exc:
+            self.message_user(
+                request,
+                f"SMTP-Verbindung fehlgeschlagen: {exc}",
+                level=messages.ERROR,
+            )
+        else:
+            self.message_user(
+                request,
+                "SMTP-Verbindung und Anmeldung waren erfolgreich.",
+                level=messages.SUCCESS,
+            )
+        return HttpResponseRedirect(request.path)
 
 
 _ACTION_ICONS = {

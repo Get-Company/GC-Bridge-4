@@ -1,28 +1,21 @@
 from __future__ import annotations
 
 import csv
-import os
 from datetime import datetime
 from io import StringIO
 
 from django.conf import settings
-from django.core.mail import EmailMessage, get_connection
+from django.core.mail import EmailMessage
 from django.utils import timezone
 
 from core.services.base import BaseService
+from organization.services import OrganizationContactSmtpService
 from products.models import MaboxExportSettings
 from products.services.mabox_export import MaboxExportService
 
 
 class MaboxExportMailError(RuntimeError):
     pass
-
-
-def _env_bool(name: str, default: bool = False) -> bool:
-    value = os.getenv(name)
-    if value is None:
-        return default
-    return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
 class MaboxExportScheduleService(BaseService):
@@ -33,7 +26,9 @@ class MaboxExportScheduleService(BaseService):
     def synchronize(self, config_id: int = 1) -> None:
         from django_celery_beat.models import CrontabSchedule, PeriodicTask
 
-        config = self.model.objects.filter(pk=config_id).first()
+        config = self.model.objects.select_related(
+            "sender__employee_profile__user"
+        ).filter(pk=config_id).first()
         if config is None:
             PeriodicTask.objects.filter(name=self.periodic_task_name).update(enabled=False)
             return
@@ -57,7 +52,12 @@ class MaboxExportScheduleService(BaseService):
                 "args": "[]",
                 "kwargs": "{}",
                 "queue": "bulk",
-                "enabled": bool(config.is_active and config.recipients),
+                "enabled": bool(
+                    config.is_active
+                    and config.recipients
+                    and config.sender_id
+                    and config.sender.smtp_is_configured
+                ),
                 "description": (
                     "Erzeugt den aktuellen Mabox-CSV-Export und versendet ihn per E-Mail. "
                     "Zeitplan und Empfänger werden unter Produkte → Mabox-Export gepflegt."
@@ -74,6 +74,12 @@ class MaboxExportMailService(BaseService):
         recipients = config.recipients
         if not recipients:
             raise MaboxExportMailError("Es ist kein Mabox-E-Mail-Empfänger konfiguriert.")
+        if not config.sender_id:
+            raise MaboxExportMailError("Es ist kein versendender Ansprechpartner ausgewählt.")
+        if not config.sender.smtp_is_configured:
+            raise MaboxExportMailError(
+                "Beim ausgewählten Ansprechpartner ist SMTP nicht vollständig eingerichtet."
+            )
         if not config.is_active and not test_mode:
             return {"status": "skipped", "reason": "disabled"}
 
@@ -133,9 +139,9 @@ class MaboxExportMailService(BaseService):
         email = EmailMessage(
             subject=subject,
             body=body,
-            from_email=config.from_email or self._default_from_email(),
+            from_email=config.sender.smtp_from_email,
             to=recipients,
-            connection=self._email_connection(),
+            connection=OrganizationContactSmtpService().build_connection(config.sender),
         )
         email.attach(self._filename(now), csv_content.encode("utf-8"), "text/csv")
         return email
@@ -158,34 +164,3 @@ class MaboxExportMailService(BaseService):
         last_sent = timezone.localtime(config.last_sent_at)
         current = timezone.localtime(now)
         return (last_sent.year, last_sent.month) == (current.year, current.month)
-
-    @staticmethod
-    def _default_from_email() -> str:
-        value = os.getenv("DEFAULT_FROM_EMAIL", getattr(settings, "DEFAULT_FROM_EMAIL", "")).strip()
-        if not value:
-            raise MaboxExportMailError("DEFAULT_FROM_EMAIL ist nicht konfiguriert.")
-        return value
-
-    @staticmethod
-    def _email_connection():
-        backend = os.getenv(
-            "EMAIL_BACKEND",
-            getattr(settings, "EMAIL_BACKEND", "django.core.mail.backends.smtp.EmailBackend"),
-        ).strip()
-        if backend != "django.core.mail.backends.smtp.EmailBackend":
-            return get_connection(backend=backend)
-
-        use_tls = _env_bool("EMAIL_USE_TLS", getattr(settings, "EMAIL_USE_TLS", False))
-        use_ssl = _env_bool("EMAIL_USE_SSL", getattr(settings, "EMAIL_USE_SSL", False))
-        if use_tls and use_ssl:
-            raise MaboxExportMailError("EMAIL_USE_TLS und EMAIL_USE_SSL dürfen nicht gleichzeitig aktiv sein.")
-        return get_connection(
-            backend=backend,
-            host=os.getenv("EMAIL_HOST", getattr(settings, "EMAIL_HOST", "localhost")),
-            port=int(os.getenv("EMAIL_PORT", getattr(settings, "EMAIL_PORT", 25))),
-            username=os.getenv("EMAIL_HOST_USER", getattr(settings, "EMAIL_HOST_USER", "")),
-            password=os.getenv("EMAIL_HOST_PASSWORD", getattr(settings, "EMAIL_HOST_PASSWORD", "")),
-            use_tls=use_tls,
-            use_ssl=use_ssl,
-            timeout=int(os.getenv("EMAIL_TIMEOUT", "30")),
-        )

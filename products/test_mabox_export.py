@@ -1,11 +1,14 @@
 from decimal import Decimal
-from os import environ
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
+from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase
 from django.utils import timezone
 
+from hr.models import EmployeeProfile
+from organization.models import OrganizationContact
+from organization.services import OrganizationContactSmtpService
 from products.models import MaboxExportSettings
 from products.services.mabox_export import MaboxExportService
 from products.services.mabox_mail import MaboxExportMailService
@@ -120,26 +123,30 @@ class MaboxExportMailServiceTests(SimpleTestCase):
         )
 
     def test_build_message_attaches_csv_and_marks_test_subject(self):
+        sender = OrganizationContact(
+            smtp_host="smtp.example.com",
+            smtp_port=587,
+            smtp_username="export@example.com",
+            smtp_password="secret",
+            smtp_security=OrganizationContact.SmtpSecurity.STARTTLS,
+            smtp_sender_email="export@example.com",
+        )
         config = MaboxExportSettings(
             recipient_emails="mabox@example.com",
-            from_email="export@example.com",
+            sender=sender,
             subject="Export {date}",
             message="Monat {month}",
         )
         service = MaboxExportMailService()
         now = timezone.now()
 
-        with patch.dict(
-            environ,
-            {"EMAIL_BACKEND": "django.core.mail.backends.locmem.EmailBackend"},
-        ):
-            message = service.build_message(
-                config=config,
-                csv_content="Artikelnummer\r\n204116\r\n",
-                recipients=config.recipients,
-                now=now,
-                test_mode=True,
-            )
+        message = service.build_message(
+            config=config,
+            csv_content="Artikelnummer\r\n204116\r\n",
+            recipients=config.recipients,
+            now=now,
+            test_mode=True,
+        )
 
         self.assertTrue(message.subject.startswith("[TEST] Export "))
         self.assertEqual(message.to, ["mabox@example.com"])
@@ -147,3 +154,51 @@ class MaboxExportMailServiceTests(SimpleTestCase):
         self.assertEqual(len(message.attachments), 1)
         self.assertTrue(message.attachments[0].filename.startswith("products_export_mabox_"))
         self.assertEqual(message.attachments[0].mimetype, "text/csv")
+
+    def test_contact_smtp_configuration_uses_public_email_as_fallback(self):
+        employee = EmployeeProfile(
+            user=get_user_model()(email="employee@example.com"),
+            short_code="EX",
+        )
+        sender = OrganizationContact(
+            employee_profile=employee,
+            public_email="public@example.com",
+            smtp_host="smtp.example.com",
+        )
+
+        self.assertEqual(sender.smtp_from_email, "public@example.com")
+        self.assertTrue(sender.smtp_is_configured)
+
+    def test_contact_smtp_connection_uses_saved_settings(self):
+        sender = OrganizationContact(
+            smtp_host="smtp.example.com",
+            smtp_port=465,
+            smtp_username="export@example.com",
+            smtp_password="secret",
+            smtp_security=OrganizationContact.SmtpSecurity.SSL,
+            smtp_sender_email="export@example.com",
+            smtp_timeout=45,
+        )
+
+        connection = OrganizationContactSmtpService().build_connection(sender)
+
+        self.assertEqual(connection.host, "smtp.example.com")
+        self.assertEqual(connection.port, 465)
+        self.assertEqual(connection.username, "export@example.com")
+        self.assertTrue(connection.use_ssl)
+        self.assertFalse(connection.use_tls)
+        self.assertEqual(connection.timeout, 45)
+
+    def test_contact_smtp_connection_test_opens_and_closes_connection(self):
+        sender = OrganizationContact(
+            smtp_host="smtp.example.com",
+            smtp_sender_email="export@example.com",
+        )
+        connection = MagicMock()
+        service = OrganizationContactSmtpService()
+
+        with patch.object(service, "build_connection", return_value=connection):
+            service.test_connection(sender)
+
+        connection.open.assert_called_once_with()
+        connection.close.assert_called_once_with()

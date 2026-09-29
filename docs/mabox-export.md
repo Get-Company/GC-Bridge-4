@@ -29,33 +29,21 @@ docker exec -i gc_bridge_4_web python manage.py migrate
 
 ## E-Mail-Versand einrichten
 
-Die SMTP-Zugangsdaten gehören in die `.env` auf dem Server und nicht in Git. Ein
-typisches SMTP-Setup sieht so aus:
-
-```dotenv
-EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
-EMAIL_HOST=smtp.example.com
-EMAIL_PORT=587
-EMAIL_HOST_USER=export@example.com
-EMAIL_HOST_PASSWORD=geheimes-passwort
-EMAIL_USE_TLS=true
-EMAIL_USE_SSL=false
-EMAIL_TIMEOUT=30
-DEFAULT_FROM_EMAIL=export@example.com
-```
-
-Nach einer Änderung der `.env` müssen mindestens Web, Celery Beat und der
-Bulk-Worker neu gestartet werden:
-
-```bash
-docker restart gc_bridge_4_web gc_bridge_4_celery_beat gc_bridge_4_celery_bulk
-```
+Die SMTP-Zugangsdaten werden im Django-Admin unter **Organisation →
+Ansprechpartner** beim versendenden Mitarbeiter gepflegt. Dazu gehören Server,
+Port, Verschlüsselungsart, Benutzername, Passwort, Absenderadresse und Timeout.
+Bleibt die besondere SMTP-Absenderadresse leer, wird die öffentliche E-Mail des
+Ansprechpartners beziehungsweise die E-Mail seines Benutzerkontos verwendet.
+Die Aktion **SMTP-Verbindung testen** prüft Serververbindung und Anmeldung mit
+den gespeicherten Daten, ohne eine E-Mail zu versenden.
 
 Im Django-Admin unter **Produkte** befindet sich die Aktion **Mabox-Export**.
-Dort werden Empfänger, Absender, Versandtag (1 bis 28), Uhrzeit, Betreff und
-Nachricht gepflegt. Der Versand ist zunächst deaktiviert. Nach dem Speichern
-wird der monatliche Celery-Beat-Eintrag automatisch angelegt beziehungsweise
-aktualisiert. Die Uhrzeit verwendet die Server-Zeitzone `Europe/Berlin`.
+Dort werden Empfänger, der versendende Ansprechpartner, Versandtag (1 bis 28),
+Uhrzeit, Betreff und Nachricht gepflegt. Der Versand ist zunächst deaktiviert.
+Nach dem Speichern wird der monatliche Celery-Beat-Eintrag automatisch angelegt
+beziehungsweise aktualisiert. Die Uhrzeit verwendet die Server-Zeitzone
+`Europe/Berlin`. Änderungen an den SMTP-Daten des ausgewählten Ansprechpartners
+aktualisieren den Zeitplan ebenfalls automatisch.
 
 Zwei Aktionen stehen direkt in der Konfiguration bereit:
 

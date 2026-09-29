@@ -965,6 +965,7 @@ class PackageAdmin(BaseAdmin):
 @admin.register(MaboxExportSettings)
 class MaboxExportSettingsAdmin(BaseAdmin):
     actions_detail = ("download_csv", "queue_test_email")
+    autocomplete_fields = ("sender",)
     readonly_fields = BaseAdmin.readonly_fields + (
         "last_sent_at",
         "last_row_count",
@@ -977,7 +978,7 @@ class MaboxExportSettingsAdmin(BaseAdmin):
                 "fields": (
                     "is_active",
                     "recipient_emails",
-                    "from_email",
+                    "sender",
                     "send_day",
                     "send_hour",
                     "send_minute",
