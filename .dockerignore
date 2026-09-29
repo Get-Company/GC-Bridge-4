@@ -10,6 +10,9 @@ staticfiles
 media
 tmp
 logs
-docs/build
+docs/build/*
+!docs/build/html/
+!docs/build/html/**
+docs/build/html/.doctrees/
 .claude-flow
 *.pdf
