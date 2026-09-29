@@ -398,9 +398,9 @@ UNFOLD = {
     ],
     "SITE_DROPDOWN": [
         {
-            "title": _("Handbuch"),
+            "title": _("Anwenderhandbuch"),
             "icon": "menu_book",
-            "link": "/docs/html/index.html",
+            "link": "/docs/html/handbuch/index.html",
             "attrs": {
                 "target": "_blank",
                 "rel": "noopener noreferrer",

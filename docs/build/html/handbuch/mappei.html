@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+
+<html lang="de" data-content_root="../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Mappei &#8212; GC-Bridge-4 0.1.0 Dokumentation</title>
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=5ecbeea2" />
+    <link rel="stylesheet" type="text/css" href="../_static/basic.css?v=b08954a9" />
+    <link rel="stylesheet" type="text/css" href="../_static/alabaster.css?v=27fed22d" />
+    <script src="../_static/documentation_options.js?v=7c8c992d"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/translations.js?v=9bf55d28"></script>
+    <link rel="index" title="Stichwortverzeichnis" href="../genindex.html" />
+    <link rel="search" title="Suche" href="../search.html" />
+    <link rel="next" title="HR Mitarbeiterverwaltung" href="../hr_mitarbeiterverwaltung.html" />
+    <link rel="prev" title="Dokumente" href="dokumente.html" />
+   
+  <link rel="stylesheet" href="../_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="mappei">
+<span id="gc-bridge-handbuch-mappei"></span><h1>Mappei<a class="headerlink" href="#mappei" title="Link to this heading">¶</a></h1>
+<section id="wofur-ist-dieser-bereich-da">
+<h2>Wofür ist dieser Bereich da?<a class="headerlink" href="#wofur-ist-dieser-bereich-da" title="Link to this heading">¶</a></h2>
+<p>Im Bereich <strong>Mappei</strong> sammelt die Bridge öffentlich sichtbare Produkt-
+und Preisinformationen von Mappei. So können Sie die Preise von Mappei
+mit den Preisen der eigenen Classei-Produkte vergleichen.</p>
+<p>Der Bereich hat drei Seiten:</p>
+<ul class="simple">
+<li><p><strong>Produkte</strong> zeigt die gefundenen Mappei-Produkte und ihren letzten
+Preis.</p></li>
+<li><p><strong>Preise</strong> zeigt die gespeicherten Preisstände. Ein neuer Preisstand
+entsteht nur, wenn sich ein Preis oder eine Preisstaffel geändert
+hat.</p></li>
+<li><p><strong>Mappei &lt;-&gt; Classei</strong> verbindet ein Mappei-Produkt mit einem
+passenden Classei-Produkt.</p></li>
+</ul>
+<p>Die Zuordnung ist wichtig. Erst durch sie kann ein Mappei-Preis beim
+passenden Classei-Produkt in einer Preisänderung angezeigt werden.</p>
+<blockquote>
+<div><p><strong>Wichtig:</strong> Mappei-Preise dienen als Vergleich. Sie ändern den
+eigenen Verkaufspreis nicht automatisch.</p>
+</div></blockquote>
+<a class="reference internal image-reference" href="../_images/07_mappei.jpg"><img alt="Leere Maske für die Zuordnung von Mappei- und Classei-Produkten" src="../_images/07_mappei.jpg" style="width: 100%;" />
+</a>
+<p>Bei einer Zuordnung wählen Sie links das Mappei-Produkt und rechts das
+passende interne Classei-Produkt.</p>
+</section>
+<section id="navigation">
+<h2>Navigation<a class="headerlink" href="#navigation" title="Link to this heading">¶</a></h2>
+<ol class="arabic simple">
+<li><p>Öffnen Sie die Bridge unter <code class="docutils literal notranslate"><span class="pre">http://10.0.0.165/admin/</span></code>.</p></li>
+<li><p>Klappen Sie links den Bereich <strong>Mappei</strong> auf.</p></li>
+<li><p>Wählen Sie <strong>Produkte</strong>, <strong>Preise</strong> oder <strong>Mappei &lt;-&gt; Classei</strong>.</p></li>
+</ol>
+<p>Die folgenden Adressen ergeben sich direkt aus der Seitennavigation und
+der Admin-Einrichtung:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Seite</p></th>
+<th class="head"><p>Adresse</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Mappei-Produkte</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">http://</span>
+<span class="pre">10.0.0.165/admin/mappei/mappeiproduct/</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Einzelnes Mappei-Produkt</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">http://10.0.0.165/a</span>
+<span class="pre">dmin/mappei/mappeiproduct/&lt;ID&gt;/change/</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>Mappei-Preise</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">http://10.0.0</span>
+<span class="pre">.165/admin/mappei/mappeipricesnapshot/</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Produkt-Zuordnungen</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">http://10.0.0.</span>
+<span class="pre">165/admin/mappei/mappeiproductmapping/</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>Neue Zuordnung</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">http://10.0.0.165/</span>
+<span class="pre">admin/mappei/mappeiproductmapping/add/</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Einzelne Zuordnung</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">http://10.0.0.165/admin/ma</span>
+<span class="pre">ppei/mappeiproductmapping/&lt;ID&gt;/change/</span></code></p></td>
+</tr>
+</tbody>
+</table>
+<p><code class="docutils literal notranslate"><span class="pre">&lt;ID&gt;</span></code> steht für die interne Nummer des Eintrags. Welche Seiten ein
+Mitarbeiter sieht, hängt von seinen Rechten ab.</p>
+</section>
+<section id="mappei-produkte">
+<h2>Mappei-Produkte<a class="headerlink" href="#mappei-produkte" title="Link to this heading">¶</a></h2>
+<section id="die-produktliste">
+<h3>Die Produktliste<a class="headerlink" href="#die-produktliste" title="Link to this heading">¶</a></h3>
+<p>Die Liste zeigt diese Spalten:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Spalte</p></th>
+<th class="head"><p>Einfache Erklärung</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Bild</strong></p></td>
+<td><p>Kleines Produktbild von Mappei. Ein Strich
+bedeutet: Es wurde kein Bild gefunden.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Artikelnummer</strong></p></td>
+<td><p>Artikelnummer von Mappei. Sie kann auch
+einen Schrägstrich, einen Punkt oder
+Buchstaben enthalten.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Name</strong></p></td>
+<td><p>Bezeichnung des Produkts auf der
+Mappei-Seite.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Hat Staffelpreise</strong></p></td>
+<td><p>Zeigt an, ob für größere Mengen andere
+Preise gefunden wurden.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Aktueller Preis</strong></p></td>
+<td><p>Der neueste gespeicherte Netto-Preis. Ein
+Strich bedeutet: Es gibt noch keinen
+Preisstand.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Zuletzt gescrapt</strong></p></td>
+<td><p>Zeitpunkt, zu dem die Bridge das Produkt
+zuletzt von der Mappei-Seite eingelesen
+hat.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Mapping</strong></p></td>
+<td><p>Zeigt an, ob mindestens eine Verbindung zu
+einem Classei-Produkt besteht.</p></td>
+</tr>
+</tbody>
+</table>
+<p>Mit dem Filter <strong>Hat Staffelpreise</strong> können Sie Produkte mit und ohne
+Preisstaffel trennen.</p>
+<p>Die Suche findet ein Produkt über:</p>
+<ul class="simple">
+<li><p>die Mappei-Artikelnummer,</p></li>
+<li><p>den Mappei-Produktnamen,</p></li>
+<li><p>die ERP-Nummer eines verbundenen Classei-Produkts.</p></li>
+</ul>
+<p>Dadurch können Sie auch mit einer bekannten Classei-ERP-Nummer nach dem
+passenden Mappei-Produkt suchen.</p>
+</section>
+<section id="die-produktseite-und-ihre-felder">
+<h3>Die Produktseite und ihre Felder<a class="headerlink" href="#die-produktseite-und-ihre-felder" title="Link to this heading">¶</a></h3>
+<p>Ein Klick auf ein Produkt öffnet die Produktseite. Die Daten kommen
+überwiegend von der Mappei-Webseite.</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Einfache Erklärung</p></th>
+<th class="head"><p>Bearbeitung</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Artikelnummer</strong></p></td>
+<td><p>Eindeutige
+M
+appei-Artikelnummer.</p></td>
+<td><p>Nur Anzeige. Sie
+wird beim Einlesen
+übernommen.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Name</strong></p></td>
+<td><p>Produktname von
+Mappei.</p></td>
+<td><p>Kann sichtbar
+geändert werden.
+Beim nächsten
+Einlesen kann der
+Wert wieder durch
+die Angabe von
+Mappei ersetzt
+werden.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>URL</strong></p></td>
+<td><p>Direkter Link zur
+Produktseite bei
+Mappei. Der Link
+öffnet sich in einem
+neuen Tab.</p></td>
+<td><p>Nur Anzeige.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Bild</strong></p></td>
+<td><p>Das von Mappei
+gelieferte
+Produktbild.</p></td>
+<td><p>Nur Anzeige.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>VPE Menge</strong></p></td>
+<td><p>Anzahl der Einheiten
+in einer Verpackung.
+Bei <code class="docutils literal notranslate"><span class="pre">100</span></code> enthält
+eine Verpackung zum
+Beispiel 100 Stück.</p></td>
+<td><p>Kann geändert
+werden. Eine falsche
+Menge verfälscht den
+Preisvergleich.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>VPE Einheit</strong></p></td>
+<td><p>Bezeichnung der
+Einheit, zum
+Beispiel <code class="docutils literal notranslate"><span class="pre">Stück</span></code>.</p></td>
+<td><p>Kann geändert
+werden.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Hat
+Staffelpreise</strong></p></td>
+<td><p>Kennzeichen für ein
+Produkt mit
+Mengenpreisen.</p></td>
+<td><p>Kann geändert
+werden. Beim
+nächsten Einlesen
+kann Mappei die
+Angabe wieder
+ersetzen.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Zuletzt gescrapt</strong></p></td>
+<td><p>Zeitpunkt der
+letzten
+erfolgreichen
+Übernahme dieses
+Produkts.</p></td>
+<td><p>Nur Anzeige.</p></td>
+</tr>
+</tbody>
+</table>
+<p>Unter den Produktfeldern steht die Tabelle mit den bisherigen
+<strong>Mappei-Preissnapshots</strong>. Diese Tabelle ist nur zum Lesen. Sie zeigt
+die neuesten Einträge zuerst. Neue Preiszeilen können dort nicht von
+Hand angelegt oder gelöscht werden.</p>
+<p>Zwei weitere Werte werden im Hintergrund übernommen, erscheinen aber
+nicht als eigenes Eingabefeld auf dieser Produktseite:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Wert</p></th>
+<th class="head"><p>Bedeutung</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Beschreibung</strong></p></td>
+<td><p>Beschreibungstext von der Mappei-Produktseite.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Bild-URL</strong></p></td>
+<td><p>Internetadresse, von der das angezeigte
+Produktbild geladen wird.</p></td>
+</tr>
+</tbody>
+</table>
+<p>Die Verbindung zu Classei wird nicht auf dieser Seite gepflegt.
+Verwenden Sie dafür <strong>Mappei &lt;-&gt; Classei</strong>.</p>
+<blockquote>
+<div><p><strong>Hinweis:</strong> In der Oberfläche kann je nach Recht eine Schaltfläche
+zum Hinzufügen oder Kopieren sichtbar sein. Mappei-Produkte sollten
+im normalen Arbeitsablauf trotzdem durch das Einlesen entstehen. Die
+Artikelnummer ist auf der Produktseite nicht frei eintragbar.</p>
+</div></blockquote>
+</section>
+</section>
+<section id="preise">
+<h2>Preise<a class="headerlink" href="#preise" title="Link to this heading">¶</a></h2>
+<section id="die-preisliste">
+<h3>Die Preisliste<a class="headerlink" href="#die-preisliste" title="Link to this heading">¶</a></h3>
+<p>Die Seite <strong>Preise</strong> ist ein Preisverlauf. Sie ist nur zum Lesen. Die
+neuesten Preisstände stehen oben.</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Spalte und Feld</p></th>
+<th class="head"><p>Einfache Erklärung</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Mappei Produkt</strong></p></td>
+<td><p>Das Produkt, zu dem der Preis
+gehört. Angezeigt werden
+Artikelnummer und Name.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Gescrapt am</strong></p></td>
+<td><p>Zeitpunkt, zu dem dieser Preisstand
+eingelesen wurde.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Preis (netto)</strong></p></td>
+<td><p>Normaler Netto-Preis der
+Mappei-Verpackung.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Staffelpreis min</strong></p></td>
+<td><p>Niedrigster gefundener Preis in der
+Preisstaffel.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Staffelpreis max</strong></p></td>
+<td><p>Höchster gefundener Preis in der
+Preisstaffel.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Staffelmenge min (Stück)</strong></p></td>
+<td><p>Kleinste gefundene Menge der
+Staffel, in Stück umgerechnet.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Staffelmenge max (Stück)</strong></p></td>
+<td><p>Größte gefundene Menge der Staffel,
+in Stück umgerechnet.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Teilweise erfolgreich</strong></p></td>
+<td><p>Warnt davor, dass die Bridge die
+Staffelmengen nicht sicher in Stück
+umrechnen konnte. Meist fehlte dafür
+die VPE-Menge. Die gefundenen Preise
+können trotzdem vorhanden sein.</p></td>
+</tr>
+</tbody>
+</table>
+<p>Leere Staffel-Felder sind bei einem Produkt ohne Staffelpreis normal.</p>
+<p>Sie können nach der <strong>Mappei-Artikelnummer</strong> suchen. Mit dem Filter
+<strong>Teilweise erfolgreich</strong> finden Sie Preisstände, die geprüft werden
+sollten.</p>
+<p>Ein Preisstand kann nicht von Hand angelegt oder geändert werden. Er
+wird automatisch erstellt. Bleiben alle Preisangaben gleich, entsteht
+keine neue Zeile. So bleibt die Liste übersichtlich und zeigt echte
+Preisänderungen.</p>
+</section>
+<section id="so-lesen-sie-eine-preisstaffel">
+<h3>So lesen Sie eine Preisstaffel<a class="headerlink" href="#so-lesen-sie-eine-preisstaffel" title="Link to this heading">¶</a></h3>
+<p>Die Bridge speichert den normalen Verpackungspreis und die beiden
+äußeren Werte der gefundenen Staffel:</p>
+<ul class="simple">
+<li><p><strong>Staffelpreis min</strong> ist der niedrigste gefundene Staffelpreis.</p></li>
+<li><p><strong>Staffelpreis max</strong> ist der höchste gefundene Staffelpreis.</p></li>
+<li><p><strong>Staffelmenge min</strong> und <strong>Staffelmenge max</strong> zeigen den kleinsten
+und größten gefundenen Mengenpunkt in Stück.</p></li>
+</ul>
+<p>Die Liste zeigt damit einen schnellen Überblick. Sie zeigt nicht jede
+einzelne Zwischenstufe einer langen Preisstaffel.</p>
+</section>
+</section>
+<section id="mappei-classei">
+<h2>Mappei &lt;-&gt; Classei<a class="headerlink" href="#mappei-classei" title="Link to this heading">¶</a></h2>
+<section id="wozu-dient-die-zuordnung">
+<h3>Wozu dient die Zuordnung?<a class="headerlink" href="#wozu-dient-die-zuordnung" title="Link to this heading">¶</a></h3>
+<p>Auf dieser Seite legen Sie fest, welche Produkte zusammengehören. Eine
+Zuordnung hat immer zwei Seiten:</p>
+<ul class="simple">
+<li><p>ein Produkt von Mappei,</p></li>
+<li><p>ein internes Produkt von Classei.</p></li>
+</ul>
+<p>Eine Zuordnung ändert keine Produktdaten und keinen Verkaufspreis. Sie
+erlaubt nur den Vergleich.</p>
+<p>Ein Mappei-Produkt darf mit mehreren Classei-Produkten verbunden sein.
+Auch ein Classei-Produkt darf mit mehreren Mappei-Produkten verbunden
+sein. Genau dieselbe Verbindung kann aber nicht zweimal gespeichert
+werden.</p>
+</section>
+<section id="die-zuordnungsliste">
+<h3>Die Zuordnungsliste<a class="headerlink" href="#die-zuordnungsliste" title="Link to this heading">¶</a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Spalte</p></th>
+<th class="head"><p>Einfache Erklärung</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Mappei Bild</strong></p></td>
+<td><p>Kleines Bild des Mappei-Produkts.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Mappei Produkt</strong></p></td>
+<td><p>Artikelnummer und Name des ausgewählten
+Mappei-Produkts.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Produktbild</strong></p></td>
+<td><p>Erstes verfügbares Bild des
+Classei-Produkts.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Internes Produkt</strong></p></td>
+<td><p>ERP-Nummer und Name des Classei-Produkts.</p></td>
+</tr>
+</tbody>
+</table>
+<p>Die Suche berücksichtigt Artikelnummern und Namen auf beiden Seiten:</p>
+<ul class="simple">
+<li><p>Mappei-Artikelnummer,</p></li>
+<li><p>Mappei-Produktname,</p></li>
+<li><p>Classei-ERP-Nummer,</p></li>
+<li><p>Classei-Produktname.</p></li>
+</ul>
+</section>
+<section id="eine-zuordnung-anlegen">
+<h3>Eine Zuordnung anlegen<a class="headerlink" href="#eine-zuordnung-anlegen" title="Link to this heading">¶</a></h3>
+<ol class="arabic simple">
+<li><p>Öffnen Sie <strong>Mappei &lt;-&gt; Classei</strong>.</p></li>
+<li><p>Wählen Sie <strong>Mappei Produkt-Mapping hinzufügen</strong>.</p></li>
+<li><p>Klicken Sie in das Feld <strong>Mappei Produkt</strong> und suchen Sie nach
+Artikelnummer oder Name.</p></li>
+<li><p>Prüfen Sie das kleine Bild und wählen Sie das richtige
+Mappei-Produkt.</p></li>
+<li><p>Klicken Sie in das Feld <strong>Internes Produkt</strong> und suchen Sie nach
+ERP-Nummer oder Name.</p></li>
+<li><p>Prüfen Sie auch hier Bild, Nummer und Name.</p></li>
+<li><p>Speichern Sie die Zuordnung.</p></li>
+</ol>
+<p>Die beiden Auswahlfelder zeigen in der Trefferliste ein Produktbild,
+sofern eines vorhanden ist.</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Einfache Erklärung</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Mappei Produkt</strong></p></td>
+<td><p>Das Produkt des Wettbewerbers. Suchen Sie
+möglichst mit der genauen
+Mappei-Artikelnummer.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Internes Produkt</strong></p></td>
+<td><p>Das passende Classei-Produkt. Suchen Sie
+möglichst mit der ERP-Nummer.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Angelegt am</strong></p></td>
+<td><p>Zeitpunkt, zu dem die Zuordnung angelegt
+wurde. Nur Anzeige.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Aktualisiert am</strong></p></td>
+<td><p>Zeitpunkt der letzten Änderung. Nur Anzeige.</p></td>
+</tr>
+</tbody>
+</table>
+<p>Beim Löschen einer Zuordnung wird nur die Verbindung entfernt. Die
+beiden Produkte bleiben bestehen. Danach fehlt der Mappei-Vergleich für
+diese Verbindung.</p>
+</section>
+</section>
+<section id="wo-erscheint-der-vergleich">
+<h2>Wo erscheint der Vergleich?<a class="headerlink" href="#wo-erscheint-der-vergleich" title="Link to this heading">¶</a></h2>
+<p>Bei einer <strong>Preisänderung</strong> eines Classei-Produkts kann eine Spalte
+<strong>Mappei</strong> erscheinen. Voraussetzung sind:</p>
+<ul class="simple">
+<li><p>eine passende Zuordnung unter <strong>Mappei &lt;-&gt; Classei</strong>,</p></li>
+<li><p>mindestens ein gespeicherter Preisstand für das Mappei-Produkt.</p></li>
+</ul>
+<p>Die Bridge rechnet den Mappei-Preis auf die Preiseinheit des
+Classei-Produkts um. Dabei werden die VPE-Menge von Mappei und die
+Preiseinheit des Classei-Produkts berücksichtigt. In der aufgeklappten
+Anzeige sehen Sie:</p>
+<ul class="simple">
+<li><p>den Preis auf die eigene Preiseinheit umgerechnet,</p></li>
+<li><p>die eigene Preisbasis zum Vergleich,</p></li>
+<li><p>den originalen Mappei-Basispreis,</p></li>
+<li><p>die Staffelmenge und den Staffelpreis, falls vorhanden,</p></li>
+<li><p>die Mappei-Artikelnummer und das Datum des Preisstands,</p></li>
+<li><p>einen Link zur Mappei-Produktseite.</p></li>
+</ul>
+<p>Sind mehrere Mappei-Produkte mit demselben Classei-Produkt verbunden,
+zeigt die Positionsliste den günstigsten passend umgerechneten aktuellen
+Mappei-Preis. Im Preisdiagramm kann dagegen pro Jahr der höchste
+gespeicherte Mappei-Preis erscheinen. Diese beiden Ansichten beantworten
+also unterschiedliche Fragen.</p>
+</section>
+<section id="typischer-ablauf">
+<h2>Typischer Ablauf<a class="headerlink" href="#typischer-ablauf" title="Link to this heading">¶</a></h2>
+<ol class="arabic simple">
+<li><p>Die Bridge liest die Mappei-Produkte und Preise ein.</p></li>
+<li><p>Öffnen Sie <strong>Produkte</strong> und prüfen Sie Artikelnummer, Name, VPE und
+letzten Preis.</p></li>
+<li><p>Prüfen Sie unter <strong>Preise</strong>, ob der aktuelle Preis vollständig ist.</p></li>
+<li><p>Legen Sie unter <strong>Mappei &lt;-&gt; Classei</strong> die passende Verbindung an.</p></li>
+<li><p>Öffnen Sie die zugehörige Preisänderung des Classei-Produkts.</p></li>
+<li><p>Klappen Sie dort die Spalte <strong>Mappei</strong> auf und vergleichen Sie die
+Preiseinheiten.</p></li>
+<li><p>Entscheiden Sie den eigenen Preis weiterhin bewusst. Der Mappei-Wert
+ist nur eine Hilfe.</p></li>
+</ol>
+<p>Die Bridge ist so eingerichtet, dass Mappei-Preise auf dem laufenden
+System täglich gegen 20 Uhr eingelesen werden können. Zusätzlich gibt es
+für berechtigte Administratoren unter <strong>System → Celery Tasks</strong> den
+Eintrag <strong>Mappei Preise scrapen</strong>. Ob der tägliche Lauf auf dem
+jeweiligen Server wirklich aktiv ist, sollte die zuständige
+Administration bestätigen.</p>
+</section>
+<section id="hinweise-und-haufige-fehler">
+<h2>Hinweise und häufige Fehler<a class="headerlink" href="#hinweise-und-haufige-fehler" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p><strong>Kein aktueller Preis:</strong> Prüfen Sie <strong>Zuletzt gescrapt</strong>. Ist das
+Feld leer oder alt, wurde das Produkt noch nicht oder seit längerer
+Zeit nicht erfolgreich gelesen.</p></li>
+<li><p><strong>Kein Wert in der Mappei-Spalte:</strong> Es fehlt wahrscheinlich die
+Zuordnung oder ein Preisstand.</p></li>
+<li><p><strong>Falscher Vergleichspreis:</strong> Prüfen Sie zuerst <strong>VPE Menge</strong>, <strong>VPE
+Einheit</strong> und die Preiseinheit des Classei-Produkts. Schon eine
+falsche Packungsmenge kann den Vergleich stark verändern.</p></li>
+<li><p><strong>Warnung „Teilweise erfolgreich“:</strong> Die Preisstaffel wurde gefunden,
+aber wegen einer fehlenden VPE-Menge nicht sicher in Stück
+umgerechnet. Prüfen Sie die Mappei-Seite und melden Sie den Fall an
+die zuständige Administration. Eine Änderung von Hand ist keine
+dauerhafte Lösung, weil das nächste Einlesen die VPE-Angabe wieder
+von Mappei übernimmt.</p></li>
+<li><p><strong>Staffel-Felder sind leer:</strong> Das ist bei einem Produkt ohne
+Preisstaffel normal.</p></li>
+<li><p><strong>Doppelte Zuordnung wird abgelehnt:</strong> Dieselbe Paarung aus Mappei-
+und Classei-Produkt gibt es bereits. Suchen Sie in der Liste nach
+beiden Artikelnummern.</p></li>
+<li><p><strong>Falsches Produkt gewählt:</strong> Löschen Sie nur die falsche Zuordnung
+und legen Sie die richtige neu an. Löschen Sie nicht das gesamte
+Mappei-Produkt.</p></li>
+<li><p><strong>Name oder VPE ändert sich später wieder:</strong> Diese Angaben werden
+beim nächsten Einlesen erneut von Mappei übernommen.</p></li>
+<li><p><strong>Bild fehlt:</strong> Die Zuordnung kann trotzdem gespeichert werden.
+Prüfen Sie Nummer und Name besonders sorgfältig.</p></li>
+<li><p><strong>Preise nicht selbst überschreiben:</strong> Die Preisliste ist absichtlich
+nur lesbar. Lassen Sie bei veralteten Daten den Einlesevorgang durch
+eine berechtigte Person prüfen.</p></li>
+<li><p><strong>Netto und Verpackung beachten:</strong> Der angezeigte Mappei-Basispreis
+ist ein Netto-Preis für die Mappei-Verpackung. Er ist nicht
+automatisch ein Stückpreis.</p></li>
+</ul>
+</section>
+<section id="praxisbeispiel-1-ein-mappei-produkt-richtig-mit-classei-verbinden">
+<h2>Praxisbeispiel 1: Ein Mappei-Produkt richtig mit Classei verbinden<a class="headerlink" href="#praxisbeispiel-1-ein-mappei-produkt-richtig-mit-classei-verbinden" title="Link to this heading">¶</a></h2>
+<p>Sie möchten das Mappei-Produkt <code class="docutils literal notranslate"><span class="pre">M-204113</span></code> mit dem eigenen
+Classei-Produkt <code class="docutils literal notranslate"><span class="pre">204113</span></code> vergleichen.</p>
+<ol class="arabic simple">
+<li><p>Öffnen Sie <strong>Mappei → Produkte</strong>.</p></li>
+<li><p>Suchen Sie nach <code class="docutils literal notranslate"><span class="pre">M-204113</span></code>.</p></li>
+<li><p>Öffnen Sie den Treffer. Prüfen Sie Name, Bild und URL.</p></li>
+<li><p>Prüfen Sie die <strong>VPE Menge</strong>. Sie steht in diesem Fall auf <code class="docutils literal notranslate"><span class="pre">100</span></code>.
+Damit gilt der Mappei-Preis für eine Verpackung mit 100 Stück.</p></li>
+<li><p>Schauen Sie unten in den Preisständen nach, ob ein aktueller
+Netto-Preis vorhanden ist.</p></li>
+<li><p>Öffnen Sie <strong>Mappei → Mappei &lt;-&gt; Classei</strong>.</p></li>
+<li><p>Wählen Sie <strong>Mappei Produkt-Mapping hinzufügen</strong>.</p></li>
+<li><p>Wählen Sie im ersten Feld <code class="docutils literal notranslate"><span class="pre">M-204113</span></code>. Prüfen Sie das Bild.</p></li>
+<li><p>Wählen Sie im zweiten Feld das interne Produkt mit der ERP-Nummer
+<code class="docutils literal notranslate"><span class="pre">204113</span></code>. Prüfen Sie auch dessen Bild und Namen.</p></li>
+<li><p>Speichern Sie.</p></li>
+<li><p>Suchen Sie die neue Zeile in der Zuordnungsliste. Beide Produkte
+müssen nebeneinander stehen.</p></li>
+</ol>
+<p>Wenn das Classei-Produkt später in einer Preisänderung erscheint, zeigt
+die Mappei-Spalte den Vergleich für 100 Stück. Das Speichern der
+Zuordnung allein verändert den Classei-Preis nicht.</p>
+</section>
+<section id="praxisbeispiel-2-eine-unvollstandige-preisstaffel-richtig-melden">
+<h2>Praxisbeispiel 2: Eine unvollständige Preisstaffel richtig melden<a class="headerlink" href="#praxisbeispiel-2-eine-unvollstandige-preisstaffel-richtig-melden" title="Link to this heading">¶</a></h2>
+<p>In der Preisliste steht bei einem Produkt <strong>Teilweise erfolgreich: Ja</strong>.
+Außerdem fehlen die Staffel-Mengen.</p>
+<ol class="arabic simple">
+<li><p>Klicken Sie in der Preiszeile auf das Mappei-Produkt.</p></li>
+<li><p>Prüfen Sie auf der Produktseite die <strong>VPE Menge</strong>.</p></li>
+<li><p>Ist die VPE-Menge leer, kann die Bridge eine Mappei-Angabe wie „ab 2
+Packungen“ nicht sicher in Stück umrechnen.</p></li>
+<li><p>Öffnen Sie über die <strong>URL</strong> die Mappei-Seite in einem neuen Tab.</p></li>
+<li><p>Suchen Sie dort die Angabe zum Inhalt der Verpackung.</p></li>
+<li><p>Notieren Sie Mappei-Artikelnummer, Verpackungsinhalt, Datum des
+Preisstands und die sichtbare Warnung.</p></li>
+<li><p>Ändern Sie den Preisstand nicht. Er ist absichtlich nur lesbar.</p></li>
+<li><p>Melden Sie die Angaben an die zuständige Administration. Die
+Übernahme von der Mappei-Seite muss geprüft werden.</p></li>
+<li><p>Nach der Korrektur und einem neuen Einleselauf prüfen Sie den
+neuesten Preisstand. Die Staffelmengen sollten dann in Stück
+erscheinen. Beim neuen Eintrag sollte <strong>Teilweise erfolgreich</strong> auf
+<strong>Nein</strong> stehen.</p></li>
+</ol>
+<p>Eine VPE-Änderung von Hand am Produkt wäre hier nur vorübergehend. Der
+nächste Einleselauf übernimmt den Wert erneut von der Mappei-Seite. Der
+ältere Preisstand bleibt zur Nachvollziehbarkeit erhalten und wird nicht
+nachträglich verändert.</p>
+</section>
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../index.html">GC-Bridge-4</a></h1>
+
+
+
+
+
+
+
+
+
+<search id="searchbox" style="display: none" role="search">
+    <div class="searchformwrapper">
+    <form class="search" action="../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Search"/>
+      <input type="submit" value="Los" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script><h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Inhalte</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../einleitung.html">Einleitung</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../erste_schritte.html">Erste Schritte</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Anwenderhandbuch: tägliche Arbeit</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="issues.html">Issues</a></li>
+<li class="toctree-l2"><a class="reference internal" href="emails.html">E-Mails</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bestellungen.html">Bestellungen</a></li>
+<li class="toctree-l2"><a class="reference internal" href="kunden.html">Kunden</a></li>
+<li class="toctree-l2"><a class="reference internal" href="produkte.html">Produkte</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dokumente.html">Dokumente</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Mappei</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../hr_mitarbeiterverwaltung.html">HR Mitarbeiterverwaltung</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../microtech_rulebuilder_feldkatalog.html">Microtech Rulebuilder mit Feldkatalog (Schritt fuer Schritt)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../operator_checkliste.html">Operator-Checkliste (1 Seite)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../workflows.html">Workflows</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../ki_uebersetzungen.html">KI-Uebersetzungen mit Ollama</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../betrieb_technik.html">Betrieb und Technik</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../stoerung_nicht_erreichbar.html">Stoerung: Seite nicht erreichbar</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../reference/index.html">Referenz</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../index.html">Documentation overview</a><ul>
+  <li><a href="index.html">Anwenderhandbuch: tägliche Arbeit</a><ul>
+      <li>Previous: <a href="dokumente.html" title="vorheriges Kapitel">Dokumente</a></li>
+      <li>Next: <a href="../hr_mitarbeiterverwaltung.html" title="nächstes Kapitel">HR Mitarbeiterverwaltung</a></li>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 9.1.0</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+      
+      |
+      <a href="../_sources/handbuch/mappei.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

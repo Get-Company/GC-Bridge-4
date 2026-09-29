@@ -1,0 +1,1216 @@
+<!DOCTYPE html>
+
+<html lang="de" data-content_root="../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>E-Mails &#8212; GC-Bridge-4 0.1.0 Dokumentation</title>
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=5ecbeea2" />
+    <link rel="stylesheet" type="text/css" href="../_static/basic.css?v=b08954a9" />
+    <link rel="stylesheet" type="text/css" href="../_static/alabaster.css?v=27fed22d" />
+    <script src="../_static/documentation_options.js?v=7c8c992d"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/translations.js?v=9bf55d28"></script>
+    <link rel="index" title="Stichwortverzeichnis" href="../genindex.html" />
+    <link rel="search" title="Suche" href="../search.html" />
+    <link rel="next" title="Bestellungen" href="bestellungen.html" />
+    <link rel="prev" title="Issues" href="issues.html" />
+   
+  <link rel="stylesheet" href="../_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="e-mails">
+<h1>E-Mails<a class="headerlink" href="#e-mails" title="Link to this heading">¶</a></h1>
+<section id="wofur-ist-dieser-bereich-da">
+<h2>Wofür ist dieser Bereich da?<a class="headerlink" href="#wofur-ist-dieser-bereich-da" title="Link to this heading">¶</a></h2>
+<p>Im Bereich <strong>E-Mails</strong> erstellen Sie Newsletter-Kampagnen, gestalten
+deren Inhalt und ordnen sie den passenden Newsletter-Empfängern zu.
+Außerdem sehen Sie, welche E-Mails bereits für die weitere Verarbeitung
+vorbereitet wurden.</p>
+<p>Der Bereich enthält fünf Menüpunkte:</p>
+<ul class="simple">
+<li><p><strong>Kampagnen</strong> – Newsletter anlegen, bearbeiten, gestalten und als
+HTML ausgeben.</p></li>
+<li><p><strong>Warteschlange</strong> – vorbereitete E-Mails je Empfänger prüfen.</p></li>
+<li><p><strong>Komponenten</strong> – wiederverwendbare Vorlagen-Bausteine verwalten.
+Dieser Punkt ist eher für geschulte Anwender gedacht.</p></li>
+<li><p><strong>Kategorien</strong> – Kampagnen mit einfachen Schlagworten ordnen.</p></li>
+<li><p><strong>Newsletter-Empfänger</strong> – Empfänger aus Shopware prüfen, mit Kunden
+verbinden und einer Kampagne zuordnen.</p></li>
+</ul>
+<a class="reference internal image-reference" href="../_images/02_emails.jpg"><img alt="Liste der E-Mail-Kampagnen mit Kategorien, Status und Sendedatum" src="../_images/02_emails.jpg" style="width: 100%;" />
+</a>
+<p>Die Kampagnenliste zeigt auf einen Blick, ob eine E-Mail noch ein Entwurf,
+bereit oder bereits exportiert ist.</p>
+<blockquote>
+<div><p><strong>Wichtig:</strong> Die hier geprüfte Funktion bereitet E-Mails vor und legt
+sie in die Warteschlange. Im untersuchten Bereich ist kein
+eigentlicher E-Mail-Versand zu sehen. Deshalb sollte das Handbuch
+nicht versprechen, dass eine E-Mail allein durch den Status „Bereit“
+oder durch den Eintrag in der Warteschlange bereits versendet wurde.</p>
+</div></blockquote>
+</section>
+<section id="navigation">
+<h2>Navigation<a class="headerlink" href="#navigation" title="Link to this heading">¶</a></h2>
+<ol class="arabic simple">
+<li><p>Öffnen Sie die Bridge unter <code class="docutils literal notranslate"><span class="pre">http://10.0.0.165/admin/</span></code>.</p></li>
+<li><p>Klappen Sie links den Bereich <strong>E-Mails</strong> auf.</p></li>
+<li><p>Wählen Sie den gewünschten Menüpunkt.</p></li>
+</ol>
+<p>Direkte Adressen:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Seite</p></th>
+<th class="head"><p>Adresse</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Kampagnen</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">htt</span>
+<span class="pre">p://10.0.0.165/admin/emails/emailcampaign/</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Neue Kampagne</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">http://</span>
+<span class="pre">10.0.0.165/admin/emails/emailcampaign/add/</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>Kampagnendaten</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">http://10.0.0.1</span>
+<span class="pre">65/admin/emails/emailcampaign/&lt;ID&gt;/change/</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Einfacher Editor</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">http://10.0.0.1</span>
+<span class="pre">65/admin/emails/emailcampaign/&lt;ID&gt;/editor/</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>Warteschlange</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">http://10.0.0</span>
+<span class="pre">.165/admin/emails/emailcampaignqueueentry/</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Komponenten</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">htt</span>
+<span class="pre">p://10.0.0.165/admin/emails/mjmlcomponent/</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>Kategorien</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">http://10.0</span>
+<span class="pre">.0.165/admin/emails/emailcampaigncategory/</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Newsletter-Empfänger</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">http://10.0.0</span>
+<span class="pre">.165/admin/newsletter/newsletterrecipient/</span></code></p></td>
+</tr>
+</tbody>
+</table>
+<p><code class="docutils literal notranslate"><span class="pre">&lt;ID&gt;</span></code> steht für die Nummer der jeweiligen Kampagne.</p>
+</section>
+<section id="kampagnen">
+<h2>Kampagnen<a class="headerlink" href="#kampagnen" title="Link to this heading">¶</a></h2>
+<section id="die-kampagnenliste">
+<h3>Die Kampagnenliste<a class="headerlink" href="#die-kampagnenliste" title="Link to this heading">¶</a></h3>
+<p>Die Liste zeigt folgende Spalten:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Spalte</p></th>
+<th class="head"><p>Einfache Erklärung</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Interner Titel</strong></p></td>
+<td><p>Name der Kampagne in der Bridge. Er wird nicht
+im eigentlichen E-Mail-Inhalt angezeigt. Beim
+Vorbereiten der E-Mail wird er zugleich als
+Betreff übernommen.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Editor</strong></p></td>
+<td><p>Bei Kampagnen mit einfachem Editor erscheint
+<strong>Öffnen</strong>. Ein Strich bedeutet, dass die
+Kampagne noch den älteren Komponenten-Aufbau
+verwendet.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Kategorien</strong></p></td>
+<td><p>Zeigt alle zugeordneten Kategorien.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Sendedatum</strong></p></td>
+<td><p>Geplanter Zeitpunkt der Kampagne. Das Datum
+allein versendet noch nichts.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Produkte</strong></p></td>
+<td><p>Anzahl der in dieser Kampagne verwendeten
+Produkte.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Status</strong></p></td>
+<td><p>Aktueller Arbeitsstand. Der Status kann direkt
+in der Liste geändert werden.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Angelegt am</strong></p></td>
+<td><p>Zeitpunkt, zu dem die Kampagne erstellt wurde.</p></td>
+</tr>
+</tbody>
+</table>
+<p>Sie können nach dem <strong>internen Titel</strong> suchen. Als Filter stehen
+<strong>Kategorien</strong>, <strong>Status</strong>, <strong>Sendedatum</strong> und <strong>Angelegt am</strong> zur
+Verfügung.</p>
+<p>Je nach Berechtigung stehen an einem Eintrag auch <strong>Kopieren</strong> und
+<strong>Löschen</strong> zur Verfügung. Prüfen Sie bei einer Kopie besonders den
+Status, das Sendedatum, die Kategorien, die Produkte und die Texte.
+Diese Angaben können aus der Vorlage übernommen sein.</p>
+</section>
+<section id="status-einer-kampagne">
+<h3>Status einer Kampagne<a class="headerlink" href="#status-einer-kampagne" title="Link to this heading">¶</a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Status</p></th>
+<th class="head"><p>Bedeutung</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Entwurf</strong></p></td>
+<td><p>Die Kampagne wird noch bearbeitet. Sie wird von
+der zeitgesteuerten Vorbereitung nicht
+berücksichtigt.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Bereit</strong></p></td>
+<td><p>Die Kampagne ist für die Vorbereitung freigegeben.
+Ist zusätzlich ein Sendedatum gesetzt und der
+Hintergrundlauf eingerichtet, können die
+zugeordneten aktiven Empfänger vor dem Termin in
+die Warteschlange gelegt werden.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Exportiert</strong></p></td>
+<td><p>Kennzeichnung für eine bereits ausgegebene
+Kampagne. Der HTML-Export setzt diesen Status nach
+aktuellem Stand nicht automatisch.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="eine-kampagne-anlegen-oder-bearbeiten">
+<h3>Eine Kampagne anlegen oder bearbeiten<a class="headerlink" href="#eine-kampagne-anlegen-oder-bearbeiten" title="Link to this heading">¶</a></h3>
+<p>Im Formular <strong>Kampagne</strong> sehen Sie diese Felder:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Einfache Erklärung</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Interner Titel</strong></p></td>
+<td><p>Pflichtfeld für den Namen in der Bridge.
+Dieser Text wird beim Vorbereiten auch als
+Betreff verwendet.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Kategorien</strong></p></td>
+<td><p>Eine oder mehrere Kategorien zur besseren
+Ordnung. Die Auswahl bestimmt nicht die
+Empfänger.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Status</strong></p></td>
+<td><p>Entwurf, Bereit oder Exportiert. Arbeiten
+Sie zuerst mit <strong>Entwurf</strong>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Sendedatum</strong></p></td>
+<td><p>Geplanter Zeitpunkt. Für die automatische
+Vorbereitung muss die Kampagne zusätzlich
+den Status <strong>Bereit</strong> haben.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>E-Mail gestalten</strong></p></td>
+<td><p>Öffnet den einfachen Editor. Bei einer neuen
+Kampagne erscheint zunächst der Hinweis,
+dass sich der Editor nach dem Speichern
+öffnet.</p></td>
+</tr>
+</tbody>
+</table>
+<p>Unter <strong>Info</strong> stehen Hinweise zu persönlichen Empfänger- und
+Kundendaten, die in Vorlagen eingesetzt werden können. Dieser Teil ist
+vor allem für Vorlagen-Verantwortliche gedacht. Unter <strong>System</strong> sehen
+Sie <strong>Angelegt am</strong> und <strong>Aktualisiert am</strong>.</p>
+<p>Nach dem ersten Speichern einer neuen Kampagne öffnet sich normalerweise
+automatisch der einfache Editor.</p>
+</section>
+<section id="der-einfache-e-mail-editor">
+<h3>Der einfache E-Mail-Editor<a class="headerlink" href="#der-einfache-e-mail-editor" title="Link to this heading">¶</a></h3>
+<p>Links bearbeiten Sie die Inhalte. Rechts sehen Sie die Vorschau der
+E-Mail. Änderungen werden nach einer kurzen Pause automatisch
+gespeichert. Die Anzeige oben wechselt dabei zwischen <strong>Ungespeicherte
+Änderung</strong>, <strong>Speichert …</strong>, <strong>Gespeichert</strong>, <strong>Vorschau wird erstellt
+…</strong> und <strong>Vorschau aktuell</strong>. Mit <strong>Vorschau aktualisieren</strong> können Sie
+die Vorschau zusätzlich von Hand neu laden.</p>
+<p>Oben stehen außerdem:</p>
+<ul class="simple">
+<li><p><strong>← Kampagnen</strong> – zurück zur Kampagnenliste.</p></li>
+<li><p><strong>Kampagnendaten</strong> – zurück zu Titel, Kategorien, Status und
+Sendedatum.</p></li>
+<li><p><strong>Vorschau aktualisieren</strong> – baut die rechte Vorschau neu auf.</p></li>
+</ul>
+<section id="kopfbereich-und-titel">
+<h4>Kopfbereich und Titel<a class="headerlink" href="#kopfbereich-und-titel" title="Link to this heading">¶</a></h4>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Einfache Erklärung</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Bild-URL</strong></p></td>
+<td><p>Internetadresse des Logos. Sie muss mit
+<code class="docutils literal notranslate"><span class="pre">http://</span></code> oder <code class="docutils literal notranslate"><span class="pre">https://</span></code> beginnen.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Hauptüberschrift</strong></p></td>
+<td><p>Große Überschrift am Anfang der E-Mail.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Unterzeile</strong></p></td>
+<td><p>Kürzerer Zusatz direkt unter der
+Hauptüberschrift.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="begruszung-und-einleitung">
+<h4>Begrüßung und Einleitung<a class="headerlink" href="#begruszung-und-einleitung" title="Link to this heading">¶</a></h4>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Einfache Erklärung</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Anrede vor dem
+Empfängernamen</strong></p></td>
+<td><p>Text vor dem Namen, zum Beispiel
+„Hallo“. Der Name wird bei der
+Vorbereitung für den einzelnen
+Empfänger ergänzt.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Einleitung</strong></p></td>
+<td><p>Einleitender Text. Leerzeilen
+werden als getrennte Absätze
+dargestellt.</p></td>
+</tr>
+</tbody>
+</table>
+<p>In der Editor-Vorschau kann anstelle eines echten Empfängernamens ein
+Platzhalter erscheinen. In der persönlichen E-Mail wird der Name des
+gewählten Empfängers eingesetzt, soweit er vorhanden ist.</p>
+</section>
+<section id="produktauswahl">
+<h4>Produktauswahl<a class="headerlink" href="#produktauswahl" title="Link to this heading">¶</a></h4>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld oder Schaltfläche</p></th>
+<th class="head"><p>Einfache Erklärung</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Überschrift</strong></p></td>
+<td><p>Überschrift über der gesamten
+Produktauswahl.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Produkt hinzufügen</strong></p></td>
+<td><p>Suche nach Artikelnummer oder
+Produktname. Geben Sie
+mindestens zwei Zeichen ein.
+Archivierte Produkte werden
+nicht angeboten.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>+ Zwischenüberschrift vor den
+Produkten</strong></p></td>
+<td><p>Fügt einen eigenen Textblock vor
+dem ersten Produkt ein.</p></td>
+</tr>
+</tbody>
+</table>
+<p>Die Suche zeigt höchstens zwölf Treffer. Ein Klick auf einen Treffer
+nimmt das Produkt in die Kampagne auf und lädt den Editor neu.</p>
+</section>
+<section id="felder-je-produkt">
+<h4>Felder je Produkt<a class="headerlink" href="#felder-je-produkt" title="Link to this heading">¶</a></h4>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld oder Schaltfläche</p></th>
+<th class="head"><p>Einfache Erklärung</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>↑ / ↓</strong></p></td>
+<td><p>Verschiebt das Produkt nach oben
+oder unten.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Entfernen</strong></p></td>
+<td><p>Entfernt das Produkt nach einer
+Sicherheitsfrage aus dieser
+Kampagne. Das Produkt selbst
+bleibt im Produktkatalog
+erhalten.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Abschnittsüberschrift ·
+optional</strong></p></td>
+<td><p>Kleine Überschrift nur für
+diesen Produktabschnitt.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Titel in der E-Mail</strong></p></td>
+<td><p>Eigener Produktname für diese
+Kampagne. Bleibt das Feld leer,
+wird der Name aus dem
+Produktkatalog verwendet.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Beschreibung</strong></p></td>
+<td><p>Eigener Beschreibungstext.
+Bleibt das Feld leer, wird die
+Kurzbeschreibung aus dem
+Produktkatalog verwendet.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Produktbilder · eine URL pro
+Zeile</strong></p></td>
+<td><p>Eigene Bilder für diese
+Kampagne. Jede Bildadresse muss
+in einer neuen Zeile stehen und
+mit <code class="docutils literal notranslate"><span class="pre">http://</span></code> oder
+<code class="docutils literal notranslate"><span class="pre">https://</span></code> beginnen. Bleibt
+das Feld leer, werden die Bilder
+aus dem Produktkatalog
+verwendet.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Sonderpreis</strong></p></td>
+<td><p>Auswahl zwischen
+<strong>Katalogpreis</strong>, <strong>Neuer Preis
+€</strong> und <strong>Rabatt %</strong>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Wert</strong></p></td>
+<td><p>Betrag oder Prozentsatz passend
+zur Auswahl im Feld
+<strong>Sonderpreis</strong>.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>+ Zwischenüberschrift danach</strong></p></td>
+<td><p>Fügt direkt nach diesem Produkt
+einen eigenen Zwischenblock ein.</p></td>
+</tr>
+</tbody>
+</table>
+<p>Preis und Rabatt gelten nur für diese Kampagne. Ein neuer Preis muss
+größer als 0 und kleiner als der Listenpreis sein. Ein Rabatt muss
+größer als 0 und kleiner als 100 Prozent sein. <strong>Neuer Preis</strong> und
+<strong>Rabatt</strong> können nicht gleichzeitig verwendet werden.</p>
+</section>
+<section id="zwischenuberschrift">
+<h4>Zwischenüberschrift<a class="headerlink" href="#zwischenuberschrift" title="Link to this heading">¶</a></h4>
+<p>Ein Zwischenblock kann vor der Produktliste oder nach einem bestimmten
+Produkt stehen.</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Einfache Erklärung</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Überschrift links</strong></p></td>
+<td><p>Haupttext des Zwischenblocks.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Text mittig · optional</strong></p></td>
+<td><p>Zusätzlicher Text in der Mitte.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Text rechts · optional</strong></p></td>
+<td><p>Zusätzlicher Text auf der rechten Seite.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Entfernen</strong></p></td>
+<td><p>Löscht nur diesen Zwischenblock.</p></td>
+</tr>
+</tbody>
+</table>
+<p>Pro Kampagne sind höchstens 30 Zwischenüberschriften möglich.</p>
+</section>
+<section id="abschluss-bestellung">
+<h4>Abschluss „Bestellung“<a class="headerlink" href="#abschluss-bestellung" title="Link to this heading">¶</a></h4>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Einfache Erklärung</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Überschrift</strong></p></td>
+<td><p>Überschrift des Bestellbereichs.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Bestellhinweis</strong></p></td>
+<td><p>Kurze Erklärung, wie bestellt werden kann.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Kontakttext rechts</strong></p></td>
+<td><p>Kontaktmöglichkeit, zum Beispiel ein
+Telefonhinweis.</p></td>
+</tr>
+</tbody>
+</table>
+<p>Die Produktliste im Bestellbereich entsteht automatisch aus den
+ausgewählten Produkten.</p>
+</section>
+</section>
+<section id="vorschau-und-export">
+<h3>Vorschau und Export<a class="headerlink" href="#vorschau-und-export" title="Link to this heading">¶</a></h3>
+<p>Öffnen Sie über <strong>Kampagnendaten</strong> wieder das normale Kampagnenformular.
+Rechts befindet sich der Bereich <strong>Export</strong> mit der Schaltfläche <strong>HTML
+kopieren</strong>. Sie öffnet ein großes Fenster mit:</p>
+<ul class="simple">
+<li><p><strong>HTML zum Kopieren</strong>,</p></li>
+<li><p><strong>MJML zum Kopieren</strong>,</p></li>
+<li><p><strong>Textversion zum Kopieren</strong>,</p></li>
+<li><p>einer sichtbaren <strong>Vorschau</strong>,</p></li>
+<li><p>den Schaltflächen <strong>HTML kopieren</strong>, <strong>MJML kopieren</strong>, <strong>Text
+kopieren</strong> und <strong>Schließen</strong>.</p></li>
+</ul>
+<p>Für die Exportvorschau wird nach aktuellem Stand der zuletzt
+aktualisierte aktive Newsletter-Empfänger verwendet. Dadurch können
+echte persönliche Daten in der Vorschau erscheinen. Prüfen Sie
+Screenshots und Weitergaben deshalb sorgfältig.</p>
+<p>Der Export ändert den Kampagnenstatus nicht automatisch. Setzen Sie
+<strong>Exportiert</strong> nur dann selbst, wenn dies zu Ihrem Arbeitsablauf gehört.</p>
+</section>
+</section>
+<section id="kategorien">
+<h2>Kategorien<a class="headerlink" href="#kategorien" title="Link to this heading">¶</a></h2>
+<p>Kategorien helfen beim Sortieren und Filtern. Sie wählen keine Empfänger
+aus und verändern nicht den Inhalt.</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Einfache Erklärung</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Name</strong></p></td>
+<td><p>Eindeutiger Name der Kategorie. Derselbe Name
+kann nicht zweimal angelegt werden.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Angelegt am</strong></p></td>
+<td><p>Wird automatisch gesetzt.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Aktualisiert am</strong></p></td>
+<td><p>Wird automatisch gesetzt.</p></td>
+</tr>
+</tbody>
+</table>
+<p>Die Liste zeigt <strong>Name</strong>, <strong>Angelegt am</strong> und <strong>Aktualisiert am</strong>. Sie
+können nach dem Namen suchen.</p>
+</section>
+<section id="newsletter-empfanger">
+<h2>Newsletter-Empfänger<a class="headerlink" href="#newsletter-empfanger" title="Link to this heading">¶</a></h2>
+<section id="die-empfangerliste">
+<h3>Die Empfängerliste<a class="headerlink" href="#die-empfangerliste" title="Link to this heading">¶</a></h3>
+<p>Die Liste zeigt:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Spalte</p></th>
+<th class="head"><p>Einfache Erklärung</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>E-Mail</strong></p></td>
+<td><p>E-Mail-Adresse des Empfängers.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Anrede</strong></p></td>
+<td><p>Lesbare Anrede aus Shopware.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Name</strong></p></td>
+<td><p>Titel, Vorname und Nachname
+zusammen.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Status</strong></p></td>
+<td><p>Farbiger Hinweis, ob der
+Empfänger aktiv, abgemeldet oder
+noch nicht bestätigt ist.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Kunde</strong></p></td>
+<td><p><strong>Ja</strong> mit Link zum verbundenen
+Kunden oder <strong>Nein</strong> ohne
+Zuordnung.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>ERP-/Adressnummer</strong></p></td>
+<td><p>Nummer zur Verbindung mit dem
+Kunden.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Ausgewählte E-Mail-Kampagne</strong></p></td>
+<td><p>Kampagne, die für diesen
+Empfänger vorbereitet wird.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Ort</strong></p></td>
+<td><p>Ort aus den Empfängerdaten.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Sales-Channel ID</strong></p></td>
+<td><p>Herkunftskanal in Shopware.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Zuletzt synchronisiert am</strong></p></td>
+<td><p>Zeitpunkt der letzten Übernahme
+aus Shopware.</p></td>
+</tr>
+</tbody>
+</table>
+<p>Die Suche berücksichtigt unter anderem E-Mail-Adresse, Name, Ort,
+Shopware-Nummern, ERP-/Adressnummer, verbundenen Kunden, Kampagnentitel
+und Sales-Channel. Filter gibt es für <strong>Status</strong>, <strong>Ist Kunde</strong>,
+<strong>Sales-Channel ID</strong>, <strong>In Shopware vorhanden</strong> und <strong>Zuletzt
+synchronisiert am</strong>.</p>
+<p>Oben stehen zwei wichtige Aktionen:</p>
+<ul class="simple">
+<li><p><strong>Newsletter-Empfänger von Shopware synchronisieren</strong> – übernimmt den
+aktuellen Stand aus Shopware und meldet anschließend, wie viele
+Einträge gesehen, neu angelegt, geändert, Kunden zugeordnet oder
+nicht zugeordnet wurden und wie viele Fehler auftraten.</p></li>
+<li><p><strong>Kundenzuordnungen aus AdrNr neu aufbauen</strong> – prüft die vorhandenen
+Empfänger erneut und verbindet sie anhand der ERP-/Adressnummer mit
+Kunden.</p></li>
+</ul>
+</section>
+<section id="felder-eines-empfangers">
+<h3>Felder eines Empfängers<a class="headerlink" href="#felder-eines-empfangers" title="Link to this heading">¶</a></h3>
+<p>Einige Angaben kommen aus Shopware und dienen nur zur Kontrolle. Manuell
+wichtig ist vor allem <strong>Ausgewählte E-Mail-Kampagne</strong>.</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Bedeutung</p></th>
+<th class="head"><p>Bearbeitung</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Shopware ID</strong></p></td>
+<td><p>Eindeutige Nummer
+des
+Newsletter-Eintrags
+in Shopware.</p></td>
+<td><p>Nur lesen</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Shopware
+Kunden-ID</strong></p></td>
+<td><p>Nummer des
+zugehörigen
+Shopware-Kunden.</p></td>
+<td><p>Nur lesen</p></td>
+</tr>
+<tr class="row-even"><td><p>ERP-/Adressnummer</p></td>
+<td><p>Nummer zur
+Verbindung mit dem
+Bridge-Kunden.</p></td>
+<td><p>Nur lesen</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Bridge-Kunde</strong></p></td>
+<td><p>Zugeordneter Kunde
+in der Bridge.</p></td>
+<td><p>Nur lesen</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Ausgewählte
+E-Mail-Kampagne</strong></p></td>
+<td><p>Kampagne, die für
+diesen Empfänger
+vorbereitet werden
+soll.</p></td>
+<td><p>Auswählen</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Ist Kunde</strong></p></td>
+<td><p>Zeigt, ob eine
+Kundenzuordnung
+besteht.</p></td>
+<td><p>Nur lesen</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>E-Mail</strong></p></td>
+<td><p>Zieladresse.</p></td>
+<td><p>Änderbar, kann aber
+beim nächsten
+Abgleich wieder aus
+Shopware kommen</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Titel</strong></p></td>
+<td><p>Titel der Person.</p></td>
+<td><p>Änderbar</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Anrede ID</strong></p></td>
+<td><p>Interne
+Shopware-Nummer der
+Anrede.</p></td>
+<td><p>Änderbar</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Anrede Schlüssel</strong></p></td>
+<td><p>Kurzer
+Shopware-Schlüssel
+der Anrede.</p></td>
+<td><p>Änderbar</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Anrede</strong></p></td>
+<td><p>Lesbare Anrede.</p></td>
+<td><p>Änderbar</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Briefanrede</strong></p></td>
+<td><p>Anrede für einen
+persönlichen Text.</p></td>
+<td><p>Änderbar</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Vorname</strong></p></td>
+<td><p>Vorname des
+Empfängers.</p></td>
+<td><p>Änderbar</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Nachname</strong></p></td>
+<td><p>Nachname des
+Empfängers.</p></td>
+<td><p>Änderbar</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>PLZ</strong></p></td>
+<td><p>Postleitzahl.</p></td>
+<td><p>Änderbar</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Ort</strong></p></td>
+<td><p>Ort.</p></td>
+<td><p>Änderbar</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Straße</strong></p></td>
+<td><p>Straße.</p></td>
+<td><p>Änderbar</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Status</strong></p></td>
+<td><p>Shopware-Status des
+Empfängers.</p></td>
+<td><p>Änderbar</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Hash</strong></p></td>
+<td><p>Kennung aus
+Shopware.</p></td>
+<td><p>Änderbar,
+normalerweise nicht
+anfassen</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Sales-Channel ID</strong></p></td>
+<td><p>Sho
+pware-Verkaufskanal.</p></td>
+<td><p>Änderbar,
+normalerweise nicht
+anfassen</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Sprach-ID</strong></p></td>
+<td><p>Sprache aus
+Shopware.</p></td>
+<td><p>Änderbar,
+normalerweise nicht
+anfassen</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Bestätigt am</strong></p></td>
+<td><p>Zeitpunkt der
+Bestätigung.</p></td>
+<td><p>Änderbar</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Shopware angelegt
+am</strong></p></td>
+<td><p>Anlagezeitpunkt in
+Shopware.</p></td>
+<td><p>Nur lesen</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Shopware
+aktualisiert am</strong></p></td>
+<td><p>Letzte Änderung in
+Shopware.</p></td>
+<td><p>Nur lesen</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Zuletzt
+synchronisiert am</strong></p></td>
+<td><p>Letzter Abgleich mit
+der Bridge.</p></td>
+<td><p>Nur lesen</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>In Shopware
+vorhanden</strong></p></td>
+<td><p>Zeigt, ob der
+Eintrag beim letzten
+vollständigen
+Abgleich noch
+gefunden wurde.</p></td>
+<td><p>Änderbar,
+normalerweise nicht
+anfassen</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Custom Fields</strong></p></td>
+<td><p>Zusätzliche Daten
+aus Shopware.</p></td>
+<td><p>Änderbar, nur für
+geschulte Anwender</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Shopware
+Rohdaten</strong></p></td>
+<td><p>Vollständige
+gelieferte Daten zur
+Kontrolle.</p></td>
+<td><p>Nur lesen</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Angelegt am /
+Aktualisiert am</strong></p></td>
+<td><p>Systemzeiten der
+Bridge.</p></td>
+<td><p>Nur lesen</p></td>
+</tr>
+</tbody>
+</table>
+<p>Die möglichen Empfängerstatus sind:</p>
+<ul class="simple">
+<li><p><strong>Nicht bestätigt</strong> – Anmeldung wartet noch auf Bestätigung.</p></li>
+<li><p><strong>Bestätigt</strong> – Double-Opt-In wurde bestätigt; der Empfänger gilt als
+aktiv.</p></li>
+<li><p><strong>Abgemeldet</strong> – der Empfänger ist nicht aktiv.</p></li>
+<li><p><strong>Direkt aktiv</strong> – ohne offene Bestätigung aktiv.</p></li>
+</ul>
+</section>
+<section id="kampagne-in-die-warteschlange-legen">
+<h3>Kampagne in die Warteschlange legen<a class="headerlink" href="#kampagne-in-die-warteschlange-legen" title="Link to this heading">¶</a></h3>
+<p>Öffnen Sie einen Empfänger, wählen Sie <strong>Ausgewählte E-Mail-Kampagne</strong>,
+speichern Sie und verwenden Sie <strong>Ausgewählte Kampagne in Warteschlange
+legen</strong>. Alternativ können Sie mehrere Zeilen in der Liste markieren und
+die gleichnamige Sammelaktion verwenden.</p>
+<p>Die Vorbereitung ist nur möglich, wenn:</p>
+<ul class="simple">
+<li><p>eine Kampagne ausgewählt ist,</p></li>
+<li><p>eine E-Mail-Adresse vorhanden ist,</p></li>
+<li><p>der Empfänger <strong>Bestätigt</strong> oder <strong>Direkt aktiv</strong> ist,</p></li>
+<li><p>der Empfänger weiterhin in Shopware vorhanden ist.</p></li>
+</ul>
+<p>Die Bridge erstellt dabei bereits die persönliche HTML- und Textfassung.
+Wird dieselbe Kampagne für denselben Empfänger erneut vorbereitet, wird
+der vorhandene Warteschlangen-Eintrag aktualisiert. Es entsteht nicht
+jedes Mal ein neuer Eintrag.</p>
+<p>Bei Erfolg erscheint eine Meldung, wie viele E-Mails fertig aufgebaut
+und in die Warteschlange gelegt wurden. Bei einem Fehler nennt die
+Meldung die betroffene E-Mail-Adresse und den Grund.</p>
+</section>
+</section>
+<section id="warteschlange">
+<h2>Warteschlange<a class="headerlink" href="#warteschlange" title="Link to this heading">¶</a></h2>
+<section id="die-liste">
+<h3>Die Liste<a class="headerlink" href="#die-liste" title="Link to this heading">¶</a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Spalte</p></th>
+<th class="head"><p>Einfache Erklärung</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>E-Mail</strong></p></td>
+<td><p>Zieladresse.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Kampagne</strong></p></td>
+<td><p>Verwendete Kampagne.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Newsletter-Empfänger</strong></p></td>
+<td><p>Zugehöriger Empfänger.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Kunde</strong></p></td>
+<td><p>Verbundener Kunde, falls vorhanden.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Status</strong></p></td>
+<td><p>Aktueller Stand des Eintrags.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Eingereiht am</strong></p></td>
+<td><p>Zeitpunkt der Vorbereitung.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Gesendet am</strong></p></td>
+<td><p>Versandzeitpunkt, sofern gesetzt.</p></td>
+</tr>
+</tbody>
+</table>
+<p>Sie können nach E-Mail-Adresse, Betreff, Kampagnentitel, Empfängername,
+ERP-/Adressnummer und Kundendaten suchen. Filter gibt es für <strong>Status</strong>,
+<strong>Kampagne</strong>, <strong>Eingereiht am</strong> und <strong>Gesendet am</strong>.</p>
+</section>
+<section id="felder-im-eintrag">
+<h3>Felder im Eintrag<a class="headerlink" href="#felder-im-eintrag" title="Link to this heading">¶</a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Einfache Erklärung</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Kampagne</strong></p></td>
+<td><p>Kampagne, aus der die E-Mail
+aufgebaut wurde. Nur lesbar.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Newsletter-Empfänger</strong></p></td>
+<td><p>Empfänger, für den die
+persönliche Fassung erstellt
+wurde. Nur lesbar.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Kunde</strong></p></td>
+<td><p>Verbundener Kunde, falls
+vorhanden. Nur lesbar.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>E-Mail</strong></p></td>
+<td><p>Zieladresse zum Zeitpunkt der
+Vorbereitung. Nur lesbar.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Betreff</strong></p></td>
+<td><p>Wird aus dem internen
+Kampagnentitel übernommen. Nur
+lesbar.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Status</strong></p></td>
+<td><p>Wartet, Wird gesendet, Gesendet,
+Fehler oder Abgebrochen.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Eingereiht am</strong></p></td>
+<td><p>Zeitpunkt der letzten
+Vorbereitung. Nur lesbar.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Gesendet am</strong></p></td>
+<td><p>Versandzeitpunkt, sofern
+bekannt.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Fehlermeldung</strong></p></td>
+<td><p>Beschreibung eines aufgetretenen
+Fehlers.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Gerenderte HTML E-Mail</strong></p></td>
+<td><p>Sichtbare Vorschau genau dieser
+vorbereiteten Empfängerfassung.
+Nur lesbar.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Angelegt am / Aktualisiert
+am</strong></p></td>
+<td><p>Systemzeiten der Bridge. Nur
+lesbar.</p></td>
+</tr>
+</tbody>
+</table>
+<p>Ein Eintrag mit <strong>Wartet</strong> ist vorbereitet, aber damit noch nicht
+nachweislich versendet. Verwenden Sie <strong>Gesendet</strong> nur zusammen mit
+einem bestätigten Versandablauf.</p>
+</section>
+</section>
+<section id="komponenten-nur-fur-vorlagen-verantwortliche">
+<span id="id1"></span><h2>Komponenten – nur für Vorlagen-Verantwortliche<a class="headerlink" href="#komponenten-nur-fur-vorlagen-verantwortliche" title="Link to this heading">¶</a></h2>
+<p>Komponenten sind wiederverwendbare Bausteine für ältere oder besondere
+Kampagnen. Neue Kampagnen verwenden normalerweise den einfachen Editor.</p>
+<p>Die Liste zeigt <strong>Name</strong>, <strong>Rendering-Modus</strong>, <strong>Platzierung</strong>,
+<strong>Standard</strong> und <strong>Reihenfolge</strong>. Nach Name kann gesucht werden. Die
+Liste kann nach Modus, Platzierung und Standard gefiltert werden.
+<strong>Standard</strong> und <strong>Reihenfolge</strong> lassen sich direkt in der Liste ändern.</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Einfache Erklärung</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Name</strong></p></td>
+<td><p>Name des Vorlagen-Bausteins.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Platzierung</strong></p></td>
+<td><p><strong>Kopfbereich</strong> oder
+<strong>Inhaltsbereich</strong>.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Standard</strong></p></td>
+<td><p>Ist dies aktiv, kann der
+Baustein bei passenden älteren
+Kampagnen automatisch eingesetzt
+werden.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Reihenfolge</strong></p></td>
+<td><p>Position des Bausteins.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Rendering-Modus</strong></p></td>
+<td><p>Legt fest, ob die Bridge die
+Platzhalter verarbeitet oder den
+Baustein unverändert an Shopware
+weitergibt. Nur nach Vorgabe
+ändern.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>MJML-Markup</strong></p></td>
+<td><p>Vorlageninhalt des Bausteins.
+Nur für geschulte Anwender.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Standard-Variablen</strong></p></td>
+<td><p>Grundwerte für die Platzhalter
+des Bausteins. Muss als
+Schlüssel-Wert-Liste im
+angezeigten Editor gepflegt
+werden.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Komponenten-Info</strong></p></td>
+<td><p>Zeigt, welche Unterbausteine
+sowie Produkt-, Empfänger- und
+Kundendaten verwendet werden
+können.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Angelegt am / Aktualisiert
+am</strong></p></td>
+<td><p>Systemzeiten der Bridge. Nur
+lesbar.</p></td>
+</tr>
+</tbody>
+</table>
+<p>Ein ungültiger Vorlagentext wird beim Speichern mit Zeilennummer
+gemeldet. Ändern Sie Komponenten nur, wenn klar ist, welche Kampagnen
+sie verwenden.</p>
+<section id="altere-kampagnen-mit-komponenten">
+<h3>Ältere Kampagnen mit Komponenten<a class="headerlink" href="#altere-kampagnen-mit-komponenten" title="Link to this heading">¶</a></h3>
+<p>Bei einer älteren Kampagne kann statt des einfachen Editors eine Liste
+von Bausteinen im Kampagnenformular erscheinen. Dort gibt es je
+Baustein:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Einfache Erklärung</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Baum</strong></p></td>
+<td><p>Zeigt Reihenfolge und Einrückung des
+Bausteins.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Reihenfolge</strong></p></td>
+<td><p>Position innerhalb der Kampagne.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Titel</strong></p></td>
+<td><p>Eigener Name für diesen Baustein.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Bibliotheks-Komponente</strong></p></td>
+<td><p>Gewählte Vorlage.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Variablen</strong></p></td>
+<td><p>Abweichende Texte oder Werte für
+diese Kampagne. Nicht gesetzte Werte
+kommen aus der Vorlage.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Übergeordnete Komponente</strong></p></td>
+<td><p>Ordnet den Baustein unter einem
+anderen Baustein ein.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Aktiviert</strong></p></td>
+<td><p>Bestimmt, ob der Baustein ausgegeben
+wird.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Produkt</strong></p></td>
+<td><p>Optional verbundenes Produkt.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Aktueller Preis</strong></p></td>
+<td><p>Nur lesbare Preisanzeige des
+verbundenen Produkts.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Komponenten-Info</strong></p></td>
+<td><p>Zeigt Standardwerte und Hinweise zur
+Einordnung.</p></td>
+</tr>
+</tbody>
+</table>
+<p>Wenn in der Spalte <strong>Editor</strong> ein Strich steht, handelt es sich
+wahrscheinlich um eine solche Komponenten-Kampagne.</p>
+</section>
+</section>
+<section id="haufige-hinweise-und-fehlerquellen">
+<h2>Häufige Hinweise und Fehlerquellen<a class="headerlink" href="#haufige-hinweise-und-fehlerquellen" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p><strong>Die Vorschau ändert sich nicht:</strong> Warten Sie kurz auf
+<strong>Gespeichert</strong> und <strong>Vorschau aktuell</strong> oder klicken Sie auf
+<strong>Vorschau aktualisieren</strong>.</p></li>
+<li><p><strong>Ein Bild erscheint nicht:</strong> Prüfen Sie, ob die Adresse vollständig
+ist und mit <code class="docutils literal notranslate"><span class="pre">http://</span></code> oder <code class="docutils literal notranslate"><span class="pre">https://</span></code> beginnt. Bei Produktbildern
+muss jede Adresse in einer eigenen Zeile stehen.</p></li>
+<li><p><strong>Ein Produkt wird nicht gefunden:</strong> Geben Sie mindestens zwei
+Zeichen ein. Suchen Sie nach Artikelnummer oder Name. Archivierte
+Produkte fehlen absichtlich.</p></li>
+<li><p><strong>Ein Sonderpreis wird abgelehnt:</strong> Der Wert muss größer als 0 und
+kleiner als der Listenpreis sein. Ein Rabatt muss unter 100 Prozent
+liegen.</p></li>
+<li><p><strong>Eine Kampagne landet nicht automatisch in der Warteschlange:</strong>
+Prüfen Sie Status <strong>Bereit</strong>, Sendedatum, Empfängerzuordnung und ob
+der Hintergrundlauf eingerichtet ist. Standardmäßig sucht dieser Lauf
+ungefähr einen Tag vor dem Sendedatum in einem Zeitfenster nach
+passenden Kampagnen.</p></li>
+<li><p><strong>Ein Empfänger kann nicht vorbereitet werden:</strong> Häufig fehlt die
+ausgewählte Kampagne, die E-Mail-Adresse, ein aktiver Status oder der
+Eintrag wurde in Shopware nicht mehr gefunden.</p></li>
+<li><p><strong>Der Name fehlt in der E-Mail:</strong> Prüfen Sie Vorname, Nachname und
+Anrede beim Empfänger sowie den letzten Shopware-Abgleich.</p></li>
+<li><p><strong>Die falsche Kampagne wird vorbereitet:</strong> Die Kategorie einer
+Kampagne wählt keine Empfänger aus. Entscheidend ist das Feld
+<strong>Ausgewählte E-Mail-Kampagne</strong> am Empfänger.</p></li>
+<li><p><strong>Eine erneute Vorbereitung erzeugt keinen zweiten Eintrag:</strong> Für
+dieselbe Kampagne und denselben Empfänger wird der bestehende Eintrag
+aktualisiert.</p></li>
+<li><p><strong>Exportiert wurde nicht automatisch gesetzt:</strong> Der HTML-Export
+ändert den Status nicht.</p></li>
+<li><p><strong>Persönliche Daten in Vorschau oder Screenshot:</strong> Export und
+Warteschlangen-Vorschau können Namen, Adresse oder Kundendaten
+enthalten. Vor Weitergabe bitte anonymisieren.</p></li>
+</ul>
+</section>
+<section id="praxisbeispiel-1-eine-produktaktion-erstellen-und-als-html-prufen">
+<h2>Praxisbeispiel 1: Eine Produktaktion erstellen und als HTML prüfen<a class="headerlink" href="#praxisbeispiel-1-eine-produktaktion-erstellen-und-als-html-prufen" title="Link to this heading">¶</a></h2>
+<p>Ziel: Eine neue Kampagne mit zwei Produkten, einer eigenen Einleitung
+und einem Rabatt vorbereiten.</p>
+<ol class="arabic simple">
+<li><p>Öffnen Sie <strong>E-Mails → Kampagnen</strong> und wählen Sie <strong>Hinzufügen</strong>.</p></li>
+<li><p>Tragen Sie bei <strong>Interner Titel</strong> „Herbstaktion Ordnungsmappen“ ein.</p></li>
+<li><p>Wählen Sie eine passende Kategorie und lassen Sie den Status
+zunächst auf <strong>Entwurf</strong>.</p></li>
+<li><p>Speichern Sie. Der einfache Editor öffnet sich.</p></li>
+<li><p>Tragen Sie eine <strong>Hauptüberschrift</strong>, eine <strong>Unterzeile</strong>, die
+<strong>Anrede</strong> und die <strong>Einleitung</strong> ein.</p></li>
+<li><p>Suchen Sie im Feld <strong>Produkt hinzufügen</strong> nach der ersten
+Artikelnummer und klicken Sie auf den Treffer. Wiederholen Sie den
+Schritt für das zweite Produkt.</p></li>
+<li><p>Verwenden Sie <strong>↑</strong> und <strong>↓</strong>, bis die Produkte in der gewünschten
+Reihenfolge stehen.</p></li>
+<li><p>Geben Sie beim ersten Produkt einen eigenen <strong>Titel in der E-Mail</strong>
+und eine kurze <strong>Beschreibung</strong> ein.</p></li>
+<li><p>Wählen Sie beim zweiten Produkt <strong>Rabatt %</strong> und tragen Sie <code class="docutils literal notranslate"><span class="pre">15</span></code>
+ein. Prüfen Sie, ob in der Vorschau der erwartete Preis erscheint.</p></li>
+<li><p>Fügen Sie nach dem ersten Produkt eine <strong>Zwischenüberschrift</strong> ein.
+Tragen Sie links einen kurzen Titel und rechts einen Telefonhinweis
+ein.</p></li>
+<li><p>Warten Sie, bis oben <strong>Gespeichert</strong> und <strong>Vorschau aktuell</strong> steht.</p></li>
+<li><p>Öffnen Sie <strong>Kampagnendaten</strong>. Kontrollieren Sie Titel, Kategorie,
+Status und gegebenenfalls das Sendedatum.</p></li>
+<li><p>Klicken Sie rechts auf <strong>HTML kopieren</strong>. Prüfen Sie die Vorschau
+und kopieren Sie die benötigte Fassung.</p></li>
+<li><p>Setzen Sie den Status erst dann auf <strong>Bereit</strong>, wenn Inhalt, Preise,
+Links und Empfängerzuordnung geprüft sind.</p></li>
+</ol>
+<p>Erwartetes Ergebnis: Die Kampagne ist gespeichert, enthält zwei Produkte
+in richtiger Reihenfolge, zeigt den Rabatt nur in dieser Kampagne und
+kann als HTML, Vorlagentext oder reine Textfassung kopiert werden.</p>
+</section>
+<section id="praxisbeispiel-2-empfanger-zuordnen-und-die-personliche-fassung-kontrollieren">
+<h2>Praxisbeispiel 2: Empfänger zuordnen und die persönliche Fassung kontrollieren<a class="headerlink" href="#praxisbeispiel-2-empfanger-zuordnen-und-die-personliche-fassung-kontrollieren" title="Link to this heading">¶</a></h2>
+<p>Ziel: Eine fertige Kampagne für aktive Empfänger vorbereiten und Fehler
+in der Warteschlange prüfen.</p>
+<ol class="arabic simple">
+<li><p>Öffnen Sie <strong>E-Mails → Newsletter-Empfänger</strong>.</p></li>
+<li><p>Starten Sie <strong>Newsletter-Empfänger von Shopware synchronisieren</strong>
+und lesen Sie die Abschlussmeldung.</p></li>
+<li><p>Falls Empfänger trotz vorhandener ERP-/Adressnummer nicht als Kunde
+erkannt werden, verwenden Sie <strong>Kundenzuordnungen aus AdrNr neu
+aufbauen</strong>.</p></li>
+<li><p>Filtern Sie auf aktive Empfänger. Geeignet sind <strong>Bestätigt</strong> und
+<strong>Direkt aktiv</strong>.</p></li>
+<li><p>Öffnen Sie den ersten Empfänger. Prüfen Sie E-Mail-Adresse, Status,
+<strong>In Shopware vorhanden</strong> und die Kundenverknüpfung.</p></li>
+<li><p>Wählen Sie bei <strong>Ausgewählte E-Mail-Kampagne</strong> die fertige Kampagne
+und speichern Sie.</p></li>
+<li><p>Klicken Sie auf <strong>Ausgewählte Kampagne in Warteschlange legen</strong>.</p></li>
+<li><p>Wiederholen Sie die Zuordnung bei weiteren Empfängern oder markieren
+Sie mehrere vorbereitete Empfänger in der Liste und verwenden Sie
+die Sammelaktion.</p></li>
+<li><p>Achten Sie auf die Rückmeldung. Bei einem Fehler nennt die Bridge
+Empfänger und Ursache.</p></li>
+<li><p>Öffnen Sie <strong>E-Mails → Warteschlange</strong> und filtern Sie auf die
+Kampagne.</p></li>
+<li><p>Öffnen Sie einen Eintrag. Kontrollieren Sie E-Mail-Adresse, Betreff,
+Status und die <strong>Gerenderte HTML E-Mail</strong>. Prüfen Sie besonders
+Anrede, Name, Produkttexte, Preise und Bilddarstellung.</p></li>
+<li><p>Ein Status <strong>Wartet</strong> bedeutet nur, dass die persönliche Fassung
+vorbereitet wurde. Klären Sie über den vorgesehenen Versandablauf,
+wann sie tatsächlich gesendet wird.</p></li>
+</ol>
+<p>Erwartetes Ergebnis: Für jeden geeigneten Empfänger liegt genau ein
+aktueller Warteschlangen-Eintrag mit persönlicher Vorschau vor. Nicht
+aktive oder in Shopware fehlende Empfänger werden mit verständlicher
+Meldung abgewiesen.</p>
+</section>
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../index.html">GC-Bridge-4</a></h1>
+
+
+
+
+
+
+
+
+
+<search id="searchbox" style="display: none" role="search">
+    <div class="searchformwrapper">
+    <form class="search" action="../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Search"/>
+      <input type="submit" value="Los" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script><h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Inhalte</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../einleitung.html">Einleitung</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../erste_schritte.html">Erste Schritte</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Anwenderhandbuch: tägliche Arbeit</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="issues.html">Issues</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">E-Mails</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bestellungen.html">Bestellungen</a></li>
+<li class="toctree-l2"><a class="reference internal" href="kunden.html">Kunden</a></li>
+<li class="toctree-l2"><a class="reference internal" href="produkte.html">Produkte</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dokumente.html">Dokumente</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mappei.html">Mappei</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../hr_mitarbeiterverwaltung.html">HR Mitarbeiterverwaltung</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../microtech_rulebuilder_feldkatalog.html">Microtech Rulebuilder mit Feldkatalog (Schritt fuer Schritt)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../operator_checkliste.html">Operator-Checkliste (1 Seite)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../workflows.html">Workflows</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../ki_uebersetzungen.html">KI-Uebersetzungen mit Ollama</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../betrieb_technik.html">Betrieb und Technik</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../stoerung_nicht_erreichbar.html">Stoerung: Seite nicht erreichbar</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../reference/index.html">Referenz</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../index.html">Documentation overview</a><ul>
+  <li><a href="index.html">Anwenderhandbuch: tägliche Arbeit</a><ul>
+      <li>Previous: <a href="issues.html" title="vorheriges Kapitel">Issues</a></li>
+      <li>Next: <a href="bestellungen.html" title="nächstes Kapitel">Bestellungen</a></li>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 9.1.0</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+      
+      |
+      <a href="../_sources/handbuch/emails.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

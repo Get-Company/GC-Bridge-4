@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+
+<html lang="de" data-content_root="./">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>KI-Uebersetzungen mit Ollama &#8212; GC-Bridge-4 0.1.0 Dokumentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=5ecbeea2" />
+    <link rel="stylesheet" type="text/css" href="_static/basic.css?v=b08954a9" />
+    <link rel="stylesheet" type="text/css" href="_static/alabaster.css?v=27fed22d" />
+    <script src="_static/documentation_options.js?v=7c8c992d"></script>
+    <script src="_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/translations.js?v=9bf55d28"></script>
+    <link rel="index" title="Stichwortverzeichnis" href="genindex.html" />
+    <link rel="search" title="Suche" href="search.html" />
+    <link rel="next" title="Betrieb und Technik" href="betrieb_technik.html" />
+    <link rel="prev" title="Workflows" href="workflows.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="ki-uebersetzungen-mit-ollama">
+<h1>KI-Uebersetzungen mit Ollama<a class="headerlink" href="#ki-uebersetzungen-mit-ollama" title="Link to this heading">¶</a></h1>
+<p>Die automatische KI-Uebersetzung verarbeitet jedes Textfeld, das in
+<code class="docutils literal notranslate"><span class="pre">django-modeltranslation</span></code> registriert ist. Die deutsche Variante ist die
+Quelle; alle anderen in Django angelegten Sprachen sind Ziele.</p>
+<section id="funktionsweise">
+<h2>Funktionsweise<a class="headerlink" href="#funktionsweise" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p>Pro Objekt, Quellfeld und Zielsprache wird ein SHA-256-Hash des deutschen
+Originalwerts gespeichert.</p></li>
+<li><p>Ein naechster Scan uebersetzt nur fehlende, fehlgeschlagene oder geaenderte
+Quellwerte erneut.</p></li>
+<li><p>Zusaetzlich wird ein Fingerprint der Uebersetzungskonfiguration gespeichert.
+Werden Prompt, Sprachhinweise, Quellsprache, Leerwert-Verhalten oder der
+ausgewaehlte Provider bzw. dessen Modell geaendert, werden auch unveraenderte
+Quellwerte beim naechsten Scan erneut uebersetzt.</p></li>
+<li><p>Die Statusliste wird automatisch beim Uebersetzungsscan aufgeraeumt.
+<code class="docutils literal notranslate"><span class="pre">Statusanzeige</span> <span class="pre">aufbewahren</span> <span class="pre">(Tage)</span></code> in der Konfiguration legt fest, wann
+erfolgreiche oder abgebrochene Eintraege aus der Liste verschwinden; <code class="docutils literal notranslate"><span class="pre">0</span></code>
+deaktiviert das. Die Hashes bleiben intern erhalten, damit keine unnötigen
+Neuuebersetzungen entstehen.</p></li>
+<li><p>Bei geleertem deutschen Quellwert werden Zielwerte standardmaessig ebenfalls
+geleert. Das Verhalten ist in der Konfiguration abschaltbar.</p></li>
+<li><p>HTML wird nicht vom Modell erzeugt: Tags, technische Attribute, Klassen,
+Styles, URLs und IDs bleiben unveraendert. Sichtbare Textknoten sowie die
+menschlich lesbaren Attribute <code class="docutils literal notranslate"><span class="pre">alt</span></code>, <code class="docutils literal notranslate"><span class="pre">title</span></code>, <code class="docutils literal notranslate"><span class="pre">aria-label</span></code> und
+<code class="docutils literal notranslate"><span class="pre">placeholder</span></code> werden als JSON-Segmente uebersetzt; das Modell muss
+dieselben Segment-IDs zurueckgeben.</p></li>
+<li><p>Inhalte von <code class="docutils literal notranslate"><span class="pre">code</span></code>, <code class="docutils literal notranslate"><span class="pre">pre</span></code>, <code class="docutils literal notranslate"><span class="pre">script</span></code> und <code class="docutils literal notranslate"><span class="pre">style</span></code> werden nicht
+uebersetzt.</p></li>
+<li><p>Ein Scan verarbeitet die geplanten Feld-/Sprachkombinationen als serielle
+Celery-Kette. Damit wird der einzelne TranslateGemma-Server auf dem
+Arbeits-PC nicht durch parallele Anfragen ueberlastet.</p></li>
+</ul>
+<p>Die Konfiguration unter <code class="docutils literal notranslate"><span class="pre">AI</span> <span class="pre">&gt;</span> <span class="pre">Uebersetzungen</span></code> enthaelt einen editierbaren
+System-Prompt, eine Benutzer-Prompt-Vorlage und die Sprachvarianten-Hinweise.
+Die Standardvorgabe fuer <code class="docutils literal notranslate"><span class="pre">ch-de</span></code> verlangt echten schweizerdeutschen Dialekt;
+die anderen Zielsprachen verwenden die jeweilige Hochsprache. Diese Hinweise
+koennen dort pro Sprachcode angepasst werden.
+Bei <code class="docutils literal notranslate"><span class="pre">it-de</span></code> ist Deutsch zwingende Ausgabesprache fuer den suedtirolerischen
+Markt. Da der technische Code von Sprachmodellen als Italienisch missverstanden
+werden kann, wird diese Regel zusaetzlich verbindlich an jeden Modell-Prompt
+angehaengt.</p>
+</section>
+<section id="shopware-export">
+<h2>Shopware-Export<a class="headerlink" href="#shopware-export" title="Link to this heading">¶</a></h2>
+<p>Eine erfolgreich geschriebene Produktuebersetzung startet ausschliesslich einen
+Shopware-6-Produktsync. Der SW6-Payload enthaelt fuer jede dort vorhandene,
+passende Locale (<code class="docutils literal notranslate"><span class="pre">en-*</span></code>, <code class="docutils literal notranslate"><span class="pre">de-CH</span></code>, <code class="docutils literal notranslate"><span class="pre">de-IT</span></code>, <code class="docutils literal notranslate"><span class="pre">it-IT</span></code>) einen nativen
+<code class="docutils literal notranslate"><span class="pre">translations</span></code>-Eintrag mit Name, Beschreibung und Verpackungseinheit.
+Microtech erhaelt keine KI-Uebersetzungen. Eine Kurzbeschreibung besitzt
+in der SW6-Produktentitaet kein eigenes Standardfeld und wird deshalb nicht
+exportiert.</p>
+<p>Auch die kundenrelevanten Varianteninformationen werden uebersetzt: Name und
+Beschreibung der Variantenfamilie sowie Namen von Attributgruppen und ihren
+Werten. Bei einer geaenderten Sprachfassung startet der Varianten-Sync und
+uebergibt diese Inhalte als native SW6-<code class="docutils literal notranslate"><span class="pre">translations</span></code> fuer Parent-Produkt,
+Property-Group und Property-Group-Option. Technische Felder, Bilder, Klassen
+und die Variantenlogik bleiben unveraendert.</p>
+<p>Kategorien werden fuer Name, Beschreibung, Kurzbeschreibung sowie SEO-Titel,
+SEO-Beschreibung und SEO-Keywords gescannt. Eine KI-Uebersetzung schreibt die
+SW6-Standardfelder Name, Beschreibung und SEO-Metadaten als nativen
+<code class="docutils literal notranslate"><span class="pre">translations</span></code>-Payload zurueck. Die Kurzbeschreibung bleibt in Django
+uebersetzt; die Standard-Kategorie von Shopware 6 hat dafuer kein eigenes
+Feld. Wird eine vorhandene Kategorie lokal an einem kundenrelevanten Feld oder
+an einer Produktzuordnung geaendert, stellt ein separater SW6-Task den
+Kategorieninhalt samt nativen <code class="docutils literal notranslate"><span class="pre">translations</span></code> wieder her. Die direkten
+<code class="docutils literal notranslate"><span class="pre">product_category</span></code>-Zuordnungen werden dabei exakt abgeglichen: neue Produkte
+werden zugeordnet und entfernte Zuordnungen in SW6 geloescht.</p>
+</section>
+<section id="ollama-auf-dem-arbeits-pc-im-lan-bereitstellen">
+<h2>Ollama auf dem Arbeits-PC im LAN bereitstellen<a class="headerlink" href="#ollama-auf-dem-arbeits-pc-im-lan-bereitstellen" title="Link to this heading">¶</a></h2>
+<p>Ollama bindet standardmaessig nur an <code class="docutils literal notranslate"><span class="pre">127.0.0.1:11434</span></code>. Damit der Server den
+Arbeits-PC erreichen kann, muss auf dem Arbeits-PC die Umgebungsvariable
+<code class="docutils literal notranslate"><span class="pre">OLLAMA_HOST</span></code> gesetzt werden:</p>
+<p>Fuer diesen Linux-Mint-Arbeits-PC wird Ollama gezielt an seine LAN-Adresse
+gebunden. Die aktuelle Adresse ist <code class="docutils literal notranslate"><span class="pre">10.0.0.155</span></code>. Die dauerhafte
+systemd-Konfiguration lautet:</p>
+<div class="highlight-ini notranslate"><div class="highlight"><pre><span></span><span class="c1"># /etc/systemd/system/ollama.service.d/override.conf</span>
+<span class="k">[Service]</span>
+<span class="na">Environment</span><span class="o">=</span><span class="s">&quot;OLLAMA_HOST=10.0.0.155:11434&quot;</span>
+</pre></div>
+</div>
+<p>Danach muessen <code class="docutils literal notranslate"><span class="pre">systemctl</span> <span class="pre">daemon-reload</span></code> und <code class="docutils literal notranslate"><span class="pre">systemctl</span> <span class="pre">restart</span> <span class="pre">ollama</span></code>
+ausgefuehrt werden. Wenn sich diese LAN-Adresse aendert, ist die Einstellung
+anzupassen oder eine DHCP-Reservierung einzurichten.</p>
+<p>Unter Windows wird die entsprechende Umgebungsvariable im Benutzerkonto
+gesetzt und Ollama anschliessend neu gestartet. Die offizielle
+Ollama-Dokumentation beschreibt die Konfiguration und den Standard-Bind-Host
+unter <a class="reference external" href="https://docs.ollama.com/faq#how-can-i-expose-ollama-on-my-network">https://docs.ollama.com/faq#how-can-i-expose-ollama-on-my-network</a>.</p>
+<section id="sicherheit">
+<h3>Sicherheit<a class="headerlink" href="#sicherheit" title="Link to this heading">¶</a></h3>
+<p>Der lokale Ollama-Endpunkt hat bei einer LAN-Freigabe keine eigene
+Anwendungs-Authentifizierung. Daher ist zwingend eine Linux-Firewall-Regel
+einzurichten:</p>
+<ul class="simple">
+<li><p>eingehend TCP-Port <code class="docutils literal notranslate"><span class="pre">11434</span></code> erlauben;</p></li>
+<li><p>als Remote-IP ausschliesslich die feste IP-Adresse des GC-Bridge-Servers
+eintragen;</p></li>
+<li><p>keine Freigabe fuer das Internet, Gastnetz oder beliebige LAN-Clients.</p></li>
+</ul>
+<p>Vor der Django-Konfiguration muss der Server den Endpunkt erreichen koennen:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>curl<span class="w"> </span>http://&lt;IP-DES-ARBEITS-PC&gt;:11434/api/tags
+</pre></div>
+</div>
+<p>Die Ausgabe muss <code class="docutils literal notranslate"><span class="pre">translategemma:12b</span></code> enthalten. Verwende fuer die
+Server-Verbindung immer eine feste IP-Adresse oder einen internen DNS-Namen,
+nie <code class="docutils literal notranslate"><span class="pre">localhost</span></code>.</p>
+</section>
+</section>
+<section id="django-konfigurieren">
+<h2>Django konfigurieren<a class="headerlink" href="#django-konfigurieren" title="Link to this heading">¶</a></h2>
+<ol class="arabic simple">
+<li><p>Unter <code class="docutils literal notranslate"><span class="pre">AI</span> <span class="pre">&gt;</span> <span class="pre">Provider</span></code> einen aktiven Eintrag anlegen:</p>
+<ul class="simple">
+<li><p>Name: <code class="docutils literal notranslate"><span class="pre">Ollama</span> <span class="pre">TranslateGemma</span></code></p></li>
+<li><p>Base URL: <code class="docutils literal notranslate"><span class="pre">http://&lt;IP-DES-ARBEITS-PC&gt;:11434/v1</span></code></p></li>
+<li><p>Modellname: <code class="docutils literal notranslate"><span class="pre">translategemma:12b</span></code></p></li>
+<li><p>API-Key: leer lassen</p></li>
+<li><p>Timeout: fuer das 12B-Modell ausreichend hoch setzen, zum Beispiel
+<code class="docutils literal notranslate"><span class="pre">600</span></code> Sekunden.</p></li>
+</ul>
+</li>
+<li><p>Unter <code class="docutils literal notranslate"><span class="pre">AI</span> <span class="pre">&gt;</span> <span class="pre">Uebersetzungen</span></code> eine aktive Konfiguration erstellen und den
+Provider aus Schritt 1 auswaehlen. Zunaechst empfiehlt sich eine kleine
+Batchgroesse, zum Beispiel 20 Uebersetzungen pro Lauf.</p></li>
+<li><p>Im gleichen Bereich lassen sich der vorgeschlagene strikte System-Prompt,
+die Benutzer-Prompt-Vorlage und die Spracheigenheiten jederzeit aendern.
+Der native Unfold-Aktionseintrag <code class="docutils literal notranslate"><span class="pre">Uebersetzungsscan</span> <span class="pre">jetzt</span> <span class="pre">starten</span></code> dient
+zum kontrollierten manuellen Test.</p></li>
+<li><p>Unter <code class="docutils literal notranslate"><span class="pre">System</span> <span class="pre">&gt;</span> <span class="pre">Celery</span> <span class="pre">Scheduler</span></code> einen <code class="docutils literal notranslate"><span class="pre">CrontabSchedule</span></code> und einen
+<code class="docutils literal notranslate"><span class="pre">PeriodicTask</span></code> anlegen:</p>
+<ul class="simple">
+<li><p>Task: <code class="docutils literal notranslate"><span class="pre">ai.queue_translation_scan</span></code></p></li>
+<li><p>Zeit: taeglich, beispielsweise 02:30 Uhr (Server-Zeitzone
+<code class="docutils literal notranslate"><span class="pre">Europe/Berlin</span></code>)</p></li>
+<li><p>Argumente: leer</p></li>
+</ul>
+</li>
+</ol>
+<p>Der Celery-Worker muss nachts laufen und der Arbeits-PC mit Ollama muss zu
+dieser Zeit eingeschaltet sowie im LAN erreichbar sein.</p>
+</section>
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="index.html">GC-Bridge-4</a></h1>
+
+
+
+
+
+
+
+
+
+<search id="searchbox" style="display: none" role="search">
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Search"/>
+      <input type="submit" value="Los" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script><h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Inhalte</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="einleitung.html">Einleitung</a></li>
+<li class="toctree-l1"><a class="reference internal" href="erste_schritte.html">Erste Schritte</a></li>
+<li class="toctree-l1"><a class="reference internal" href="handbuch/index.html">Anwenderhandbuch: tägliche Arbeit</a></li>
+<li class="toctree-l1"><a class="reference internal" href="hr_mitarbeiterverwaltung.html">HR Mitarbeiterverwaltung</a></li>
+<li class="toctree-l1"><a class="reference internal" href="microtech_rulebuilder_feldkatalog.html">Microtech Rulebuilder mit Feldkatalog (Schritt fuer Schritt)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="operator_checkliste.html">Operator-Checkliste (1 Seite)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="workflows.html">Workflows</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">KI-Uebersetzungen mit Ollama</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#funktionsweise">Funktionsweise</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#shopware-export">Shopware-Export</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ollama-auf-dem-arbeits-pc-im-lan-bereitstellen">Ollama auf dem Arbeits-PC im LAN bereitstellen</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#django-konfigurieren">Django konfigurieren</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="betrieb_technik.html">Betrieb und Technik</a></li>
+<li class="toctree-l1"><a class="reference internal" href="stoerung_nicht_erreichbar.html">Stoerung: Seite nicht erreichbar</a></li>
+<li class="toctree-l1"><a class="reference internal" href="reference/index.html">Referenz</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+      <li>Previous: <a href="workflows.html" title="vorheriges Kapitel">Workflows</a></li>
+      <li>Next: <a href="betrieb_technik.html" title="nächstes Kapitel">Betrieb und Technik</a></li>
+  </ul></li>
+</ul>
+</div>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 9.1.0</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+      
+      |
+      <a href="_sources/ki_uebersetzungen.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

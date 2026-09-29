@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+
+<html lang="de" data-content_root="../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Issues &#8212; GC-Bridge-4 0.1.0 Dokumentation</title>
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=5ecbeea2" />
+    <link rel="stylesheet" type="text/css" href="../_static/basic.css?v=b08954a9" />
+    <link rel="stylesheet" type="text/css" href="../_static/alabaster.css?v=27fed22d" />
+    <script src="../_static/documentation_options.js?v=7c8c992d"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/translations.js?v=9bf55d28"></script>
+    <link rel="index" title="Stichwortverzeichnis" href="../genindex.html" />
+    <link rel="search" title="Suche" href="../search.html" />
+    <link rel="next" title="E-Mails" href="emails.html" />
+    <link rel="prev" title="Anwenderhandbuch: tägliche Arbeit" href="index.html" />
+   
+  <link rel="stylesheet" href="../_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="issues">
+<span id="gc-bridge-handbuch-issues"></span><h1>Issues<a class="headerlink" href="#issues" title="Link to this heading">¶</a></h1>
+<section id="wofur-ist-dieser-bereich-da">
+<h2>Wofür ist dieser Bereich da?<a class="headerlink" href="#wofur-ist-dieser-bereich-da" title="Link to this heading">¶</a></h2>
+<p>Im Bereich <strong>Issues</strong> werden Fehler, offene Fragen und kleine
+Arbeitsaufträge gesammelt. Ein Issue beschreibt kurz, was passiert ist,
+wer sich darum kümmert und wie weit die Bearbeitung ist. Bilder,
+PDF-Dateien und Fehlerdateien können direkt am Issue abgelegt werden.</p>
+<p>Erledigte und geschlossene Einträge verschwinden nicht. Sie werden
+automatisch im <strong>Issue-Archiv</strong> angezeigt und bleiben dort
+nachvollziehbar.</p>
+<a class="reference internal image-reference" href="../_images/01_issues.jpg"><img alt="Leere Issue-Maske mit Kurzbeschreibung, Kategorie und Beschreibung" src="../_images/01_issues.jpg" style="width: 100%;" />
+</a>
+<p>Beim Anlegen reicht eine kurze, klare Überschrift. Kategorie, Beschreibung und
+Link machen die Meldung leichter verständlich.</p>
+</section>
+<section id="navigation">
+<h2>Navigation<a class="headerlink" href="#navigation" title="Link to this heading">¶</a></h2>
+<p>In der linken Navigation gibt es den Abschnitt <strong>Issues</strong> mit drei
+Einträgen:</p>
+<ul class="simple">
+<li><p><strong>Issues</strong>: aktive Vorgänge bearbeiten und neue Vorgänge anlegen</p></li>
+<li><p><strong>Issue-Archiv</strong>: erledigte und geschlossene Vorgänge nachlesen oder
+wiederherstellen</p></li>
+<li><p><strong>Kategorien</strong>: die auswählbaren Themenbereiche verwalten</p></li>
+</ul>
+<p>Direkte Adressen:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Bereich</p></th>
+<th class="head"><p>Adresse</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Aktive Issues</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">http://10.0.0.165/admin/issues/issue/</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Neues Issue</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">http://10.0.0.165/admin/issues/issue/add/</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>Issue-Archiv</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">http://10.0.0.165/admin/issues/archivedissue/</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Kategorien</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">http://10.0.0.165/admin/issues/issuecategory/</span></code></p></td>
+</tr>
+</tbody>
+</table>
+<p>Die Links sind nur für angemeldete Mitarbeiter sichtbar. Issues dürfen
+Mitarbeiter ansehen, anlegen und ändern. Das endgültige Löschen eines
+Issues ist nur für Administratoren möglich. Kategorien dürfen ebenfalls
+nur Administratoren anlegen, ändern oder löschen.</p>
+</section>
+<section id="die-arbeitsliste-issues">
+<h2>Die Arbeitsliste „Issues“<a class="headerlink" href="#die-arbeitsliste-issues" title="Link to this heading">¶</a></h2>
+<p>Die Arbeitsliste zeigt nur Vorgänge, die noch nicht erledigt oder
+geschlossen sind. Standardmäßig stehen die neuesten Einträge oben.</p>
+<section id="spalten-der-liste">
+<h3>Spalten der Liste<a class="headerlink" href="#spalten-der-liste" title="Link to this heading">¶</a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Spalte</p></th>
+<th class="head"><p>Bedeutung</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Kurzbeschreibung</strong></p></td>
+<td><p>Der Titel des Issues. Ein Klick öffnet den
+Vorgang.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Kategorie</strong></p></td>
+<td><p>Das Thema, zu dem der Vorgang gehört.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Status</strong></p></td>
+<td><p>Der aktuelle Bearbeitungsstand.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Priorität</strong></p></td>
+<td><p>Zeigt, wie dringend der Vorgang ist. Die
+Priorität kann direkt in der Liste geändert
+werden.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Gemeldet von</strong></p></td>
+<td><p>Der Mitarbeiter, der das Issue angelegt hat.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Zugewiesen an</strong></p></td>
+<td><p>Der verantwortliche Mitarbeiter. Die
+Zuweisung kann direkt in der Liste geändert
+werden.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Link</strong></p></td>
+<td><p>Zeigt <strong>Öffnen</strong>, wenn im Issue eine Adresse
+hinterlegt wurde. Der Link öffnet sich in
+einem neuen Fenster oder Tab. Ohne
+hinterlegte Adresse steht hier ein Strich.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Anhänge</strong></p></td>
+<td><p>Anzahl der am Issue gespeicherten Dateien.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Angelegt am</strong></p></td>
+<td><p>Zeitpunkt, zu dem das Issue erstellt wurde.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="suchen-und-filtern">
+<h3>Suchen und filtern<a class="headerlink" href="#suchen-und-filtern" title="Link to this heading">¶</a></h3>
+<p>Die Suche berücksichtigt die Kurzbeschreibung, die Beschreibung, den
+Link, den Fehlertext sowie Namen und Benutzernamen der meldenden und
+zugewiesenen Person.</p>
+<p>Die Liste kann nach folgenden Angaben gefiltert werden:</p>
+<ul class="simple">
+<li><p>Status</p></li>
+<li><p>Priorität</p></li>
+<li><p>Kategorie</p></li>
+<li><p>zugewiesener Mitarbeiter</p></li>
+<li><p>Anlagedatum</p></li>
+</ul>
+<p>So lässt sich zum Beispiel schnell die persönliche Arbeitsliste
+anzeigen: Im Filter <strong>Zugewiesen an</strong> den eigenen Namen wählen und bei
+<strong>Status</strong> nur die gewünschten Bearbeitungsstände auswählen.</p>
+</section>
+</section>
+<section id="ein-issue-anlegen-oder-bearbeiten">
+<h2>Ein Issue anlegen oder bearbeiten<a class="headerlink" href="#ein-issue-anlegen-oder-bearbeiten" title="Link to this heading">¶</a></h2>
+<p>Zum Anlegen in der Arbeitsliste <strong>Issue hinzufügen</strong> wählen. Für ein
+neues Issue ist nur die <strong>Kurzbeschreibung</strong> zwingend erforderlich. Je
+genauer die hilfreichen Angaben sind, desto leichter kann der Vorgang
+bearbeitet werden.</p>
+<section id="abschnitt-kurzmeldung">
+<h3>Abschnitt „Kurzmeldung“<a class="headerlink" href="#abschnitt-kurzmeldung" title="Link to this heading">¶</a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Eingabe und Bedeutung</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Kurzbeschreibung</strong></p></td>
+<td><p>Pflichtfeld. Ein kurzer, eindeutiger Satz
+mit höchstens 255 Zeichen. Er sollte
+beschreiben, was nicht funktioniert oder was
+geklärt werden soll.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Kategorie</strong></p></td>
+<td><p>Optional. Ordnet das Issue einem Thema zu.
+Es werden nur aktive Kategorien angeboten.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Beschreibung</strong></p></td>
+<td><p>Optional. Hier gehört hinein, was passiert
+ist, wo es passiert ist und was stattdessen
+erwartet wurde. Das Feld bietet viel Platz
+für eine verständliche Schilderung.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Link</strong></p></td>
+<td><p>Optional. Direkte Adresse zur betroffenen
+Seite, zu einem Eintrag in der Bridge, zu
+Shopware oder zu einer anderen passenden
+Fundstelle. Es muss eine vollständige
+Webadresse sein.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="abschnitt-bearbeitung">
+<h3>Abschnitt „Bearbeitung“<a class="headerlink" href="#abschnitt-bearbeitung" title="Link to this heading">¶</a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Eingabe und Bedeutung</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Status</strong></p></td>
+<td><p>Legt den Bearbeitungsstand fest. Die möglichen
+Werte werden unten erklärt.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Priorität</strong></p></td>
+<td><p>Legt die Dringlichkeit fest. Beim Anlegen ist
+<strong>Normal</strong> vorausgewählt.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Zugewiesen an</strong></p></td>
+<td><p>Verantwortlicher Mitarbeiter. Es werden
+Benutzer mit Mitarbeiterrechten angeboten. Ein
+fest eingerichteter Standardbearbeiter ist
+vorausgewählt; der angezeigte Name hängt von
+der Benutzerverwaltung der Bridge ab. Das Feld
+kann auch leer bleiben.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Gemeldet von</strong></p></td>
+<td><p>Wird beim Anlegen automatisch mit dem
+angemeldeten Mitarbeiter gefüllt und kann nicht
+von Hand geändert werden.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="statuswerte">
+<h3>Statuswerte<a class="headerlink" href="#statuswerte" title="Link to this heading">¶</a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Status</p></th>
+<th class="head"><p>Einfache Bedeutung</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Offen</strong></p></td>
+<td><p>Das Issue ist neu oder wurde noch nicht
+begonnen.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>In Bearbeitung</strong></p></td>
+<td><p>Jemand arbeitet gerade daran.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Wartet</strong></p></td>
+<td><p>Die Bearbeitung kann im Moment nicht
+weitergehen, etwa weil eine Antwort oder eine
+andere Voraussetzung fehlt.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Erledigt</strong></p></td>
+<td><p>Das Problem wurde gelöst. Eine
+Lösungsdokumentation ist Pflicht. Der Eintrag
+wechselt ins Archiv.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Geschlossen</strong></p></td>
+<td><p>Der Vorgang ist endgültig beendet. Eine
+Lösungsdokumentation ist Pflicht. Der Eintrag
+wechselt ins Archiv.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="prioritaten">
+<h3>Prioritäten<a class="headerlink" href="#prioritaten" title="Link to this heading">¶</a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Priorität</p></th>
+<th class="head"><p>Verwendung</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Niedrig</strong></p></td>
+<td><p>Der Vorgang kann warten und behindert die tägliche
+Arbeit nicht.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Normal</strong></p></td>
+<td><p>Üblicher Vorgang ohne besondere Eile. Dies ist die
+Voreinstellung.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Hoch</strong></p></td>
+<td><p>Der Vorgang sollte zeitnah bearbeitet werden.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Dringend</strong></p></td>
+<td><p>Der Vorgang beeinträchtigt die Arbeit stark und
+braucht sofortige Aufmerksamkeit.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="abschnitt-fehlerdetails">
+<h3>Abschnitt „Fehlerdetails“<a class="headerlink" href="#abschnitt-fehlerdetails" title="Link to this heading">¶</a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Eingabe und Bedeutung</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Fehlertext</strong></p></td>
+<td><p>Optional. Hier kann eine angezeigte
+Fehlermeldung oder ein kopierter Auszug aus
+einem Protokoll eingefügt werden. Der Text
+sollte möglichst unverändert übernommen
+werden.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Fehlertext-Datei</strong></p></td>
+<td><p>Optional. Hier kann eine Fehler- oder
+Protokolldatei hochgeladen werden. Erlaubt
+sind Dateien mit den Endungen <code class="docutils literal notranslate"><span class="pre">.txt</span></code>,
+<code class="docutils literal notranslate"><span class="pre">.log</span></code>, <code class="docutils literal notranslate"><span class="pre">.json</span></code>, <code class="docutils literal notranslate"><span class="pre">.xml</span></code>, <code class="docutils literal notranslate"><span class="pre">.html</span></code>
+und <code class="docutils literal notranslate"><span class="pre">.csv</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Link</strong> / <strong>Öffnen</strong></p></td>
+<td><p>Schreibgeschützte Anzeige des oben
+eingetragenen Links. Ohne Link wird ein
+Strich angezeigt.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Anhänge</strong></p></td>
+<td><p>Schreibgeschützte Anzahl der Dateien, die
+unten im Bereich <strong>Issue-Anhänge</strong>
+gespeichert sind. Bei einem noch nicht
+gespeicherten Issue steht hier 0.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="abschnitt-abschlussdokumentation">
+<h3>Abschnitt „Abschlussdokumentation“<a class="headerlink" href="#abschnitt-abschlussdokumentation" title="Link to this heading">¶</a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Eingabe und Bedeutung</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Lösungsdokumentation</strong></p></td>
+<td><p>Beschreibt kurz, was gemacht wurde und
+warum. Sobald der Status <strong>Erledigt</strong>
+oder <strong>Geschlossen</strong> gewählt wird, ist
+dieses Feld Pflicht.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Abgeschlossen am</strong></p></td>
+<td><p>Wird beim ersten Abschluss automatisch
+gesetzt und kann nicht von Hand geändert
+werden.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Abgeschlossen von</strong></p></td>
+<td><p>Wird beim ersten Abschluss automatisch
+mit dem angemeldeten Mitarbeiter gefüllt
+und kann nicht von Hand geändert werden.</p></td>
+</tr>
+</tbody>
+</table>
+<p>Wird <strong>Erledigt</strong> oder <strong>Geschlossen</strong> ohne Lösungsdokumentation
+gespeichert, bleibt das Formular geöffnet und zeigt den Hinweis: „Bitte
+dokumentiere kurz, was gelöst wurde und warum, bevor das Issue
+archiviert wird.“</p>
+</section>
+<section id="abschnitt-system">
+<h3>Abschnitt „System“<a class="headerlink" href="#abschnitt-system" title="Link to this heading">¶</a></h3>
+<p>Dieser eingeklappte Abschnitt dient nur zur Information:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Bedeutung</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Angelegt am</strong></p></td>
+<td><p>Zeitpunkt der ersten Speicherung.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Aktualisiert am</strong></p></td>
+<td><p>Zeitpunkt der letzten Änderung.</p></td>
+</tr>
+</tbody>
+</table>
+<p>Beide Angaben werden automatisch geführt.</p>
+</section>
+</section>
+<section id="anhange-hinzufugen">
+<h2>Anhänge hinzufügen<a class="headerlink" href="#anhange-hinzufugen" title="Link to this heading">¶</a></h2>
+<p>Im unteren Teil des Issue-Formulars befindet sich der Bereich
+<strong>Issue-Anhänge</strong>. Dort können mehrere Dateien nacheinander ergänzt
+werden.</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Eingabe und Bedeutung</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Art</strong></p></td>
+<td><p>Auswahl zwischen <strong>Screenshot</strong>, <strong>Fehlerdatei</strong>
+und <strong>Sonstiges</strong>. Beim neuen Anhang ist
+<strong>Screenshot</strong> vorausgewählt.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Datei</strong></p></td>
+<td><p>Pflichtfeld für den jeweiligen Anhang. Erlaubt
+sind <code class="docutils literal notranslate"><span class="pre">.png</span></code>, <code class="docutils literal notranslate"><span class="pre">.jpg</span></code>, <code class="docutils literal notranslate"><span class="pre">.jpeg</span></code>, <code class="docutils literal notranslate"><span class="pre">.webp</span></code>,
+<code class="docutils literal notranslate"><span class="pre">.gif</span></code>, <code class="docutils literal notranslate"><span class="pre">.pdf</span></code>, <code class="docutils literal notranslate"><span class="pre">.txt</span></code>, <code class="docutils literal notranslate"><span class="pre">.log</span></code> und
+<code class="docutils literal notranslate"><span class="pre">.json</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Hinweis</strong></p></td>
+<td><p>Optionaler kurzer Text, der erklärt, was auf dem
+Bild oder in der Datei wichtig ist.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Angelegt am</strong></p></td>
+<td><p>Wird nach dem Speichern automatisch angezeigt.</p></td>
+</tr>
+</tbody>
+</table>
+<p>Ein nicht mehr benötigter Anhang kann im Issue zum Löschen markiert
+werden. Die Änderung wird erst mit dem Speichern des gesamten Issues
+übernommen.</p>
+<p>Tipp: Bei einem Screenshot im Feld <strong>Hinweis</strong> kurz den sichtbaren
+Fehler und die wichtige Stelle benennen. So muss der Bearbeiter nicht
+raten, worauf er achten soll.</p>
+</section>
+<section id="ein-issue-abschlieszen">
+<h2>Ein Issue abschließen<a class="headerlink" href="#ein-issue-abschlieszen" title="Link to this heading">¶</a></h2>
+<ol class="arabic simple">
+<li><p>Das Issue öffnen.</p></li>
+<li><p>Prüfen, ob Beschreibung, Fehlerdetails und Anhänge für spätere
+Rückfragen ausreichen.</p></li>
+<li><p>Im Feld <strong>Lösungsdokumentation</strong> kurz festhalten, was geändert oder
+geklärt wurde und warum.</p></li>
+<li><p>Den Status auf <strong>Erledigt</strong> oder <strong>Geschlossen</strong> setzen.</p></li>
+<li><p>Speichern.</p></li>
+</ol>
+<p>Beim Speichern werden Abschlusszeitpunkt und abschließender Mitarbeiter
+automatisch eingetragen. Anschließend erscheint der Vorgang nicht mehr
+in der normalen Arbeitsliste, sondern im <strong>Issue-Archiv</strong>.</p>
+</section>
+<section id="das-issue-archiv">
+<h2>Das Issue-Archiv<a class="headerlink" href="#das-issue-archiv" title="Link to this heading">¶</a></h2>
+<p>Das Archiv enthält ausschließlich Issues mit dem Status <strong>Erledigt</strong>
+oder <strong>Geschlossen</strong>. Die Felder, Suche und Filter entsprechen
+weitgehend der normalen Arbeitsliste. Im Archiv kann kein neues Issue
+angelegt werden.</p>
+<p>Soll ein Vorgang erneut bearbeitet werden, gibt es drei Möglichkeiten:</p>
+<ul class="simple">
+<li><p>in der Archivliste die Aktion <strong>Wiederherstellen</strong> direkt in der
+Zeile verwenden,</p></li>
+<li><p>ein archiviertes Issue öffnen und <strong>Aus Archiv wiederherstellen</strong>
+wählen,</p></li>
+<li><p>mehrere Einträge markieren und die Sammelaktion <strong>Aus Archiv
+wiederherstellen</strong> ausführen.</p></li>
+</ul>
+<p>Beim Wiederherstellen erhält das Issue den Status <strong>In Bearbeitung</strong> und
+erscheint wieder in der normalen Arbeitsliste. Die bisherige
+Lösungsdokumentation bleibt erhalten und kann bei Bedarf ergänzt werden.</p>
+</section>
+<section id="kategorien">
+<h2>Kategorien<a class="headerlink" href="#kategorien" title="Link to this heading">¶</a></h2>
+<p>Kategorien machen die Arbeitsliste übersichtlicher. Nur Administratoren
+können sie verwalten. Mitarbeiter können aktive Kategorien beim
+Bearbeiten eines Issues auswählen.</p>
+<section id="felder-einer-kategorie">
+<h3>Felder einer Kategorie<a class="headerlink" href="#felder-einer-kategorie" title="Link to this heading">¶</a></h3>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Feld</p></th>
+<th class="head"><p>Eingabe und Bedeutung</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><strong>Name</strong></p></td>
+<td><p>Pflichtfeld. Eindeutiger Name mit höchstens
+120 Zeichen. Derselbe Name kann nicht zweimal
+angelegt werden.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Beschreibung</strong></p></td>
+<td><p>Optional. Erklärt, welche Issues in diese
+Kategorie gehören.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Farbe</strong></p></td>
+<td><p>Optional. Farbwert für die Kennzeichnung.
+Ohne eigene Angabe wird ein gedecktes Grau
+verwendet. In der Kategorienliste werden ein
+Farbpunkt und der gespeicherte Wert
+angezeigt.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Aktiv</strong></p></td>
+<td><p>Nur aktive Kategorien stehen im
+Issue-Formular zur Auswahl. Eine nicht mehr
+benötigte Kategorie sollte deaktiviert
+werden, wenn vorhandene Zuordnungen erhalten
+bleiben sollen.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>Angelegt am</strong></p></td>
+<td><p>Automatisch gesetzter Zeitpunkt der
+Erstellung.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>Aktualisiert am</strong></p></td>
+<td><p>Automatisch gesetzter Zeitpunkt der letzten
+Änderung.</p></td>
+</tr>
+</tbody>
+</table>
+<p>Die Kategorienliste zeigt <strong>Name</strong>, eine Vorschau der <strong>Farbe</strong>,
+<strong>Aktiv</strong> und <strong>Aktualisiert am</strong>. Der Schalter <strong>Aktiv</strong> kann direkt in
+der Liste geändert werden. Außerdem kann nach aktiven und inaktiven
+Kategorien gefiltert sowie in Name und Beschreibung gesucht werden.</p>
+</section>
+</section>
+<section id="automatisch-angelegte-issues">
+<h2>Automatisch angelegte Issues<a class="headerlink" href="#automatisch-angelegte-issues" title="Link to this heading">¶</a></h2>
+<p>Bestimmte Hintergrundaufgaben der Bridge können Fehler selbst als Issue
+festhalten. Solche Einträge tragen häufig einen Titel, der mit
+<strong>[Task]</strong> beginnt. Sie sind normalerweise <strong>Offen</strong> und haben eine hohe
+Priorität. Der gesammelte Fehler steht im Feld <strong>Fehlertext</strong>.</p>
+<p>Gibt es bereits ein offenes Issue mit genau demselben Titel, wird nicht
+jedes Mal ein weiterer Vorgang angelegt. Der neue Fehlertext wird dem
+vorhandenen Issue hinzugefügt. Dadurch bleibt die Arbeitsliste
+übersichtlich und die wiederholten Fehler stehen gemeinsam an einem Ort.
+Automatisch angelegte Issues werden anschließend genauso zugewiesen,
+bearbeitet und abgeschlossen wie manuell angelegte Issues.</p>
+</section>
+<section id="meldung-uber-neue-issues-nach-der-anmeldung">
+<h2>Meldung über neue Issues nach der Anmeldung<a class="headerlink" href="#meldung-uber-neue-issues-nach-der-anmeldung" title="Link to this heading">¶</a></h2>
+<p>Nach einer Anmeldung kann oben rechts eine gelbe Meldung <strong>Neues Issue</strong>
+erscheinen. Sie zeigt den Titel und führt mit einem Klick direkt zum
+Issue. Bei einem bereits abgeschlossenen Issue führt der Link ins
+Archiv.</p>
+<p>Die Meldung betrifft neu angelegte Issues seit der letzten Prüfung und
+ist nicht auf die eigene Zuweisung beschränkt. Sie schließt sich nach
+etwa zehn Sekunden selbst oder kann über das Kreuz geschlossen werden.
+Beim allerersten Einsatz werden vorhandene alte Issues nicht
+nachträglich als neue Meldungen gezeigt.</p>
+</section>
+<section id="haufige-hinweise-und-fehlerquellen">
+<h2>Häufige Hinweise und Fehlerquellen<a class="headerlink" href="#haufige-hinweise-und-fehlerquellen" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p><strong>Das Issue ist nach dem Speichern verschwunden:</strong> Bei <strong>Erledigt</strong>
+oder <strong>Geschlossen</strong> ist es ins Issue-Archiv gewechselt.</p></li>
+<li><p><strong>Der Abschluss lässt sich nicht speichern:</strong> Im Feld
+<strong>Lösungsdokumentation</strong> fehlt eine kurze Erklärung.</p></li>
+<li><p><strong>Eine Kategorie fehlt in der Auswahl:</strong> Die Kategorie ist
+möglicherweise auf <strong>inaktiv</strong> gestellt. Ein Administrator kann dies
+unter <strong>Kategorien</strong> prüfen.</p></li>
+<li><p><strong>Eine Datei wird abgelehnt:</strong> Die Dateiendung ist für das gewählte
+Dateifeld nicht erlaubt. Screenshots gehören am besten in
+<strong>Issue-Anhänge</strong>, nicht in <strong>Fehlertext-Datei</strong>.</p></li>
+<li><p><strong>Der Link lässt sich nicht speichern:</strong> Im Feld <strong>Link</strong> muss eine
+vollständige Webadresse stehen, in der Regel beginnend mit
+<code class="docutils literal notranslate"><span class="pre">http://</span></code> oder <code class="docutils literal notranslate"><span class="pre">https://</span></code>.</p></li>
+<li><p><strong>Die Liste zeigt zu viele Einträge:</strong> Mit Status, Priorität,
+Kategorie oder Zuweisung filtern. Die Suche eignet sich für Wörter
+aus Titel, Beschreibung oder Fehlertext.</p></li>
+<li><p><strong>Ein Issue soll doch weiterbearbeitet werden:</strong> Im Issue-Archiv die
+Funktion <strong>Wiederherstellen</strong> verwenden.</p></li>
+<li><p><strong>Eine Kategorie soll nicht mehr verwendet werden:</strong> Sie besser
+deaktivieren statt löschen. So bleiben ältere Issues verständlich
+zugeordnet.</p></li>
+<li><p><strong>Eine Warnmeldung verschwindet schnell:</strong> Das ist beabsichtigt. Das
+Issue bleibt trotzdem in der Arbeitsliste oder im Archiv erhalten.</p></li>
+</ul>
+</section>
+<section id="praxisbeispiel-1-fehler-beim-bearbeiten-einer-bestellung-melden">
+<h2>Praxisbeispiel 1: Fehler beim Bearbeiten einer Bestellung melden<a class="headerlink" href="#praxisbeispiel-1-fehler-beim-bearbeiten-einer-bestellung-melden" title="Link to this heading">¶</a></h2>
+<p>Eine Mitarbeiterin kann eine Bestellung öffnen, aber beim Speichern
+erscheint eine Fehlermeldung.</p>
+<ol class="arabic simple">
+<li><p>In der linken Navigation <strong>Issues → Issues</strong> öffnen und <strong>Issue
+hinzufügen</strong> wählen.</p></li>
+<li><p>Als <strong>Kurzbeschreibung</strong> eintragen: „Bestellung 4711 lässt sich
+nicht speichern“.</p></li>
+<li><p>Eine passende <strong>Kategorie</strong> wählen, sofern vorhanden.</p></li>
+<li><p>In der <strong>Beschreibung</strong> festhalten: „Der Fehler erscheint nach einer
+Änderung der Lieferadresse beim Klick auf Speichern. Erwartet wurde,
+dass die neue Adresse übernommen wird.“</p></li>
+<li><p>Den vollständigen Link zur betroffenen Bestellung in <strong>Link</strong>
+einfügen.</p></li>
+<li><p>Die angezeigte Meldung unverändert in <strong>Fehlertext</strong> kopieren.</p></li>
+<li><p><strong>Priorität Hoch</strong> wählen, weil die Bestellung weiterbearbeitet
+werden muss.</p></li>
+<li><p>Unter <strong>Issue-Anhänge</strong> die sichtbare Fehlermeldung als
+<strong>Screenshot</strong> hochladen. Als <strong>Hinweis</strong> „Fehlermeldung nach dem
+Speichern der Lieferadresse“ eintragen.</p></li>
+<li><p>Das Issue speichern. <strong>Gemeldet von</strong> wird automatisch gesetzt; der
+vorausgewählte Bearbeiter kann bei Bedarf geändert werden.</p></li>
+<li><p>Während der Prüfung den Status auf <strong>In Bearbeitung</strong> stellen. Falls
+zunächst eine Rückmeldung benötigt wird, vorübergehend <strong>Wartet</strong>
+wählen.</p></li>
+<li><p>Nach der Korrektur in <strong>Lösungsdokumentation</strong> eintragen: „Die
+unvollständige Lieferadresse wurde ergänzt. Danach konnte die
+Bestellung wieder gespeichert werden.“</p></li>
+<li><p>Den Status auf <strong>Erledigt</strong> setzen und speichern. Das Issue liegt
+nun mit Abschlusszeit und Bearbeiter im Archiv.</p></li>
+</ol>
+<p>Das Ergebnis ist ein nachvollziehbarer Vorgang: Die betroffene Stelle
+ist direkt verlinkt, der genaue Fehler ist erhalten und die Lösung kann
+später nachgelesen werden.</p>
+</section>
+<section id="praxisbeispiel-2-einen-zu-fruh-geschlossenen-vorgang-wieder-aufnehmen">
+<h2>Praxisbeispiel 2: Einen zu früh geschlossenen Vorgang wieder aufnehmen<a class="headerlink" href="#praxisbeispiel-2-einen-zu-fruh-geschlossenen-vorgang-wieder-aufnehmen" title="Link to this heading">¶</a></h2>
+<p>Ein Issue wurde geschlossen, doch am nächsten Tag tritt dasselbe Problem
+erneut auf.</p>
+<ol class="arabic simple">
+<li><p>In der linken Navigation <strong>Issues → Issue-Archiv</strong> öffnen.</p></li>
+<li><p>Über die Suche ein markantes Wort aus der Kurzbeschreibung eingeben.</p></li>
+<li><p>Den gefundenen Vorgang öffnen und die bisherige Beschreibung,
+Anhänge und Lösungsdokumentation prüfen.</p></li>
+<li><p><strong>Aus Archiv wiederherstellen</strong> wählen. Der Status ändert sich
+automatisch auf <strong>In Bearbeitung</strong>, und die normale Issue-Liste wird
+geöffnet.</p></li>
+<li><p>Das wiederhergestellte Issue öffnen.</p></li>
+<li><p>In der <strong>Beschreibung</strong> ergänzen, wann und unter welchen Umständen
+der Fehler erneut aufgetreten ist.</p></li>
+<li><p>Einen neuen Screenshot als weiteren <strong>Issue-Anhang</strong> hinzufügen und
+den Zeitpunkt im <strong>Hinweis</strong> nennen.</p></li>
+<li><p>Die <strong>Priorität</strong> bei Bedarf auf <strong>Dringend</strong> erhöhen und die
+zuständige Person unter <strong>Zugewiesen an</strong> prüfen.</p></li>
+<li><p>Nach der erneuten Lösung die <strong>Lösungsdokumentation</strong> um die neue
+Ursache und die dauerhafte Maßnahme ergänzen.</p></li>
+<li><p>Den Status wieder auf <strong>Erledigt</strong> oder <strong>Geschlossen</strong> setzen und
+speichern.</p></li>
+</ol>
+<p>Auf diese Weise bleibt die gesamte Vorgeschichte an einem Ort. Es
+entsteht kein zweiter, schwer zuzuordnender Vorgang.</p>
+</section>
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../index.html">GC-Bridge-4</a></h1>
+
+
+
+
+
+
+
+
+
+<search id="searchbox" style="display: none" role="search">
+    <div class="searchformwrapper">
+    <form class="search" action="../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Search"/>
+      <input type="submit" value="Los" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script><h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Inhalte</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../einleitung.html">Einleitung</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../erste_schritte.html">Erste Schritte</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Anwenderhandbuch: tägliche Arbeit</a><ul class="current">
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Issues</a></li>
+<li class="toctree-l2"><a class="reference internal" href="emails.html">E-Mails</a></li>
+<li class="toctree-l2"><a class="reference internal" href="bestellungen.html">Bestellungen</a></li>
+<li class="toctree-l2"><a class="reference internal" href="kunden.html">Kunden</a></li>
+<li class="toctree-l2"><a class="reference internal" href="produkte.html">Produkte</a></li>
+<li class="toctree-l2"><a class="reference internal" href="dokumente.html">Dokumente</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mappei.html">Mappei</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../hr_mitarbeiterverwaltung.html">HR Mitarbeiterverwaltung</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../microtech_rulebuilder_feldkatalog.html">Microtech Rulebuilder mit Feldkatalog (Schritt fuer Schritt)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../operator_checkliste.html">Operator-Checkliste (1 Seite)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../workflows.html">Workflows</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../ki_uebersetzungen.html">KI-Uebersetzungen mit Ollama</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../betrieb_technik.html">Betrieb und Technik</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../stoerung_nicht_erreichbar.html">Stoerung: Seite nicht erreichbar</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../reference/index.html">Referenz</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../index.html">Documentation overview</a><ul>
+  <li><a href="index.html">Anwenderhandbuch: tägliche Arbeit</a><ul>
+      <li>Previous: <a href="index.html" title="vorheriges Kapitel">Anwenderhandbuch: tägliche Arbeit</a></li>
+      <li>Next: <a href="emails.html" title="nächstes Kapitel">E-Mails</a></li>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 9.1.0</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+      
+      |
+      <a href="../_sources/handbuch/issues.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>
