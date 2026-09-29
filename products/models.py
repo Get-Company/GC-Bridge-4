@@ -4,6 +4,7 @@ from decimal import Decimal, ROUND_FLOOR, ROUND_UP
 from urllib.parse import parse_qs, urlparse
 
 from django.conf import settings
+from django.core.validators import MinValueValidator
 from django.db import models
 from django.db.models import Q
 from django.core.exceptions import ValidationError
@@ -441,6 +442,47 @@ class Product(BaseModel):
     def first_image(self) -> Image | None:
         images = self.get_images()
         return images[0] if images else None
+
+
+class Package(BaseModel):
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE,
+        related_name="packages",
+        verbose_name=_("Produkt"),
+    )
+    package_nr = models.CharField(
+        max_length=100,
+        unique=True,
+        verbose_name=_("Paket-Artikelnummer"),
+    )
+    quantity = models.PositiveIntegerField(
+        validators=(MinValueValidator(1),),
+        verbose_name=_("Menge"),
+    )
+    gtin = models.CharField(max_length=32, blank=True, default="", verbose_name=_("GTIN"))
+    legacy_id = models.PositiveBigIntegerField(
+        null=True,
+        blank=True,
+        unique=True,
+        db_index=True,
+        verbose_name=_("Legacy-ID"),
+    )
+    is_active = models.BooleanField(default=True, verbose_name=_("Aktiv"))
+    mabox_enabled = models.BooleanField(
+        default=True,
+        db_index=True,
+        verbose_name=_("Im Mabox-Export"),
+        help_text=_("Das Paket wird als Kindartikel im Mabox-Export ausgegeben."),
+    )
+
+    class Meta:
+        verbose_name = _("Paket")
+        verbose_name_plural = _("Pakete")
+        ordering = ("product__erp_nr", "quantity", "package_nr")
+
+    def __str__(self) -> str:
+        return f"{self.package_nr} ({self.quantity} × {self.product.erp_nr})"
 
 
 class ArchivedProduct(Product):

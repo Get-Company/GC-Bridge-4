@@ -83,6 +83,7 @@ from .models import (
     ArchivedProduct,
     Category,
     Image,
+    Package,
     Price,
     PriceHistory,
     PriceIncrease,
@@ -231,6 +232,12 @@ class PriceInline(BaseTabularInline):
                 "pk",
             )
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+
+class PackageInline(BaseTabularInline):
+    model = Package
+    fields = ("package_nr", "quantity", "gtin", "is_active", "mabox_enabled")
+    extra = 0
 
 
 class PriceHistoryInline(BaseTabularInline):
@@ -475,7 +482,14 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
         ("categories", RelatedDropdownFilter),
         ("created_at", RangeDateTimeFilter),
     ]
-    inlines = (ProductImageInline, ProductVideoInline, ProductPropertyInline, StorageInline, PriceInline)
+    inlines = (
+        ProductImageInline,
+        ProductVideoInline,
+        ProductPropertyInline,
+        StorageInline,
+        PriceInline,
+        PackageInline,
+    )
     exclude = ("images",)
     filter_horizontal = ("categories",)
     action_form = ProductSpecialPriceActionForm
@@ -916,6 +930,23 @@ class ProductSyncJobAdmin(BaseAdmin):
 
     def has_change_permission(self, request, obj=None):
         return self.has_view_permission(request, obj)
+
+
+@admin.register(Package)
+class PackageAdmin(BaseAdmin):
+    list_display = (
+        "package_nr",
+        "product",
+        "quantity",
+        "gtin",
+        "mabox_enabled",
+        "is_active",
+        "updated_at",
+    )
+    list_filter = ("mabox_enabled", "is_active")
+    search_fields = ("package_nr", "gtin", "product__erp_nr", "product__name")
+    autocomplete_fields = ("product",)
+    ordering = ("product__erp_nr", "quantity", "package_nr")
 
 
 @admin.register(Price)
