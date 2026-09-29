@@ -4,7 +4,7 @@ from decimal import Decimal, ROUND_FLOOR, ROUND_UP
 from urllib.parse import parse_qs, urlparse
 
 from django.conf import settings
-from django.core.validators import MinValueValidator
+from django.core.validators import MaxValueValidator, MinValueValidator, validate_email
 from django.db import models
 from django.db.models import Q
 from django.core.exceptions import ValidationError
@@ -483,6 +483,121 @@ class Package(BaseModel):
 
     def __str__(self) -> str:
         return f"{self.package_nr} ({self.quantity} × {self.product.erp_nr})"
+
+
+class MaboxExportSettings(BaseModel):
+    is_active = models.BooleanField(
+        default=False,
+        verbose_name=_("Monatlichen Versand aktivieren"),
+    )
+    recipient_emails = models.TextField(
+        blank=True,
+        default="",
+        verbose_name=_("Empfänger"),
+        help_text=_("Eine oder mehrere E-Mail-Adressen, getrennt durch Komma, Semikolon oder Zeilenumbruch."),
+    )
+    send_day = models.PositiveSmallIntegerField(
+        default=1,
+        validators=(MinValueValidator(1), MaxValueValidator(28)),
+        verbose_name=_("Versandtag im Monat"),
+        help_text=_("1 bis 28, damit der Termin in jedem Monat existiert."),
+    )
+    send_hour = models.PositiveSmallIntegerField(
+        default=8,
+        validators=(MinValueValidator(0), MaxValueValidator(23)),
+        verbose_name=_("Stunde"),
+    )
+    send_minute = models.PositiveSmallIntegerField(
+        default=0,
+        validators=(MinValueValidator(0), MaxValueValidator(59)),
+        verbose_name=_("Minute"),
+    )
+    subject = models.CharField(
+        max_length=255,
+        default="Aktueller Classei-Produktexport für Mabox – {date}",
+        verbose_name=_("Betreff"),
+        help_text=_("Verfügbare Platzhalter: {date}, {month}"),
+    )
+    message = models.TextField(
+        default=(
+            "Guten Tag,\n\n"
+            "anbei erhalten Sie den aktuellen Classei-Produktexport für Mabox.\n\n"
+            "Freundliche Grüße\nClassei | Egon Heimann GmbH"
+        ),
+        verbose_name=_("Nachricht"),
+        help_text=_("Verfügbare Platzhalter: {date}, {month}"),
+    )
+    from_email = models.EmailField(
+        blank=True,
+        default="",
+        verbose_name=_("Absender-Adresse"),
+        help_text=_("Leer lassen, um DEFAULT_FROM_EMAIL aus der Serverkonfiguration zu verwenden."),
+    )
+    last_sent_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        editable=False,
+        verbose_name=_("Zuletzt versendet"),
+    )
+    last_row_count = models.PositiveIntegerField(
+        default=0,
+        editable=False,
+        verbose_name=_("Datensätze beim letzten Versand"),
+    )
+    last_error = models.TextField(
+        blank=True,
+        default="",
+        editable=False,
+        verbose_name=_("Letzter Fehler"),
+    )
+
+    class Meta:
+        verbose_name = _("Mabox-Export")
+        verbose_name_plural = _("Mabox-Export")
+
+    def __str__(self) -> str:
+        return str(_("Mabox-Export und E-Mail-Versand"))
+
+    @classmethod
+    def load(cls) -> "MaboxExportSettings":
+        obj, _created = cls.objects.get_or_create(pk=1)
+        return obj
+
+    @property
+    def recipients(self) -> list[str]:
+        return [
+            value.strip()
+            for value in re.split(r"[,;\s]+", self.recipient_emails or "")
+            if value.strip()
+        ]
+
+    def clean(self):
+        super().clean()
+        errors = []
+        for recipient in self.recipients:
+            try:
+                validate_email(recipient)
+            except ValidationError:
+                errors.append(recipient)
+        if errors:
+            raise ValidationError(
+                {
+                    "recipient_emails": _("Ungültige E-Mail-Adressen: %(values)s")
+                    % {"values": ", ".join(errors)}
+                }
+            )
+        if self.is_active and not self.recipients:
+            raise ValidationError(
+                {
+                    "recipient_emails": _(
+                        "Für den aktiven Versand ist ein Empfänger erforderlich."
+                    )
+                }
+            )
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
 
 
 class ArchivedProduct(Product):

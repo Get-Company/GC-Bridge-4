@@ -73,7 +73,7 @@ from documents.models import Document
 from documents.price_list_service import PriceListDocumentService
 from mappei.models import MappeiPriceSnapshot, MappeiProductMapping
 from shopware.models import ShopwareSettings
-from .services import PriceIncreaseService
+from .services import MaboxExportService, PriceIncreaseService
 from .tasks import (
     scheduled_product_sync as scheduled_product_sync_task,
     microtech_update_prices as microtech_update_prices_task,
@@ -83,6 +83,7 @@ from .models import (
     ArchivedProduct,
     Category,
     Image,
+    MaboxExportSettings,
     Package,
     Price,
     PriceHistory,
@@ -501,6 +502,7 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
         "archive_products",
     )
     actions_row = ("archive_product_row",)
+    actions_list = ("open_mabox_export_settings",)
     actions_detail = (
         {
             "title": "Synchronisation",
@@ -522,6 +524,17 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
 
     # Non-archived rows for the working view; ArchivedProductAdmin flips this.
     _archived_state = False
+
+    @action(
+        description="Mabox-Export",
+        icon="forward_to_inbox",
+        variant=ActionVariant.PRIMARY,
+    )
+    def open_mabox_export_settings(self, request):
+        config = MaboxExportSettings.load()
+        return HttpResponseRedirect(
+            reverse("admin:products_maboxexportsettings_change", args=(config.pk,))
+        )
 
     def get_queryset(self, request):
         queryset = super().get_queryset(request).filter(is_archived=self._archived_state)
@@ -947,6 +960,98 @@ class PackageAdmin(BaseAdmin):
     search_fields = ("package_nr", "gtin", "product__erp_nr", "product__name")
     autocomplete_fields = ("product",)
     ordering = ("product__erp_nr", "quantity", "package_nr")
+
+
+@admin.register(MaboxExportSettings)
+class MaboxExportSettingsAdmin(BaseAdmin):
+    actions_detail = ("download_csv", "queue_test_email")
+    readonly_fields = BaseAdmin.readonly_fields + (
+        "last_sent_at",
+        "last_row_count",
+        "last_error",
+    )
+    fieldsets = (
+        (
+            "Versand",
+            {
+                "fields": (
+                    "is_active",
+                    "recipient_emails",
+                    "from_email",
+                    "send_day",
+                    "send_hour",
+                    "send_minute",
+                )
+            },
+        ),
+        ("E-Mail", {"fields": ("subject", "message")}),
+        (
+            "Letzter Lauf",
+            {
+                "fields": ("last_sent_at", "last_row_count", "last_error"),
+            },
+        ),
+        (
+            "System",
+            {
+                "fields": BaseAdmin.readonly_fields,
+                "classes": ("collapse",),
+            },
+        ),
+    )
+
+    def changelist_view(self, request, extra_context=None):
+        config = MaboxExportSettings.load()
+        return HttpResponseRedirect(
+            reverse("admin:products_maboxexportsettings_change", args=(config.pk,))
+        )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    @action(
+        description="Aktuelle CSV herunterladen",
+        icon="download",
+        variant=ActionVariant.DEFAULT,
+    )
+    def download_csv(self, request, object_id: str):
+        try:
+            content = MaboxExportService().render_csv()
+        except Exception as exc:
+            self.message_user(
+                request,
+                f"Mabox-Export konnte nicht erstellt werden: {exc}",
+                level=messages.ERROR,
+            )
+            return HttpResponseRedirect(request.path)
+
+        filename = f"products_export_mabox_{timezone.localdate().isoformat()}.csv"
+        response = HttpResponse(content, content_type="text/csv; charset=utf-8")
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
+
+    @action(
+        description="Test-E-Mail mit aktuellem CSV einreihen",
+        icon="send",
+        variant=ActionVariant.PRIMARY,
+    )
+    def queue_test_email(self, request, object_id: str):
+        config = self.get_object(request, object_id)
+        if config is None:
+            self.message_user(request, "Mabox-Konfiguration nicht gefunden.", level=messages.ERROR)
+            return self._redirect_to_changelist()
+        if not config.recipients:
+            self.message_user(request, "Bitte zuerst mindestens einen Empfänger speichern.", level=messages.ERROR)
+            return HttpResponseRedirect(request.path)
+
+        from products.tasks import send_mabox_export_email
+
+        result = send_mabox_export_email.apply_async(kwargs={"test_mode": True}, queue="bulk")
+        self.message_user(request, f"Mabox-Testversand eingereiht (Task {result.id}).")
+        return HttpResponseRedirect(request.path)
 
 
 @admin.register(Price)

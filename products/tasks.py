@@ -116,6 +116,14 @@ def quick_product_sync() -> None:
     scheduled_product_sync.delay(include_images=False)
 
 
+@shared_task(name="products.send_mabox_export_email")
+def send_mabox_export_email(*, test_mode: bool = False) -> dict[str, object]:
+    from products.services import MaboxExportMailService
+
+    with TaskIssueCollector("products.send_mabox_export_email"):
+        return MaboxExportMailService().send(test_mode=test_mode)
+
+
 @shared_task(name="products.expire_special_prices")
 def expire_special_prices() -> dict:
     from microtech.services import MicrotechExpiredSpecialSyncService, microtech_connection

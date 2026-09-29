@@ -9,6 +9,7 @@ from loguru import logger
 
 from products.models import (
     Category,
+    MaboxExportSettings,
     Price,
     PriceIncrease,
     Product,
@@ -26,12 +27,29 @@ from products.services import (
     is_category_auto_sync_disabled,
     is_product_auto_sync_disabled,
 )
+from products.services.mabox_mail import MaboxExportScheduleService
 from shopware.models import ShopwareSettings
 
 price_increase_applied = Signal()
 
 MIN_PRICE_FACTOR = Decimal("0.01")
 MAX_PRICE_FACTOR = Decimal("10.00")
+
+
+@receiver(post_save, sender=MaboxExportSettings, dispatch_uid="products_sync_mabox_export_schedule")
+def synchronize_mabox_export_schedule(sender, instance: MaboxExportSettings, **kwargs) -> None:
+    transaction.on_commit(
+        lambda config_id=instance.pk: MaboxExportScheduleService().synchronize(config_id)
+    )
+
+
+@receiver(post_delete, sender=MaboxExportSettings, dispatch_uid="products_disable_mabox_export_schedule")
+def disable_mabox_export_schedule(sender, instance: MaboxExportSettings, **kwargs) -> None:
+    transaction.on_commit(
+        lambda config_id=instance.pk: MaboxExportScheduleService().synchronize(config_id)
+    )
+
+
 PRODUCT_AUTO_SYNC_FIELDS = (
     "erp_nr",
     "gtin",

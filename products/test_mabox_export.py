@@ -1,9 +1,14 @@
 from decimal import Decimal
+from os import environ
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from django.test import SimpleTestCase
+from django.utils import timezone
 
+from products.models import MaboxExportSettings
 from products.services.mabox_export import MaboxExportService
+from products.services.mabox_mail import MaboxExportMailService
 
 
 class _Collection:
@@ -101,3 +106,44 @@ class MaboxExportServiceTests(SimpleTestCase):
 
         self.assertTrue(csv_content.startswith("Artikelnummer,GTIN,HAN,Vaterartikel,Artikelname"))
         self.assertIn('"169,75"', csv_content)
+
+
+class MaboxExportMailServiceTests(SimpleTestCase):
+    def test_recipient_list_accepts_common_separators(self):
+        config = MaboxExportSettings(
+            recipient_emails="one@example.com, two@example.com;\nthree@example.com"
+        )
+
+        self.assertEqual(
+            config.recipients,
+            ["one@example.com", "two@example.com", "three@example.com"],
+        )
+
+    def test_build_message_attaches_csv_and_marks_test_subject(self):
+        config = MaboxExportSettings(
+            recipient_emails="mabox@example.com",
+            from_email="export@example.com",
+            subject="Export {date}",
+            message="Monat {month}",
+        )
+        service = MaboxExportMailService()
+        now = timezone.now()
+
+        with patch.dict(
+            environ,
+            {"EMAIL_BACKEND": "django.core.mail.backends.locmem.EmailBackend"},
+        ):
+            message = service.build_message(
+                config=config,
+                csv_content="Artikelnummer\r\n204116\r\n",
+                recipients=config.recipients,
+                now=now,
+                test_mode=True,
+            )
+
+        self.assertTrue(message.subject.startswith("[TEST] Export "))
+        self.assertEqual(message.to, ["mabox@example.com"])
+        self.assertEqual(message.from_email, "export@example.com")
+        self.assertEqual(len(message.attachments), 1)
+        self.assertTrue(message.attachments[0].filename.startswith("products_export_mabox_"))
+        self.assertEqual(message.attachments[0].mimetype, "text/csv")

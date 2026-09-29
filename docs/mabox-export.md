@@ -2,8 +2,8 @@
 
 Der Exportservice bildet die 50 Spalten aus `resource_2.py` ab. Er liefert alle
 aktiven, nicht archivierten Produkte sowie die für Mabox aktivierten Pakete als
-Kindartikel. Er ist als Grundlage für den geplanten wöchentlichen CSV-Versand per
-E-Mail vorgesehen; ein öffentlicher Feed ist nicht eingerichtet.
+Kindartikel. Der aktuelle Stand wird einmal im Monat als CSV-Anhang per E-Mail
+versendet; ein öffentlicher Feed ist nicht eingerichtet.
 
 ## Einmalige Einrichtung auf dem Server
 
@@ -20,6 +20,51 @@ E-Mail vorgesehen; ein öffentlicher Feed ist nicht eingerichtet.
   --dump-path /media/fbuchner/Daten/htdocs/python/GC_Bridge_v3_django/backups/database.sql \
   --sqlite-path /tmp/gc_bridge_v3_packages.sqlite3
 ```
+
+Beim Docker-Deployment wird die Migration im Web-Container ausgeführt:
+
+```bash
+docker exec -i gc_bridge_4_web python manage.py migrate
+```
+
+## E-Mail-Versand einrichten
+
+Die SMTP-Zugangsdaten gehören in die `.env` auf dem Server und nicht in Git. Ein
+typisches SMTP-Setup sieht so aus:
+
+```dotenv
+EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+EMAIL_HOST=smtp.example.com
+EMAIL_PORT=587
+EMAIL_HOST_USER=export@example.com
+EMAIL_HOST_PASSWORD=geheimes-passwort
+EMAIL_USE_TLS=true
+EMAIL_USE_SSL=false
+EMAIL_TIMEOUT=30
+DEFAULT_FROM_EMAIL=export@example.com
+```
+
+Nach einer Änderung der `.env` müssen mindestens Web, Celery Beat und der
+Bulk-Worker neu gestartet werden:
+
+```bash
+docker restart gc_bridge_4_web gc_bridge_4_celery_beat gc_bridge_4_celery_bulk
+```
+
+Im Django-Admin unter **Produkte** befindet sich die Aktion **Mabox-Export**.
+Dort werden Empfänger, Absender, Versandtag (1 bis 28), Uhrzeit, Betreff und
+Nachricht gepflegt. Der Versand ist zunächst deaktiviert. Nach dem Speichern
+wird der monatliche Celery-Beat-Eintrag automatisch angelegt beziehungsweise
+aktualisiert. Die Uhrzeit verwendet die Server-Zeitzone `Europe/Berlin`.
+
+Zwei Aktionen stehen direkt in der Konfiguration bereit:
+
+- **Aktuelle CSV herunterladen** erstellt den Export sofort im Browser.
+- **Test-E-Mail mit aktuellem CSV einreihen** sendet über den Bulk-Worker eine
+  Testmail; dafür muss der monatliche Versand noch nicht aktiviert sein.
+
+Der reguläre Task versendet höchstens einmal pro Kalendermonat. Erfolgszeit,
+Datensatzanzahl und der letzte Fehler werden in der Konfiguration angezeigt.
 
 Der Import ist idempotent: vorhandene Pakete werden anhand ihrer Paket-Artikelnummer
 aktualisiert. Er übernimmt Menge, Paket-GTIN, Legacy-ID, Zeitstempel und die frühere
