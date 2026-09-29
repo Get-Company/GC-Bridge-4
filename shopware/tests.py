@@ -107,19 +107,25 @@ class Shopware6ProductUnitAndFactorPayloadTest(SimpleTestCase):
         payload = self._payload(self._product(unit="Stck", factor=100))
 
         self.assertEqual(payload["packUnit"], "Stck")
-        self.assertEqual(payload["customFields"], {"geco_price_factor_value": 100})
+        self.assertEqual(
+            payload["customFields"],
+            {"geco_product_videos": [], "geco_price_factor_value": 100},
+        )
 
     def test_missing_unit_and_factor_are_omitted(self):
         payload = self._payload(self._product(unit="", factor=None))
 
         self.assertNotIn("packUnit", payload)
-        self.assertNotIn("customFields", payload)
+        self.assertEqual(payload["customFields"], {"geco_product_videos": []})
 
     def test_factor_zero_is_still_transferred(self):
         payload = self._payload(self._product(unit=" Pack ", factor=0))
 
         self.assertEqual(payload["packUnit"], "Pack")
-        self.assertEqual(payload["customFields"], {"geco_price_factor_value": 0})
+        self.assertEqual(
+            payload["customFields"],
+            {"geco_product_videos": [], "geco_price_factor_value": 0},
+        )
 
 
 class Shopware6ProductTranslationPayloadTest(SimpleTestCase):

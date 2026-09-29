@@ -91,12 +91,14 @@ from .models import (
     ProductImage,
     ProductProperty,
     ProductSyncJob,
+    ProductVideo,
     ProductVariantAttribute,
     ProductVariantFamily,
     PropertyGroup,
     PropertyValue,
     Storage,
     Tax,
+    Video,
 )
 
 
@@ -162,6 +164,16 @@ class ProductImageInline(BaseTabularInline):
             '<img src="{}" loading="lazy" style="width:60px;height:60px;object-fit:cover;border-radius:4px;" />',
             image.url,
         )
+
+
+class ProductVideoInline(BaseTabularInline):
+    model = ProductVideo
+    fields = ("video", "position", "is_active")
+    autocomplete_fields = ("video",)
+    extra = 0
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related("video").order_by("position", "id")
 
 
 class PriceInline(BaseTabularInline):
@@ -463,7 +475,7 @@ class ProductAdmin(TabbedTranslationAdmin, BaseAdmin):
         ("categories", RelatedDropdownFilter),
         ("created_at", RangeDateTimeFilter),
     ]
-    inlines = (ProductImageInline, ProductPropertyInline, StorageInline, PriceInline)
+    inlines = (ProductImageInline, ProductVideoInline, ProductPropertyInline, StorageInline, PriceInline)
     exclude = ("images",)
     filter_horizontal = ("categories",)
     action_form = ProductSpecialPriceActionForm
@@ -3662,6 +3674,32 @@ class LegacyImageProductInline(BaseTabularInline):
     def legacy_product_name(self, obj):
         product = getattr(obj, "product", None)
         return getattr(product, "name", "") or "-"
+
+
+class VideoProductInline(BaseTabularInline):
+    model = ProductVideo
+    fields = ("product", "position", "is_active")
+    autocomplete_fields = ("product",)
+    extra = 0
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related("product").order_by("product__erp_nr", "position", "id")
+
+
+@admin.register(Video)
+class VideoAdmin(BaseAdmin):
+    list_display = ("title", "vimeo_id", "is_active", "product_count", "updated_at")
+    list_filter = (("is_active", BooleanRadioFilter),)
+    search_fields = ("title", "vimeo_id")
+    autocomplete_fields = ("poster",)
+    inlines = (VideoProductInline,)
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).annotate(assigned_product_count=Count("product_videos", distinct=True))
+
+    @admin.display(description="Produkte", ordering="assigned_product_count")
+    def product_count(self, obj: Video):
+        return getattr(obj, "assigned_product_count", 0)
 
 
 @admin.register(Image)

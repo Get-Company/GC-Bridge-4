@@ -1,5 +1,7 @@
 import calendar
+import re
 from decimal import Decimal, ROUND_FLOOR, ROUND_UP
+from urllib.parse import parse_qs, urlparse
 
 from django.conf import settings
 from django.db import models
@@ -169,6 +171,96 @@ class Image(BaseModel):
         if not value:
             return ""
         return str(value).replace("\\", "/").rstrip("/").split("/")[-1]
+
+
+def parse_vimeo_reference(value: str) -> tuple[str, str]:
+    """Return ``(video_id, privacy_hash)`` for supported Vimeo references.
+
+    Editors may paste a numeric Vimeo ID, a public share URL, an unlisted
+    share URL or a player URL. Keeping the normalized ID and optional privacy
+    hash separate gives the Shopware storefront all it needs without storing
+    arbitrary embed HTML.
+    """
+    reference = str(value or "").strip()
+    if reference.isdigit():
+        return reference, ""
+
+    parsed = urlparse(reference)
+    host = (parsed.hostname or "").lower()
+    if parsed.scheme != "https" or host not in {"vimeo.com", "www.vimeo.com", "player.vimeo.com"}:
+        raise ValidationError(
+            _("Bitte eine numerische Vimeo-ID oder eine öffentliche/unlisted Vimeo-HTTPS-URL eingeben.")
+        )
+
+    path_parts = [part for part in parsed.path.split("/") if part]
+    privacy_hash = ""
+    if host == "player.vimeo.com":
+        if len(path_parts) != 2 or path_parts[0] != "video" or not path_parts[1].isdigit():
+            raise ValidationError(_("Die Vimeo-Player-URL ist ungültig."))
+        video_id = path_parts[1]
+        privacy_hash = (parse_qs(parsed.query).get("h") or [""])[0]
+    else:
+        if not path_parts or not path_parts[0].isdigit() or len(path_parts) > 2:
+            raise ValidationError(_("Die Vimeo-URL ist ungültig."))
+        video_id = path_parts[0]
+        if len(path_parts) == 2:
+            privacy_hash = path_parts[1]
+
+    if privacy_hash and not re.fullmatch(r"[A-Za-z0-9]+", privacy_hash):
+        raise ValidationError(_("Der Vimeo-Privacy-Hash ist ungültig."))
+    return video_id, privacy_hash
+
+
+class Video(BaseModel):
+    title = models.CharField(max_length=255, verbose_name=_("Titel"))
+    vimeo_id = models.CharField(
+        max_length=255,
+        unique=True,
+        verbose_name=_("Vimeo-ID oder URL"),
+        help_text=_(
+            "Numerische Vimeo-ID, öffentliche URL oder unlisted URL. "
+            "Beim Speichern wird der Wert auf die numerische ID normalisiert."
+        ),
+    )
+    privacy_hash = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        verbose_name=_("Vimeo Privacy-Hash"),
+        help_text=_("Wird aus einer unlisted Vimeo-URL automatisch übernommen."),
+    )
+    poster = models.ForeignKey(
+        Image,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="video_posters",
+        verbose_name=_("Vorschaubild"),
+    )
+    is_active = models.BooleanField(default=True, verbose_name=_("Aktiv"))
+
+    class Meta:
+        verbose_name = _("Video")
+        verbose_name_plural = _("Videos")
+        ordering = ("title", "vimeo_id")
+
+    def clean(self) -> None:
+        super().clean()
+        reference_was_url = not str(self.vimeo_id or "").strip().isdigit()
+        video_id, url_hash = parse_vimeo_reference(self.vimeo_id)
+        self.vimeo_id = video_id
+        if reference_was_url:
+            self.privacy_hash = url_hash
+        if self.privacy_hash and not re.fullmatch(r"[A-Za-z0-9]+", self.privacy_hash):
+            raise ValidationError({"privacy_hash": _("Der Vimeo-Privacy-Hash ist ungültig.")})
+
+    @property
+    def public_url(self) -> str:
+        suffix = f"/{self.privacy_hash}" if self.privacy_hash else ""
+        return f"https://vimeo.com/{self.vimeo_id}{suffix}"
+
+    def __str__(self) -> str:
+        return f"{self.title} ({self.vimeo_id})"
 
 
 class PropertyGroup(BaseModel):
@@ -448,6 +540,37 @@ class ProductImage(BaseModel):
 
     def __str__(self) -> str:
         return f"{self.product.erp_nr} | {self.order} | {self.image.path}"
+
+
+class ProductVideo(BaseModel):
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE,
+        related_name="product_videos",
+        verbose_name=_("Produkt"),
+    )
+    video = models.ForeignKey(
+        Video,
+        on_delete=models.CASCADE,
+        related_name="product_videos",
+        verbose_name=_("Video"),
+    )
+    position = models.PositiveIntegerField(default=100, db_index=True, verbose_name=_("Position"))
+    is_active = models.BooleanField(default=True, verbose_name=_("Aktiv"))
+
+    class Meta:
+        verbose_name = _("Produktvideo")
+        verbose_name_plural = _("Produktvideos")
+        ordering = ("product", "position", "id")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("product", "video"),
+                name="unique_product_video_assignment",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.product.erp_nr} | {self.position} | {self.video.title}"
 
 
 class ProductProperty(BaseModel):

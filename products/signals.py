@@ -12,11 +12,14 @@ from products.models import (
     Price,
     PriceIncrease,
     Product,
+    ProductSyncJob,
+    ProductVideo,
     ProductVariantAttribute,
     ProductVariantFamily,
     PropertyGroup,
     PropertyValue,
     Storage,
+    Video,
 )
 from products.services import (
     ProductAutoSyncService,
@@ -80,6 +83,19 @@ STORAGE_AUTO_SYNC_FIELDS = (
     "stock",
     "virtual_stock",
     "location",
+)
+VIDEO_AUTO_SYNC_FIELDS = (
+    "title",
+    "vimeo_id",
+    "privacy_hash",
+    "poster_id",
+    "is_active",
+)
+PRODUCT_VIDEO_AUTO_SYNC_FIELDS = (
+    "product_id",
+    "video_id",
+    "position",
+    "is_active",
 )
 _VARIANT_TRANSLATION_SUFFIXES = (
     "de",
@@ -160,7 +176,13 @@ def _apply_factor(value: Decimal | None, factor: Decimal) -> Decimal | None:
     return Price._round_up_5ct(Decimal(value) * factor).quantize(Decimal("0.01"))
 
 
-def _enqueue_product_sync_on_commit(*, product_id: int | None, changed_fields: list[str], trigger: str) -> None:
+def _enqueue_product_sync_on_commit(
+    *,
+    product_id: int | None,
+    changed_fields: list[str],
+    trigger: str,
+    targets: tuple[str, ...] | None = None,
+) -> None:
     if not product_id or not changed_fields:
         return
 
@@ -169,6 +191,7 @@ def _enqueue_product_sync_on_commit(*, product_id: int | None, changed_fields: l
             product_id=product_id,
             changed_fields=changed_fields,
             trigger=trigger,
+            targets=targets,
         )
 
     transaction.on_commit(enqueue_after_commit)
@@ -541,6 +564,95 @@ def enqueue_storage_auto_sync_jobs(sender, instance: Storage, raw: bool = False,
         product_id=instance.product_id,
         changed_fields=list(getattr(instance, "_auto_sync_changed_fields", []) or []),
         trigger="storage_save",
+    )
+
+
+@receiver(pre_save, sender=Video, dispatch_uid="products_capture_video_auto_sync_changes")
+def capture_video_auto_sync_changes(sender, instance: Video, raw: bool = False, update_fields=None, **kwargs):
+    if raw or is_product_auto_sync_disabled():
+        instance._auto_sync_changed_fields = []
+        return
+
+    changed_fields = _changed_fields_before_save(
+        model=Video,
+        instance=instance,
+        watched_fields=VIDEO_AUTO_SYNC_FIELDS,
+        update_fields=update_fields,
+    )
+    instance._auto_sync_changed_fields = sorted(f"video.{field}" for field in changed_fields)
+
+
+@receiver(post_save, sender=Video, dispatch_uid="products_enqueue_video_auto_sync_jobs")
+def enqueue_video_auto_sync_jobs(sender, instance: Video, raw: bool = False, **kwargs):
+    if raw or is_product_auto_sync_disabled():
+        return
+
+    changed_fields = list(getattr(instance, "_auto_sync_changed_fields", []) or [])
+    if not changed_fields:
+        return
+    for product_id in instance.product_videos.values_list("product_id", flat=True).distinct():
+        _enqueue_product_sync_on_commit(
+            product_id=product_id,
+            changed_fields=changed_fields,
+            trigger="video_save",
+            targets=(ProductSyncJob.Target.SHOPWARE,),
+        )
+
+
+@receiver(pre_save, sender=ProductVideo, dispatch_uid="products_capture_product_video_auto_sync_changes")
+def capture_product_video_auto_sync_changes(
+    sender,
+    instance: ProductVideo,
+    raw: bool = False,
+    update_fields=None,
+    **kwargs,
+):
+    if raw or is_product_auto_sync_disabled():
+        instance._auto_sync_changed_fields = []
+        instance._auto_sync_previous_product_id = None
+        return
+
+    previous = None
+    if instance.pk:
+        previous = ProductVideo.objects.filter(pk=instance.pk).values("product_id").first()
+    changed_fields = _changed_fields_before_save(
+        model=ProductVideo,
+        instance=instance,
+        watched_fields=PRODUCT_VIDEO_AUTO_SYNC_FIELDS,
+        update_fields=update_fields,
+    )
+    instance._auto_sync_changed_fields = sorted(f"product_video.{field}" for field in changed_fields)
+    instance._auto_sync_previous_product_id = previous.get("product_id") if previous else None
+
+
+@receiver(post_save, sender=ProductVideo, dispatch_uid="products_enqueue_product_video_auto_sync_jobs")
+def enqueue_product_video_auto_sync_jobs(sender, instance: ProductVideo, raw: bool = False, **kwargs):
+    if raw or is_product_auto_sync_disabled():
+        return
+
+    changed_fields = list(getattr(instance, "_auto_sync_changed_fields", []) or [])
+    product_ids = {
+        instance.product_id,
+        getattr(instance, "_auto_sync_previous_product_id", None),
+    }
+    for product_id in sorted(product_id for product_id in product_ids if product_id):
+        _enqueue_product_sync_on_commit(
+            product_id=product_id,
+            changed_fields=changed_fields,
+            trigger="product_video_save",
+            targets=(ProductSyncJob.Target.SHOPWARE,),
+        )
+
+
+@receiver(post_delete, sender=ProductVideo, dispatch_uid="products_enqueue_deleted_product_video_auto_sync")
+def enqueue_deleted_product_video_auto_sync(sender, instance: ProductVideo, **kwargs):
+    if is_product_auto_sync_disabled():
+        return
+    _enqueue_product_sync_on_commit(
+        product_id=instance.product_id,
+        changed_fields=["product_video.deleted"],
+        trigger="product_video_delete",
+        targets=(ProductSyncJob.Target.SHOPWARE,),
     )
 
 

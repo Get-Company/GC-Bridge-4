@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import json
 from decimal import Decimal
 import sys
+from urllib.parse import urlparse
 
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
@@ -13,7 +15,7 @@ from django.db.models import Prefetch
 from loguru import logger
 from core.admin_utils import log_admin_change
 from core.services import CommandRuntimeService
-from products.models import Price, Product, ProductImage, Storage
+from products.models import Price, Product, ProductImage, ProductVideo, Storage
 from shopware.models import ShopwareSettings
 from shopware.services import ProductMediaSyncService, ProductService
 from shopware.services.translations import ShopwareTranslationService
@@ -22,6 +24,7 @@ DEFAULT_TAX_ID = "d391e13bdd95404a885f4ad28ea218e0"
 REDUCED_TAX_ID = "be66a53eae3a49829f4a8c5959535501"
 # Custom-Field des Shops fuer den Artikel-Faktor (Set "geco_price_factor").
 PRICE_FACTOR_CUSTOM_FIELD = "geco_price_factor_value"
+PRODUCT_VIDEOS_CUSTOM_FIELD = "geco_product_videos"
 
 def _get_admin_user_id() -> int | None:
     user = get_user_model().objects.filter(is_superuser=True).order_by("id").first()
@@ -230,6 +233,59 @@ def _build_custom_search_keywords(product: Product) -> list[str]:
     return keywords
 
 
+def _public_https_url(value: str) -> str:
+    """Return a browser-safe public HTTPS URL, otherwise an empty string."""
+    url = str(value or "").strip()
+    parsed = urlparse(url)
+    host = (parsed.hostname or "").lower().rstrip(".")
+    if parsed.scheme != "https" or not host or parsed.username or parsed.password:
+        return ""
+    if host == "localhost" or host.endswith((".localhost", ".local", ".internal")):
+        return ""
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        if "." not in host:
+            return ""
+    else:
+        if not address.is_global:
+            return ""
+    return url
+
+
+def _build_product_videos(product: Product) -> list[dict]:
+    assignments = getattr(product, "prefetched_product_videos_for_shopware_sync", None)
+    if assignments is None:
+        relation = getattr(product, "product_videos", None)
+        if relation is None:
+            assignments = []
+        else:
+            assignments = relation.filter(is_active=True, video__is_active=True).select_related(
+                "video", "video__poster"
+            ).order_by("position", "id")
+
+    videos: list[dict] = []
+    for assignment in assignments:
+        video = assignment.video
+        if not assignment.is_active or not video.is_active:
+            continue
+        item = {
+            "provider": "vimeo",
+            "videoId": str(video.vimeo_id),
+            "title": str(video.title or ""),
+            "position": int(assignment.position),
+        }
+        privacy_hash = str(video.privacy_hash or "").strip()
+        if privacy_hash:
+            item["privacyHash"] = privacy_hash
+        poster = getattr(video, "poster", None)
+        poster_url = _public_https_url(getattr(poster, "url", "") if poster else "")
+        if poster_url:
+            item["posterUrl"] = poster_url
+        videos.append(item)
+    return videos
+
+
 def _prefetch_sync_queryset(products):
     if hasattr(products, "select_related"):
         products = products.select_related("tax", "storage")
@@ -244,6 +300,15 @@ def _prefetch_sync_queryset(products):
                 "prices",
                 queryset=Price.objects.select_related("sales_channel").order_by("sales_channel_id", "id"),
                 to_attr="prefetched_prices_for_shopware_sync",
+            ),
+            Prefetch(
+                "product_videos",
+                queryset=(
+                    ProductVideo.objects.filter(is_active=True, video__is_active=True)
+                    .select_related("video", "video__poster")
+                    .order_by("position", "id")
+                ),
+                to_attr="prefetched_product_videos_for_shopware_sync",
             ),
             "mappei_products",
         )
@@ -311,10 +376,13 @@ def _build_product_sync_payload(
     pack_unit = (product.unit or "").strip()
     if pack_unit:
         payload["packUnit"] = pack_unit
+    # Always send the video list, including []: this is what removes obsolete
+    # assignments in Shopware after the last relation is deleted. Shopware
+    # merges customFields on update, so unrelated fields remain untouched.
+    custom_fields = {PRODUCT_VIDEOS_CUSTOM_FIELD: _build_product_videos(product)}
     if product.factor is not None:
-        # Shopware fuehrt customFields beim Update zusammen, andere Felder des
-        # Produkts (z. B. attr18) bleiben deshalb erhalten.
-        payload["customFields"] = {PRICE_FACTOR_CUSTOM_FIELD: int(product.factor)}
+        custom_fields[PRICE_FACTOR_CUSTOM_FIELD] = int(product.factor)
+    payload["customFields"] = custom_fields
     translations = _build_product_translations(
         product=product,
         translation_language_ids=translation_language_ids,
