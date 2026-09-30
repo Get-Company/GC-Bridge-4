@@ -6,3 +6,6 @@ class EmailsConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
     name = "emails"
     verbose_name = _("E-Mails")
+
+    def ready(self) -> None:
+        import emails.signals  # noqa: F401

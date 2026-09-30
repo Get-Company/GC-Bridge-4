@@ -34,10 +34,6 @@
       {% trans "Statistik" %}
     </div>
     <div style="font-size:12px; display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px solid #f1f5f9">
-      <span>{% trans "Komponenten" %}</span>
-      <strong>{{ original.components.count }}</strong>
-    </div>
-    <div style="font-size:12px; display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px solid #f1f5f9">
       <span>{% trans "Produkte" %}</span>
       <strong>{{ original.campaign_products.count }}</strong>
     </div>
@@ -117,16 +113,6 @@
 </div>
 
 <script>
-function scrollToCampaignComponents() {
-  var headings = Array.prototype.slice.call(document.querySelectorAll('h2'));
-  var heading = headings.find(function(el) {
-    return el.textContent.trim() === '{% trans "Kampagnen-Komponenten" %}';
-  });
-  if (heading) {
-    heading.scrollIntoView({behavior: 'smooth', block: 'start'});
-  }
-}
-
 function exportHtml(campaignId) {
   fetch('/admin/emails/emailcampaign/' + campaignId + '/export-html/')
     .then(function(r) { return r.json(); })

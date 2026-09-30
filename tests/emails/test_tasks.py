@@ -3,6 +3,27 @@ from unittest.mock import patch
 
 
 class TestEmailCampaignTasks:
+    @patch("products.tasks.shopware_sync_products.delay")
+    @patch("products.tasks.microtech_update_prices.delay")
+    @patch("emails.services.apply_campaign_special_prices", return_value=["581000", "581001"])
+    @patch("emails.models.EmailCampaign.objects.get")
+    def test_apply_prices_syncs_both_external_systems(
+        self,
+        campaign_get,
+        apply_prices,
+        microtech_delay,
+        shopware_delay,
+    ):
+        from emails.tasks import apply_campaign_prices_async
+
+        campaign = campaign_get.return_value
+
+        apply_campaign_prices_async.run(3)
+
+        apply_prices.assert_called_once_with(campaign)
+        microtech_delay.assert_called_once_with(["581000", "581001"])
+        shopware_delay.assert_called_once_with(["581000", "581001"], skip_images=True)
+
     @patch("emails.services.EmailCampaignQueueService")
     def test_queue_due_campaigns_before_send_delegates_to_service(self, queue_service_class):
         from emails.tasks import queue_due_campaigns_before_send

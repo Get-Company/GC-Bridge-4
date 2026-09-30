@@ -100,7 +100,7 @@ def test_legacy_campaign_opens_in_simple_editor():
         response = admin.simple_editor_view(request, 8)
     assert response.status_code == 200
     assert b"Einfacher E-Mail-Editor" in response.content
-    assert b"gespeicherten visuellen Aufbau" in response.content
+    assert b"gespeicherten visuellen Aufbau" not in response.content
     assert b"visual_editor.js" not in response.content
     assert b"visual_document" not in response.content
 

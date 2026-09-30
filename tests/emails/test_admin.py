@@ -1,10 +1,9 @@
 import json
 from decimal import Decimal
 from pathlib import Path
-import pytest
 from django.test import SimpleTestCase
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 
 class TestMjmlComponentAdminRegistered(SimpleTestCase):
@@ -49,10 +48,17 @@ class TestMjmlComponentAdminRegistered(SimpleTestCase):
 
 
 class TestEmailCampaignAdmin(SimpleTestCase):
-    def test_campaign_admin_uses_only_component_inline(self):
-        from emails.admin import EmailCampaignAdmin, EmailCampaignComponentInline
+    def test_campaign_admin_does_not_expose_component_inlines(self):
+        from emails.admin import EmailCampaignAdmin
 
-        assert EmailCampaignAdmin.inlines == (EmailCampaignComponentInline,)
+        assert EmailCampaignAdmin.inlines == ()
+
+    def test_new_campaigns_default_to_simple_editor(self):
+        from emails.models import EmailCampaign
+
+        campaign = EmailCampaign(internal_title="Test")
+
+        assert campaign.layout_mode == EmailCampaign.LayoutMode.SIMPLE
 
     def test_campaign_admin_displays_and_filters_categories(self):
         from django.contrib.admin.sites import AdminSite
@@ -76,7 +82,7 @@ class TestEmailCampaignAdmin(SimpleTestCase):
         assert category_admin.search_fields == ("name",)
         assert category_admin.get_ordering(None) == ("name",)
 
-    def test_component_campaign_links_to_its_component_editor(self):
+    def test_component_campaign_links_to_simple_editor(self):
         from django.contrib.admin.sites import AdminSite
 
         from emails.admin import EmailCampaignAdmin
@@ -92,15 +98,34 @@ class TestEmailCampaignAdmin(SimpleTestCase):
         list_link = str(campaign_admin.editor_link(campaign))
         editor_actions = str(campaign_admin.simple_editor_link(campaign))
 
-        assert "/admin/emails/emailcampaign/42/change/" in list_link
-        assert "Komponenten" in list_link
-        assert "Diese Kampagne verwendet einen anderen Editor" not in editor_actions
-        assert "Kampagnen-Komponenten unterhalb" in editor_actions
-        assert "Komponenten bearbeiten" in editor_actions
-        assert "scrollToCampaignComponents()" in editor_actions
-        assert "Vorschau mit Empfänger öffnen" in editor_actions
-        assert "exportHtml(42)" in editor_actions
+        assert "/admin/emails/emailcampaign/42/editor/" in list_link
+        assert "Öffnen" in list_link
+        assert "/admin/emails/emailcampaign/42/editor/" in editor_actions
+        assert "Einfachen Editor öffnen" in editor_actions
         assert "preview@example.com" in editor_actions
+
+    @patch("emails.admin._copy_component_products_to_simple")
+    def test_component_campaign_is_converted_to_simple_layout(
+        self,
+        copy_component_products,
+    ):
+        from django.contrib.admin.sites import AdminSite
+
+        from emails.admin import EmailCampaignAdmin
+        from emails.models import EmailCampaign
+
+        campaign = SimpleNamespace(
+            layout_mode=EmailCampaign.LayoutMode.COMPONENTS,
+            save=Mock(),
+        )
+        campaign_admin = EmailCampaignAdmin(EmailCampaign, AdminSite())
+
+        result = campaign_admin._ensure_simple_layout(campaign)
+
+        assert result is campaign
+        assert campaign.layout_mode == EmailCampaign.LayoutMode.SIMPLE
+        copy_component_products.assert_called_once_with(campaign, campaign)
+        campaign.save.assert_called_once_with(update_fields=["layout_mode"])
 
     def test_simple_campaign_editor_shows_selected_preview_recipient(self):
         from django.contrib.admin.sites import AdminSite
@@ -132,9 +157,75 @@ class TestEmailCampaignAdmin(SimpleTestCase):
         assert 'id="text-output"' in template
         assert "data.text" in template
         assert "function copyText()" in template
-        assert "function scrollToCampaignComponents()" in template
         assert "Vorschau mit Empfänger" in template
         assert "original.preview_recipient.email" in template
+        assert "original.components.count" not in template
+
+    @patch("emails.admin.EmailCampaignProduct.objects.get_or_create")
+    def test_component_products_are_preserved_when_switching_to_simple_editor(
+        self,
+        get_or_create_campaign_product,
+    ):
+        from emails.admin import _copy_component_products_to_simple
+
+        linked_product = SimpleNamespace(
+            product_id=17,
+            special_price_override=Decimal("12.34"),
+            discount_pct=None,
+        )
+        components = [
+            SimpleNamespace(
+                product_id=11,
+                campaign_product=None,
+                order=10,
+            ),
+            SimpleNamespace(
+                product_id=None,
+                campaign_product=linked_product,
+                order=20,
+            ),
+        ]
+        source_components = SimpleNamespace(
+            select_related=lambda *args: SimpleNamespace(
+                filter=lambda **kwargs: SimpleNamespace(
+                    order_by=lambda *fields: components
+                )
+            )
+        )
+        target_products = SimpleNamespace(
+            values_list=lambda *args, **kwargs: [],
+        )
+        source_campaign = SimpleNamespace(components=source_components)
+        target_campaign = SimpleNamespace(campaign_products=target_products)
+        get_or_create_campaign_product.side_effect = [
+            (SimpleNamespace(), True),
+            (SimpleNamespace(), True),
+        ]
+
+        created = _copy_component_products_to_simple(source_campaign, target_campaign)
+
+        assert created == 2
+        assert get_or_create_campaign_product.call_count == 2
+        assert get_or_create_campaign_product.call_args_list[0].kwargs == {
+            "campaign": target_campaign,
+            "product_id": 11,
+            "defaults": {
+                "special_price_override": None,
+                "discount_pct": None,
+                "prices_synced_at": None,
+                "order": 10,
+            },
+        }
+        assert get_or_create_campaign_product.call_args_list[1].kwargs == {
+            "campaign": target_campaign,
+            "product_id": 17,
+            "defaults": {
+                "special_price_override": Decimal("12.34"),
+                "discount_pct": None,
+                "prices_synced_at": None,
+                "order": 20,
+            },
+        }
 
     def test_campaign_admin_shows_recipient_customer_context_info(self):
         from django.contrib.admin.sites import AdminSite
@@ -242,14 +333,19 @@ class TestEmailCampaignComponentInline(SimpleTestCase):
         from emails.models import EmailCampaign
 
         inline = EmailCampaignComponentInline(EmailCampaign, AdminSite())
+        inline_fields = tuple(
+            field
+            for _title, options in EmailCampaignComponentInline.fieldsets
+            for field in options["fields"]
+        )
         assert inline.ordering_field == "order"
         assert inline.hide_ordering_field is True
-        assert "order" in EmailCampaignComponentInline.fields
-        assert "tree_position" in EmailCampaignComponentInline.fields
-        assert "product" in EmailCampaignComponentInline.fields
-        assert "special_price_override" not in EmailCampaignComponentInline.fields
-        assert "discount_pct" not in EmailCampaignComponentInline.fields
-        assert "campaign_product" not in EmailCampaignComponentInline.fields
+        assert "order" in inline_fields
+        assert "tree_position" in inline_fields
+        assert "product" in inline_fields
+        assert "special_price_override" not in inline_fields
+        assert "discount_pct" not in inline_fields
+        assert "campaign_product" not in inline_fields
 
     def test_component_inline_autocompletes_products_directly(self):
         from emails.admin import EmailCampaignComponentInline
@@ -306,13 +402,17 @@ class TestEmailCampaignComponentInline(SimpleTestCase):
         assert "drag_indicator" in html
         assert "Eigener Titel" in html
 
-    def test_default_variables_info_field_is_shown_before_campaign_variables(self):
+    def test_default_variables_info_field_is_shown_with_campaign_variables(self):
         from emails.admin import EmailCampaignComponentInline
 
-        assert "component_default_variables" in EmailCampaignComponentInline.fields
-        assert (
-            EmailCampaignComponentInline.fields.index("component_default_variables")
-            < EmailCampaignComponentInline.fields.index("variables")
+        inline_fields = tuple(
+            field
+            for _title, options in EmailCampaignComponentInline.fieldsets
+            for field in options["fields"]
+        )
+        assert "component_default_variables" in inline_fields
+        assert inline_fields.index("variables") < inline_fields.index(
+            "component_default_variables"
         )
 
     def test_default_variables_info_renders_component_defaults(self):
@@ -393,6 +493,7 @@ class TestEmailVariableJSONForms(SimpleTestCase):
         assert "href='https://www.classei-shop.com/Fertig-Sets'" in cleaned["description"]
 
     def test_campaign_variables_use_json_editor_widget(self):
+        from django.test import override_settings
         from django_json_widget.widgets import JSONEditorWidget
         from emails.admin import EmailCampaignComponentInlineForm
 
@@ -407,7 +508,14 @@ class TestEmailVariableJSONForms(SimpleTestCase):
         assert '"mode": "code"' in rendered
         assert "JSONEditor" in rendered
         assert "description" in rendered
-        assert "dist/jsoneditor.min.js" in str(widget.media)
+        with override_settings(
+            STORAGES={
+                "staticfiles": {
+                    "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
+                }
+            }
+        ):
+            assert "dist/jsoneditor.min.js" in str(widget.media)
 
     def test_json_field_normalizes_line_breaks_inside_strings(self):
         from emails.admin import EmailCampaignComponentInlineForm
@@ -492,100 +600,3 @@ class TestEmailCampaignQueueEntryAdmin(SimpleTestCase):
         assert "<iframe" in html
         assert "srcdoc=" in html
         assert "&lt;h1&gt;Hallo&lt;/h1&gt;" in html
-
-
-@pytest.mark.django_db
-class TestEmailCampaignAdminDefaultComponents:
-    def test_default_components_created_on_new_campaign(self):
-        from emails.models import EmailCampaign, EmailCampaignComponent, MjmlComponent
-        from emails.admin import EmailCampaignAdmin
-        from django.contrib.admin.sites import AdminSite
-
-        MjmlComponent.objects.create(name="Logo", placement="body", is_default=True, order=10)
-        MjmlComponent.objects.create(name="Footer", placement="body", is_default=True, order=20)
-
-        admin_instance = EmailCampaignAdmin(EmailCampaign, AdminSite())
-        campaign = EmailCampaign.objects.create(internal_title="Test", status="draft")
-        admin_instance._ensure_default_components(campaign)
-
-        assert EmailCampaignComponent.objects.filter(campaign=campaign).count() == 2
-        names = list(
-            EmailCampaignComponent.objects.filter(campaign=campaign)
-            .select_related("library_component")
-            .values_list("library_component__name", flat=True)
-            .order_by("order")
-        )
-        assert names == ["Logo", "Footer"]
-
-    def test_default_components_not_duplicated_on_second_call(self):
-        from emails.models import EmailCampaign, EmailCampaignComponent, MjmlComponent
-        from emails.admin import EmailCampaignAdmin
-        from django.contrib.admin.sites import AdminSite
-
-        MjmlComponent.objects.create(name="Logo", placement="body", is_default=True, order=10)
-        admin_instance = EmailCampaignAdmin(EmailCampaign, AdminSite())
-        campaign = EmailCampaign.objects.create(internal_title="Test2", status="draft")
-        admin_instance._ensure_default_components(campaign)
-        admin_instance._ensure_default_components(campaign)
-
-        assert EmailCampaignComponent.objects.filter(campaign=campaign).count() == 1
-
-    def test_copy_campaign_components_preserves_products_and_tree(self):
-        from emails.admin import _copy_campaign_components
-        from emails.models import (
-            EmailCampaign,
-            EmailCampaignComponent,
-            EmailCampaignProduct,
-            MjmlComponent,
-        )
-        from products.models import Product
-
-        product = Product.objects.create(erp_nr="COPY-1", sku="COPY-1", name="Copy Product")
-        library_section = MjmlComponent.objects.create(name="Section", order=10)
-        library_text = MjmlComponent.objects.create(name="Text", order=20)
-        source_campaign = EmailCampaign.objects.create(internal_title="Quelle", status="draft")
-        target_campaign = EmailCampaign.objects.create(internal_title="Kopie", status="draft")
-        source_campaign_product = EmailCampaignProduct.objects.create(
-            campaign=source_campaign,
-            product=product,
-            special_price_override=Decimal("12.34"),
-            order=30,
-        )
-        root = EmailCampaignComponent.objects.create(
-            campaign=source_campaign,
-            library_component=library_section,
-            title="Root",
-            variables={"headline": {"text": "Hallo"}},
-            order=10,
-            enabled=True,
-        )
-        EmailCampaignComponent.objects.create(
-            campaign=source_campaign,
-            library_component=library_text,
-            parent=root,
-            campaign_product=source_campaign_product,
-            product=product,
-            title="Child",
-            variables={"body": "Text"},
-            order=20,
-            enabled=False,
-        )
-
-        _copy_campaign_components(source_campaign, target_campaign)
-
-        copied_product = EmailCampaignProduct.objects.get(campaign=target_campaign)
-        copied_components = list(
-            EmailCampaignComponent.objects.filter(campaign=target_campaign).order_by("order")
-        )
-
-        assert copied_product.product == product
-        assert copied_product.special_price_override == source_campaign_product.special_price_override
-        assert copied_product.prices_synced_at is None
-        assert len(copied_components) == 2
-        assert copied_components[0].title == "Root"
-        assert copied_components[0].variables == {"headline": {"text": "Hallo"}}
-        assert copied_components[1].title == "Child"
-        assert copied_components[1].parent == copied_components[0]
-        assert copied_components[1].campaign_product == copied_product
-        assert copied_components[1].product == product
-        assert copied_components[1].enabled is False

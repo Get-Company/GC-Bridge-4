@@ -19,7 +19,7 @@ def apply_campaign_prices_async(campaign_pk: int) -> None:
     erp_nrs = apply_campaign_special_prices(campaign)
     if erp_nrs:
         microtech_update_prices.delay(erp_nrs)
-        shopware_sync_products.delay(erp_nrs)
+        shopware_sync_products.delay(erp_nrs, skip_images=True)
 
 
 @shared_task(name="emails.queue_due_campaigns_before_send")

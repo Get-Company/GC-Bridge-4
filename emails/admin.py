@@ -9,7 +9,7 @@ from copy import deepcopy
 from django import forms
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.db.models import Case, IntegerField, Max, Q, When
+from django.db.models import Case, IntegerField, Q, When
 from django.forms import PasswordInput
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.urls import path, reverse
@@ -210,51 +210,52 @@ def _copy_campaign_products(
     return copied_products
 
 
-def _copy_campaign_components(
+def _copy_component_products_to_simple(
     source_campaign: EmailCampaign,
     target_campaign: EmailCampaign,
-) -> None:
-    if target_campaign.components.exists():
-        return
-
-    campaign_products_by_source_id = _copy_campaign_products(source_campaign, target_campaign)
-    source_components = list(
-        source_campaign.components.select_related(
-            "library_component",
-            "campaign_product",
-            "product",
-            "parent",
-        ).order_by("order", "id")
+) -> int:
+    """Preserve legacy component product selections for the simple editor."""
+    existing_product_ids = set(
+        target_campaign.campaign_products.values_list("product_id", flat=True)
     )
-    copied_components: dict[int, EmailCampaignComponent] = {}
+    created = 0
+    source_components = (
+        source_campaign.components.select_related("campaign_product")
+        .filter(enabled=True)
+        .order_by("order", "id")
+    )
 
-    for source_component in source_components:
-        copied_component = EmailCampaignComponent.objects.create(
-            campaign=target_campaign,
-            library_component_id=source_component.library_component_id,
-            parent=None,
-            campaign_product=campaign_products_by_source_id.get(source_component.campaign_product_id),
-            product_id=source_component.product_id,
-            title=source_component.title,
-            variables=deepcopy(source_component.variables),
-            order=source_component.order,
-            enabled=source_component.enabled,
+    for component in source_components:
+        linked_product = getattr(component, "campaign_product", None)
+        product_id = getattr(component, "product_id", None) or getattr(
+            linked_product, "product_id", None
         )
-        copied_components[source_component.pk] = copied_component
-
-    parent_updates = []
-    for source_component in source_components:
-        if not source_component.parent_id:
+        if not product_id or product_id in existing_product_ids:
             continue
-        copied_component = copied_components[source_component.pk]
-        copied_parent = copied_components.get(source_component.parent_id)
-        if copied_parent is None:
-            continue
-        copied_component.parent = copied_parent
-        parent_updates.append(copied_component)
 
-    if parent_updates:
-        EmailCampaignComponent.objects.bulk_update(parent_updates, ["parent"])
+        carries_linked_price = (
+            linked_product is not None and linked_product.product_id == product_id
+        )
+        _campaign_product, was_created = EmailCampaignProduct.objects.get_or_create(
+            campaign=target_campaign,
+            product_id=product_id,
+            defaults={
+                "special_price_override": (
+                    linked_product.special_price_override
+                    if carries_linked_price
+                    else None
+                ),
+                "discount_pct": (
+                    linked_product.discount_pct if carries_linked_price else None
+                ),
+                "prices_synced_at": None,
+                "order": component.order,
+            },
+        )
+        existing_product_ids.add(product_id)
+        created += int(was_created)
+
+    return created
 
 
 class LenientJSONField(forms.JSONField):
@@ -687,7 +688,7 @@ class EmailCampaignAdmin(BaseAdmin):
     list_filter = ("categories", "status", "send_at", "created_at")
     search_fields = ("internal_title",)
     list_editable = ("status",)
-    inlines = (EmailCampaignComponentInline,)
+    inlines = ()
     autocomplete_fields = ("categories", "preview_recipient")
 
     fieldsets = (
@@ -721,14 +722,8 @@ class EmailCampaignAdmin(BaseAdmin):
     )
     readonly_fields = BaseAdmin.readonly_fields + ("campaign_context_info", "simple_editor_link")
 
-    def get_inlines(self, request, obj=None):
-        return [] if obj is None or obj.layout_mode in {EmailCampaign.LayoutMode.SIMPLE, _LEGACY_VISUAL_LAYOUT} else super().get_inlines(request, obj)
-
     @admin.display(description=_("Editor"))
     def editor_link(self, obj):
-        if obj.layout_mode not in {EmailCampaign.LayoutMode.SIMPLE, _LEGACY_VISUAL_LAYOUT}:
-            url = reverse("admin:emails_emailcampaign_change", args=[obj.pk])
-            return format_html('<a href="{}">Komponenten</a>', url)
         url = reverse("admin:emails_emailcampaign_simple_editor", args=[obj.pk])
         return format_html('<a href="{}">Öffnen</a>', url)
 
@@ -740,24 +735,6 @@ class EmailCampaignAdmin(BaseAdmin):
             getattr(getattr(obj, "preview_recipient", None), "email", "")
             or "Kein Vorschau-Empfänger gewählt"
         )
-        if obj.layout_mode not in {EmailCampaign.LayoutMode.SIMPLE, _LEGACY_VISUAL_LAYOUT}:
-            return format_html(
-                '<div style="display:grid;gap:8px">'
-                '<p style="margin:0">Diese Kampagne wird mit den '
-                "Kampagnen-Komponenten unterhalb bearbeitet.</p>"
-                '<div style="display:flex;align-items:center;flex-wrap:wrap;gap:8px">'
-                '<button type="button" class="button" '
-                'onclick="scrollToCampaignComponents()">Komponenten bearbeiten</button>'
-                '<button type="button" class="button" onclick="exportHtml({})">'
-                "Vorschau mit Empfänger öffnen</button>"
-                '<span style="color:#64748b">Vorschau mit: <strong>{}</strong></span>'
-                "</div>"
-                '<small style="color:#64748b">Nach einer Empfänger-Änderung '
-                "die Kampagne vor der Vorschau speichern.</small>"
-                "</div>",
-                obj.pk,
-                recipient_email,
-            )
         url = reverse("admin:emails_emailcampaign_simple_editor", args=[obj.pk])
         return format_html(
             '<div style="display:flex;align-items:center;flex-wrap:wrap;gap:8px">'
@@ -788,10 +765,6 @@ class EmailCampaignAdmin(BaseAdmin):
             Q(product__isnull=False) | Q(campaign_product__isnull=False)
         ).distinct().count()
 
-    @admin.display(description=_("Komponenten"))
-    def component_count(self, obj: EmailCampaign) -> int:
-        return obj.components.count()
-
     @admin.display(description=_("Kampagnen-Info"))
     def campaign_context_info(self, obj: EmailCampaign):
         return format_html(
@@ -799,43 +772,21 @@ class EmailCampaignAdmin(BaseAdmin):
             _recipient_customer_context_info_html(),
         )
 
-    def save_formset(self, request, form, formset, change):
-        instances = formset.save(commit=False)
-        campaign = form.instance
-        new_instances = [i for i in instances if not i.pk and isinstance(i, EmailCampaignComponent)]
-        if new_instances:
-            existing_max = (
-                EmailCampaignComponent.objects.filter(campaign=campaign)
-                .aggregate(max_order=Max("order"))["max_order"]
-                or 0
-            )
-            next_order = existing_max + 10
-            for instance in new_instances:
-                instance.order = next_order
-                next_order += 10
-        for instance in instances:
-            instance.save()
-        formset.save_m2m()
-        for obj in formset.deleted_objects:
-            obj.delete()
-
     def save_model(self, request, obj, form, change):
+        previous_layout = obj.layout_mode
+        obj.layout_mode = EmailCampaign.LayoutMode.SIMPLE
         if not change:
-            obj.layout_mode = EmailCampaign.LayoutMode.SIMPLE
             source_id = request.GET.get(self.copy_source_param)
             if source_id:
                 source_campaign = self.get_object(request, source_id)
                 if source_campaign:
-                    obj.layout_mode = (
-                        EmailCampaign.LayoutMode.SIMPLE
-                        if source_campaign.layout_mode == _LEGACY_VISUAL_LAYOUT
-                        else source_campaign.layout_mode
-                    )
                     if source_campaign.layout_mode in {EmailCampaign.LayoutMode.SIMPLE, _LEGACY_VISUAL_LAYOUT}:
                         obj.editor_content = deepcopy(source_campaign.editor_content or {})
                         obj.editor_content.pop("visual_document", None)
         super().save_model(request, obj, form, change)
         if change:
+            if previous_layout == EmailCampaign.LayoutMode.COMPONENTS:
+                _copy_component_products_to_simple(obj, obj)
             return
 
         source_id = request.GET.get(self.copy_source_param)
@@ -856,37 +807,14 @@ class EmailCampaignAdmin(BaseAdmin):
                 obj.editor_content = content
                 obj.save(update_fields=["editor_content"])
             elif source_campaign.layout_mode == EmailCampaign.LayoutMode.COMPONENTS:
-                _copy_campaign_components(source_campaign, obj)
+                _copy_component_products_to_simple(source_campaign, obj)
             return
-
-        if obj.layout_mode == EmailCampaign.LayoutMode.COMPONENTS:
-            self._ensure_default_components(obj)
 
     def response_add(self, request, obj, post_url_continue=None):
         if obj.layout_mode == EmailCampaign.LayoutMode.SIMPLE and "_addanother" not in request.POST:
             url = reverse("admin:emails_emailcampaign_simple_editor", args=[obj.pk])
             return HttpResponseRedirect(url)
         return super().response_add(request, obj, post_url_continue)
-
-    def _ensure_default_components(self, campaign: EmailCampaign) -> None:
-        if campaign.components.exists():
-            return
-
-        components = []
-        for index, lib_component in enumerate(
-            MjmlComponent.objects.filter(is_default=True).order_by("order", "name"), start=1
-        ):
-            components.append(
-                EmailCampaignComponent(
-                    campaign=campaign,
-                    library_component=lib_component,
-                    title=lib_component.name,
-                    variables={},
-                    order=index * 10,
-                    enabled=True,
-                )
-            )
-        EmailCampaignComponent.objects.bulk_create(components)
 
     def get_urls(self):
         urls = super().get_urls()
@@ -906,15 +834,25 @@ class EmailCampaignAdmin(BaseAdmin):
         ]
         return custom + urls
 
+    def _ensure_simple_layout(self, campaign: EmailCampaign) -> EmailCampaign:
+        if (
+            getattr(campaign, "layout_mode", EmailCampaign.LayoutMode.SIMPLE)
+            == EmailCampaign.LayoutMode.SIMPLE
+        ):
+            return campaign
+        if campaign.layout_mode == EmailCampaign.LayoutMode.COMPONENTS:
+            _copy_component_products_to_simple(campaign, campaign)
+        campaign.layout_mode = EmailCampaign.LayoutMode.SIMPLE
+        campaign.save(update_fields=["layout_mode"])
+        return campaign
+
     def _editor_campaign(self, request, campaign_id):
         from django.shortcuts import get_object_or_404
 
         campaign = get_object_or_404(EmailCampaign, pk=campaign_id)
         if not self.has_change_permission(request, campaign):
             raise PermissionDenied
-        if campaign.layout_mode not in {EmailCampaign.LayoutMode.SIMPLE, _LEGACY_VISUAL_LAYOUT}:
-            raise PermissionDenied
-        return campaign
+        return self._ensure_simple_layout(campaign)
 
     def retired_visual_editor_view(self, request, campaign_id):
         self._editor_campaign(request, campaign_id)
@@ -986,7 +924,9 @@ class EmailCampaignAdmin(BaseAdmin):
                     if key in allowed_ids and isinstance(item, dict)
                 }
             campaign.editor_content = content
-            if getattr(campaign, "layout_mode", None) == _LEGACY_VISUAL_LAYOUT:
+            if getattr(
+                campaign, "layout_mode", EmailCampaign.LayoutMode.SIMPLE
+            ) != EmailCampaign.LayoutMode.SIMPLE:
                 campaign.layout_mode = EmailCampaign.LayoutMode.SIMPLE
                 campaign.save(update_fields=["editor_content", "layout_mode"])
             else:
@@ -1041,7 +981,9 @@ class EmailCampaignAdmin(BaseAdmin):
                 campaign=campaign, product=product,
                 defaults={"order": campaign.campaign_products.count()},
             )
-            if campaign.layout_mode == _LEGACY_VISUAL_LAYOUT:
+            if getattr(
+                campaign, "layout_mode", EmailCampaign.LayoutMode.SIMPLE
+            ) != EmailCampaign.LayoutMode.SIMPLE:
                 campaign.layout_mode = EmailCampaign.LayoutMode.SIMPLE
                 campaign.save(update_fields=["layout_mode"])
             return JsonResponse({"id": campaign_product.pk})
@@ -1112,7 +1054,9 @@ class EmailCampaignAdmin(BaseAdmin):
                     EmailCampaignProduct.objects.bulk_update(items, ["order"])
             else:
                 raise ValueError("Unbekannte Aktion.")
-            if getattr(campaign, "layout_mode", None) == _LEGACY_VISUAL_LAYOUT:
+            if getattr(
+                campaign, "layout_mode", EmailCampaign.LayoutMode.SIMPLE
+            ) != EmailCampaign.LayoutMode.SIMPLE:
                 campaign.layout_mode = EmailCampaign.LayoutMode.SIMPLE
                 campaign.save(update_fields=["layout_mode"])
             return JsonResponse({"saved": True})
@@ -1124,6 +1068,8 @@ class EmailCampaignAdmin(BaseAdmin):
             campaign = EmailCampaign.objects.get(pk=campaign_id)
         except EmailCampaign.DoesNotExist:
             return JsonResponse({"error": "Kampagne nicht gefunden."}, status=404)
+
+        campaign = self._ensure_simple_layout(campaign)
 
         try:
             mjml = render_campaign_mjml(campaign, recipient=campaign.preview_recipient)

@@ -92,7 +92,7 @@ class EmailCampaign(BaseModel):
         help_text=_("Wird nicht in der E-Mail angezeigt."),
     )
     layout_mode = models.CharField(
-        max_length=20, choices=LayoutMode.choices, default=LayoutMode.COMPONENTS
+        max_length=20, choices=LayoutMode.choices, default=LayoutMode.SIMPLE
     )
     editor_content = models.JSONField(default=dict, blank=True)
     status = models.CharField(
@@ -436,6 +436,36 @@ class EmailCampaignProduct(BaseModel):
         from django.core.exceptions import ValidationError
         if self.special_price_override and self.discount_pct:
             raise ValidationError(_("Nur Sonderpreis ODER Rabatt (%) angeben, nicht beides."))
+
+    def __str__(self) -> str:
+        return f"{self.campaign} | {self.product}"
+
+
+class EmailCampaignPriceState(BaseModel):
+    campaign = models.ForeignKey(
+        EmailCampaign,
+        on_delete=models.CASCADE,
+        related_name="applied_price_states",
+        verbose_name=_("Preisführende Kampagne"),
+    )
+    product = models.OneToOneField(
+        "products.Product",
+        on_delete=models.CASCADE,
+        related_name="email_campaign_price_state",
+        verbose_name=_("Produkt"),
+    )
+    price_snapshot = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name=_("Preiszustand vor der Kampagne"),
+        help_text=_(
+            "Interner Wiederherstellungszustand für entfernte oder geänderte Kampagnen-Produkte."
+        ),
+    )
+
+    class Meta:
+        verbose_name = _("Kampagnen-Preiszustand")
+        verbose_name_plural = _("Kampagnen-Preiszustände")
 
     def __str__(self) -> str:
         return f"{self.campaign} | {self.product}"

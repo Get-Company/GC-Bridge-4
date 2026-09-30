@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import calendar
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta
 from decimal import Decimal, ROUND_UP
 
 from django.core.mail import get_connection
@@ -11,7 +11,12 @@ from django.utils import timezone
 
 from core.services import BaseService
 from emails.mjml import compile_mjml_to_html, html_to_plain_text, render_campaign_mjml
-from emails.models import EmailCampaign, EmailCampaignQueueEntry, EmailSmtpSettings
+from emails.models import (
+    EmailCampaign,
+    EmailCampaignPriceState,
+    EmailCampaignQueueEntry,
+    EmailSmtpSettings,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -67,13 +72,230 @@ def _end_of_next_month(now) -> object:
     )
 
 
-def apply_campaign_special_prices(campaign) -> list[str]:
-    """Campaigns no longer write product prices.
+class EmailCampaignPriceSyncService(BaseService):
+    """Apply campaign specials and retain enough state to undo removed products."""
 
-    Special prices are maintained directly on Product Price entries and read
-    during rendering through ProductEmailProxy.
-    """
-    return []
+    model = EmailCampaignPriceState
+    tracked_price_fields = (
+        "special_percentage",
+        "special_price",
+        "special_start_date",
+        "special_end_date",
+    )
+
+    @transaction.atomic
+    def reconcile(self, campaign: EmailCampaign) -> list[str]:
+        from products.models import Price, Product
+        from products.services.product_auto_sync import disable_product_auto_sync
+        from shopware.models import ShopwareSettings
+
+        default_channel = (
+            ShopwareSettings.objects.filter(is_default=True, is_active=True).first()
+        )
+        if default_channel is None:
+            return []
+
+        desired = {
+            item.product_id: item
+            for item in campaign.campaign_products.select_related("product").all()
+            if item.special_price_override is not None or item.discount_pct is not None
+        }
+        owned_states = {
+            state.product_id: state
+            for state in self.model.objects.select_for_update()
+            .filter(campaign=campaign)
+            .select_related("product")
+        }
+        affected: set[str] = set()
+
+        with disable_product_auto_sync():
+            for product_id in owned_states.keys() - desired.keys():
+                state = owned_states[product_id]
+                if self._restore_snapshot(state, price_model=Price):
+                    affected.add(state.product.erp_nr)
+                state.delete()
+
+            for product_id, item in desired.items():
+                # Serialize competing campaign claims for the same product. The
+                # state row may not exist yet, so locking only that table is not
+                # sufficient to prevent concurrent first-time claims.
+                Product.objects.select_for_update().get(pk=product_id)
+                prices = list(
+                    Price.objects.filter(
+                        product_id=product_id,
+                        sales_channel__is_active=True,
+                    ).select_related("sales_channel")
+                )
+                default_price = next(
+                    (price for price in prices if price.sales_channel_id == default_channel.pk),
+                    None,
+                )
+                if default_price is None:
+                    continue
+
+                state = (
+                    self.model.objects.select_for_update()
+                    .filter(product_id=product_id)
+                    .select_related("product")
+                    .first()
+                )
+                if state is None:
+                    state = self.model.objects.create(
+                        campaign=campaign,
+                        product_id=product_id,
+                        price_snapshot=self._snapshot_prices(prices),
+                    )
+                else:
+                    intent_at = max(campaign.updated_at, item.updated_at)
+                    if state.campaign_id != campaign.pk and state.updated_at > intent_at:
+                        # A newer save from another campaign already owns this
+                        # product. A delayed Celery task must not take it back.
+                        continue
+                    snapshot = self._extend_snapshot(state.price_snapshot, prices)
+                    state_changed = (
+                        state.campaign_id != campaign.pk
+                        or snapshot != state.price_snapshot
+                    )
+                    state.campaign = campaign
+                    state.price_snapshot = snapshot
+                    if state_changed:
+                        state.save(update_fields=("campaign", "price_snapshot", "updated_at"))
+
+                special_price = self._special_price(item, default_price)
+                changed = self._apply_special_price(
+                    prices=prices,
+                    default_channel_id=default_channel.pk,
+                    special_price=special_price,
+                )
+                if changed:
+                    affected.add(item.product.erp_nr)
+                campaign.campaign_products.filter(pk=item.pk).update(
+                    prices_synced_at=timezone.now()
+                )
+
+        return sorted(affected)
+
+    @transaction.atomic
+    def release(self, campaign: EmailCampaign) -> list[str]:
+        """Restore every price still owned by a campaign before it is deleted."""
+        from products.models import Price
+        from products.services.product_auto_sync import disable_product_auto_sync
+
+        states = list(
+            self.model.objects.select_for_update()
+            .filter(campaign=campaign)
+            .select_related("product")
+        )
+        affected: set[str] = set()
+        with disable_product_auto_sync():
+            for state in states:
+                if self._restore_snapshot(state, price_model=Price):
+                    affected.add(state.product.erp_nr)
+                state.delete()
+        return sorted(affected)
+
+    def _special_price(self, item, default_price) -> Decimal:
+        if item.special_price_override is not None:
+            return Decimal(str(item.special_price_override))
+        return _round_up_5ct(
+            Decimal(str(default_price.price))
+            * (Decimal("100") - Decimal(str(item.discount_pct)))
+            / Decimal("100")
+        ).quantize(Decimal("0.01"))
+
+    def _apply_special_price(
+        self,
+        *,
+        prices: list,
+        default_channel_id: int,
+        special_price: Decimal,
+    ) -> bool:
+        now = timezone.now()
+        special_end = _end_of_next_month(now)
+        changed = False
+        for price in prices:
+            factor = (
+                Decimal("1")
+                if price.sales_channel_id == default_channel_id
+                else Decimal(str(price.sales_channel.price_factor or "1"))
+            )
+            desired_price = _apply_channel_factor(special_price, factor)
+            desired_start = price.special_start_date or now
+            before = tuple(getattr(price, field) for field in self.tracked_price_fields)
+            price.special_percentage = None
+            price.special_price = desired_price
+            price.special_start_date = desired_start
+            price.special_end_date = special_end
+            after = tuple(getattr(price, field) for field in self.tracked_price_fields)
+            if before == after:
+                continue
+            price.save(history_tracked_fields=self.tracked_price_fields)
+            changed = True
+        return changed
+
+    def _restore_snapshot(self, state: EmailCampaignPriceState, *, price_model) -> bool:
+        snapshots = {
+            int(row["price_id"]): row
+            for row in state.price_snapshot or []
+            if row.get("price_id") is not None
+        }
+        if not snapshots:
+            return False
+        changed = False
+        for price in price_model.objects.filter(
+            product_id=state.product_id,
+            pk__in=snapshots,
+        ):
+            row = snapshots[price.pk]
+            before = tuple(getattr(price, field) for field in self.tracked_price_fields)
+            price.special_percentage = self._decimal_or_none(row.get("special_percentage"))
+            price.special_price = self._decimal_or_none(row.get("special_price"))
+            price.special_start_date = self._datetime_or_none(row.get("special_start_date"))
+            price.special_end_date = self._datetime_or_none(row.get("special_end_date"))
+            after = tuple(getattr(price, field) for field in self.tracked_price_fields)
+            if before == after:
+                continue
+            price.save(history_tracked_fields=self.tracked_price_fields)
+            changed = True
+        return changed
+
+    def _snapshot_prices(self, prices: list) -> list[dict[str, object]]:
+        return [self._snapshot_price(price) for price in prices]
+
+    def _extend_snapshot(self, snapshot: list, prices: list) -> list[dict[str, object]]:
+        rows = list(snapshot or [])
+        known_ids = {int(row["price_id"]) for row in rows if row.get("price_id") is not None}
+        rows.extend(self._snapshot_price(price) for price in prices if price.pk not in known_ids)
+        return rows
+
+    def _snapshot_price(self, price) -> dict[str, object]:
+        return {
+            "price_id": price.pk,
+            "special_percentage": self._string_or_none(price.special_percentage),
+            "special_price": self._string_or_none(price.special_price),
+            "special_start_date": self._iso_or_none(price.special_start_date),
+            "special_end_date": self._iso_or_none(price.special_end_date),
+        }
+
+    @staticmethod
+    def _string_or_none(value) -> str | None:
+        return None if value is None else str(value)
+
+    @staticmethod
+    def _iso_or_none(value) -> str | None:
+        return None if value is None else value.isoformat()
+
+    @staticmethod
+    def _decimal_or_none(value) -> Decimal | None:
+        return None if value in (None, "") else Decimal(str(value))
+
+    @staticmethod
+    def _datetime_or_none(value) -> datetime | None:
+        return None if value in (None, "") else datetime.fromisoformat(str(value))
+
+
+def apply_campaign_special_prices(campaign: EmailCampaign) -> list[str]:
+    return EmailCampaignPriceSyncService().reconcile(campaign)
 
 
 class EmailCampaignQueueService(BaseService):

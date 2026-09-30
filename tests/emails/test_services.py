@@ -27,22 +27,75 @@ class TestApplyChannelFactor:
 
 
 class TestApplyCampaignSpecialPrices:
-    def test_returns_empty_without_writing_product_prices(self):
+    @pytest.mark.django_db
+    def test_reconciles_removed_and_added_campaign_products(self):
+        from emails.models import EmailCampaign, EmailCampaignPriceState, EmailCampaignProduct
         from emails.services import apply_campaign_special_prices
-        campaign = MagicMock()
+        from products.models import Price, Product
+        from shopware.models import ShopwareSettings
 
-        result = apply_campaign_special_prices(campaign)
+        channel = ShopwareSettings.objects.create(name="Standard", is_default=True)
+        old_product = Product.objects.create(erp_nr="581000")
+        new_product = Product.objects.create(erp_nr="581001")
+        old_price = Price.objects.create(
+            product=old_product,
+            sales_channel=channel,
+            price=Decimal("100.00"),
+            special_price=Decimal("90.00"),
+        )
+        new_price = Price.objects.create(
+            product=new_product,
+            sales_channel=channel,
+            price=Decimal("200.00"),
+        )
+        campaign = EmailCampaign.objects.create(internal_title="Produktwechsel")
+        old_item = EmailCampaignProduct.objects.create(
+            campaign=campaign,
+            product=old_product,
+            special_price_override=Decimal("80.00"),
+        )
 
-        assert result == []
+        assert apply_campaign_special_prices(campaign) == ["581000"]
+        old_price.refresh_from_db()
+        assert old_price.special_price == Decimal("80.00")
 
-    def test_does_not_touch_campaign_relations(self):
-        from emails.services import apply_campaign_special_prices
-        campaign = MagicMock()
+        old_item.delete()
+        EmailCampaignProduct.objects.create(
+            campaign=campaign,
+            product=new_product,
+            special_price_override=Decimal("150.00"),
+        )
 
-        result = apply_campaign_special_prices(campaign)
+        assert apply_campaign_special_prices(campaign) == ["581000", "581001"]
+        old_price.refresh_from_db()
+        new_price.refresh_from_db()
+        assert old_price.special_price == Decimal("90.00")
+        assert new_price.special_price == Decimal("150.00")
+        assert not EmailCampaignPriceState.objects.filter(product=old_product).exists()
+        assert EmailCampaignPriceState.objects.get(product=new_product).campaign == campaign
 
-        assert result == []
-        campaign.components.select_related.assert_not_called()
+    def test_snapshot_values_are_json_serializable_and_round_trip(self):
+        from emails.services import EmailCampaignPriceSyncService
+
+        service = EmailCampaignPriceSyncService()
+        price = SimpleNamespace(
+            pk=12,
+            special_percentage=Decimal("15.00"),
+            special_price=Decimal("85.00"),
+            special_start_date=None,
+            special_end_date=None,
+        )
+
+        snapshot = service._snapshot_price(price)
+
+        assert snapshot == {
+            "price_id": 12,
+            "special_percentage": "15.00",
+            "special_price": "85.00",
+            "special_start_date": None,
+            "special_end_date": None,
+        }
+        assert service._decimal_or_none(snapshot["special_price"]) == Decimal("85.00")
 
 
 class TestEmailCampaignQueueService:
