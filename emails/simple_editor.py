@@ -5,10 +5,11 @@ from decimal import Decimal
 from urllib.parse import quote_plus, urlparse
 from uuid import UUID
 
+from django.conf import settings
 from django.template.defaultfilters import strip_tags
 from django.template.loader import render_to_string
 
-from emails.mjml import ProductEmailProxy, _campaign_sales_channel_ids
+from emails.mjml import ProductEmailProxy, _campaign_sales_channel_ids, recipient_context
 
 
 DEFAULT_CONTENT = {
@@ -26,10 +27,7 @@ DEFAULT_CONTENT = {
     "order_heading": "Bestellformular",
     "order_text": "Einfach auf diese E-Mail antworten und die gewünschte Anzahl eingeben.",
     "order_phone": "oder schnell anrufen:\n+49 (0)8641 97 59 0",
-    "logo_url": (
-        "https://www.classei.de/index.php?option=com_joomgallery&view=image"
-        "&format=raw&id=355&type=orig"
-    ),
+    "logo_url": f"{settings.NEWSLETTER_ASSET_BASE_URL}/img/logos/classei_logo.png",
     "product_texts": {},
     "headings": [],
 }
@@ -68,7 +66,10 @@ def content_for(campaign, override=None):
     if not isinstance(content.get("product_texts"), dict):
         content["product_texts"] = {}
     content["headings"] = normalize_headings(content.get("headings"))
-    if not valid_media_url(content.get("logo_url", "")):
+    logo_url = str(content.get("logo_url") or "")
+    if "classei.de/index.php?option=com_joomgallery" in logo_url:
+        content["logo_url"] = DEFAULT_CONTENT["logo_url"]
+    elif not valid_media_url(logo_url):
         content["logo_url"] = DEFAULT_CONTENT["logo_url"]
     return content
 
@@ -108,7 +109,10 @@ def offer_for_product(campaign_product, content, sales_channel_ids):
             "title": custom.get("title") or product.name or product.erp_nr,
             "description": custom.get("description") or strip_tags(product.description_short or ""),
             "sku": product.erp_nr,
-            "url": f"https://www.classei-shop.com/search?sSearch={quote_plus(product.erp_nr)}",
+            "url": (
+                f"{settings.NEWSLETTER_STOREFRONT_URL}/search"
+                f"?sSearch={quote_plus(product.erp_nr)}"
+            ),
             "images": _media_urls(product, custom),
             "list_price": _price(proxy.price),
             "current_price": _price(proxy.current_price),
@@ -141,10 +145,15 @@ def build_simple_mjml(campaign, *, recipient=None, override=None):
         else:
             tail_headings.append(heading)
     recipient_name = getattr(recipient, "full_name", "") if recipient else ""
-    return render_to_string("emails/simple_newsletter.mjml", {
-        "content": content,
-        "offers": offers,
-        "intro_headings": intro_headings,
-        "tail_headings": tail_headings,
-        "recipient_name": recipient_name or "...",
-    })
+    return render_to_string(
+        "emails/simple_newsletter.mjml",
+        {
+            **recipient_context(recipient),
+            "content": content,
+            "offers": offers,
+            "intro_headings": intro_headings,
+            "tail_headings": tail_headings,
+            "recipient_name": recipient_name or "...",
+            "shopware_storefront_url": settings.NEWSLETTER_STOREFRONT_URL,
+        },
+    )

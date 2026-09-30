@@ -12,8 +12,8 @@
     <mj-column width="580px" padding="0">
         <mj-image
             width="400px"
-            src="https://www.classei-shop.com/media/image/3f/a3/04/weihnachten_800x800.jpg"
-            href="https://www.classei-shop.com"
+            src="{{ newsletter_asset_base_url }}/img/newsletter/weihnachten_800x800.jpg"
+            href="{{ shopware_storefront_url }}"
             padding="0"
         />
     </mj-column>

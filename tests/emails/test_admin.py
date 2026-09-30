@@ -70,6 +70,7 @@ class TestEmailCampaignAdmin(SimpleTestCase):
 
         assert "categories" in campaign_admin.list_filter
         assert "categories" in campaign_admin.autocomplete_fields
+        assert "preview_recipient" in campaign_admin.autocomplete_fields
         assert "categories" not in campaign_admin.filter_horizontal
         assert campaign_admin.category_list(campaign) == "Shop, Newsletter"
         assert category_admin.search_fields == ("name",)
@@ -99,43 +100,13 @@ class TestEmailCampaignAdmin(SimpleTestCase):
         assert "recipient.salutation_display_name" in html
         assert "customer.erp_nr" in html
 
-    @patch("newsletter.models.NewsletterRecipient")
-    def test_latest_active_preview_recipient_uses_latest_active_recipient(self, recipient_model):
-        from emails.admin import _latest_active_preview_recipient
-
-        expected_recipient = SimpleNamespace(email="preview@example.com")
-        manager = recipient_model.objects
-        manager.filter.return_value.select_related.return_value.order_by.return_value.first.return_value = (
-            expected_recipient
-        )
-
-        recipient = _latest_active_preview_recipient()
-
-        assert recipient == expected_recipient
-        manager.filter.assert_called_once_with(
-            status__in=(
-                recipient_model.Status.DIRECT,
-                recipient_model.Status.OPT_IN,
-            )
-        )
-        manager.filter.return_value.select_related.assert_called_once_with("customer")
-        manager.filter.return_value.select_related.return_value.order_by.assert_called_once_with(
-            "-last_synced_at",
-            "-remote_updated_at",
-            "-updated_at",
-            "-created_at",
-            "-pk",
-        )
-
     @patch("emails.admin.html_to_plain_text", return_value="Preview text")
     @patch("emails.admin.compile_mjml_to_html", return_value="<html>Preview</html>")
     @patch("emails.admin.render_campaign_mjml", return_value="<mjml>Preview</mjml>")
-    @patch("emails.admin._latest_active_preview_recipient")
     @patch("emails.admin.EmailCampaign")
-    def test_export_html_view_renders_preview_with_latest_active_recipient(
+    def test_export_html_view_renders_preview_with_selected_recipient(
         self,
         campaign_model,
-        latest_active_preview_recipient,
         render_campaign_mjml,
         compile_mjml_to_html,
         html_to_plain_text,
@@ -146,10 +117,13 @@ class TestEmailCampaignAdmin(SimpleTestCase):
         from emails.admin import EmailCampaignAdmin
         from emails.models import EmailCampaign
 
-        campaign = SimpleNamespace(pk=1, internal_title="Kampagne")
         preview_recipient = SimpleNamespace(email="preview@example.com")
+        campaign = SimpleNamespace(
+            pk=1,
+            internal_title="Kampagne",
+            preview_recipient=preview_recipient,
+        )
         campaign_model.objects.get.return_value = campaign
-        latest_active_preview_recipient.return_value = preview_recipient
 
         admin_instance = EmailCampaignAdmin(EmailCampaign, AdminSite())
         request = RequestFactory().get("/admin/emails/emailcampaign/1/export-html/")
@@ -164,6 +138,53 @@ class TestEmailCampaignAdmin(SimpleTestCase):
             "mjml": "<mjml>Preview</mjml>",
             "text": "Preview text",
         }
+
+    @patch("emails.admin.compile_mjml_to_html", return_value="<html>Preview</html>")
+    @patch("emails.simple_editor.build_simple_mjml", return_value="<mjml>Preview</mjml>")
+    def test_simple_editor_preview_uses_selected_recipient(
+        self,
+        build_simple_mjml,
+        compile_mjml_to_html,
+    ):
+        from django.contrib.admin.sites import AdminSite
+        from django.test import RequestFactory
+
+        from emails.admin import EmailCampaignAdmin
+        from emails.models import EmailCampaign
+
+        preview_recipient = SimpleNamespace(email="preview@example.com")
+        campaign = SimpleNamespace(pk=1, preview_recipient=preview_recipient)
+        admin_instance = EmailCampaignAdmin(EmailCampaign, AdminSite())
+        admin_instance._editor_campaign = lambda request, campaign_id: campaign
+        request = RequestFactory().post(
+            "/admin/emails/emailcampaign/1/editor/preview/",
+            data=json.dumps({"headline": "Test"}),
+            content_type="application/json",
+        )
+
+        response = admin_instance.simple_editor_preview_view(request, campaign_id=1)
+
+        assert response.status_code == 200
+        build_simple_mjml.assert_called_once_with(
+            campaign,
+            recipient=preview_recipient,
+            override={"headline": "Test"},
+        )
+        assert json.loads(response.content) == {"html": "<html>Preview</html>"}
+
+
+class TestEmailSmtpSettingsAdmin(SimpleTestCase):
+    def test_smtp_settings_admin_is_registered_as_singleton(self):
+        from django.contrib import admin
+
+        from emails.admin import EmailSmtpSettingsAdmin
+        from emails.models import EmailSmtpSettings
+
+        assert admin.site.is_registered(EmailSmtpSettings)
+        assert EmailSmtpSettingsAdmin.actions_detail == ("test_smtp_connection",)
+        admin_instance = EmailSmtpSettingsAdmin(EmailSmtpSettings, admin.site)
+        assert admin_instance.has_add_permission(None) is False
+        assert admin_instance.has_delete_permission(None) is False
 
 
 class TestEmailCampaignComponentInline(SimpleTestCase):

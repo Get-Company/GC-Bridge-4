@@ -333,6 +333,18 @@ MEDIA_ROOT = BASE_DIR / 'media'
 DOCUMENT_PDF_ROOT = BASE_DIR / 'Dokumente'
 DB_BACKUP_DIR = os.getenv("DB_BACKUP_DIR", "tmp/backups")
 DB_BACKUP_SCHEMA = os.getenv("DB_BACKUP_SCHEMA", "public")
+NEWSLETTER_RECIPIENT_ERP_CUSTOM_FIELD = os.getenv(
+    "NEWSLETTER_RECIPIENT_ERP_CUSTOM_FIELD",
+    "AdrNr",
+)
+NEWSLETTER_ASSET_BASE_URL = os.getenv(
+    "NEWSLETTER_ASSET_BASE_URL",
+    "https://assets.classei.de",
+).rstrip("/")
+NEWSLETTER_STOREFRONT_URL = os.getenv(
+    "NEWSLETTER_STOREFRONT_URL",
+    "https://www.classei-shop.com",
+).rstrip("/")
 
 CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
 CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/1")
@@ -522,6 +534,12 @@ UNFOLD = {
                         "icon": "mark_email_read",
                         "link": reverse_lazy("admin:newsletter_newsletterrecipient_changelist"),
                         "permission": sidebar_model_view_permission("newsletter", "NewsletterRecipient"),
+                    },
+                    {
+                        "title": _("SMTP-Einstellungen"),
+                        "icon": "settings_ethernet",
+                        "link": reverse_lazy("admin:emails_emailsmtpsettings_changelist"),
+                        "permission": sidebar_model_view_permission("emails", "EmailSmtpSettings"),
                     },
                 ],
             },

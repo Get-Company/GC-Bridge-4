@@ -5,14 +5,45 @@ import logging
 from datetime import timedelta
 from decimal import Decimal, ROUND_UP
 
+from django.core.mail import get_connection
 from django.db import transaction
 from django.utils import timezone
 
 from core.services import BaseService
 from emails.mjml import compile_mjml_to_html, html_to_plain_text, render_campaign_mjml
-from emails.models import EmailCampaign, EmailCampaignQueueEntry
+from emails.models import EmailCampaign, EmailCampaignQueueEntry, EmailSmtpSettings
 
 logger = logging.getLogger(__name__)
+
+
+class EmailSmtpSettingsError(RuntimeError):
+    pass
+
+
+class EmailSmtpSettingsService(BaseService):
+    model = EmailSmtpSettings
+
+    @staticmethod
+    def build_connection(configuration: EmailSmtpSettings):
+        if not configuration.smtp_is_configured:
+            raise EmailSmtpSettingsError("Die SMTP-Konfiguration ist unvollständig.")
+        return get_connection(
+            backend="django.core.mail.backends.smtp.EmailBackend",
+            host=configuration.host,
+            port=configuration.port,
+            username=configuration.username or None,
+            password=configuration.password or None,
+            use_tls=configuration.security == EmailSmtpSettings.Security.STARTTLS,
+            use_ssl=configuration.security == EmailSmtpSettings.Security.SSL,
+            timeout=configuration.timeout,
+        )
+
+    def test_connection(self, configuration: EmailSmtpSettings) -> None:
+        connection = self.build_connection(configuration)
+        try:
+            connection.open()
+        finally:
+            connection.close()
 
 
 def _round_up_5ct(value: Decimal) -> Decimal:
@@ -89,6 +120,7 @@ class EmailCampaignQueueService(BaseService):
         recipients = (
             NewsletterRecipient.objects.filter(
                 selected_email_campaign=campaign,
+                is_present_in_shopware=True,
                 status__in=(
                     NewsletterRecipient.Status.DIRECT,
                     NewsletterRecipient.Status.OPT_IN,
@@ -96,6 +128,7 @@ class EmailCampaignQueueService(BaseService):
             )
             .exclude(email="")
             .select_related("customer", "selected_email_campaign")
+            .prefetch_related("customer__addresses")
             .order_by("pk")
         )
         summary = {
@@ -129,6 +162,8 @@ class EmailCampaignQueueService(BaseService):
             raise ValueError("Empfaenger hat keine E-Mail Adresse.")
         if not recipient.is_active_status:
             raise ValueError(f"Empfaenger ist nicht aktiv (Status: {recipient.status or '-'}).")
+        if not recipient.is_present_in_shopware:
+            raise ValueError("Empfaenger ist nicht mehr in Shopware vorhanden.")
 
         mjml = render_campaign_mjml(campaign, recipient=recipient)
         html = compile_mjml_to_html(mjml)

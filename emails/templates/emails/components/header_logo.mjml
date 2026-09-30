@@ -2,9 +2,9 @@
 <mj-section background-color="#ffffff" padding="20px">
     <mj-column>
         <mj-image
-            src="https://assets.classei.de/img/logos/classei_logo.png"
+            src="{{ newsletter_asset_base_url }}/img/logos/classei_logo.png"
             alt="Classei Logo"
-            href="https://www.classei.de"
+            href="{{ shopware_storefront_url }}"
             width="200px"
         />
     </mj-column>

@@ -7,15 +7,18 @@ import re
 from copy import deepcopy
 
 from django import forms
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db.models import Case, IntegerField, Max, Q, When
+from django.forms import PasswordInput
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.urls import path, reverse
 from django.utils.html import format_html, format_html_join
 from django.utils.translation import gettext_lazy as _
 from django_json_widget.widgets import JSONEditorWidget
 from jinja2 import TemplateSyntaxError
+from unfold.decorators import action
+from unfold.enums import ActionVariant
 
 logger = logging.getLogger(__name__)
 
@@ -27,11 +30,14 @@ from emails.models import (
     EmailCampaignComponent,
     EmailCampaignProduct,
     EmailCampaignQueueEntry,
+    EmailSmtpSettings,
     MjmlComponent,
 )
+from emails.services import EmailSmtpSettingsService
 from emails_v2.variable_parser import extract_variables
 
 _MONOSPACE_STYLE = "font-family: monospace; width: 100%; min-height: 300px;"
+_LEGACY_VISUAL_LAYOUT = EmailCampaign.LayoutMode.VISUAL
 _PRODUCT_FIELD_EXCLUDES = {
     "id",
     "created_at",
@@ -57,9 +63,20 @@ _RECIPIENT_EMAIL_FIELDS = (
     ("recipient.street", "Strasse aus Newsletter-Anmeldung"),
     ("recipient.zip_code", "PLZ aus Newsletter-Anmeldung"),
     ("recipient.city", "Ort aus Newsletter-Anmeldung"),
+    ("recipient.erp_nr", "normalisierte ERP-/Adressnummer aus Shopware"),
     ("recipient.status", "Shopware Newsletter-Status"),
     ("recipient.is_customer", "true/false, ob ein Django-Kunde verknuepft wurde"),
     ("recipient.custom_fields", "Shopware Custom Fields"),
+)
+_RECIPIENT_PROFILE_EMAIL_FIELDS = (
+    ("recipient_profile.erp_nr", "ERP-/Adressnummer mit Kunden-Fallback"),
+    ("recipient_profile.company", "Firma aus dem verknuepften Kunden"),
+    ("recipient_profile.first_name", "Vorname des Newsletter-Empfaengers"),
+    ("recipient_profile.last_name", "Nachname des Newsletter-Empfaengers"),
+    ("recipient_profile.street", "Kundenadresse, sonst Newsletter-Anmeldung"),
+    ("recipient_profile.postal_line", "PLZ und Ort mit Kunden-Fallback"),
+    ("recipient_profile.phone", "Telefonnummer der bevorzugten Kundenadresse"),
+    ("recipient_profile.email", "Newsletter-E-Mail-Adresse"),
 )
 _CUSTOMER_EMAIL_FIELDS = (
     ("customer.erp_nr", "ERP-Kundennummer"),
@@ -87,6 +104,7 @@ def _recipient_customer_context_info_html():
         "<code>newsletter_recipient</code>, <code>customer</code> und <code>is_customer</code> "
         "im Template zur Verfuegung. Ohne konkreten Empfaenger bleiben diese Felder leer.</p>"
         "<h4 style='margin:12px 0 6px;font-weight:600'>Newsletter-Empfaenger</h4><ul>{}</ul>"
+        "<h4 style='margin:12px 0 6px;font-weight:600'>Zusammengefuehrtes Empfaengerprofil</h4><ul>{}</ul>"
         "<h4 style='margin:12px 0 6px;font-weight:600'>Kunde</h4><ul>{}</ul>"
         "<p>Beispiel: <code>{{{{ recipient.salutation_display_name }}}} "
         "{{{{ recipient.last_name }}}}</code> oder "
@@ -100,24 +118,13 @@ def _recipient_customer_context_info_html():
         format_html_join(
             "",
             "<li><code>{{{{ {} }}}}</code> <span style='color:#666'>({})</span></li>",
+            _RECIPIENT_PROFILE_EMAIL_FIELDS,
+        ),
+        format_html_join(
+            "",
+            "<li><code>{{{{ {} }}}}</code> <span style='color:#666'>({})</span></li>",
             _CUSTOMER_EMAIL_FIELDS,
         ),
-    )
-
-
-def _latest_active_preview_recipient():
-    from newsletter.models import NewsletterRecipient
-
-    return (
-        NewsletterRecipient.objects.filter(
-            status__in=(
-                NewsletterRecipient.Status.DIRECT,
-                NewsletterRecipient.Status.OPT_IN,
-            )
-        )
-        .select_related("customer")
-        .order_by("-last_synced_at", "-remote_updated_at", "-updated_at", "-created_at", "-pk")
-        .first()
     )
 
 
@@ -670,6 +677,7 @@ class EmailCampaignAdmin(BaseAdmin):
     list_display = (
         "internal_title",
         "editor_link",
+        "preview_recipient",
         "category_list",
         "send_at",
         "product_count",
@@ -680,13 +688,20 @@ class EmailCampaignAdmin(BaseAdmin):
     search_fields = ("internal_title",)
     list_editable = ("status",)
     inlines = (EmailCampaignComponentInline,)
-    autocomplete_fields = ("categories",)
+    autocomplete_fields = ("categories", "preview_recipient")
 
     fieldsets = (
         (
             _("Kampagne"),
             {
-                "fields": ("internal_title", "layout_mode", "categories", "status", "send_at", "simple_editor_link", "visual_editor_link"),
+                "fields": (
+                    "internal_title",
+                    "categories",
+                    "preview_recipient",
+                    "status",
+                    "send_at",
+                    "simple_editor_link",
+                ),
             },
         ),
         (
@@ -704,47 +719,34 @@ class EmailCampaignAdmin(BaseAdmin):
             },
         ),
     )
-    readonly_fields = BaseAdmin.readonly_fields + ("campaign_context_info", "simple_editor_link", "visual_editor_link")
-
-    def get_readonly_fields(self, request, obj=None):
-        fields = tuple(super().get_readonly_fields(request, obj))
-        return fields + (("layout_mode",) if obj else ())
-
-    def get_changeform_initial_data(self, request):
-        data = super().get_changeform_initial_data(request)
-        data.setdefault("layout_mode", EmailCampaign.LayoutMode.SIMPLE)
-        return data
+    readonly_fields = BaseAdmin.readonly_fields + ("campaign_context_info", "simple_editor_link")
 
     def get_inlines(self, request, obj=None):
-        return [] if obj is None or obj.layout_mode in {EmailCampaign.LayoutMode.SIMPLE, EmailCampaign.LayoutMode.VISUAL} else super().get_inlines(request, obj)
+        return [] if obj is None or obj.layout_mode in {EmailCampaign.LayoutMode.SIMPLE, _LEGACY_VISUAL_LAYOUT} else super().get_inlines(request, obj)
 
     @admin.display(description=_("Editor"))
     def editor_link(self, obj):
-        if obj.layout_mode not in {EmailCampaign.LayoutMode.SIMPLE, EmailCampaign.LayoutMode.VISUAL}:
+        if obj.layout_mode not in {EmailCampaign.LayoutMode.SIMPLE, _LEGACY_VISUAL_LAYOUT}:
             return "—"
-        name = "admin:emails_emailcampaign_visual_editor" if obj.layout_mode == EmailCampaign.LayoutMode.VISUAL else "admin:emails_emailcampaign_simple_editor"
-        url = reverse(name, args=[obj.pk])
+        url = reverse("admin:emails_emailcampaign_simple_editor", args=[obj.pk])
         return format_html('<a href="{}">Öffnen</a>', url)
 
     @admin.display(description=_("E-Mail gestalten"))
     def simple_editor_link(self, obj):
         if not obj or not obj.pk:
             return "Nach dem Speichern öffnet sich der einfache Editor."
-        if obj.layout_mode != EmailCampaign.LayoutMode.SIMPLE:
+        if obj.layout_mode not in {EmailCampaign.LayoutMode.SIMPLE, _LEGACY_VISUAL_LAYOUT}:
             return "Diese Kampagne verwendet einen anderen Editor."
         url = reverse("admin:emails_emailcampaign_simple_editor", args=[obj.pk])
         return format_html('<a class="button" href="{}">Einfachen Editor öffnen →</a>', url)
 
-    @admin.display(description=_("Visueller Editor"))
-    def visual_editor_link(self, obj):
-        if not obj or not obj.pk:
-            return "Nach dem Speichern kann der visuelle Editor geöffnet werden."
-        url = reverse("admin:emails_emailcampaign_visual_editor", args=[obj.pk])
-        label = "Visuellen Editor öffnen →" if obj.layout_mode == EmailCampaign.LayoutMode.VISUAL else "Zum visuellen MJML-Editor wechseln →"
-        return format_html('<a class="button" href="{}">{}</a>', url, label)
-
     def get_queryset(self, request):
-        return super().get_queryset(request).prefetch_related("categories")
+        return (
+            super()
+            .get_queryset(request)
+            .select_related("preview_recipient", "preview_recipient__customer")
+            .prefetch_related("categories", "preview_recipient__customer__addresses")
+        )
 
     @admin.display(description=_("Kategorien"))
     def category_list(self, obj: EmailCampaign) -> str:
@@ -752,7 +754,7 @@ class EmailCampaignAdmin(BaseAdmin):
 
     @admin.display(description=_("Produkte"))
     def product_count(self, obj: EmailCampaign) -> int:
-        if obj.layout_mode in {EmailCampaign.LayoutMode.SIMPLE, EmailCampaign.LayoutMode.VISUAL}:
+        if obj.layout_mode in {EmailCampaign.LayoutMode.SIMPLE, _LEGACY_VISUAL_LAYOUT}:
             return obj.campaign_products.count()
         return obj.components.filter(
             Q(product__isnull=False) | Q(campaign_product__isnull=False)
@@ -791,13 +793,19 @@ class EmailCampaignAdmin(BaseAdmin):
 
     def save_model(self, request, obj, form, change):
         if not change:
+            obj.layout_mode = EmailCampaign.LayoutMode.SIMPLE
             source_id = request.GET.get(self.copy_source_param)
             if source_id:
                 source_campaign = self.get_object(request, source_id)
                 if source_campaign:
-                    obj.layout_mode = source_campaign.layout_mode
-                    if source_campaign.layout_mode in {EmailCampaign.LayoutMode.SIMPLE, EmailCampaign.LayoutMode.VISUAL}:
-                        obj.editor_content = deepcopy(source_campaign.editor_content)
+                    obj.layout_mode = (
+                        EmailCampaign.LayoutMode.SIMPLE
+                        if source_campaign.layout_mode == _LEGACY_VISUAL_LAYOUT
+                        else source_campaign.layout_mode
+                    )
+                    if source_campaign.layout_mode in {EmailCampaign.LayoutMode.SIMPLE, _LEGACY_VISUAL_LAYOUT}:
+                        obj.editor_content = deepcopy(source_campaign.editor_content or {})
+                        obj.editor_content.pop("visual_document", None)
         super().save_model(request, obj, form, change)
         if change:
             return
@@ -809,19 +817,14 @@ class EmailCampaignAdmin(BaseAdmin):
                 return
             if not self.has_view_or_change_permission(request, source_campaign):
                 raise PermissionDenied
-            if source_campaign.layout_mode in {EmailCampaign.LayoutMode.SIMPLE, EmailCampaign.LayoutMode.VISUAL}:
+            if source_campaign.layout_mode in {EmailCampaign.LayoutMode.SIMPLE, _LEGACY_VISUAL_LAYOUT}:
                 copied_products = _copy_campaign_products(source_campaign, obj)
                 id_map = {old_id: item.pk for old_id, item in copied_products.items()}
                 content = dict(obj.editor_content or {})
-                if source_campaign.layout_mode == EmailCampaign.LayoutMode.SIMPLE:
-                    for heading in content.get("headings") or []:
-                        old_id = heading.get("after_product_id")
-                        if old_id:
-                            heading["after_product_id"] = str(id_map.get(int(old_id), ""))
-                elif content.get("visual_document"):
-                    from emails.visual_editor import remap_product_ids
-
-                    content["visual_document"] = remap_product_ids(content["visual_document"], id_map)
+                for heading in content.get("headings") or []:
+                    old_id = heading.get("after_product_id")
+                    if old_id:
+                        heading["after_product_id"] = str(id_map.get(int(old_id), ""))
                 obj.editor_content = content
                 obj.save(update_fields=["editor_content"])
             elif source_campaign.layout_mode == EmailCampaign.LayoutMode.COMPONENTS:
@@ -832,8 +835,6 @@ class EmailCampaignAdmin(BaseAdmin):
             self._ensure_default_components(obj)
 
     def response_add(self, request, obj, post_url_continue=None):
-        if obj.layout_mode == EmailCampaign.LayoutMode.VISUAL and "_addanother" not in request.POST:
-            return HttpResponseRedirect(reverse("admin:emails_emailcampaign_visual_editor", args=[obj.pk]))
         if obj.layout_mode == EmailCampaign.LayoutMode.SIMPLE and "_addanother" not in request.POST:
             url = reverse("admin:emails_emailcampaign_simple_editor", args=[obj.pk])
             return HttpResponseRedirect(url)
@@ -862,9 +863,7 @@ class EmailCampaignAdmin(BaseAdmin):
     def get_urls(self):
         urls = super().get_urls()
         custom = [
-            path("<int:campaign_id>/visual-editor/", self.admin_site.admin_view(self.visual_editor_view), name="emails_emailcampaign_visual_editor"),
-            path("<int:campaign_id>/visual-editor/save/", self.admin_site.admin_view(self.visual_editor_save_view), name="emails_emailcampaign_visual_save"),
-            path("<int:campaign_id>/visual-editor/preview/", self.admin_site.admin_view(self.visual_editor_preview_view), name="emails_emailcampaign_visual_preview"),
+            path("<int:campaign_id>/visual-editor/", self.admin_site.admin_view(self.retired_visual_editor_view), name="emails_emailcampaign_visual_editor"),
             path("<int:campaign_id>/editor/", self.admin_site.admin_view(self.simple_editor_view), name="emails_emailcampaign_simple_editor"),
             path("<int:campaign_id>/editor/save/", self.admin_site.admin_view(self.simple_editor_save_view), name="emails_emailcampaign_simple_save"),
             path("<int:campaign_id>/editor/preview/", self.admin_site.admin_view(self.simple_editor_preview_view), name="emails_emailcampaign_simple_preview"),
@@ -885,85 +884,13 @@ class EmailCampaignAdmin(BaseAdmin):
         campaign = get_object_or_404(EmailCampaign, pk=campaign_id)
         if not self.has_change_permission(request, campaign):
             raise PermissionDenied
-        if campaign.layout_mode != EmailCampaign.LayoutMode.SIMPLE:
+        if campaign.layout_mode not in {EmailCampaign.LayoutMode.SIMPLE, _LEGACY_VISUAL_LAYOUT}:
             raise PermissionDenied
         return campaign
 
-    def _product_editor_campaign(self, request, campaign_id):
-        campaign = self._visual_campaign(request, campaign_id)
-        if campaign.layout_mode not in {EmailCampaign.LayoutMode.SIMPLE, EmailCampaign.LayoutMode.VISUAL}:
-            raise PermissionDenied
-        return campaign
-
-    def _visual_campaign(self, request, campaign_id):
-        from django.shortcuts import get_object_or_404
-
-        campaign = get_object_or_404(EmailCampaign, pk=campaign_id)
-        if not self.has_change_permission(request, campaign):
-            raise PermissionDenied
-        return campaign
-
-    def visual_editor_view(self, request, campaign_id):
-        from django.shortcuts import render
-        from emails.visual_editor import ATTRS, CHILDREN, default_document
-
-        campaign = self._visual_campaign(request, campaign_id)
-        campaign_products = list(campaign.campaign_products.select_related("product").order_by("order", "id"))
-        document = (campaign.editor_content or {}).get("visual_document") or default_document(
-            campaign.editor_content, [item.pk for item in campaign_products]
-        )
-        return render(request, "emails/visual_editor.html", {
-            "campaign": campaign,
-            "document": document,
-            "schema": {"children": CHILDREN, "attrs": ATTRS},
-            "products": {
-                str(item.pk): {
-                    "label": f"{item.product.erp_nr} · {item.product.name or ''}",
-                    "mode": "price" if item.special_price_override else "percent" if item.discount_pct else "none",
-                    "value": str(item.special_price_override or item.discount_pct or ""),
-                }
-                for item in campaign_products
-            },
-        })
-
-    def visual_editor_save_view(self, request, campaign_id):
-        from emails.visual_editor import product_ids, render_visual_mjml, validate_document
-
-        campaign = self._visual_campaign(request, campaign_id)
-        if request.method != "POST":
-            return JsonResponse({"error": "POST erforderlich."}, status=405)
-        try:
-            document = validate_document(json.loads(request.body))
-            allowed_ids = set(campaign.campaign_products.values_list("id", flat=True))
-            if not product_ids(document) <= allowed_ids:
-                raise ValueError("Ein Produkt gehört nicht zu dieser Kampagne.")
-            compile_mjml_to_html(render_visual_mjml(document, campaign=campaign))
-            campaign.editor_content = {**(campaign.editor_content or {}), "visual_document": document}
-            campaign.layout_mode = EmailCampaign.LayoutMode.VISUAL
-            campaign.save(update_fields=["editor_content", "layout_mode"])
-            return JsonResponse({"saved": True})
-        except (ValueError, TypeError, json.JSONDecodeError) as exc:
-            return JsonResponse({"error": str(exc)}, status=400)
-        except Exception:
-            logger.exception("Visual MJML save validation failed for campaign %s", campaign_id)
-            return JsonResponse({"error": "MJML konnte nicht kompiliert werden."}, status=400)
-
-    def visual_editor_preview_view(self, request, campaign_id):
-        from emails.visual_editor import render_visual_mjml
-
-        campaign = self._visual_campaign(request, campaign_id)
-        if request.method != "POST":
-            return JsonResponse({"error": "POST erforderlich."}, status=405)
-        try:
-            document = json.loads(request.body)
-            mjml = render_visual_mjml(document, campaign=campaign)
-            preview_mjml = render_visual_mjml(document, campaign=campaign, editor_classes=True)
-            return JsonResponse({"html": compile_mjml_to_html(preview_mjml), "mjml": mjml})
-        except (ValueError, TypeError, json.JSONDecodeError) as exc:
-            return JsonResponse({"error": str(exc)}, status=400)
-        except Exception:
-            logger.exception("Visual MJML preview failed for campaign %s", campaign_id)
-            return JsonResponse({"error": "Vorschau konnte nicht erstellt werden."}, status=500)
+    def retired_visual_editor_view(self, request, campaign_id):
+        self._editor_campaign(request, campaign_id)
+        return HttpResponseRedirect(reverse("admin:emails_emailcampaign_simple_editor", args=[campaign_id]))
 
     def simple_editor_view(self, request, campaign_id):
         from django.shortcuts import render
@@ -972,7 +899,10 @@ class EmailCampaignAdmin(BaseAdmin):
         campaign = self._editor_campaign(request, campaign_id)
         return render(request, "emails/simple_editor.html", {
             "campaign": campaign,
-            "content": content_for(campaign),
+            "content": {
+                key: value for key, value in content_for(campaign).items()
+                if key != "visual_document"
+            },
             "campaign_products": campaign.campaign_products.select_related("product").order_by("order", "id"),
         })
 
@@ -1028,7 +958,11 @@ class EmailCampaignAdmin(BaseAdmin):
                     if key in allowed_ids and isinstance(item, dict)
                 }
             campaign.editor_content = content
-            campaign.save(update_fields=["editor_content"])
+            if getattr(campaign, "layout_mode", None) == _LEGACY_VISUAL_LAYOUT:
+                campaign.layout_mode = EmailCampaign.LayoutMode.SIMPLE
+                campaign.save(update_fields=["editor_content", "layout_mode"])
+            else:
+                campaign.save(update_fields=["editor_content"])
             return JsonResponse({"saved": True})
         except (ValueError, TypeError) as exc:
             return JsonResponse({"error": str(exc)}, status=400)
@@ -1041,7 +975,11 @@ class EmailCampaignAdmin(BaseAdmin):
             return JsonResponse({"error": "POST erforderlich."}, status=405)
         try:
             content = json.loads(request.body)
-            mjml = build_simple_mjml(campaign, override=content)
+            mjml = build_simple_mjml(
+                campaign,
+                recipient=campaign.preview_recipient,
+                override=content,
+            )
             return JsonResponse({"html": compile_mjml_to_html(mjml)})
         except Exception:
             logger.exception("Simple email preview failed for campaign %s", campaign_id)
@@ -1050,7 +988,7 @@ class EmailCampaignAdmin(BaseAdmin):
     def simple_editor_search_view(self, request, campaign_id):
         from products.models import Product
 
-        self._product_editor_campaign(request, campaign_id)
+        self._editor_campaign(request, campaign_id)
         query = request.GET.get("q", "").strip()[:100]
         if len(query) < 2:
             return JsonResponse({"products": []})
@@ -1065,7 +1003,7 @@ class EmailCampaignAdmin(BaseAdmin):
     def simple_editor_product_add_view(self, request, campaign_id):
         from products.models import Product
 
-        campaign = self._product_editor_campaign(request, campaign_id)
+        campaign = self._editor_campaign(request, campaign_id)
         if request.method != "POST":
             return JsonResponse({"error": "POST erforderlich."}, status=405)
         try:
@@ -1075,6 +1013,9 @@ class EmailCampaignAdmin(BaseAdmin):
                 campaign=campaign, product=product,
                 defaults={"order": campaign.campaign_products.count()},
             )
+            if campaign.layout_mode == _LEGACY_VISUAL_LAYOUT:
+                campaign.layout_mode = EmailCampaign.LayoutMode.SIMPLE
+                campaign.save(update_fields=["layout_mode"])
             return JsonResponse({"id": campaign_product.pk})
         except (Product.DoesNotExist, ValueError, TypeError):
             return JsonResponse({"error": "Produkt nicht gefunden."}, status=400)
@@ -1082,15 +1023,13 @@ class EmailCampaignAdmin(BaseAdmin):
     def simple_editor_product_view(self, request, campaign_id, product_id):
         from decimal import Decimal, InvalidOperation
 
-        campaign = self._product_editor_campaign(request, campaign_id)
+        campaign = self._editor_campaign(request, campaign_id)
         if request.method != "POST":
             return JsonResponse({"error": "POST erforderlich."}, status=405)
         try:
             item = campaign.campaign_products.get(pk=product_id)
             payload = json.loads(request.body)
             action = payload.get("action")
-            if campaign.layout_mode == EmailCampaign.LayoutMode.VISUAL and action != "price":
-                raise ValueError("Im visuellen Editor wird die Reihenfolge über die Bausteine geändert.")
             if action == "remove":
                 ordered_items = list(campaign.campaign_products.order_by("order", "id"))
                 item_index = next(i for i, row in enumerate(ordered_items) if row.pk == item.pk)
@@ -1145,6 +1084,9 @@ class EmailCampaignAdmin(BaseAdmin):
                     EmailCampaignProduct.objects.bulk_update(items, ["order"])
             else:
                 raise ValueError("Unbekannte Aktion.")
+            if getattr(campaign, "layout_mode", None) == _LEGACY_VISUAL_LAYOUT:
+                campaign.layout_mode = EmailCampaign.LayoutMode.SIMPLE
+                campaign.save(update_fields=["layout_mode"])
             return JsonResponse({"saved": True})
         except (EmailCampaignProduct.DoesNotExist, ValueError, InvalidOperation, StopIteration, ValidationError) as exc:
             return JsonResponse({"error": str(exc)}, status=400)
@@ -1156,8 +1098,7 @@ class EmailCampaignAdmin(BaseAdmin):
             return JsonResponse({"error": "Kampagne nicht gefunden."}, status=404)
 
         try:
-            preview_recipient = _latest_active_preview_recipient()
-            mjml = render_campaign_mjml(campaign, recipient=preview_recipient)
+            mjml = render_campaign_mjml(campaign, recipient=campaign.preview_recipient)
             html = compile_mjml_to_html(mjml)
             text = html_to_plain_text(html)
         except Exception:
@@ -1172,6 +1113,85 @@ class EmailCampaignAdmin(BaseAdmin):
             return response
 
         return JsonResponse({"html": html, "mjml": mjml, "text": text})
+
+
+@admin.register(EmailSmtpSettings)
+class EmailSmtpSettingsAdmin(BaseAdmin):
+    actions_detail = ("test_smtp_connection",)
+    readonly_fields = BaseAdmin.readonly_fields + ("configuration_status",)
+    fieldsets = (
+        (
+            _("Status"),
+            {
+                "fields": ("is_active", "configuration_status"),
+            },
+        ),
+        (
+            _("SMTP-Verbindung"),
+            {
+                "fields": ("host", "port", "security", "username", "password", "timeout"),
+            },
+        ),
+        (
+            _("Absender"),
+            {
+                "fields": ("sender_name", "sender_email", "reply_to_email"),
+            },
+        ),
+        (
+            _("System"),
+            {
+                "fields": BaseAdmin.readonly_fields,
+                "classes": ("collapse",),
+            },
+        ),
+    )
+
+    def changelist_view(self, request, extra_context=None):
+        configuration = self.model.load()
+        url = reverse("admin:emails_emailsmtpsettings_change", args=(configuration.pk,))
+        return HttpResponseRedirect(url)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def formfield_for_dbfield(self, db_field, request, **kwargs):
+        if db_field.name == "password":
+            kwargs["widget"] = PasswordInput(render_value=True)
+        return super().formfield_for_dbfield(db_field, request, **kwargs)
+
+    @admin.display(boolean=True, description=_("Vollständig eingerichtet"))
+    def configuration_status(self, obj: EmailSmtpSettings) -> bool:
+        return obj.smtp_is_configured
+
+    @action(
+        description=_("SMTP-Verbindung testen"),
+        icon="wifi_tethering",
+        variant=ActionVariant.PRIMARY,
+    )
+    def test_smtp_connection(self, request, object_id: str):
+        configuration = self.get_object(request, object_id)
+        if configuration is None:
+            self.message_user(request, _("SMTP-Einstellungen nicht gefunden."), level=messages.ERROR)
+            return self._redirect_to_changelist()
+        try:
+            EmailSmtpSettingsService().test_connection(configuration)
+        except Exception as exc:
+            self.message_user(
+                request,
+                _("SMTP-Verbindung fehlgeschlagen: %(error)s") % {"error": exc},
+                level=messages.ERROR,
+            )
+        else:
+            self.message_user(
+                request,
+                _("SMTP-Verbindung und Anmeldung waren erfolgreich."),
+                level=messages.SUCCESS,
+            )
+        return HttpResponseRedirect(request.path)
 
 
 @admin.register(EmailCampaignCategory)
@@ -1192,6 +1212,7 @@ class EmailCampaignQueueEntryAdmin(BaseAdmin):
         "recipient__email",
         "recipient__first_name",
         "recipient__last_name",
+        "recipient__erp_nr",
         "customer__erp_nr",
         "customer__name",
         "customer__email",

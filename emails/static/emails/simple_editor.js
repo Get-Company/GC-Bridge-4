@@ -86,7 +86,7 @@
   function showError(error) { status.textContent = error.message || String(error); status.style.color = '#bd4e4e'; }
   async function save() {
     status.textContent = 'Speichert …'; status.style.color = '#8b7a5b';
-    try { await api(config.save, content()); status.textContent = 'Gespeichert'; status.style.color = '#2d8b62'; }
+    try { await api(config.save, content()); document.getElementById('legacy-layout-notice')?.remove(); status.textContent = 'Gespeichert'; status.style.color = '#2d8b62'; }
     catch (error) { showError(error); }
   }
   async function preview() {
@@ -171,6 +171,7 @@
     async function updatePrice() {
       try {
         await api(itemUrl, {action:'price', mode:mode.value, value:value.value});
+        document.getElementById('legacy-layout-notice')?.remove();
         status.textContent = 'Preis gespeichert'; status.style.color = '#2d8b62';
         preview();
       } catch (error) { showError(error); }

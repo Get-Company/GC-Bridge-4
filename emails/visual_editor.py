@@ -1,15 +1,12 @@
-"""Validated MJML document tree for the visual campaign editor."""
+"""Read-only MJML renderer for campaigns saved with the retired visual editor."""
 from __future__ import annotations
 
 from html import escape
-from copy import deepcopy
 import re
 from urllib.parse import urlparse
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from django.template.loader import render_to_string
-
-from emails.simple_editor import DEFAULT_CONTENT, normalize_headings
 
 
 RECIPIENT_FIELDS = {
@@ -31,8 +28,7 @@ def merge_recipient_text(value, recipient):
     return RECIPIENT_TOKEN.sub(replace, value)
 
 
-# A node can only be dropped into one of these parents. The root names are UI
-# containers, not MJML tags.
+# Historical document schema. Kept so already saved campaigns can still render.
 CHILDREN = {
     "head": ("mj-title", "mj-preview", "mj-font", "mj-breakpoint", "mj-style", "mj-attributes"),
     "mj-attributes": ("mj-all", "mj-body", "mj-section", "mj-wrapper", "mj-column", "mj-text", "mj-image", "mj-button", "mj-divider", "mj-spacer"),
@@ -75,66 +71,6 @@ ATTRS = {
 TEXT_TAGS = {"mj-title", "mj-preview", "mj-style", "mj-text", "mj-button", "mj-social-element", "mj-navbar-link", "product"}
 VOID_TAGS = {"mj-font", "mj-breakpoint", "mj-all"}
 URL_ATTRS = {"href", "src", "background-url", "base-url", "media-url"}
-
-
-def new_node(tag, *, attrs=None, content="", children=None):
-    return {"id": str(uuid4()), "type": tag, "attrs": attrs or {}, "content": content, "children": children or []}
-
-
-def default_document(content=None, product_ids=()):
-    """Start with the same brand, colours and editable copy as the simple mail."""
-    copy = {**DEFAULT_CONTENT, **(content or {})}
-    def section(*nodes, **attrs):
-        return new_node("mj-section", attrs=attrs, children=[new_node("mj-column", children=list(nodes))])
-
-    def heading_section(heading):
-        nodes = [new_node("mj-text", attrs={"font-size": "34px", "color": "#ff9933"}, content=heading["title"])]
-        if heading["center_text"]:
-            nodes.append(new_node("mj-text", attrs={"align": "center", "font-size": "24px"}, content=heading["center_text"]))
-        if heading["right_text"]:
-            nodes.append(new_node("mj-text", attrs={"align": "right", "font-size": "24px", "color": "#ff9933"}, content=heading["right_text"]))
-        return section(*nodes)
-
-    document = {
-        "head": [
-            new_node("mj-title", content="Classei Newsletter"),
-            new_node("mj-preview", content=str(copy["headline"])),
-            new_node("mj-font", attrs={"name": "Roboto", "href": "https://assets.classei.de/css/emails_fonts.css"}),
-            new_node("mj-font", attrs={"name": "DancingScript", "href": "https://assets.classei.de/css/emails_fonts.css"}),
-            new_node("mj-attributes", children=[
-                new_node("mj-all", attrs={"font-family": "Roboto, Arial, sans-serif", "color": "#222222"}),
-                new_node("mj-body", attrs={"background-color": "#f3f3f3", "width": "600px"}),
-                new_node("mj-section", attrs={"background-color": "#ffffff", "padding": "20px"}),
-                new_node("mj-button", attrs={"background-color": "#ff9933", "color": "#ffffff"}),
-            ]),
-            new_node("mj-style", attrs={"inline": "inline"}, content="h1, h2 { color: #ff9933; }\na { color: #ff9933; text-decoration: none; }"),
-        ],
-        "body": [
-            section(new_node("mj-navbar", attrs={"hamburger": "hamburger", "ico-color": "#ffffff"}, children=[
-                new_node("mj-navbar-link", attrs={"color": "#ffffff", "font-weight": "bold", "href": "https://www.classei-shop.com/Orga-Mappen?sPartner=email"}, content="ORGA-MAPPEN"),
-                new_node("mj-navbar-link", attrs={"color": "#ffffff", "font-weight": "bold", "href": "https://www.classei-shop.com/Orga-Tabs?sPartner=email"}, content="ORGA-TABS"),
-                new_node("mj-navbar-link", attrs={"color": "#ffffff", "font-weight": "bold", "href": "https://www.classei-shop.com/Orga-Boxen?sPartner=email"}, content="ORGA-BOXEN"),
-                new_node("mj-navbar-link", attrs={"color": "#ffffff", "font-weight": "bold", "href": "https://www.classei-shop.com/Fertig-Sets?sPartner=email"}, content="FERTIG-SETS"),
-            ]), **{"background-color": "#ff9933", "padding": "5px 0"}),
-            section(new_node("mj-image", attrs={"src": str(copy["logo_url"]), "alt": "Classei", "width": "600px", "href": "https://www.classei-shop.com/"}), padding="0"),
-            section(new_node("mj-text", attrs={"align": "center", "font-size": "36px", "color": "#ff9933"}, content=str(copy["headline"]))),
-            section(new_node("mj-text", attrs={"align": "right", "font-size": "22px"}, content=str(copy["subheadline"]))),
-            section(new_node("mj-text", content=f"{copy['salutation']} {{{{ recipient.full_name }}}},\n\n{copy['intro']}")),
-            section(new_node("mj-text", attrs={"font-size": "32px", "color": "#ff9933"}, content=str(copy["product_heading"]))),
-            section(new_node("mj-text", attrs={"font-size": "34px", "color": "#ff9933"}, content=str(copy["order_heading"])), new_node("mj-text", attrs={"align": "center", "font-size": "24px"}, content=str(copy["order_text"])), new_node("mj-text", attrs={"align": "right", "color": "#ff9933"}, content=str(copy["order_phone"]))),
-            new_node("order-form"),
-            section(new_node("mj-text", attrs={"font-size": "10px", "line-height": "16px"}, content="Classei-Organisation – Egon Heimann GmbH | Staudacher Str. 7e | 83250 Marquartstein | Deutschland\nFon: +49 (0)8641 97 59 0 | E-Mail: info@classei.de\nSie erhalten diese E-Mail, weil Sie unser Kunde/Interessent sind oder wir schon Kontakt hatten. Wenn Sie keine Informationen mehr erhalten möchten, tragen Sie sich bitte {modify}hier{/modify} aus.")),
-        ],
-    }
-    product_ids = [str(pk) for pk in product_ids]
-    headings = normalize_headings(copy.get("headings"))
-    product_nodes = [heading_section(heading) for heading in headings if not heading["after_product_id"]]
-    for pk in product_ids:
-        product_nodes.append(new_node("product", attrs={"campaign-product-id": pk}))
-        product_nodes.extend(heading_section(heading) for heading in headings if heading["after_product_id"] == pk)
-    product_nodes.extend(heading_section(heading) for heading in headings if heading["after_product_id"] and heading["after_product_id"] not in product_ids)
-    document["body"][-3:-3] = product_nodes
-    return document
 
 
 def _url_is_safe(value):
@@ -210,20 +146,8 @@ def product_ids(document):
     return set(collect(document["body"]))
 
 
-def remap_product_ids(document, mapping):
-    copied = deepcopy(document)
-    def visit(nodes):
-        for node in nodes:
-            if node.get("type") == "product":
-                old_id = int(node["attrs"]["campaign-product-id"])
-                node["attrs"]["campaign-product-id"] = str(mapping[old_id])
-            visit(node.get("children") or [])
-    visit(copied.get("body") or [])
-    return copied
-
-
-def render_visual_mjml(document, *, campaign=None, recipient=None, editor_classes=False):
-    document = validate_document(document or default_document())
+def render_visual_mjml(document, *, campaign=None, recipient=None):
+    document = validate_document(document)
     offers = {}
     if product_ids(document):
         if campaign is None:
@@ -252,16 +176,11 @@ def render_visual_mjml(document, *, campaign=None, recipient=None, editor_classe
                 offer["images"] = [node["attrs"]["media-url"]]
             if node["content"]:
                 offer["description"] = merge_recipient_text(node["content"], recipient)
-            editor_class = f"visual-node-{node['id']}" if editor_classes else ""
-            return render_to_string("emails/_visual_product.mjml", {"offer": offer, "editor_class": editor_class})
+            return render_to_string("emails/_visual_product.mjml", {"offer": offer})
         if tag == "order-form":
             ordered_offers = [offers[pk] for pk in product_order(document) if pk in offers]
-            editor_class = f"visual-node-{node['id']}" if editor_classes else ""
-            return render_to_string("emails/_visual_order_form.mjml", {"offers": ordered_offers, "editor_class": editor_class}) if ordered_offers else ""
-        node_attrs = dict(node["attrs"])
-        if editor_classes and "css-class" in ATTRS[tag] and parent != "mj-attributes":
-            node_attrs["css-class"] = f"{node_attrs.get('css-class', '')} visual-node-{node['id']}".strip()
-        attrs = "".join(f' {key}="{escape(value, quote=True)}"' for key, value in node_attrs.items())
+            return render_to_string("emails/_visual_order_form.mjml", {"offers": ordered_offers}) if ordered_offers else ""
+        attrs = "".join(f' {key}="{escape(value, quote=True)}"' for key, value in node["attrs"].items())
         if tag in VOID_TAGS or parent == "mj-attributes":
             return f"<{tag}{attrs} />"
         if tag == "mj-style":

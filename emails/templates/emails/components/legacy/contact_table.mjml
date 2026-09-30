@@ -18,13 +18,13 @@
                 <p style="font-weight: bold;">Stimmen ihre Daten noch? Bitte berichtigen Sie:</p>
             </mj-text>
             <mj-table css-class="contact_table" line-height="40px" padding="10px">
-                <tr><td width="20%" class="ct_text">Vorname:</td><td width="40%" class="ct_value">{subtag:vorname}</td><td width="40%" style="border-bottom: 1px dotted #000000" class="ct_user">&nbsp;</td></tr>
-                <tr><td class="ct_text">Nachname:</td><td class="ct_value">{subtag:name}</td><td style="border-bottom: 1px dotted #000000" class="ct_user">&nbsp;</td></tr>
-                <tr><td class="ct_text">Firma:</td><td class="ct_value">{subtag:firma}</td><td style="border-bottom: 1px dotted #000000" class="ct_user">&nbsp;</td></tr>
-                <tr><td class="ct_text">Strasse:</td><td class="ct_value">{subtag:strasse}</td><td style="border-bottom: 1px dotted #000000" class="ct_user">&nbsp;</td></tr>
-                <tr><td class="ct_text">PLZ/Ort:</td><td class="ct_value">{subtag:plzort}</td><td style="border-bottom: 1px dotted #000000" class="ct_user">&nbsp;</td></tr>
-                <tr><td class="ct_text">Fon:</td><td class="ct_value">{subtag:fon}</td><td style="border-bottom: 1px dotted #000000" class="ct_user">&nbsp;</td></tr>
-                <tr><td class="ct_text">E-Mail:</td><td class="ct_value">{subtag:email}</td><td style="border-bottom: 1px dotted #000000" class="ct_user">&nbsp;</td></tr>
+                <tr><td width="20%" class="ct_text">Vorname:</td><td width="40%" class="ct_value">{{ recipient_profile.first_name }}</td><td width="40%" style="border-bottom: 1px dotted #000000" class="ct_user">&nbsp;</td></tr>
+                <tr><td class="ct_text">Nachname:</td><td class="ct_value">{{ recipient_profile.last_name }}</td><td style="border-bottom: 1px dotted #000000" class="ct_user">&nbsp;</td></tr>
+                <tr><td class="ct_text">Firma:</td><td class="ct_value">{{ recipient_profile.company }}</td><td style="border-bottom: 1px dotted #000000" class="ct_user">&nbsp;</td></tr>
+                <tr><td class="ct_text">Strasse:</td><td class="ct_value">{{ recipient_profile.street }}</td><td style="border-bottom: 1px dotted #000000" class="ct_user">&nbsp;</td></tr>
+                <tr><td class="ct_text">PLZ/Ort:</td><td class="ct_value">{{ recipient_profile.postal_line }}</td><td style="border-bottom: 1px dotted #000000" class="ct_user">&nbsp;</td></tr>
+                <tr><td class="ct_text">Fon:</td><td class="ct_value">{{ recipient_profile.phone }}</td><td style="border-bottom: 1px dotted #000000" class="ct_user">&nbsp;</td></tr>
+                <tr><td class="ct_text">E-Mail:</td><td class="ct_value">{{ recipient_profile.email }}</td><td style="border-bottom: 1px dotted #000000" class="ct_user">&nbsp;</td></tr>
             </mj-table>
         </mj-column>
     </mj-section>

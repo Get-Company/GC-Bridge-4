@@ -2,6 +2,7 @@ from pathlib import Path
 
 from core.management.base import MonitoredBaseCommand
 
+from emails.mjml import normalize_legacy_asset_urls, normalize_legacy_recipient_placeholders
 from emails.models import MjmlComponent
 
 _TEMPLATE_DIR = Path(__file__).resolve().parents[4] / "old-emails" / "template"
@@ -63,7 +64,8 @@ class Command(MonitoredBaseCommand):
             stem = path.stem
             placement = MjmlComponent.Placement.HEAD if path.name in _HEAD_FILES else MjmlComponent.Placement.BODY
             name = _PRETTY_NAMES.get(stem, stem.replace("_", " ").title())
-            markup = path.read_text(encoding="utf-8")
+            markup = normalize_legacy_asset_urls(path.read_text(encoding="utf-8"))
+            markup = normalize_legacy_recipient_placeholders(markup)
 
             obj, was_created = MjmlComponent.objects.get_or_create(
                 name=name,

@@ -15,7 +15,16 @@
     <a class="button secondary" href="{% url 'admin:emails_emailcampaign_change' campaign.pk %}">Kampagnendaten</a>
     <button id="refresh-preview" class="button" type="button">Vorschau aktualisieren</button>
   </header>
-  <div class="intro-banner">Texte und Medien links bearbeiten. Die E-Mail rechts wird aus MJML und den aktuellen Produktdaten erstellt.</div>
+  <div class="intro-banner">
+    Texte und Medien links bearbeiten. Die E-Mail rechts wird aus MJML und den aktuellen Produktdaten erstellt.
+    {% if campaign.preview_recipient %}
+      Vorschau-Empfänger: <strong>{{ campaign.preview_recipient.email }}</strong>
+      {% if campaign.preview_recipient.full_name %}· {{ campaign.preview_recipient.full_name }}{% endif %}
+    {% else %}
+      <strong>Es ist noch kein Vorschau-Empfänger in den Kampagnendaten gewählt.</strong>
+    {% endif %}
+  </div>
+  {% if campaign.layout_mode == 'visual' %}<div class="intro-banner" id="legacy-layout-notice">Diese Kampagne hat noch einen gespeicherten visuellen Aufbau. Die einfache Vorschau zeigt die Vorlage, zu der sie beim ersten Speichern wechselt. Der bisherige Aufbau bleibt intern als Sicherung erhalten.</div>{% endif %}
   <main class="editor-grid">
     <div class="editor-track" id="editor-track">
       <section class="editor-card" data-anchor="editor-logo">

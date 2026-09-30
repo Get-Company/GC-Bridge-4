@@ -299,6 +299,21 @@ class AdminSidebarPermissionTest(SimpleTestCase):
         self.assertEqual(len(items), 1)
         self.assertTrue(items[0]["has_permission"])
 
+    def test_email_smtp_settings_sidebar_entry_requires_view_permission(self):
+        smtp_item = self._sidebar_item(permissions=set(), title="SMTP-Einstellungen")
+
+        self.assertEqual(
+            str(smtp_item["link"]),
+            reverse("admin:emails_emailsmtpsettings_changelist"),
+        )
+        self.assertFalse(smtp_item["has_permission"])
+
+        smtp_item = self._sidebar_item(
+            permissions={"emails.view_emailsmtpsettings"},
+            title="SMTP-Einstellungen",
+        )
+        self.assertTrue(smtp_item["has_permission"])
+
     def test_hr_calendar_sidebar_entry_requires_employee_profile_view_permission(self):
         item = self._sidebar_item(permissions=set(), title="Kalender")
         self.assertFalse(item["has_permission"])

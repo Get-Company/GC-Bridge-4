@@ -1,5 +1,5 @@
 {% if offers %}
-<mj-section css-class="{{ editor_class }}"><mj-column><mj-table>
+<mj-section><mj-column><mj-table>
   {% for offer in offers %}
   <tr style="border-bottom:1px dotted #ff9933">
     <td style="padding:8px 0;vertical-align:top" width="10%">{{ forloop.counter }}</td>

@@ -26,6 +26,14 @@ class NewsletterRecipient(BaseModel):
         db_index=True,
         verbose_name=_("Shopware Kunden-ID"),
     )
+    erp_nr = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        db_index=True,
+        verbose_name=_("ERP-/Adressnummer"),
+        help_text=_("Aus dem AdrNr-Custom-Field des Shopware Newsletter-Empfaengers."),
+    )
     customer = models.ForeignKey(
         "customer.Customer",
         null=True,

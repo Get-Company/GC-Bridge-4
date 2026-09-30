@@ -191,6 +191,13 @@ class TestEmailCampaignQueueService:
             status=NewsletterRecipient.Status.OPT_OUT,
             selected_email_campaign=due_campaign,
         )
+        NewsletterRecipient.objects.create(
+            shopware_id="missing-due",
+            email="missing@example.com",
+            status=NewsletterRecipient.Status.OPT_IN,
+            is_present_in_shopware=False,
+            selected_email_campaign=due_campaign,
+        )
 
         summary = EmailCampaignQueueService().queue_due_campaigns_before_send(now=now)
 
@@ -208,3 +215,21 @@ class TestEmailCampaignQueueService:
         assert entry.rendered_text == "queued"
         render_campaign_mjml.assert_called_once_with(due_campaign, recipient=active_recipient)
         compile_mjml_to_html.assert_called_once_with("<mjml>queued</mjml>")
+
+    @pytest.mark.django_db
+    def test_rejects_recipient_missing_from_shopware(self):
+        from emails.models import EmailCampaign
+        from emails.services import EmailCampaignQueueService
+        from newsletter.models import NewsletterRecipient
+
+        campaign = EmailCampaign.objects.create(internal_title="Newsletter")
+        recipient = NewsletterRecipient.objects.create(
+            shopware_id="missing-recipient",
+            email="missing@example.com",
+            status=NewsletterRecipient.Status.OPT_IN,
+            is_present_in_shopware=False,
+            selected_email_campaign=campaign,
+        )
+
+        with pytest.raises(ValueError, match="nicht mehr in Shopware"):
+            EmailCampaignQueueService().queue_recipient_campaign(recipient)

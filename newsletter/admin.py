@@ -25,6 +25,7 @@ class NewsletterRecipientAdmin(BaseAdmin):
         "full_name",
         "status_badge",
         "customer_badge",
+        "erp_nr",
         "selected_email_campaign",
         "city",
         "sales_channel_id",
@@ -39,6 +40,7 @@ class NewsletterRecipientAdmin(BaseAdmin):
         "city",
         "shopware_id",
         "customer_shopware_id",
+        "erp_nr",
         "customer__erp_nr",
         "customer__name",
         "customer__email",
@@ -55,6 +57,7 @@ class NewsletterRecipientAdmin(BaseAdmin):
     readonly_fields = BaseAdmin.readonly_fields + (
         "shopware_id",
         "customer_shopware_id",
+        "erp_nr",
         "customer",
         "is_customer",
         "last_synced_at",
@@ -62,9 +65,9 @@ class NewsletterRecipientAdmin(BaseAdmin):
         "remote_updated_at",
         "raw_data",
     )
-    actions_list = ("sync_from_shopware_list",)
+    actions_list = ("sync_from_shopware_list", "relink_customers_list")
     actions_submit_line = ("queue_selected_campaign_submit",)
-    actions = ("queue_selected_campaign", "sync_from_shopware")
+    actions = ("queue_selected_campaign", "sync_from_shopware", "relink_customers")
     autocomplete_fields = ("selected_email_campaign",)
 
     status_badge_map = {
@@ -123,7 +126,7 @@ class NewsletterRecipientAdmin(BaseAdmin):
 
     def _run_sync_from_shopware(self, request) -> None:
         try:
-            summary = NewsletterRecipientSyncService().sync_from_shopware()
+            summary = NewsletterRecipientSyncService().sync_from_shopware(mark_missing=True)
         except Exception as exc:
             self.message_user(
                 request,
@@ -139,6 +142,8 @@ class NewsletterRecipientAdmin(BaseAdmin):
                 f"{summary['seen']} gesehen, "
                 f"{summary['created']} neu, "
                 f"{summary['updated']} aktualisiert, "
+                f"{summary['linked']} Kunden zugeordnet, "
+                f"{summary['unlinked']} ohne Kundenzuordnung, "
                 f"{summary['failed']} Fehler."
             ),
         )
@@ -159,6 +164,36 @@ class NewsletterRecipientAdmin(BaseAdmin):
     )
     def sync_from_shopware(self, request, queryset):
         self._run_sync_from_shopware(request)
+
+    def _run_relink_customers(self, request) -> None:
+        summary = NewsletterRecipientSyncService().relink_existing()
+        self.message_user(
+            request,
+            (
+                "Kundenzuordnung aktualisiert: "
+                f"{summary['seen']} geprueft, "
+                f"{summary['updated']} aktualisiert, "
+                f"{summary['linked']} zugeordnet, "
+                f"{summary['unlinked']} ohne Zuordnung."
+            ),
+        )
+
+    @action(
+        description="Kundenzuordnungen aus AdrNr neu aufbauen",
+        icon="link",
+        variant=ActionVariant.DEFAULT,
+    )
+    def relink_customers_list(self, request):
+        self._run_relink_customers(request)
+        return self._redirect_to_changelist()
+
+    @action(
+        description="Kundenzuordnungen aus AdrNr neu aufbauen",
+        icon="link",
+        variant=ActionVariant.DEFAULT,
+    )
+    def relink_customers(self, request, queryset):
+        self._run_relink_customers(request)
 
     def _queue_recipients(self, request, recipients) -> None:
         service = EmailCampaignQueueService()
@@ -210,4 +245,9 @@ class NewsletterRecipientAdmin(BaseAdmin):
         variant=ActionVariant.PRIMARY,
     )
     def queue_selected_campaign(self, request, queryset):
-        self._queue_recipients(request, queryset.select_related("customer", "selected_email_campaign"))
+        self._queue_recipients(
+            request,
+            queryset.select_related("customer", "selected_email_campaign").prefetch_related(
+                "customer__addresses"
+            ),
+        )

@@ -42,6 +42,11 @@ class Command(MonitoredBaseCommand):
             action="store_true",
             help="Nur bei Vollsync: lokal vorhandene, in Shopware fehlende Empfaenger markieren.",
         )
+        parser.add_argument(
+            "--relink-only",
+            action="store_true",
+            help="Nur bestehende Empfaenger anhand gespeicherter AdrNr/Shopware-ID neu zuordnen.",
+        )
 
     def handle(self, *args, **options):
         limit = options.get("limit")
@@ -49,6 +54,7 @@ class Command(MonitoredBaseCommand):
         status = (options.get("status") or "").strip()
         email = (options.get("email") or "").strip()
         mark_missing = bool(options.get("mark_missing", False))
+        relink_only = bool(options.get("relink_only", False))
 
         runtime = CommandRuntimeService().start(
             command_name="shopware_sync_newsletter_recipients",
@@ -59,9 +65,24 @@ class Command(MonitoredBaseCommand):
                 "status": status,
                 "email": email,
                 "mark_missing": mark_missing,
+                "relink_only": relink_only,
             },
         )
         try:
+            if relink_only:
+                runtime.update(stage="relink_customers")
+                summary = NewsletterRecipientSyncService().relink_existing(limit=limit)
+                runtime.update(stage="finished", **summary)
+                self.stdout.write(
+                    self.style.SUCCESS(
+                        "Newsletter-Kundenzuordnung abgeschlossen: "
+                        f"{summary['seen']} geprueft, "
+                        f"{summary['updated']} aktualisiert, "
+                        f"{summary['linked']} zugeordnet, "
+                        f"{summary['unlinked']} ohne Zuordnung."
+                    )
+                )
+                return
             runtime.update(stage="shopware_to_django")
             logger.info(
                 "Newsletter recipient sync started. limit={} page_size={} status={} email={} mark_missing={}",
@@ -86,6 +107,8 @@ class Command(MonitoredBaseCommand):
                     f"{summary['seen']} gesehen, "
                     f"{summary['created']} neu, "
                     f"{summary['updated']} aktualisiert, "
+                    f"{summary['linked']} Kunden zugeordnet, "
+                    f"{summary['unlinked']} ohne Kundenzuordnung, "
                     f"{summary['failed']} Fehler, "
                     f"{summary['marked_missing']} als fehlend markiert."
                 )

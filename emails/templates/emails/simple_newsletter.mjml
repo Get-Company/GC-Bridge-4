@@ -21,7 +21,7 @@
   <mj-body>
     <mj-section background-color="#ff9933" padding="5px 0">
       <mj-column>
-        <mj-navbar base-url="https://www.classei-shop.com/" hamburger="hamburger" ico-color="#ffffff">
+        <mj-navbar base-url="{{ shopware_storefront_url }}/" hamburger="hamburger" ico-color="#ffffff">
           <mj-navbar-link color="#ffffff" font-weight="bold" href="Orga-Mappen?sPartner=email">ORGA-MAPPEN</mj-navbar-link>
           <mj-navbar-link color="#ffffff" font-weight="bold" href="Orga-Tabs?sPartner=email">ORGA-TABS</mj-navbar-link>
           <mj-navbar-link color="#ffffff" font-weight="bold" href="Orga-Boxen?sPartner=email">ORGA-BOXEN</mj-navbar-link>
@@ -30,7 +30,7 @@
       </mj-column>
     </mj-section>
     <mj-section css-class="editor-logo" padding="0"><mj-column>
-      <mj-image width="600px" src="{{ content.logo_url }}" href="https://www.classei-shop.com/" alt="Logo der Büroorganisation Classei" />
+      <mj-image width="600px" src="{{ content.logo_url }}" href="{{ shopware_storefront_url }}/" alt="Logo der Büroorganisation Classei" />
     </mj-column></mj-section>
     <mj-section css-class="editor-headline" padding="20px"><mj-column>
       <mj-text align="center"><h1 style="font-size:40px;line-height:42px">{{ content.headline }}</h1></mj-text>
@@ -97,7 +97,7 @@
     </mj-wrapper>
     <mj-section css-class="editor-footer"><mj-column>
       <mj-text font-size="10px" line-height="16px">
-        <p>* <a href="https://www.classei-shop.com/Versandinformationen?sPartner=email">Nähere Infos zu Versandkosten</a></p>
+        <p>* <a href="{{ shopware_storefront_url }}/Versandinformationen?sPartner=email">Nähere Infos zu Versandkosten</a></p>
         <p>Classei-Organisation – Egon Heimann GmbH | Staudacher Str. 7e | 83250 Marquartstein | Deutschland<br />
         Fon: +49 (0)8641 97 59 0 | Fax: +49 (0)8641 97 59 20 | E-Mail: <a href="mailto:info@classei.de">info@classei.de</a> | <a href="https://www.classei.de">Classei.de</a></p>
         <p>Sie erhalten diese E-Mail, weil Sie unser Kunde/Interessent sind oder wir schon Kontakt hatten.

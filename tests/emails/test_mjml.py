@@ -493,6 +493,67 @@ class TestCampaignComponentRendering:
 
         assert "Herr Muster 10042 True" in mjml
 
+    def test_recipient_profile_combines_newsletter_and_customer_address(self):
+        from emails.mjml import recipient_context
+
+        invoice_address = SimpleNamespace(
+            is_invoice=True,
+            is_shipping=False,
+            company="",
+            street="Musterweg 4",
+            postal_code="83250",
+            city="Marquartstein",
+            phone="08641 123",
+        )
+        customer = SimpleNamespace(
+            erp_nr="10042",
+            company="Muster GmbH",
+            name="Muster",
+            addresses=[invoice_address],
+        )
+        recipient = SimpleNamespace(
+            customer=customer,
+            erp_nr="10042",
+            email="kontakt@example.com",
+            title="",
+            salutation_display_name="Herr",
+            salutation_letter_name="Sehr geehrter Herr",
+            first_name="Max",
+            last_name="Muster",
+            full_name="Max Muster",
+            street="Alter Weg 1",
+            zip_code="00000",
+            city="Altstadt",
+        )
+
+        context = recipient_context(recipient)
+
+        assert context["is_customer"] is True
+        assert context["recipient_profile"].erp_nr == "10042"
+        assert context["recipient_profile"].company == "Muster GmbH"
+        assert context["recipient_profile"].street == "Musterweg 4"
+        assert context["recipient_profile"].postal_line == "83250 Marquartstein"
+        assert context["recipient_profile"].phone == "08641 123"
+
+    def test_normalizes_legacy_recipient_and_asset_placeholders(self):
+        from emails.mjml import (
+            normalize_legacy_asset_urls,
+            normalize_legacy_recipient_placeholders,
+        )
+
+        markup = (
+            "{subtag:vorname} {subtag:name} {subtag:adrnr} "
+            'src="https://www.classei.de/index.php?option=com_joomgallery'
+            '&amp;view=image&amp;format=raw&amp;id=355&amp;type=orig"'
+        )
+        normalized = normalize_legacy_recipient_placeholders(markup)
+        normalized = normalize_legacy_asset_urls(normalized)
+
+        assert "{{ recipient_profile.first_name }}" in normalized
+        assert "{{ recipient_profile.last_name }}" in normalized
+        assert "{{ recipient_profile.erp_nr }}" in normalized
+        assert "{{ newsletter_asset_base_url }}/img/logos/classei_logo.png" in normalized
+
     def test_render_campaign_exposes_latest_offer_valid_until_text(self, monkeypatch):
         def fake_render_to_string(template_name, context):
             if template_name == "emails/newsletter_base.mjml":

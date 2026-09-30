@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
@@ -113,6 +114,17 @@ class EmailCampaign(BaseModel):
         related_name="campaigns",
         verbose_name=_("Kategorien"),
     )
+    preview_recipient = models.ForeignKey(
+        "newsletter.NewsletterRecipient",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="preview_campaigns",
+        verbose_name=_("Vorschau-Empfänger"),
+        help_text=_(
+            "Dieser Newsletter-Empfänger liefert die Platzhalterdaten für Vorschau und Export."
+        ),
+    )
 
     class Meta:
         verbose_name = _("E-Mail-Kampagne")
@@ -121,6 +133,114 @@ class EmailCampaign(BaseModel):
 
     def __str__(self) -> str:
         return self.internal_title
+
+
+class EmailSmtpSettings(BaseModel):
+    class Security(models.TextChoices):
+        STARTTLS = "starttls", _("STARTTLS")
+        SSL = "ssl", _("SSL/TLS")
+        NONE = "none", _("Keine")
+
+    is_active = models.BooleanField(
+        default=False,
+        verbose_name=_("Für Newsletter-Versand aktiviert"),
+        help_text=_("Der spätere Versand-Worker darf diese Konfiguration nur aktiviert verwenden."),
+    )
+    host = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        verbose_name=_("SMTP-Server"),
+        help_text=_("Zum Beispiel smtp.office365.com"),
+    )
+    port = models.PositiveIntegerField(
+        default=587,
+        validators=(MinValueValidator(1), MaxValueValidator(65535)),
+        verbose_name=_("SMTP-Port"),
+    )
+    security = models.CharField(
+        max_length=16,
+        choices=Security.choices,
+        default=Security.STARTTLS,
+        verbose_name=_("Verschlüsselung"),
+    )
+    username = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        verbose_name=_("Benutzername"),
+    )
+    password = models.CharField(
+        max_length=500,
+        blank=True,
+        default="",
+        verbose_name=_("Passwort"),
+    )
+    sender_name = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        verbose_name=_("Absendername"),
+    )
+    sender_email = models.EmailField(
+        blank=True,
+        default="",
+        verbose_name=_("Absenderadresse"),
+    )
+    reply_to_email = models.EmailField(
+        blank=True,
+        default="",
+        verbose_name=_("Antwortadresse"),
+        help_text=_("Optional. Ohne Angabe wird die Absenderadresse verwendet."),
+    )
+    timeout = models.PositiveSmallIntegerField(
+        default=30,
+        validators=(MinValueValidator(1), MaxValueValidator(300)),
+        verbose_name=_("Timeout in Sekunden"),
+    )
+
+    class Meta:
+        verbose_name = _("SMTP-Einstellungen")
+        verbose_name_plural = _("SMTP-Einstellungen")
+
+    def __str__(self) -> str:
+        return "SMTP-Einstellungen"
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def load(cls) -> "EmailSmtpSettings":
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+    @property
+    def smtp_is_configured(self) -> bool:
+        credentials_complete = bool(self.username) == bool(self.password)
+        return bool(self.host and self.sender_email and credentials_complete)
+
+    @property
+    def effective_reply_to_email(self) -> str:
+        return self.reply_to_email or self.sender_email
+
+    def clean(self) -> None:
+        super().clean()
+        errors: dict[str, str] = {}
+        if bool(self.username) != bool(self.password):
+            message = _("SMTP-Benutzername und SMTP-Passwort müssen gemeinsam gepflegt werden.")
+            errors["username"] = message
+            errors["password"] = message
+        if not self.host and any((self.username, self.password, self.sender_email)):
+            errors["host"] = _("Für die SMTP-Konfiguration ist ein SMTP-Server erforderlich.")
+        if self.host and not self.sender_email:
+            errors["sender_email"] = _("Bitte eine SMTP-Absenderadresse hinterlegen.")
+        if self.is_active and not self.smtp_is_configured:
+            errors["is_active"] = _(
+                "Die SMTP-Konfiguration muss vollständig sein, bevor sie aktiviert werden kann."
+            )
+        if errors:
+            raise ValidationError(errors)
 
 
 class EmailCampaignQueueEntry(BaseModel):

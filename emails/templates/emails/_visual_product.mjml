@@ -1,4 +1,4 @@
-<mj-wrapper css-class="visual-product-{{ offer.id }} {{ editor_class }}">
+<mj-wrapper css-class="visual-product-{{ offer.id }}">
   {% if offer.section_heading %}<mj-section><mj-column><mj-text align="center" font-size="28px" color="#ff9933">{{ offer.section_heading }}</mj-text></mj-column></mj-section>{% endif %}
   <mj-section><mj-column><mj-text font-size="24px" font-weight="bold">{{ offer.title }}</mj-text></mj-column></mj-section>
   <mj-section>

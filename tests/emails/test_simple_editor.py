@@ -70,6 +70,26 @@ def test_editor_text_is_escaped_in_mjml():
     assert "&lt;script&gt;" in mjml
 
 
+def test_simple_newsletter_renders_selected_preview_recipient_data():
+    campaign = SimpleNamespace(
+        editor_content={},
+        campaign_products=ProductRows([]),
+    )
+    recipient = SimpleNamespace(
+        customer=None,
+        full_name="Max Mustermann",
+        first_name="Max",
+        last_name="Mustermann",
+        email="max@example.com",
+        erp_nr="10042",
+    )
+
+    with patch("emails.simple_editor._campaign_sales_channel_ids", return_value=()):
+        mjml = build_simple_mjml(campaign, recipient=recipient)
+
+    assert "Hallo Max Mustermann" in mjml
+
+
 def test_percentage_override_takes_precedence_over_catalog_special_price():
     product = FakeProduct()
     proxy = ProductEmailProxy(product, discount_pct=Decimal("15"))

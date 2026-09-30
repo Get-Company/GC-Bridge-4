@@ -12,6 +12,7 @@ from urllib.parse import quote_plus
 
 import jinja2
 from bs4 import BeautifulSoup
+from django.conf import settings
 from django.template.loader import render_to_string
 
 if TYPE_CHECKING:
@@ -53,6 +54,48 @@ _HYPHENATED_PLACEHOLDER_RE = re.compile(
     r"(\{\{\s*)([A-Za-z_][A-Za-z0-9_]*(?:-[A-Za-z0-9_]+)+)(?=\s*(?:\||\}\}))"
 )
 _CHILDREN_PLACEHOLDER_RE = re.compile(r"\{\{\s*children\s*\}\}")
+_LEGACY_RECIPIENT_PLACEHOLDERS = {
+    "{subtag:vorname}": "{{ recipient_profile.first_name }}",
+    "{subtag:name}": "{{ recipient_profile.last_name }}",
+    "{subtag:firma}": "{{ recipient_profile.company }}",
+    "{subtag:strasse}": "{{ recipient_profile.street }}",
+    "{subtag:plzort}": "{{ recipient_profile.postal_line }}",
+    "{subtag:fon}": "{{ recipient_profile.phone }}",
+    "{subtag:email}": "{{ recipient_profile.email }}",
+    "{subtag:adrnr}": "{{ recipient_profile.erp_nr }}",
+    "{if:anrede~Herr} Herr {/if}": (
+        '{% if recipient_profile.salutation_display_name == "Herr" %} Herr {% endif %}'
+    ),
+    "{if:anrede~Frau} Frau {/if}": (
+        '{% if recipient_profile.salutation_display_name == "Frau" %} Frau {% endif %}'
+    ),
+}
+_LEGACY_ASSET_URL_REPLACEMENTS = {
+    "https://www.classei.de/index.php?option=com_joomgallery&view=image&format=raw&id=355&type=orig": (
+        "{{ newsletter_asset_base_url }}/img/logos/classei_logo.png"
+    ),
+    "https://www.classei.de/index.php?option=com_joomgallery&amp;view=image&amp;format=raw&amp;id=355&amp;type=orig": (
+        "{{ newsletter_asset_base_url }}/img/logos/classei_logo.png"
+    ),
+    "https://www.classei.de/index.php?option=com_joomgallery&view=image&format=raw&id=454&type=img": (
+        "{{ newsletter_asset_base_url }}/img/newsletter/certs_logo_green.png"
+    ),
+    "https://www.classei.de/index.php?option=com_joomgallery&amp;view=image&amp;format=raw&amp;id=454&amp;type=img": (
+        "{{ newsletter_asset_base_url }}/img/newsletter/certs_logo_green.png"
+    ),
+    "https://www.classei.de/index.php?option=com_joomgallery&view=image&format=raw&id=349&type=orig": (
+        "{{ newsletter_asset_base_url }}/img/newsletter/header_acryl.jpg"
+    ),
+    "https://www.classei.de/index.php?option=com_joomgallery&amp;view=image&amp;format=raw&amp;id=349&amp;type=orig": (
+        "{{ newsletter_asset_base_url }}/img/newsletter/header_acryl.jpg"
+    ),
+    "https://www.classei-shop.com/media/image/65/8b/53/classei_logo_neu.jpg": (
+        "{{ newsletter_asset_base_url }}/img/logos/classei_logo.png"
+    ),
+    "https://www.classei-shop.com/media/image/3f/a3/04/weihnachten_800x800.jpg": (
+        "{{ newsletter_asset_base_url }}/img/newsletter/weihnachten_800x800.jpg"
+    ),
+}
 _TEXT_LINE_BREAK_MARKER = "\ue000"
 _TEXT_BLOCK_TAGS = {
     "address",
@@ -245,14 +288,17 @@ def _empty_recipient_context() -> SimpleNamespace:
         erp_nr="",
         erp_id=None,
         name="",
+        company="",
         email="",
         api_id="",
+        shopware_customer_group="",
         vat_id="",
         is_gross=True,
     )
     return SimpleNamespace(
         shopware_id="",
         customer_shopware_id="",
+        erp_nr="",
         customer=customer,
         is_customer=False,
         email="",
@@ -268,21 +314,70 @@ def _empty_recipient_context() -> SimpleNamespace:
         city="",
         street="",
         status="",
+        hash="",
         confirmed_at=None,
         custom_fields={},
+    )
+
+
+def _preferred_customer_address(customer):
+    addresses = getattr(customer, "addresses", None)
+    if addresses is None:
+        return None
+    try:
+        rows = list(addresses.all())
+    except (AttributeError, TypeError):
+        rows = list(addresses) if isinstance(addresses, (list, tuple)) else []
+    return (
+        next((address for address in rows if getattr(address, "is_invoice", False)), None)
+        or next((address for address in rows if getattr(address, "is_shipping", False)), None)
+        or (rows[0] if rows else None)
     )
 
 
 def recipient_context(recipient: "NewsletterRecipient | None" = None) -> dict:
     """Builds the recipient/customer variables exposed to MJML templates."""
     empty_recipient = _empty_recipient_context()
+    has_recipient = recipient is not None
     recipient = recipient or empty_recipient
-    customer = getattr(recipient, "customer", None) or empty_recipient.customer
+    linked_customer = getattr(recipient, "customer", None) if has_recipient else None
+    customer = linked_customer or empty_recipient.customer
+    address = _preferred_customer_address(customer)
+    erp_nr = getattr(recipient, "erp_nr", "") or getattr(customer, "erp_nr", "")
+    street = getattr(address, "street", "") or getattr(recipient, "street", "")
+    zip_code = getattr(address, "postal_code", "") or getattr(recipient, "zip_code", "")
+    city = getattr(address, "city", "") or getattr(recipient, "city", "")
+    company = (
+        getattr(customer, "company", "")
+        or getattr(address, "company", "")
+        or getattr(customer, "name", "")
+    )
+    profile = SimpleNamespace(
+        erp_nr=erp_nr,
+        email=getattr(recipient, "email", ""),
+        title=getattr(recipient, "title", ""),
+        salutation_display_name=getattr(recipient, "salutation_display_name", ""),
+        salutation_letter_name=getattr(recipient, "salutation_letter_name", ""),
+        first_name=getattr(recipient, "first_name", ""),
+        last_name=getattr(recipient, "last_name", ""),
+        full_name=getattr(recipient, "full_name", ""),
+        company=company,
+        street=street,
+        zip_code=zip_code,
+        city=city,
+        postal_line=" ".join(part for part in (zip_code, city) if part).strip(),
+        phone=getattr(address, "phone", "") if address is not None else "",
+    )
+    is_customer = linked_customer is not None
     return {
         "recipient": recipient,
         "newsletter_recipient": recipient,
+        "recipient_profile": profile,
         "customer": customer,
-        "is_customer": bool(getattr(recipient, "is_customer", False)),
+        "customer_address": address,
+        "is_customer": is_customer,
+        "newsletter_asset_base_url": settings.NEWSLETTER_ASSET_BASE_URL,
+        "shopware_storefront_url": settings.NEWSLETTER_STOREFRONT_URL,
     }
 
 
@@ -304,6 +399,18 @@ def normalize_hyphenated_placeholders(markup: str) -> str:
         lambda match: f'{match.group(1)}__component_variables["{match.group(2)}"]',
         markup,
     )
+
+
+def normalize_legacy_recipient_placeholders(markup: str) -> str:
+    for legacy, replacement in _LEGACY_RECIPIENT_PLACEHOLDERS.items():
+        markup = markup.replace(legacy, replacement)
+    return markup
+
+
+def normalize_legacy_asset_urls(markup: str) -> str:
+    for legacy, replacement in _LEGACY_ASSET_URL_REPLACEMENTS.items():
+        markup = markup.replace(legacy, replacement)
+    return markup
 
 
 def insert_rendered_children(markup: str, children: str) -> str:
@@ -414,6 +521,9 @@ def _render_component_mjml(
 
     library_component = getattr(component, "library_component", None)
     rendering_mode = getattr(library_component, "rendering_mode", "jinja")
+    if rendering_mode == "jinja":
+        markup = normalize_legacy_recipient_placeholders(markup)
+        markup = normalize_legacy_asset_urls(markup)
     default_variables = (
         getattr(library_component, "default_variables", None) or {}
         if rendering_mode == "jinja"
@@ -473,9 +583,14 @@ def render_campaign_mjml(
 
         return build_simple_mjml(campaign, recipient=recipient)
     if getattr(campaign, "layout_mode", "components") == "visual":
-        from emails.visual_editor import render_visual_mjml
+        document = (campaign.editor_content or {}).get("visual_document")
+        if document:
+            from emails.visual_editor import render_visual_mjml
 
-        return render_visual_mjml((campaign.editor_content or {}).get("visual_document"), campaign=campaign, recipient=recipient)
+            return render_visual_mjml(document, campaign=campaign, recipient=recipient)
+        from emails.simple_editor import build_simple_mjml
+
+        return build_simple_mjml(campaign, recipient=recipient)
     sales_channel_ids = _campaign_sales_channel_ids(campaign)
 
     components = _campaign_components(campaign)
