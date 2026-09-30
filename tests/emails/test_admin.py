@@ -76,6 +76,51 @@ class TestEmailCampaignAdmin(SimpleTestCase):
         assert category_admin.search_fields == ("name",)
         assert category_admin.get_ordering(None) == ("name",)
 
+    def test_component_campaign_links_to_its_component_editor(self):
+        from django.contrib.admin.sites import AdminSite
+
+        from emails.admin import EmailCampaignAdmin
+        from emails.models import EmailCampaign
+
+        campaign_admin = EmailCampaignAdmin(EmailCampaign, AdminSite())
+        campaign = SimpleNamespace(
+            pk=42,
+            layout_mode=EmailCampaign.LayoutMode.COMPONENTS,
+            preview_recipient=SimpleNamespace(email="preview@example.com"),
+        )
+
+        list_link = str(campaign_admin.editor_link(campaign))
+        editor_actions = str(campaign_admin.simple_editor_link(campaign))
+
+        assert "/admin/emails/emailcampaign/42/change/" in list_link
+        assert "Komponenten" in list_link
+        assert "Diese Kampagne verwendet einen anderen Editor" not in editor_actions
+        assert "Kampagnen-Komponenten unterhalb" in editor_actions
+        assert "Komponenten bearbeiten" in editor_actions
+        assert "scrollToCampaignComponents()" in editor_actions
+        assert "Vorschau mit Empfänger öffnen" in editor_actions
+        assert "exportHtml(42)" in editor_actions
+        assert "preview@example.com" in editor_actions
+
+    def test_simple_campaign_editor_shows_selected_preview_recipient(self):
+        from django.contrib.admin.sites import AdminSite
+
+        from emails.admin import EmailCampaignAdmin
+        from emails.models import EmailCampaign
+
+        campaign_admin = EmailCampaignAdmin(EmailCampaign, AdminSite())
+        campaign = SimpleNamespace(
+            pk=7,
+            layout_mode=EmailCampaign.LayoutMode.SIMPLE,
+            preview_recipient=SimpleNamespace(email="simple@example.com"),
+        )
+
+        editor_actions = str(campaign_admin.simple_editor_link(campaign))
+
+        assert "/admin/emails/emailcampaign/7/editor/" in editor_actions
+        assert "Einfachen Editor öffnen" in editor_actions
+        assert "simple@example.com" in editor_actions
+
     def test_campaign_export_modal_has_copyable_mjml_output(self):
         template = Path("templates/admin/emails/emailcampaign/change_form.html").read_text(
             encoding="utf-8"
@@ -87,6 +132,9 @@ class TestEmailCampaignAdmin(SimpleTestCase):
         assert 'id="text-output"' in template
         assert "data.text" in template
         assert "function copyText()" in template
+        assert "function scrollToCampaignComponents()" in template
+        assert "Vorschau mit Empfänger" in template
+        assert "original.preview_recipient.email" in template
 
     def test_campaign_admin_shows_recipient_customer_context_info(self):
         from django.contrib.admin.sites import AdminSite

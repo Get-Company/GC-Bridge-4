@@ -727,18 +727,46 @@ class EmailCampaignAdmin(BaseAdmin):
     @admin.display(description=_("Editor"))
     def editor_link(self, obj):
         if obj.layout_mode not in {EmailCampaign.LayoutMode.SIMPLE, _LEGACY_VISUAL_LAYOUT}:
-            return "—"
+            url = reverse("admin:emails_emailcampaign_change", args=[obj.pk])
+            return format_html('<a href="{}">Komponenten</a>', url)
         url = reverse("admin:emails_emailcampaign_simple_editor", args=[obj.pk])
         return format_html('<a href="{}">Öffnen</a>', url)
 
-    @admin.display(description=_("E-Mail gestalten"))
+    @admin.display(description=_("Editor und Vorschau"))
     def simple_editor_link(self, obj):
         if not obj or not obj.pk:
             return "Nach dem Speichern öffnet sich der einfache Editor."
+        recipient_email = (
+            getattr(getattr(obj, "preview_recipient", None), "email", "")
+            or "Kein Vorschau-Empfänger gewählt"
+        )
         if obj.layout_mode not in {EmailCampaign.LayoutMode.SIMPLE, _LEGACY_VISUAL_LAYOUT}:
-            return "Diese Kampagne verwendet einen anderen Editor."
+            return format_html(
+                '<div style="display:grid;gap:8px">'
+                '<p style="margin:0">Diese Kampagne wird mit den '
+                "Kampagnen-Komponenten unterhalb bearbeitet.</p>"
+                '<div style="display:flex;align-items:center;flex-wrap:wrap;gap:8px">'
+                '<button type="button" class="button" '
+                'onclick="scrollToCampaignComponents()">Komponenten bearbeiten</button>'
+                '<button type="button" class="button" onclick="exportHtml({})">'
+                "Vorschau mit Empfänger öffnen</button>"
+                '<span style="color:#64748b">Vorschau mit: <strong>{}</strong></span>'
+                "</div>"
+                '<small style="color:#64748b">Nach einer Empfänger-Änderung '
+                "die Kampagne vor der Vorschau speichern.</small>"
+                "</div>",
+                obj.pk,
+                recipient_email,
+            )
         url = reverse("admin:emails_emailcampaign_simple_editor", args=[obj.pk])
-        return format_html('<a class="button" href="{}">Einfachen Editor öffnen →</a>', url)
+        return format_html(
+            '<div style="display:flex;align-items:center;flex-wrap:wrap;gap:8px">'
+            '<a class="button" href="{}">Einfachen Editor öffnen →</a>'
+            '<span style="color:#64748b">Vorschau mit: <strong>{}</strong></span>'
+            "</div>",
+            url,
+            recipient_email,
+        )
 
     def get_queryset(self, request):
         return (
