@@ -900,7 +900,7 @@ UNFOLD = {
                         "permission": sidebar_model_view_permission("organization", "OrganizationRole"),
                     },
                     {
-                        "title": _("Telefon-Zeitsteuerung"),
+                        "title": _("Zeitsteuerung"),
                         "icon": "schedule",
                         "link": reverse_lazy("admin:telefon_zeitsteuerung_list"),
                     },
