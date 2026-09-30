@@ -55,7 +55,10 @@ class ZeitsteuerungListView(TelefonAdminViewMixin, TemplateView):
             "warnings": [],
             "chain": [],
             "detached": [],
+            "display_chain": [],
+            "display_detached": [],
             "node_count": 0,
+            "technical_node_count": 0,
             "destination_options": [],
             "weekdays": [],
         }
@@ -87,6 +90,12 @@ class ZeitsteuerungEditorActionView(TelefonAdminViewMixin, View):
         try:
             if action == "update_node":
                 result = service.update_editor_node(str(payload.get("service_id") or ""), payload)
+            elif action == "update_partial_day_node":
+                result = service.update_partial_day_node(
+                    str(payload.get("service_id") or ""),
+                    str(payload.get("window_service_id") or ""),
+                    payload,
+                )
             elif action == "insert_node":
                 result = service.insert_editor_node(payload)
             else:

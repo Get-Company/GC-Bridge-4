@@ -24,7 +24,10 @@
         </div>
         <div class="tc-live-badge">
             <span class="material-symbols-outlined">cloud_done</span>
-            <span>Live aus NFON · <strong data-node-count>{{ services|length }}</strong> Nodes</span>
+            <span>
+                Live aus NFON · <strong data-node-count>{{ editor_state.node_count }}</strong> Regeln
+                <small>(<span data-technical-node-count>{{ editor_state.technical_node_count }}</span> NFON-Nodes intern)</small>
+            </span>
         </div>
     </header>
 

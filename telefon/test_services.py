@@ -340,6 +340,15 @@ def test_editor_state_recognizes_partial_day_gate_as_connected_chain():
     assert state["chain"][0]["next_relation"] == "destinationIfDenied"
     assert state["chain"][0]["bypass_id"] == "19"
     assert state["chain"][0]["bypass_relation"] == "destinationIfAllowed"
+    assert [node["id"] for node in state["display_chain"]] == ["20", "19"]
+    assert state["display_chain"][0]["is_partial_day"] is True
+    assert state["display_chain"][0]["technical_ids"] == ["20", "30"]
+    assert state["display_chain"][0]["window_service_id"] == "30"
+    assert state["display_chain"][0]["from_time"] == "07:45"
+    assert state["display_chain"][0]["to_time"] == "12:00"
+    assert state["display_chain"][0]["insert_after_id"] == "30"
+    assert state["node_count"] == 2
+    assert state["technical_node_count"] == 3
     assert not any("verzweigt" in warning for warning in state["warnings"])
 
 
@@ -595,6 +604,89 @@ def test_configure_partial_day_node_moves_announcement_to_matching_time_window()
     assert gate_data["referralDenied"] == ["Aug 08, 2026"]
     assert gate_links["destinationIfAllowed"].endswith("/time-control-services/19")
     assert gate_links["destinationIfDenied"].endswith("/time-control-services/30")
+
+
+def test_update_partial_day_node_updates_logical_rule_across_both_services():
+    class PartialDayUpdateFakeClient:
+        def __init__(self):
+            self.collection = "/api/customers/customer/targets/time-control-services"
+            self.ivr_href = "/api/customers/customer/targets/ivr-services/17"
+            self.gate = _time_control("20", "006 Vormittags", next_id="19")
+            self.gate["links"][0] = {
+                "rel": "destinationIfDenied",
+                "href": f"{self.collection}/30",
+            }
+            next(item for item in self.gate["data"] if item["name"] == "referralDenied")["value"] = [
+                "Aug 08, 2026"
+            ]
+            self.window = _time_control("30", "006 Vormittags · Zeitfenster", next_id="19")
+            self.window["links"] = [
+                {"rel": "destinationIfAllowed", "href": self.ivr_href},
+                {"rel": "destinationIfDenied", "href": f"{self.collection}/19"},
+            ]
+            self.put_calls = []
+
+        def get(self, path):
+            if path == f"{self.collection}/20":
+                return FakeResponse(self.gate)
+            if path == f"{self.collection}/30":
+                return FakeResponse(self.window)
+            if path == f"{self.collection}/available-destinations":
+                return FakeResponse({"items": [], "links": []})
+            if path == "/api/customers/customer/targets/ivr-services":
+                return FakeResponse(
+                    {
+                        "items": [
+                            {
+                                "href": self.ivr_href,
+                                "data": [{"name": "displayName", "value": "Ansage Vormittags"}],
+                            }
+                        ],
+                        "links": [],
+                    }
+                )
+            raise AssertionError(f"Unexpected GET {path}")
+
+        def put(self, path, body):
+            payload = json.loads(body.decode("utf-8"))
+            self.put_calls.append((path, payload))
+            return FakeResponse(status_code=204)
+
+    client = PartialDayUpdateFakeClient()
+    service = NfonTimeControlService(client=client, customer_id="customer")
+
+    result = service.update_partial_day_node(
+        "20",
+        "30",
+        {
+            "name": "006 Vormittags Spezial",
+            "date_mode": "single",
+            "dates": ["2026-08-09T08:00"],
+            "from_time": "08:00",
+            "to_time": "11:30",
+            "outcome_relation": "destinationIfAllowed",
+            "outcome_href": client.ivr_href,
+        },
+    )
+
+    assert result["dates"] == ["Aug 09, 2026"]
+    assert [path for path, _payload in client.put_calls] == [
+        f"{client.collection}/30",
+        f"{client.collection}/20",
+    ]
+    window_payload = client.put_calls[0][1]
+    window_data = {item["name"]: item["value"] for item in window_payload["data"]}
+    assert window_data["displayName"] == "006 Vormittags Spezial · Zeitfenster"
+    assert window_data["fromTimeOfDay"] == "08:00 AM"
+    assert window_data["toTimeOfDay"] == "11:30 AM"
+    assert window_data["referralDenied"] == []
+
+    gate_payload = client.put_calls[1][1]
+    gate_data = {item["name"]: item["value"] for item in gate_payload["data"]}
+    assert gate_data["displayName"] == "006 Vormittags Spezial"
+    assert gate_data["fromTimeOfDay"] == "12:00 AM"
+    assert gate_data["toTimeOfDay"] == "11:59 PM"
+    assert gate_data["referralDenied"] == ["Aug 09, 2026"]
 
 
 def test_insert_node_rolls_back_created_service_if_predecessor_rewire_fails():

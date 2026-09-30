@@ -104,6 +104,9 @@
     }
 
     function formatWindow(node) {
+        if (node.is_partial_day) {
+            return node.from_time + "–" + node.to_time + " Uhr";
+        }
         const fromDay = weekdayLabels[node.from_day] || node.from_day;
         const toDay = weekdayLabels[node.to_day] || node.to_day;
         const days = fromDay === toDay ? fromDay : fromDay + "–" + toDay;
@@ -227,7 +230,8 @@
     function updateActiveNodeHighlight() {
         const activeId = activeNodeId();
         page.querySelectorAll(".tc-node[data-node-id]").forEach(function (element) {
-            const isActive = activeId !== "" && element.dataset.nodeId === activeId;
+            const memberIds = String(element.dataset.nodeIds || element.dataset.nodeId || "").split(",");
+            const isActive = activeId !== "" && memberIds.indexOf(activeId) !== -1;
             element.classList.toggle("tc-node-active", isActive);
             if (isActive) {
                 element.setAttribute("aria-current", "true");
@@ -318,12 +322,23 @@
         const nextName = node.next_id ? "Node " + node.next_id : "Endziel";
         const editorId = "tc-editor-" + node.id;
         const outcome = node.outcomes && node.outcomes.length ? node.outcomes[0] : null;
+        const memberIds = node.technical_ids || [node.id];
+        const technicalLabel = node.is_partial_day
+            ? "NFON IDs " + memberIds.join(" + ") + " · technisch gekoppelt"
+            : "NFON ID " + node.id;
+        const nodeClass = node.is_partial_day ? " tc-node-compound" : "";
+        const windowLabel = node.is_partial_day ? "Gültige Uhrzeit" : "Zeitfenster";
+        const dateLabel = node.is_partial_day ? "Gültiges Datum" : "Auslösedaten";
+        const weekdayFields = node.is_partial_day ? "" : [
+            '      <label class="tc-field"><span>Von Wochentag</span><select name="from_day">' + weekdayOptions(node.from_day) + "</select></label>",
+            '      <label class="tc-field"><span>Bis Wochentag</span><select name="to_day">' + weekdayOptions(node.to_day) + "</select></label>",
+        ].join("");
         return [
-            '<article class="tc-node' + (detached ? " tc-node-detached" : "") + '" data-node-id="' + escapeHtml(node.id) + '">',
+            '<article class="tc-node' + nodeClass + (detached ? " tc-node-detached" : "") + '" data-node-id="' + escapeHtml(node.id) + '" data-node-ids="' + escapeHtml(memberIds.join(",")) + '" data-window-service-id="' + escapeHtml(node.window_service_id || "") + '">',
             '  <div class="tc-node-head">',
             '    <div class="tc-node-title">',
             '      <span class="tc-node-index">' + (detached ? "!" : index + 1) + "</span>",
-            "      <div><h3>" + escapeHtml(node.name) + '</h3><span class="tc-node-id">NFON ID ' + escapeHtml(node.id) + "</span></div>",
+            "      <div><div class=\"tc-node-heading-line\"><h3>" + escapeHtml(node.name) + "</h3>" + (node.is_partial_day ? '<span class="tc-compound-badge"><span class="material-symbols-outlined">join_inner</span>Datum + Uhrzeit</span>' : "") + '</div><span class="tc-node-id">' + escapeHtml(technicalLabel) + "</span></div>",
             "    </div>",
             '    <div class="tc-node-actions">',
             '      <span class="tc-active-badge" data-active-badge hidden><span class="material-symbols-outlined">phone_in_talk</span>Jetzt aktiv</span>',
@@ -331,15 +346,15 @@
             "    </div>",
             "  </div>",
             '  <div class="tc-node-summary">',
-            '    <div class="tc-summary-cell"><span class="tc-summary-label">Zeitfenster</span><span class="tc-summary-value">' + escapeHtml(formatWindow(node)) + "</span></div>",
-            '    <div class="tc-summary-cell"><span class="tc-summary-label">Auslösedaten</span><div class="tc-date-list">' + dateMarkup(node) + "</div></div>",
+            '    <div class="tc-summary-cell"><span class="tc-summary-label">' + escapeHtml(dateLabel) + '</span><div class="tc-date-list">' + dateMarkup(node) + "</div></div>",
+            '    <div class="tc-summary-cell"><span class="tc-summary-label">' + escapeHtml(windowLabel) + '</span><span class="tc-summary-value">' + escapeHtml(formatWindow(node)) + "</span></div>",
             '    <div class="tc-summary-cell"><span class="tc-summary-label">Ansage / Ziel</span><span class="tc-summary-value">' + escapeHtml(outcomeText(node)) + "</span></div>",
             "  </div>",
             '  <form class="tc-node-editor" data-edit-form id="' + escapeHtml(editorId) + '" hidden>',
             '    <div class="tc-form-grid">',
+            node.is_partial_day ? '      <div class="tc-compound-note tc-field-wide"><span class="material-symbols-outlined">join_inner</span><span>Eine fachliche Spezial-Node. Datum und Uhrzeit werden gemeinsam bearbeitet und intern auf zwei verbundene NFON-Nodes verteilt.</span></div>' : "",
             '      <label class="tc-field tc-field-wide"><span>Name</span><input name="name" maxlength="160" required value="' + escapeHtml(node.name) + '"></label>',
-            '      <label class="tc-field"><span>Von Wochentag</span><select name="from_day">' + weekdayOptions(node.from_day) + "</select></label>",
-            '      <label class="tc-field"><span>Bis Wochentag</span><select name="to_day">' + weekdayOptions(node.to_day) + "</select></label>",
+            weekdayFields,
             '      <label class="tc-field"><span>Von Uhrzeit</span><input type="time" name="from_time" required value="' + escapeHtml(node.from_time) + '"></label>',
             '      <label class="tc-field"><span>Bis Uhrzeit</span><input type="time" name="to_time" required value="' + escapeHtml(node.to_time) + '"></label>',
             dateSelectorMarkup(node.denied_dates || [], node.from_time),
@@ -461,8 +476,9 @@
                 const data = new FormData(form);
                 const button = form.querySelector("button[type=submit]");
                 postAction(Object.assign({
-                    action: "update_node",
+                    action: node.dataset.windowServiceId ? "update_partial_day_node" : "update_node",
                     service_id: node.dataset.nodeId,
+                    window_service_id: node.dataset.windowServiceId,
                     name: data.get("name"),
                     from_day: data.get("from_day"),
                     from_time: data.get("from_time"),
@@ -488,12 +504,15 @@
     }
 
     function render() {
-        const chain = state.chain || [];
-        const detached = state.detached || [];
+        const chain = state.display_chain || state.chain || [];
+        const detached = state.display_detached || state.detached || [];
         countElement.textContent = String(state.node_count || chain.length + detached.length);
+        const technicalCount = page.querySelector("[data-technical-node-count]");
+        if (technicalCount) technicalCount.textContent = String(state.technical_node_count || state.node_count || chain.length + detached.length);
         chainElement.innerHTML = chain.map(function (node, index) {
             const canInsert = index < chain.length - 1;
-            return '<div class="tc-node-wrap">' + nodeMarkup(node, index, false) + (canInsert ? '<button type="button" class="tc-insert-between" data-insert-after="' + escapeHtml(node.id) + '" title="Hier Node einfügen" aria-label="Hier Node einfügen"><span class="tc-insert-plus" aria-hidden="true">+</span></button>' : "") + "</div>";
+            const insertAfterId = node.insert_after_id || node.id;
+            return '<div class="tc-node-wrap">' + nodeMarkup(node, index, false) + (canInsert ? '<button type="button" class="tc-insert-between" data-insert-after="' + escapeHtml(insertAfterId) + '" title="Hier Node einfügen" aria-label="Hier Node einfügen"><span class="tc-insert-plus" aria-hidden="true">+</span></button>' : "") + "</div>";
         }).join("") || '<p class="tc-intro">Keine Zeitsteuerungen aus NFON geladen.</p>';
         detachedSection.hidden = !detached.length;
         detachedGrid.innerHTML = detached.map(function (node, index) {
@@ -543,8 +562,9 @@
 
     page.querySelector("[data-window-mode]").addEventListener("change", updateWindowFields);
     page.querySelector("[data-add-at-end]").addEventListener("click", function () {
-        const chain = state.chain || [];
-        openInsertDialog(chain.length ? chain[chain.length - 1].id : "");
+        const chain = state.display_chain || state.chain || [];
+        const lastNode = chain.length ? chain[chain.length - 1] : null;
+        openInsertDialog(lastNode ? (lastNode.insert_after_id || lastNode.id) : "");
     });
     page.querySelectorAll("[data-dialog-close]").forEach(function (button) {
         button.addEventListener("click", function () { dialog.close(); });

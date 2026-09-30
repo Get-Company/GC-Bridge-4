@@ -115,10 +115,12 @@ class NfonTimeControlService(BaseService):
             chain_links = time_control_links
             node["bypass_id"] = None
             node["bypass_relation"] = None
+            node["partial_day_window_id"] = None
             if partial_day_route:
                 chain_links = [partial_day_route["window_link"]]
                 node["bypass_id"] = partial_day_route["continuation_link"]["id"]
                 node["bypass_relation"] = partial_day_route["continuation_link"]["rel"]
+                node["partial_day_window_id"] = partial_day_route["window_link"]["id"]
 
             node["next_ids"] = [destination["id"] for destination in chain_links]
             node["next_id"] = node["next_ids"][0] if len(node["next_ids"]) == 1 else None
@@ -214,6 +216,9 @@ class NfonTimeControlService(BaseService):
                 if destination["kind"] != "time-control-services"
             ]
 
+        display_chain = self._collapse_partial_day_nodes(chain, nodes_by_id)
+        display_detached = self._collapse_partial_day_nodes(detached, nodes_by_id)
+
         return {
             "ok": not warnings,
             "chain_complete": bool(chain) and stopped_at is None and not detached,
@@ -221,9 +226,12 @@ class NfonTimeControlService(BaseService):
             "warnings": warnings,
             "chain": chain,
             "detached": detached,
+            "display_chain": display_chain,
+            "display_detached": display_detached,
             "roots": [root["id"] for root in roots],
             "main_root_id": main_root["id"] if main_root else None,
-            "node_count": len(nodes),
+            "node_count": len(display_chain) + len(display_detached),
+            "technical_node_count": len(nodes),
             "destination_options": destination_options,
             "weekdays": list(self.WEEKDAYS),
             "time_zone": settings.TIME_ZONE,
@@ -403,6 +411,112 @@ class NfonTimeControlService(BaseService):
         return {
             "service_id": service_id,
             "window_service_id": window_service["id"],
+            "dates": dates,
+            "from_time": from_time,
+            "to_time": to_time,
+        }
+
+    def update_partial_day_node(
+        self,
+        service_id: str,
+        window_service_id: str,
+        values: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Update a logical partial-day rule while preserving its two NFON services."""
+        gate = self._fetch_time_control(service_id)
+        window = self._fetch_time_control(window_service_id)
+        serialized_gate = self._serialize_editor_node(gate)
+        serialized_window = self._serialize_editor_node(window)
+        route = self._partial_day_routes(
+            {
+                serialized_gate["id"]: serialized_gate,
+                serialized_window["id"]: serialized_window,
+            }
+        ).get(serialized_gate["id"])
+        if route is None or route["window_link"]["id"] != serialized_window["id"]:
+            raise ValueError(
+                "Die Spezial-Node besteht nicht mehr aus dem erwarteten Datums- und Zeitfenster-Paar."
+            )
+
+        name = self._required_text(values.get("name"), "Name")
+        dates = self._normalize_date_selection(values)
+        if not dates:
+            raise ValueError("Mindestens ein Auslösedatum ist erforderlich.")
+        from_time, to_time = self._window_times("custom", values)
+
+        outcome_relation = str(values.get("outcome_relation") or "")
+        outcome_link = next(
+            (
+                link
+                for link in window.get("links", [])
+                if link.get("rel") == outcome_relation and link.get("href")
+            ),
+            None,
+        )
+        if (
+            outcome_relation not in self.DESTINATION_RELS
+            or outcome_link is None
+            or self._target_from_href(outcome_link["href"])["kind"] == "time-control-services"
+        ):
+            raise ValueError("Das Ziel der Spezial-Node konnte nicht eindeutig zugeordnet werden.")
+        outcome_href = self._validate_destination_href(values.get("outcome_href"))
+
+        window_payload = self._payload_with_updates(
+            window,
+            data_updates={
+                "name": f"{name} · Zeitfenster",
+                "displayName": f"{name} · Zeitfenster",
+                "fromDay": "MONDAY",
+                "fromTimeOfDay": self._format_api_time(from_time),
+                "toDay": "SUNDAY",
+                "toTimeOfDay": self._format_api_time(to_time),
+                "referralAllowed": [],
+                "referralDenied": [],
+            },
+            link_updates={outcome_relation: outcome_href},
+        )
+        gate_payload = self._payload_with_updates(
+            gate,
+            data_updates={
+                "name": name,
+                "displayName": name,
+                "fromDay": "MONDAY",
+                "fromTimeOfDay": self._format_api_time("00:00"),
+                "toDay": "SUNDAY",
+                "toTimeOfDay": self._format_api_time("23:59"),
+                "referralAllowed": [],
+                "referralDenied": dates,
+            },
+        )
+
+        window_response = self.client.put(
+            self._detail_path(window_service_id),
+            json.dumps(window_payload).encode("utf-8"),
+        )
+        if window_response.status_code >= 300:
+            raise ValueError(self._format_error_response(window_response))
+
+        gate_response = self.client.put(
+            self._detail_path(service_id),
+            json.dumps(gate_payload).encode("utf-8"),
+        )
+        if gate_response.status_code >= 300:
+            try:
+                rollback_payload = self._build_writable_payload(
+                    window,
+                    [dict(item) for item in window.get("data", [])],
+                )
+                self.client.put(
+                    self._detail_path(window_service_id),
+                    json.dumps(rollback_payload).encode("utf-8"),
+                )
+            except Exception:
+                pass
+            raise ValueError(self._format_error_response(gate_response))
+
+        return {
+            "service_id": service_id,
+            "window_service_id": window_service_id,
             "dates": dates,
             "from_time": from_time,
             "to_time": to_time,
@@ -640,6 +754,48 @@ class NfonTimeControlService(BaseService):
                 }
                 break
         return routes
+
+    @staticmethod
+    def _collapse_partial_day_nodes(
+        nodes: list[dict[str, Any]],
+        nodes_by_id: dict[str, dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Expose a date-gate/time-window pair as one logical editor node."""
+        window_ids = {
+            str(node["partial_day_window_id"])
+            for node in nodes
+            if node.get("partial_day_window_id")
+        }
+        collapsed: list[dict[str, Any]] = []
+        for node in nodes:
+            if str(node["id"]) in window_ids:
+                continue
+
+            window_id = node.get("partial_day_window_id")
+            window = nodes_by_id.get(str(window_id)) if window_id else None
+            if window is None:
+                collapsed.append(dict(node))
+                continue
+
+            logical_node = dict(node)
+            logical_node.update(
+                {
+                    "is_partial_day": True,
+                    "technical_ids": [node["id"], window["id"]],
+                    "window_service_id": window["id"],
+                    "from_day": window["from_day"],
+                    "from_time": window["from_time"],
+                    "to_day": window["to_day"],
+                    "to_time": window["to_time"],
+                    "outcomes": window.get("outcomes", []),
+                    "next_ids": window.get("next_ids", []),
+                    "next_id": window.get("next_id"),
+                    "next_relation": window.get("next_relation"),
+                    "insert_after_id": window["id"],
+                }
+            )
+            collapsed.append(logical_node)
+        return collapsed
 
     @classmethod
     def _format_html_time(cls, value: str) -> str:
