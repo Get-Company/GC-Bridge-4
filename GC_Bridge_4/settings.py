@@ -372,6 +372,7 @@ CELERY_TASK_ROUTES = {
     # one bulk worker.
     "products.*": {"queue": "bulk"},
     "shopware.*": {"queue": "bulk"},
+    "emails.sync_due_campaign_prices_to_shopware": {"queue": "bulk"},
     "bulk.*": {"queue": "bulk"},
 }
 CELERY_BEAT_SCHEDULE = {
@@ -389,6 +390,11 @@ CELERY_BEAT_SCHEDULE = {
         "task": "microtech.monitor_worker_health",
         "schedule": 120.0,
         "options": {"queue": "microtech"},
+    },
+    "email-campaign-prices-to-shopware-every-minute": {
+        "task": "emails.sync_due_campaign_prices_to_shopware",
+        "schedule": 60.0,
+        "options": {"queue": "bulk"},
     },
 }
 CELERY_IMPORTS = ("core.tasks", "newsletter.tasks", "microtech.tasks", "products.tasks")

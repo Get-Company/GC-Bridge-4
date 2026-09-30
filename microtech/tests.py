@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 
+from emails.models import EmailCampaign, EmailCampaignPriceState
 from microtech.management.commands.microtech_sync_products import (
     Command as MicrotechSyncProductsCommand,
     _to_int,
@@ -500,6 +501,76 @@ class MicrotechSyncProductsCommandTest(TestCase):
         price = Price.objects.get(product=product, sales_channel=self.default_channel)
         self.assertEqual(price.rebate_quantity, 10)
         self.assertEqual(price.rebate_price, Decimal("95.00"))
+
+    def test_microtech_import_preserves_campaign_owned_special_price(self):
+        product = Product.objects.create(
+            erp_nr="1004-campaign",
+            name="Kampagnenartikel",
+            tax=self.tax_19,
+        )
+        start = timezone.now() + timedelta(days=2)
+        end = start + timedelta(days=30)
+        price = Price.objects.create(
+            product=product,
+            sales_channel=self.default_channel,
+            price=Decimal("100.00"),
+            special_price=Decimal("90.00"),
+            special_start_date=start,
+            special_end_date=end,
+        )
+        campaign = EmailCampaign.objects.create(internal_title="Oktober")
+        EmailCampaignPriceState.objects.create(
+            campaign=campaign,
+            product=product,
+            price_snapshot=[],
+        )
+
+        MicrotechSyncProductsCommand._save_microtech_price(
+            product=product,
+            sales_channel=self.default_channel,
+            price=Decimal("100.00"),
+            rebate_quantity=None,
+            rebate_price=None,
+            special_price=None,
+            special_start_date=None,
+            special_end_date=None,
+        )
+
+        price.refresh_from_db()
+        self.assertEqual(price.special_price, Decimal("90.00"))
+        self.assertEqual(price.special_start_date, start)
+        self.assertEqual(price.special_end_date, end)
+
+    def test_microtech_import_can_clear_unowned_special_price(self):
+        product = Product.objects.create(
+            erp_nr="1004-unowned",
+            name="Normaler Artikel",
+            tax=self.tax_19,
+        )
+        price = Price.objects.create(
+            product=product,
+            sales_channel=self.default_channel,
+            price=Decimal("100.00"),
+            special_price=Decimal("90.00"),
+            special_start_date=timezone.now() - timedelta(days=1),
+            special_end_date=timezone.now() + timedelta(days=1),
+        )
+
+        MicrotechSyncProductsCommand._save_microtech_price(
+            product=product,
+            sales_channel=self.default_channel,
+            price=Decimal("100.00"),
+            rebate_quantity=None,
+            rebate_price=None,
+            special_price=None,
+            special_start_date=None,
+            special_end_date=None,
+        )
+
+        price.refresh_from_db()
+        self.assertIsNone(price.special_price)
+        self.assertIsNone(price.special_start_date)
+        self.assertIsNone(price.special_end_date)
 
     def test_sync_changed_rebate_quantity_writes_history_entry(self):
         cmd = MicrotechSyncProductsCommand()

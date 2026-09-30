@@ -124,6 +124,21 @@ class Command(MonitoredBaseCommand):
         if price_entry is None:
             price_entry = Price(product=product, sales_channel=sales_channel)
 
+        # Newsletter campaigns own their special-price window until the
+        # campaign removes/releases the product. A Microtech read can race the
+        # preceding outbound price write and must not erase that local intent.
+        from emails.models import EmailCampaignPriceState
+
+        campaign_owns_special = (
+            price_entry.pk is not None
+            and price_entry.special_price is not None
+            and EmailCampaignPriceState.objects.filter(product_id=product.pk).exists()
+        )
+        if campaign_owns_special and price_entry.pk:
+            special_price = price_entry.special_price
+            special_start_date = price_entry.special_start_date
+            special_end_date = price_entry.special_end_date
+
         # Während eines Sonderpreises wird die Staffel bewusst aus Microtech
         # entfernt. Sie bleibt in Django als Wiederherstellungswert erhalten und
         # darf beim naechsten Microtech-Import nicht verloren gehen.

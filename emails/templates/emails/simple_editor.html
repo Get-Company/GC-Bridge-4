@@ -1,4 +1,4 @@
-{% load static %}
+{% load l10n static %}
 <!doctype html>
 <html lang="de">
 <head>
@@ -101,9 +101,9 @@
               <option value="percent" {% if item.discount_pct %}selected{% endif %}>Rabatt %</option>
             </select></div>
           <div><label for="value-{{ item.pk }}">Wert</label>
-            <input id="value-{{ item.pk }}" data-price-value type="number" min="0.01" step="0.01" value="{% if item.special_price_override %}{{ item.special_price_override }}{% elif item.discount_pct %}{{ item.discount_pct }}{% endif %}" placeholder="z. B. 19,95"></div>
+            <input id="value-{{ item.pk }}" data-price-value type="number" min="0.01" step="0.01" value="{% if item.special_price_override %}{{ item.special_price_override|unlocalize }}{% elif item.discount_pct %}{{ item.discount_pct|unlocalize }}{% endif %}" placeholder="z. B. 19,95"></div>
         </div>
-        <small>Beim Speichern wird die Preissynchronisierung per Signal eingeplant. Der Worker überträgt anschließend an microtech und SW6. Der Aktionspreis gilt ab dem Sendedatum bis zum Ende des Folgemonats.</small>
+        <small>microtech erhält den Sonderpreis nach dem Speichern mit seinem Gültigkeitszeitraum. SW6 wird zum Sendedatum aktiviert und nach Ende des Folgemonats wieder auf den Normalpreis gesetzt.</small>
         <button class="add-heading" data-add-heading data-after-product="{{ item.pk }}" type="button">+ Zwischenüberschrift danach</button>
       </section>
       {% endfor %}

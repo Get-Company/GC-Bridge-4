@@ -137,6 +137,19 @@ class EmailCampaign(BaseModel):
             "Dieser Newsletter-Empfänger liefert die Platzhalterdaten für Vorschau und Export."
         ),
     )
+    shopware_price_activation_fingerprint = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        editable=False,
+        verbose_name=_("SW6-Preisaktivierung"),
+    )
+    shopware_prices_activated_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        editable=False,
+        verbose_name=_("SW6-Preise aktiviert am"),
+    )
 
     class Meta:
         verbose_name = _("E-Mail-Kampagne")
