@@ -140,58 +140,6 @@
                     </div>
                 {% endif %}
             {% endcomponent %}
-
-            {% component "unfold/components/card.html" with title="Preisauffälligkeiten seit der letzten Preiserhöhung" %}
-                {% component "unfold/components/text.html" with class="mt-2 mb-4" %}
-                    Normal- und Staffelpreise werden mit den Zielwerten der zuletzt übernommenen Preiserhöhung verglichen.
-                {% endcomponent %}
-
-                {% if price_anomaly_warning %}
-                    <p class="text-sm text-gray-500 dark:text-gray-400">{{ price_anomaly_warning }}</p>
-                {% elif not price_anomaly_count %}
-                    <p class="text-sm text-green-700 dark:text-green-300">Keine Preisauffälligkeiten gefunden.</p>
-                {% else %}
-                    {% component "unfold/components/table.html" with table=price_anomalies_table striped=1 %}
-                    {% endcomponent %}
-                    {% if price_anomaly_count > price_anomaly_row_limit %}
-                        <p class="mt-3 text-xs text-gray-500 dark:text-gray-400">Es werden die ersten {{ price_anomaly_row_limit }} von {{ price_anomaly_count }} Hinweisen angezeigt.</p>
-                    {% endif %}
-                {% endif %}
-            {% endcomponent %}
         </section>
-
-        {% component "unfold/components/card.html" with title="Aktuelle offene Bestellungen" %}
-            {% component "unfold/components/title.html" %}
-                {{ open_orders_count }} offene Bestellungen
-            {% endcomponent %}
-
-            {% component "unfold/components/text.html" with class="mt-2 mb-4" %}
-                Sortierung nach Bestelldatum absteigend. Es werden offene Bestellungen angezeigt.
-            {% endcomponent %}
-
-            {% component "unfold/components/table.html" with table=open_orders_table striped=1 %}
-            {% endcomponent %}
-        {% endcomponent %}
-
-        {% component "unfold/components/card.html" with title="Aktuelle Sonderangebote" %}
-            {% component "unfold/components/title.html" %}
-                {{ discounted_articles_count }} aktive Sonderpreise
-            {% endcomponent %}
-
-            {% component "unfold/components/text.html" with class="mt-2 mb-4" %}
-                Sortierung nach Sonderpreis-Enddatum (special_end_date).
-            {% endcomponent %}
-
-            {% component "unfold/components/table.html" with table=discounted_articles_table striped=1 %}
-            {% endcomponent %}
-        {% endcomponent %}
-
-        <div class="flex flex-col lg:flex-row lg:gap-8">
-            <div class="grow">
-                {% include "unfold/helpers/app_list_default.html" %}
-            </div>
-
-            {% include "unfold/helpers/history.html" %}
-        </div>
     </div>
 {% endblock %}
