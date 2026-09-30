@@ -59,6 +59,10 @@
                 <dd class="inline font-medium">{{ instance.customer.erp_nr|default:"-" }}</dd>
             </div>
             <div>
+                <dt class="inline text-gray-400 dark:text-gray-500">PayPal ID:</dt>
+                <dd class="inline font-mono break-all">{{ instance.paypal_id|default:"-" }}</dd>
+            </div>
+            <div>
                 <dt class="inline text-gray-400 dark:text-gray-500">PayPal Transaktions-ID:</dt>
                 <dd class="inline font-mono break-all">{{ instance.paypal_transaction_id|default:"-" }}</dd>
             </div>

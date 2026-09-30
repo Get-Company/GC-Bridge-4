@@ -379,7 +379,10 @@ class OrderSyncWorkflowEnqueueTest(SimpleTestCase):
             "transactions": [
                 {
                     "id": "transaction-1",
-                    "customFields": {"swag_paypal_transaction_id": "paypal-transaction-1"},
+                    "customFields": {
+                        "swag_paypal_resource_id": "paypal-resource-1",
+                        "swag_paypal_transaction_id": "paypal-transaction-1",
+                    },
                 }
             ],
             "lineItems": [],
@@ -395,7 +398,7 @@ class OrderSyncWorkflowEnqueueTest(SimpleTestCase):
             patch(
                 "orders.services.order_sync.Order.objects.update_or_create",
                 return_value=(order, True),
-            ),
+            ) as update_or_create,
             patch(
                 "orders.services.order_sync_workflow.OrderSyncWorkflowService.ensure_pending_for_order",
                 return_value=(workflow, True),
@@ -413,16 +416,36 @@ class OrderSyncWorkflowEnqueueTest(SimpleTestCase):
         ensure_pending.assert_not_called()
         on_commit.assert_not_called()
         self.assertEqual(
-            Order.objects.update_or_create.call_args.kwargs["defaults"]["paypal_transaction_id"],
+            update_or_create.call_args.kwargs["defaults"]["paypal_id"],
+            "paypal-resource-1",
+        )
+        self.assertEqual(
+            update_or_create.call_args.kwargs["defaults"]["paypal_transaction_id"],
             "paypal-transaction-1",
         )
 
-    def test_paypal_transaction_id_falls_back_to_paypal_order_reference(self):
-        transaction_id = OrderSyncService._paypal_transaction_id(
-            {"customFields": {"swag_paypal_order_id": "paypal-order-1"}}
-        )
+    def test_paypal_id_and_transaction_id_are_kept_separate(self):
+        payment_transaction = {
+            "customFields": {
+                "swag_paypal_resource_id": "paypal-resource-1",
+                "swag_paypal_transaction_id": "paypal-transaction-1",
+            }
+        }
 
-        self.assertEqual(transaction_id, "paypal-order-1")
+        paypal_id = OrderSyncService._paypal_id(payment_transaction)
+        transaction_id = OrderSyncService._paypal_transaction_id(payment_transaction)
+
+        self.assertEqual(paypal_id, "paypal-resource-1")
+        self.assertEqual(transaction_id, "paypal-transaction-1")
+
+    def test_paypal_order_id_is_not_mistaken_for_report_id(self):
+        payment_transaction = {"customFields": {"swag_paypal_order_id": "paypal-order-1"}}
+
+        paypal_id = OrderSyncService._paypal_id(payment_transaction)
+        transaction_id = OrderSyncService._paypal_transaction_id(payment_transaction)
+
+        self.assertEqual(paypal_id, "")
+        self.assertEqual(transaction_id, "")
 
 
 class OrderProductNumberResolutionTest(TestCase):

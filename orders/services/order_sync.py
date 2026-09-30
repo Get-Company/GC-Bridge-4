@@ -73,10 +73,8 @@ NEW_ORDER_TRANSITION = "process"
 NEW_ORDER_TO_STATE = "in_progress"
 
 
-PAYPAL_TRANSACTION_ID_CUSTOM_FIELDS = (
-    "swag_paypal_transaction_id",
-    "swag_paypal_order_id",
-)
+PAYPAL_ID_CUSTOM_FIELD = "swag_paypal_resource_id"
+PAYPAL_TRANSACTION_ID_CUSTOM_FIELD = "swag_paypal_transaction_id"
 
 
 class OrderSyncService(BaseService):
@@ -169,6 +167,7 @@ class OrderSyncService(BaseService):
         order_defaults = {
             "api_delivery_id": _to_str(delivery.get("id")),
             "api_transaction_id": _to_str(payment_transaction.get("id")),
+            "paypal_id": self._paypal_id(payment_transaction),
             "paypal_transaction_id": self._paypal_transaction_id(payment_transaction),
             "sales_channel_id": sales_channel_id or _to_str(order_data.get("salesChannelId")),
             "order_number": _to_str(order_data.get("orderNumber")),
@@ -215,18 +214,23 @@ class OrderSyncService(BaseService):
         }
 
     @staticmethod
-    def _paypal_transaction_id(payment_transaction: dict[str, Any]) -> str:
-        """Read the external PayPal reference stored by the Shopware PayPal plugin."""
+    def _paypal_custom_field(payment_transaction: dict[str, Any], field_name: str) -> str:
         custom_fields = payment_transaction.get("customFields") or {}
         if not isinstance(custom_fields, dict):
             return ""
 
         normalized_fields = {str(key).casefold(): value for key, value in custom_fields.items()}
-        for field_name in PAYPAL_TRANSACTION_ID_CUSTOM_FIELDS:
-            transaction_id = _to_str(normalized_fields.get(field_name))
-            if transaction_id:
-                return transaction_id
-        return ""
+        return _to_str(normalized_fields.get(field_name.casefold()))
+
+    @classmethod
+    def _paypal_id(cls, payment_transaction: dict[str, Any]) -> str:
+        """Read the PayPal resource ID used to reconcile PayPal reports."""
+        return cls._paypal_custom_field(payment_transaction, PAYPAL_ID_CUSTOM_FIELD)
+
+    @classmethod
+    def _paypal_transaction_id(cls, payment_transaction: dict[str, Any]) -> str:
+        """Read the separate PayPal transaction ID stored by the Shopware plugin."""
+        return cls._paypal_custom_field(payment_transaction, PAYPAL_TRANSACTION_ID_CUSTOM_FIELD)
 
     def promote_new_order_to_in_progress(
         self,

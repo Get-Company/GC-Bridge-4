@@ -79,7 +79,7 @@ Bestellungen stehen normalerweise oben.
 
 Die Suche findet Bestellungen über Bestellnummer, Shopware-Bestell-ID,
 Microtech-Belegnummer, Microtech-Vorgangsbezeichnung,
-PayPal-Transaktionsnummer sowie über AdrNr, Kundenname, Kunden-E-Mail,
+PayPal-ID, PayPal-Transaktionsnummer sowie über AdrNr, Kundenname, Kunden-E-Mail,
 Vorname oder Nachname in einer Kundenadresse.
 
 Die Filter am rechten Rand grenzen die Liste ein nach:
@@ -201,6 +201,10 @@ Werte sollten im Normalfall nicht von Hand überschrieben werden.
 | Shopware Transaktions-ID         | Kennung der Zahlung in Shopware. |
 |                                  | Ohne sie kann der Zahlstatus     |
 |                                  | nicht geändert werden.           |
++----------------------------------+----------------------------------+
+| PayPal ID                        | PayPal-Ressourcen-ID, die im     |
+|                                  | PayPal-Bericht zur Zuordnung     |
+|                                  | verwendet wird.                  |
 +----------------------------------+----------------------------------+
 | PayPal Transaktions-ID           | Zahlungsreferenz von PayPal. Sie |
 |                                  | erscheint nur, wenn Shopware     |
@@ -359,10 +363,10 @@ PayPal-Liste
 ~~~~~~~~~~~~
 
 Die PayPal-Liste ist keine zweite Bestellung. Sie zeigt dieselben
-Bestellungen, aber nur solche mit einer PayPal-Transaktions-ID. Sichtbar
-sind Bestellnummer, Kunde mit Anschrift und Kontaktdaten,
-PayPal-Transaktions-ID, Zahlstatus und Bestelldatum. Neue
-PayPal-Einträge können hier nicht von Hand angelegt werden.
+Bestellungen, aber nur solche mit einer PayPal-ID. Sichtbar sind AdrNr,
+PayPal-ID und Bestelldatum. Das Bestelldatum lässt sich mit dem
+Unfold-Von/Bis-Filter eingrenzen. Neue PayPal-Einträge können hier nicht
+von Hand angelegt werden.
 
 Typischer Ablauf
 ~~~~~~~~~~~~~~~~
@@ -454,4 +458,3 @@ werden.
 
 Ergebnis: Für jede Bestellposition enthält die CSV eine Zeile nach der
 eingerichteten Zoll-Feldzuordnung.
-

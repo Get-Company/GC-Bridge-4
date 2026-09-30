@@ -1,4 +1,5 @@
 import json
+from datetime import date
 from unittest.mock import MagicMock, patch
 
 from django.contrib import admin as django_admin
@@ -7,7 +8,7 @@ from django.test import SimpleTestCase, TestCase
 
 from core.admin import BaseAdmin
 from customer.models import Address, Customer
-from orders.admin import OrderAdmin, PayPalOrderAdmin, _render_state_dropdown
+from orders.admin import DateTimeDateRangeFilter, OrderAdmin, PayPalOrderAdmin, _render_state_dropdown
 from orders.models import MicrotechOrderSyncWorkflow, Order, PayPalOrder
 from orders.test_order_sync_workflow import make_order
 
@@ -16,6 +17,7 @@ class OrderAdminSearchTest(SimpleTestCase):
     def test_search_includes_customer_first_and_last_name(self):
         model_admin = OrderAdmin(Order, django_admin.site)
 
+        self.assertIn("paypal_id", model_admin.search_fields)
         self.assertIn("paypal_transaction_id", model_admin.search_fields)
         self.assertIn("customer__erp_nr", model_admin.search_fields)
         self.assertIn("customer__addresses__first_name", model_admin.search_fields)
@@ -202,22 +204,46 @@ class OrderAdminListDisplayTest(SimpleTestCase):
         self.assertNotIn("address_system_link_status", self.model_admin.list_display)
         self.assertEqual(self.model_admin.list_per_page, 20)
 
-    def test_paypal_list_contains_customer_and_transaction_details(self):
+    def test_paypal_list_matches_customer_number_to_paypal_id(self):
         model_admin = PayPalOrderAdmin(PayPalOrder, django_admin.site)
 
         self.assertEqual(str(PayPalOrder._meta.verbose_name_plural), "PayPal")
         self.assertEqual(
             model_admin.list_display,
             (
-                "order_number",
-                "paypal_customer_details",
-                "paypal_transaction_id",
-                "payment_state",
+                "customer_erp_nr",
+                "paypal_id",
                 "purchase_date",
             ),
         )
+        self.assertIn("paypal_id", model_admin.search_fields)
         self.assertIn("paypal_transaction_id", model_admin.search_fields)
         self.assertIn("customer__erp_nr", model_admin.search_fields)
+        self.assertEqual(model_admin.list_filter, [("purchase_date", DateTimeDateRangeFilter)])
+
+    def test_paypal_date_filter_includes_complete_from_and_to_dates(self):
+        model_admin = PayPalOrderAdmin(PayPalOrder, django_admin.site)
+        request = RequestFactory().get("/")
+        params = {
+            "purchase_date_from": "2026-09-01",
+            "purchase_date_to": "2026-09-30",
+        }
+        date_filter = DateTimeDateRangeFilter(
+            PayPalOrder._meta.get_field("purchase_date"),
+            request,
+            params,
+            PayPalOrder,
+            model_admin,
+            "purchase_date",
+        )
+        queryset = MagicMock()
+
+        date_filter.queryset(request, queryset)
+
+        queryset.filter.assert_called_once_with(
+            purchase_date__date__gte=date(2026, 9, 1),
+            purchase_date__date__lte=date(2026, 9, 30),
+        )
 
     def test_connection_column_stacks_both_link_badges(self):
         order = self._order(country_code="DE")
@@ -232,24 +258,13 @@ class OrderAdminListDisplayTest(SimpleTestCase):
         self.assertIn("Zugeordnet", rendered)
         self.assertIn("Eindeutig verknüpft", rendered)
 
-    def test_paypal_customer_details_include_adrnr_and_address(self):
-        order = self._order(country_code="DE", company="Muster GmbH")
-        order.billing_address.street = "Musterstraße 1"
-        order.billing_address.postal_code = "12345"
-        order.billing_address.city = "Musterstadt"
-        order.billing_address.phone = "+49 123 456"
-        order.billing_address.email = "erika@example.com"
+    def test_paypal_customer_number_returns_adrnr(self):
+        order = self._order(country_code="DE")
         model_admin = PayPalOrderAdmin(PayPalOrder, django_admin.site)
 
-        rendered = str(model_admin.paypal_customer_details(order))
+        rendered = str(model_admin.customer_erp_nr(order))
 
-        self.assertIn("AdrNr: 100123", rendered)
-        self.assertIn("Muster GmbH", rendered)
-        self.assertIn("Musterstraße 1", rendered)
-        self.assertIn("12345 Musterstadt", rendered)
-        self.assertIn("erika@example.com", rendered)
-        self.assertNotIn("<", rendered)
-        self.assertNotIn(">", rendered)
+        self.assertEqual(rendered, "100123")
 
     def test_address_reconciliation_status_marks_missing_microtech_ids(self):
         order = self._order(country_code="DE")

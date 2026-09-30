@@ -6,6 +6,7 @@ from urllib.parse import urlencode
 from django import forms
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
+from django.core.validators import EMPTY_VALUES
 from django.db.models import Prefetch
 from django.http import HttpResponseRedirect
 from django.http import HttpResponse
@@ -17,12 +18,14 @@ from django.utils.html import format_html, format_html_join
 
 from unfold.contrib.filters.admin import (
     FieldTextFilter,
+    RangeDateFilter,
     RangeDateTimeFilter,
 )
 from unfold.decorators import action
 from unfold.enums import ActionVariant
 from unfold.forms import BaseDialogForm
 from unfold.sections import TemplateSection
+from unfold.utils import parse_date_str
 
 from core.admin import BaseAdmin, BaseTabularInline
 from customer.models import Address
@@ -47,6 +50,25 @@ def _to_str(value: Any) -> str:
     if value is None:
         return ""
     return str(value).strip()
+
+
+class DateTimeDateRangeFilter(RangeDateFilter):
+    """Unfold date-only range filter that includes the complete end date."""
+
+    def queryset(self, request, queryset):
+        filters = {}
+        value_from = self.used_parameters.get(f"{self.parameter_name}_from")
+        value_to = self.used_parameters.get(f"{self.parameter_name}_to")
+
+        if value_from not in EMPTY_VALUES:
+            filters[f"{self.parameter_name}__date__gte"] = parse_date_str(value_from)
+        if value_to not in EMPTY_VALUES:
+            filters[f"{self.parameter_name}__date__lte"] = parse_date_str(value_to)
+
+        try:
+            return queryset.filter(**filters)
+        except (TypeError, ValueError, forms.ValidationError):
+            return None
 
 
 def _state_entity_id(*, order: Order, scope: str) -> str:
@@ -214,6 +236,7 @@ class OrderAdmin(BaseAdmin):
         "api_id",
         "erp_order_id",
         "erp_vorgang_id",
+        "paypal_id",
         "paypal_transaction_id",
         "customer__erp_nr",
         "customer__name",
@@ -1160,78 +1183,32 @@ class OrderAdmin(BaseAdmin):
 
 @admin.register(PayPalOrder)
 class PayPalOrderAdmin(OrderAdmin):
-    """Dedicated list for orders that contain a PayPal transaction reference."""
+    """Dedicated reconciliation list matching customer numbers to PayPal IDs."""
 
     list_display = (
-        "order_number",
-        "paypal_customer_details",
-        "paypal_transaction_id",
-        "payment_state",
+        "customer_erp_nr",
+        "paypal_id",
         "purchase_date",
     )
+    list_select_related = ("customer",)
     search_fields = (
         "order_number",
+        "paypal_id",
         "paypal_transaction_id",
         "customer__erp_nr",
         "customer__name",
         "customer__email",
     )
     list_filter = [
-        ("payment_state", FieldTextFilter),
-        ("purchase_date", RangeDateTimeFilter),
+        ("purchase_date", DateTimeDateRangeFilter),
     ]
 
     def get_queryset(self, request):
-        return super().get_queryset(request).filter(paypal_transaction_id__gt="")
+        return super().get_queryset(request).filter(paypal_id__gt="")
 
-    @admin.display(description="Kunde / Adresse", ordering="customer__erp_nr")
-    def paypal_customer_details(self, obj: Order):
-        customer = getattr(obj, "customer", None)
-        address = self._customer_address(obj)
-        if customer is None and address is None:
-            return "-"
-
-        customer_name = (
-            CustomerWebshopMappingService.resolve_na2(address=address)
-            if address is not None
-            else _to_str(getattr(customer, "name", ""))
-        )
-        customer_name = customer_name or _to_str(getattr(customer, "name", "")) or "-"
-        lines = [
-            f'AdrNr: {_to_str(getattr(customer, "erp_nr", "")) or "-"}',
-            customer_name,
-        ]
-
-        if address is not None:
-            address_name = " · ".join(
-                value
-                for value in (
-                    _to_str(address.name1),
-                    _to_str(address.name2),
-                    _to_str(address.name3),
-                    _to_str(address.department),
-                )
-                if value
-            )
-            if address_name and address_name != customer_name:
-                lines.append(address_name)
-            if _to_str(address.street):
-                lines.append(_to_str(address.street))
-            city_line = " ".join(value for value in (_to_str(address.postal_code), _to_str(address.city)) if value)
-            if city_line:
-                lines.append(city_line)
-            if _to_str(address.country_code):
-                lines.append(_to_str(address.country_code).upper())
-
-            contact_details = " · ".join(
-                value
-                for value in (_to_str(address.phone), _to_str(address.email) or _to_str(getattr(customer, "email", "")))
-                if value
-            )
-            if contact_details:
-                lines.append(contact_details)
-
-        return " · ".join(lines)
+    @admin.display(description="AdrNr", ordering="customer__erp_nr")
+    def customer_erp_nr(self, obj: Order):
+        return _to_str(getattr(obj.customer, "erp_nr", "")) or "-"
 
     def has_module_permission(self, request):
         return request.user.has_module_perms(Order._meta.app_label)
