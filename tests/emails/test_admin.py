@@ -52,6 +52,7 @@ class TestEmailCampaignAdmin(SimpleTestCase):
         from emails.admin import EmailCampaignAdmin
 
         assert EmailCampaignAdmin.inlines == ()
+        assert EmailCampaignAdmin.actions_detail == ("open_simple_editor_detail",)
 
     def test_new_campaigns_default_to_simple_editor(self):
         from emails.models import EmailCampaign
@@ -59,6 +60,22 @@ class TestEmailCampaignAdmin(SimpleTestCase):
         campaign = EmailCampaign(internal_title="Test")
 
         assert campaign.layout_mode == EmailCampaign.LayoutMode.SIMPLE
+
+    def test_ready_campaign_requires_subject_and_send_date(self):
+        from django.core.exceptions import ValidationError
+        from emails.models import EmailCampaign
+
+        campaign = EmailCampaign(
+            internal_title="Test",
+            status=EmailCampaign.Status.READY,
+        )
+
+        try:
+            campaign.clean()
+        except ValidationError as exc:
+            assert set(exc.message_dict) == {"subject", "send_at"}
+        else:
+            raise AssertionError("Aktive Kampagne ohne Betreff und Sendedatum wurde akzeptiert")
 
     def test_campaign_admin_displays_and_filters_categories(self):
         from django.contrib.admin.sites import AdminSite
@@ -146,20 +163,8 @@ class TestEmailCampaignAdmin(SimpleTestCase):
         assert "Einfachen Editor öffnen" in editor_actions
         assert "simple@example.com" in editor_actions
 
-    def test_campaign_export_modal_has_copyable_mjml_output(self):
-        template = Path("templates/admin/emails/emailcampaign/change_form.html").read_text(
-            encoding="utf-8"
-        )
-
-        assert 'id="mjml-output"' in template
-        assert "data.mjml" in template
-        assert "function copyMjml()" in template
-        assert 'id="text-output"' in template
-        assert "data.text" in template
-        assert "function copyText()" in template
-        assert "Vorschau mit Empfänger" in template
-        assert "original.preview_recipient.email" in template
-        assert "original.components.count" not in template
+    def test_campaign_change_form_uses_plain_admin_ui(self):
+        assert not Path("templates/admin/emails/emailcampaign/change_form.html").exists()
 
     @patch("emails.admin.EmailCampaignProduct.objects.get_or_create")
     def test_component_products_are_preserved_when_switching_to_simple_editor(

@@ -62,14 +62,19 @@ def _apply_channel_factor(value: Decimal | None, factor: Decimal) -> Decimal | N
     return _round_up_5ct(Decimal(value) * factor).quantize(Decimal("0.01"))
 
 
-def _end_of_next_month(now) -> object:
-    next_month = (now.month % 12) + 1
-    year = now.year + (1 if next_month == 1 else 0)
+def _end_of_next_month(anchor: datetime) -> datetime:
+    next_month = (anchor.month % 12) + 1
+    year = anchor.year + (1 if next_month == 1 else 0)
     last_day = calendar.monthrange(year, next_month)[1]
-    return now.replace(
+    return anchor.replace(
         year=year, month=next_month, day=last_day,
         hour=23, minute=59, second=59, microsecond=0,
     )
+
+
+def _campaign_price_window(campaign: EmailCampaign, item) -> tuple[datetime, datetime]:
+    valid_from = campaign.send_at or max(campaign.updated_at, item.updated_at)
+    return valid_from, _end_of_next_month(valid_from)
 
 
 class EmailCampaignPriceSyncService(BaseService):
@@ -162,10 +167,13 @@ class EmailCampaignPriceSyncService(BaseService):
                         state.save(update_fields=("campaign", "price_snapshot", "updated_at"))
 
                 special_price = self._special_price(item, default_price)
+                valid_from, valid_until = _campaign_price_window(campaign, item)
                 changed = self._apply_special_price(
                     prices=prices,
                     default_channel_id=default_channel.pk,
                     special_price=special_price,
+                    valid_from=valid_from,
+                    valid_until=valid_until,
                 )
                 if changed:
                     affected.add(item.product.erp_nr)
@@ -209,9 +217,9 @@ class EmailCampaignPriceSyncService(BaseService):
         prices: list,
         default_channel_id: int,
         special_price: Decimal,
+        valid_from: datetime,
+        valid_until: datetime,
     ) -> bool:
-        now = timezone.now()
-        special_end = _end_of_next_month(now)
         changed = False
         for price in prices:
             factor = (
@@ -220,12 +228,11 @@ class EmailCampaignPriceSyncService(BaseService):
                 else Decimal(str(price.sales_channel.price_factor or "1"))
             )
             desired_price = _apply_channel_factor(special_price, factor)
-            desired_start = price.special_start_date or now
             before = tuple(getattr(price, field) for field in self.tracked_price_fields)
             price.special_percentage = None
             price.special_price = desired_price
-            price.special_start_date = desired_start
-            price.special_end_date = special_end
+            price.special_start_date = valid_from
+            price.special_end_date = valid_until
             after = tuple(getattr(price, field) for field in self.tracked_price_fields)
             if before == after:
                 continue
@@ -403,7 +410,7 @@ class EmailCampaignQueueService(BaseService):
         entry.recipient = recipient
         entry.customer = recipient.customer
         entry.email = recipient.email
-        entry.subject = campaign.internal_title
+        entry.subject = campaign.subject.strip() or campaign.internal_title
         entry.status = self.model.Status.QUEUED
         entry.rendered_mjml = mjml
         entry.rendered_html = html

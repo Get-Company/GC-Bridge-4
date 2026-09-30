@@ -36,8 +36,11 @@
       <mj-text align="center"><h1 style="font-size:40px;line-height:42px">{{ content.headline }}</h1></mj-text>
       <mj-text align="right" color="#8a8a8a"><span style="font-family:DancingScript,cursive;font-size:28px;line-height:36px">{{ content.subheadline }}</span></mj-text>
     </mj-column></mj-section>
-    <mj-section css-class="editor-intro"><mj-column>
-      <mj-text><p>{{ content.salutation }} {{ recipient_name }},</p></mj-text>
+    <mj-section css-class="editor-intro">
+      <mj-column width="65%"><mj-text><p>{{ content.salutation }} {{ recipient_name }},</p></mj-text></mj-column>
+      <mj-column width="35%"><mj-text align="right"><p>{% if recipient_erp_nr %}<strong>Kunden-Nr.: {{ recipient_erp_nr }}</strong>{% endif %}</p></mj-text></mj-column>
+    </mj-section>
+    <mj-section padding-top="0"><mj-column>
       <mj-text>{{ content.intro|linebreaksbr }}</mj-text>
     </mj-column></mj-section>
     <mj-section css-class="editor-products"><mj-column>

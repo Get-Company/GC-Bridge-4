@@ -12,20 +12,37 @@
     <a class="back" href="{% url 'admin:emails_emailcampaign_changelist' %}">← Kampagnen</a>
     <div class="toolbar-title"><strong>{{ campaign.internal_title }}</strong><span>Einfacher E-Mail-Editor</span></div>
     <div id="save-status" role="status">Gespeichert</div>
+    <button id="save-editor" class="button" type="button">Speichern</button>
     <a class="button secondary" href="{% url 'admin:emails_emailcampaign_change' campaign.pk %}">Kampagnendaten</a>
-    <button id="refresh-preview" class="button" type="button">Vorschau aktualisieren</button>
   </header>
-  <div class="intro-banner">
-    Texte und Medien links bearbeiten. Die E-Mail rechts wird aus MJML und den aktuellen Produktdaten erstellt.
-    {% if campaign.preview_recipient %}
-      Vorschau-Empfänger: <strong>{{ campaign.preview_recipient.email }}</strong>
-      {% if campaign.preview_recipient.full_name %}· {{ campaign.preview_recipient.full_name }}{% endif %}
-    {% else %}
-      <strong>Es ist noch kein Vorschau-Empfänger in den Kampagnendaten gewählt.</strong>
-    {% endif %}
-  </div>
   <main class="editor-grid">
     <div class="editor-track" id="editor-track">
+      <section class="editor-card" data-anchor="editor-settings">
+        <span class="eyebrow">Kampagne</span>
+        <h2>Versand & Vorschau</h2>
+        <label for="campaign-subject">Betreff</label>
+        <input id="campaign-subject" data-campaign-field="subject" type="text" maxlength="255" value="{{ campaign.subject }}" placeholder="Betreff der Newsletter-E-Mail">
+        <label for="campaign-status">Status</label>
+        <select id="campaign-status" data-campaign-field="status">
+          <option value="draft" {% if campaign.status == 'draft' %}selected{% endif %}>Entwurf (inaktiv)</option>
+          <option value="ready" {% if campaign.status == 'ready' %}selected{% endif %}>Bereit (aktiv)</option>
+          <option value="exported" {% if campaign.status == 'exported' %}selected{% endif %}>Exportiert (inaktiv)</option>
+        </select>
+        <small>
+          <strong>Entwurf:</strong> wird nicht versendet. <strong>Bereit:</strong> wird etwa 24 Stunden vor dem Sendedatum in die Versand-Queue gestellt.
+          <strong>Exportiert:</strong> Kennzeichnung für extern verwendete oder abgeschlossene Kampagnen; kein automatischer Versand.
+          {% if campaign.send_at %}Sendedatum: {{ campaign.send_at|date:"d.m.Y H:i" }} Uhr.{% else %}<strong>Vor der Aktivierung muss in den Kampagnendaten ein Sendedatum gesetzt werden.</strong>{% endif %}
+        </small>
+        <label for="recipient-search">Beispiel-Empfänger suchen</label>
+        <input id="recipient-search" type="search" autocomplete="off" placeholder="AdrNr, Name oder E-Mail …">
+        <input id="preview-recipient-id" data-campaign-field="preview_recipient_id" type="hidden" value="{{ campaign.preview_recipient_id|default:'' }}">
+        <div id="recipient-results" class="search-results" role="listbox"></div>
+        <div class="selected-recipient">
+          <span>Aktuell: <strong id="recipient-current">{{ preview_recipient_label }}</strong></span>
+          <button id="clear-recipient" type="button">Auswahl löschen</button>
+        </div>
+        <small>Die Daten dieses Empfängers werden sofort in der Vorschau eingesetzt.</small>
+      </section>
       <section class="editor-card" data-anchor="editor-logo">
         <span class="eyebrow">Kopfbereich · Medien</span>
         <h2>Logo</h2>
@@ -86,7 +103,7 @@
           <div><label for="value-{{ item.pk }}">Wert</label>
             <input id="value-{{ item.pk }}" data-price-value type="number" min="0.01" step="0.01" value="{% if item.special_price_override %}{{ item.special_price_override }}{% elif item.discount_pct %}{{ item.discount_pct }}{% endif %}" placeholder="z. B. 19,95"></div>
         </div>
-        <small>Preis und Rabatt gelten nur für diese Kampagne.</small>
+        <small>Beim Speichern wird die Preissynchronisierung per Signal eingeplant. Der Worker überträgt anschließend an microtech und SW6. Der Aktionspreis gilt ab dem Sendedatum bis zum Ende des Folgemonats.</small>
         <button class="add-heading" data-add-heading data-after-product="{{ item.pk }}" type="button">+ Zwischenüberschrift danach</button>
       </section>
       {% endfor %}
@@ -103,7 +120,7 @@
       </section>
     </div>
     <div class="preview-column">
-      <div class="preview-label">Live-Vorschau <span>600 px · MJML</span></div>
+      <div class="preview-label">Live-Vorschau <span>600 px</span></div>
       <iframe id="email-preview" title="E-Mail-Vorschau" sandbox="allow-same-origin"></iframe>
     </div>
   </main>
@@ -113,6 +130,7 @@
       save: "{% url 'admin:emails_emailcampaign_simple_save' campaign.pk %}",
       preview: "{% url 'admin:emails_emailcampaign_simple_preview' campaign.pk %}",
       search: "{% url 'admin:emails_emailcampaign_simple_search' campaign.pk %}",
+      recipientSearch: "{% url 'admin:emails_emailcampaign_simple_recipient_search' campaign.pk %}",
       add: "{% url 'admin:emails_emailcampaign_simple_product_add' campaign.pk %}",
       productBase: "{% url 'admin:emails_emailcampaign_simple_editor' campaign.pk %}product/",
       csrf: "{{ csrf_token }}"

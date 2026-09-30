@@ -144,16 +144,23 @@ def build_simple_mjml(campaign, *, recipient=None, override=None):
             headings_by_product[after_id].append(heading)
         else:
             tail_headings.append(heading)
-    recipient_name = getattr(recipient, "full_name", "") if recipient else ""
+    context = recipient_context(recipient)
+    profile = context["recipient_profile"]
+    recipient_name = " ".join(
+        part for part in (profile.first_name, profile.last_name) if part
+    ).strip()
+    if not recipient_name and recipient:
+        recipient_name = getattr(recipient, "full_name", "") or getattr(recipient, "email", "")
     return render_to_string(
         "emails/simple_newsletter.mjml",
         {
-            **recipient_context(recipient),
+            **context,
             "content": content,
             "offers": offers,
             "intro_headings": intro_headings,
             "tail_headings": tail_headings,
             "recipient_name": recipient_name or "...",
+            "recipient_erp_nr": profile.erp_nr,
             "shopware_storefront_url": settings.NEWSLETTER_STOREFRONT_URL,
         },
     )

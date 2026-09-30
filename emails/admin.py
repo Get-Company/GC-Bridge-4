@@ -675,6 +675,7 @@ class EmailCampaignComponentInline(BaseStackedInline):
 
 @admin.register(EmailCampaign)
 class EmailCampaignAdmin(BaseAdmin):
+    actions_detail = ("open_simple_editor_detail",)
     list_display = (
         "internal_title",
         "editor_link",
@@ -697,11 +698,11 @@ class EmailCampaignAdmin(BaseAdmin):
             {
                 "fields": (
                     "internal_title",
+                    "subject",
                     "categories",
                     "preview_recipient",
                     "status",
                     "send_at",
-                    "simple_editor_link",
                 ),
             },
         ),
@@ -720,7 +721,13 @@ class EmailCampaignAdmin(BaseAdmin):
             },
         ),
     )
-    readonly_fields = BaseAdmin.readonly_fields + ("campaign_context_info", "simple_editor_link")
+    readonly_fields = BaseAdmin.readonly_fields + ("campaign_context_info",)
+
+    @action(description=_("Editor"), icon="edit", variant=ActionVariant.PRIMARY)
+    def open_simple_editor_detail(self, request, object_id: str):
+        return HttpResponseRedirect(
+            reverse("admin:emails_emailcampaign_simple_editor", args=(object_id,))
+        )
 
     @admin.display(description=_("Editor"))
     def editor_link(self, obj):
@@ -824,6 +831,7 @@ class EmailCampaignAdmin(BaseAdmin):
             path("<int:campaign_id>/editor/save/", self.admin_site.admin_view(self.simple_editor_save_view), name="emails_emailcampaign_simple_save"),
             path("<int:campaign_id>/editor/preview/", self.admin_site.admin_view(self.simple_editor_preview_view), name="emails_emailcampaign_simple_preview"),
             path("<int:campaign_id>/editor/search/", self.admin_site.admin_view(self.simple_editor_search_view), name="emails_emailcampaign_simple_search"),
+            path("<int:campaign_id>/editor/recipient-search/", self.admin_site.admin_view(self.simple_editor_recipient_search_view), name="emails_emailcampaign_simple_recipient_search"),
             path("<int:campaign_id>/editor/product/add/", self.admin_site.admin_view(self.simple_editor_product_add_view), name="emails_emailcampaign_simple_product_add"),
             path("<int:campaign_id>/editor/product/<int:product_id>/", self.admin_site.admin_view(self.simple_editor_product_view), name="emails_emailcampaign_simple_product"),
             path(
@@ -870,6 +878,7 @@ class EmailCampaignAdmin(BaseAdmin):
                 if key != "visual_document"
             },
             "campaign_products": campaign.campaign_products.select_related("product").order_by("order", "id"),
+            "preview_recipient_label": self._recipient_label(campaign.preview_recipient),
         })
 
     def simple_editor_save_view(self, request, campaign_id):
@@ -924,14 +933,49 @@ class EmailCampaignAdmin(BaseAdmin):
                     if key in allowed_ids and isinstance(item, dict)
                 }
             campaign.editor_content = content
+            update_fields = ["editor_content"]
+            if "subject" in payload:
+                campaign.subject = str(payload["subject"]).strip()[:255]
+                update_fields.append("subject")
+            if "status" in payload:
+                status = str(payload["status"])
+                if status not in EmailCampaign.Status.values:
+                    raise ValueError("Der Kampagnenstatus ist ungültig.")
+                campaign.status = status
+                update_fields.append("status")
+            if "preview_recipient_id" in payload:
+                from newsletter.models import NewsletterRecipient
+
+                recipient_id = payload["preview_recipient_id"]
+                if recipient_id in (None, ""):
+                    campaign.preview_recipient = None
+                else:
+                    try:
+                        campaign.preview_recipient = NewsletterRecipient.objects.get(
+                            pk=recipient_id,
+                            is_present_in_shopware=True,
+                        )
+                    except (NewsletterRecipient.DoesNotExist, ValueError, TypeError):
+                        raise ValueError("Der Vorschau-Empfänger wurde nicht gefunden.") from None
+                update_fields.append("preview_recipient")
+            if getattr(campaign, "status", EmailCampaign.Status.DRAFT) == EmailCampaign.Status.READY:
+                if not getattr(campaign, "subject", "").strip():
+                    raise ValueError("Zum Aktivieren ist ein Betreff erforderlich.")
+                if getattr(campaign, "send_at", None) is None:
+                    raise ValueError("Zum Aktivieren ist ein Sendedatum erforderlich.")
             if getattr(
                 campaign, "layout_mode", EmailCampaign.LayoutMode.SIMPLE
             ) != EmailCampaign.LayoutMode.SIMPLE:
                 campaign.layout_mode = EmailCampaign.LayoutMode.SIMPLE
-                campaign.save(update_fields=["editor_content", "layout_mode"])
-            else:
-                campaign.save(update_fields=["editor_content"])
-            return JsonResponse({"saved": True})
+                update_fields.append("layout_mode")
+            campaign.save(update_fields=list(dict.fromkeys(update_fields)))
+            return JsonResponse({
+                "saved": True,
+                "status": getattr(campaign, "status", EmailCampaign.Status.DRAFT),
+                "preview_recipient": self._recipient_label(
+                    getattr(campaign, "preview_recipient", None)
+                ),
+            })
         except (ValueError, TypeError) as exc:
             return JsonResponse({"error": str(exc)}, status=400)
 
@@ -967,6 +1011,44 @@ class EmailCampaignAdmin(BaseAdmin):
             {"id": product.pk, "label": f"{product.erp_nr} · {product.name or ''}"}
             for product in products
         ]})
+
+    @staticmethod
+    def _recipient_label(recipient) -> str:
+        if recipient is None:
+            return "Kein Vorschau-Empfänger gewählt"
+        customer = getattr(recipient, "customer", None)
+        erp_nr = getattr(recipient, "erp_nr", "") or getattr(customer, "erp_nr", "")
+        name = getattr(recipient, "full_name", "") or getattr(customer, "name", "")
+        email = getattr(recipient, "email", "")
+        details = " · ".join(part for part in (erp_nr, name, email) if part)
+        return details or str(getattr(recipient, "pk", ""))
+
+    def simple_editor_recipient_search_view(self, request, campaign_id):
+        from newsletter.models import NewsletterRecipient
+
+        self._editor_campaign(request, campaign_id)
+        query = request.GET.get("q", "").strip()[:100]
+        if len(query) < 2:
+            return JsonResponse({"recipients": []})
+        recipients = (
+            NewsletterRecipient.objects.filter(is_present_in_shopware=True)
+            .filter(
+                Q(email__icontains=query)
+                | Q(first_name__icontains=query)
+                | Q(last_name__icontains=query)
+                | Q(erp_nr__icontains=query)
+                | Q(customer__erp_nr__icontains=query)
+                | Q(customer__name__icontains=query)
+            )
+            .select_related("customer")
+            .order_by("email", "pk")[:12]
+        )
+        return JsonResponse({
+            "recipients": [
+                {"id": recipient.pk, "label": self._recipient_label(recipient)}
+                for recipient in recipients
+            ]
+        })
 
     def simple_editor_product_add_view(self, request, campaign_id):
         from products.models import Product

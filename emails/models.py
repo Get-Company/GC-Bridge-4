@@ -82,14 +82,21 @@ class EmailCampaign(BaseModel):
         VISUAL = "visual", _("Visueller MJML-Editor")
 
     class Status(models.TextChoices):
-        DRAFT = "draft", _("Entwurf")
-        READY = "ready", _("Bereit")
-        EXPORTED = "exported", _("Exportiert")
+        DRAFT = "draft", _("Entwurf (inaktiv)")
+        READY = "ready", _("Bereit (aktiv)")
+        EXPORTED = "exported", _("Exportiert (inaktiv)")
 
     internal_title = models.CharField(
         max_length=255,
         verbose_name=_("Interner Titel"),
         help_text=_("Wird nicht in der E-Mail angezeigt."),
+    )
+    subject = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        verbose_name=_("Betreff"),
+        help_text=_("Wird als Betreff der versendeten Newsletter-E-Mail verwendet."),
     )
     layout_mode = models.CharField(
         max_length=20, choices=LayoutMode.choices, default=LayoutMode.SIMPLE
@@ -101,6 +108,11 @@ class EmailCampaign(BaseModel):
         default=Status.DRAFT,
         db_index=True,
         verbose_name=_("Status"),
+        help_text=_(
+            "Entwurf ist inaktiv. Bereit aktiviert die Kampagne für die automatische "
+            "Versand-Queue. Exportiert kennzeichnet eine abgeschlossene oder extern "
+            "verwendete Kampagne und ist ebenfalls inaktiv."
+        ),
     )
     send_at = models.DateTimeField(
         null=True,
@@ -133,6 +145,18 @@ class EmailCampaign(BaseModel):
 
     def __str__(self) -> str:
         return self.internal_title
+
+    def clean(self) -> None:
+        super().clean()
+        if self.status != self.Status.READY:
+            return
+        errors = {}
+        if not self.subject.strip():
+            errors["subject"] = _("Für eine aktive Kampagne ist ein Betreff erforderlich.")
+        if self.send_at is None:
+            errors["send_at"] = _("Für eine aktive Kampagne ist ein Sendedatum erforderlich.")
+        if errors:
+            raise ValidationError(errors)
 
 
 class EmailSmtpSettings(BaseModel):

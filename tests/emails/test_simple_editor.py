@@ -88,6 +88,7 @@ def test_simple_newsletter_renders_selected_preview_recipient_data():
         mjml = build_simple_mjml(campaign, recipient=recipient)
 
     assert "Hallo Max Mustermann" in mjml
+    assert "<strong>Kunden-Nr.: 10042</strong>" in mjml
 
 
 def test_percentage_override_takes_precedence_over_catalog_special_price():
@@ -213,3 +214,54 @@ def test_editor_saves_interstitial_heading_position():
     assert response.status_code == 200
     assert campaign.editor_content["headings"][0]["after_product_id"] == "9"
     assert campaign.editor_content["headings"][0]["title"] == "Bestellformular"
+
+
+def test_editor_saves_subject_status_and_preview_recipient():
+    import json
+    from django.contrib.admin.sites import AdminSite
+    from django.test import RequestFactory
+    from emails.admin import EmailCampaignAdmin
+    from emails.models import EmailCampaign
+    from unittest.mock import Mock
+
+    recipient = SimpleNamespace(
+        pk=31,
+        erp_nr="10042",
+        full_name="Max Mustermann",
+        email="max@example.com",
+        customer=None,
+    )
+    campaign = SimpleNamespace(
+        editor_content={},
+        campaign_products=Mock(),
+        subject="",
+        status=EmailCampaign.Status.DRAFT,
+        send_at=SimpleNamespace(),
+        preview_recipient=None,
+        save=Mock(),
+    )
+    campaign.campaign_products.values_list.return_value = []
+    admin = EmailCampaignAdmin(EmailCampaign, AdminSite())
+    request = RequestFactory().post(
+        "/editor/save/",
+        data=json.dumps({
+            "subject": "September-Angebote",
+            "status": EmailCampaign.Status.READY,
+            "preview_recipient_id": "31",
+        }),
+        content_type="application/json",
+    )
+
+    with patch.object(admin, "_editor_campaign", return_value=campaign), patch(
+        "newsletter.models.NewsletterRecipient.objects.get",
+        return_value=recipient,
+    ):
+        response = admin.simple_editor_save_view(request, 1)
+
+    assert response.status_code == 200
+    assert campaign.subject == "September-Angebote"
+    assert campaign.status == EmailCampaign.Status.READY
+    assert campaign.preview_recipient is recipient
+    campaign.save.assert_called_once_with(
+        update_fields=["editor_content", "subject", "status", "preview_recipient"]
+    )

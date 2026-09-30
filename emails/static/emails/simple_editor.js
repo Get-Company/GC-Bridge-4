@@ -6,9 +6,15 @@
   const status = document.getElementById('save-status');
   const search = document.getElementById('product-search');
   const results = document.getElementById('search-results');
+  const recipientSearch = document.getElementById('recipient-search');
+  const recipientResults = document.getElementById('recipient-results');
+  const recipientId = document.getElementById('preview-recipient-id');
+  const recipientCurrent = document.getElementById('recipient-current');
   let editTimer;
   let searchTimer;
+  let recipientSearchTimer;
   let previewGeneration = 0;
+  const flushPriceUpdates = [];
 
   document.querySelectorAll('.product-card').forEach(card => {
     const custom = (initial.product_texts || {})[card.dataset.catalogId] || {};
@@ -54,6 +60,9 @@
   function content() {
     const data = {};
     document.querySelectorAll('[data-field]').forEach(input => { data[input.dataset.field] = input.value; });
+    document.querySelectorAll('[data-campaign-field]').forEach(input => {
+      data[input.dataset.campaignField] = input.value;
+    });
     data.product_texts = {};
     document.querySelectorAll('.product-card').forEach(card => {
       const custom = {};
@@ -86,8 +95,13 @@
   function showError(error) { status.textContent = error.message || String(error); status.style.color = '#bd4e4e'; }
   async function save() {
     status.textContent = 'Speichert …'; status.style.color = '#8b7a5b';
-    try { await api(config.save, content()); document.getElementById('legacy-layout-notice')?.remove(); status.textContent = 'Gespeichert'; status.style.color = '#2d8b62'; }
-    catch (error) { showError(error); }
+    try {
+      const result = await api(config.save, content());
+      document.getElementById('legacy-layout-notice')?.remove();
+      if (result.preview_recipient) recipientCurrent.textContent = result.preview_recipient;
+      status.textContent = 'Gespeichert'; status.style.color = '#2d8b62';
+      return true;
+    } catch (error) { showError(error); return false; }
   }
   async function preview() {
     const generation = ++previewGeneration;
@@ -102,9 +116,18 @@
   function changed() {
     status.textContent = 'Ungespeicherte Änderung'; status.style.color = '#8b7a5b';
     clearTimeout(editTimer);
-    editTimer = setTimeout(() => { save(); preview(); }, 650);
+    editTimer = setTimeout(saveAndPreview, 650);
   }
-  document.querySelectorAll('[data-field],[data-product-text]').forEach(input => input.addEventListener('input', changed));
+  async function saveAndPreview() {
+    clearTimeout(editTimer);
+    const pricesSaved = await Promise.all(flushPriceUpdates.map(flush => flush()));
+    if (pricesSaved.includes(false)) return;
+    if (await save()) await preview();
+  }
+  document.querySelectorAll('[data-field],[data-product-text],[data-campaign-field]').forEach(input => {
+    input.addEventListener('input', changed);
+    input.addEventListener('change', changed);
+  });
   document.querySelectorAll('[data-add-heading]').forEach(button => button.addEventListener('click', () => {
     const card = insertHeading({id: crypto.randomUUID(), after_product_id: button.dataset.afterProduct});
     card.querySelector('[data-heading-field="title"]').focus();
@@ -118,7 +141,13 @@
     event.target.closest('.heading-card').remove();
     changed();
   });
-  document.getElementById('refresh-preview').addEventListener('click', preview);
+  document.getElementById('save-editor').addEventListener('click', saveAndPreview);
+  document.addEventListener('keydown', event => {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+      event.preventDefault();
+      saveAndPreview();
+    }
+  });
 
   function align() {
     const doc = frame.contentDocument;
@@ -154,7 +183,10 @@
           const button = document.createElement('button');
           button.type = 'button'; button.textContent = product.label;
           button.addEventListener('click', async () => {
-            try { await save(); await api(config.add, {product_id: product.id}); window.location.reload(); }
+            try {
+              if (!(await save())) return;
+              await api(config.add, {product_id: product.id}); window.location.reload();
+            }
             catch (error) { showError(error); }
           });
           results.append(button);
@@ -163,28 +195,75 @@
     }, 250);
   });
 
+  recipientSearch.addEventListener('input', () => {
+    clearTimeout(recipientSearchTimer);
+    recipientResults.replaceChildren();
+    const q = recipientSearch.value.trim();
+    if (q.length < 2) return;
+    recipientSearchTimer = setTimeout(async () => {
+      try {
+        const response = await fetch(`${config.recipientSearch}?q=${encodeURIComponent(q)}`, {credentials:'same-origin'});
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Empfängersuche fehlgeschlagen');
+        if (recipientSearch.value.trim() !== q) return;
+        if (!data.recipients.length) { recipientResults.textContent = 'Keine Empfänger gefunden.'; return; }
+        data.recipients.forEach(recipient => {
+          const button = document.createElement('button');
+          button.type = 'button'; button.textContent = recipient.label;
+          button.addEventListener('click', async () => {
+            recipientId.value = recipient.id;
+            recipientCurrent.textContent = recipient.label;
+            recipientSearch.value = '';
+            recipientResults.replaceChildren();
+            await saveAndPreview();
+          });
+          recipientResults.append(button);
+        });
+      } catch (error) { showError(error); }
+    }, 250);
+  });
+  document.getElementById('clear-recipient').addEventListener('click', async () => {
+    recipientId.value = '';
+    recipientCurrent.textContent = 'Kein Vorschau-Empfänger gewählt';
+    recipientSearch.value = '';
+    recipientResults.replaceChildren();
+    await saveAndPreview();
+  });
+
   document.querySelectorAll('.product-card').forEach(card => {
     const itemUrl = `${config.productBase}${card.dataset.productId}/`;
     const mode = card.querySelector('[data-price-mode]');
     const value = card.querySelector('[data-price-value]');
     let priceTimer;
-    async function updatePrice() {
+    let priceDirty = false;
+    async function updatePrice(refreshPreview = true) {
+      clearTimeout(priceTimer);
       try {
         await api(itemUrl, {action:'price', mode:mode.value, value:value.value});
+        priceDirty = false;
         document.getElementById('legacy-layout-notice')?.remove();
         status.textContent = 'Preis gespeichert'; status.style.color = '#2d8b62';
-        preview();
-      } catch (error) { showError(error); }
+        if (refreshPreview) preview();
+        return true;
+      } catch (error) { showError(error); return false; }
     }
+    flushPriceUpdates.push(() => priceDirty ? updatePrice(false) : Promise.resolve(true));
     mode.addEventListener('change', () => {
       value.value = '';
       clearTimeout(priceTimer);
       updatePrice();
     });
-    value.addEventListener('input', () => { clearTimeout(priceTimer); priceTimer = setTimeout(updatePrice, 650); });
+    value.addEventListener('input', () => {
+      priceDirty = true;
+      clearTimeout(priceTimer);
+      priceTimer = setTimeout(updatePrice, 650);
+    });
     card.querySelectorAll('[data-action]').forEach(button => button.addEventListener('click', async () => {
       if (button.dataset.action === 'remove' && !confirm('Produkt aus dieser Kampagne entfernen?')) return;
-      try { await save(); await api(itemUrl, {action:button.dataset.action}); window.location.reload(); }
+      try {
+        if (!(await save())) return;
+        await api(itemUrl, {action:button.dataset.action}); window.location.reload();
+      }
       catch (error) { showError(error); }
     }));
   });

@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 import pytest
 from unittest.mock import MagicMock, patch
@@ -26,6 +26,37 @@ class TestApplyChannelFactor:
         assert _apply_channel_factor(None, Decimal("1.1")) is None
 
 
+class TestCampaignPriceWindow:
+    def test_uses_send_date_through_end_of_following_month(self):
+        from emails.services import _campaign_price_window
+
+        send_at = datetime(2026, 9, 15, 10, 30, tzinfo=UTC)
+        campaign = SimpleNamespace(
+            send_at=send_at,
+            updated_at=datetime(2026, 8, 20, 9, 0, tzinfo=UTC),
+        )
+        item = SimpleNamespace(updated_at=datetime(2026, 9, 1, 8, 0, tzinfo=UTC))
+
+        valid_from, valid_until = _campaign_price_window(campaign, item)
+
+        assert valid_from == send_at
+        assert valid_until == datetime(2026, 10, 31, 23, 59, 59, tzinfo=UTC)
+
+    def test_without_send_date_uses_latest_relevant_save(self):
+        from emails.services import _campaign_price_window
+
+        campaign = SimpleNamespace(
+            send_at=None,
+            updated_at=datetime(2026, 9, 2, 9, 0, tzinfo=UTC),
+        )
+        item = SimpleNamespace(updated_at=datetime(2026, 9, 3, 11, 15, tzinfo=UTC))
+
+        valid_from, valid_until = _campaign_price_window(campaign, item)
+
+        assert valid_from == item.updated_at
+        assert valid_until == datetime(2026, 10, 31, 23, 59, 59, tzinfo=UTC)
+
+
 class TestApplyCampaignSpecialPrices:
     @pytest.mark.django_db
     def test_reconciles_removed_and_added_campaign_products(self):
@@ -48,7 +79,11 @@ class TestApplyCampaignSpecialPrices:
             sales_channel=channel,
             price=Decimal("200.00"),
         )
-        campaign = EmailCampaign.objects.create(internal_title="Produktwechsel")
+        send_at = datetime(2026, 9, 15, 10, 30, tzinfo=UTC)
+        campaign = EmailCampaign.objects.create(
+            internal_title="Produktwechsel",
+            send_at=send_at,
+        )
         old_item = EmailCampaignProduct.objects.create(
             campaign=campaign,
             product=old_product,
@@ -58,6 +93,10 @@ class TestApplyCampaignSpecialPrices:
         assert apply_campaign_special_prices(campaign) == ["581000"]
         old_price.refresh_from_db()
         assert old_price.special_price == Decimal("80.00")
+        assert old_price.special_start_date == send_at
+        assert old_price.special_end_date == datetime(
+            2026, 10, 31, 23, 59, 59, tzinfo=UTC
+        )
 
         old_item.delete()
         EmailCampaignProduct.objects.create(
@@ -113,7 +152,10 @@ class TestEmailCampaignQueueService:
         from emails.services import EmailCampaignQueueService
         from newsletter.models import NewsletterRecipient
 
-        campaign = EmailCampaign.objects.create(internal_title="Sommeraktion")
+        campaign = EmailCampaign.objects.create(
+            internal_title="Sommeraktion",
+            subject="Nur heute: Sommeraktion",
+        )
         recipient = NewsletterRecipient.objects.create(
             shopware_id="recipient",
             email="neu@example.com",
@@ -138,7 +180,7 @@ class TestEmailCampaignQueueService:
         assert EmailCampaignQueueEntry.objects.filter(campaign=campaign, recipient=recipient).count() == 1
         assert queued_entry.recipient == recipient
         assert queued_entry.email == "neu@example.com"
-        assert queued_entry.subject == "Sommeraktion"
+        assert queued_entry.subject == "Nur heute: Sommeraktion"
         assert queued_entry.status == EmailCampaignQueueEntry.Status.QUEUED
         assert queued_entry.rendered_mjml == "<mjml>neu</mjml>"
         assert queued_entry.rendered_html == "<html>neu</html>"
