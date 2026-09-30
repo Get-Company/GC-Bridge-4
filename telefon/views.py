@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import json
+
 from django.contrib import messages
-from django.utils.html import format_html
+from django.http import JsonResponse
 from django.shortcuts import redirect
 from django.urls import reverse
+from django.utils.html import format_html
+from django.views import View
 from django.views.generic import TemplateView
 
 from telefon.forms import ZeitsteuerungDateForm
@@ -45,20 +49,53 @@ class ZeitsteuerungListView(TelefonAdminViewMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        services = []
+        editor_state = {
+            "ok": False,
+            "chain_complete": False,
+            "warnings": [],
+            "chain": [],
+            "detached": [],
+            "node_count": 0,
+            "destination_options": [],
+            "weekdays": [],
+        }
         try:
-            services = [
-                {
-                    **service,
-                    "url": reverse("admin:telefon_zeitsteuerung_detail", args=[service["id"]]),
-                }
-                for service in self.get_service().list_time_controls()
-            ]
+            editor_state = self.get_service().get_editor_state()
         except Exception as error:
             messages.error(self.request, f"NFON API Fehler: {error}")
+            editor_state["warnings"] = [f"NFON API Fehler: {error}"]
 
-        context["services"] = services
+        context.update(
+            {
+                "editor_state": editor_state,
+                "editor_action_url": reverse("admin:telefon_zeitsteuerung_editor_action"),
+                "services": [*editor_state.get("chain", []), *editor_state.get("detached", [])],
+            }
+        )
         return context
+
+
+class ZeitsteuerungEditorActionView(TelefonAdminViewMixin, View):
+    def post(self, request, *args, **kwargs):
+        try:
+            payload = json.loads(request.body)
+        except (TypeError, json.JSONDecodeError):
+            return JsonResponse({"ok": False, "error": "Ungültiges JSON."}, status=400)
+
+        action = str(payload.get("action") or "")
+        service = self.get_service()
+        try:
+            if action == "update_node":
+                result = service.update_editor_node(str(payload.get("service_id") or ""), payload)
+            elif action == "insert_node":
+                result = service.insert_editor_node(payload)
+            else:
+                return JsonResponse({"ok": False, "error": "Unbekannte Aktion."}, status=400)
+            return JsonResponse({"ok": True, "result": result, "state": service.get_editor_state()})
+        except ValueError as error:
+            return JsonResponse({"ok": False, "error": str(error)}, status=400)
+        except Exception as error:
+            return JsonResponse({"ok": False, "error": f"NFON API Fehler: {error}"}, status=502)
 
 
 class ZeitsteuerungDetailView(TelefonAdminViewMixin, TemplateView):

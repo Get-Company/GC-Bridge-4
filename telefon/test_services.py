@@ -8,10 +8,11 @@ from telefon.services import NfonTimeControlService
 
 
 class FakeResponse:
-    def __init__(self, payload=None, status_code=200, text=""):
+    def __init__(self, payload=None, status_code=200, text="", headers=None):
         self.payload = payload
         self.status_code = status_code
         self.text = text
+        self.headers = headers or {}
 
     def json(self):
         return self.payload
@@ -208,3 +209,332 @@ def test_delete_denied_date_raises_when_date_is_missing():
         raise AssertionError("Expected ValueError")
 
     assert client.put_calls == []
+
+
+def _time_control(service_id, name, *, next_id=None, outcome_id="1"):
+    links = [
+        {
+            "rel": "destinationIfDenied",
+            "href": f"/api/customers/customer/targets/ivr-services/{outcome_id}",
+        }
+    ]
+    if next_id is not None:
+        links.append(
+            {
+                "rel": "destinationIfAllowed",
+                "href": f"/api/customers/customer/targets/time-control-services/{next_id}",
+            }
+        )
+    else:
+        links.append(
+            {
+                "rel": "destinationIfAllowed",
+                "href": "/api/customers/customer/targets/group-services/0",
+            }
+        )
+    return {
+        "href": f"/api/customers/customer/targets/time-control-services/{service_id}",
+        "links": links,
+        "data": [
+            {"name": "displayName", "value": name},
+            {"name": "evaluationStrategy", "value": "AUTO"},
+            {"name": "fromDay", "value": "MONDAY"},
+            {"name": "fromTimeOfDay", "value": "07:45 AM"},
+            {"name": "toDay", "value": "FRIDAY"},
+            {"name": "toTimeOfDay", "value": "04:45 PM"},
+            {"name": "referralAllowed", "value": []},
+            {"name": "referralDenied", "value": []},
+        ],
+    }
+
+
+def test_editor_state_prefers_root_with_inbound_number_and_marks_detached_chain():
+    collection = "/api/customers/customer/targets/time-control-services"
+    pages = {
+        collection: {
+            "items": [
+                _time_control("6", "005 Brückentage", next_id="19"),
+                _time_control("18", "006 Vormittags", next_id="19"),
+                _time_control("19", "007 Nachmittag", next_id="16"),
+                _time_control("16", "010 Feiertag"),
+            ],
+            "links": [],
+        },
+        f"{collection}/6/inbound-trunk-numbers": {"items": [{}], "links": []},
+        f"{collection}/18/inbound-trunk-numbers": {"items": [], "links": []},
+        f"{collection}/available-destinations": {"items": [], "links": []},
+        "/api/customers/customer/targets/ivr-services": {"items": [], "links": []},
+    }
+    client = PaginatedFakeNfonClient(pages)
+    service = NfonTimeControlService(client=client, customer_id="customer")
+
+    state = service.get_editor_state()
+
+    assert state["main_root_id"] == "6"
+    assert [node["id"] for node in state["chain"]] == ["6", "19", "16"]
+    assert [node["id"] for node in state["detached"]] == ["18"]
+    assert state["chain_complete"] is False
+    assert any("außerhalb der Hauptkette" in warning for warning in state["warnings"])
+
+
+def test_editor_state_stops_at_node_with_missing_destination_link():
+    collection = "/api/customers/customer/targets/time-control-services"
+    first = _time_control("1", "Start", next_id="2")
+    first["links"] = [first["links"][1]]
+    pages = {
+        collection: {"items": [first, _time_control("2", "Danach")], "links": []},
+        f"{collection}/1/inbound-trunk-numbers": {"items": [{}], "links": []},
+        f"{collection}/available-destinations": {"items": [], "links": []},
+        "/api/customers/customer/targets/ivr-services": {"items": [], "links": []},
+    }
+    service = NfonTimeControlService(client=PaginatedFakeNfonClient(pages), customer_id="customer")
+
+    state = service.get_editor_state()
+
+    assert state["stopped_at"] == "1"
+    assert [node["id"] for node in state["chain"]] == ["1"]
+    assert [node["id"] for node in state["detached"]] == ["2"]
+    assert state["chain_complete"] is False
+
+
+def test_update_editor_node_writes_weekday_hours_in_nfon_format():
+    client = FakeNfonClient(_time_control("4", "Freitag"))
+    service = NfonTimeControlService(client=client, customer_id="customer")
+
+    service.update_editor_node(
+        "4",
+        {
+            "name": "Freitag",
+            "from_day": "FRIDAY",
+            "from_time": "07:45",
+            "to_day": "FRIDAY",
+            "to_time": "12:00",
+            "denied_dates": [],
+        },
+    )
+
+    payload = client.put_calls[0][1]
+    data = {item["name"]: item["value"] for item in payload["data"]}
+    assert data["fromDay"] == "FRIDAY"
+    assert data["fromTimeOfDay"] == "07:45 AM"
+    assert data["toDay"] == "FRIDAY"
+    assert data["toTimeOfDay"] == "12:00 PM"
+
+
+def test_date_selection_accepts_datetime_values_and_expands_inclusive_range():
+    service = NfonTimeControlService(client=FakeNfonClient({}), customer_id="customer")
+
+    assert service._normalize_date_selection(
+        {
+            "date_mode": "single",
+            "dates": ["2026-12-24T13:30", "2026-12-31T08:00"],
+        }
+    ) == ["Dec 24, 2026", "Dec 31, 2026"]
+    assert service._normalize_date_selection(
+        {
+            "date_mode": "range",
+            "range_start": "2026-12-24T13:30",
+            "range_end": "2026-12-27T08:00",
+        }
+    ) == ["Dec 24, 2026", "Dec 25, 2026", "Dec 26, 2026", "Dec 27, 2026"]
+
+
+def test_date_selection_rejects_backwards_range():
+    service = NfonTimeControlService(client=FakeNfonClient({}), customer_id="customer")
+
+    try:
+        service._normalize_date_selection(
+            {
+                "date_mode": "range",
+                "range_start": "2026-12-27T08:00",
+                "range_end": "2026-12-24T13:30",
+            }
+        )
+    except ValueError as error:
+        assert "nicht vor dem Start" in str(error)
+    else:
+        raise AssertionError("Expected ValueError")
+
+
+def test_destination_options_include_all_nfon_outcomes_but_not_time_controls():
+    collection = "/api/customers/customer/targets/time-control-services"
+    pages = {
+        f"{collection}/available-destinations": {
+            "items": [
+                {
+                    "href": "/api/customers/customer/targets/phone-extensions/12",
+                    "data": [{"name": "displayName", "value": "Empfang"}],
+                },
+                {
+                    "href": f"{collection}/9",
+                    "data": [{"name": "displayName", "value": "Andere Zeitsteuerung"}],
+                },
+            ],
+            "links": [],
+        },
+        "/api/customers/customer/targets/ivr-services": {
+            "items": [
+                {
+                    "href": "/api/customers/customer/targets/ivr-services/3",
+                    "data": [{"name": "displayName", "value": "Feiertagsansage"}],
+                }
+            ],
+            "links": [],
+        },
+    }
+    service = NfonTimeControlService(
+        client=PaginatedFakeNfonClient(pages),
+        customer_id="customer",
+    )
+
+    options = service.list_destination_options()
+
+    assert {option["kind"] for option in options} == {"ivr-services", "phone-extensions"}
+    assert {option["name"] for option in options} == {"Feiertagsansage", "Empfang"}
+
+
+class InsertFakeNfonClient:
+    def __init__(self):
+        self.collection = "/api/customers/customer/targets/time-control-services"
+        self.ivr_href = "/api/customers/customer/targets/ivr-services/17"
+        self.predecessor = _time_control("6", "005 Brückentage", next_id="19")
+        self.post_calls = []
+        self.put_calls = []
+        self.delete_calls = []
+
+    def get(self, path):
+        if path == f"{self.collection}/6":
+            return FakeResponse(self.predecessor)
+        if path == f"{self.collection}/available-destinations":
+            return FakeResponse({"items": [], "links": []})
+        if path == "/api/customers/customer/targets/ivr-services":
+            return FakeResponse(
+                {
+                    "items": [
+                        {
+                            "href": self.ivr_href,
+                            "data": [{"name": "displayName", "value": "Ansage Vormittags"}],
+                        }
+                    ],
+                    "links": [],
+                }
+            )
+        raise AssertionError(f"Unexpected GET {path}")
+
+    def post(self, path, body):
+        payload = json.loads(body.decode("utf-8"))
+        self.post_calls.append((path, payload))
+        new_id = str(30 + len(self.post_calls) - 1)
+        return FakeResponse({"href": f"{self.collection}/{new_id}"}, status_code=201)
+
+    def put(self, path, body):
+        payload = json.loads(body.decode("utf-8"))
+        self.put_calls.append((path, payload))
+        return FakeResponse(payload)
+
+    def delete(self, path):
+        self.delete_calls.append(path)
+        return FakeResponse(status_code=204)
+
+
+def test_update_editor_node_changes_outcome_without_touching_chain_link():
+    client = InsertFakeNfonClient()
+    service = NfonTimeControlService(client=client, customer_id="customer")
+
+    service.update_editor_node(
+        "6",
+        {
+            "name": "005 Brückentage",
+            "from_day": "MONDAY",
+            "from_time": "00:00",
+            "to_day": "SUNDAY",
+            "to_time": "23:59",
+            "outcome_relation": "destinationIfDenied",
+            "outcome_href": client.ivr_href,
+        },
+    )
+
+    links = {link["rel"]: link["href"] for link in client.put_calls[0][1]["links"]}
+    assert links["destinationIfAllowed"].endswith("/time-control-services/19")
+    assert links["destinationIfDenied"] == client.ivr_href
+
+    try:
+        service.update_editor_node(
+            "6",
+            {
+                "name": "005 Brückentage",
+                "from_day": "MONDAY",
+                "from_time": "00:00",
+                "to_day": "SUNDAY",
+                "to_time": "23:59",
+                "outcome_relation": "destinationIfAllowed",
+                "outcome_href": client.ivr_href,
+            },
+        )
+    except ValueError as error:
+        assert "nächsten Zeitsteuerung" in str(error)
+    else:
+        raise AssertionError("Expected ValueError")
+
+
+def test_insert_partial_day_node_creates_date_gate_and_time_window_before_rewire():
+    client = InsertFakeNfonClient()
+    service = NfonTimeControlService(client=client, customer_id="customer")
+
+    result = service.insert_editor_node(
+        {
+            "after_id": "6",
+            "name": "006 Vormittags",
+            "dates": "2026-04-01, 2026-04-02",
+            "mode": "morning",
+            "from_time": "08:00",
+            "to_time": "12:00",
+            "destination_href": client.ivr_href,
+        }
+    )
+
+    assert result["created_ids"] == ["30", "31"]
+    assert len(client.post_calls) == 2
+    window_payload = client.post_calls[0][1]
+    gate_payload = client.post_calls[1][1]
+    window_data = {item["name"]: item["value"] for item in window_payload["data"]}
+    gate_data = {item["name"]: item["value"] for item in gate_payload["data"]}
+    assert window_data["fromTimeOfDay"] == "08:00 AM"
+    assert window_data["toTimeOfDay"] == "12:00 PM"
+    assert window_data["referralDenied"] == []
+    assert gate_data["referralDenied"] == ["Apr 01, 2026", "Apr 02, 2026"]
+    assert gate_payload["links"][1]["href"].endswith("/30")
+    predecessor_links = {link["rel"]: link["href"] for link in client.put_calls[0][1]["links"]}
+    assert predecessor_links["destinationIfAllowed"].endswith("/31")
+    assert client.delete_calls == []
+
+
+def test_insert_node_rolls_back_created_service_if_predecessor_rewire_fails():
+    class RewireFailingClient(InsertFakeNfonClient):
+        def put(self, path, body):
+            self.put_calls.append((path, json.loads(body.decode("utf-8"))))
+            return FakeResponse(
+                {"title": "Validation failed", "errors": []},
+                status_code=400,
+                text="Validation failed",
+            )
+
+    client = RewireFailingClient()
+    service = NfonTimeControlService(client=client, customer_id="customer")
+
+    try:
+        service.insert_editor_node(
+            {
+                "after_id": "6",
+                "name": "Feiertag",
+                "dates": "2026-12-24",
+                "mode": "full_day",
+                "destination_href": client.ivr_href,
+            }
+        )
+    except ValueError as error:
+        assert "Validation failed" in str(error)
+    else:
+        raise AssertionError("Expected ValueError")
+
+    assert client.delete_calls == [f"{client.collection}/30"]
