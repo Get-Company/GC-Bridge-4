@@ -900,15 +900,22 @@ UNFOLD = {
                         "permission": sidebar_model_view_permission("organization", "OrganizationRole"),
                     },
                     {
-                        "title": _("Zeitsteuerung"),
-                        "icon": "schedule",
-                        "link": reverse_lazy("admin:telefon_zeitsteuerung_list"),
-                    },
-                    {
                         "title": _("Backend-Aktivität"),
                         "icon": "manage_history",
                         "link": reverse_lazy("admin:admin_logentry_changelist"),
                         "permission": lambda request: request.user.is_superuser,
+                    },
+                ],
+            },
+            {
+                "title": _("Telefoneinstellungen"),
+                "separator": True,
+                "collapsible": True,
+                "items": [
+                    {
+                        "title": _("Telefon"),
+                        "icon": "schedule",
+                        "link": reverse_lazy("admin:telefon_zeitsteuerung_list"),
                     },
                 ],
             },

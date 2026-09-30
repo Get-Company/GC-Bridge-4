@@ -297,6 +297,52 @@ def test_editor_state_stops_at_node_with_missing_destination_link():
     assert state["chain_complete"] is False
 
 
+def test_editor_state_recognizes_partial_day_gate_as_connected_chain():
+    collection = "/api/customers/customer/targets/time-control-services"
+    gate = _time_control("20", "006 Vormittags", next_id="19")
+    gate["links"][0] = {
+        "rel": "destinationIfDenied",
+        "href": f"{collection}/30",
+    }
+    next(item for item in gate["data"] if item["name"] == "referralDenied")["value"] = ["Aug 08, 2026"]
+
+    window = _time_control("30", "006 Vormittags · Zeitfenster", next_id="19")
+    window["links"] = [
+        {
+            "rel": "destinationIfAllowed",
+            "href": "/api/customers/customer/targets/ivr-services/17",
+        },
+        {
+            "rel": "destinationIfDenied",
+            "href": f"{collection}/19",
+        },
+    ]
+    next(item for item in window["data"] if item["name"] == "fromTimeOfDay")["value"] = "07:45 AM"
+    next(item for item in window["data"] if item["name"] == "toTimeOfDay")["value"] = "12:00 PM"
+
+    pages = {
+        collection: {
+            "items": [gate, window, _time_control("19", "007 Danach")],
+            "links": [],
+        },
+        f"{collection}/20/inbound-trunk-numbers": {"items": [{}], "links": []},
+        f"{collection}/available-destinations": {"items": [], "links": []},
+        "/api/customers/customer/targets/ivr-services": {"items": [], "links": []},
+    }
+    service = NfonTimeControlService(client=PaginatedFakeNfonClient(pages), customer_id="customer")
+
+    state = service.get_editor_state()
+
+    assert [node["id"] for node in state["chain"]] == ["20", "30", "19"]
+    assert state["detached"] == []
+    assert state["chain_complete"] is True
+    assert state["chain"][0]["next_id"] == "30"
+    assert state["chain"][0]["next_relation"] == "destinationIfDenied"
+    assert state["chain"][0]["bypass_id"] == "19"
+    assert state["chain"][0]["bypass_relation"] == "destinationIfAllowed"
+    assert not any("verzweigt" in warning for warning in state["warnings"])
+
+
 def test_update_editor_node_writes_weekday_hours_in_nfon_format():
     client = FakeNfonClient(_time_control("4", "Freitag"))
     service = NfonTimeControlService(client=client, customer_id="customer")
@@ -507,6 +553,48 @@ def test_insert_partial_day_node_creates_date_gate_and_time_window_before_rewire
     predecessor_links = {link["rel"]: link["href"] for link in client.put_calls[0][1]["links"]}
     assert predecessor_links["destinationIfAllowed"].endswith("/31")
     assert client.delete_calls == []
+
+
+def test_configure_partial_day_node_moves_announcement_to_matching_time_window():
+    client = InsertFakeNfonClient()
+    service = NfonTimeControlService(client=client, customer_id="customer")
+
+    result = service.configure_partial_day_node(
+        "6",
+        {
+            "name": "006 Zeitsteuerung Vormittags Ansage",
+            "date_mode": "single",
+            "dates": ["2026-08-08T07:45"],
+            "from_time": "07:45",
+            "to_time": "12:00",
+            "destination_href": client.ivr_href,
+        },
+    )
+
+    assert result == {
+        "service_id": "6",
+        "window_service_id": "30",
+        "dates": ["Aug 08, 2026"],
+        "from_time": "07:45",
+        "to_time": "12:00",
+    }
+    window_payload = client.post_calls[0][1]
+    window_data = {item["name"]: item["value"] for item in window_payload["data"]}
+    window_links = {link["rel"]: link["href"] for link in window_payload["links"]}
+    assert window_data["fromTimeOfDay"] == "07:45 AM"
+    assert window_data["toTimeOfDay"] == "12:00 PM"
+    assert window_data["referralDenied"] == []
+    assert window_links["destinationIfAllowed"] == client.ivr_href
+    assert window_links["destinationIfDenied"].endswith("/time-control-services/19")
+
+    gate_payload = client.put_calls[0][1]
+    gate_data = {item["name"]: item["value"] for item in gate_payload["data"]}
+    gate_links = {link["rel"]: link["href"] for link in gate_payload["links"]}
+    assert gate_data["fromTimeOfDay"] == "12:00 AM"
+    assert gate_data["toTimeOfDay"] == "11:59 PM"
+    assert gate_data["referralDenied"] == ["Aug 08, 2026"]
+    assert gate_links["destinationIfAllowed"].endswith("/time-control-services/19")
+    assert gate_links["destinationIfDenied"].endswith("/time-control-services/30")
 
 
 def test_insert_node_rolls_back_created_service_if_predecessor_rewire_fails():

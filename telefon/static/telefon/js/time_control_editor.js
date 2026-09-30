@@ -24,6 +24,20 @@
         SATURDAY: "Samstag",
         SUNDAY: "Sonntag",
     };
+    const monthNumbers = {
+        Jan: "01",
+        Feb: "02",
+        Mar: "03",
+        Apr: "04",
+        May: "05",
+        Jun: "06",
+        Jul: "07",
+        Aug: "08",
+        Sep: "09",
+        Oct: "10",
+        Nov: "11",
+        Dec: "12",
+    };
 
     function escapeHtml(value) {
         return String(value == null ? "" : value)
@@ -114,6 +128,117 @@
         return denied.concat(allowed).join("") || '<span class="tc-summary-value">Keine Ausnahmedaten</span>';
     }
 
+    function nfonDateKey(value) {
+        const text = String(value || "").trim();
+        const isoMatch = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (isoMatch) return isoMatch[1] + "-" + isoMatch[2] + "-" + isoMatch[3];
+        const nfonMatch = text.match(/^([A-Z][a-z]{2})\s+(\d{1,2}),\s*(\d{4})$/);
+        if (!nfonMatch || !monthNumbers[nfonMatch[1]]) return "";
+        return nfonMatch[3] + "-" + monthNumbers[nfonMatch[1]] + "-" + nfonMatch[2].padStart(2, "0");
+    }
+
+    function currentMoment() {
+        const formatter = new Intl.DateTimeFormat("en-GB", {
+            timeZone: state.time_zone || "Europe/Berlin",
+            weekday: "long",
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+            hourCycle: "h23",
+        });
+        const values = {};
+        formatter.formatToParts(new Date()).forEach(function (part) {
+            if (part.type !== "literal") values[part.type] = part.value;
+        });
+        return {
+            date: values.year + "-" + values.month + "-" + values.day,
+            weekday: String(values.weekday || "").toUpperCase(),
+            time: values.hour + ":" + values.minute,
+        };
+    }
+
+    function weekdayInRange(weekday, fromDay, toDay) {
+        const weekdays = state.weekdays || Object.keys(weekdayLabels);
+        const currentIndex = weekdays.indexOf(weekday);
+        const fromIndex = weekdays.indexOf(fromDay);
+        const toIndex = weekdays.indexOf(toDay);
+        if (currentIndex < 0 || fromIndex < 0 || toIndex < 0) return false;
+        if (fromIndex <= toIndex) return currentIndex >= fromIndex && currentIndex <= toIndex;
+        return currentIndex >= fromIndex || currentIndex <= toIndex;
+    }
+
+    function nodeAllowsMoment(node, moment) {
+        const deniedDates = (node.denied_dates || []).map(nfonDateKey);
+        if (deniedDates.indexOf(moment.date) !== -1) return false;
+        const allowedDates = (node.allowed_dates || []).map(nfonDateKey);
+        if (allowedDates.indexOf(moment.date) !== -1) return true;
+
+        const fromTime = node.from_time || "00:00";
+        const toTime = node.to_time || "23:59";
+        if (fromTime <= toTime) {
+            return weekdayInRange(moment.weekday, node.from_day, node.to_day)
+                && moment.time >= fromTime
+                && moment.time <= toTime;
+        }
+
+        const weekdays = state.weekdays || Object.keys(weekdayLabels);
+        const currentIndex = weekdays.indexOf(moment.weekday);
+        const previousDay = currentIndex >= 0 ? weekdays[(currentIndex + weekdays.length - 1) % weekdays.length] : "";
+        return (weekdayInRange(moment.weekday, node.from_day, node.to_day) && moment.time >= fromTime)
+            || (weekdayInRange(previousDay, node.from_day, node.to_day) && moment.time <= toTime);
+    }
+
+    function inferredNextRelation(node) {
+        if (node.next_relation) return node.next_relation;
+        const outcomeRelations = (node.outcomes || []).map(function (outcome) { return outcome.rel; });
+        if (node.next_id && outcomeRelations.length === 1) {
+            return outcomeRelations[0] === "destinationIfAllowed" ? "destinationIfDenied" : "destinationIfAllowed";
+        }
+        return "";
+    }
+
+    function activeNodeId() {
+        const moment = currentMoment();
+        const chain = state.chain || [];
+        const nodesById = {};
+        chain.forEach(function (node) { nodesById[String(node.id)] = node; });
+        const visited = {};
+        let node = chain.length ? chain[0] : null;
+        while (node && !visited[String(node.id)]) {
+            visited[String(node.id)] = true;
+            const relation = nodeAllowsMoment(node, moment) ? "destinationIfAllowed" : "destinationIfDenied";
+            const outcomeMatches = (node.outcomes || []).some(function (outcome) {
+                return outcome.rel === relation;
+            });
+            if (outcomeMatches) return String(node.id);
+            let targetId = "";
+            if (node.next_id && inferredNextRelation(node) === relation) {
+                targetId = String(node.next_id);
+            } else if (node.bypass_id && node.bypass_relation === relation) {
+                targetId = String(node.bypass_id);
+            }
+            node = targetId ? nodesById[targetId] : null;
+        }
+        return "";
+    }
+
+    function updateActiveNodeHighlight() {
+        const activeId = activeNodeId();
+        page.querySelectorAll(".tc-node[data-node-id]").forEach(function (element) {
+            const isActive = activeId !== "" && element.dataset.nodeId === activeId;
+            element.classList.toggle("tc-node-active", isActive);
+            if (isActive) {
+                element.setAttribute("aria-current", "true");
+            } else {
+                element.removeAttribute("aria-current");
+            }
+            const badge = element.querySelector("[data-active-badge]");
+            if (badge) badge.hidden = !isActive;
+        });
+    }
+
     function toDateTimeLocal(value, time) {
         const parsed = new Date(value);
         if (Number.isNaN(parsed.getTime())) return "";
@@ -201,6 +326,7 @@
             "      <div><h3>" + escapeHtml(node.name) + '</h3><span class="tc-node-id">NFON ID ' + escapeHtml(node.id) + "</span></div>",
             "    </div>",
             '    <div class="tc-node-actions">',
+            '      <span class="tc-active-badge" data-active-badge hidden><span class="material-symbols-outlined">phone_in_talk</span>Jetzt aktiv</span>',
             '      <button type="button" class="tc-icon-button" data-toggle-editor="' + escapeHtml(editorId) + '" title="Node bearbeiten" aria-expanded="false"><span class="material-symbols-outlined">tune</span></button>',
             "    </div>",
             "  </div>",
@@ -378,6 +504,7 @@
         bindDateSelectors(chainElement);
         bindDateSelectors(detachedGrid);
         populateDestinationOptions();
+        updateActiveNodeHighlight();
     }
 
     function populateDestinationOptions() {
@@ -446,4 +573,5 @@
 
     bindDateSelectors(insertForm);
     render();
+    window.setInterval(updateActiveNodeHighlight, 30000);
 })();

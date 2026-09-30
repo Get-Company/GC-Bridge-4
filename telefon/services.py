@@ -7,6 +7,8 @@ from datetime import date, datetime, timedelta
 from typing import Any
 from urllib.parse import urlparse
 
+from django.conf import settings
+
 from core.services import BaseService
 from core.services.nfon_client import NfonClient
 
@@ -85,6 +87,7 @@ class NfonTimeControlService(BaseService):
 
         nodes = [self._serialize_editor_node(service) for service in services]
         nodes_by_id = {node["id"]: node for node in nodes}
+        partial_day_routes = self._partial_day_routes(nodes_by_id)
         incoming = {node_id: [] for node_id in nodes_by_id}
         warnings: list[str] = []
         broken_node_ids: set[str] = set()
@@ -108,15 +111,24 @@ class NfonTimeControlService(BaseService):
                 for destination in node["destinations"]
                 if destination["kind"] == "time-control-services"
             ]
-            node["next_ids"] = [destination["id"] for destination in time_control_links]
+            partial_day_route = partial_day_routes.get(node["id"])
+            chain_links = time_control_links
+            node["bypass_id"] = None
+            node["bypass_relation"] = None
+            if partial_day_route:
+                chain_links = [partial_day_route["window_link"]]
+                node["bypass_id"] = partial_day_route["continuation_link"]["id"]
+                node["bypass_relation"] = partial_day_route["continuation_link"]["rel"]
+
+            node["next_ids"] = [destination["id"] for destination in chain_links]
             node["next_id"] = node["next_ids"][0] if len(node["next_ids"]) == 1 else None
-            node["next_relation"] = time_control_links[0]["rel"] if len(time_control_links) == 1 else None
-            if len(time_control_links) > 1:
+            node["next_relation"] = chain_links[0]["rel"] if len(chain_links) == 1 else None
+            if len(time_control_links) > 1 and not partial_day_route:
                 broken_node_ids.add(node["id"])
                 warnings.append(
                     f"{node['name']} verzweigt auf mehrere Zeitsteuerungen. Die Kette stoppt hier."
                 )
-            for destination in time_control_links:
+            for destination in chain_links:
                 target_id = destination["id"]
                 if target_id in incoming:
                     incoming[target_id].append(node["id"])
@@ -214,6 +226,7 @@ class NfonTimeControlService(BaseService):
             "node_count": len(nodes),
             "destination_options": destination_options,
             "weekdays": list(self.WEEKDAYS),
+            "time_zone": settings.TIME_ZONE,
         }
 
     def update_editor_node(self, service_id: str, values: dict[str, Any]) -> dict[str, Any]:
@@ -332,6 +345,68 @@ class NfonTimeControlService(BaseService):
             raise
 
         return {"created_ids": created, "after_id": after_id}
+
+    def configure_partial_day_node(self, service_id: str, values: dict[str, Any]) -> dict[str, Any]:
+        """Turn an existing date node into a date-gate/time-window pair."""
+        gate = self._fetch_time_control(service_id)
+        name = self._required_text(values.get("name"), "Name")
+        dates = self._normalize_date_selection(values)
+        if not dates:
+            raise ValueError("Mindestens ein Auslösedatum ist erforderlich.")
+        from_time, to_time = self._window_times("custom", values)
+        announcement_href = self._validate_destination_href(values.get("destination_href"))
+        continuation = self._continuation_link(gate)
+        if continuation is None:
+            raise ValueError(
+                "Die Node hat kein eindeutiges Weiterleitungsziel. Die Kette wurde nicht verändert."
+            )
+
+        window_service = self._create_time_control(
+            name=f"{name} · Zeitfenster",
+            denied_dates=[],
+            from_time=from_time,
+            to_time=to_time,
+            allowed_href=announcement_href,
+            denied_href=continuation["href"],
+        )
+        try:
+            gate_payload = self._payload_with_updates(
+                gate,
+                data_updates={
+                    "name": name,
+                    "displayName": name,
+                    "fromDay": "MONDAY",
+                    "fromTimeOfDay": self._format_api_time("00:00"),
+                    "toDay": "SUNDAY",
+                    "toTimeOfDay": self._format_api_time("23:59"),
+                    "referralAllowed": [],
+                    "referralDenied": dates,
+                },
+                link_updates={
+                    "destinationIfAllowed": continuation["href"],
+                    "destinationIfDenied": window_service["href"],
+                },
+            )
+            response = self.client.put(
+                self._detail_path(service_id),
+                json.dumps(gate_payload).encode("utf-8"),
+            )
+            if response.status_code >= 300:
+                raise ValueError(self._format_error_response(response))
+        except Exception:
+            try:
+                self.client.delete(self._detail_path(window_service["id"]))
+            except Exception:
+                pass
+            raise
+
+        return {
+            "service_id": service_id,
+            "window_service_id": window_service["id"],
+            "dates": dates,
+            "from_time": from_time,
+            "to_time": to_time,
+        }
 
     def list_destination_options(self) -> list[dict[str, str]]:
         options: list[dict[str, str]] = []
@@ -517,6 +592,54 @@ class NfonTimeControlService(BaseService):
             return (-int(node.get("inbound_count") or 0), prefix, str(node.get("name") or ""))
 
         return sorted(roots, key=order_key)[0]
+
+    @staticmethod
+    def _partial_day_routes(nodes_by_id: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+        """Recognize date gates whose matching branch passes through a time window."""
+        routes: dict[str, dict[str, Any]] = {}
+        for gate in nodes_by_id.values():
+            gate_links = [
+                destination
+                for destination in gate["destinations"]
+                if destination["kind"] == "time-control-services"
+            ]
+            if len(gate_links) != 2 or not gate["denied_dates"]:
+                continue
+
+            for window_link in gate_links:
+                window = nodes_by_id.get(window_link["id"])
+                if window is None or window["denied_dates"] or window["allowed_dates"]:
+                    continue
+                window_links = [
+                    destination
+                    for destination in window["destinations"]
+                    if destination["kind"] == "time-control-services"
+                ]
+                window_outcomes = [
+                    destination
+                    for destination in window["destinations"]
+                    if destination["kind"] != "time-control-services"
+                ]
+                if len(window_links) != 1 or len(window_outcomes) != 1:
+                    continue
+                continuation_link = next(
+                    (
+                        destination
+                        for destination in gate_links
+                        if destination["id"] == window_links[0]["id"]
+                    ),
+                    None,
+                )
+                if continuation_link is None:
+                    continue
+                if window_outcomes[0]["rel"] == window_links[0]["rel"]:
+                    continue
+                routes[gate["id"]] = {
+                    "window_link": window_link,
+                    "continuation_link": continuation_link,
+                }
+                break
+        return routes
 
     @classmethod
     def _format_html_time(cls, value: str) -> str:
