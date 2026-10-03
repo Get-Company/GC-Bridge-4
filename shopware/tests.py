@@ -1341,11 +1341,13 @@ class ShopwareVariantSyncServiceTest(TestCase):
                 "configuratorGroupConfig": [
                     {
                         "id": expected_size_group_id,
+                        "representation": "box",
                         "expressionForListings": False,
                         "position": 10,
                     },
                     {
                         "id": self.color_group.shopware_id,
+                        "representation": "box",
                         "expressionForListings": True,
                         "position": 20,
                     },
