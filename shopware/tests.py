@@ -1140,7 +1140,7 @@ class ShopwareVariantSyncServiceTest(TestCase):
 
         self.assertTrue(result.dry_run)
         self.assertEqual(result.variant_count, 1)
-        product_service.method_calls.assert_not_called()
+        self.assertEqual(product_service.method_calls, [])
 
     def test_dry_run_rejects_image_display_without_selection_image(self):
         self.color.image = None
@@ -1150,7 +1150,7 @@ class ShopwareVariantSyncServiceTest(TestCase):
         result = ShopwareVariantSyncService(product_service=product_service).sync(self.family, dry_run=True)
 
         self.assertEqual(result.errors, ("Bilddarstellung für 'Farbe' ohne Auswahlbild: Weiß.",))
-        product_service.method_calls.assert_not_called()
+        self.assertEqual(product_service.method_calls, [])
 
     def test_customer_visible_variant_content_uses_native_sw6_translations(self):
         self.family.shopware_id = "parent-shopware-id"
@@ -1293,6 +1293,10 @@ class ShopwareVariantSyncServiceTest(TestCase):
             self.size_group.external_key,
             self.size.external_key,
         )
+        expected_size_group_id = ShopwareVariantSyncService._stable_id(
+            "property-group",
+            self.size_group.external_key or self.size_group.name,
+        )
         product_service.bulk_upsert.assert_any_call(
             [
                 {
@@ -1336,7 +1340,7 @@ class ShopwareVariantSyncServiceTest(TestCase):
                 "mainVariantId": "child-shopware-id",
                 "configuratorGroupConfig": [
                     {
-                        "id": self.size_group.shopware_id,
+                        "id": expected_size_group_id,
                         "expressionForListings": False,
                         "position": 10,
                     },
@@ -1379,6 +1383,7 @@ class ShopwareVariantSyncServiceTest(TestCase):
 
     def test_apply_removes_stale_parent_configurator_settings(self):
         product_service = MagicMock()
+        product_service._entity_id.side_effect = lambda row: row.get("id", "")
         product_service.find_sku_by_number.return_value = "parent-shopware-id"
         product_service.get_sku_map.return_value = {"581000": "child-shopware-id"}
         expected_size_option_id = ShopwareVariantSyncService._stable_id(
@@ -1476,6 +1481,7 @@ class ShopwareVariantSyncServiceTest(TestCase):
         self.family.synced_products.add(stale_product)
         self.family.variant_attributes.all().delete()
         product_service = MagicMock()
+        product_service._entity_id.side_effect = lambda row: row.get("id", "")
         product_service.find_sku_by_number.return_value = "parent-shopware-id"
         product_service.get_sku_map.return_value = {"291004W": "stale-shopware-id"}
         product_service.request_post.return_value = {"data": [{"id": "stale-configurator-setting"}]}
