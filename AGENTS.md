@@ -17,6 +17,21 @@ These rules are mandatory for all contributors and tools.
 - The Bridge runs at `http://10.0.0.165/`; its admin UI is at `http://10.0.0.165/admin/`.
 - Interpret requests such as "öffne die Bridge" or "geh in die Bridge" as requests to open this web UI.
 - For requests to open or work on rules, use the graphical `Microtech → Regel-Mappings` page at `/admin/microtech/microtechorderrule/builder/`.
+- The issues to work on are the Bridge's internal issues at `/admin/issues/issue/`, not GitHub issues, unless the user explicitly says otherwise.
+
+## Remote access
+
+- Use the configured SSH alias `gcbridge` for the GC-Bridge server.
+- Use the configured SSH alias `shopware` for the DomainFactory server that hosts Shopware 6.
+- Never add SSH private keys, passwords, access tokens, or `.env` contents to this repository.
+
+## Shopware 6
+
+- The live storefront is `https://www.classei-shop.com/`; its admin UI is at `https://www.classei-shop.com/admin`.
+- The confirmed live Shopware project root on the `shopware` SSH host is `/kunden/106812_83250/webseiten/shopware/sw6dev`.
+- The confirmed live document root is `/kunden/106812_83250/webseiten/shopware/sw6dev/public`.
+- Always invoke PHP explicitly as `/usr/bin/php84` for Shopware commands; never rely on an unversioned `php` executable from `PATH`.
+- Treat `/kunden/106812_83250/webseiten/shopware/sw6` and the sibling `develop` and `entwicklung` directories as legacy installations unless the user explicitly asks to work on them.
 
 ## Release tags
 
