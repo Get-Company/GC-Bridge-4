@@ -1354,8 +1354,8 @@ class ShopwareVariantSyncServiceTest(TestCase):
                 ],
             },
         )
-        self.assertTrue(
-            any(
+        self.assertEqual(
+            sum(
                 payload == [
                     {
                         "id": "child-shopware-id",
@@ -1370,7 +1370,8 @@ class ShopwareVariantSyncServiceTest(TestCase):
                     }
                 ]
                 for payload in product_payloads
-            )
+            ),
+            2,
         )
         self.assertIn(
             [
