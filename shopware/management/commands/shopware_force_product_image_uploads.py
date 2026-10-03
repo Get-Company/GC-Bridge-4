@@ -196,6 +196,15 @@ class Command(MonitoredBaseCommand):
                 logger.warning("Shopware force image batch {} skipped: no resolvable Shopware product IDs.", batch_no)
                 continue
 
+            # Validate/download every source before removing live media. A bad
+            # file or unavailable source must not leave this batch without images.
+            try:
+                for upload in media_uploads.values():
+                    upload["prepared_content"] = service.prepare_media_upload(source_url=upload["source_url"])
+            except Exception as exc:
+                self._record_error(errors=errors, batch_no=batch_no, step="prepare", products=batch_erp_nrs, exc=exc)
+                continue
+
             if not self._run_delete_step(
                 service=service,
                 batch_no=batch_no,

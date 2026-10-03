@@ -6,6 +6,7 @@ from lib_shopware6_api_base.conf_shopware6_api_base_classes import ShopwareAPIEr
 from loguru import logger
 
 from .product_media import ProductMediaSyncService
+from .image_color import ImageColorProfileService
 from shopware.services.shopware6 import Shopware6Service
 
 
@@ -452,23 +453,31 @@ class ProductService(Shopware6Service):
         ]
         return self.delete_media_by_ids(media_ids)
 
-    def upload_media_from_url(self, *, media_id: str, file_name: str, source_url: str) -> Any:
+    def prepare_media_upload(self, *, source_url: str) -> bytes:
+        if not hasattr(self, "_image_color_service"):
+            self._image_color_service = ImageColorProfileService()
+        return self._image_color_service.prepare_upload(source_url=source_url)
+
+    def upload_media_from_url(
+        self, *, media_id: str, file_name: str, source_url: str, prepared_content: bytes | None = None,
+    ) -> Any:
         base_name, extension = ProductMediaSyncService.split_file_name(file_name)
+        content = prepared_content if prepared_content is not None else self.prepare_media_upload(source_url=source_url)
         self.delete_conflicting_media_by_filename(
             file_name=base_name,
             extension=extension,
             exclude_media_id=media_id,
         )
         try:
-            return self.request_post(
+            return self.request_binary(
                 f"/_action/media/{media_id}/upload",
-                payload={"url": source_url},
+                content=content,
                 additional_query_params={
                     "extension": extension,
                     "fileName": base_name,
                 },
             )
-        except RuntimeError as exc:
+        except (RuntimeError, ShopwareAPIError) as exc:
             if not self._is_duplicate_media_filename_error(exc):
                 raise
             self.delete_conflicting_media_by_filename(
@@ -476,9 +485,9 @@ class ProductService(Shopware6Service):
                 extension=extension,
                 exclude_media_id=media_id,
             )
-            return self.request_post(
+            return self.request_binary(
                 f"/_action/media/{media_id}/upload",
-                payload={"url": source_url},
+                content=content,
                 additional_query_params={
                     "extension": extension,
                     "fileName": base_name,

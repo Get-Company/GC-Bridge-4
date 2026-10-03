@@ -7,6 +7,8 @@ from lib_shopware6_api_base import (
     ContainsFilter,
 )
 from loguru import logger
+from authlib.integrations.base_client.errors import TokenExpiredError
+from lib_shopware6_api_base.conf_shopware6_api_base_classes import ShopwareAPIError
 
 from shopware.services.base import ShopwareBaseService
 from shopware.services.config import ConfShopware6ApiBase
@@ -149,6 +151,36 @@ class Shopware6Service(ShopwareBaseService):
         result = self._request_with_retry("request_patch", path, payload=payload)
         logger.debug("Shopware6 PATCH {} -> {}", path, result)
         return result
+
+    def request_binary(self, path: str, *, content: bytes, additional_query_params: dict) -> dict:
+        """Upload actual bytes using the library's authenticated HTTP session.
+
+        The library's JSON request wrapper stringifies byte payloads, so binary
+        uploads must use its session directly.
+        """
+        for attempt in range(2):
+            try:
+                self.client._get_session()
+                response = self.client.session.post(
+                    self.client._format_admin_api_url(path),
+                    content=content,
+                    headers={"Content-Type": "application/octet-stream", "Accept": "application/json"},
+                    params=additional_query_params,
+                    timeout=60,
+                    follow_redirects=self.client.config.follow_redirects,
+                )
+            except (InvalidTokenError, TokenExpiredError):
+                if attempt:
+                    raise
+                self.client = self._build_client()
+                continue
+            if response.status_code == 401 and not attempt:
+                self.client = self._build_client()
+                continue
+            if response.is_error:
+                raise ShopwareAPIError(f"Shopware binary upload failed ({response.status_code}): {response.text}")
+            return response.json() if response.content else {}
+        raise RuntimeError("Shopware binary upload authentication failed.")
 
     def request_delete(self, path: str):
         logger.debug("Shopware6 DELETE {}", path)

@@ -805,8 +805,9 @@ class ProductMediaSyncServiceTest(SimpleTestCase):
         self.assertEqual(base_name, "produkt-bild")
         self.assertEqual(extension, "jpeg")
 
-    @patch.object(ProductService, "request_post")
-    def test_upload_media_from_url_uses_shopware_upload_endpoint(self, mock_request_post):
+    @patch.object(ProductService, "prepare_media_upload", return_value=b"normalized-image")
+    @patch.object(ProductService, "request_binary")
+    def test_upload_media_from_url_uses_shopware_upload_endpoint(self, mock_request_post, prepare_upload):
         service = ProductService.__new__(ProductService)
         service.delete_conflicting_media_by_filename = MagicMock(return_value=0)
 
@@ -819,12 +820,13 @@ class ProductMediaSyncServiceTest(SimpleTestCase):
 
         mock_request_post.assert_called_once_with(
             "/_action/media/media-1/upload",
-            payload={"url": "https://cdn.example.com/img/bild.png"},
+            content=b"normalized-image",
             additional_query_params={"extension": "png", "fileName": "bild"},
         )
 
-    @patch.object(ProductService, "request_post")
-    def test_upload_media_from_url_retries_after_duplicate_filename_conflict(self, mock_request_post):
+    @patch.object(ProductService, "prepare_media_upload", return_value=b"normalized-image")
+    @patch.object(ProductService, "request_binary")
+    def test_upload_media_from_url_retries_after_duplicate_filename_conflict(self, mock_request_post, prepare_upload):
         service = ProductService.__new__(ProductService)
         service.delete_conflicting_media_by_filename = MagicMock(return_value=1)
         mock_request_post.side_effect = [
@@ -843,7 +845,7 @@ class ProductMediaSyncServiceTest(SimpleTestCase):
         self.assertEqual(service.delete_conflicting_media_by_filename.call_count, 2)
         mock_request_post.assert_called_with(
             "/_action/media/media-2/upload",
-            payload={"url": "https://cdn.example.com/img/bild.jpg"},
+            content=b"normalized-image",
             additional_query_params={"extension": "jpg", "fileName": "bild"},
         )
 
@@ -1520,6 +1522,23 @@ class ShopwareVariantSyncServiceTest(TestCase):
 
 
 class ForceProductImageUploadsCommandTest(TestCase):
+    @patch("shopware.management.commands.shopware_force_product_image_uploads.ProductService")
+    def test_preparation_failure_preserves_live_images_and_sync_hash(self, product_service_factory):
+        service = product_service_factory.return_value
+        service.prepare_media_upload.side_effect = ValueError("Invalid ICC profile")
+        product = Product.objects.create(erp_nr="A-preflight", sku="sku-preflight", shopware_image_sync_hash="old-hash")
+        image = Image.objects.create(path="invalid-profile.jpg")
+        ProductImage.objects.create(product=product, image=image, order=1)
+
+        with self.assertRaises(CommandError):
+            ForceProductImageUploadsCommand().handle(
+                all=False, limit=None, batch_size=10, erp_nrs=["A-preflight"], only_with_images=False, log_images=False,
+            )
+        service.purge_product_media_by_product_ids.assert_not_called()
+        service.upload_media_from_url.assert_not_called()
+        product.refresh_from_db()
+        self.assertEqual(product.shopware_image_sync_hash, "old-hash")
+
     @patch("shopware.management.commands.shopware_force_product_image_uploads.ProductService")
     def test_handle_processes_all_products_when_no_erp_numbers_are_given(self, product_service_factory):
         service = MagicMock()

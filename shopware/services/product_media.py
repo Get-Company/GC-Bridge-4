@@ -94,10 +94,12 @@ class ProductMediaSyncService(BaseService):
                     upload["source_url"],
                 )
             try:
+                prepared = {"prepared_content": upload["prepared_content"]} if "prepared_content" in upload else {}
                 product_service.upload_media_from_url(
                     media_id=upload["media_id"],
                     file_name=upload["file_name"],
                     source_url=upload["source_url"],
+                    **prepared,
                 )
             except ShopwareAPIError as exc:
                 if "CONTENT__MEDIA_CANNOT_OPEN_SOURCE_STREAM_TO_READ" in str(exc):
