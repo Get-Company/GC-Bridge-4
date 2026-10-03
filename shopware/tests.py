@@ -1360,6 +1360,7 @@ class ShopwareVariantSyncServiceTest(TestCase):
                         "productNumber": "581000",
                         "parentId": "parent-shopware-id",
                         "stock": 0,
+                        "maxPurchase": 0,
                         "options": [
                             {"id": expected_size_option_id},
                             {"id": self.color.shopware_id},
