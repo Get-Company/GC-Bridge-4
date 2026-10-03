@@ -165,6 +165,7 @@ PROPERTY_VALUE_VARIANT_SYNC_FIELDS = (
 )
 VARIANT_ATTRIBUTE_SYNC_FIELDS = (
     "display_type",
+    "expand_in_listing",
     "fallback_value_id",
     "family_id",
     "position",

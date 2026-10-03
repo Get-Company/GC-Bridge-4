@@ -807,6 +807,14 @@ class ProductVariantAutoSyncSignalTest(TestCase):
         mock_delay.assert_called_once_with(self.family.pk)
 
     @patch("products.tasks.sync_variant_family_to_shopware.delay")
+    def test_changed_variant_listing_expansion_queues_its_family_after_commit(self, mock_delay):
+        with self.captureOnCommitCallbacks(execute=True):
+            self.attribute.expand_in_listing = True
+            self.attribute.save(update_fields=["expand_in_listing"])
+
+        mock_delay.assert_called_once_with(self.family.pk)
+
+    @patch("products.tasks.sync_variant_family_to_shopware.delay")
     def test_changed_property_group_queues_affected_family_after_commit(self, mock_delay):
         with self.captureOnCommitCallbacks(execute=True):
             self.group.name = "Grundfarbe"
@@ -3377,6 +3385,7 @@ class ProductImageAdminAndSyncTest(TestCase):
 
         self.assertEqual(attribute_inline.ordering_field, "position")
         self.assertTrue(attribute_inline.hide_ordering_field)
+        self.assertIn("expand_in_listing", attribute_inline.fields)
 
     def test_property_value_admin_inherits_sorting_defaults(self):
         property_value_admin = PropertyValueAdmin(PropertyValue, AdminSite())

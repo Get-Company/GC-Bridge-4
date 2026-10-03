@@ -290,7 +290,7 @@ class ShopwareVariantSyncService(BaseService):
             variant_listing_config["configuratorGroupConfig"] = [
                 {
                     "id": group_ids[attribute.property_group_id],
-                    "expressionForListings": False,
+                    "expressionForListings": attribute.expand_in_listing,
                     "position": attribute.position,
                 }
                 for attribute in resolution.attributes

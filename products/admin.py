@@ -3946,7 +3946,13 @@ class PropertyValueAdmin(TabbedTranslationAdmin, BaseAdmin):
 
 class ProductVariantAttributeInline(BaseTabularInline):
     model = ProductVariantAttribute
-    fields = ("property_group", "position", "display_type", "fallback_value")
+    fields = (
+        "property_group",
+        "position",
+        "display_type",
+        "expand_in_listing",
+        "fallback_value",
+    )
     autocomplete_fields = ("property_group", "fallback_value")
     extra = 0
 

@@ -1125,11 +1125,12 @@ class ShopwareVariantSyncServiceTest(TestCase):
         )
         self.family.source_categories.add(self.source_category)
         ProductVariantAttribute.objects.create(family=self.family, property_group=self.size_group, position=10)
-        ProductVariantAttribute.objects.create(
+        self.color_attribute = ProductVariantAttribute.objects.create(
             family=self.family,
             property_group=self.color_group,
             position=20,
             display_type=ProductVariantAttribute.DisplayType.IMAGE,
+            expand_in_listing=True,
         )
 
     def test_dry_run_derives_variant_without_calling_shopware(self):
@@ -1341,7 +1342,7 @@ class ShopwareVariantSyncServiceTest(TestCase):
                     },
                     {
                         "id": self.color_group.shopware_id,
-                        "expressionForListings": False,
+                        "expressionForListings": True,
                         "position": 20,
                     },
                 ],

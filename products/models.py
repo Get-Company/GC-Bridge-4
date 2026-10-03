@@ -891,6 +891,13 @@ class ProductVariantAttribute(BaseModel):
         default=DisplayType.TEXT,
         verbose_name=_("Darstellung in Shopware"),
     )
+    expand_in_listing = models.BooleanField(
+        default=False,
+        verbose_name=_("In Produktlisten auffächern"),
+        help_text=_(
+            "Zeigt Varianten dieser Eigenschaft einzeln in Shopware-Produktlisten und Suchergebnissen."
+        ),
+    )
     fallback_value = models.ForeignKey(
         PropertyValue,
         on_delete=models.PROTECT,
