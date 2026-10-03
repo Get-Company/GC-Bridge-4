@@ -1336,8 +1336,7 @@ class ShopwareVariantSyncServiceTest(TestCase):
         self.assertEqual(
             parent_payloads[1]["variantListingConfig"],
             {
-                "displayParent": True,
-                "mainVariantId": "child-shopware-id",
+                "displayParent": False,
                 "configuratorGroupConfig": [
                     {
                         "id": expected_size_group_id,
@@ -1354,8 +1353,8 @@ class ShopwareVariantSyncServiceTest(TestCase):
                 ],
             },
         )
-        self.assertEqual(
-            sum(
+        self.assertTrue(
+            any(
                 payload == [
                     {
                         "id": "child-shopware-id",
@@ -1370,8 +1369,7 @@ class ShopwareVariantSyncServiceTest(TestCase):
                     }
                 ]
                 for payload in product_payloads
-            ),
-            2,
+            )
         )
         self.assertIn(
             [

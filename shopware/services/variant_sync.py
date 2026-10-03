@@ -109,17 +109,6 @@ class ShopwareVariantSyncService(BaseService):
             group_ids=group_ids,
             resolution=resolution,
         )
-        # Shopware derives each child's ``displayGroup`` while indexing the
-        # child.  The first child upsert must happen before the final parent
-        # configuration can reference its main variant, so trigger one more
-        # idempotent child write after that configuration is in place.  A
-        # parent-only update does not refresh the children's listing groups.
-        self._upsert_children(
-            resolution=resolution,
-            parent_id=parent_id,
-            child_ids=child_ids,
-            value_ids=value_ids,
-        )
         detached_count = self._detach_stale_children(
             family=family,
             active_product_ids=set(child_ids),
@@ -294,8 +283,13 @@ class ShopwareVariantSyncService(BaseService):
         # Sending the values as top-level product properties is silently ignored
         # by the sync API, leaving Shopware to choose an arbitrary child for
         # listings and the initial product-detail selection.
-        variant_listing_config = {"displayParent": True}
-        if main_variant_id:
+        expand_in_listing = bool(
+            group_ids
+            and resolution
+            and any(attribute.expand_in_listing for attribute in resolution.attributes)
+        )
+        variant_listing_config = {"displayParent": not expand_in_listing}
+        if main_variant_id and not expand_in_listing:
             variant_listing_config["mainVariantId"] = main_variant_id
         if group_ids and resolution:
             variant_listing_config["configuratorGroupConfig"] = [
