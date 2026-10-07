@@ -1876,7 +1876,7 @@ const customerHtml = customerIdentifiers('10001', 'django', raw, normalized);
 const bridgeNameHtml = editableBridgeCustomerName('10001', raw, normalized);
 for (const value of ['AdrNr', '10001', 'SW6-ID', raw.api_id, 'update_shopware_id']) assert.ok(customerHtml.includes(value), value);
 for (const value of ['Name GC-Bridge', raw.name, 'updateBridgeCustomerName']) assert.ok(bridgeNameHtml.includes(value), value);
-assert.ok(customerHtml.includes('Django-Kunde löschen'));
+assert.ok(customerHtml.includes('GC-Bridge-Kunde löschen'));
 assert.ok(customerHtml.includes('deleteDjangoCustomer'));
 assert.ok(customerHtml.includes('shopware-id-field'));
 assert.ok(customerHtml.includes('<textarea'));

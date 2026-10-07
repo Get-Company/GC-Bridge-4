@@ -440,7 +440,7 @@
     <div id="sw-merge-result" class="hidden merge-result-space" role="status" aria-live="polite"></div>
   </div>
   <footer class="merge-dialog-footer">
-    <p>Der Quellkunde wird nach erfolgreicher Prüfung endgültig gelöscht. Django und microtech bleiben unverändert.</p>
+    <p>Der Quellkunde wird nach erfolgreicher Prüfung endgültig gelöscht. GC-Bridge übernimmt anschließend die zugehörigen Einträge. Microtech bleibt unverändert.</p>
     <div class="merge-dialog-actions">
       <button type="button" class="merge-button" id="sw-merge-cancel" onclick="closeShopwareMergeModal()">Schließen</button>
       <button type="button" class="merge-button merge-button-danger" id="sw-merge-btn" disabled onclick="executeShopwareMerge()">Merge bestätigen</button>
@@ -508,7 +508,7 @@ function editableMicrotechMapping(address) {
 function shopwareCustomerMapping(nr, raw, status = '') {
   const target = searchData[nr]?.django;
   const transfer = target?.id
-    ? `<button type="button" data-erp-nr="${esc(nr)}" onclick="adoptShopwareCustomerId(this.dataset.erpNr, this)">Zu Django übernehmen</button>`
+    ? `<button type="button" data-erp-nr="${esc(nr)}" onclick="adoptShopwareCustomerId(this.dataset.erpNr, this)">Zu GC-Bridge übernehmen</button>`
     : '';
   return `<div class="merge-identifier"><dt>${identifierLabel('SW6-ID', status)}</dt><dd><div class="customer-number-field shopware-id-field">
       <span class="shopware-id-value">${esc(raw.id || '—')}</span>${transfer}
@@ -522,10 +522,10 @@ function customerIdentifiers(nr, sysKey, raw, customer, { customerNumberStatus =
   const deleteDjango = sysKey === 'django'
     ? `<div class="mt-2 flex justify-end"><button type="button" onclick="deleteDjangoCustomer('${esc(nr)}', this)"
         class="inline-flex items-center gap-1 text-xs text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300">
-        <span class="material-symbols-outlined" style="font-size:14px">delete</span>Django-Kunde löschen
+        <span class="material-symbols-outlined" style="font-size:14px">delete</span>GC-Bridge-Kunde löschen
       </button></div>`
     : '';
-  return `<dl class="merge-identifiers merge-customer-identifiers" aria-label="Kennungen ${esc(sysKey)}">
+  return `<dl class="merge-identifiers merge-customer-identifiers" aria-label="Kennungen ${esc(sysKey === 'django' ? 'GC-Bridge' : sysKey)}">
     <div class="merge-identifier"><dt>${identifierLabel(customer.customerNrLabel, customerNumberStatus)}</dt><dd>${number}</dd></div>${Array.isArray(ids) ? identifierRows(ids) : ids}</dl>${deleteDjango}`;
 }
 function toggleSection(btn) {
@@ -668,7 +668,7 @@ function standardAddressBadges(address, synchronizedDefaults = {}) {
 function localAddressLabel(address) {
   const contact = [address.first_name, address.last_name].filter(Boolean).join(' ');
   const place = [address.street, address.postal_code, address.city].filter(Boolean).join(', ');
-  return contact || address.name1 || place || 'Bestehende Bridge-Adresse';
+  return contact || address.name1 || place || 'Bestehende GC-Bridge-Adresse';
 }
 
 function microtechContactMapping(nr, address, contact) {
@@ -678,10 +678,10 @@ function microtechContactMapping(nr, address, contact) {
   const selected = localAddresses.find(local => String(local.erp_ans_nr ?? local.microtechAddressNumber) === String(ansNr)
     && String(local.erp_asp_nr ?? local.microtechContactNumber ?? '') === String(aspNr));
   const options = localAddresses.map(local => `<option value="${esc(local.id)}"${selected?.id === local.id ? ' selected' : ''}>${esc(localAddressLabel(local))}</option>`).join('');
-  if (!options) return '<div class="mt-2 text-[10px] text-gray-400">Keine bestehende Bridge-Adresse verfügbar.</div>';
-  return `<select class="merge-contact-map" aria-label="Bestehende Bridge-Adresse zuordnen"
+  if (!options) return '<div class="mt-2 text-[10px] text-gray-400">Keine bestehende GC-Bridge-Adresse verfügbar.</div>';
+  return `<select class="merge-contact-map" aria-label="Bestehende GC-Bridge-Adresse zuordnen"
       data-ans-nr="${esc(ansNr)}" data-asp-nr="${esc(aspNr)}" onchange="assignMicrotechMapping(this)">
-      <option value="">Bestehende Bridge-Adresse zuordnen …</option>${options}
+      <option value="">Bestehende GC-Bridge-Adresse zuordnen …</option>${options}
   </select>`;
 }
 
@@ -837,14 +837,14 @@ function comparisonAddressCard(nr, sysKey, address, defaultActions = '', synchro
     ? `<input type="checkbox" value="${address.id}" class="rounded mt-0.5 addr-cb-${groupId}" style="flex-shrink:0">`
     : '';
   const copyToDjango = sysKey === 'shopware' && address.id
-    ? `<button type="button" class="comparison-address-copy" title="Diese SW6-Adresse nach Django kopieren"
-        aria-label="Diese SW6-Adresse nach Django kopieren" onclick="adoptShopwareAddress('${esc(nr)}', '${esc(searchData[nr]?.shopware?.id || '')}', '${esc(address.id)}', this)">
+    ? `<button type="button" class="comparison-address-copy" title="Diese SW6-Adresse nach GC-Bridge kopieren"
+        aria-label="Diese SW6-Adresse nach GC-Bridge kopieren" onclick="adoptShopwareAddress('${esc(nr)}', '${esc(searchData[nr]?.shopware?.id || '')}', '${esc(address.id)}', this)">
         <span class="material-symbols-outlined" style="font-size:18px">arrow_forward</span>
       </button>`
     : '';
   const copyToShopware = sysKey === 'django' && address.id && searchData[nr]?.shopware?.id
-    ? `<button type="button" class="comparison-address-copy comparison-address-copy-left" title="Diese Bridge-Adresse nach SW6 kopieren"
-        aria-label="Diese Bridge-Adresse nach SW6 kopieren" onclick="adoptDjangoAddress('${esc(nr)}', '${esc(address.id)}', this)">
+    ? `<button type="button" class="comparison-address-copy comparison-address-copy-left" title="Diese GC-Bridge-Adresse nach SW6 kopieren"
+        aria-label="Diese GC-Bridge-Adresse nach SW6 kopieren" onclick="adoptDjangoAddress('${esc(nr)}', '${esc(address.id)}', this)">
         <span class="material-symbols-outlined" style="font-size:18px">arrow_back</span>
       </button>`
     : '';
@@ -1567,7 +1567,7 @@ async function updateBridgeCustomerName(button) {
   const value = input?.value.trim();
   const raw = searchData[erpNr]?.django;
   if (!erpNr || !customerId || !raw) {
-    alert('Der Bridge-Kunde konnte nicht bestimmt werden. Bitte erneut suchen.');
+    alert('Der GC-Bridge-Kunde konnte nicht bestimmt werden. Bitte erneut suchen.');
     return;
   }
   if (!value) {
@@ -1647,7 +1647,7 @@ async function adoptShopwareCustomerId(erpNr, button) {
   const source = searchData[erpNr]?.shopware;
   const target = searchData[erpNr]?.django;
   if (!source?.id || !target?.id) {
-    alert('SW6-Quelle oder Bridge-Kunde fehlt. Bitte erneut suchen.');
+    alert('SW6-Quelle oder GC-Bridge-Kunde fehlt. Bitte erneut suchen.');
     return;
   }
   const idleLabel = button.innerHTML;
@@ -1713,7 +1713,7 @@ async function updateMicrotechAddressMapping(button) {
     systems.django?.addresses?.some(address => String(address.id) === String(addressId))
   )?.[0];
   if (!erpNr) {
-    alert('Die Bridge-Adresse konnte nicht bestimmt werden. Bitte erneut suchen.');
+    alert('Die GC-Bridge-Adresse konnte nicht bestimmt werden. Bitte erneut suchen.');
     return;
   }
   const idleLabel = button.innerHTML;
@@ -1864,7 +1864,7 @@ async function setSynchronizedAddressDefault(erpNr, djangoAddressId, role, butto
 }
 
 async function deleteDjangoCustomer(erpNr, button) {
-  if (!confirm(`Django-Kunde ${erpNr} einschließlich seiner lokalen Adressen löschen?`)) return;
+  if (!confirm(`GC-Bridge-Kunde ${erpNr} einschließlich seiner lokalen Adressen löschen?`)) return;
   const idleLabel = button.innerHTML;
   button.disabled = true;
   button.innerHTML = `${spinner()} Lösche...`;
@@ -1875,7 +1875,7 @@ async function deleteDjangoCustomer(erpNr, button) {
       body: JSON.stringify({erp_nr: erpNr}),
     });
     const data = await response.json();
-    if (!response.ok || data.error) throw new Error(data.error || 'Der Django-Kunde konnte nicht gelöscht werden.');
+    if (!response.ok || data.error) throw new Error(data.error || 'Der GC-Bridge-Kunde konnte nicht gelöscht werden.');
     await refetchRow(erpNr, erpNr);
   } catch (error) {
     alert('Fehler: ' + error.message);
@@ -2183,7 +2183,7 @@ function renderShopwareMergeSection() {
     options(selected.delete_sw_id || customers[0]?.id) + '</select></label>' +
     '<label>Richtiger Kunde – bleibt erhalten<select id="sw-merge-keep" onchange="invalidateShopwareMergePreview()">' +
     options(selected.keep_sw_id || customers[1]?.id) + '</select></label></div>' +
-    '<p class="merge-launcher-note">Alle Adressen des falschen Kunden werden in SW6 zum richtigen Kunden übertragen. Die Standardadressen des richtigen Kunden bleiben erhalten. Das Shopware-Plugin bestimmt das zuletzt verwendete Login-Paar; E-Mail und Passwort bleiben dabei immer zusammen. Erst nach der bestätigten Löschung in SW6 übernimmt Django die lokalen Referenzen und löscht das lokale Quellkonto. Microtech bleibt unverändert.</p>' +
+    '<p class="merge-launcher-note">Alle Adressen des falschen Kunden werden in SW6 zum richtigen Kunden übertragen. Die Standardadressen des richtigen Kunden bleiben erhalten. Das Shopware-Plugin bestimmt das zuletzt verwendete Login-Paar; E-Mail und Passwort bleiben dabei immer zusammen. Erst nach der bestätigten Löschung in SW6 übernimmt GC-Bridge die lokalen Referenzen und löscht das lokale Quellkonto. Microtech bleibt unverändert.</p>' +
     '<button type="button" id="sw-merge-preview-btn" onclick="loadShopwareMergePreview()" class="merge-preview-button">Vorschau laden</button>' +
     '</div></div>';
   invalidateShopwareMergePreview();
@@ -2282,13 +2282,13 @@ function completeShopwareMerge(data) {
   result.classList.remove('hidden');
   const cleanup = data.djangoCleanup || {};
   const djangoOutcome = cleanup.status === 'deleted'
-    ? '<div class="mt-2 text-xs">Django: ' + Number(cleanup.addresses_moved || 0) + ' Adressen und ' +
+    ? '<div class="mt-2 text-xs">GC-Bridge: ' + Number(cleanup.addresses_moved || 0) + ' Adressen und ' +
       Number(cleanup.orders_moved || 0) + ' Bestellungen auf den Zielkunden übernommen; Quellkonto gelöscht.</div>'
     : cleanup.status === 'already_removed'
-      ? '<div class="mt-2 text-xs">Django-Quellkonto war bereits entfernt.</div>'
+      ? '<div class="mt-2 text-xs">GC-Bridge-Quellkonto war bereits entfernt.</div>'
       : cleanup.status === 'failed'
         ? '<div class="mt-2 p-2 border border-amber-300 rounded text-xs text-amber-700 dark:text-amber-300">' +
-          'Shopware ist fertig, aber Django konnte den Quellkunden nicht sicher bereinigen: ' + esc(cleanup.message || 'Bitte die Zuordnungen prüfen.') +
+          'Shopware ist fertig, aber GC-Bridge konnte den Quellkunden nicht sicher bereinigen: ' + esc(cleanup.message || 'Bitte die Zuordnungen prüfen.') +
           '</div>'
         : '';
   result.innerHTML = '<div class="p-3 border border-green-300 rounded text-sm text-green-700 dark:text-green-300">' +

@@ -109,7 +109,7 @@ Rechnungs- und Lieferadresse bei <strong>12196</strong> bleibt zunächst ausgew�
 <p><strong>4. Bestätigen und das Ergebnis prüfen</strong></p>
 <p>Passt alles zu Nina, klicken Sie auf <strong>Merge bestätigen</strong>. Das Konto
 <strong>950059</strong> wird aufgelöst. Seine Adresse und seine beiden Bestellungen
-gehören anschließend zu <strong>12196</strong>. Auch die Bridge ordnet ihre
+gehören anschließend zu <strong>12196</strong>. Auch die GC-Bridge ordnet ihre
 entsprechenden Einträge dem verbliebenen Kunden zu. Ninas Kunde in
 Microtech wird durch diesen Schritt nicht geändert.</p>
 <p>Warten Sie auf die Erfolgsmeldung. Erscheint stattdessen <strong>Status
@@ -129,17 +129,17 @@ sorgen, dass die drei Spalten ihre vorhandenen Einträge richtig
 zusammen anzeigen.</p>
 <p>Suchen Sie erneut nach <strong>12196</strong> und warten Sie, bis <strong>SW6</strong>, <strong>GC-Bridge</strong>
 und <strong>Microtech</strong> geladen sind. Links stehen Ninas Angaben im Shop,
-in der Mitte ihr Eintrag in der Bridge und rechts ihre Angaben in
+in der Mitte ihr Eintrag in der GC-Bridge und rechts ihre Angaben in
 Microtech. Nina möchte ihre Rechnung an die <strong>Musterstraße 12</strong> und ihre
 Pakete an den <strong>Gartenweg 8</strong> bekommen.</p>
 <p><strong>1. Ninas Shopkonto mit dem Eintrag in der Mitte verbinden</strong></p>
 <p>Die Kundennummer <strong>12196</strong> stimmt in unserem Beispiel schon überein.
-Bei <strong>SW6-ID</strong> sehen Sie aber einen Unterschied: Links beginnt die
-Kennung mit <strong>bbbb</strong>, in der Mitte steht noch die alte Kennung mit
-<strong>aaaa</strong>. Die Anzeige <strong>„unterschiedlich“</strong> macht darauf aufmerksam.
+Bei <strong>SW6-ID</strong> sehen Sie aber einen Unterschied: Links steht
+<strong>019a41c5f86a7240b1d4e622809f137c</strong>, in der Mitte noch die alte Kennung
+<strong>019a3fbd20457395a8e067bf42d9c816</strong>. Die Anzeige <strong>„unterschiedlich“</strong> macht darauf aufmerksam.
 Dieselben Namen und Kundennummern allein reichen also noch nicht aus.</p>
 <figure class="align-default" id="id5">
-<a class="reference internal image-reference" href="../_images/05_drei_spalten.jpg"><img alt="Kundennummer 12196 stimmt überein, aber SW6-ID ist links bbbb und in der Mitte aaaa" src="../_images/05_drei_spalten.jpg" style="width: 100%;" />
+<a class="reference internal image-reference" href="../_images/05_drei_spalten.jpg"><img alt="Kundennummer 12196 stimmt überein, aber die SW6-IDs in Shop und GC-Bridge unterscheiden sich" src="../_images/05_drei_spalten.jpg" style="width: 100%;" />
 </a>
 <figcaption>
 <p><span class="caption-text">Nina wird in allen drei Spalten gefunden. Die Shop-Zuordnung in der Mitte ist noch falsch.</span><a class="headerlink" href="#id5" title="Link to this image">¶</a></p>
@@ -147,11 +147,11 @@ Dieselben Namen und Kundennummern allein reichen also noch nicht aus.</p>
 </figure>
 <p>Prüfen Sie zuerst, dass links wirklich Ninas verbliebenes Shopkonto
 steht. Klicken Sie dann links neben dessen <strong>SW6-ID</strong> auf
-<strong>Zu Django übernehmen</strong>. „Django“ meint hier die Bridge in der Mitte.
-Der Knopf übernimmt die Kennung dieses Shopkontos in Ninas Bridge-Eintrag.
+<strong>Zu GC-Bridge übernehmen</strong>.
+Der Knopf übernimmt die Kennung dieses Shopkontos in Ninas GC-Bridge-Eintrag.
 Ihre Kundennummer und die Kennung im Shop bleiben dabei unverändert.</p>
 <figure class="align-default" id="id6">
-<a class="reference internal image-reference" href="../_images/09_kunde_zugeordnet.jpg"><img alt="Nach Zu Django übernehmen zeigt die mittlere SW6-ID dieselbe Shop-Kennung wie links" src="../_images/09_kunde_zugeordnet.jpg" style="width: 100%;" />
+<a class="reference internal image-reference" href="../_images/09_kunde_zugeordnet.jpg"><img alt="Nach Zu GC-Bridge übernehmen zeigt die mittlere SW6-ID dieselbe Shop-Kennung wie links" src="../_images/09_kunde_zugeordnet.jpg" style="width: 100%;" />
 </a>
 <figcaption>
 <p><span class="caption-text">Links und in der Mitte steht jetzt die Kennung des richtigen Shopkontos.</span><a class="headerlink" href="#id6" title="Link to this image">¶</a></p>
@@ -174,31 +174,31 @@ drei dieselbe gewünschte Lieferanschrift zeigen.</p>
 <p><span class="caption-text">Rechts steht 7 und 2, in der Mitte noch 9 und 0. Die vorhandenen Adressen sind noch getrennt.</span><a class="headerlink" href="#id7" title="Link to this image">¶</a></p>
 </figcaption>
 </figure>
-<p><strong>3. Die vorhandene Shopadresse mit Ninas Bridge-Adresse verbinden</strong></p>
+<p><strong>3. Die vorhandene Shopadresse mit Ninas GC-Bridge-Adresse verbinden</strong></p>
 <p>Suchen Sie links Ninas <strong>Gartenweg 8</strong>. Dort steht unter
-<strong>SW6-Adress-ID</strong> die Kennung, die mit <strong>ffff</strong> beginnt.
+<strong>SW6-Adress-ID</strong> die Kennung <strong>019a42e862c4718397fb3d605ea9b214</strong>.
 Kopieren Sie die <strong>vollständige</strong> angezeigte Kennung.</p>
 <figure class="align-default" id="id8">
-<a class="reference internal image-reference" href="../_images/11_shop_adresse.jpg"><img alt="Die bereits vorhandene Shopadresse Gartenweg 8 hat die SW6-Adress-ID beginnend mit ffff" src="../_images/11_shop_adresse.jpg" style="width: 100%;" />
+<a class="reference internal image-reference" href="../_images/11_shop_adresse.jpg"><img alt="Die bereits vorhandene Shopadresse Gartenweg 8 hat die SW6-Adress-ID 019a42e862c4718397fb3d605ea9b214" src="../_images/11_shop_adresse.jpg" style="width: 100%;" />
 </a>
 <figcaption>
-<p><span class="caption-text">Diese Shopadresse ist schon vorhanden. Wir übernehmen ihre Kennung in die passende Bridge-Adresse.</span><a class="headerlink" href="#id8" title="Link to this image">¶</a></p>
+<p><span class="caption-text">Diese Shopadresse ist schon vorhanden. Wir übernehmen ihre Kennung in die passende GC-Bridge-Adresse.</span><a class="headerlink" href="#id8" title="Link to this image">¶</a></p>
 </figcaption>
 </figure>
 <p>Suchen Sie nun <strong>Gartenweg 8 in der mittleren Spalte</strong>. Im Beispiel heißt
 dieser Eintrag <strong>Nina Beispiel – Gartenweg 8</strong>, damit er von der
 Musterstraße unterscheidbar ist. Unter <strong>SW6-Adress-ID</strong> steht noch eine
-andere Kennung, die mit <strong>cccc</strong> beginnt. Ersetzen Sie diese durch die
+andere Kennung: <strong>019a1bb087fa72d6bc3e9a5148f026d7</strong>. Ersetzen Sie diese durch die
 gerade kopierte vollständige Kennung aus dem Shop. Klicken Sie auf
 <strong>Speichern direkt neben diesem Feld</strong>.</p>
 <figure class="align-default" id="id9">
 <a class="reference internal image-reference" href="../_images/12_adress_id_uebernehmen.jpg"><img alt="Die vollständige Shop-Adress-ID ist bei Gartenweg 8 in der mittleren Spalte eingetragen" src="../_images/12_adress_id_uebernehmen.jpg" style="width: 100%;" />
 </a>
 <figcaption>
-<p><span class="caption-text">Bei der vorhandenen Bridge-Adresse wird die Shop-Zuordnung ersetzt und gespeichert.</span><a class="headerlink" href="#id9" title="Link to this image">¶</a></p>
+<p><span class="caption-text">Bei der vorhandenen GC-Bridge-Adresse wird die Shop-Zuordnung ersetzt und gespeichert.</span><a class="headerlink" href="#id9" title="Link to this image">¶</a></p>
 </figcaption>
 </figure>
-<p>Jetzt stehen Ninas Shopadresse und ihre Bridge-Adresse <strong>nebeneinander
+<p>Jetzt stehen Ninas Shopadresse und ihre GC-Bridge-Adresse <strong>nebeneinander
 in derselben Zeile</strong>. Rechts ist die Zeile noch leer: Die Verbindung zu
 Microtech fehlt weiterhin.</p>
 <figure class="align-default" id="id10">
@@ -209,30 +209,30 @@ Microtech fehlt weiterhin.</p>
 </figcaption>
 </figure>
 <p>Die Pfeile an den Adressen brauchen wir hier nicht. Sie kopieren
-Anschriften zwischen Shop und Bridge. Ninas Gartenweg 8 ist bereits
+Anschriften zwischen Shop und GC-Bridge. Ninas Gartenweg 8 ist bereits
 auf beiden Seiten vorhanden; wir möchten diese Einträge verbinden.
 Wäre Ninas Anschrift tatsächlich nur in der Mitte vorhanden, würde der
 Pfeil nach links sie in den Shop übernehmen. Der Pfeil nach rechts
 übernimmt entsprechend eine nur im Shop vorhandene Anschrift in die
-Bridge.</p>
+GC-Bridge.</p>
 <p><strong>4. Auch Ninas Microtech-Adresse in dieselbe Zeile holen</strong></p>
 <p>Suchen Sie rechts den <strong>Gartenweg 8</strong> mit Ninas Ansprechpartner.
 Im Beispiel stehen dort <strong>AnsNr 7</strong> und <strong>AnspNr 2</strong>. In der Mitte sind
 bei derselben Anschrift noch <strong>9</strong> und <strong>0</strong> eingetragen. Auch hier
 stimmt die Zuordnung also noch nicht.</p>
-<p>Öffnen Sie rechts beim Gartenweg 8 die Auswahl <strong>Bestehende Bridge-Adresse
+<p>Öffnen Sie rechts beim Gartenweg 8 die Auswahl <strong>Bestehende GC-Bridge-Adresse
 zuordnen</strong>. Wählen Sie <strong>Nina Beispiel – Gartenweg 8</strong>. Das ist die
 vorhandene Adresse, deren Anschrift Sie eben in der Mitte geprüft haben.
 Die Auswahl wird unmittelbar gespeichert; ein weiterer Klick auf
 <strong>Speichern</strong> ist für diese Auswahl nicht nötig.</p>
 <figure class="align-default" id="id11">
-<a class="reference internal image-reference" href="../_images/14_microtech_zuordnen.jpg"><img alt="Beim Gartenweg 8 in Microtech wird Nina Beispiel – Gartenweg 8 aus den vorhandenen Bridge-Adressen gewählt" src="../_images/14_microtech_zuordnen.jpg" style="width: 100%;" />
+<a class="reference internal image-reference" href="../_images/14_microtech_zuordnen.jpg"><img alt="Beim Gartenweg 8 in Microtech wird Nina Beispiel – Gartenweg 8 aus den vorhandenen GC-Bridge-Adressen gewählt" src="../_images/14_microtech_zuordnen.jpg" style="width: 100%;" />
 </a>
 <figcaption>
-<p><span class="caption-text">Wählen Sie die passende vorhandene Bridge-Adresse, nicht den Eintrag zur Musterstraße.</span><a class="headerlink" href="#id11" title="Link to this image">¶</a></p>
+<p><span class="caption-text">Wählen Sie die passende vorhandene GC-Bridge-Adresse, nicht den Eintrag zur Musterstraße.</span><a class="headerlink" href="#id11" title="Link to this image">¶</a></p>
 </figcaption>
 </figure>
-<p>Nun stehen <strong>Shop, Bridge und Microtech nebeneinander in derselben
+<p>Nun stehen <strong>Shop, GC-Bridge und Microtech nebeneinander in derselben
 Adresszeile</strong>. In der Mitte sehen Sie beim Gartenweg 8 jetzt <strong>7</strong> und
 <strong>2</strong> statt <strong>9</strong> und <strong>0</strong>. Es wurde keine weitere Adresse angelegt.</p>
 <figure class="align-default" id="id12">
@@ -248,14 +248,14 @@ links und Mitte überein; <strong>7 und 2</strong> stimmen zwischen Mitte und re
 überein. So weiß die Oberfläche, welche drei Einträge zusammengehören.</p>
 <p>Zeigt die Auswahl mehrere Einträge nur als <strong>Nina Beispiel</strong>, prüfen Sie
 zuerst deren Anschriften in der Mitte. Wählen Sie nicht allein nach dem
-Namen. Alternativ können Sie bei der geprüften Bridge-Adresse die rechts
+Namen. Alternativ können Sie bei der geprüften GC-Bridge-Adresse die rechts
 angezeigten Werte <strong>7</strong> und <strong>2</strong> in <strong>AnsNr</strong> und <strong>AnspNr</strong> eintragen und
 auf <strong>Speichern direkt neben diesen beiden Zahlen</strong> klicken. Für Ninas
 Beispiel genügt einer dieser beiden Wege.</p>
 <p><strong>5. Für Ninas nächste Lieferung den Gartenweg 8 wählen</strong></p>
 <p>An der nun verbundenen Adresszeile erscheinen <strong>Rechnung</strong> und
 <strong>Lieferung</strong>. Klicken Sie beim <strong>Gartenweg 8</strong> auf <strong>Lieferung</strong>.
-Die Auswahl setzt Ninas Lieferadresse in Shop, Bridge und Microtech
+Die Auswahl setzt Ninas Lieferadresse in Shop, GC-Bridge und Microtech
 zusammen. Für ihre Rechnung bleibt die <strong>Musterstraße 12</strong> ausgewählt.
 Klicken Sie anschließend erneut auf <strong>Suchen</strong>, um den aktuellen Stand
 in allen drei Spalten zu sehen.</p>
@@ -284,7 +284,7 @@ Rückfrage und suchen Sie anschließend erneut.</p>
 <p>Steht der zusätzliche Eintrag danach noch in der Mitte, markieren Sie
 dort genau diese Adresse und verwenden dort <strong>Markierte löschen</strong>.
 Jeder Knopf entfernt nur die Auswahl in seiner eigenen Spalte.
-<strong>Django-Kunde löschen</strong> würde dagegen Ninas ganzen Kunden in der Bridge
+<strong>GC-Bridge-Kunde löschen</strong> würde dagegen Ninas ganzen Kunden in der GC-Bridge
 entfernen. Für diese einzelne überflüssige Adresse bleibt er unbenutzt.</p>
 <p>Zum Schluss suchen Sie noch einmal nach <strong>12196</strong>. Nina hat ein Shopkonto,
 die Rechnung geht an die Musterstraße 12 und die Lieferung an den
