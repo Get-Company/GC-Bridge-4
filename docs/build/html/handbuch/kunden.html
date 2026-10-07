@@ -123,122 +123,173 @@ die richtige Anschrift erhält.</p>
 </section>
 <section id="funktionen-der-drei-spalten">
 <span id="kunden-merge-oberflaeche"></span><h2>Funktionen der drei Spalten<a class="headerlink" href="#funktionen-der-drei-spalten" title="Link to this heading">¶</a></h2>
-<p>Wir bleiben bei <strong>Nina Beispiel, Kundennummer 12196</strong>. Nach dem
-Zusammenführen suchen Sie diese Nummer erneut. Lesen Sie die Angaben
-von links nach rechts: <strong>SW6</strong>, <strong>GC-Bridge</strong>, <strong>Microtech</strong>.
-Warten Sie, bis die jeweilige Spalte fertig geladen ist.</p>
+<p>Wir bleiben bei <strong>Nina Beispiel, Kundennummer 12196</strong>. Ihr zusätzliches
+Shopkonto ist bereits zusammengeführt. Jetzt müssen wir noch dafür
+sorgen, dass die drei Spalten ihre vorhandenen Einträge richtig
+zusammen anzeigen.</p>
+<p>Suchen Sie erneut nach <strong>12196</strong> und warten Sie, bis <strong>SW6</strong>, <strong>GC-Bridge</strong>
+und <strong>Microtech</strong> geladen sind. Links stehen Ninas Angaben im Shop,
+in der Mitte ihr Eintrag in der Bridge und rechts ihre Angaben in
+Microtech. Nina möchte ihre Rechnung an die <strong>Musterstraße 12</strong> und ihre
+Pakete an den <strong>Gartenweg 8</strong> bekommen.</p>
+<p><strong>1. Ninas Shopkonto mit dem Eintrag in der Mitte verbinden</strong></p>
+<p>Die Kundennummer <strong>12196</strong> stimmt in unserem Beispiel schon überein.
+Bei <strong>SW6-ID</strong> sehen Sie aber einen Unterschied: Links beginnt die
+Kennung mit <strong>bbbb</strong>, in der Mitte steht noch die alte Kennung mit
+<strong>aaaa</strong>. Die Anzeige <strong>„unterschiedlich“</strong> macht darauf aufmerksam.
+Dieselben Namen und Kundennummern allein reichen also noch nicht aus.</p>
 <figure class="align-default" id="id5">
-<a class="reference internal image-reference" href="../_images/05_drei_spalten.jpg"><img alt="Nina Beispiel unter 12196 in den drei Spalten SW6, GC-Bridge und Microtech" src="../_images/05_drei_spalten.jpg" style="width: 100%;" />
+<a class="reference internal image-reference" href="../_images/05_drei_spalten.jpg"><img alt="Kundennummer 12196 stimmt überein, aber SW6-ID ist links bbbb und in der Mitte aaaa" src="../_images/05_drei_spalten.jpg" style="width: 100%;" />
 </a>
 <figcaption>
-<p><span class="caption-text">Links Ninas Shopkonto, in der Mitte die Bridge und rechts ihr Kunde in Microtech.</span><a class="headerlink" href="#id5" title="Link to this image">¶</a></p>
+<p><span class="caption-text">Nina wird in allen drei Spalten gefunden. Die Shop-Zuordnung in der Mitte ist noch falsch.</span><a class="headerlink" href="#id5" title="Link to this image">¶</a></p>
 </figcaption>
 </figure>
-<p><strong>Links: SW6 – Ninas Angaben im Shop</strong></p>
-<p>Hier sehen Sie, unter welcher Nummer Nina im Shop geführt wird, welche
-E-Mail-Adresse sie dort verwendet und welche Anschriften der Shop kennt.
-Im Beispiel stehen <strong>12196</strong> und <strong>nina.neu&#64;example.com</strong>. Das passt zum
-Ergebnis aus der Vorschau.</p>
-<p>Neben der Kundennummer steht <strong>Speichern</strong>. Damit würde eine geänderte
-Nummer im Shop gespeichert. Bei Nina ist <strong>12196</strong> bereits richtig und
-bleibt stehen.</p>
-<p><strong>Zu Django übernehmen</strong> verbindet den angezeigten Shopkunden mit dem
-Kunden in der mittleren Spalte. Bei Nina passen beide bereits zusammen.
-Dafür müssen Sie nichts erneut übernehmen. In dieser Oberfläche meint
-<strong>Django</strong> die <strong>GC-Bridge</strong>.</p>
-<p>Der Pfeil <strong>nach rechts</strong> an einer Shopadresse kopiert diese Anschrift
-in die Bridge. Wäre der Gartenweg 8 nur links vorhanden, würden Sie ihn
-mit diesem Pfeil in die mittlere Spalte übernehmen.</p>
-<p><strong>In der Mitte: GC-Bridge – Ninas Kunde zwischen Shop und Microtech</strong></p>
-<p>Hier prüfen Sie Ninas Namen, ihre Kundennummer und ihre Anschriften in
-der Bridge. Stünde beim Namen nur „N. Beispiel“, könnten Sie das Feld
-auf <strong>Nina Beispiel</strong> ändern und mit <strong>Speichern</strong> direkt daneben sichern.
-Mit dem Speichern neben der Kundennummer ändern Sie entsprechend nur
-diese Nummer in der Bridge. In unserem Beispiel sind Name und Nummer
-bereits richtig.</p>
-<p>Bei den Adressen sehen wir einen Unterschied: Der <strong>Gartenweg 8</strong> ist
-in der Bridge und in Microtech vorhanden, links im Shop fehlt er noch.
-Nina hat bestätigt, dass ihre nächsten Pakete dorthin gehen sollen.
-Klicken Sie beim <strong>Gartenweg 8</strong> auf den Pfeil <strong>nach links</strong>. Damit
-kopieren Sie diese Anschrift aus der Bridge in den Shop.</p>
+<p>Prüfen Sie zuerst, dass links wirklich Ninas verbliebenes Shopkonto
+steht. Klicken Sie dann links neben dessen <strong>SW6-ID</strong> auf
+<strong>Zu Django übernehmen</strong>. „Django“ meint hier die Bridge in der Mitte.
+Der Knopf übernimmt die Kennung dieses Shopkontos in Ninas Bridge-Eintrag.
+Ihre Kundennummer und die Kennung im Shop bleiben dabei unverändert.</p>
 <figure class="align-default" id="id6">
-<a class="reference internal image-reference" href="../_images/06_adresse_kopieren.jpg"><img alt="Gartenweg 8 ist in Bridge und Microtech vorhanden und fehlt in der linken Shop-Spalte" src="../_images/06_adresse_kopieren.jpg" style="width: 100%;" />
+<a class="reference internal image-reference" href="../_images/09_kunde_zugeordnet.jpg"><img alt="Nach Zu Django übernehmen zeigt die mittlere SW6-ID dieselbe Shop-Kennung wie links" src="../_images/09_kunde_zugeordnet.jpg" style="width: 100%;" />
 </a>
 <figcaption>
-<p><span class="caption-text">Der Pfeil nach links am Gartenweg 8 übernimmt genau diese Adresse in den Shop.</span><a class="headerlink" href="#id6" title="Link to this image">¶</a></p>
+<p><span class="caption-text">Links und in der Mitte steht jetzt die Kennung des richtigen Shopkontos.</span><a class="headerlink" href="#id6" title="Link to this image">¶</a></p>
 </figcaption>
 </figure>
-<p>Klicken Sie anschließend erneut auf <strong>Suchen</strong>, um das Ergebnis zu sehen.
-Prüfen Sie, dass der Gartenweg 8 jetzt auch in der linken Spalte steht.
-Ein Pfeil kopiert eine Adresse; er führt keine Kunden zusammen.</p>
-<p><strong>Rechts: Microtech – Ninas Angaben in der Warenwirtschaft</strong></p>
-<p>Rechts vergleichen Sie Ninas bekannte Anschriften und Ansprechpartner.
-Im Beispiel finden wir hier die <strong>Musterstraße 12</strong> und den
-<strong>Gartenweg 8</strong>. Damit können wir prüfen, ob wir in den beiden anderen
-Spalten die richtigen Anschriften ansehen.</p>
-<p>Bei Ninas Ansprechpartner gibt es die Auswahl <strong>Bestehende Bridge-Adresse
-zuordnen</strong>. Damit lässt sich ihr Ansprechpartner mit einer bereits
-vorhandenen Adresse in der mittleren Spalte verbinden. Eine zusätzliche
-Adresse wird dabei nicht angelegt. Im Beispiel gehört Nina bereits zur
-passenden Adresse <strong>Gartenweg 8</strong> in der Mitte. Deshalb lassen Sie die
-Auswahl dort stehen. Wenn mehrere Einträge denselben Namen zeigen,
-prüfen Sie erst die zugehörigen Anschriften, statt allein nach „Nina
-Beispiel“ auszuwählen.</p>
-<p>In der Microtech-Spalte gibt es keine Sammelschaltfläche zum Löschen
-von Adressen. Für Ninas Vergleich verwenden Sie diese Spalte vor allem,
-um Anschrift und Ansprechpartner abzugleichen.</p>
-<p><strong>Für Ninas nächste Lieferung den Gartenweg 8 wählen</strong></p>
-<p>Sobald der Gartenweg 8 in allen drei Spalten passend zusammengehört,
-erscheinen an dieser Anschrift die Schaltflächen <strong>Rechnung</strong> und
-<strong>Lieferung</strong>. Klicken Sie beim Gartenweg 8 auf <strong>Lieferung</strong>. Diese
-Auswahl gilt für <strong>Shop, Bridge und Microtech gemeinsam</strong>.</p>
-<p>Die Rechnung soll weiter an die <strong>Musterstraße 12</strong> gehen. Dort lassen
-Sie <strong>Rechnung</strong> ausgewählt. Bei Nina sind Rechnung und Lieferung nun
-bewusst zwei verschiedene Anschriften. Sollten beide an dieselbe
-Anschrift gehen, wären beide Kennzeichen an einer Adresse ebenfalls
-richtig.</p>
+<p><strong>2. Den Gartenweg 8 in den getrennten Zeilen wiederfinden</strong></p>
+<p>Gehen Sie nun zu den Adressen. Ninas <strong>Gartenweg 8</strong> ist bereits in allen
+drei Spalten vorhanden. Er steht aber in verschiedenen Zeilen: rechts
+allein, in der Mitte allein und weiter unten links allein. Die leeren
+Nachbarfelder sagen <strong>Keine zugeordnete Adresse</strong>. Das bedeutet in diesem
+Beispiel, dass die vorhandenen Einträge noch nicht zusammengehören.
+Die Adresse fehlt hier nicht.</p>
+<p>Vergleichen Sie bei den drei Einträgen <strong>Ninas Namen, Gartenweg 8,
+12345 Musterstadt</strong> und mögliche Zusätze. Wir haben geprüft, dass alle
+drei dieselbe gewünschte Lieferanschrift zeigen.</p>
 <figure class="align-default" id="id7">
-<a class="reference internal image-reference" href="../_images/07_lieferadresse.jpg"><img alt="Gartenweg 8 ist in allen drei Spalten als Lieferadresse gekennzeichnet" src="../_images/07_lieferadresse.jpg" style="width: 100%;" />
+<a class="reference internal image-reference" href="../_images/10_adressen_getrennt.jpg"><img alt="Gartenweg 8 steht rechts und in der Mitte in getrennten Zeilen mit unterschiedlichen Zuordnungen" src="../_images/10_adressen_getrennt.jpg" style="width: 100%;" />
 </a>
 <figcaption>
-<p><span class="caption-text">Gartenweg 8 ist jetzt die Lieferadresse; Musterstraße 12 bleibt die Rechnungsadresse.</span><a class="headerlink" href="#id7" title="Link to this image">¶</a></p>
+<p><span class="caption-text">Rechts steht 7 und 2, in der Mitte noch 9 und 0. Die vorhandenen Adressen sind noch getrennt.</span><a class="headerlink" href="#id7" title="Link to this image">¶</a></p>
 </figcaption>
 </figure>
-<p>Fehlen die Schaltflächen, kopieren oder löschen Sie nicht auf Verdacht
-weitere Adressen. Prüfen Sie zuerst, ob in derselben Zeile wirklich
-Ninas passende Anschrift in allen drei Spalten steht.</p>
-<p><strong>Die zusätzliche Musterstraße 12 entfernen</strong></p>
-<p>Nach dem Merge steht die Musterstraße 12 in unserem Beispiel zweimal
-im Shop und zweimal in der Bridge. Vergleichen Sie beide Einträge
-vollständig, einschließlich Namen und möglicher Zusätze. Wir behalten
-die Anschrift, an der <strong>Rechnungsadresse</strong> steht. Die zusätzliche
-Musterstraße 12 hat keine Standardkennzeichen mehr und wird nicht benötigt.</p>
-<p>Markieren Sie <strong>nur diese zusätzliche Adresse</strong> in der linken Spalte.
-Klicken Sie in dieser Spalte auf <strong>Markierte löschen</strong> und prüfen Sie
-die Rückfrage. Der linke Knopf entfernt die ausgewählte Adresse im Shop.</p>
+<p><strong>3. Die vorhandene Shopadresse mit Ninas Bridge-Adresse verbinden</strong></p>
+<p>Suchen Sie links Ninas <strong>Gartenweg 8</strong>. Dort steht unter
+<strong>SW6-Adress-ID</strong> die Kennung, die mit <strong>ffff</strong> beginnt.
+Kopieren Sie die <strong>vollständige</strong> angezeigte Kennung.</p>
 <figure class="align-default" id="id8">
-<a class="reference internal image-reference" href="../_images/08_doppelte_adresse.jpg"><img alt="Nur die zusätzliche Musterstraße 12 ohne Standardkennzeichen ist in der Shop-Spalte markiert" src="../_images/08_doppelte_adresse.jpg" style="width: 100%;" />
+<a class="reference internal image-reference" href="../_images/11_shop_adresse.jpg"><img alt="Die bereits vorhandene Shopadresse Gartenweg 8 hat die SW6-Adress-ID beginnend mit ffff" src="../_images/11_shop_adresse.jpg" style="width: 100%;" />
 </a>
 <figcaption>
-<p><span class="caption-text">Markiert ist nur die zusätzliche Musterstraße 12, nicht Ninas Rechnungs- oder Lieferadresse.</span><a class="headerlink" href="#id8" title="Link to this image">¶</a></p>
+<p><span class="caption-text">Diese Shopadresse ist schon vorhanden. Wir übernehmen ihre Kennung in die passende Bridge-Adresse.</span><a class="headerlink" href="#id8" title="Link to this image">¶</a></p>
 </figcaption>
 </figure>
-<p>Suchen Sie danach erneut. Ist die zusätzliche Adresse noch in der
-mittleren Spalte vorhanden, markieren Sie dort genau diesen Eintrag
-und benutzen <strong>Markierte löschen</strong> in der mittleren Spalte. Dieser
-Knopf entfernt die Auswahl in der Bridge. Das Löschen in einer Spalte
-löscht nicht automatisch dieselbe Adresse in der anderen Spalte.</p>
-<p>Eine noch ausgewählte Shop-Rechnungs- oder Lieferadresse lässt sich
-auf diese Weise nicht entfernen. Bei Nina lassen wir deshalb zuerst
-<strong>Musterstraße 12 für Rechnung</strong> und <strong>Gartenweg 8 für Lieferung</strong> richtig
-stehen. Erst dann entfernen wir den überflüssigen Eintrag.</p>
-<p><strong>Django-Kunde löschen</strong> betrifft dagegen Ninas ganzen Kunden in der
-Bridge samt seinen dortigen Adressen. Für die doppelte Musterstraße 12
-verwenden wir diesen Knopf nicht: <strong>12196</strong> soll erhalten bleiben.</p>
-<p>Zum Schluss suchen Sie noch einmal nach <strong>12196</strong>: Nina hat ein
-Shopkonto, die Rechnung geht an die Musterstraße 12 und die nächste
-Lieferung an den Gartenweg 8. Die Anschriften in den drei Spalten passen
-zusammen, und ihre bisherigen Bestellungen sind weiter vorhanden.</p>
+<p>Suchen Sie nun <strong>Gartenweg 8 in der mittleren Spalte</strong>. Im Beispiel heißt
+dieser Eintrag <strong>Nina Beispiel – Gartenweg 8</strong>, damit er von der
+Musterstraße unterscheidbar ist. Unter <strong>SW6-Adress-ID</strong> steht noch eine
+andere Kennung, die mit <strong>cccc</strong> beginnt. Ersetzen Sie diese durch die
+gerade kopierte vollständige Kennung aus dem Shop. Klicken Sie auf
+<strong>Speichern direkt neben diesem Feld</strong>.</p>
+<figure class="align-default" id="id9">
+<a class="reference internal image-reference" href="../_images/12_adress_id_uebernehmen.jpg"><img alt="Die vollständige Shop-Adress-ID ist bei Gartenweg 8 in der mittleren Spalte eingetragen" src="../_images/12_adress_id_uebernehmen.jpg" style="width: 100%;" />
+</a>
+<figcaption>
+<p><span class="caption-text">Bei der vorhandenen Bridge-Adresse wird die Shop-Zuordnung ersetzt und gespeichert.</span><a class="headerlink" href="#id9" title="Link to this image">¶</a></p>
+</figcaption>
+</figure>
+<p>Jetzt stehen Ninas Shopadresse und ihre Bridge-Adresse <strong>nebeneinander
+in derselben Zeile</strong>. Rechts ist die Zeile noch leer: Die Verbindung zu
+Microtech fehlt weiterhin.</p>
+<figure class="align-default" id="id10">
+<a class="reference internal image-reference" href="../_images/13_shop_bridge_verbunden.jpg"><img alt="Gartenweg 8 steht nach dem Speichern links und in der Mitte in derselben Zeile" src="../_images/13_shop_bridge_verbunden.jpg" style="width: 100%;" />
+</a>
+<figcaption>
+<p><span class="caption-text">Zwei Spalten gehören nun zusammen. Microtech ordnen wir im nächsten Schritt zu.</span><a class="headerlink" href="#id10" title="Link to this image">¶</a></p>
+</figcaption>
+</figure>
+<p>Die Pfeile an den Adressen brauchen wir hier nicht. Sie kopieren
+Anschriften zwischen Shop und Bridge. Ninas Gartenweg 8 ist bereits
+auf beiden Seiten vorhanden; wir möchten diese Einträge verbinden.
+Wäre Ninas Anschrift tatsächlich nur in der Mitte vorhanden, würde der
+Pfeil nach links sie in den Shop übernehmen. Der Pfeil nach rechts
+übernimmt entsprechend eine nur im Shop vorhandene Anschrift in die
+Bridge.</p>
+<p><strong>4. Auch Ninas Microtech-Adresse in dieselbe Zeile holen</strong></p>
+<p>Suchen Sie rechts den <strong>Gartenweg 8</strong> mit Ninas Ansprechpartner.
+Im Beispiel stehen dort <strong>AnsNr 7</strong> und <strong>AnspNr 2</strong>. In der Mitte sind
+bei derselben Anschrift noch <strong>9</strong> und <strong>0</strong> eingetragen. Auch hier
+stimmt die Zuordnung also noch nicht.</p>
+<p>Öffnen Sie rechts beim Gartenweg 8 die Auswahl <strong>Bestehende Bridge-Adresse
+zuordnen</strong>. Wählen Sie <strong>Nina Beispiel – Gartenweg 8</strong>. Das ist die
+vorhandene Adresse, deren Anschrift Sie eben in der Mitte geprüft haben.
+Die Auswahl wird unmittelbar gespeichert; ein weiterer Klick auf
+<strong>Speichern</strong> ist für diese Auswahl nicht nötig.</p>
+<figure class="align-default" id="id11">
+<a class="reference internal image-reference" href="../_images/14_microtech_zuordnen.jpg"><img alt="Beim Gartenweg 8 in Microtech wird Nina Beispiel – Gartenweg 8 aus den vorhandenen Bridge-Adressen gewählt" src="../_images/14_microtech_zuordnen.jpg" style="width: 100%;" />
+</a>
+<figcaption>
+<p><span class="caption-text">Wählen Sie die passende vorhandene Bridge-Adresse, nicht den Eintrag zur Musterstraße.</span><a class="headerlink" href="#id11" title="Link to this image">¶</a></p>
+</figcaption>
+</figure>
+<p>Nun stehen <strong>Shop, Bridge und Microtech nebeneinander in derselben
+Adresszeile</strong>. In der Mitte sehen Sie beim Gartenweg 8 jetzt <strong>7</strong> und
+<strong>2</strong> statt <strong>9</strong> und <strong>0</strong>. Es wurde keine weitere Adresse angelegt.</p>
+<figure class="align-default" id="id12">
+<a class="reference internal image-reference" href="../_images/15_drei_spalten_verbunden.jpg"><img alt="Die vorhandenen Adressen Gartenweg 8 sind nach beiden Zuordnungen in einer gemeinsamen Zeile zusammengeführt" src="../_images/15_drei_spalten_verbunden.jpg" style="width: 100%;" />
+</a>
+<figcaption>
+<p><span class="caption-text">Alle drei vorhandenen Einträge zum Gartenweg 8 sind jetzt miteinander verbunden.</span><a class="headerlink" href="#id12" title="Link to this image">¶</a></p>
+</figcaption>
+</figure>
+<p>Die lange Shop-Adress-ID und die beiden Microtech-Nummern müssen dabei
+nicht gleich aussehen. Bei Nina stimmt die Shop-Adress-ID zwischen
+links und Mitte überein; <strong>7 und 2</strong> stimmen zwischen Mitte und rechts
+überein. So weiß die Oberfläche, welche drei Einträge zusammengehören.</p>
+<p>Zeigt die Auswahl mehrere Einträge nur als <strong>Nina Beispiel</strong>, prüfen Sie
+zuerst deren Anschriften in der Mitte. Wählen Sie nicht allein nach dem
+Namen. Alternativ können Sie bei der geprüften Bridge-Adresse die rechts
+angezeigten Werte <strong>7</strong> und <strong>2</strong> in <strong>AnsNr</strong> und <strong>AnspNr</strong> eintragen und
+auf <strong>Speichern direkt neben diesen beiden Zahlen</strong> klicken. Für Ninas
+Beispiel genügt einer dieser beiden Wege.</p>
+<p><strong>5. Für Ninas nächste Lieferung den Gartenweg 8 wählen</strong></p>
+<p>An der nun verbundenen Adresszeile erscheinen <strong>Rechnung</strong> und
+<strong>Lieferung</strong>. Klicken Sie beim <strong>Gartenweg 8</strong> auf <strong>Lieferung</strong>.
+Die Auswahl setzt Ninas Lieferadresse in Shop, Bridge und Microtech
+zusammen. Für ihre Rechnung bleibt die <strong>Musterstraße 12</strong> ausgewählt.
+Klicken Sie anschließend erneut auf <strong>Suchen</strong>, um den aktuellen Stand
+in allen drei Spalten zu sehen.</p>
+<figure class="align-default" id="id13">
+<a class="reference internal image-reference" href="../_images/07_lieferadresse.jpg"><img alt="Nach Zuordnung und erneuter Suche ist Gartenweg 8 in allen drei Spalten als Lieferadresse gekennzeichnet" src="../_images/07_lieferadresse.jpg" style="width: 100%;" />
+</a>
+<figcaption>
+<p><span class="caption-text">Die drei grünen Kennzeichen bestätigen Ninas gewünschte Lieferadresse.</span><a class="headerlink" href="#id13" title="Link to this image">¶</a></p>
+</figcaption>
+</figure>
+<p><strong>6. Die zusätzliche Musterstraße 12 aufräumen</strong></p>
+<p>Nach dem Kunden-Merge ist die Musterstraße 12 im Beispiel zweimal
+vorhanden. Vergleichen Sie beide Einträge vollständig. Wir behalten die
+Adresse mit <strong>Rechnungsadresse</strong>. Die zusätzliche Musterstraße hat weder
+dieses Kennzeichen noch <strong>Lieferadresse</strong> und wird nicht gebraucht.</p>
+<p>Markieren Sie nur diesen zusätzlichen Eintrag links. <strong>Markierte
+löschen in der linken Spalte</strong> entfernt ihn aus dem Shop. Prüfen Sie die
+Rückfrage und suchen Sie anschließend erneut.</p>
+<figure class="align-default" id="id14">
+<a class="reference internal image-reference" href="../_images/08_doppelte_adresse.jpg"><img alt="Nur die zusätzliche Musterstraße 12 ohne Standardkennzeichen ist links markiert" src="../_images/08_doppelte_adresse.jpg" style="width: 100%;" />
+</a>
+<figcaption>
+<p><span class="caption-text">Ninas Rechnungsadresse und der Gartenweg 8 bleiben erhalten.</span><a class="headerlink" href="#id14" title="Link to this image">¶</a></p>
+</figcaption>
+</figure>
+<p>Steht der zusätzliche Eintrag danach noch in der Mitte, markieren Sie
+dort genau diese Adresse und verwenden dort <strong>Markierte löschen</strong>.
+Jeder Knopf entfernt nur die Auswahl in seiner eigenen Spalte.
+<strong>Django-Kunde löschen</strong> würde dagegen Ninas ganzen Kunden in der Bridge
+entfernen. Für diese einzelne überflüssige Adresse bleibt er unbenutzt.</p>
+<p>Zum Schluss suchen Sie noch einmal nach <strong>12196</strong>. Nina hat ein Shopkonto,
+die Rechnung geht an die Musterstraße 12 und die Lieferung an den
+Gartenweg 8. Die zugehörigen Adressen stehen jeweils gemeinsam in einer
+Zeile, und ihre bisherigen Bestellungen bleiben erhalten.</p>
 </section>
 </section>
 
