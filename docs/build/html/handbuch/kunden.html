@@ -36,658 +36,209 @@
             
   <section id="kunden">
 <h1>Kunden<a class="headerlink" href="#kunden" title="Link to this heading">¶</a></h1>
-<section id="wofur-ist-dieser-bereich-da">
-<h2>Wofür ist dieser Bereich da?<a class="headerlink" href="#wofur-ist-dieser-bereich-da" title="Link to this heading">¶</a></h2>
-<p>Im Bereich <strong>Kunden</strong> verwalten Sie die Kundendaten, die Zuordnung zu
-Shopware und Microtech sowie Rechnungs- und Lieferanschriften. Die
-GC-Bridge kann Kundendaten aus Microtech holen oder nach Microtech
-übertragen.</p>
-<p>Unter <strong>Kunden zusammenführen</strong> vergleichen Sie Daten aus Shopware,
-GC-Bridge und Microtech. Diese Seite ist für unklare oder doppelte
-Kundenzuordnungen gedacht.</p>
-<a class="reference internal image-reference" href="../_images/04_kunden.jpg"><img alt="Leere Kundenmaske mit ERP-Nummer, Name, Firma und E-Mail" src="../_images/04_kunden.jpg" style="width: 100%;" />
+<section id="kunden-zusammenfuhren">
+<span id="kunden-merge-ablauf"></span><h2>Kunden zusammenführen<a class="headerlink" href="#kunden-zusammenfuhren" title="Link to this heading">¶</a></h2>
+<p><strong>Unser Beispiel:</strong> Nina Beispiel ist bereits Kundin unter der Nummer
+<strong>12196</strong>. Sie meldet sich im Shop noch einmal an und erhält die Nummer
+<strong>950059</strong>. Nun gibt es zwei Kundenkonten für dieselbe Person. Wir möchten
+mit <strong>12196</strong> weiterarbeiten und die Bestellungen und die Adresse von
+<strong>950059</strong> dorthin übernehmen.</p>
+<p>Nina wohnt in der <strong>Musterstraße 12</strong>. Ihre Pakete möchte sie künftig an
+den <strong>Gartenweg 8</strong> bekommen. Wir begleiten diesen einen Fall vom
+Zusammenführen bis zur Prüfung der Adressen.</p>
+<p>Die Bildschirmfotos zeigen die Bedienoberfläche mit fiktiven
+Beispieldaten. Nina Beispiel, ihre Anschriften und Bestellungen sind
+frei erfunden.</p>
+<p><strong>1. Beide Kunden suchen</strong></p>
+<p>Öffnen Sie <strong>Kunden → Kunden zusammenführen</strong>. Tragen Sie bei
+<strong>AdrNr / Kundennummer</strong> die beiden Nummern <strong>12196,950059</strong> ein.
+Lassen Sie die übrigen Suchfelder leer und klicken Sie auf <strong>Suchen</strong>.
+So werden beide Kunden nebeneinander prüfbar.</p>
+<figure class="align-default" id="id1">
+<a class="reference internal image-reference" href="../_images/01_suche.jpg"><img alt="Suche nach Ninas beiden Kundennummern 12196 und 950059" src="../_images/01_suche.jpg" style="width: 100%;" />
 </a>
-<p>Die Kundenmaske trennt die allgemeinen Kundendaten von den zugehörigen
-Adressen. Pflichtfelder sind mit einem Stern markiert.</p>
+<figcaption>
+<p><span class="caption-text">Beide Nummern stehen im selben Suchfeld, durch ein Komma getrennt.</span><a class="headerlink" href="#id1" title="Link to this image">¶</a></p>
+</figcaption>
+</figure>
+<p>Prüfen Sie die Treffer: Gehören Name, E-Mail-Adressen und Anschriften
+wirklich zu Nina? Zwei Menschen mit demselben Namen sollen nicht
+zusammengeführt werden. Wird nur noch eines der beiden Konten gefunden,
+prüfen Sie den verbliebenen Kunden und seine Adressen. Ein weiterer
+Merge ist dann für dieses Beispiel nicht nötig.</p>
+<p><strong>2. Festlegen, welcher Kunde bleibt</strong></p>
+<p>Bei <strong>Falscher Kunde – wird nach Prüfung gelöscht</strong> wählen Sie
+<strong>950059</strong>. Bei <strong>Richtiger Kunde – bleibt erhalten</strong> wählen Sie
+<strong>12196</strong>. Nina soll künftig unter ihrer bisherigen Nummer geführt
+werden. Klicken Sie anschließend auf <strong>Vorschau laden</strong>.</p>
+<figure class="align-default" id="id2">
+<a class="reference internal image-reference" href="../_images/02_auswahl.jpg"><img alt="Auswahl 950059 als zusätzliches Konto und 12196 als verbleibender Kunde" src="../_images/02_auswahl.jpg" style="width: 100%;" />
+</a>
+<figcaption>
+<p><span class="caption-text">Links steht das zusätzliche Konto 950059, rechts der Kunde 12196, der bleibt.</span><a class="headerlink" href="#id2" title="Link to this image">¶</a></p>
+</figcaption>
+</figure>
+<p><strong>3. Die Vorschau gemeinsam mit dem Beispiel lesen</strong></p>
+<p>Die <strong>Verbindliche Vorschau</strong> zeigt links das bisherige Konto <strong>950059</strong>
+und rechts das geplante Ergebnis bei <strong>12196</strong>. In unserem Beispiel
+kommen <strong>eine Adresse und zwei Bestellungen</strong> hinzu. Ninas bisherige
+Bestellung bei <strong>12196</strong> bleibt ebenfalls erhalten.</p>
+<figure class="align-default" id="id3">
+<a class="reference internal image-reference" href="../_images/03_vorschau.jpg"><img alt="Verbindliche Vorschau für 950059 zu 12196 mit einer Adresse und zwei Bestellungen" src="../_images/03_vorschau.jpg" style="width: 100%;" />
+</a>
+<figcaption>
+<p><span class="caption-text">Die Vorschau zeigt, was zum Kunden 12196 hinzukommt.</span><a class="headerlink" href="#id3" title="Link to this image">¶</a></p>
+</figcaption>
+</figure>
+<p>Nina hat zuletzt das neue Konto mit <strong>nina.neu&#64;example.com</strong> benutzt.
+Die Vorschau zeigt deshalb diese E-Mail-Adresse als künftigen Zugang.
+Sie verwendet danach das dazugehörige Passwort. Ihre Kundennummer
+bleibt trotzdem <strong>12196</strong>.</p>
+<p>Unter <strong>Adressen</strong> prüfen Sie die Musterstraße 12. Sie steht in unserem
+Beispiel schon beim alten Kunden und auch beim neuen Konto. Nach der
+Zusammenführung bleiben zunächst beide Adressen erhalten. Die Vorschau
+entfernt gleiche Adressen nicht von selbst. Ninas bisherige
+Rechnungs- und Lieferadresse bei <strong>12196</strong> bleibt zunächst ausgewählt.</p>
+<figure class="align-default" id="id4">
+<a class="reference internal image-reference" href="../_images/04_zugang_adressen.jpg"><img alt="Vorschau des künftigen Zugangs nina.neu&#64;example.com und der übernommenen Adressen" src="../_images/04_zugang_adressen.jpg" style="width: 100%;" />
+</a>
+<figcaption>
+<p><span class="caption-text">Prüfen Sie Ninas künftigen Zugang und anschließend ihre Anschriften in der Vorschau.</span><a class="headerlink" href="#id4" title="Link to this image">¶</a></p>
+</figcaption>
+</figure>
+<p><strong>4. Bestätigen und das Ergebnis prüfen</strong></p>
+<p>Passt alles zu Nina, klicken Sie auf <strong>Merge bestätigen</strong>. Das Konto
+<strong>950059</strong> wird aufgelöst. Seine Adresse und seine beiden Bestellungen
+gehören anschließend zu <strong>12196</strong>. Auch die Bridge ordnet ihre
+entsprechenden Einträge dem verbliebenen Kunden zu. Ninas Kunde in
+Microtech wird durch diesen Schritt nicht geändert.</p>
+<p>Warten Sie auf die Erfolgsmeldung. Erscheint stattdessen <strong>Status
+prüfen</strong>, benutzen Sie diese Schaltfläche und warten Sie auf ein klares
+Ergebnis. Starten Sie den Vorgang nicht noch einmal auf Verdacht.</p>
+<p>Suchen Sie danach erneut nach <strong>12196</strong>. Prüfen Sie Ninas Adressen und
+ihre Bestellungen. Rechnungen und Lieferanschriften bereits vorhandener
+Bestellungen bleiben so erhalten, wie sie damals erstellt wurden.
+Mit den drei Spalten prüfen wir nun, ob Nina ihre nächste Lieferung an
+die richtige Anschrift erhält.</p>
 </section>
-<section id="navigation">
-<h2>Navigation<a class="headerlink" href="#navigation" title="Link to this heading">¶</a></h2>
-<p>Öffnen Sie in der linken Navigation <strong>Kunden</strong>. Dort stehen:</p>
-<ul class="simple">
-<li><p><strong>Kunden</strong>: Kundenstammdaten und zugehörige Adressen</p></li>
-<li><p><strong>Adressen</strong>: alle Adressen als eigene Liste</p></li>
-<li><p><strong>Kunden zusammenführen</strong>: Suche und Vergleich über die drei
-beteiligten Systeme</p></li>
-</ul>
-<p>Direkte Adressen:</p>
-<ul class="simple">
-<li><p>Kunden: <code class="docutils literal notranslate"><span class="pre">/admin/customer/customer/</span></code></p></li>
-<li><p>Einzelner Kunde: <code class="docutils literal notranslate"><span class="pre">/admin/customer/customer/&lt;ID&gt;/change/</span></code></p></li>
-<li><p>Adressen: <code class="docutils literal notranslate"><span class="pre">/admin/customer/address/</span></code></p></li>
-<li><p>Einzelne Adresse: <code class="docutils literal notranslate"><span class="pre">/admin/customer/address/&lt;ID&gt;/change/</span></code></p></li>
-<li><p>Kunden zusammenführen: <code class="docutils literal notranslate"><span class="pre">/admin/customer-merge/</span></code></p></li>
-</ul>
-</section>
-<section id="die-kundenliste">
-<h2>Die Kundenliste<a class="headerlink" href="#die-kundenliste" title="Link to this heading">¶</a></h2>
-<table class="docutils align-default">
-<thead>
-<tr class="row-odd"><th class="head"><p>Spalte</p></th>
-<th class="head"><p>Einfache Erklärung</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p>ERP-Nummer</p></td>
-<td><p>Die AdrNr des Kunden. Sie ist eindeutig und die
-wichtigste Verbindung zu Microtech.</p></td>
-</tr>
-<tr class="row-odd"><td><p>Name</p></td>
-<td><p>Kurzname des Kunden in der GC-Bridge.</p></td>
-</tr>
-<tr class="row-even"><td><p>E-Mail</p></td>
-<td><p>Haupt-E-Mail-Adresse.</p></td>
-</tr>
-<tr class="row-odd"><td><p>Bruttopreise</p></td>
-<td><p>Zeigt, ob Preise für diesen Kunden brutto behandelt
-werden.</p></td>
-</tr>
-<tr class="row-even"><td><p>Angelegt am</p></td>
-<td><p>Zeitpunkt, zu dem der Kunde in der GC-Bridge
-angelegt wurde.</p></td>
-</tr>
-</tbody>
-</table>
-<p>Die Suche berücksichtigt ERP-Nummer, Name und E-Mail. Filtern können Sie
-nach <strong>Bruttopreise</strong> und nach dem Anlagedatum.</p>
-</section>
-<section id="feldbeschreibung-des-kunden">
-<h2>Feldbeschreibung des Kunden<a class="headerlink" href="#feldbeschreibung-des-kunden" title="Link to this heading">¶</a></h2>
-<table class="docutils align-default">
-<thead>
-<tr class="row-odd"><th class="head"><p>Feld</p></th>
-<th class="head"><p>Bedeutung und richtige Verwendung</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p>ERP-Nummer</p></td>
-<td><p>AdrNr des Kunden in Microtech. Sie muss
-eindeutig sein. Eine falsche Nummer kann
-Daten dem falschen Kunden zuordnen.</p></td>
-</tr>
-<tr class="row-odd"><td><p>ERP-ID</p></td>
-<td><p>Interne Microtech-Kennung, falls vorhanden.
-Sie ist nicht dasselbe wie die AdrNr und
-sollte normalerweise nicht von Hand
-geändert werden.</p></td>
-</tr>
-<tr class="row-even"><td><p>Name</p></td>
-<td><p>Anzeigename in der GC-Bridge.</p></td>
-</tr>
-<tr class="row-odd"><td><p>Firma (Shopware)</p></td>
-<td><p>Firmenname, wie er aus dem Shopware-Konto
-kommt.</p></td>
-</tr>
-<tr class="row-even"><td><p>E-Mail</p></td>
-<td><p>Haupt-E-Mail-Adresse des Kunden.</p></td>
-</tr>
-<tr class="row-odd"><td><p>Shopware Kunden-ID</p></td>
-<td><p>Eindeutige interne Kundenkennung in
-Shopware. Sie verbindet das Shopware-Konto
-mit diesem Datensatz.</p></td>
-</tr>
-<tr class="row-even"><td><p>Shopware Kundengruppe</p></td>
-<td><p>Name der Kundengruppe aus Shopware. Er kann
-Regeln und Steuerbehandlung beeinflussen.</p></td>
-</tr>
-<tr class="row-odd"><td><p>USt-IdNr</p></td>
-<td><p>Umsatzsteuer-Identifikationsnummer.
-Besonders bei Firmenkunden im Ausland
-sorgfältig prüfen.</p></td>
-</tr>
-<tr class="row-even"><td><p>Bruttopreise</p></td>
-<td><p>Aktiv bedeutet, dass Shopware diesen Kunden
-mit Bruttopreisen führt.</p></td>
-</tr>
-<tr class="row-odd"><td><p>Angelegt am</p></td>
-<td><p>Zeitpunkt der Anlage in der GC-Bridge. Wird
-automatisch gesetzt.</p></td>
-</tr>
-<tr class="row-even"><td><p>Aktualisiert am</p></td>
-<td><p>Zeitpunkt der letzten Änderung. Wird
-automatisch gesetzt.</p></td>
-</tr>
-</tbody>
-</table>
-<p>Unter dem Kunden werden seine Adressen in einer Tabelle angezeigt. Dort
-können vorhandene Adressen bearbeitet werden. Die Tabelle zeigt nur
-einen Teil aller Adressfelder. Für alle Felder öffnen Sie <strong>Kunden →
-Adressen</strong> und wählen die betreffende Adresse.</p>
-</section>
-<section id="aktionen-fur-kunden">
-<h2>Aktionen für Kunden<a class="headerlink" href="#aktionen-fur-kunden" title="Link to this heading">¶</a></h2>
-<table class="docutils align-default">
-<thead>
-<tr class="row-odd"><th class="head"><p>Aktion</p></th>
-<th class="head"><p>Wirkung</p></th>
-<th class="head"><p>Wichtiger Hinweis</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p>Von Microtech
-synchronisieren</p></td>
-<td><p>Holt den Kunden und
-seine Anschriften
-anhand der
-ERP-Nummer aus
-Microtech in die
-GC-Bridge.</p></td>
-<td><p>Ohne ERP-Nummer ist
-die Aktion nicht
-möglich. Lokale
-Werte können durch
-die Microtech-Daten
-ersetzt werden.</p></td>
-</tr>
-<tr class="row-odd"><td><p>Nach Microtech
-übertragen</p></td>
-<td><p>Legt den Kunden in
-Microtech an oder
-aktualisiert ihn.
-Auch
-Standard-Rechnungs-
-und Lieferanschrift
-werden
-berücksichtigt.</p></td>
-<td><p>Vorher ERP-Nummer,
-Anschriften und
-Standardkennzeichen
-prüfen.</p></td>
-</tr>
-</tbody>
-</table>
-<p>Beide Aktionen gibt es für einen einzelnen Kunden auf der Detailseite
-und für markierte Kunden in der Liste. Nach dem Lauf zeigt die
-Oberfläche eine Erfolgsmeldung oder die betroffenen Fehler.</p>
-</section>
-<section id="feldbeschreibung-der-adresse">
-<h2>Feldbeschreibung der Adresse<a class="headerlink" href="#feldbeschreibung-der-adresse" title="Link to this heading">¶</a></h2>
-<table class="docutils align-default">
-<thead>
-<tr class="row-odd"><th class="head"><p>Feld</p></th>
-<th class="head"><p>Bedeutung und richtige Verwendung</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p>Kunde</p></td>
-<td><p>Kunde, zu dem die Adresse gehört.</p></td>
-</tr>
-<tr class="row-odd"><td><p>ERP Kombi-ID</p></td>
-<td><p>Zusammengesetzte interne Kennung aus
-Microtech-Werten. Sie wird bei passenden
-Daten automatisch gebildet und sollte
-nicht manuell gepflegt werden.</p></td>
-</tr>
-<tr class="row-even"><td><p>Shopware Adress-ID</p></td>
-<td><p>Eindeutige Kennung dieser Adresse in
-Shopware. Sie darf bei einem Kunden nicht
-auf mehrere lokale Adressen zeigen.</p></td>
-</tr>
-<tr class="row-odd"><td><p>ERP-Nummer</p></td>
-<td><p>Numerische AdrNr, zu der die Anschrift
-gehört.</p></td>
-</tr>
-<tr class="row-even"><td><p>Anschrift-ID</p></td>
-<td><p>Interne Microtech-Kennung der Anschrift.
-Nicht mit der sichtbaren Anschrift-Nummer
-verwechseln.</p></td>
-</tr>
-<tr class="row-odd"><td><p>Anschrift-Nummer</p></td>
-<td><p>Nummer der Anschrift innerhalb des
-Microtech-Kunden. Sie wird für den
-täglichen Abgleich verwendet. Auch <code class="docutils literal notranslate"><span class="pre">0</span></code>
-kann eine gültige Nummer sein.</p></td>
-</tr>
-<tr class="row-even"><td><p>Ansprechpartner-ID</p></td>
-<td><p>Interne Microtech-Kennung des
-Ansprechpartners.</p></td>
-</tr>
-<tr class="row-odd"><td><p>Ansprechpartner-Nummer</p></td>
-<td><p>Nummer des Ansprechpartners innerhalb der
-Anschrift. Auch <code class="docutils literal notranslate"><span class="pre">0</span></code> kann gültig sein.</p></td>
-</tr>
-<tr class="row-even"><td><p>Firma</p></td>
-<td><p>Firmenangabe der Adresse.</p></td>
-</tr>
-<tr class="row-odd"><td><p>Name 1</p></td>
-<td><p>Erste Namenszeile, häufig Firma oder
-Anrede.</p></td>
-</tr>
-<tr class="row-even"><td><p>Name 2</p></td>
-<td><p>Zweite Namenszeile, häufig Personenname
-oder Ergänzung.</p></td>
-</tr>
-<tr class="row-odd"><td><p>Name 3</p></td>
-<td><p>Weitere Namenszeile.</p></td>
-</tr>
-<tr class="row-even"><td><p>Abteilung</p></td>
-<td><p>Abteilung des Empfängers oder
-Ansprechpartners.</p></td>
-</tr>
-<tr class="row-odd"><td><p>Straße</p></td>
-<td><p>Straße und Hausnummer.</p></td>
-</tr>
-<tr class="row-even"><td><p>PLZ</p></td>
-<td><p>Postleitzahl.</p></td>
-</tr>
-<tr class="row-odd"><td><p>Ort</p></td>
-<td><p>Ort.</p></td>
-</tr>
-<tr class="row-even"><td><p>Ländercode</p></td>
-<td><p>Zweistelliger Ländercode, etwa <code class="docutils literal notranslate"><span class="pre">DE</span></code>,
-<code class="docutils literal notranslate"><span class="pre">AT</span></code> oder <code class="docutils literal notranslate"><span class="pre">CH</span></code>.</p></td>
-</tr>
-<tr class="row-odd"><td><p>E-Mail</p></td>
-<td><p>E-Mail-Adresse für diese Anschrift oder
-diesen Ansprechpartner.</p></td>
-</tr>
-<tr class="row-even"><td><p>Titel</p></td>
-<td><p>Anrede oder Titel.</p></td>
-</tr>
-<tr class="row-odd"><td><p>Vorname</p></td>
-<td><p>Vorname des Ansprechpartners.</p></td>
-</tr>
-<tr class="row-even"><td><p>Nachname</p></td>
-<td><p>Nachname des Ansprechpartners.</p></td>
-</tr>
-<tr class="row-odd"><td><p>Telefon</p></td>
-<td><p>Telefonnummer.</p></td>
-</tr>
-<tr class="row-even"><td><p>Lieferanschrift</p></td>
-<td><p>Kennzeichnet die aktuelle
-Standard-Lieferanschrift dieses Kunden.</p></td>
-</tr>
-<tr class="row-odd"><td><p>Rechnungsanschrift</p></td>
-<td><p>Kennzeichnet die aktuelle
-Standard-Rechnungsanschrift dieses Kunden.</p></td>
-</tr>
-<tr class="row-even"><td><p>Angelegt am</p></td>
-<td><p>Zeitpunkt der Anlage. Wird automatisch
-gesetzt.</p></td>
-</tr>
-<tr class="row-odd"><td><p>Aktualisiert am</p></td>
-<td><p>Zeitpunkt der letzten Änderung. Wird
-automatisch gesetzt.</p></td>
-</tr>
-</tbody>
-</table>
-<p>Ein Kunde kann mehrere Adressen haben. Für den normalen Ablauf sollte
-genau die richtige Adresse als Lieferanschrift und genau die richtige
-als Rechnungsanschrift gekennzeichnet sein. Beides darf dieselbe Adresse
-sein.</p>
-</section>
-<section id="die-adressliste">
-<h2>Die Adressliste<a class="headerlink" href="#die-adressliste" title="Link to this heading">¶</a></h2>
-<p>Die eigene Adressliste zeigt Kunde, Anschrift-ID, Name 1, Ort, die
-Kennzeichen für Rechnung und Lieferung sowie das Anlagedatum. Die Suche
-findet Adressen über AdrNr, Name 1, Name 2, Straße, PLZ und Ort. Filter
-stehen für Rechnungsanschrift, Lieferanschrift, Ländercode und
-Anlagedatum bereit.</p>
-</section>
-<section id="kunden-zusammenfuhren-und-systemzuordnungen-prufen">
-<h2>Kunden zusammenführen und Systemzuordnungen prüfen<a class="headerlink" href="#kunden-zusammenfuhren-und-systemzuordnungen-prufen" title="Link to this heading">¶</a></h2>
-<section id="der-kunden-merge-was-passiert-dabei">
-<span id="kunden-merge-ablauf"></span><h3>Der Kunden-Merge: Was passiert dabei?<a class="headerlink" href="#der-kunden-merge-was-passiert-dabei" title="Link to this heading">¶</a></h3>
-<p>Beim <strong>Kunden-Merge</strong> werden zwei Shopware-Konten derselben Person oder
-Firma zu einem Konto zusammengeführt. Sie wählen das richtige Konto,
-das erhalten bleiben soll, und das zusätzliche Konto, das danach
-gelöscht wird. Vor der Bestätigung zeigt die <strong>Verbindliche Vorschau</strong>
-das geplante Ergebnis.</p>
-<p>Ein Kunden-Merge ist sinnvoll, wenn tatsächlich zwei unterschiedliche
-Shopware-Kunden-IDs zu derselben Person oder Firma gehören. Eine einzige
-Adresse, die sowohl <strong>Rechnung</strong> als auch <strong>Lieferung</strong> ist, ist dagegen
-keine Dublette. Auch zwei gleiche Adressen innerhalb eines einzigen
-Kontos werden durch einen Kunden-Merge nicht bereinigt.</p>
-<p><strong>Quelle</strong> bedeutet: das zusätzliche oder falsche Konto, das aufgelöst
-wird. <strong>Ziel</strong> bedeutet: das richtige Konto, mit dem anschließend
-weitergearbeitet wird. Wählen Sie nicht allein nach der kleineren oder
-älteren Kundennummer, sondern nach der richtigen Kundenzuordnung.</p>
-<table class="docutils align-default" id="id1">
-<caption><span class="caption-text">Was die Zusammenführung bewirkt</span><a class="headerlink" href="#id1" title="Link to this table">¶</a></caption>
-<colgroup>
-<col style="width: 25.0%" />
-<col style="width: 75.0%" />
-</colgroup>
-<thead>
-<tr class="row-odd"><th class="head"><p>Bereich</p></th>
-<th class="head"><p>Ergebnis nach bestätigtem Erfolg</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p>Kundenkonto</p></td>
-<td><p>Das Zielkonto behält seine Kundennummer, Shopware-Kunden-ID und
-Stammdaten. Das Shopware-Quellkonto wird gelöscht.</p></td>
-</tr>
-<tr class="row-odd"><td><p>Zugang zum Shop</p></td>
-<td><p>Das Paar aus E-Mail-Adresse und Passwort des zuletzt verwendeten
-Kontos wird für das Zielkonto verwendet. Bei gleichem oder bei
-beiden Konten fehlendem letzten Login bleibt das Paar des
-Zielkontos erhalten. Die Vorschau zeigt, welches Konto die
-Zugangsdaten liefert.</p></td>
-</tr>
-<tr class="row-even"><td><p>Adressen</p></td>
-<td><p>Alle Quelladressen wechseln zum Zielkonto und behalten ihre
-Shopware-Adress-IDs. Die vorhandenen Zieladressen bleiben
-erhalten. Inhaltlich gleiche Adressen werden nicht automatisch
-zu einer Adresse zusammengefasst.</p></td>
-</tr>
-<tr class="row-odd"><td><p>Standardadressen</p></td>
-<td><p>Bei der normalen Auswahl bleiben die Standard-Rechnungs- und
-Standard-Lieferadresse des Zielkontos erhalten. Prüfen Sie die
-geplanten Standardrollen in der Vorschau.</p></td>
-</tr>
-<tr class="row-even"><td><p>Bestellungen</p></td>
-<td><p>Die Bestellzuordnungen des Quellkontos wechseln zum Zielkonto.
-Bereits vorhandene Bestellungen bleiben erhalten. Historische
-Rechnungs- und Lieferanschriften in Bestellungen werden nicht
-geändert.</p></td>
-</tr>
-<tr class="row-odd"><td><p>GC-Bridge</p></td>
-<td><p>Erst nach bestätigtem Erfolg in Shopware übernimmt die Bridge
-die lokalen Adress- und Bestellverweise auf den Zielkunden und
-bereinigt das lokale Quellkonto. Eine fehlgeschlagene lokale
-Bereinigung wird gesondert angezeigt.</p></td>
-</tr>
-<tr class="row-even"><td><p>Microtech</p></td>
-<td><p>Dieser Shopware-Merge verändert keine Microtech-Kundendaten.
-Bestehende Microtech-Zuordnungen müssen bei Bedarf separat
-geprüft werden.</p></td>
-</tr>
-</tbody>
-</table>
-<p><strong>Vorschau laden</strong> führt noch keinen Merge aus. Links sehen Sie den
-Quellkunden vor dem Vorgang, rechts das geplante Ergebnis beim
-Zielkunden. Prüfen Sie die Kundennummern, die künftigen Zugangsdaten,
-alle Adressen, die Standardrollen und die Anzahl der Bestellzuordnungen.
-Erst die anschließende Bestätigung startet das Zusammenführen und die
-Löschung des Quellkontos.</p>
-<section id="praxisbeispiel-erneute-anmeldung-eines-bestehenden-kunden">
-<h4>Praxisbeispiel: Erneute Anmeldung eines bestehenden Kunden<a class="headerlink" href="#praxisbeispiel-erneute-anmeldung-eines-bestehenden-kunden" title="Link to this heading">¶</a></h4>
-<p>Das Beispiel greift die Fragestellung aus <strong>Issue 45</strong> auf, ohne Namen
-oder persönliche Anschriften zu nennen. Ein Kunde hat bereits die
-Nummer <code class="docutils literal notranslate"><span class="pre">12196</span></code> und meldet sich erneut unter <code class="docutils literal notranslate"><span class="pre">950059</span></code> an. Gemeldet
-wird eine doppelte Standard-Rechnungs- beziehungsweise Lieferadresse.</p>
-<p>Für den folgenden Ablauf nehmen wir an, dass <strong>beide Shopware-Konten
-noch bestehen</strong>, zur selben Person gehören und das Konto <code class="docutils literal notranslate"><span class="pre">12196</span></code> das
-richtige Konto für die weitere Arbeit ist:</p>
-<ol class="arabic simple">
-<li><p>Öffnen Sie <strong>Kunden → Kunden zusammenführen</strong>. Suchen Sie zunächst
-nur nach <code class="docutils literal notranslate"><span class="pre">12196,950059</span></code> und lassen Sie die anderen Suchfelder leer.</p></li>
-<li><p>Vergleichen Sie die gefundenen Konten, Namen, E-Mail-Adressen,
-Anschriften und Bestellzuordnungen. Prüfen Sie, dass tatsächlich
-zwei unterschiedliche SW6-Kunden-IDs vorliegen.</p></li>
-<li><p>Wählen Sie <code class="docutils literal notranslate"><span class="pre">950059</span></code> als <strong>Falscher Kunde – wird nach Prüfung
-gelöscht</strong> und <code class="docutils literal notranslate"><span class="pre">12196</span></code> als <strong>Richtiger Kunde – bleibt erhalten</strong>.</p></li>
-<li><p>Wählen Sie <strong>Vorschau laden</strong>. Hat beispielsweise jedes Konto eine
-Adresse und das Quellkonto zwei Bestellungen, kommen eine Adresse
-und zwei Bestellzuordnungen beim Zielkonto hinzu. Die vorherige
-Zieladresse bleibt bestehen. Zwei inhaltlich gleiche Adressen
-können somit auch nach diesem Merge noch vorhanden sein.</p></li>
-<li><p>Prüfen Sie auch die Login-Quelle: War das neue Konto zuletzt in
-Benutzung, wird dessen Paar aus E-Mail und Passwort für das
-erhaltene Konto verwendet. Die Kundennummer des Zielkontos bleibt
-trotzdem <code class="docutils literal notranslate"><span class="pre">12196</span></code>.</p></li>
-<li><p>Bestätigen Sie die Zusammenführung erst nach Prüfung der Vorschau.
-Suchen Sie anschließend erneut und kontrollieren Sie das Zielkonto,
-die Adressen, die Standardrollen und die Bestellzuordnungen.</p></li>
-<li><p>Sind danach wirklich zwei überflüssig gleiche Adressdatensätze
-vorhanden, bereinigen Sie diese gesondert wie im nächsten Abschnitt
-beschrieben. Prüfen Sie auch, ob die Shopware-Adress-ID der lokalen
-Bridge-Adresse zur verbliebenen Adresse im Shop passt.</p></li>
-</ol>
-<p><strong>Wenn nur noch ein Konto gefunden wird:</strong> Starten Sie keinen weiteren
-Merge. Eine fehlende neue Kundennummer allein beweist nicht, wann oder
-wie ein früherer Merge stattgefunden hat. Prüfen Sie die verbliebenen
-Adressen und Zuordnungen. Eine einzige Adresse mit beiden Standardrollen
-ist korrekt. Eine abweichende Shopware-Adress-ID in der Bridge ist ein
-Zuordnungsproblem und keine automatisch bewiesene Adressdublette.</p>
-<p>Ergebnis des Beispiels: Das richtige Konto bleibt erhalten, seine
-Bestellzuordnungen umfassen auch die übernommenen Bestellungen. Die
-Adressdatensätze und Standardrollen sind geprüft. Durch den
-Shopware-Merge allein wurden keine Microtech-Daten geändert.</p>
-</section>
-</section>
-<section id="die-oberflache-suchen-vergleichen-und-handeln">
-<span id="kunden-merge-oberflaeche"></span><h3>Die Oberfläche: Suchen, vergleichen und handeln<a class="headerlink" href="#die-oberflache-suchen-vergleichen-und-handeln" title="Link to this heading">¶</a></h3>
-<p>Die Seite <strong>Kunden zusammenführen</strong> ist eine Vergleichsseite für drei
-Systeme. Sie hilft sowohl beim Merge zweier Konten als auch beim Prüfen
-einer falschen Kunden- oder Adresszuordnung. Sie müssen nicht bei jeder
-Abweichung einen Merge starten.</p>
-<section id="die-suche">
-<h4>Die Suche<a class="headerlink" href="#die-suche" title="Link to this heading">¶</a></h4>
-<p>Beginnen Sie mit der Kundennummer oder den bekannten Kundennummern.
-Mehrere ausgefüllte Suchfelder werden mit <strong>UND</strong> verknüpft: Ein Treffer
-muss zu allen Angaben passen. Eine zusätzliche alte E-Mail-Adresse kann
-daher einen passenden Treffer ausblenden.</p>
-<table class="docutils align-default" id="id2">
-<caption><span class="caption-text">Suchfelder</span><a class="headerlink" href="#id2" title="Link to this table">¶</a></caption>
-<colgroup>
-<col style="width: 30.0%" />
-<col style="width: 70.0%" />
-</colgroup>
-<thead>
-<tr class="row-odd"><th class="head"><p>Suchfeld</p></th>
-<th class="head"><p>Bedeutung</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p>AdrNr / Kundennummer</p></td>
-<td><p>Eine oder mehrere Kundennummern. Mehrere Nummern werden mit
-Komma getrennt, zum Beispiel <code class="docutils literal notranslate"><span class="pre">12196,950059</span></code>.</p></td>
-</tr>
-<tr class="row-odd"><td><p>SW6-Kunden-ID</p></td>
-<td><p>Die 32-stellige interne Kennung eines bestimmten Shopware-Kontos.</p></td>
-</tr>
-<tr class="row-even"><td><p>E-Mail</p></td>
-<td><p>Genaue E-Mail-Adresse oder Suche mit <code class="docutils literal notranslate"><span class="pre">?</span></code> als Platzhalter.</p></td>
-</tr>
-<tr class="row-odd"><td><p>Firma</p></td>
-<td><p>Firmenname; <code class="docutils literal notranslate"><span class="pre">?</span></code> kann als Platzhalter verwendet werden.</p></td>
-</tr>
-<tr class="row-even"><td><p>Vorname / Nachname</p></td>
-<td><p>Namen des Kunden oder Ansprechpartners.</p></td>
-</tr>
-<tr class="row-odd"><td><p>Straße / PLZ / Ort</p></td>
-<td><p>Angaben der gesuchten Anschrift.</p></td>
-</tr>
-</tbody>
-</table>
-</section>
-<section id="die-drei-ergebnisspalten">
-<h4>Die drei Ergebnisspalten<a class="headerlink" href="#die-drei-ergebnisspalten" title="Link to this heading">¶</a></h4>
-<ul class="simple">
-<li><p><strong>SW6:</strong> Der aktuelle Shopware-Kunde mit seinen Kunden- und
-Adress-IDs sowie seinen Standardadressen.</p></li>
-<li><p><strong>GC-Bridge:</strong> Die lokal gespeicherten Kundendaten und Verweise auf
-Shopware und Microtech, die Adressen und zugeordneten Bestellungen.
-Manche Schaltflächen und Meldungen nennen die Bridge <strong>Django</strong>.</p></li>
-<li><p><strong>Microtech:</strong> Der ermittelte Kunden- und Anschriftenstand aus
-Microtech, einschließlich Anschrift- und Ansprechpartnernummern.</p></li>
-</ul>
-<p>Die Ergebnisse können zu unterschiedlichen Zeitpunkten erscheinen.
-Prüfen Sie die Statusmeldung der jeweiligen Spalte. Ein noch laufender
-oder fehlgeschlagener Abruf ist kein Beweis, dass der Kunde fehlt.
-Neukundennummern ab <code class="docutils literal notranslate"><span class="pre">900000</span></code> werden für die direkte Microtech-Suche
-übersprungen; bei einer Nummer wie <code class="docutils literal notranslate"><span class="pre">950059</span></code> ist daher nicht in jedem
-System ein eigener Datensatz zu erwarten.</p>
-<p>Vergleichen Sie besonders Kundennummer, Name und Firma, E-Mail,
-SW6-Kunden-ID, USt-IdNr, Anschriften und zugeordnete Bestellungen. Die
-Kundennummer und die SW6-Kunden-ID sind verschiedene Kennungen: Zwei
-Shopware-Konten müssen zwei unterschiedliche SW6-Kunden-IDs haben.</p>
-</section>
-<section id="der-adressvergleich">
-<h4>Der Adressvergleich<a class="headerlink" href="#der-adressvergleich" title="Link to this heading">¶</a></h4>
-<p>Eine gemeinsame Zeile zeigt die als zusammengehörig erkannten
-Anschriften in den drei Systemen. Eine Anschrift, die einmal in SW6 und
-einmal in der Bridge steht, ist deshalb nicht automatisch doppelt
-angelegt. Prüfen Sie die Kennungen:</p>
-<ul class="simple">
-<li><p>Die <strong>Shopware Adress-ID</strong> der lokalen Bridge-Adresse muss zur
-<strong>SW6-Adress-ID</strong> der zugehörigen Adresse passen.</p></li>
-<li><p>Die Microtech-Anschrift- und Ansprechpartnernummern erklären,
-welche Anschrift und welcher Kontakt zugeordnet sind. Auch <code class="docutils literal notranslate"><span class="pre">0</span></code>
-kann eine gültige Nummer sein.</p></li>
-<li><p>Microtech kann mehrere Ansprechpartner zu einer Anschrift führen.
-Mehrere lokale Zeilen mit derselben Anschrift-Nummer und denselben
-Standardkennzeichen sind deshalb nicht automatisch Dubletten.</p></li>
-</ul>
-<p><strong>Rechnung</strong> und <strong>Lieferung</strong> sind zwei Aufgaben einer Adresse. Beide
-Kennzeichen dürfen an derselben Adresse stehen. Gleiche Straße und
-gleiche PLZ allein beweisen weder eine richtige Systemzuordnung noch
-eine überflüssige Dublette.</p>
-</section>
-<section id="schaltflachen-und-ihre-wirkung">
-<h4>Schaltflächen und ihre Wirkung<a class="headerlink" href="#schaltflachen-und-ihre-wirkung" title="Link to this heading">¶</a></h4>
-<table class="docutils align-default" id="id3">
-<caption><span class="caption-text">Wichtige Aktionen auf der Vergleichsseite</span><a class="headerlink" href="#id3" title="Link to this table">¶</a></caption>
-<colgroup>
-<col style="width: 30.0%" />
-<col style="width: 70.0%" />
-</colgroup>
-<thead>
-<tr class="row-odd"><th class="head"><p>Aktion</p></th>
-<th class="head"><p>Wirkung und Verwendung</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p>Nummer oder ID bearbeiten</p></td>
-<td><p>Korrigiert die ausgewählte lokale Kunden- oder Adresszuordnung.
-Prüfen Sie vorher den passenden Datensatz im anderen System.
-Eine ID-Korrektur führt keine Kundenkonten zusammen.</p></td>
-</tr>
-<tr class="row-odd"><td><p>Zu Django übernehmen</p></td>
-<td><p>Übernimmt die ermittelte Shopware-Kunden-ID in die lokale
-Bridge-Zuordnung.</p></td>
-</tr>
-<tr class="row-even"><td><p>Adresse zwischen SW6 und GC-Bridge kopieren</p></td>
-<td><p>Übernimmt die ausgewählte Anschrift in das andere System. Die
-Richtung des Pfeils und die Schaltflächenbeschreibung zeigen
-das Ziel. Kopieren ersetzt keinen Kunden-Merge.</p></td>
-</tr>
-<tr class="row-odd"><td><p>Rechnung / Lieferung setzen</p></td>
-<td><p>Bei einer eindeutig verknüpften gemeinsamen Anschrift setzt
-die jeweilige Schaltfläche den Standard in <strong>SW6, GC-Bridge und
-Microtech</strong>. Sie erscheint nur bei passender Zuordnung.</p></td>
-</tr>
-<tr class="row-even"><td><p>Markierte löschen</p></td>
-<td><p>Entfernt nach Bestätigung die ausgewählten Adressen in der
-gewählten Spalte. SW6 entfernt Shopware-Adressen, GC-Bridge
-lokale Adressdatensätze. Das ist keine gemeinsame Löschung in
-allen drei Systemen. In der Microtech-Spalte gibt es keine
-entsprechende Sammelaktion.</p></td>
-</tr>
-<tr class="row-odd"><td><p>Vorschau laden</p></td>
-<td><p>Öffnet den Vergleich für den gewählten Quell- und Zielkunden.
-Es wird noch kein Merge ausgeführt.</p></td>
-</tr>
-<tr class="row-even"><td><p>Status prüfen</p></td>
-<td><p>Prüft einen bereits gestarteten Merge, wenn dessen Ausgang
-noch nicht bestätigt ist. Prüfen Sie den Status, bevor Sie
-weitere Änderungen am Kunden vornehmen.</p></td>
-</tr>
-</tbody>
-</table>
-<p>Die Merge-Auswahl bietet <strong>Falscher Kunde – wird nach Prüfung gelöscht</strong>
-und <strong>Richtiger Kunde – bleibt erhalten</strong>. Sie brauchen dafür zwei
-unterschiedliche Shopware-Kunden-IDs. Nach einer Änderung der Auswahl
-müssen Sie eine neue Vorschau laden und prüfen. Eine Erfolgsmeldung
-nennt das bestätigte Ergebnis und eine gegebenenfalls noch offene
-lokale Bereinigung.</p>
-</section>
-<section id="eine-uberflussige-adresse-entfernen">
-<h4>Eine überflüssige Adresse entfernen<a class="headerlink" href="#eine-uberflussige-adresse-entfernen" title="Link to this heading">¶</a></h4>
-<p>Vergleichen Sie zuerst Firma, Namen, Straße, PLZ, Ort, Land, Zusätze und
-Ansprechpartner der vermeintlich gleichen Adressen. Legen Sie fest,
-welcher Datensatz erhalten bleibt und welche Standardrollen er hat.</p>
-<p>Eine Standard-Rechnungs- oder Standard-Lieferadresse lässt sich über
-<strong>Markierte löschen</strong> in der SW6-Spalte nicht entfernen. Setzen Sie
-zuerst eine passende andere Adresse als Standard. Dafür können Sie bei
-einer vollständigen gemeinsamen Zuordnung die Schaltflächen <strong>Rechnung</strong>
-und <strong>Lieferung</strong> verwenden; diese ändern alle drei Systeme. Fehlen
-diese Schaltflächen, prüfen Sie die Zuordnung und verwenden Sie bei
-Bedarf die Standardadressverwaltung der zuständigen Anwendung.</p>
-<p>Markieren Sie anschließend nur den überflüssigen Datensatz in der
-betroffenen Spalte und wählen Sie <strong>Markierte löschen</strong>. Prüfen Sie nach
-der Bestätigung erneut die Standardrollen und die Systemzuordnungen.
-Bereinigen Sie gegebenenfalls auch den passenden lokalen Datensatz,
-statt aus einer abweichenden Anzeige ungeprüft einen weiteren Merge
-abzuleiten.</p>
-</section>
-</section>
-</section>
-<section id="typischer-ablauf">
-<h2>Typischer Ablauf<a class="headerlink" href="#typischer-ablauf" title="Link to this heading">¶</a></h2>
-<ol class="arabic simple">
-<li><p>Öffnen Sie <strong>Kunden → Kunden</strong>.</p></li>
-<li><p>Suchen Sie nach der AdrNr oder E-Mail-Adresse.</p></li>
-<li><p>Öffnen Sie den Kunden und prüfen Sie Stammdaten sowie alle Adressen.</p></li>
-<li><p>Kontrollieren Sie, welche Adresse als Rechnung und welche als
-Lieferung markiert ist.</p></li>
-<li><p>Entscheiden Sie die Richtung: <strong>Von Microtech synchronisieren</strong> oder
-<strong>Nach Microtech übertragen</strong>.</p></li>
-<li><p>Lesen Sie die Rückmeldung oben auf der Seite.</p></li>
-<li><p>Nutzen Sie <strong>Kunden zusammenführen</strong> nur dann, wenn Nummern,
-Shopware-ID oder Adressen nicht eindeutig sind oder zwei
-Shopware-Konten zusammengeführt werden müssen.</p></li>
-</ol>
-</section>
-<section id="haufige-hinweise-und-fehlerquellen">
-<h2>Häufige Hinweise und Fehlerquellen<a class="headerlink" href="#haufige-hinweise-und-fehlerquellen" title="Link to this heading">¶</a></h2>
-<ul class="simple">
-<li><p><strong>ERP-Nummer fehlt</strong>: Ein Laden aus Microtech ist nicht möglich.</p></li>
-<li><p><strong>ERP-Nummer doppelt</strong>: Die Nummer muss eindeutig sein. Nicht einfach
-einen zweiten Kunden mit derselben Nummer anlegen.</p></li>
-<li><p><strong>Shopware-Kunden-ID falsch</strong>: Bestellungen und Adressen können dem
-falschen Konto zugeordnet werden. Korrekturen über <strong>Kunden
-zusammenführen</strong> durchführen und vorher alle drei Spalten
-vergleichen.</p></li>
-<li><p><strong>Mehrere Standardadressen</strong>: Vor der Übertragung prüfen, welche
-Adresse wirklich Rechnung und Lieferung sein soll.</p></li>
-<li><p><strong>Anschrift-Nummer 0</strong>: Null ist in Microtech ein gültiger Wert und
-darf nicht als „fehlt“ behandelt werden.</p></li>
-<li><p><strong>Anschrift-ID und Anschrift-Nummer verwechselt</strong>: Für den sichtbaren
-Abgleich ist vor allem die Anschrift-Nummer wichtig; IDs sind interne
-Kennungen.</p></li>
-<li><p><strong>Falsche Synchronisationsrichtung</strong>: <strong>Von Microtech</strong> ersetzt
-lokale Werte durch Microtech-Daten. <strong>Nach Microtech</strong> schreibt die
-GC-Bridge-Daten in die andere Richtung.</p></li>
-<li><p><strong>Leere Felder</strong>: Vor einer Übertragung besonders Name, Straße, PLZ,
-Ort, Ländercode und die Standardkennzeichen prüfen.</p></li>
-<li><p><strong>Kundenmerge</strong>: Das bestätigte Zusammenführen löscht das
-Shopware-Quellkonto und bereinigt danach das lokale Quellkonto.
-Vorschau und Zielkunde sorgfältig prüfen.</p></li>
-<li><p><strong>Berechtigungen</strong>: Einträge oder Aktionen können fehlen, wenn dem
-angemeldeten Benutzer die passende Ansichts- oder
-Änderungsberechtigung fehlt.</p></li>
-</ul>
-</section>
-<section id="praxisbeispiel-bestehenden-kunden-aus-microtech-aktualisieren">
-<h2>Praxisbeispiel: Bestehenden Kunden aus Microtech aktualisieren<a class="headerlink" href="#praxisbeispiel-bestehenden-kunden-aus-microtech-aktualisieren" title="Link to this heading">¶</a></h2>
-<p>Die Anschrift der Kundin mit AdrNr <code class="docutils literal notranslate"><span class="pre">36415</span></code> wurde in Microtech
-geändert.</p>
-<ol class="arabic simple">
-<li><p>Öffnen Sie <strong>Kunden → Kunden</strong> und suchen Sie nach <code class="docutils literal notranslate"><span class="pre">36415</span></code>.</p></li>
-<li><p>Öffnen Sie den Kunden und notieren Sie die bisherige Liefer- und
-Rechnungsanschrift.</p></li>
-<li><p>Wählen Sie <strong>Von Microtech synchronisieren</strong>.</p></li>
-<li><p>Prüfen Sie die Erfolgsmeldung.</p></li>
-<li><p>Kontrollieren Sie anschließend Name, E-Mail, Anschriften sowie die
-Kennzeichen <strong>Lieferanschrift</strong> und <strong>Rechnungsanschrift</strong>.</p></li>
-<li><p>Öffnen Sie bei Unklarheiten <strong>Kunden zusammenführen</strong> und suchen Sie
-erneut nach <code class="docutils literal notranslate"><span class="pre">36415</span></code>, um Shopware, GC-Bridge und Microtech
-nebeneinander zu vergleichen.</p></li>
-</ol>
-<p>Ergebnis: Die GC-Bridge zeigt den aktuellen Stand aus Microtech und die
-vorhandenen Kontakte sind der richtigen Anschrift zugeordnet.</p>
+<section id="funktionen-der-drei-spalten">
+<span id="kunden-merge-oberflaeche"></span><h2>Funktionen der drei Spalten<a class="headerlink" href="#funktionen-der-drei-spalten" title="Link to this heading">¶</a></h2>
+<p>Wir bleiben bei <strong>Nina Beispiel, Kundennummer 12196</strong>. Nach dem
+Zusammenführen suchen Sie diese Nummer erneut. Lesen Sie die Angaben
+von links nach rechts: <strong>SW6</strong>, <strong>GC-Bridge</strong>, <strong>Microtech</strong>.
+Warten Sie, bis die jeweilige Spalte fertig geladen ist.</p>
+<figure class="align-default" id="id5">
+<a class="reference internal image-reference" href="../_images/05_drei_spalten.jpg"><img alt="Nina Beispiel unter 12196 in den drei Spalten SW6, GC-Bridge und Microtech" src="../_images/05_drei_spalten.jpg" style="width: 100%;" />
+</a>
+<figcaption>
+<p><span class="caption-text">Links Ninas Shopkonto, in der Mitte die Bridge und rechts ihr Kunde in Microtech.</span><a class="headerlink" href="#id5" title="Link to this image">¶</a></p>
+</figcaption>
+</figure>
+<p><strong>Links: SW6 – Ninas Angaben im Shop</strong></p>
+<p>Hier sehen Sie, unter welcher Nummer Nina im Shop geführt wird, welche
+E-Mail-Adresse sie dort verwendet und welche Anschriften der Shop kennt.
+Im Beispiel stehen <strong>12196</strong> und <strong>nina.neu&#64;example.com</strong>. Das passt zum
+Ergebnis aus der Vorschau.</p>
+<p>Neben der Kundennummer steht <strong>Speichern</strong>. Damit würde eine geänderte
+Nummer im Shop gespeichert. Bei Nina ist <strong>12196</strong> bereits richtig und
+bleibt stehen.</p>
+<p><strong>Zu Django übernehmen</strong> verbindet den angezeigten Shopkunden mit dem
+Kunden in der mittleren Spalte. Bei Nina passen beide bereits zusammen.
+Dafür müssen Sie nichts erneut übernehmen. In dieser Oberfläche meint
+<strong>Django</strong> die <strong>GC-Bridge</strong>.</p>
+<p>Der Pfeil <strong>nach rechts</strong> an einer Shopadresse kopiert diese Anschrift
+in die Bridge. Wäre der Gartenweg 8 nur links vorhanden, würden Sie ihn
+mit diesem Pfeil in die mittlere Spalte übernehmen.</p>
+<p><strong>In der Mitte: GC-Bridge – Ninas Kunde zwischen Shop und Microtech</strong></p>
+<p>Hier prüfen Sie Ninas Namen, ihre Kundennummer und ihre Anschriften in
+der Bridge. Stünde beim Namen nur „N. Beispiel“, könnten Sie das Feld
+auf <strong>Nina Beispiel</strong> ändern und mit <strong>Speichern</strong> direkt daneben sichern.
+Mit dem Speichern neben der Kundennummer ändern Sie entsprechend nur
+diese Nummer in der Bridge. In unserem Beispiel sind Name und Nummer
+bereits richtig.</p>
+<p>Bei den Adressen sehen wir einen Unterschied: Der <strong>Gartenweg 8</strong> ist
+in der Bridge und in Microtech vorhanden, links im Shop fehlt er noch.
+Nina hat bestätigt, dass ihre nächsten Pakete dorthin gehen sollen.
+Klicken Sie beim <strong>Gartenweg 8</strong> auf den Pfeil <strong>nach links</strong>. Damit
+kopieren Sie diese Anschrift aus der Bridge in den Shop.</p>
+<figure class="align-default" id="id6">
+<a class="reference internal image-reference" href="../_images/06_adresse_kopieren.jpg"><img alt="Gartenweg 8 ist in Bridge und Microtech vorhanden und fehlt in der linken Shop-Spalte" src="../_images/06_adresse_kopieren.jpg" style="width: 100%;" />
+</a>
+<figcaption>
+<p><span class="caption-text">Der Pfeil nach links am Gartenweg 8 übernimmt genau diese Adresse in den Shop.</span><a class="headerlink" href="#id6" title="Link to this image">¶</a></p>
+</figcaption>
+</figure>
+<p>Klicken Sie anschließend erneut auf <strong>Suchen</strong>, um das Ergebnis zu sehen.
+Prüfen Sie, dass der Gartenweg 8 jetzt auch in der linken Spalte steht.
+Ein Pfeil kopiert eine Adresse; er führt keine Kunden zusammen.</p>
+<p><strong>Rechts: Microtech – Ninas Angaben in der Warenwirtschaft</strong></p>
+<p>Rechts vergleichen Sie Ninas bekannte Anschriften und Ansprechpartner.
+Im Beispiel finden wir hier die <strong>Musterstraße 12</strong> und den
+<strong>Gartenweg 8</strong>. Damit können wir prüfen, ob wir in den beiden anderen
+Spalten die richtigen Anschriften ansehen.</p>
+<p>Bei Ninas Ansprechpartner gibt es die Auswahl <strong>Bestehende Bridge-Adresse
+zuordnen</strong>. Damit lässt sich ihr Ansprechpartner mit einer bereits
+vorhandenen Adresse in der mittleren Spalte verbinden. Eine zusätzliche
+Adresse wird dabei nicht angelegt. Im Beispiel gehört Nina bereits zur
+passenden Adresse <strong>Gartenweg 8</strong> in der Mitte. Deshalb lassen Sie die
+Auswahl dort stehen. Wenn mehrere Einträge denselben Namen zeigen,
+prüfen Sie erst die zugehörigen Anschriften, statt allein nach „Nina
+Beispiel“ auszuwählen.</p>
+<p>In der Microtech-Spalte gibt es keine Sammelschaltfläche zum Löschen
+von Adressen. Für Ninas Vergleich verwenden Sie diese Spalte vor allem,
+um Anschrift und Ansprechpartner abzugleichen.</p>
+<p><strong>Für Ninas nächste Lieferung den Gartenweg 8 wählen</strong></p>
+<p>Sobald der Gartenweg 8 in allen drei Spalten passend zusammengehört,
+erscheinen an dieser Anschrift die Schaltflächen <strong>Rechnung</strong> und
+<strong>Lieferung</strong>. Klicken Sie beim Gartenweg 8 auf <strong>Lieferung</strong>. Diese
+Auswahl gilt für <strong>Shop, Bridge und Microtech gemeinsam</strong>.</p>
+<p>Die Rechnung soll weiter an die <strong>Musterstraße 12</strong> gehen. Dort lassen
+Sie <strong>Rechnung</strong> ausgewählt. Bei Nina sind Rechnung und Lieferung nun
+bewusst zwei verschiedene Anschriften. Sollten beide an dieselbe
+Anschrift gehen, wären beide Kennzeichen an einer Adresse ebenfalls
+richtig.</p>
+<figure class="align-default" id="id7">
+<a class="reference internal image-reference" href="../_images/07_lieferadresse.jpg"><img alt="Gartenweg 8 ist in allen drei Spalten als Lieferadresse gekennzeichnet" src="../_images/07_lieferadresse.jpg" style="width: 100%;" />
+</a>
+<figcaption>
+<p><span class="caption-text">Gartenweg 8 ist jetzt die Lieferadresse; Musterstraße 12 bleibt die Rechnungsadresse.</span><a class="headerlink" href="#id7" title="Link to this image">¶</a></p>
+</figcaption>
+</figure>
+<p>Fehlen die Schaltflächen, kopieren oder löschen Sie nicht auf Verdacht
+weitere Adressen. Prüfen Sie zuerst, ob in derselben Zeile wirklich
+Ninas passende Anschrift in allen drei Spalten steht.</p>
+<p><strong>Die zusätzliche Musterstraße 12 entfernen</strong></p>
+<p>Nach dem Merge steht die Musterstraße 12 in unserem Beispiel zweimal
+im Shop und zweimal in der Bridge. Vergleichen Sie beide Einträge
+vollständig, einschließlich Namen und möglicher Zusätze. Wir behalten
+die Anschrift, an der <strong>Rechnungsadresse</strong> steht. Die zusätzliche
+Musterstraße 12 hat keine Standardkennzeichen mehr und wird nicht benötigt.</p>
+<p>Markieren Sie <strong>nur diese zusätzliche Adresse</strong> in der linken Spalte.
+Klicken Sie in dieser Spalte auf <strong>Markierte löschen</strong> und prüfen Sie
+die Rückfrage. Der linke Knopf entfernt die ausgewählte Adresse im Shop.</p>
+<figure class="align-default" id="id8">
+<a class="reference internal image-reference" href="../_images/08_doppelte_adresse.jpg"><img alt="Nur die zusätzliche Musterstraße 12 ohne Standardkennzeichen ist in der Shop-Spalte markiert" src="../_images/08_doppelte_adresse.jpg" style="width: 100%;" />
+</a>
+<figcaption>
+<p><span class="caption-text">Markiert ist nur die zusätzliche Musterstraße 12, nicht Ninas Rechnungs- oder Lieferadresse.</span><a class="headerlink" href="#id8" title="Link to this image">¶</a></p>
+</figcaption>
+</figure>
+<p>Suchen Sie danach erneut. Ist die zusätzliche Adresse noch in der
+mittleren Spalte vorhanden, markieren Sie dort genau diesen Eintrag
+und benutzen <strong>Markierte löschen</strong> in der mittleren Spalte. Dieser
+Knopf entfernt die Auswahl in der Bridge. Das Löschen in einer Spalte
+löscht nicht automatisch dieselbe Adresse in der anderen Spalte.</p>
+<p>Eine noch ausgewählte Shop-Rechnungs- oder Lieferadresse lässt sich
+auf diese Weise nicht entfernen. Bei Nina lassen wir deshalb zuerst
+<strong>Musterstraße 12 für Rechnung</strong> und <strong>Gartenweg 8 für Lieferung</strong> richtig
+stehen. Erst dann entfernen wir den überflüssigen Eintrag.</p>
+<p><strong>Django-Kunde löschen</strong> betrifft dagegen Ninas ganzen Kunden in der
+Bridge samt seinen dortigen Adressen. Für die doppelte Musterstraße 12
+verwenden wir diesen Knopf nicht: <strong>12196</strong> soll erhalten bleiben.</p>
+<p>Zum Schluss suchen Sie noch einmal nach <strong>12196</strong>: Nina hat ein
+Shopkonto, die Rechnung geht an die Musterstraße 12 und die nächste
+Lieferung an den Gartenweg 8. Die Anschriften in den drei Spalten passen
+zusammen, und ihre bisherigen Bestellungen sind weiter vorhanden.</p>
 </section>
 </section>
 
