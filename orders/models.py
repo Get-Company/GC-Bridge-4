@@ -73,6 +73,10 @@ class Order(BaseModel):
         verbose_name=_("Ausschlussgrund Microtech-Export"),
     )
     description = models.TextField(blank=True, default="", verbose_name=_("Beschreibung"))
+    shopware_price_snapshot = models.JSONField(
+        default=dict, blank=True, editable=False,
+        verbose_name=_("Shopware Originalpreise"),
+    )
     total_price = models.DecimalField(
         max_digits=12,
         decimal_places=2,
@@ -173,8 +177,8 @@ class OrderDetail(BaseModel):
     unit = models.CharField(max_length=64, blank=True, default="", verbose_name=_("Einheit"))
     quantity = models.IntegerField(default=0, verbose_name=_("Menge"))
     unit_price = models.DecimalField(
-        max_digits=12,
-        decimal_places=2,
+        max_digits=18,
+        decimal_places=8,
         default=Decimal("0.00"),
         verbose_name=_("Einzelpreis"),
     )

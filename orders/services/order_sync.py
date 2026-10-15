@@ -164,7 +164,10 @@ class OrderSyncService(BaseService):
 
         delivery = _normalize_entity((order_data.get("deliveries") or [{}])[0] or {})
         payment_transaction = _normalize_entity((order_data.get("transactions") or [{}])[0] or {})
+        from orders.services.order_price import OrderPriceService
+
         order_defaults = {
+            "shopware_price_snapshot": OrderPriceService.snapshot_from_data(order_data),
             "api_delivery_id": _to_str(delivery.get("id")),
             "api_transaction_id": _to_str(payment_transaction.get("id")),
             "paypal_id": self._paypal_id(payment_transaction),
@@ -688,18 +691,20 @@ class OrderSyncService(BaseService):
         quantity: int,
         tax_status: str,
     ) -> Decimal:
-        unit_price = _to_decimal(price_data.get("unitPrice"))
+        from orders.services.order_price import OrderPriceService
+
+        unit_price = OrderPriceService.decimal(price_data.get("unitPrice", "0"))
         if _to_str(tax_status).casefold() != "gross":
             return unit_price
 
-        total_price = _to_decimal(price_data.get("totalPrice"))
+        total_price = OrderPriceService.decimal(price_data.get("totalPrice", "0"))
         total_tax = sum(
-            (_to_decimal((tax or {}).get("tax")) for tax in price_data.get("calculatedTaxes", []) or []),
+            (OrderPriceService.decimal((tax or {}).get("tax", "0")) for tax in price_data.get("calculatedTaxes", []) or []),
             start=Decimal("0.00"),
         )
         if total_price <= Decimal("0.00") or quantity <= 0:
             return unit_price
-        return ((total_price - total_tax) / Decimal(quantity)).quantize(Decimal("0.01"))
+        return (total_price - total_tax) / Decimal(quantity)
 
     @staticmethod
     def _active_sales_channel_ids() -> list[str]:

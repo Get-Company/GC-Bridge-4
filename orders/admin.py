@@ -498,6 +498,15 @@ class OrderAdmin(BaseAdmin):
             self.message_user(request, "Bestellung nicht gefunden.", level=messages.ERROR)
             return
 
+        if not order.microtech_export_enabled:
+            reason = order.microtech_export_exclusion_reason or "Kein Grund dokumentiert."
+            self.message_user(
+                request,
+                f"Microtech-Export nicht freigegeben: {reason}",
+                level=messages.ERROR,
+            )
+            return
+
         try:
             workflow = OrderSyncWorkflowService().start_or_resume_for_order(order)
         except Exception:

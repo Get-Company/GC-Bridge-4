@@ -27,6 +27,7 @@ def make_order() -> Order:
         payment_method="Rechnung",
         shipping_method="Standard",
         total_price=Decimal("0.00"),
+        shopware_price_snapshot={"version": 1, "currency": "EUR", "price": {"taxStatus": "tax-free", "netPrice": "0.00", "totalPrice": "0.00"}, "shipping": {}, "lines": []},
         total_tax=Decimal("0.00"),
         shipping_costs=Decimal("0.00"),
     )

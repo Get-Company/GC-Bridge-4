@@ -1141,7 +1141,7 @@ class MicrotechGraphQLClientService(BaseService):
                 vorgang {
                   belegNr vorgangArt erpAddressNumber orderNumber date description
                   netto brutto currency status source
-                  positions { belegNr positionNr erpNumber name quantity unit unitPrice totalPrice taxKey discountRate }
+                  positions { belegNr positionNr erpNumber name quantity unit unitPrice totalPrice grossUnitPrice grossTotalPrice taxKey discountRate }
                 }
               }
             }

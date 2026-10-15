@@ -45,6 +45,7 @@ class OrderSyncWorkflowService(BaseService):
         "set_default_addresses",
         "probe_vorgang",
         "write_vorgang",
+        "verify_vorgang_prices",
     )
 
     def _completed_steps(self, workflow: MicrotechOrderSyncWorkflow) -> set[str]:
@@ -462,7 +463,7 @@ class OrderSyncWorkflowService(BaseService):
                 beleg = _to_str(vorgang.get("belegNr"))
                 if beleg:
                     return beleg
-            return _to_str(node.get("belegNr"))
+            return _to_str(node.get("belegNr") or node.get("BelegNr"))
 
         root = result if isinstance(result, dict) else {}
         data = root.get("data") if isinstance(root.get("data"), dict) else {}
@@ -472,7 +473,7 @@ class OrderSyncWorkflowService(BaseService):
                 beleg = extract(node)
                 if beleg:
                     return beleg
-            for record in container.get("records") or []:
+            for record in (container.get("records") or container.get("vorgaenge") or []):
                 beleg = extract(record)
                 if beleg:
                     return beleg
@@ -501,7 +502,7 @@ class OrderSyncWorkflowService(BaseService):
                 vorgang_id = extract(node)
                 if vorgang_id:
                     return vorgang_id
-            for record in container.get("records") or []:
+            for record in (container.get("records") or container.get("vorgaenge") or []):
                 vorgang_id = extract(record)
                 if vorgang_id:
                     return vorgang_id
@@ -529,7 +530,7 @@ class OrderSyncWorkflowService(BaseService):
                 value = extract(container if not key else container.get(key))
                 if value is not None:
                     return value
-            for record in container.get("records") or []:
+            for record in (container.get("records") or container.get("vorgaenge") or []):
                 value = extract(record)
                 if value is not None:
                     return value
@@ -647,6 +648,15 @@ class OrderSyncWorkflowService(BaseService):
         logger.info(
             "Order-Sync-Workflow #%s für Bestellung %s gestartet.", workflow.pk, workflow.order_id
         )
+        from orders.services.order_price import OrderPriceService
+
+        try:
+            snapshot = OrderPriceService().ensure_snapshot(workflow.order)
+            workflow.state = {**(workflow.state or {}), "shopware_price_snapshot": snapshot}
+            workflow.save(update_fields=("state", "updated_at"))
+        except Exception as exc:
+            self._mark_step_failed(workflow, "prepare_prices", exc)
+            raise
         self._advance(workflow)
         return workflow
 
@@ -982,6 +992,15 @@ class OrderSyncWorkflowService(BaseService):
                     order=workflow.order,
                     erp_vorgang_id=vorgang_id,
                 )
+        elif step == "verify_vorgang_prices":
+            from orders.services.order_price import OrderPriceService
+
+            expected = state.get("expected_prices")
+            if not expected:
+                raise ValueError("Shopware-Preismanifest fehlt; der Export kann nicht als geprüft gelten.")
+            if self._beleg_nr_from_vorgang_result(result) != state.get("beleg_nr"):
+                raise ValueError("Preisprüfung lieferte einen anderen Microtech-Beleg.")
+            state["price_verification"] = OrderPriceService().verify_export(expected, result)
         elif step == "write_vorgang":
             beleg = self._beleg_nr_from_vorgang_result(result) or state.get("beleg_nr", "")
             state["beleg_nr"] = beleg
@@ -1325,7 +1344,27 @@ class OrderSyncWorkflowService(BaseService):
                 continuation=CONTINUATION_NAME,
                 next_step="Microtech requestDatasetRecords (probe_vorgang).",
             )
+        elif step == "verify_vorgang_prices":
+            beleg_nr = state.get("beleg_nr")
+            if not beleg_nr:
+                raise ValueError("Microtech-Belegnummer fehlt für die Preisprüfung.")
+            job = MicrotechJobSentinelService().submit_wrapper_job(
+                kind=MicrotechGraphQLJob.Kind.ORDER_READ,
+                operation="requestVorgang",
+                submit=lambda: client.submit_request_vorgang(beleg_nr),
+                request_payload={"belegNr": beleg_nr},
+                context={"workflow_id": workflow.pk, "step": step},
+                continuation=CONTINUATION_NAME,
+                next_step="Microtech gespeicherte Bestellpreise prüfen.",
+            )
         elif step == "write_vorgang":
+            from orders.services.order_price import OrderPriceService
+
+            pricing = OrderPriceService()
+            if state.get("shopware_price_snapshot"):
+                order.shopware_price_snapshot = state["shopware_price_snapshot"]
+            else:
+                state = {**state, "shopware_price_snapshot": pricing.ensure_snapshot(order)}
             upsert = OrderUpsertMicrotechService()
             resolved_rule = resolve_order_rule_with_mode(order)
             positions, _rule_debug = upsert._build_graphql_positions(
@@ -1338,6 +1377,8 @@ class OrderSyncWorkflowService(BaseService):
                 # isolierte GraphQL-Submit-/Poll-Pipeline.
                 allow_remote_article_lookup=False,
             )
+            state = {**state, "expected_prices": pricing.expected_export(order, positions)}
+            workflow.state = state
             defaults = upsert._load_order_defaults()
             order_type_number = upsert._coerce_positive_int(
                 resolved_rule.vorgangsart_id,
@@ -1378,7 +1419,7 @@ class OrderSyncWorkflowService(BaseService):
             raise ValueError(f"Unbekannter Order-Step: {step}")
         workflow.status = MicrotechOrderSyncWorkflow.Status.WAITING
         workflow.current_step = step
-        update_fields = ["status", "current_step", "updated_at"]
+        update_fields = ["status", "current_step", "state", "updated_at"]
         if isinstance(job, MicrotechGraphQLJob):
             workflow.current_job = job
             update_fields.append("current_job")
@@ -1698,6 +1739,15 @@ class OrderSyncWorkflowService(BaseService):
             return None
 
         step = workflow.current_step
+        if step == "prepare_prices":
+            from orders.services.order_price import OrderPriceService
+
+            snapshot = OrderPriceService().ensure_snapshot(workflow.order)
+            workflow.state = {**(workflow.state or {}), "shopware_price_snapshot": snapshot}
+            workflow.error_message = ""
+            workflow.save(update_fields=("state", "error_message", "updated_at"))
+            self._advance(workflow)
+            return workflow.current_job
         if self._is_missing_postal_address_update(workflow=workflow, step=step):
             shipping, billing = self._resolve_addresses(workflow.order)
             address = shipping if step == "shipping_address" else billing

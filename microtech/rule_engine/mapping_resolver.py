@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import cached_property
 
 from microtech.graphql_schema import get_rule_action_input_types
 from microtech.models import MicrotechOrderRule, MicrotechOrderRuleAction
@@ -23,13 +24,60 @@ class OrderMappingContext:
         return getattr(self.order, name)
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class OrderPositionMappingContext:
     detail: object
     code_values: dict
 
     def __getattr__(self, name: str):
         return getattr(self.detail, name)
+
+    @cached_property
+    def product(self):
+        from products.models import Product
+
+        return Product.objects.filter(erp_nr=self.detail.erp_nr).prefetch_related(
+            "prices__sales_channel"
+        ).first()
+
+    @cached_property
+    def shopware_price_per_100(self):
+        """Scale the ordered price for Microtech's percent unit; never reprice."""
+        from orders.services.order_price import OrderPriceService
+
+        return OrderPriceService().unit_price(self.detail) * 100
+
+    @cached_property
+    def bridge_price(self):
+        """The channel's net product price, before the product factor is applied.
+
+        Choosing this value is the editable position rule's responsibility.
+        Never fall back to a different channel or to a rounded unit price.
+        """
+        channel_id = self.detail.order.sales_channel_id
+        price = None
+        if self.product:
+            price = next(
+                (
+                    item for item in self.product.prices.all()
+                    if item.sales_channel and item.sales_channel.sales_channel_id == channel_id
+                ),
+                None,
+            )
+        if price is None:
+            raise ValueError(
+                f"Kein Bridge-Preis für Artikel {self.detail.erp_nr} "
+                f"im Verkaufskanal {channel_id}."
+            )
+        if price.is_special_active:
+            return price.get_special_price()
+        if (
+            price.rebate_quantity
+            and price.rebate_price is not None
+            and self.detail.quantity >= price.rebate_quantity
+        ):
+            return price.get_rebate_price()
+        return price.get_standard_price()
 
 
 def _coerce_like_code_value(*, field_name: str, value: str, code_values: dict):

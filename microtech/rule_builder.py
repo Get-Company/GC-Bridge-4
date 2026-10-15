@@ -931,6 +931,35 @@ def get_order_detail_field_defs() -> list[DjangoFieldDef]:
             context_root="orders.OrderDetail",
         )
     )
+    defs.extend([
+        DjangoFieldDef(
+            catalog_id=None,
+            path="product__factor",
+            label="Produkt - Faktor (product__factor)",
+            value_kind="int",
+            hint="Faktor des Bridge-Artikels zur Artikelnummer der Bestellposition.",
+            example="100",
+            context_root="orders.OrderDetail",
+        ),
+        DjangoFieldDef(
+            catalog_id=None,
+            path="shopware_price_per_100",
+            label="Bestellposition - Shopware-Bestellpreis pro 100 (shopware_price_per_100)",
+            value_kind="decimal",
+            hint="Gespeicherter Brutto- oder Netto-Bestellpreis × 100. Mit % Stück verwenden; kein aktueller Artikelpreis.",
+            example="144.80",
+            context_root="orders.OrderDetail",
+        ),
+        DjangoFieldDef(
+            catalog_id=None,
+            path="bridge_price",
+            label="Produkt - Bridge-Preis des Verkaufskanals (bridge_price)",
+            value_kind="decimal",
+            hint="Netto-Produktpreis inklusive Mengenstaffel oder aktivem Sonderpreis, vor Teilung durch den Faktor.",
+            example="144.80",
+            context_root="orders.OrderDetail",
+        ),
+    ])
     return sorted(defs, key=lambda item: item.label.lower())
 
 

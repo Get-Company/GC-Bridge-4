@@ -146,7 +146,7 @@ class OrderGraphQLPayloadTest(SimpleTestCase):
 
     def test_graphql_decimal_uses_german_decimal_separator(self):
         self.assertEqual(OrderUpsertMicrotechService._format_graphql_decimal(Decimal("15.00")), "15,00")
-        self.assertEqual(OrderUpsertMicrotechService._format_graphql_decimal(Decimal("1.235")), "1,24")
+        self.assertEqual(OrderUpsertMicrotechService._format_graphql_decimal(Decimal("1.235")), "1,235")
         self.assertEqual(OrderUpsertMicrotechService._format_graphql_decimal(None), "")
 
     def test_order_details_are_sorted_by_article_number(self):

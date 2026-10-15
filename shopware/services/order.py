@@ -127,6 +127,8 @@ class OrderService(Shopware6Service):
             raise ValueError("order_id is required.")
 
         criteria = Criteria(limit=1)
+        criteria.associations["lineItems"] = Criteria()
+        criteria.associations["currency"] = Criteria()
         criteria.associations["deliveries"] = Criteria()
         criteria.associations["deliveries"].associations["stateMachineState"] = Criteria()
         criteria.associations["transactions"] = Criteria()

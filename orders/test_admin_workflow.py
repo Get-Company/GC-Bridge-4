@@ -346,6 +346,23 @@ class OrderAdminListDisplayTest(SimpleTestCase):
 
 
 class AdminTriggerTest(TestCase):
+    @patch("orders.admin.OrderSyncWorkflowService.start_or_resume_for_order")
+    def test_disabled_export_shows_the_exclusion_reason_without_starting_sync(self, mock_trigger):
+        order = make_order()
+        order.microtech_export_enabled = False
+        order.microtech_export_exclusion_reason = "Testkopie; Freigabe nach Aktivierung der Faktor-Regel"
+        model_admin = OrderAdmin(Order, django_admin.site)
+        request = RequestFactory().post("/")
+        with (
+            patch.object(model_admin, "get_object", return_value=order),
+            patch.object(model_admin, "message_user") as message,
+        ):
+            model_admin._run_microtech_upsert(request, str(order.pk))
+
+        mock_trigger.assert_not_called()
+        self.assertIn(order.microtech_export_exclusion_reason, message.call_args.args[1])
+        self.assertIn("Microtech-Export nicht freigegeben", message.call_args.args[1])
+
     def test_dialog_action_uses_hx_redirect_to_close_the_modal(self):
         model_admin = OrderAdmin(Order, django_admin.site)
         request = RequestFactory().post("/", HTTP_HX_REQUEST="true")

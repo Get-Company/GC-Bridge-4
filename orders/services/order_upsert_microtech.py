@@ -316,7 +316,21 @@ class OrderUpsertMicrotechService(BaseService):
         return ""
 
     def _upsert_order_graphql(self, *, order: Order, client: MicrotechGraphQLClientService) -> OrderUpsertResult:
+        from orders.services.order_price import OrderPriceService
+
+        pricing = OrderPriceService()
         resolved_rule = resolve_order_rule_with_mode(order)
+        existing_beleg_nr = self._refresh_erp_order_id_graphql(order=order, client=client)
+        if existing_beleg_nr:
+            remote_vorgangsart_id = self._read_remote_vorgangsart_graphql(
+                client=client,
+                beleg_nr=existing_beleg_nr,
+            )
+            self._assert_remote_vorgangsart_allows_update(
+                order=order,
+                remote_vorgangsart_id=remote_vorgangsart_id,
+            )
+        pricing.ensure_snapshot(order)
         self._ensure_customer_synced(
             order,
             na1_mode=resolved_rule.na1_mode,
@@ -335,16 +349,8 @@ class OrderUpsertMicrotechService(BaseService):
             resolved_rule=resolved_rule,
         )
 
-        existing_beleg_nr = self._refresh_erp_order_id_graphql(order=order, client=client)
+        expected_prices = pricing.expected_export(order, positions)
         if existing_beleg_nr:
-            remote_vorgangsart_id = self._read_remote_vorgangsart_graphql(
-                client=client,
-                beleg_nr=existing_beleg_nr,
-            )
-            self._assert_remote_vorgangsart_allows_update(
-                order=order,
-                remote_vorgangsart_id=remote_vorgangsart_id,
-            )
             job = client.update_vorgang(existing_beleg_nr, input_data)
             is_new = False
         else:
@@ -360,6 +366,7 @@ class OrderUpsertMicrotechService(BaseService):
             erp_vorgang_id=str(vorgang.get("description") or "").strip(),
         )
 
+        pricing.verify_export(expected_prices, client.request_vorgang(erp_order_id))
         return OrderUpsertResult(
             order=order,
             erp_order_id=erp_order_id,
@@ -380,7 +387,7 @@ class OrderUpsertMicrotechService(BaseService):
         code_input = {
             "orderNumber": (order.order_number or "").strip() or (order.api_id or "").strip(),
             "description": order.description or f"Shopware Bestellung {order.order_number}",
-            "currency": "EUR",
+            "currency": (getattr(order, "shopware_price_snapshot", {}) or {}).get("currency", "EUR"),
             "vorgangArt": order_type_number,
             "customerNumber": customer_number,
         }
@@ -388,6 +395,8 @@ class OrderUpsertMicrotechService(BaseService):
 
         mapped_input = resolve_order_mapping_fields(order=order, code_values=code_input)
         mapped_input = mapped_input or code_input
+        if getattr(order, "shopware_price_snapshot", None) and mapped_input.get("currency") != code_input["currency"]:
+            raise ValueError("Regel-Mapping verändert die Währung der Shopware-Bestellung.")
         update_input = {
             key: mapped_input[key]
             for key in ("orderNumber", "description", "currency")
@@ -457,6 +466,9 @@ class OrderUpsertMicrotechService(BaseService):
         client: MicrotechGraphQLClientService,
         allow_remote_article_lookup: bool = True,
     ) -> tuple[list[dict[str, str]], OrderRuleDebugInfo]:
+        from orders.services.order_price import OrderPriceService
+
+        pricing = OrderPriceService()
         details = self._sort_order_details(order.details.all())
         artikel_service = MicrotechArtikelService(erp=client) if allow_remote_article_lookup else None
         article_name_cache: dict[str, str] = {}
@@ -482,7 +494,7 @@ class OrderUpsertMicrotechService(BaseService):
                 "erpNumber": erp_nr,
                 "quantity": str(detail.quantity or 1),
                 "unit": unit,
-                "price": self._format_graphql_decimal(detail.unit_price),
+                "price": self._format_graphql_decimal(pricing.unit_price(detail)),
             }
             position_name = self._resolve_position_name(
                 detail=detail,
@@ -503,14 +515,16 @@ class OrderUpsertMicrotechService(BaseService):
             )
             if mapped_position:
                 position = {
-                    key: value
-                    for key, value in mapped_position.items()
-                    if value not in (None, "")
+                    **position,
+                    **{key: value for key, value in mapped_position.items() if value not in (None, "")},
                 }
             # The GraphQL wrapper accepts an article number or a text name,
             # never both on one position. Article positions keep their number.
             if position.get("erpNumber"):
                 position.pop("name", None)
+            if getattr(order, "shopware_price_snapshot", None):
+                position["priceIsGross"] = pricing.is_gross(order)
+                pricing.validate_position(detail, position)
             positions.append(position)
 
         configured_shipping_erp_nr = self._configured_shipping_erp_nr(resolved_rule=resolved_rule)
@@ -520,13 +534,15 @@ class OrderUpsertMicrotechService(BaseService):
             and order.shipping_costs
             and order.shipping_costs > Decimal("0")
         )
-        if order.shipping_costs and order.shipping_costs > Decimal("0"):
+        shipping_price = pricing.shipping_price(order)
+        if shipping_price > Decimal("0"):
             positions.append(
                 {
                     "erpNumber": shipping_erp_nr,
                     "quantity": "1",
                     "unit": DEFAULT_UNIT,
-                    "price": self._format_graphql_decimal(order.shipping_costs),
+                    "price": self._format_graphql_decimal(shipping_price),
+                    **({"priceIsGross": pricing.is_gross(order)} if getattr(order, "shopware_price_snapshot", None) else {}),
                 }
             )
 
@@ -676,7 +692,13 @@ class OrderUpsertMicrotechService(BaseService):
     def _format_graphql_decimal(value: Decimal | None) -> str:
         if value is None:
             return ""
-        return format(value.quantize(Decimal("0.01")), "f").replace(".", ",")
+        rendered = format(value, "f")
+        if "." in rendered:
+            whole, fraction = rendered.split(".", 1)
+            rendered = whole + "." + fraction.rstrip("0").ljust(2, "0")
+        else:
+            rendered += ".00"
+        return rendered.replace(".", ",")
 
     def _ensure_customer_synced(
         self,
