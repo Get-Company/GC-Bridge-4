@@ -31,6 +31,13 @@ class OrderPriceService(BaseService):
         return abs(cls.money(actual) - cls.money(expected)) <= MAX_ROUNDING_OFFSET
 
     @classmethod
+    def unit_prices_match(cls, actual, expected, *, unit, quantity) -> bool:
+        """Bound read-back unit-price rounding across the entire ordered quantity."""
+        actual_total = cls.decimal(actual) / cls.unit_divisor(unit) * cls.decimal(quantity)
+        expected_total = cls.decimal(expected) * cls.decimal(quantity)
+        return cls.totals_match(actual_total, expected_total)
+
+    @classmethod
     def snapshot_from_data(cls, data: dict) -> dict:
         price = data.get("price") or {}
         # Legacy imports without prices are left unverified and must reload
@@ -171,7 +178,8 @@ class OrderPriceService(BaseService):
             unit_key = "grossUnitPrice" if expected["gross"] else "unitPrice"
             total_key = "grossTotalPrice" if expected["gross"] else "totalPrice"
             matching = [p for p in candidates if p.get(unit_key) is not None and p.get(total_key) is not None
-                        and self.decimal(p[unit_key]) / self.unit_divisor(p.get("unit")) == self.decimal(source["unitPrice"])
+                        and self.unit_prices_match(p[unit_key], source["unitPrice"],
+                                                   unit=p.get("unit"), quantity=source["quantity"])
                         and self.totals_match(p[total_key], source["totalPrice"])]
             if not matching:
                 raise ValueError(f"Microtech-Preisabweichung für {source['erpNumber']}: "

@@ -86,17 +86,41 @@ class OrderPriceRoundingTest(SimpleTestCase):
                     with self.assertRaisesRegex(ValueError, "Preisabweichung"):
                         self.pricing.verify_export(manifest, result)
 
-    def test_unit_prices_stay_exact_even_for_subcent_differences(self):
+    def test_unit_price_rounding_is_limited_to_one_cent_for_the_whole_line(self):
         for gross in (False, True):
-            with self.subTest(gross=gross):
-                manifest = deepcopy(self.expected)
-                manifest["gross"] = gross
-                result = deepcopy(self.result)
-                position = result["vorgang"]["positions"][0]
-                position["grossTotalPrice"] = "100.00"
-                position["grossUnitPrice" if gross else "unitPrice"] = "100.001"
-                with self.assertRaisesRegex(ValueError, "Preisabweichung"):
-                    self.pricing.verify_export(manifest, result)
+            for value in ("100.001", "100.01", "99.99", "100.02", "99.98"):
+                with self.subTest(gross=gross, value=value):
+                    manifest = deepcopy(self.expected)
+                    manifest["gross"] = gross
+                    result = deepcopy(self.result)
+                    position = result["vorgang"]["positions"][0]
+                    position["grossTotalPrice"] = "100.00"
+                    position["grossUnitPrice" if gross else "unitPrice"] = value
+                    if value in ("100.02", "99.98"):
+                        with self.assertRaisesRegex(ValueError, "Preisabweichung"):
+                            self.pricing.verify_export(manifest, result)
+                    else:
+                        self.pricing.verify_export(manifest, result)
+
+    def test_converted_invoice_brutto_unit_price_can_have_subcent_precision(self):
+        manifest = deepcopy(self.expected)
+        manifest["gross"] = True
+        manifest["positions"][0].update(quantity="1", unitPrice="5.47", totalPrice="5.47")
+        result = deepcopy(self.result)
+        result["vorgang"]["positions"][0].update(
+            quantity="1", unit="Blatt", grossUnitPrice="5.473999999999999",
+            grossTotalPrice="5.473999999999999",
+        )
+        self.pricing.verify_export(manifest, result)
+
+    def test_small_unit_difference_cannot_accumulate_beyond_one_cent(self):
+        manifest = deepcopy(self.expected)
+        manifest["positions"][0].update(quantity="1000", totalPrice="1000.00")
+        result = deepcopy(self.result)
+        position = result["vorgang"]["positions"][0]
+        position.update(quantity="1000", unit="Stck", unitPrice="1.001", totalPrice="1000.00")
+        with self.assertRaisesRegex(ValueError, "Preisabweichung"):
+            self.pricing.verify_export(manifest, result)
 
     def test_additional_one_cent_position_is_still_rejected(self):
         result = deepcopy(self.result)
