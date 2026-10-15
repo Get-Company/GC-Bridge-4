@@ -688,6 +688,7 @@ def sync_django_field_catalog() -> dict[str, int]:
     if not _db_has_django_field_catalog_table():
         return {}
 
+    example_max_length = MicrotechOrderRuleDjangoField._meta.get_field("example").max_length
     active_paths = {item.path for item in defs}
     existing = {
         row.field_path: row
@@ -699,7 +700,7 @@ def sync_django_field_catalog() -> dict[str, int]:
             "label": item.label,
             "value_kind": item.value_kind,
             "hint": item.hint,
-            "example": item.example,
+            "example": item.example[:example_max_length],
             "is_active": True,
             "priority": index * 10,
         }
