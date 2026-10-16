@@ -1,6 +1,7 @@
 import json
 import shutil
 import subprocess
+from contextlib import nullcontext
 from pathlib import Path
 from unittest import skipUnless
 from unittest.mock import MagicMock, patch
@@ -219,13 +220,17 @@ class CustomerIdUpdateViewTest(SimpleTestCase):
         self.assertEqual(response.status_code, 200)
         service_class.return_value.update_django_name.assert_called_once_with(81, "Neuer Name")
 
+    @patch("django.contrib.admin.models.LogEntry.objects.log_actions")
+    @patch("customer.models.Address.objects.filter")
+    @patch("customer.views.transaction.atomic", return_value=nullcontext())
     @patch("customer.views.CustomerIdUpdateService")
-    def test_microtech_address_mapping_is_dispatched(self, service_class):
+    def test_microtech_address_mapping_is_dispatched(self, service_class, atomic, addresses, log_actions):
         from customer.views import customer_update_ids_api
 
         service_class.return_value.update_microtech_address_mapping.return_value = {
             "ans_nr": 7,
             "asp_nr": 3,
+            "old_mapping": {"ans_nr": 2, "asp_nr": 1},
         }
         request = RequestFactory().post(
             "/admin/customer-merge/api/update-ids/",
@@ -240,10 +245,12 @@ class CustomerIdUpdateViewTest(SimpleTestCase):
             content_type="application/json",
         )
 
+        request.user = MagicMock(pk=12)
         response = customer_update_ids_api(request)
 
         self.assertEqual(response.status_code, 200)
         service_class.return_value.update_microtech_address_mapping.assert_called_once_with(81, 7, 3)
+        self.assertEqual(log_actions.call_args.kwargs["user_id"], 12)
 
 
 class CustomerDeleteAddressesViewTest(SimpleTestCase):

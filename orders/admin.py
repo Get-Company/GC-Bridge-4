@@ -557,8 +557,13 @@ class OrderAdmin(BaseAdmin):
         if workflow is None:
             return "-"
 
-        text = workflow.get_status_display()
-        return text
+        summary = workflow.status_summary
+        if workflow.error_message:
+            return format_html(
+                '<div>{}</div><div class="text-xs break-words mt-1">{}</div>',
+                summary, workflow.error_message,
+            )
+        return summary
 
     def _export_swiss_customs_csv(self, request, object_id: str) -> HttpResponse | None:
         order = self.get_object(request, object_id)
@@ -835,7 +840,7 @@ class OrderAdmin(BaseAdmin):
                         MicrotechOrderSyncWorkflow.Status.WAITING,
                     },
                     "status": workflow.status,
-                    "status_display": workflow.get_status_display(),
+                    "status_display": workflow.status_summary,
                     "current_step": workflow.current_step,
                     "error_message": workflow.error_message,
                     "current_job_status": job.get_status_display() if job else "",

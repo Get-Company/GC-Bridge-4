@@ -256,6 +256,20 @@ class MicrotechOrderSyncWorkflow(BaseModel):
         return f"OrderSync #{self.pk} order={self.order_id} [{self.get_status_display()}]"
 
     @property
+    def status_summary(self) -> str:
+        """Distinguish a saved document from a failed subsequent check."""
+        if self.status == self.Status.FAILED and self.current_step == "verify_vorgang_prices":
+            written = any(
+                entry.get("step") == "write_vorgang" and entry.get("status") == "completed"
+                for entry in (self.step_log or [])
+            )
+            if written:
+                return str(_("Angelegt · Preisprüfung fehlgeschlagen"))
+            if (self.state or {}).get("beleg_nr"):
+                return str(_("Beleg vorhanden · Preisprüfung fehlgeschlagen"))
+        return self.get_status_display()
+
+    @property
     def is_active(self) -> bool:
         """Gibt True zurück, wenn der Workflow noch nicht abgeschlossen ist."""
         return self.status in self.ACTIVE_STATUSES

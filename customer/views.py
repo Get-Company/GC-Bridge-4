@@ -5,6 +5,7 @@ import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from django.contrib import admin
+from django.db import transaction
 from django.http import JsonResponse
 from django.template.response import TemplateResponse
 from django.utils import timezone
@@ -341,11 +342,26 @@ def customer_update_ids_api(request):
             asp_nr = body.get("asp_nr")
             if ans_nr in (None, ""):
                 return JsonResponse({"error": "AnsNr erforderlich."}, status=400)
-            result = service.update_microtech_address_mapping(
-                int(address_id),
-                int(ans_nr),
-                None if asp_nr in (None, "") else int(asp_nr),
-            )
+            with transaction.atomic():
+                result = service.update_microtech_address_mapping(
+                    int(address_id),
+                    int(ans_nr),
+                    None if asp_nr in (None, "") else int(asp_nr),
+                )
+                from django.contrib.admin.models import CHANGE, LogEntry
+                from customer.models import Address
+
+                LogEntry.objects.log_actions(
+                    user_id=request.user.pk,
+                    queryset=Address.objects.filter(pk=int(address_id)),
+                    action_flag=CHANGE,
+                    change_message=json.dumps({
+                        "microtech_mapping": {
+                            "before": result["old_mapping"],
+                            "after": {"ans_nr": result["ans_nr"], "asp_nr": result["asp_nr"]},
+                        },
+                    }, ensure_ascii=False),
+                )
         else:
             return JsonResponse({"error": f"Unbekannte Aktion: {action}"}, status=400)
 

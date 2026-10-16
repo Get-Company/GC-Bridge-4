@@ -36,7 +36,8 @@
       beleg.textContent = text(payload.erp_order_id, "-");
     }
     if (detail) {
-      var detailText = text(payload.current_job_error, text(payload.current_job_next_step, ""));
+      var detailText = text(payload.error_message,
+        text(payload.current_job_error, text(payload.current_job_next_step, "")));
       if (payload.current_job_next_submit_at) {
         detailText = [detailText, "Nächster Übergabeversuch: " + new Date(payload.current_job_next_submit_at).toLocaleString()]
           .filter(Boolean)

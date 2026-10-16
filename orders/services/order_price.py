@@ -31,11 +31,22 @@ class OrderPriceService(BaseService):
         return abs(cls.money(actual) - cls.money(expected)) <= MAX_ROUNDING_OFFSET
 
     @classmethod
-    def unit_prices_match(cls, actual, expected, *, unit, quantity) -> bool:
+    def unit_prices_match(cls, actual, expected, *, unit, quantity, total=None) -> bool:
         """Bound read-back unit-price rounding across the entire ordered quantity."""
         actual_total = cls.decimal(actual) / cls.unit_divisor(unit) * cls.decimal(quantity)
         expected_total = cls.decimal(expected) * cls.decimal(quantity)
-        return cls.totals_match(actual_total, expected_total)
+        if cls.totals_match(actual_total, expected_total):
+            return True
+        # Converted Microtech invoices can report the generic label "Einheit"
+        # for a price per 100. Require the returned line total to independently
+        # confirm that basis; never infer it just from the expected shop price.
+        if str(unit or "").strip().casefold() == "einheit" and total is not None:
+            per_hundred_total = cls.decimal(actual) / Decimal(100) * cls.decimal(quantity)
+            return (
+                cls.totals_match(per_hundred_total, total)
+                and cls.totals_match(per_hundred_total, expected_total)
+            )
+        return False
 
     @classmethod
     def snapshot_from_data(cls, data: dict) -> dict:
@@ -179,7 +190,8 @@ class OrderPriceService(BaseService):
             total_key = "grossTotalPrice" if expected["gross"] else "totalPrice"
             matching = [p for p in candidates if p.get(unit_key) is not None and p.get(total_key) is not None
                         and self.unit_prices_match(p[unit_key], source["unitPrice"],
-                                                   unit=p.get("unit"), quantity=source["quantity"])
+                                                   unit=p.get("unit"), quantity=source["quantity"],
+                                                   total=p[total_key])
                         and self.totals_match(p[total_key], source["totalPrice"])]
             if not matching:
                 raise ValueError(f"Microtech-Preisabweichung für {source['erpNumber']}: "

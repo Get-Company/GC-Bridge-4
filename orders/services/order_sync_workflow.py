@@ -114,6 +114,44 @@ class OrderSyncWorkflowService(BaseService):
             raise ValueError("Order hat keine Rechnungsadresse zum Synchronisieren.")
         return shipping, billing
 
+    def _address_mappings(self, workflow: MicrotechOrderSyncWorkflow) -> dict[str, dict]:
+        shipping, billing = self._resolve_addresses(workflow.order)
+        return {
+            role: {"address_id": address.pk, "ans_nr": _to_int(address.erp_ans_nr),
+                   "asp_nr": _to_int(address.erp_asp_nr)}
+            for role, address in (("shipping", shipping), ("billing", billing))
+        }
+
+    def _assert_address_mappings_current(self, workflow, *, job=None) -> None:
+        """Never let a paused workflow restore a mapping corrected by an operator."""
+        mappings = self._address_mappings(workflow)
+        previous = (job.context or {}).get("address_mappings") if job else None
+        if previous is not None and previous != mappings:
+            raise ValueError(
+                "Die Adresszuordnung wurde seit dem Start dieses Microtech-Schritts geändert. "
+                "Die aktuelle Zuordnung bleibt erhalten. Bitte den alten Sync abbrechen "
+                "und mit der aktuellen Zuordnung neu starten."
+            )
+        for role, mapping in mappings.items():
+            remembered = _to_int((workflow.state or {}).get(f"{role}_ans_nr"))
+            if remembered is not None and mapping["ans_nr"] is not None and remembered != mapping["ans_nr"]:
+                raise ValueError(
+                    "Die aktuelle Adresszuordnung weicht vom gespeicherten Sync-Ablauf ab. "
+                    "Sie wird nicht überschrieben. Bitte den alten Sync abbrechen und neu starten."
+                )
+        shipping, billing = self._resolve_addresses(workflow.order)
+        ship, bill = mappings["shipping"], mappings["billing"]
+        if (
+            ship["address_id"] != bill["address_id"]
+            and ship["ans_nr"] is not None and ship["asp_nr"] is not None
+            and (ship["ans_nr"], ship["asp_nr"]) == (bill["ans_nr"], bill["asp_nr"])
+            and not self._same_address(shipping, billing)
+        ):
+            raise ValueError(
+                "Unterschiedliche Liefer- und Rechnungsanschriften verweisen auf dieselbe "
+                "Microtech-Anschrift und denselben Ansprechpartner. Bitte zuerst die Zuordnung korrigieren."
+            )
+
     @staticmethod
     def _same_address(shipping: Address, billing: Address) -> bool:
         """Compare postal identity, independently from the selected contact.
@@ -170,6 +208,8 @@ class OrderSyncWorkflowService(BaseService):
         """Remember every existing default flag for deterministic cleanup."""
         shipping_numbers = {_to_int(customer.get("defaultShippingAddressNumber"))}
         billing_numbers = {_to_int(customer.get("defaultBillingAddressNumber"))}
+        flagged_shipping: set[int] = set()
+        flagged_billing: set[int] = set()
 
         for address in customer.get("addresses") or []:
             if not isinstance(address, dict):
@@ -179,8 +219,10 @@ class OrderSyncWorkflowService(BaseService):
                 continue
             if address.get("isDefaultShipping"):
                 shipping_numbers.add(ans_nr)
+                flagged_shipping.add(ans_nr)
             if address.get("isDefaultBilling"):
                 billing_numbers.add(ans_nr)
+                flagged_billing.add(ans_nr)
 
         shipping_numbers.discard(None)
         billing_numbers.discard(None)
@@ -188,12 +230,12 @@ class OrderSyncWorkflowService(BaseService):
             values = sorted(shipping_numbers)
             state["existing_default_shipping_ans_nrs"] = values
             # Kept for already-created workflows and admin displays.
-            state["existing_default_shipping_ans_nr"] = values[0]
+            state["existing_default_shipping_ans_nr"] = min(flagged_shipping) if flagged_shipping else values[0]
         if billing_numbers:
             values = sorted(billing_numbers)
             state["existing_default_billing_ans_nrs"] = values
             # Kept for already-created workflows and admin displays.
-            state["existing_default_billing_ans_nr"] = values[0]
+            state["existing_default_billing_ans_nr"] = min(flagged_billing) if flagged_billing else values[0]
 
     @staticmethod
     def _remember_remote_address_sub_numbers(state: dict[str, Any], customer: dict[str, Any]) -> None:
@@ -867,6 +909,8 @@ class OrderSyncWorkflowService(BaseService):
         """Überträgt das Job-Ergebnis in den Workflow-Zustand."""
         from customer.services.customer_upsert_microtech import _to_int
 
+        if step in ("shipping_address", "billing_address", "shipping_contact", "billing_contact"):
+            self._assert_address_mappings_current(workflow, job=job)
         state = dict(workflow.state or {})
         if step == "probe_customer":
             customer = (result or {}).get("customer") or {}
@@ -918,7 +962,7 @@ class OrderSyncWorkflowService(BaseService):
             if sub is not None:
                 state[key] = sub
                 self._persist_address_sub_number(workflow=workflow, address=address, sub_number=sub, result=result)
-            if step == "shipping_address" and state.get("billing_same_as_shipping"):
+            if step == "shipping_address" and state.get("billing_same_as_shipping") and sub is not None:
                 state["billing_ans_nr"] = state.get("shipping_ans_nr")
         elif step in ("shipping_contact", "billing_contact"):
             shipping, billing = self._resolve_addresses(workflow.order)
@@ -1089,6 +1133,8 @@ class OrderSyncWorkflowService(BaseService):
 
     def submit_step(self, workflow: MicrotechOrderSyncWorkflow, step: str) -> MicrotechGraphQLJob:
         """Submittet einen Customer-Remote-Step an den Sentinel."""
+        if step in self.STEP_ORDER and step not in ("probe_vorgang", "verify_vorgang_prices"):
+            self._assert_address_mappings_current(workflow)
         order = workflow.order
         shipping, billing = self._resolve_addresses(order)
         state = workflow.state or {}
@@ -1289,7 +1335,8 @@ class OrderSyncWorkflowService(BaseService):
             operation=operation,
             submit=submit,
             request_payload=payload,
-            context={"workflow_id": workflow.pk, "step": step},
+            context={"workflow_id": workflow.pk, "step": step,
+                     "address_mappings": self._address_mappings(workflow)},
             continuation=CONTINUATION_NAME,
             next_step=f"Microtech {operation} ({step}).",
         )
