@@ -59,6 +59,26 @@ for(const key of ['shopware','django','microtech'])assert.equal(groups[0][key].l
 assert.equal(groups[0].microtech[0].contacts[0].microtechContactNumber,0);
 """,proposal)
 
+    def test_duplicate_standard_addresses_keep_their_roles_when_both_are_linked(self):
+        from customer.test_merge_ai_standard_addresses import duplicate_standard_snapshot, standard_plan
+        self.run_js("""
+const before=preview.sources(snap)['12196'],after=preview.sources(preview.project(snap,plan))['12196'];
+for(const system of ['shopware','django','microtech']) {
+  const roles=customer=>customer.addresses.map(a=>[a.id??a.ans_nr,a.is_invoice,a.is_shipping]);
+  assert.deepEqual(roles(after[system]),roles(before[system]),system+' defaults must remain unchanged');
+}
+const addresses=after.django.addresses;
+assert.equal(addresses.find(a=>a.is_invoice).erp_ans_nr,7);
+assert.equal(addresses.find(a=>a.is_shipping).erp_asp_nr,0);
+assert.equal(addresses.find(a=>a.id===2).erp_ans_nr,null);
+const groups=addressComparisonGroups('12196',preview.sources(preview.project(snap,plan)));
+for(const id of [3,4]) {
+  const group=groups.find(g=>g.django.some(a=>a.id===id));
+  assert.ok(group.microtech.length,'Standard address '+id+' must visibly align with Microtech');
+}
+assert.ok(preview.render(snap,plan).includes('Rechnungsadresse'));
+""", standard_plan(), duplicate_standard_snapshot())
+
     def test_merge_keeps_target_roles_and_shows_server_selected_login(self):
         import copy
         snap=snapshot();snap['records'][0]['fields'].update(defaultBillingAddressId='b'*32,defaultShippingAddressId='b'*32)

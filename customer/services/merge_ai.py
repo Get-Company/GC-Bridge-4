@@ -90,6 +90,18 @@ inklusive Ansprechpartnern, Zuordnungen, Standardrollen und historischen Bestell
 Unterscheide Kundenidentität, Anschrift und Ansprechpartner. Gleiche Namen, E-Mail
 oder Straßen allein beweisen keine Identität. Firmen, Niederlassungen und Personen
 nicht verwechseln. Rechnungs-/Lieferrolle nur aus Belegen ableiten; nie erraten.
+Vorhandene Rechnungs- und Lieferadressen bei neuen Zuordnungen bevorzugen: Bei
+inhaltlich identischen GC-Bridge-Dubletten nicht die rollenfreie Zusatzadresse
+verknüpfen. standard_mapping_preferences nennt solche gleichwertigen Ziele.
+Wenn Rechnung und Lieferung getrennte, identische Datensätze sind, beide soweit
+mit den vorhandenen Microtech-Schlüsseln eindeutig möglich verknüpfen (Anschrift
+und Anschrift/Ansprechpartner sind unterschiedliche Schlüssel). Nicht erst die
+Anschrift und danach den Ansprechpartner auf dieselbe Zusatzadresse legen und
+damit die Standardadressen unzugeordnet lassen. Keine Schlüssel erfinden oder
+bereits vergebene Zuordnungen überschreiben. Verschiedene Personen, Firmen oder
+Zusatzangaben sind keine gleichwertigen Dubletten. Vorhandene Standardrollen
+erhalten; abweichende Standards zwischen Systemen als Konflikt benennen und ohne
+ausdrückliche fachliche Vorgabe keine andere Rechnungs-/Lieferadresse setzen.
 Widersprüche ausdrücklich nennen, keine erfundenen Prozentwerte. 1 bis 3 sinnvolle
 Alternativen, keine künstlichen Alternativen. Die fachlich beste Empfehlung zuerst.
 summary und reason jeweils höchstens zwei kurze Sätze; die grafische Ansicht zeigt alle Änderungen.
@@ -386,7 +398,8 @@ class CustomerMergeAIService(BaseService):
                 result, usage = AIProviderService().structured_response(
                     provider=self.provider(state["provider_id"]), instructions=INSTRUCTIONS + ("\nNur Adresszuordnungen: merge_shopware ist in diesem Schritt ausgeschlossen." if state.get("address_only") else ""),
                     schema=self.response_schema(snapshot, address_only=state.get("address_only", False)),
-                    context={"snapshot": snapshot, "previous": state["previous"], "objection": state["objection"]},
+                    context={"snapshot": snapshot, "previous": state["previous"], "objection": state["objection"],
+                             "standard_mapping_preferences": self.standard_mapping_preferences(snapshot["records"])},
                 )
                 state.update(self.validate_result(result, snapshot, address_only=state.get("address_only", False)))
                 state.update(status="ready", usage=usage, approval_tokens=[uuid.uuid4().hex for _ in state["proposals"]],
@@ -637,6 +650,39 @@ class CustomerMergeAIService(BaseService):
             validated.append(plan)
         return {"summary": result["summary"][:8000], "proposals": validated}
 
+    @staticmethod
+    def standard_mapping_preferences(records):
+        """Prefer unused standard records only among exact business-field copies.
+
+        This is a choice of mapping target, never a merge, role change or fuzzy
+        address match. Existing Microtech associations remain authoritative.
+        Both address-only and contact keys can still be assigned independently.
+        """
+        fields = ("company", "name1", "name2", "name3", "department", "street", "postal_code", "city",
+                  "country_code", "email", "title", "first_name", "last_name", "phone")
+        groups = {}
+        for record in records:
+            if record["system"] != "dj" or record["kind"] != "address":
+                continue
+            f = record["fields"]
+            # Zero is a real Microtech business key, not an empty association.
+            if any(f.get(k) is not None for k in ("erp_ans_nr", "erp_asp_nr", "erp_ans_id", "erp_asp_id")) or f.get("erp_combined_id"):
+                continue
+            if not all(str(f.get(k) or "").strip() for k in ("street", "postal_code", "city")):
+                continue
+            if not any(str(f.get(k) or "").strip() for k in ("company", "name1", "first_name", "last_name")):
+                continue
+            identity = tuple(" ".join(str(f.get(k) or "").split()).casefold() for k in fields)
+            groups.setdefault((record["parent"], identity), []).append(record)
+        preferences = {}
+        for group in groups.values():
+            standards = sorted(r["ref"] for r in group if r["fields"].get("is_invoice") or r["fields"].get("is_shipping"))
+            if standards:
+                for record in group:
+                    if record["ref"] not in standards:
+                        preferences[record["ref"]] = standards
+        return preferences
+
     def compile_plan(self, plan, snapshot):
         refs = {r["ref"]: copy.deepcopy(r) for r in snapshot["records"]}
         changes, used, assigned = [], set(), set()
@@ -675,6 +721,8 @@ class CustomerMergeAIService(BaseService):
                 elif kind == "link_microtech_address":
                     if source_type not in (("mt", "address"), ("mt", "contact")) or target_type != ("dj", "address"):
                         raise ValueError("Ungültige Microtech-Zuordnung.")
+                    if dst["ref"] in self.standard_mapping_preferences(refs.values()):
+                        raise ValueError("Eine identische Rechnungs-/Lieferadresse ist noch nicht zugeordnet. Bitte neu analysieren und diese statt der Zusatzadresse verknüpfen.")
                     asp = sf.get("contactNumber") if src["kind"] == "contact" else None
                     ans = sf.get("addressSubNumber")
                     if type(ans) is not int or ans < 0 or (asp is not None and (type(asp) is not int or asp < 0)):
