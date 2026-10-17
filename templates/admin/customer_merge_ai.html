@@ -485,6 +485,7 @@
   </footer>
 </dialog>
 
+<script src="{% static 'customer/js/merge_ai_preview.js' %}"></script>
 <script>
 const CSRF = '{{ csrf_token }}';
 let searchData = {};
@@ -744,8 +745,8 @@ function microtechContacts(nr, address) {
 }
 
 /* ── Shared comparison matrix ────────────────────────── */
-function comparisonData(nr, sysKey) {
-  return normalize(searchData[nr]?.[sysKey], sysKey);
+function comparisonData(nr, sysKey, sourceData = searchData) {
+  return normalize(sourceData[nr]?.[sysKey], sysKey);
 }
 
 function comparisonUnavailable(nr, sysKey) {
@@ -910,8 +911,8 @@ function comparisonAddressCard(nr, sysKey, address, defaultActions = '', synchro
   </article>`;
 }
 
-function addressComparisonGroups(nr) {
-  const sources = Object.fromEntries(SYSTEMS.map(system => [system.key, comparisonData(nr, system.key) || {addresses: []}]));
+function addressComparisonGroups(nr, sourceData = searchData) {
+  const sources = Object.fromEntries(SYSTEMS.map(system => [system.key, comparisonData(nr, system.key, sourceData) || {addresses: []}]));
   const django = sources.django.addresses || [];
   const shopware = sources.shopware.addresses || [];
   const microtech = sources.microtech.addresses || [];
@@ -953,7 +954,9 @@ function addressComparisonGroups(nr) {
 
   microtech.forEach(address => {
     const ansNr = address.microtechAddressNumber;
-    const contacts = address.contacts?.length ? address.contacts : [null];
+    const contacts = address.contacts?.length
+      ? (djangoByPair.has(pairKey(ansNr, '')) ? [null, ...address.contacts] : address.contacts)
+      : [null];
     contacts.forEach(contact => {
       const aspNr = contact?.microtechContactNumber ?? '';
       const local = djangoForPair(ansNr, aspNr);
@@ -1087,6 +1090,7 @@ function refreshCellPresentation(erpNr, systemKey) {
 
 function customerAISearchReadiness() {
   if (!searchProgress) return { ready:false, loading:false, message:'Bitte zuerst Kunden suchen.' };
+  if (searchProgress.error) return {ready:false,loading:false,failed:true,message:searchProgress.error};
   const local = LOCAL_SYSTEM_KEYS.map(systemProgress);
   const microtech = searchProgress.microtech || {};
   const loading = !!searchProgress.resolving || !!searchProgress.microtechResultsPending ||
@@ -1322,48 +1326,30 @@ async function doSearch() {
   renderSearchProgress();
 
   try {
-    const searchParams = new URLSearchParams(criteria);
+    const searchParams = new URLSearchParams({...criteria, ai_search: '1'});
     const resolveResp = await fetch(`/admin/customer-merge/api/resolve/?${searchParams}`);
     const resolveJson = await resolveResp.json();
     if (!resolveResp.ok || resolveJson.error) throw new Error(resolveJson.error || 'Suche konnte nicht gestartet werden.');
     if (!isCurrentSearch(searchId)) return;
 
-    const erpNrs = uniqueErpNumbers(resolveJson.erp_nrs || []);
-    const microtechJobIds = (resolveJson.microtech_jobs || []).map(job => job.job_id).filter(Boolean);
-    const microtechCandidates = Number(resolveJson.search_summary?.microtech_candidates || 0);
-    const microtechCandidateNumbers = new Set(
-      (resolveJson.search_summary?.microtech_candidate_numbers || []).map(value => String(value)),
-    );
-    searchErps = erpNrs;
-    searchData = {};
-    erpNrs.forEach(nr => { searchData[nr] = {}; });
-    initializeRowStates(erpNrs, { microtechState: 'idle' });
-    erpNrs.forEach(erpNr => {
-      if (microtechCandidateNumbers.has(String(erpNr))) setCellState(erpNr, 'microtech', 'pending');
-    });
+    const loaded = resolveJson.ai_search;
+    if (!loaded?.id) throw new Error('Bitte die Seite neu laden und erneut suchen.');
     searchProgress.resolving = false;
-    searchProgress.microtechResultsPending = microtechJobIds.length > 0;
-    searchProgress.microtech = microtechJobIds.length < microtechCandidates
-      ? { state:'failed', message:'Mindestens eine Microtech-Abfrage konnte nicht gestartet werden.', found:0 }
-      : microtechJobIds.length
-      ? { state: 'pending', message: `Microtech prüft ${microtechCandidates} ermittelte bestehende AdrNr.`, found: 0 }
-      : { state: 'succeeded', skipped:true, found:0 };
-    searchProgress.microtechSubmissionFailed = microtechJobIds.length < microtechCandidates;
-    searchProgress.resolved = resolveJson.search_summary || {};
-    searchProgress.microtechCandidateNumbers = microtechCandidateNumbers;
-    renderRows(false);
-    renderSearchProgress();
-    void loadCells(erpNrs, LOCAL_SYSTEM_KEYS, searchId);
-    if (microtechJobIds.length) {
-      void addMicrotechResults(microtechJobIds, searchId);
-    } else if (!erpNrs.length) {
-      document.getElementById('results-rows').innerHTML =
-        '<div class="text-sm text-gray-400 italic p-4">Keine Ergebnisse gefunden.</div>';
+    searchProgress.cacheId = loaded.id;
+    let result = loaded;
+    while (isCurrentSearch(searchId)) {
+      presentLoadedSearch(result);
+      if (result.status !== 'loading') break;
+      await delay(1500);
+      if (!isCurrentSearch(searchId)) return;
+      const response = await fetch(`/admin/customer-merge-ai/api/?run_id=${encodeURIComponent(loaded.id)}`);
+      result = await response.json();
+      if (!response.ok || result.error) throw new Error(result.error || 'Der Suchstatus konnte nicht geladen werden.');
     }
   } catch(e) {
     if (!isCurrentSearch(searchId)) return;
     searchProgress.resolving = false;
-    searchProgress.error = 'Die Suche konnte nicht gestartet werden. Bitte erneut suchen.';
+    searchProgress.error = e.message || 'Die Suche konnte nicht abgeschlossen werden. Bitte erneut suchen.';
     searchProgress.microtech = {
       state: 'failed',
       message: 'Die Suche konnte nicht gestartet werden. Bitte versuchen Sie es erneut.',
@@ -1377,6 +1363,28 @@ async function doSearch() {
   } finally {
     if (isCurrentSearch(searchId)) setSearchButtonLoading(false);
   }
+}
+
+function presentLoadedSearch(result) {
+  if (!searchProgress) return;
+  searchErps = result.numbers || [];
+  searchData = CustomerMergePreview.sources(result.snapshot || {records:[],availability:{}});
+  searchProgress.cellStates = {};
+  for (const number of searchErps) {
+    for (const [system,key] of [['shopware','sw'],['django','dj'],['microtech','mt']]) {
+      const availability = result.snapshot?.availability?.[number]?.[key];
+      if (availability) setCellState(number,system,availability==='found'?'found':'not_found');
+      else setCellState(number,system,result.status==='failed'?'failed':'loading');
+    }
+  }
+  const mt=result.search_progress?.mt;
+  searchProgress.microtechResultsPending = result.status==='loading';
+  searchProgress.microtech = {state:result.status==='failed'?'failed':mt==='ready'||mt==='not_applicable'?'succeeded':'pending',
+    skipped:mt==='not_applicable',found:searchErps.filter(n=>searchData[n]?.microtech).length};
+  if(result.status==='failed')searchProgress.error=result.message;
+  renderRows(false);
+  renderShopwareMergeSection();
+  renderSearchProgress();
 }
 
 function startSearchFromOrderCustomer() {
@@ -1803,6 +1811,11 @@ async function assignMicrotechMapping(select) {
 }
 
 async function refetchRow(oldNr, newNr) {
+  if (searchProgress?.cacheId) {
+    searchProgress.cacheId = '';
+    searchProgress.error = 'Die Daten wurden manuell geändert. Bitte vor einer KI-Analyse erneut suchen.';
+    renderSearchProgress();
+  }
   const previousShopware = searchData[oldNr]?.shopware;
   if (oldNr !== newNr) {
     delete searchData[oldNr];

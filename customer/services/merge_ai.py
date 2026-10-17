@@ -6,6 +6,7 @@ trusted. Paid analysis is explicit; preview and apply never invoke a model.
 from __future__ import annotations
 
 import copy
+from datetime import datetime, timezone as dt_timezone
 import hashlib
 import json
 import re
@@ -90,6 +91,7 @@ oder Straßen allein beweisen keine Identität. Firmen, Niederlassungen und Pers
 nicht verwechseln. Rechnungs-/Lieferrolle nur aus Belegen ableiten; nie erraten.
 Widersprüche ausdrücklich nennen, keine erfundenen Prozentwerte. 1 bis 3 sinnvolle
 Alternativen, keine künstlichen Alternativen. Die fachlich beste Empfehlung zuerst.
+summary und reason jeweils höchstens zwei kurze Sätze; die grafische Ansicht zeigt alle Änderungen.
 Schreibe kurz und verständlich mit Kundennummern und ausgeschriebenen Anschriften.
 Entscheidungsrelevante Folgen nennen; technische IDs gehören nicht in Titel oder Begründung. Unklarheit: leere operations und Fragen.
 Jede schreibende Empfehlung braucht konkrete evidence (ref und vorhandener Feldname).
@@ -167,7 +169,35 @@ class CustomerMergeAIService(BaseService):
             self.save(state)
             raise ValueError(state["message"]) from None
 
-    def start(self, *, owner, numbers, provider_id, previous_id="", objection=""):
+    def begin_search(self, *, owner, numbers, microtech_jobs):
+        """Keep the full, server-owned search snapshot for analysis and display."""
+        numbers = sorted(set(numbers))
+        if len(numbers) > MAX_CUSTOMERS:
+            raise ValueError(f"Bitte die Suche auf höchstens {MAX_CUSTOMERS} Kunden eingrenzen.")
+        from microtech.models import MicrotechGraphQLJob
+        expected = {n for n in numbers if CustomerMergeSearchService.is_microtech_existing_customer_number(n)}
+        jobs = {}
+        ids = [job["job_id"] for job in microtech_jobs]
+        for job in MicrotechGraphQLJob.objects.filter(pk__in=ids):
+            number = str((job.request_payload or {}).get("customerNumber", ""))
+            if (job.context or {}).get("source") != "customer_merge_search" or number not in expected or number in jobs:
+                raise ValueError("Die Microtech-Abfrage konnte nicht eindeutig zugeordnet werden.")
+            jobs[number] = job.pk
+        if set(jobs) != expected:
+            raise ValueError("Microtech konnte nicht vollständig abgefragt werden. Bitte erneut suchen.")
+        state = {"id": uuid.uuid4().hex, "owner": owner, "numbers": numbers,
+                 "phase": "search", "status": "loading", "jobs": jobs,
+                 "started": time.time(), "message": "Die Kundendaten werden einmalig geladen.",
+                 "search_progress": {"sw": "loading", "dj": "loading", "mt": "pending" if jobs else "not_applicable"}}
+        if not numbers:
+            state.update(status="search_ready", snapshot={"records": [], "availability": {}},
+                         loaded_at=timezone.now().isoformat(), message="Keine Kunden gefunden.")
+            self.save(state)
+        else:
+            self.enqueue(state)
+        return self.public(state)
+
+    def start(self, *, owner, numbers, provider_id, search_id="", previous_id="", objection=""):
         if not isinstance(numbers, list) or not 1 <= len(numbers) <= MAX_CUSTOMERS:
             raise ValueError(f"Bitte die Suche auf 1 bis {MAX_CUSTOMERS} Kunden begrenzen.")
         if any(not isinstance(n, str) or not re.fullmatch(r"[0-9]{1,18}", n) for n in numbers):
@@ -179,15 +209,28 @@ class CustomerMergeAIService(BaseService):
         if previous and (previous["status"] not in {"ready", "preview_ready"} or not objection.strip()):
             raise ValueError("Für die Überarbeitung bitte einen fertigen Vorschlag und einen Einwand angeben.")
         numbers = sorted(set(numbers))
-        if previous and numbers != previous["numbers"]:
-            raise ValueError("Die Suchauswahl wurde geändert. Bitte eine neue Analyse starten.")
+        if previous:
+            source = previous
+        else:
+            if not search_id:
+                raise ValueError("Bitte die Seite neu laden und die Kunden einmal suchen.")
+            source = self.get(search_id, owner)
+            if source.get("phase") != "search" or source["status"] != "search_ready":
+                raise ValueError("Bitte warten, bis die Suche vollständig abgeschlossen ist.")
+        if numbers != source["numbers"]:
+            raise ValueError("Die Suchauswahl wurde geändert. Bitte erneut suchen.")
+        if not source.get("snapshot", {}).get("records"):
+            raise ValueError("Es wurden keine Kunden gefunden.")
+        snapshot = copy.deepcopy(source["snapshot"])
         state = {"id": uuid.uuid4().hex, "owner": owner, "numbers": numbers,
                  "provider_id": provider.pk, "model": provider.model_name,
                  "version": previous["version"] + 1 if previous else 1,
                  "previous": {"summary": previous.get("summary"), "proposals": previous.get("proposals")} if previous else None,
                  "objection": objection.strip(), "phase": "analyze", "status": "loading",
-                 "started": time.time(), "jobs": None, "message": "Die drei Systeme werden frisch geladen."}
-        # One in-flight paid analysis per user, across browser tabs.
+                 "snapshot": snapshot, "fingerprint": fingerprint(snapshot),
+                 "search_id": previous.get("search_id", "") if previous else search_id,
+                 "loaded_at": source.get("loaded_at"), "started": time.time(), "jobs": None,
+                 "message": "Die KI bewertet die bereits geladenen Kundendaten."}
         if not self.cache.add(f"analysis:{owner}", state["id"], 600):
             raise ValueError("Für dich läuft bereits eine Analyse. Bitte deren Ergebnis abwarten.")
         try:
@@ -204,23 +247,56 @@ class CustomerMergeAIService(BaseService):
             state = self.get(run_id, owner)
             if type(index) is not int or not 0 <= index < len(state.get("proposals", [])):
                 raise ValueError("Ungültiger Vorschlag.")
-            if state["status"] not in ({"preview_ready"} if execute else {"ready", "preview_ready"}):
+            if state["status"] not in {"ready", "preview_ready"}:
                 raise ValueError("Bitte den laufenden Auftrag abwarten oder neu analysieren.")
-            if execute and (not token or token != state.get("preview_token") or index != state.get("selected")):
-                raise ValueError("Die bestätigte Vorschau stimmt nicht mit dem Vorschlag überein.")
-            if execute and time.time() - state.get("preview_at", 0) > 300:
-                raise ValueError("Die Vorschau ist abgelaufen. Bitte erneut prüfen.")
             proposal = state["proposals"][index]
-            if proposal.get("blocked") or not proposal["operations"]:
+            if proposal.get("blocked") or not proposal["operations"] or proposal.get("questions"):
                 raise ValueError("Dieser Vorschlag benötigt erst eine Klärung.")
-            if execute and proposal["operations"][0]["kind"] == "merge_shopware":
-                raise ValueError("Kundenmerges bitte in der verbindlichen Shopware-Vorschau bestätigen.")
-            state.update(selected=index, phase="execute" if execute else "preview", status="loading",
-                         jobs=None, started=time.time(), message="Die Daten werden vor der Übernahme erneut geprüft.")
-            self.enqueue(state)
+            self.compile_plan(proposal, state["snapshot"])
+            if not state.get("approval_tokens"):
+                state["approval_tokens"] = [uuid.uuid4().hex for _ in state["proposals"]]
+            expected = state["approval_tokens"][index]
+            if execute and token != expected and not (token and token == state.get("preview_token") and index == state.get("selected")):
+                raise ValueError("Die Bestätigung stimmt nicht mit dem Vorschlag überein.")
+            state.update(selected=index)
+            if not execute:
+                # Compatibility with an already-open older browser: no source reads.
+                state.update(status="preview_ready", preview_token=expected, preview_at=time.time())
+                self.save(state)
+            else:
+                state.update(phase="execute", status="loading", jobs=None, started=time.time(),
+                             message="Die Daten werden unmittelbar vor dem Speichern geprüft.", writes_started=False)
+                if proposal["operations"][0]["kind"] == "merge_shopware":
+                    state["merge_operation_id"] = uuid.uuid4().hex
+                self.enqueue(state)
             return self.public(state)
         finally:
             self.cache.delete("phase:" + run_id)
+
+    def read_microtech(self, state, *, submit):
+        search = CustomerMergeSearchService()
+        if state["jobs"] is None:
+            if not submit:
+                raise ValueError("Die Suchabfragen sind nicht vollständig vorhanden. Bitte erneut suchen.")
+            state["jobs"] = {}
+            for number in state["numbers"]:
+                if search.is_microtech_existing_customer_number(number):
+                    submitted = search.start_microtech_customer_search(number)
+                    if not submitted.get("job_id"):
+                        raise ValueError("Microtech ist nicht vollständig erreichbar. Es wurde nichts geändert.")
+                    state["jobs"][number] = submitted["job_id"]
+            self.save(state)
+        microtech = {}
+        for number, job_id in state["jobs"].items():
+            status = search.get_microtech_search_job_status(job_id)
+            if status["state"] == "pending":
+                return None
+            if status["state"] != "succeeded":
+                raise ValueError("Microtech konnte nicht vollständig gelesen werden. Bitte die Verbindung prüfen.")
+            from microtech.models import MicrotechGraphQLJob
+            job = MicrotechGraphQLJob.objects.get(pk=job_id)
+            microtech[number] = search._find_microtech_customer(job.result_payload or {})
+        return microtech
 
     def process(self, run_id):
         if not self.cache.add("worker:" + run_id, True, 600):
@@ -231,58 +307,57 @@ class CustomerMergeAIService(BaseService):
             if state["status"] != "loading":
                 return False
             if time.time() - state["started"] > 240:
-                raise ValueError("Die Daten konnten nicht vollständig geladen werden. Bitte neu analysieren.")
-            search = CustomerMergeSearchService()
-            if state["jobs"] is None:
-                state["jobs"] = {}
-                for number in state["numbers"]:
-                    if search.is_microtech_existing_customer_number(number):
-                        submitted = search.start_microtech_customer_search(number)
-                        if not submitted.get("job_id"):
-                            raise ValueError("Microtech ist nicht vollständig erreichbar. Es wurde nichts geändert.")
-                        state["jobs"][number] = submitted["job_id"]
-                self.save(state)
-            microtech = {}
-            for number, job_id in state["jobs"].items():
-                status = search.get_microtech_search_job_status(job_id)
-                if status["state"] == "pending":
+                raise ValueError("Der Auftrag konnte nicht vollständig abgeschlossen werden. Bitte erneut suchen.")
+            if state["phase"] == "search":
+                if "snapshot" not in state:
+                    state["snapshot"] = self.snapshot(state["numbers"], {}, systems=("sw", "dj"), allow_empty=True)
+                    state["search_progress"].update(sw="ready", dj="ready")
+                    state["message"] = "Microtech wird noch geladen." if state["jobs"] else "Suchdaten werden vorbereitet."
+                    self.save(state)
+                microtech = self.read_microtech(state, submit=False)
+                if microtech is None:
                     return True
-                if status["state"] != "succeeded":
-                    raise ValueError("Microtech konnte nicht vollständig gelesen werden. Bitte die Verbindung prüfen.")
-                from microtech.models import MicrotechGraphQLJob
-                job = MicrotechGraphQLJob.objects.get(pk=job_id)
-                microtech[number] = search._find_microtech_customer(job.result_payload or {})
-            snapshot = self.snapshot(state["numbers"], microtech)
-            if state["phase"] == "analyze":
-                state.update(snapshot=snapshot, fingerprint=fingerprint(snapshot), message="Die KI bewertet Kunden, Adressen und Zuordnungen.")
-                self.save(state)
+                remote = self.snapshot(state["numbers"], microtech, systems=("mt",), allow_empty=True)
+                state["snapshot"] = self.combine_snapshots(state["snapshot"], remote)
+                state["search_progress"].update(mt="ready" if state["jobs"] else "not_applicable")
+                state.update(status="search_ready", loaded_at=timezone.now().isoformat(), message="Die Suche ist abgeschlossen.")
+            elif state["phase"] == "analyze":
+                snapshot = state.get("snapshot")
+                if not snapshot:
+                    raise ValueError("Bitte die Seite neu laden und die Kunden einmal suchen.")
                 result, usage = AIProviderService().structured_response(
                     provider=self.provider(state["provider_id"]), instructions=INSTRUCTIONS, schema=self.response_schema(snapshot),
                     context={"snapshot": snapshot, "previous": state["previous"], "objection": state["objection"]},
                 )
                 state.update(self.validate_result(result, snapshot))
-                state.update(status="ready", usage=usage, message="Die Vorschläge können geprüft werden.")
+                state.update(status="ready", usage=usage, approval_tokens=[uuid.uuid4().hex for _ in state["proposals"]],
+                             message="Die Vorschläge sind bereit.")
                 state.pop("previous", None)
-            else:
-                if fingerprint(snapshot) != state["fingerprint"]:
-                    raise ValueError("Die Daten haben sich seit der Analyse geändert. Bitte neu analysieren.")
+            elif state["phase"] == "preview":
+                # An older queued preview only compiles the stored snapshot.
                 proposal = state["proposals"][state["selected"]]
-                self.compile_plan(proposal, snapshot)  # Revalidate all references and dependencies.
-                if state["phase"] == "preview":
-                    state.update(status="preview_ready", preview_token=uuid.uuid4().hex,
-                                 preview_at=time.time(), message="Die Daten sind aktuell. Bitte die Änderungen bestätigen.")
-                else:
-                    state.update(status="applying", message="Die bestätigten Änderungen werden ausgeführt.", completed=[])
-                    self.save(state)  # Duplicate tasks cannot enter writes a second time.
-                    self.apply(state, microtech)
-                    state.update(status="applied", message="Die bestätigten Änderungen wurden ausgeführt. Bitte die Suche aktualisieren.")
+                self.compile_plan(proposal, state["snapshot"])
+                state.update(status="preview_ready", preview_token=uuid.uuid4().hex, preview_at=time.time())
+            elif state["phase"] == "recover_merge":
+                self.recover_merge_result(state)
+            elif state["phase"] == "execute":
+                microtech = self.read_microtech(state, submit=True)
+                if microtech is None:
+                    return True
+                state.update(status="applying", message="Die bestätigten Änderungen werden geprüft und gespeichert.", completed=[])
+                self.save(state)
+                self.apply(state, microtech)
+                state.update(status="applied", message="Der Vorschlag wurde übernommen.")
+            else:
+                raise ValueError("Unbekannter Arbeitsschritt. Bitte erneut suchen.")
             self.save(state)
             return False
         except Exception as exc:
             if state:
-                # Domain messages are deliberately written here; never upstream responses/tracebacks.
                 message = str(exc) if isinstance(exc, (ValueError, RuntimeError)) else "Der Auftrag ist fehlgeschlagen. Bitte Systemverbindungen und Provider prüfen."
-                state.update(status="needs_review" if state.get("status") == "applying" else "failed", message=message)
+                state.update(status="needs_review" if state.get("writes_started") else "failed", message=message)
+                if state.get("phase") == "search":
+                    state["search_progress"] = {"sw": "failed", "dj": "failed", "mt": "failed"}
                 self.save(state)
             return False
         finally:
@@ -294,12 +369,13 @@ class CustomerMergeAIService(BaseService):
     @staticmethod
     def public(state):
         keys = ("id", "numbers", "status", "message", "summary", "proposals", "snapshot", "version", "usage",
-                "model", "selected", "preview_token", "preview_at", "completed", "current_step")
+                "model", "selected", "preview_token", "preview_at", "completed", "current_step",
+                "phase", "search_progress", "loaded_at", "search_id", "approval_tokens", "merge_operation_id")
         return {k: state[k] for k in keys if k in state}
 
-    def snapshot(self, numbers, microtech):
+    def snapshot(self, numbers, microtech, *, systems=("sw", "dj", "mt"), allow_empty=False):
         from shopware.services import CustomerService
-        service = CustomerService()
+        service = CustomerService() if "sw" in systems else None
         records, availability = [], {}
 
         def add(system, kind, identifier, number, fields, parent=""):
@@ -312,62 +388,76 @@ class CustomerMergeAIService(BaseService):
 
         for number in numbers:
             availability[number] = {}
-            # Explicit field projection prevents password hashes/custom extension secrets entering the prompt.
-            response = service._request_with_retry("request_post", "/search/customer", payload={
-                "filter": [{"type": "equals", "field": "customerNumber", "value": number}],
-                "limit": 2, "includes": {"customer": [*ShopwareCustomerMergeService.CUSTOMER_COMPARISON_FIELDS, "updatedAt"]},
-            })
-            customers = response.get("data", [])
-            if len(customers) > 1:
-                raise ValueError("Mehrere Shopkonten mit derselben Kundennummer. Bitte zuerst manuell prüfen.")
-            availability[number]["sw"] = "found" if customers else "not_found"
-            for row in customers:
-                customer = _safe_attrs(row)
-                cid = row.get("id") or customer.get("id")
-                parent = add("sw", "customer", cid, number, {**take(customer, [*ShopwareCustomerMergeService.CUSTOMER_COMPARISON_FIELDS, "updatedAt"]), "id": cid})
-                addresses = self.sw_collection(service, "/search/customer-address", "customerId", cid,
-                                               "customer_address", (*ShopwareCustomerMergeService.ADDRESS_COMPARISON_FIELDS, "country", "salutation"),
-                                               associations={"country": {}, "salutation": {}})
-                for address in addresses:
-                    add("sw", "address", address["id"], number, address, parent)
-                orders = self.sw_collection(service, "/search/order", "orderCustomer.customerId", cid, "order",
-                    ("id", "orderNumber", "orderDateTime", "amountTotal", "billingAddressId", "billingAddress", "deliveries"),
-                    associations={"billingAddress": {}, "deliveries": {"associations": {"shippingOrderAddress": {}}}})
-                for order in orders:
-                    # Keep only historical address business fields, not arbitrary nested payloads.
-                    order["billingAddress"] = take(_safe_attrs(order.get("billingAddress") or {}), ShopwareCustomerMergeService.ADDRESS_COMPARISON_FIELDS)
-                    raw_deliveries = order.get("deliveries") or []
-                    if isinstance(raw_deliveries, dict): raw_deliveries = raw_deliveries.get("data") or []
-                    order["deliveries"] = [take(_safe_attrs(_safe_attrs(d).get("shippingOrderAddress") or {}), ShopwareCustomerMergeService.ADDRESS_COMPARISON_FIELDS) for d in raw_deliveries]
-                    add("sw", "order", order["id"], number, order, parent)
-            local = Customer.objects.filter(erp_nr=number).first()
-            availability[number]["dj"] = "found" if local else "not_found"
-            if local:
-                fields = [f.attname for f in Customer._meta.concrete_fields]
-                parent = add("dj", "customer", local.pk, number, {k: getattr(local, k) for k in fields})
-                for a in local.addresses.order_by("pk").values():
-                    add("dj", "address", a["id"], number, a, parent)
-                for order in local.orders.order_by("pk").values("id", "api_id", "order_number", "purchase_date", "billing_address_id", "shipping_address_id", "total_price", "order_state"):
-                    add("dj", "order", order["id"], number, order, parent)
-            raw = microtech.get(number)
-            availability[number]["mt"] = "found" if raw else ("not_found" if number in microtech else "not_applicable")
-            if raw:
-                if str(raw.get("customerNumber")) != number:
-                    raise ValueError("Microtech hat Daten eines anderen Kunden geliefert.")
-                parent = add("mt", "customer", number, number, take(raw, MT_FIELDS))
-                for a in raw.get("addresses") or []:
-                    ans = a.get("addressSubNumber")
-                    address_ref = add("mt", "address", f"{number}:{ans}", number, take(a, MT_ADDRESS_FIELDS), parent)
-                    for contact in a.get("contacts") or []:
-                        add("mt", "contact", f"{number}:{ans}:{contact.get('contactNumber')}", number,
-                            take(contact, MT_CONTACT_FIELDS), address_ref)
+            if "sw" in systems:
+                # Explicit field projection prevents password hashes/custom extension secrets entering the prompt.
+                response = service._request_with_retry("request_post", "/search/customer", payload={
+                    "filter": [{"type": "equals", "field": "customerNumber", "value": number}],
+                    "limit": 2, "includes": {"customer": [*ShopwareCustomerMergeService.CUSTOMER_COMPARISON_FIELDS, "updatedAt"]},
+                })
+                customers = response.get("data", [])
+                if len(customers) > 1:
+                    raise ValueError("Mehrere Shopkonten mit derselben Kundennummer. Bitte zuerst manuell prüfen.")
+                availability[number]["sw"] = "found" if customers else "not_found"
+                for row in customers:
+                    customer = _safe_attrs(row)
+                    cid = row.get("id") or customer.get("id")
+                    parent = add("sw", "customer", cid, number, {**take(customer, [*ShopwareCustomerMergeService.CUSTOMER_COMPARISON_FIELDS, "updatedAt"]), "id": cid})
+                    addresses = self.sw_collection(service, "/search/customer-address", "customerId", cid,
+                                                   "customer_address", (*ShopwareCustomerMergeService.ADDRESS_COMPARISON_FIELDS, "country", "salutation"),
+                                                   associations={"country": {}, "salutation": {}})
+                    for address in addresses:
+                        add("sw", "address", address["id"], number, address, parent)
+                    orders = self.sw_collection(service, "/search/order", "orderCustomer.customerId", cid, "order",
+                        ("id", "orderNumber", "orderDateTime", "amountTotal", "billingAddressId", "billingAddress", "deliveries"),
+                        associations={"billingAddress": {}, "deliveries": {"associations": {"shippingOrderAddress": {}}}})
+                    for order in orders:
+                        # Keep only historical address business fields, not arbitrary nested payloads.
+                        order["billingAddress"] = take(_safe_attrs(order.get("billingAddress") or {}), ShopwareCustomerMergeService.ADDRESS_COMPARISON_FIELDS)
+                        raw_deliveries = order.get("deliveries") or []
+                        if isinstance(raw_deliveries, dict): raw_deliveries = raw_deliveries.get("data") or []
+                        order["deliveries"] = [take(_safe_attrs(_safe_attrs(d).get("shippingOrderAddress") or {}), ShopwareCustomerMergeService.ADDRESS_COMPARISON_FIELDS) for d in raw_deliveries]
+                        add("sw", "order", order["id"], number, order, parent)
+            if "dj" in systems:
+                local = Customer.objects.filter(erp_nr=number).first()
+                availability[number]["dj"] = "found" if local else "not_found"
+                if local:
+                    fields = [f.attname for f in Customer._meta.concrete_fields]
+                    parent = add("dj", "customer", local.pk, number, {k: getattr(local, k) for k in fields})
+                    for a in local.addresses.order_by("pk").values():
+                        add("dj", "address", a["id"], number, a, parent)
+                    for order in local.orders.order_by("pk").values("id", "api_id", "order_number", "purchase_date", "billing_address_id", "shipping_address_id", "total_price", "order_state"):
+                        add("dj", "order", order["id"], number, order, parent)
+            if "mt" in systems:
+                raw = microtech.get(number)
+                availability[number]["mt"] = "found" if raw else ("not_found" if number in microtech else "not_applicable")
+                if raw:
+                    if str(raw.get("customerNumber")) != number:
+                        raise ValueError("Microtech hat Daten eines anderen Kunden geliefert.")
+                    parent = add("mt", "customer", number, number, take(raw, MT_FIELDS))
+                    for a in raw.get("addresses") or []:
+                        ans = a.get("addressSubNumber")
+                        address_ref = add("mt", "address", f"{number}:{ans}", number, take(a, MT_ADDRESS_FIELDS), parent)
+                        for contact in a.get("contacts") or []:
+                            add("mt", "contact", f"{number}:{ans}:{contact.get('contactNumber')}", number,
+                                take(contact, MT_CONTACT_FIELDS), address_ref)
         result = clean_json({"records": sorted(records, key=lambda r: r["ref"]), "availability": availability})
         if len({r["ref"] for r in result["records"]}) != len(result["records"]):
             raise ValueError("Die Quelldaten enthalten mehrdeutige Kennungen. Bitte manuell prüfen.")
         if len(json.dumps(result, ensure_ascii=False).encode()) > 300_000:
             raise ValueError("Zu viele Geschäftsfelder für eine vollständige Analyse. Bitte die Suche eingrenzen.")
-        if not result["records"]:
+        if not result["records"] and not allow_empty:
             raise ValueError("Es wurden keine Kunden gefunden.")
+        return result
+
+    @staticmethod
+    def combine_snapshots(local, remote):
+        result = {"records": sorted(local["records"] + remote["records"], key=lambda r: r["ref"]),
+                  "availability": {n: {**local["availability"].get(n, {}), **remote["availability"].get(n, {})}
+                                   for n in local["availability"].keys() | remote["availability"].keys()}}
+        if len(result["records"]) > MAX_RECORDS or len(json.dumps(result, ensure_ascii=False).encode()) > 300_000:
+            raise ValueError("Zu viele Daten für eine vollständige Analyse. Bitte die Suche eingrenzen.")
+        if len({r["ref"] for r in result["records"]}) != len(result["records"]):
+            raise ValueError("Die Quelldaten enthalten mehrdeutige Kennungen. Bitte manuell prüfen.")
         return result
 
     @staticmethod
@@ -469,6 +559,8 @@ class CustomerMergeAIService(BaseService):
             plan["operations"].sort(key=lambda op: order.get(op.get("kind"), 5) if isinstance(op, dict) else 6)
             try:
                 plan["changes"] = self.compile_plan(plan, snapshot)
+                if plan["operations"] and plan["operations"][0]["kind"] == "merge_shopware":
+                    plan["merge_preview"] = self.merge_expectation(snapshot, plan["operations"][0])
                 plan["blocked"] = ""
             except ValueError as exc:
                 # Keep the reasoning visible but never offer invalid writes.
@@ -496,6 +588,7 @@ class CustomerMergeAIService(BaseService):
             if kind == "merge_shopware":
                 if source_type != ("sw", "customer") or target_type != ("sw", "customer") or src["ref"] == dst["ref"] or len(ops) != 1:
                     raise ValueError("Ein Kundenmerge muss zwei unterschiedliche Shopkonten als einzigen Schritt betreffen.")
+                self.validate_local_merge(snapshot, src, dst)
                 before, after = {"Quellkonto": sf["id"], "Zielkonto": df["id"]}, {"Erhaltenes Konto": df["id"], "Quellkonto": "wird nach verbindlicher Prüfung gelöscht"}
             else:
                 if src["number"] != dst["number"]:
@@ -558,7 +651,8 @@ class CustomerMergeAIService(BaseService):
         user = get_user_model().objects.get(pk=state["owner"])
         required = {"customer.change_customer"}
         kinds = {op["kind"] for op in state["proposals"][state["selected"]]["operations"]}
-        if kinds - {"link_customer"}: required.add("customer.change_address")
+        if kinds - {"link_customer", "merge_shopware"}: required.add("customer.change_address")
+        if "merge_shopware" in kinds: required.add("customer.delete_customer")
         if "import_shopware_address" in kinds: required.update({"customer.add_address", "customer.add_customer"})
         if not user.is_active or not user.is_staff or not user.has_perms(required):
             raise ValueError("Die Berechtigung für die Übernahme ist nicht mehr vorhanden.")
@@ -570,11 +664,114 @@ class CustomerMergeAIService(BaseService):
                     raise ValueError("Ein anderer Kundenmerge bearbeitet diese Kunden gerade. Bitte den Datenstand neu prüfen.")
                 acquired.append(key)
             if fingerprint(self.snapshot(state["numbers"], microtech)) != state["fingerprint"]:
-                raise ValueError("Die Daten haben sich vor der Übernahme geändert. Bitte neu analysieren.")
-            self.apply_steps(state)
+                raise ValueError("Die Daten haben sich seit der Suche geändert. Bitte erneut suchen.")
+            proposal = state["proposals"][state["selected"]]
+            self.compile_plan(proposal, state["snapshot"])
+            if proposal["operations"][0]["kind"] == "merge_shopware":
+                self.apply_merge(state)
+            else:
+                state["writes_started"] = True
+                self.save(state)
+                self.apply_steps(state)
         finally:
             for key in acquired:
                 if self.cache.get(key) == state["id"]: self.cache.delete(key)
+
+    @staticmethod
+    def validate_local_merge(snapshot, source, target):
+        """Reject known local cleanup conflicts before a remote merge can write."""
+        customers = {r["number"]: r for r in snapshot["records"] if r["system"] == "dj" and r["kind"] == "customer"}
+        local_source, local_target = customers.get(source["number"]), customers.get(target["number"])
+        for local, remote in ((local_source, source), (local_target, target)):
+            if local and (local["fields"].get("api_id") or "").lower() not in ("", remote["fields"]["id"].lower()):
+                raise ValueError("Bitte zuerst das richtige Shopkonto in GC-Bridge zuordnen.")
+        if not local_source:
+            return
+        if not local_target:
+            raise ValueError("Vor dem Merge muss der Zielkunde in GC-Bridge vorhanden sein.")
+        source_addresses = [r["fields"] for r in snapshot["records"] if r["kind"] == "address" and r["parent"] == local_source["ref"]]
+        target_addresses = [r["fields"] for r in snapshot["records"] if r["kind"] == "address" and r["parent"] == local_target["ref"]]
+        target_ids = {(a.get("api_id") or "").lower() for a in target_addresses if a.get("api_id")}
+        target_mt = {(a.get("erp_ans_id"), a.get("erp_asp_id")) for a in target_addresses if a.get("erp_ans_id") is not None}
+        if any((a.get("api_id") and a["api_id"].lower() in target_ids) or
+               (a.get("erp_ans_id") is not None and (a["erp_ans_id"], a.get("erp_asp_id")) in target_mt)
+               for a in source_addresses):
+            raise ValueError("Die Adresszuordnungen der GC-Bridge-Kunden überschneiden sich. Bitte zuerst klären.")
+
+    @staticmethod
+    def merge_expectation(snapshot, operation):
+        refs = {r["ref"]: r for r in snapshot["records"]}
+        source, target = refs[operation["source"]], refs[operation["target"]]
+        sf, tf = source["fields"], target["fields"]
+
+        def login(value):
+            if not value:
+                return datetime.min.replace(tzinfo=dt_timezone.utc)
+            try:
+                result = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+            except ValueError:
+                raise ValueError("Die Login-Zeitpunkte sind nicht eindeutig. Bitte die Kundendaten prüfen.") from None
+            return result if result.tzinfo else result.replace(tzinfo=dt_timezone.utc)
+
+        credentials = sf if login(sf.get("lastLogin")) > login(tf.get("lastLogin")) else tf
+        return {"sourceId": sf["id"], "targetId": tf["id"],
+                "credentialSourceId": credentials["id"], "credentialsCopied": credentials is sf,
+                "defaultBillingAddressId": tf.get("defaultBillingAddressId"),
+                "defaultShippingAddressId": tf.get("defaultShippingAddressId"),
+                "addressesMoved": sum(r["kind"] == "address" and r["parent"] == source["ref"] for r in snapshot["records"]),
+                "ordersMoved": sum(r["kind"] == "order" and r["parent"] == source["ref"] for r in snapshot["records"])}
+
+    def apply_merge(self, state):
+        operation = state["proposals"][state["selected"]]["operations"][0]
+        expected = self.merge_expectation(state["snapshot"], operation)
+        service = ShopwareCustomerMergeService()
+        selection = {"delete_sw_id": expected["sourceId"], "keep_sw_id": expected["targetId"]}
+        preview = service.preview(**selection)
+        if any(preview.get(key) != value for key, value in expected.items()):
+            raise ValueError("Die verbindliche Shopware-Prüfung weicht vom angezeigten Vorschlag ab. Bitte erneut suchen.")
+        state.update(merge_expected=expected, writes_started=True)
+        self.save(state)  # Preserve operation ID before any remote write.
+        result = service.merge(operation_id=state["merge_operation_id"], preview_token=preview["previewToken"], **selection)
+        self.finish_merge(state, service, result)
+
+    def finish_merge(self, state, service, result):
+        expected = state["merge_expected"]
+        if result.get("status") != "merged" or any(result.get(key) != value for key, value in expected.items()):
+            raise ValueError("Das Merge-Ergebnis ist nicht vollständig bestätigt. Bitte den Status prüfen.")
+        refs = {r["ref"]: r for r in state["snapshot"]["records"]}
+        operation = state["proposals"][state["selected"]]["operations"][0]
+        source, target = refs[operation["source"]], refs[operation["target"]]
+        cleanup = service.cleanup_django_source_after_merge(source_sw_id=expected["sourceId"], target_sw_id=expected["targetId"],
+            source_erp_nr=source["number"], target_erp_nr=target["number"])
+        if cleanup.get("status") not in {"deleted", "already_removed"}:
+            raise ValueError("Shopware hat zusammengeführt. Die lokale Bereinigung muss noch geprüft werden.")
+        if not state.get("completed"):
+            customer = Customer.objects.filter(erp_nr=target["number"]).first()
+            if customer:
+                self.audit(state, customer, 0)
+            state["completed"] = [{"index": 0, "label": LABELS["merge_shopware"]}]
+        state.update(status="applied", message="Die Kunden wurden zusammengeführt.")
+        self.save(state)
+
+    def recover_merge(self, *, owner, run_id):
+        state = self.get(run_id, owner)
+        if state["status"] != "needs_review" or not state.get("merge_operation_id") or not state.get("merge_expected"):
+            raise ValueError("Für diesen Auftrag ist keine Merge-Statusprüfung erforderlich.")
+        state.update(phase="recover_merge", status="loading", started=time.time(), message="Das gespeicherte Merge-Ergebnis wird geprüft.")
+        self.enqueue(state)
+        return self.public(state)
+
+    def recover_merge_result(self, state):
+        from django.contrib.auth import get_user_model
+        user = get_user_model().objects.get(pk=state["owner"])
+        if not user.is_active or not user.is_staff or not user.has_perms({"customer.change_customer", "customer.delete_customer"}):
+            raise ValueError("Die Berechtigung für die Statusprüfung ist nicht mehr vorhanden.")
+        service = ShopwareCustomerMergeService()
+        result = service.status(operation_id=state["merge_operation_id"])
+        if result.get("status") == "not_found":
+            state.update(status="needs_review", message="Der Merge ist noch nicht bestätigt. Bitte den Status später erneut prüfen.")
+            return
+        self.finish_merge(state, service, result)
 
     def apply_steps(self, state):
         refs = {r["ref"]: r for r in state["snapshot"]["records"]}

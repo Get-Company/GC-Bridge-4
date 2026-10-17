@@ -106,8 +106,12 @@ def customer_merge_ai_api(request):
         if action == "analyze":
             result = service.start(
                 owner=request.user.pk, numbers=body.get("numbers"), provider_id=body.get("provider_id"),
-                previous_id=body.get("previous_id", ""), objection=body.get("objection", ""),
+                search_id=body.get("search_id", ""), previous_id=body.get("previous_id", ""), objection=body.get("objection", ""),
             )
+        elif action == "merge_status":
+            if not request.user.has_perm("customer.delete_customer"):
+                return JsonResponse({"error": "Keine Berechtigung zur Merge-Statusprüfung."}, status=403)
+            result = service.recover_merge(owner=request.user.pk, run_id=body.get("run_id"))
         elif action in {"preview", "execute"}:
             state = service.get(body.get("run_id"), request.user.pk)
             index = body.get("index")
@@ -199,21 +203,29 @@ def customer_merge_resolve_api(request):
         microtech_jobs = search_service.start_microtech_resolution_search(
             customer_number=",".join(microtech_candidates),
         )
-        return JsonResponse(
-            {
-                "erp_nrs": erp_nrs,
-                "resolved_from": {**resolved_sets, "shopware_ids": shopware_id_numbers},
-                "microtech_jobs": microtech_jobs,
-                "search_summary": {
-                    "shopware_found": len(resolved_sets.get("shopware", [])),
-                    "shopware_ids_found": len(shopware_id_numbers),
-                    "django_found": len(resolved_sets.get("django", [])),
-                    "microtech_candidates": len(microtech_candidates),
-                    "microtech_candidate_numbers": microtech_candidates,
-                    "microtech_search_started": bool(microtech_jobs),
-                },
-            }
-        )
+        payload = {
+            "erp_nrs": erp_nrs,
+            "resolved_from": {**resolved_sets, "shopware_ids": shopware_id_numbers},
+            "microtech_jobs": microtech_jobs,
+            "search_summary": {
+                "shopware_found": len(resolved_sets.get("shopware", [])),
+                "shopware_ids_found": len(shopware_id_numbers),
+                "django_found": len(resolved_sets.get("django", [])),
+                "microtech_candidates": len(microtech_candidates),
+                "microtech_candidate_numbers": microtech_candidates,
+                "microtech_search_started": bool(microtech_jobs),
+            },
+        }
+        if request.GET.get("ai_search") == "1":
+            if not (request.user.has_perm("customer.view_customer") or request.user.has_perm("customer.change_customer")):
+                return JsonResponse({"error": "Keine Berechtigung zur Kundensuche."}, status=403)
+            from customer.services.merge_ai import CustomerMergeAIService
+            try:
+                payload["ai_search"] = CustomerMergeAIService().begin_search(
+                    owner=request.user.pk, numbers=erp_nrs, microtech_jobs=microtech_jobs)
+            except ValueError as exc:
+                return JsonResponse({"error": str(exc)}, status=400)
+        return JsonResponse(payload)
 
     # Compatibility for callers of the former free-text endpoint.
     query_raw = request.GET.get("q", "")

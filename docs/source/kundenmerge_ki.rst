@@ -14,25 +14,29 @@ Das Ergebnis erscheint automatisch; **Status prüfen** ist nur bei einer
 unterbrochenen Statusverbindung nötig. Scheitert die Analyse, können Sie mit
 **Erneut analysieren** einen neuen, kostenpflichtigen Auftrag starten.
 
-Der Assistent liest die Geschäftsdaten der gefundenen Kunden aus Shopware 6,
-GC-Bridge und Microtech. Die erste Variante ist die Empfehlung. Oben sehen Sie,
-welche Rechnungs- und Lieferadresse vorgesehen ist. Darunter zeigen drei Spalten
-die Zuordnungen. Technische Felder und nicht betroffene Datensätze können Sie
-bei Bedarf einblenden. Mit **Ist-Zustand ansehen** vergleichen Sie den Vorschlag
-mit den bisherigen Daten. Bewegen Sie die Maus über eine Alternative, um deren
-Auswirkungen vorübergehend anzusehen; ein Klick wählt sie aus.
+Die Suche lädt die vollständigen Geschäftsdaten einmalig und hält sie
+benutzergebunden bereit. Die KI verwendet genau diesen Datenstand, auch bei einer
+Überarbeitung. Variantenwechsel und Ist-Vergleich laden keine Systemdaten nach.
 
-Die Adressvorschau wird automatisch mit aktuellen Daten geprüft. Erst **Diese
-Änderungen übernehmen** startet die Änderungen. Bei einer Zusammenführung führt
-**Zusammenführung prüfen** in die verbindliche Shopware-Vorschau: Dort werden
-Zielkonto, Zugang, Adressen und Bestellzuordnungen vor **Merge bestätigen** gezeigt.
-Nach einer Zusammenführung analysieren Sie die Adresszuordnungen neu.
+Links wählen Sie einen Vorschlag oder **Ist-Zustand**. Rechts zeigt die bekannte
+Vergleichsmatrix SW6, GC-Bridge und Microtech mit denselben Feldern in einer Zeile.
+Rechnungs- und Lieferadresse stehen oben; zugeordnete Anschriften darunter.
+Vorgeschlagene Änderungen sind blau markiert. Eine kurze Erklärung beschreibt
+die Wirkung; Begründung und Belege sind bei Bedarf aufklappbar.
 
-Offene Fragen verhindern die Übernahme. Unter **Vorschlag ändern · Einwand
-ergänzen** können Sie eine fachliche Information nachreichen. Die Überarbeitung
-erzeugt eine neue Version. Bei zwischenzeitlich geänderten Daten ist eine neue
-Analyse erforderlich. Bei einer unvollständigen Übernahme werden bestätigte
-Einzelschritte angezeigt; prüfen Sie die Systeme vor einer weiteren Bearbeitung.
+**Vorschlag akzeptieren** prüft die Daten unmittelbar vor dem Speichern erneut.
+Hat sich seit der Suche etwas geändert, wird die Übernahme abgebrochen und eine
+neue Suche verlangt. Eine Zusammenführung verwendet die verbindliche Prüfung
+und den verifizierten Merge des Shopware-Plugins im Hintergrund. Weicht dessen
+Ergebnis vom angezeigten Vorschlag ab, wird vor dem Merge abgebrochen. Eine
+weitere Bestätigung in einem zweiten Modal ist nicht erforderlich.
+
+Offene Fragen verhindern die Übernahme. Unter **Vorschlag ändern** können Sie
+einen Einwand nachreichen. Die Überarbeitung erzeugt eine neue Version mit dem
+gleichen Suchstand. Bei unklarer Merge-Antwort liest **Status prüfen** ausschließlich
+das Ergebnis des bestehenden Vorgangs nach; der Merge wird nicht erneut gesendet.
+Nach einer Übernahme wird die Suche beim Schließen aktualisiert. Nach manuellen
+Änderungen ist vor der nächsten KI-Analyse ebenfalls eine neue Suche erforderlich.
 
 Einrichtung und Betrieb
 ----------------------

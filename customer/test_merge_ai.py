@@ -165,27 +165,30 @@ class MergeAIPlanTests(SimpleTestCase):
     @patch('customer.services.merge_ai.CustomerMergeAIService.provider')
     def test_double_click_cannot_start_two_paid_analyses(self, provider, enqueue):
         provider.return_value = SimpleNamespace(pk=3, model_name='gpt-5-mini')
-        self.service.start(owner=5, numbers=['12196'], provider_id=3)
+        search = state(); search.update(id='e'*32, phase='search', status='search_ready')
+        self.service.save(search)
+        self.service.start(owner=5, numbers=['12196'], provider_id=3, search_id=search['id'])
         with self.assertRaisesRegex(ValueError, 'bereits'):
-            self.service.start(owner=5, numbers=['12196'], provider_id=3)
+            self.service.start(owner=5, numbers=['12196'], provider_id=3, search_id=search['id'])
         enqueue.assert_called_once()
 
     @patch('customer.services.merge_ai.CustomerMergeAIService.enqueue')
     def test_execution_requires_the_exact_review_token_and_selected_plan(self, enqueue):
         s = state(); s.update(status='preview_ready', proposals=[plan()], selected=0, preview_token='token', preview_at=__import__('time').time())
         self.service.save(s)
-        with self.assertRaisesRegex(ValueError, 'Vorschau'):
+        with self.assertRaisesRegex(ValueError, 'Bestätigung'):
             self.service.phase(owner=5, run_id=s['id'], index=0, execute=True, token='wrong')
         enqueue.assert_not_called()
 
+    @patch('django.contrib.auth.get_user_model')
     @patch('customer.services.merge_ai.AIProviderService.structured_response')
     @patch('customer.services.merge_ai.CustomerMergeAIService.snapshot')
-    def test_stale_preview_stops_before_a_write_or_paid_call(self, snap, response):
-        s = state('preview'); s.update(proposals=[plan()], selected=0)
+    def test_changed_data_is_checked_only_when_accepted(self, snap, response, users):
+        s = state('execute'); s.update(proposals=[plan()], selected=0)
         self.service.save(s)
         changed = snapshot(); changed['records'][1]['fields']['street'] = 'Andere Straße'
         snap.return_value = changed
-        with patch.object(self.service, 'apply') as apply:
+        with patch.object(self.service, 'apply_steps') as apply:
             self.assertFalse(self.service.process(s['id']))
         apply.assert_not_called(); response.assert_not_called()
         self.assertEqual(self.service.get(s['id'])['status'], 'failed')
@@ -196,7 +199,7 @@ class MergeAIPlanTests(SimpleTestCase):
         s = state('preview'); s.update(proposals=[plan()], selected=0)
         self.service.save(s); snap.return_value = snapshot()
         self.assertFalse(self.service.process(s['id']))
-        response.assert_not_called()
+        response.assert_not_called(); snap.assert_not_called()
         self.assertEqual(self.service.get(s['id'])['status'], 'preview_ready')
         self.assertTrue(self.service.get(s['id'])['preview_token'])
 
@@ -205,7 +208,10 @@ class MergeAIPlanTests(SimpleTestCase):
     def test_partial_failure_is_reported_and_is_never_retried(self, apply, snap):
         s = state('execute'); s.update(proposals=[plan()], selected=0)
         self.service.save(s); snap.return_value = snapshot()
-        apply.side_effect = RuntimeError('Verbindung unterbrochen')
+        def interrupted(state, microtech):
+            state['writes_started'] = True
+            raise RuntimeError('Verbindung unterbrochen')
+        apply.side_effect = interrupted
         self.service.process(s['id']); self.service.process(s['id'])
         self.assertEqual(apply.call_count, 1)
         self.assertEqual(self.service.get(s['id'])['status'], 'needs_review')
@@ -221,6 +227,7 @@ class MergeAIPlanTests(SimpleTestCase):
         self.assertEqual(result['status'],'ready')
         self.assertEqual(len(result['proposals'][0]['changes']),3)
         self.assertEqual(result['usage']['total_tokens'],100)
+        snap.assert_not_called()
 
     def test_shopware_pagination_never_silently_truncates(self):
         sw=MagicMock()
