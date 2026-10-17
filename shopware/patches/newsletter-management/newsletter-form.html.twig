@@ -26,3 +26,16 @@
         })();
     </script>
 {% endblock %}
+
+{# Reuse Shopware's native field toggle: hidden fields are also disabled. #}
+{% block cms_form_newsletter_captcha %}
+    <div class="js-field-toggle-newsletter-additional d-none" data-newsletter-subscription-captcha>
+        {{ parent() }}
+    </div>
+{% endblock %}
+
+{% block cms_form_newsletter_privacy %}
+    <div class="js-field-toggle-newsletter-additional d-none" data-newsletter-subscription-privacy>
+        {{ parent() }}
+    </div>
+{% endblock %}
