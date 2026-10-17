@@ -337,6 +337,8 @@ def _preferred_customer_address(customer):
 
 def recipient_context(recipient: "NewsletterRecipient | None" = None) -> dict:
     """Builds the recipient/customer variables exposed to MJML templates."""
+    from newsletter.links import unsubscribe_url
+
     empty_recipient = _empty_recipient_context()
     has_recipient = recipient is not None
     recipient = recipient or empty_recipient
@@ -370,6 +372,7 @@ def recipient_context(recipient: "NewsletterRecipient | None" = None) -> dict:
     )
     is_customer = linked_customer is not None
     return {
+        "newsletter_unsubscribe_url": unsubscribe_url(getattr(recipient, "email", "")),
         "recipient": recipient,
         "newsletter_recipient": recipient,
         "recipient_profile": profile,
@@ -404,7 +407,12 @@ def normalize_hyphenated_placeholders(markup: str) -> str:
 def normalize_legacy_recipient_placeholders(markup: str) -> str:
     for legacy, replacement in _LEGACY_RECIPIENT_PLACEHOLDERS.items():
         markup = markup.replace(legacy, replacement)
-    return markup
+    markup = re.sub(
+        r"\{modify\}(.*?)\{/modify\}",
+        r'<a href="{{ newsletter_unsubscribe_url|e }}">\1</a>',
+        markup, flags=re.DOTALL,
+    )
+    return markup.replace("{modify}", "{{ newsletter_unsubscribe_url|e }}")
 
 
 def normalize_legacy_asset_urls(markup: str) -> str:

@@ -105,7 +105,7 @@
         <p>Classei-Organisation – Egon Heimann GmbH | Staudacher Str. 7e | 83250 Marquartstein | Deutschland<br />
         Fon: +49 (0)8641 97 59 0 | Fax: +49 (0)8641 97 59 20 | E-Mail: <a href="mailto:info@classei.de">info@classei.de</a> | <a href="https://www.classei.de">Classei.de</a></p>
         <p>Sie erhalten diese E-Mail, weil Sie unser Kunde/Interessent sind oder wir schon Kontakt hatten.
-        Wenn Sie keine Informationen mehr erhalten möchten, tragen Sie sich bitte {modify}hier{/modify} aus.</p>
+        Sie können sich jederzeit <a href="{{ newsletter_unsubscribe_url }}" style="color:#666666;text-decoration:underline">vom Newsletter abmelden</a>.</p>
       </mj-text>
     </mj-column></mj-section>
   </mj-body>

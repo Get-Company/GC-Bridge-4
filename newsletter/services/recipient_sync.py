@@ -233,9 +233,11 @@ class NewsletterRecipientSyncService(BaseService):
 
             for row in rows:
                 summary["seen"] += 1
+                remote_id = _to_str(_normalize_entity(row).get("id"))
+                if remote_id:
+                    seen_shopware_ids.add(remote_id)
                 try:
                     recipient, created = self.upsert_from_shopware(row, customer_service=customer_service)
-                    seen_shopware_ids.add(recipient.shopware_id)
                 except Exception as exc:
                     summary["failed"] += 1
                     logger.error("Newsletter recipient sync failed: {}", exc)
@@ -312,10 +314,16 @@ class NewsletterRecipientSyncService(BaseService):
             "custom_fields": data.get("customFields") if isinstance(data.get("customFields"), dict) else {},
             "raw_data": data,
         }
-        return NewsletterRecipient.objects.update_or_create(
+        recipient, created = NewsletterRecipient.objects.update_or_create(
             shopware_id=shopware_id,
             defaults=defaults,
         )
+        if not recipient.is_active_status:
+            self._cancel_pending_emails(
+                NewsletterRecipient.objects.filter(pk=recipient.pk),
+                "Newsletter-Empfänger ist in Shopware abgemeldet oder noch nicht bestätigt.",
+            )
+        return recipient, created
 
     @staticmethod
     def _extract_customer_shopware_id(data: dict[str, Any]) -> str:
@@ -432,4 +440,21 @@ class NewsletterRecipientSyncService(BaseService):
         queryset = NewsletterRecipient.objects.filter(is_present_in_shopware=True)
         if seen_shopware_ids:
             queryset = queryset.exclude(shopware_id__in=seen_shopware_ids)
-        return queryset.update(is_present_in_shopware=False, last_synced_at=timezone.now())
+        with transaction.atomic():
+            NewsletterRecipientSyncService._cancel_pending_emails(
+                queryset, "Newsletter-Empfänger ist nicht mehr in Shopware vorhanden."
+            )
+            return queryset.update(is_present_in_shopware=False, last_synced_at=timezone.now())
+
+    @staticmethod
+    def _cancel_pending_emails(recipients, reason: str) -> int:
+        from emails.models import EmailCampaignQueueEntry
+
+        return EmailCampaignQueueEntry.objects.filter(
+            recipient__in=recipients,
+            status=EmailCampaignQueueEntry.Status.QUEUED,
+        ).update(
+            status=EmailCampaignQueueEntry.Status.CANCELLED,
+            error_message=reason,
+            updated_at=timezone.now(),
+        )

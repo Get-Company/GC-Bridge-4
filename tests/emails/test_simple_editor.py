@@ -56,7 +56,8 @@ def test_simple_newsletter_uses_fixed_frame_and_editable_fields():
     assert "https://assets.classei.de/img/neu.jpg" in mjml
     assert "224453.jpg" not in mjml
     assert "https://www.classei-shop.com/search?sSearch=224453" in mjml
-    assert "{modify}hier{/modify}" in mjml
+    assert "vom Newsletter abmelden" in mjml
+    assert "{modify}" not in mjml
 
 
 def test_editor_text_is_escaped_in_mjml():
@@ -102,6 +103,7 @@ def test_simple_newsletter_renders_selected_preview_recipient_data():
     assert "83250 Marquartstein" in mjml
     assert "08641 123" in mjml
     assert "max@example.com" in mjml
+    assert "#option=unsubscribe&amp;email=max%40example.com" in mjml
     assert "Veraltete Straße" not in mjml
 
 

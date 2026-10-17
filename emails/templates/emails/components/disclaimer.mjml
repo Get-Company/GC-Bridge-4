@@ -15,8 +15,7 @@
             </p>
             <p>
                 Sie erhalten diese E-Mail, weil Sie unser Kunde/Interessent sind.
-                Wenn Sie keine Informationen mehr erhalten möchten, tragen Sie sich bitte
-                <a style="color:#ff9933" href="{modify}">hier</a> aus.
+                Sie können sich jederzeit <a style="color:#666666;text-decoration:underline" href="{{ newsletter_unsubscribe_url }}">vom Newsletter abmelden</a>.
             </p>
         </mj-text>
     </mj-column>

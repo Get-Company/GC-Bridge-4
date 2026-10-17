@@ -366,7 +366,7 @@ class EmailCampaignQueueService(BaseService):
             "failed": 0,
         }
 
-        for recipient in recipients.iterator():
+        for recipient in recipients.iterator(chunk_size=100):
             summary["recipients"] += 1
             try:
                 self.queue_recipient_campaign(recipient)

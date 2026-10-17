@@ -681,7 +681,7 @@ class TestRenderCampaignMjml:
             placement="body",
             mjml_markup="<mj-section><mj-column><mj-text>{{ title }}</mj-text></mj-column></mj-section>",
         )
-        campaign = EmailCampaign.objects.create(internal_title="Test", status="draft")
+        campaign = EmailCampaign.objects.create(internal_title="Test", status="draft", layout_mode="components")
         EmailCampaignComponent.objects.create(
             campaign=campaign,
             library_component=lib,
@@ -700,7 +700,7 @@ class TestRenderCampaignMjml:
             placement="head",
             mjml_markup="<mj-style>.custom{}</mj-style>",
         )
-        campaign = EmailCampaign.objects.create(internal_title="HeadTest", status="draft")
+        campaign = EmailCampaign.objects.create(internal_title="HeadTest", status="draft", layout_mode="components")
         EmailCampaignComponent.objects.create(
             campaign=campaign,
             library_component=lib,

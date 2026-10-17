@@ -1,0 +1,28 @@
+{% sw_extends '@Storefront/storefront/element/cms-element-form/form-types/newsletter-form.html.twig' %}
+
+{% block cms_form_newsletter %}
+    {{ parent() }}
+    <script>
+        (() => {
+            const fillNewsletterForm = () => {
+                const params = new URLSearchParams(window.location.hash.slice(1));
+                if (params.get('option') !== 'unsubscribe') return;
+                const form = document.getElementById('cms-form-newsletter');
+                if (!form) return;
+                const action = form.querySelector('[name="option"]');
+                const email = form.querySelector('[name="email"]');
+                if (email) email.value = (params.get('email') || '').slice(0, 254);
+                if (action) {
+                    action.value = 'unsubscribe';
+                    action.dispatchEvent(new Event('change', {bubbles: true}));
+                }
+            };
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', fillNewsletterForm);
+            } else {
+                fillNewsletterForm();
+            }
+            window.addEventListener('hashchange', fillNewsletterForm);
+        })();
+    </script>
+{% endblock %}
