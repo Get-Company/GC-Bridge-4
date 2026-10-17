@@ -946,6 +946,11 @@ UNFOLD = {
                         "icon": "schedule",
                         "link": reverse_lazy("admin:telefon_zeitsteuerung_list"),
                     },
+                    {
+                        "title": _("Tastenbelegung"),
+                        "icon": "dialpad",
+                        "link": reverse_lazy("admin:telefon_function_keys"),
+                    },
                 ],
             },
             {
