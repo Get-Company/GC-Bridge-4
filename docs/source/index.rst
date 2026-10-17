@@ -16,6 +16,7 @@ Der Fokus liegt auf einem nachvollziehbaren Tagesbetrieb fuer Admins und Operato
    operator_checkliste
    workflows
    ki_uebersetzungen
+   kundenmerge_ki
    betrieb_technik
    stoerung_nicht_erreichbar
    reference/index

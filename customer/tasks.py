@@ -6,6 +6,15 @@ from django.core.management import call_command
 from core.live_events import emit_event
 
 
+@shared_task(name="customer.merge_ai_process", soft_time_limit=300, time_limit=330)
+def merge_ai_process(run_id: str) -> None:
+    """Poll only before writes; never automatically retry a paid call or apply."""
+    from customer.services.merge_ai import CustomerMergeAIService
+
+    if CustomerMergeAIService().process(run_id):
+        merge_ai_process.apply_async(args=[run_id], countdown=3, queue="bulk")
+
+
 @shared_task(name="customer.microtech_customer_upsert")
 def microtech_customer_upsert(
     erp_nr: str = "",

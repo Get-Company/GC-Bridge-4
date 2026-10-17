@@ -1,0 +1,14 @@
+<nav class="flex flex-wrap gap-2" aria-label="Ansicht Kundenmerge">
+  <a href="{% url 'admin:customer_merge' %}"
+     {% if not customer_merge_ai %}aria-current="page"{% endif %}
+     class="inline-flex items-center gap-2 rounded border px-3 py-2 text-sm {% if not customer_merge_ai %}border-primary-600 bg-primary-600 text-white{% else %}border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800{% endif %}">
+    <span class="material-symbols-outlined text-sm" aria-hidden="true">compare_arrows</span>
+    Kunden zusammenführen
+  </a>
+  <a href="{% url 'admin:customer_merge_ai' %}"
+     {% if customer_merge_ai %}aria-current="page"{% endif %}
+     class="inline-flex items-center gap-2 rounded border px-3 py-2 text-sm {% if customer_merge_ai %}border-primary-600 bg-primary-600 text-white{% else %}border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800{% endif %}">
+    <span class="material-symbols-outlined text-sm" aria-hidden="true">auto_awesome</span>
+    Kundenmerge KI
+  </a>
+</nav>

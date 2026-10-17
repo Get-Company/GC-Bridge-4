@@ -5,6 +5,7 @@ import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from django.contrib import admin
+from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.http import JsonResponse
 from django.template.response import TemplateResponse
@@ -57,6 +58,82 @@ def customer_merge_view(request):
         "title": "Kunden Merge",
     }
     return TemplateResponse(request, "admin/customer_merge.html", context)
+
+
+def customer_merge_ai_view(request):
+    """Separate API-backed workspace; the existing merge screen stays available."""
+    if not (
+        request.user.has_perm("customer.view_customer")
+        or request.user.has_perm("customer.change_customer")
+    ):
+        raise PermissionDenied
+    context = {
+        **admin.site.each_context(request),
+        "title": "Kundenmerge KI",
+        "customer_merge_ai": True,
+    }
+    return TemplateResponse(request, "admin/customer_merge_ai.html", context)
+
+
+def customer_merge_ai_api(request):
+    """Create user-owned analysis/review jobs; never accept client-side plans."""
+    from django.urls import reverse
+    from customer.services.merge_ai import CustomerMergeAIService
+
+    if not request.user.has_perm("customer.change_customer"):
+        return JsonResponse({"error": "Keine Berechtigung zur Kundenbearbeitung."}, status=403)
+    if request.method not in {"GET", "POST"}:
+        return JsonResponse({"error": "GET oder POST erforderlich."}, status=405)
+    try:
+        service = CustomerMergeAIService()
+        if request.method == "GET":
+            if request.GET.get("run_id"):
+                return JsonResponse(service.public(service.get(request.GET["run_id"], request.user.pk)))
+            providers = service.providers()
+            return JsonResponse({
+                "providers": [{"id": p.pk, "name": p.name, "model": p.model_name} for p in providers],
+                "provider_admin_url": reverse("admin:ai_aiproviderconfig_changelist")
+                    if request.user.has_perm("ai.change_aiproviderconfig") else "",
+                "can_apply": request.user.has_perm("customer.change_address"),
+                "can_merge": request.user.has_perm("customer.delete_customer"),
+            })
+        if len(request.body) > 16_384:
+            raise ValueError("Die Anfrage ist zu groß.")
+        body = json.loads(request.body)
+        if not isinstance(body, dict):
+            raise ValueError("Ein JSON-Objekt ist erforderlich.")
+        action = body.get("action")
+        if action == "analyze":
+            result = service.start(
+                owner=request.user.pk, numbers=body.get("numbers"), provider_id=body.get("provider_id"),
+                previous_id=body.get("previous_id", ""), objection=body.get("objection", ""),
+            )
+        elif action in {"preview", "execute"}:
+            state = service.get(body.get("run_id"), request.user.pk)
+            index = body.get("index")
+            if type(index) is not int or not 0 <= index < len(state.get("proposals", [])):
+                raise ValueError("Ungültiger Vorschlag.")
+            kinds = {op.get("kind") for op in state["proposals"][index]["operations"]}
+            required = ["customer.change_customer"]
+            if "merge_shopware" in kinds:
+                required.append("customer.delete_customer")
+            if kinds - {"merge_shopware", "link_customer"}:
+                required.append("customer.change_address")
+            if "import_shopware_address" in kinds:
+                required.extend(["customer.add_address", "customer.add_customer"])
+            if not request.user.has_perms(required):
+                return JsonResponse({"error": "Keine Berechtigung für diese Änderungen."}, status=403)
+            result = service.phase(owner=request.user.pk, run_id=state["id"], index=index,
+                                   execute=action == "execute", token=body.get("preview_token", ""))
+        else:
+            raise ValueError("Unbekannte Aktion.")
+        return JsonResponse(result, status=202)
+    except (ValueError, TypeError) as exc:
+        # Validation messages are locally authored. JSON parsing errors need no raw body.
+        message = str(exc) if type(exc) is ValueError else "Die Anfrage ist ungültig."
+        return JsonResponse({"error": message}, status=400)
+    except Exception:
+        return JsonResponse({"error": "Der KI-Auftrag konnte nicht verarbeitet werden. Bitte Warteschlange und Provider prüfen."}, status=503)
 
 
 def customer_merge_resolve_api(request):

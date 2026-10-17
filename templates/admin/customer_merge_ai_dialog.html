@@ -1,0 +1,99 @@
+<style>
+  .customer-ai-dialog { width: min(1440px, calc(100vw - 2rem)); }
+  .customer-ai-layout { display:grid; grid-template-columns:15rem minmax(0,1fr); gap:1.5rem; }
+  .customer-ai-choices { display:flex; flex-direction:column; gap:.6rem; }
+  .customer-ai-choice { text-align:left; padding:.8rem; border:1px solid #cbd5e1; border-radius:.5rem; background:#fff; color:#334155; }
+  .customer-ai-choice[aria-pressed="true"] { border-color:#2563eb; background:#eff6ff; }
+  .customer-ai-choice span { display:block; font-size:.75rem; margin-top:.25rem; }
+  .customer-ai-columns { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:1.5rem; position:relative; margin:1rem 0; }
+  .customer-ai-system { min-width:0; position:relative; z-index:1; }
+  .customer-ai-system h4 { font-size:.8rem; font-weight:600; margin-bottom:.6rem; }
+  .customer-ai-record { padding:.65rem; margin-bottom:.6rem; border:1px solid #e2e8f0; border-radius:.5rem; background:#fff; overflow-wrap:anywhere; font-size:.75rem; }
+  .customer-ai-record[data-affected="true"] { border-color:#2563eb; background:#eff6ff; }
+  .customer-ai-record[data-source="true"] { border-style:dashed; }
+  .customer-ai-record[data-role]:not([data-role=""])::after { content:attr(data-role); display:block; margin-top:.4rem; font-weight:600; color:#1d4ed8; }
+  .customer-ai-record details { margin-top:.4rem; }
+  .customer-ai-fields { margin-top:.4rem; font-size:.7rem; }
+  .customer-ai-fields div { padding:.25rem 0; border-bottom:1px solid #e2e8f0; }
+  .customer-ai-fields dt { color:#64748b; }
+  .customer-ai-fields dd { margin:0; }
+  .customer-ai-step { padding:.65rem 0; border-bottom:1px solid #e2e8f0; font-size:.8rem; }
+  .customer-ai-step h4 { font-weight:600; }
+  .customer-ai-step dl { display:grid; grid-template-columns:1fr 1fr; gap:.75rem; margin-top:.4rem; }
+  .customer-ai-step dt { font-size:.7rem; color:#64748b; }
+  .customer-ai-step dd { overflow-wrap:anywhere; margin:0; }
+  .customer-ai-connectors { position:absolute; inset:0; width:100%; height:100%; overflow:visible; pointer-events:none; z-index:2; }
+  .customer-ai-connectors path { fill:none; stroke:#2563eb; stroke-width:1.5; opacity:.7; }
+  .customer-ai-toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:.7rem; margin:.6rem 0; }
+  .customer-ai-revision { margin-top:1.25rem; padding-top:1rem; border-top:1px solid #e2e8f0; }
+  .customer-ai-revision label { font-size:.8rem; font-weight:600; }
+  .customer-ai-revision textarea { width:100%; margin:.4rem 0 .6rem; padding:.6rem; border:1px solid #cbd5e1; border-radius:.5rem; background:#fff; color:#334155; font-size:.8rem; }
+  .customer-ai-outcome { border:1px solid #cbd5e1; border-radius:.5rem; padding:.8rem; background:#f8fafc; }
+  .customer-ai-outcome section { margin-bottom:.4rem; }
+  .customer-ai-outcome section > div { margin-top:.35rem; }
+  .customer-ai-previous { display:block; font-size:.7rem; color:#64748b; }
+  .dark .customer-ai-outcome { background:#1e293b; border-color:#475569; }
+  .dark .customer-ai-previous { color:#94a3b8; }
+  .customer-ai-message { margin:.65rem 0; font-size:.8rem; }
+  .customer-ai-warning { color:#b45309; }
+  .customer-ai-error { color:#be123c; }
+  .customer-ai-pill { display:inline-block; padding:.15rem .4rem; margin:.2rem .2rem .2rem 0; border-radius:.3rem; background:#f1f5f9; font-size:.7rem; }
+  .dark .customer-ai-choice,.dark .customer-ai-record,.dark .customer-ai-revision textarea { background:#111827; color:#e2e8f0; border-color:#475569; }
+  .dark .customer-ai-choice[aria-pressed="true"],.dark .customer-ai-record[data-affected="true"] { background:#172554; border-color:#60a5fa; }
+  .dark .customer-ai-fields div,.dark .customer-ai-step,.dark .customer-ai-revision { border-color:#334155; }
+  .dark .customer-ai-fields dt,.dark .customer-ai-step dt { color:#94a3b8; }
+  .dark .customer-ai-record[data-role]:not([data-role=""])::after { color:#93c5fd; }
+  .dark .customer-ai-pill { background:#334155; }
+  .dark .customer-ai-warning { color:#fbbf24; }
+  .dark .customer-ai-error { color:#fda4af; }
+  @media(max-width:1000px) { .customer-ai-layout { grid-template-columns:1fr; } .customer-ai-choices { flex-direction:row; flex-wrap:wrap; } .customer-ai-choice { flex:1; min-width:10rem; } }
+  @media(max-width:600px) { .customer-ai-columns { grid-template-columns:1fr; } .customer-ai-connectors { display:none; } .customer-ai-step dl { grid-template-columns:1fr; } }
+</style>
+<dialog id="customer-ai-dialog" class="merge-dialog customer-ai-dialog" aria-labelledby="customer-ai-title" aria-describedby="customer-ai-description">
+  <header class="merge-dialog-header">
+    <div><div class="merge-dialog-eyebrow">SW6 · GC-Bridge · Microtech</div>
+      <h2 id="customer-ai-title" tabindex="-1" autofocus>Kundenmerge KI</h2>
+      <p id="customer-ai-description" class="merge-comparison-note" style="margin:0">Empfehlung prüfen und bestätigen. Alternativen und Einwände sind jederzeit möglich.</p>
+    </div>
+    <button type="button" class="merge-close" data-customer-ai-close aria-label="KI-Assistent schließen">×</button>
+  </header>
+  <div class="merge-dialog-body">
+    <p id="customer-ai-progress" class="customer-ai-message" role="status" aria-live="polite"></p>
+    <div id="customer-ai-error" class="customer-ai-message customer-ai-error" role="alert"></div>
+    <div id="customer-ai-content" hidden>
+      <p id="customer-ai-summary" class="merge-comparison-note"></p>
+      <div class="customer-ai-layout">
+        <aside><h3 class="text-sm font-semibold mb-2">Empfehlung & Alternativen</h3><div id="customer-ai-choices" class="customer-ai-choices"></div>
+          <p class="merge-comparison-note">Hover zeigt einen Vorschlag vorübergehend. Ein Klick hält ihn fest.</p>
+          <details class="mt-3"><summary class="text-xs">Analyse erneut starten</summary><p class="merge-comparison-note">Eine neue Analyse wird erneut über die API abgerechnet.</p><button type="button" id="customer-ai-new" class="merge-button">Neu analysieren</button></details>
+        </aside>
+        <section aria-label="Vorschlag und Auswirkungen">
+          <h3 id="customer-ai-plan-title" class="text-sm font-semibold"></h3>
+          <p id="customer-ai-plan-reason" class="merge-comparison-note"></p>
+          <p id="customer-ai-blocked" class="customer-ai-message customer-ai-warning"></p>
+          <div id="customer-ai-questions" class="customer-ai-message customer-ai-warning"></div>
+          <div id="customer-ai-outcome" class="customer-ai-message"></div>
+          <div class="customer-ai-toolbar"><button type="button" class="merge-button" id="customer-ai-before" aria-pressed="false">Ist-Zustand ansehen</button><span id="customer-ai-preview-label" class="text-xs text-gray-500 dark:text-gray-400"></span><label class="text-xs"><input type="checkbox" id="customer-ai-all"> Alle Datensätze anzeigen</label></div>
+          <div id="customer-ai-diagram" class="customer-ai-columns" aria-label="Adresszuordnungen in den drei Systemen"></div>
+          <div id="customer-ai-steps"></div>
+          <details><summary class="text-sm">Belege und offene Fragen</summary><div id="customer-ai-evidence" class="merge-comparison-note"></div></details>
+        </section>
+      </div>
+      <details class="customer-ai-revision" id="customer-ai-revision"><summary class="text-sm font-semibold">Vorschlag ändern · Einwand ergänzen</summary><section class="mt-3" aria-label="Vorschlag überarbeiten">
+        <label for="customer-ai-objection">Einwand oder zusätzliche Information</label>
+        <textarea id="customer-ai-objection" rows="3" maxlength="4000" placeholder="Zum Beispiel: Diese Anschrift gehört zu einer anderen Niederlassung."></textarea>
+        <button type="button" class="merge-button" id="customer-ai-revise">Mit Einwand überarbeiten</button>
+        <p class="merge-comparison-note">Die Überarbeitung erzeugt eine neue Version und eine weitere kostenpflichtige API-Anfrage.</p>
+      </section></details>
+    </div>
+  </div>
+  <footer class="merge-dialog-footer">
+    <p id="customer-ai-footer">Die Analyse ändert keine Kundendaten. Historische Bestellanschriften bleiben erhalten.</p>
+    <div class="merge-dialog-actions">
+      <button type="button" class="merge-button" data-customer-ai-close>Schließen</button>
+      <button type="button" class="merge-button" id="customer-ai-refresh" hidden>Status prüfen</button>
+      <button type="button" class="merge-button" id="customer-ai-review" disabled>Änderungen prüfen</button>
+      <button type="button" class="merge-button merge-button-danger" id="customer-ai-apply" hidden>Diese Änderungen übernehmen</button>
+    </div>
+  </footer>
+</dialog>
