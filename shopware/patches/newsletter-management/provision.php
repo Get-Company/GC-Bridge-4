@@ -30,7 +30,7 @@ if ($existing === null) {
         'visible' => true, 'description' => 'Newsletter anmelden oder abmelden.',
     ]], $context);
 }
-$repository->update([['id' => $categoryId, 'cmsPageConfig' => [
+$repository->update([['id' => $categoryId, 'slotConfig' => [
     '1407600119d841059b13ec68e23fc7a6' => ['title' => [
         'source' => 'static', 'value' => 'Newsletter anmelden oder abmelden',
     ]],
