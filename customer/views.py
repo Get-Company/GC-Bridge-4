@@ -98,6 +98,7 @@ def customer_merge_ai_api(request):
                     if request.user.has_perm("ai.change_aiproviderconfig") else "",
                 "can_apply": request.user.has_perm("customer.change_address"),
                 "can_merge": request.user.has_perm("customer.delete_customer"),
+                "can_create_merge_target": request.user.has_perms(["customer.add_customer", "customer.add_address"]),
             })
         if len(request.body) > 16_384:
             raise ValueError("Die Anfrage ist zu groß.")
@@ -114,7 +115,8 @@ def customer_merge_ai_api(request):
             if not request.user.has_perm("customer.delete_customer"):
                 return JsonResponse({"error": "Keine Berechtigung zum Kundenmerge."}, status=403)
             result = service.confirm_merge(owner=request.user.pk, search_id=body.get("search_id"),
-                source_ref=body.get("source_ref"), target_ref=body.get("target_ref"))
+                source_ref=body.get("source_ref"), target_ref=body.get("target_ref"),
+                allow_create_target=request.user.has_perms(["customer.add_customer", "customer.add_address"]))
         elif action == "merge_status":
             if not request.user.has_perm("customer.delete_customer"):
                 return JsonResponse({"error": "Keine Berechtigung zur Merge-Statusprüfung."}, status=403)

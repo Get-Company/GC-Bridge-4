@@ -16,6 +16,7 @@ import uuid
 from django.core.cache import caches
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from ai.models import AIProviderConfig
@@ -202,7 +203,7 @@ class CustomerMergeAIService(BaseService):
         run_id = self.cache.get("merge-selection:" + search_id)
         return self.public(self.get(run_id, owner)) if run_id else {"status": "not_submitted"}
 
-    def confirm_merge(self, *, owner, search_id, source_ref, target_ref):
+    def confirm_merge(self, *, owner, search_id, source_ref, target_ref, allow_create_target=False):
         """An explicit pair selection is the consent; never let a model pick it."""
         search = self.get(search_id, owner)
         if search.get("phase") != "search" or search["status"] != "search_ready":
@@ -211,6 +212,8 @@ class CustomerMergeAIService(BaseService):
         if not isinstance(source_ref, str) or not isinstance(target_ref, str) or source_ref == target_ref or source_ref not in accounts or target_ref not in accounts:
             raise ValueError("Bitte unterschiedliche richtige und falsche AdrNr aus dieser Suche auswählen.")
         source, target = accounts[source_ref], accounts[target_ref]
+        if self.merge_target_missing(search["snapshot"], target_ref) and not allow_create_target:
+            raise ValueError("Für die automatische Übernahme des Zielkunden fehlen die Anlegeberechtigungen für Kunden und Adressen.")
         if source["number"] == target["number"]:
             raise ValueError("Die AdrNr sind nicht eindeutig. Bitte manuell prüfen.")
         lock = "merge-select-lock:" + search_id
@@ -449,16 +452,20 @@ class CustomerMergeAIService(BaseService):
                 # Explicit field projection prevents password hashes/custom extension secrets entering the prompt.
                 response = service._request_with_retry("request_post", "/search/customer", payload={
                     "filter": [{"type": "equals", "field": "customerNumber", "value": number}],
-                    "limit": 2, "includes": {"customer": [*ShopwareCustomerMergeService.CUSTOMER_COMPARISON_FIELDS, "updatedAt"]},
+                    "limit": 2, "associations": {"group": {}},
+                    "includes": {"customer": [*ShopwareCustomerMergeService.CUSTOMER_COMPARISON_FIELDS, "updatedAt", "group"],
+                                 "customer_group": ["id", "name", "displayGross"]},
                 })
                 customers = response.get("data", [])
                 if len(customers) > 1:
                     raise ValueError("Mehrere Shopkonten mit derselben Kundennummer. Bitte zuerst manuell prüfen.")
                 availability[number]["sw"] = "found" if customers else "not_found"
                 for row in customers:
-                    customer = _safe_attrs(row)
+                    customer = dict(_safe_attrs(row))
+                    if isinstance(customer.get("group"), dict):
+                        customer["group"] = take(_safe_attrs(customer["group"]), ("id", "name", "displayGross"))
                     cid = row.get("id") or customer.get("id")
-                    parent = add("sw", "customer", cid, number, {**take(customer, [*ShopwareCustomerMergeService.CUSTOMER_COMPARISON_FIELDS, "updatedAt"]), "id": cid})
+                    parent = add("sw", "customer", cid, number, {**take(customer, [*ShopwareCustomerMergeService.CUSTOMER_COMPARISON_FIELDS, "updatedAt", "group"]), "id": cid})
                     addresses = self.sw_collection(service, "/search/customer-address", "customerId", cid,
                                                    "customer_address", (*ShopwareCustomerMergeService.ADDRESS_COMPARISON_FIELDS, "country", "salutation"),
                                                    associations={"country": {}, "salutation": {}})
@@ -713,7 +720,11 @@ class CustomerMergeAIService(BaseService):
         required = {"customer.change_customer"}
         kinds = {op["kind"] for op in state["proposals"][state["selected"]]["operations"]}
         if kinds - {"link_customer", "merge_shopware"}: required.add("customer.change_address")
-        if "merge_shopware" in kinds: required.add("customer.delete_customer")
+        if "merge_shopware" in kinds:
+            required.add("customer.delete_customer")
+            operation = state["proposals"][state["selected"]]["operations"][0]
+            if self.merge_target_missing(state["snapshot"], operation["target"]):
+                required.update({"customer.add_customer", "customer.add_address"})
         if "import_shopware_address" in kinds: required.update({"customer.add_address", "customer.add_customer"})
         if not user.is_active or not user.is_staff or not user.has_perms(required):
             raise ValueError("Die Berechtigung für die Übernahme ist nicht mehr vorhanden.")
@@ -748,16 +759,67 @@ class CustomerMergeAIService(BaseService):
                 raise ValueError("Bitte zuerst das richtige Shopkonto in GC-Bridge zuordnen.")
         if not local_source:
             return
-        if not local_target:
-            raise ValueError("Vor dem Merge muss der Zielkunde in GC-Bridge vorhanden sein.")
         source_addresses = [r["fields"] for r in snapshot["records"] if r["kind"] == "address" and r["parent"] == local_source["ref"]]
-        target_addresses = [r["fields"] for r in snapshot["records"] if r["kind"] == "address" and r["parent"] == local_target["ref"]]
-        target_ids = {(a.get("api_id") or "").lower() for a in target_addresses if a.get("api_id")}
+        target_addresses = [r["fields"] for r in snapshot["records"] if r["kind"] == "address" and r["parent"] == (local_target["ref"] if local_target else target["ref"])]
+        target_ids = {(a.get("api_id") or a.get("id") or "").lower() for a in target_addresses if a.get("api_id") or not local_target}
         target_mt = {(a.get("erp_ans_id"), a.get("erp_asp_id")) for a in target_addresses if a.get("erp_ans_id") is not None}
         if any((a.get("api_id") and a["api_id"].lower() in target_ids) or
                (a.get("erp_ans_id") is not None and (a["erp_ans_id"], a.get("erp_asp_id")) in target_mt)
                for a in source_addresses):
             raise ValueError("Die Adresszuordnungen der GC-Bridge-Kunden überschneiden sich. Bitte zuerst klären.")
+
+    @staticmethod
+    def merge_target_missing(snapshot, target_ref):
+        target = next((r for r in snapshot["records"] if r["ref"] == target_ref), None)
+        return bool(target and not any(r["system"] == "dj" and r["kind"] == "customer" and r["number"] == target["number"] for r in snapshot["records"]))
+
+    @staticmethod
+    def target_addresses(snapshot, target):
+        return [r["fields"] for r in snapshot["records"] if r["system"] == "sw" and r["kind"] == "address" and r["parent"] == target["ref"]]
+
+    @staticmethod
+    def target_address_conflict(addresses):
+        query = Q(pk__in=[])
+        for address in addresses:
+            query |= Q(api_id__iexact=address["id"])
+        return bool(addresses) and Address.objects.filter(query).exists()
+
+    def check_missing_target(self, state, target):
+        """Detect identity conflicts before any remote write, including outside the search."""
+        if not self.merge_target_missing(state["snapshot"], target["ref"]):
+            return
+        if Customer.objects.filter(Q(erp_nr=target["number"]) | Q(api_id__iexact=target["fields"]["id"])).exists():
+            raise ValueError("Das Zielkonto ist inzwischen in GC-Bridge vorhanden oder anders zugeordnet. Bitte erneut suchen und die Zuordnung prüfen.")
+        if self.target_address_conflict(self.target_addresses(state["snapshot"], target)):
+            raise ValueError("Eine Zieladresse ist bereits einem anderen GC-Bridge-Kunden zugeordnet. Bitte die Zuordnung klären.")
+
+    def ensure_merge_target(self, state, source, target):
+        """Called inside the local cleanup transaction only after a verified SW merge."""
+        if not self.merge_target_missing(state["snapshot"], target["ref"]):
+            return
+        candidates = list(Customer.objects.select_for_update().filter(Q(erp_nr=target["number"]) | Q(api_id__iexact=target["fields"]["id"])))
+        if candidates:
+            if len(candidates) == 1 and candidates[0].erp_nr == target["number"] and candidates[0].api_id.lower() == target["fields"]["id"].lower():
+                return  # Status recovery after a previously committed cleanup.
+            raise ValueError("Der Zielkunde ist in GC-Bridge nicht mehr eindeutig. Die Quelldaten bleiben erhalten.")
+        addresses = self.target_addresses(state["snapshot"], target)
+        if self.target_address_conflict(addresses):
+            raise ValueError("Die Zieladressen sind inzwischen anders zugeordnet. Die Quelldaten bleiben erhalten.")
+        fields = copy.deepcopy(target["fields"])
+        if state["merge_expected"]["credentialsCopied"]:
+            fields["email"] = source["fields"].get("email", "")
+        sync = CustomerSyncDirectionService()
+        customer = Customer(erp_nr=target["number"])
+        sync._apply_shopware_customer(customer, fields, shopware_customer_id=fields["id"])
+        customer.save()
+        for data in addresses:
+            address = Address(customer=customer)
+            sync._apply_shopware_address(address, data, customer=customer,
+                default_billing_id=fields.get("defaultBillingAddressId", ""), default_shipping_id=fields.get("defaultShippingAddressId", ""))
+            address.save()
+        from django.contrib.admin.models import ADDITION, LogEntry
+        LogEntry.objects.log_actions(user_id=state["owner"], queryset=Customer.objects.filter(pk=customer.pk),
+            action_flag=ADDITION, change_message=json.dumps({"customer_merge_ai": {"run": state["id"], "created_merge_target": True, "addresses_imported": len(addresses)}}, ensure_ascii=False))
 
     @staticmethod
     def merge_expectation(snapshot, operation):
@@ -790,6 +852,8 @@ class CustomerMergeAIService(BaseService):
         preview = service.preview(**selection)
         if any(preview.get(key) != value for key, value in expected.items()):
             raise ValueError("Die verbindliche Shopware-Prüfung weicht vom angezeigten Vorschlag ab. Bitte erneut suchen.")
+        target = next(r for r in state["snapshot"]["records"] if r["ref"] == operation["target"])
+        self.check_missing_target(state, target)
         state.update(merge_expected=expected, writes_started=True)
         self.save(state)  # Preserve operation ID before any remote write.
         result = service.merge(operation_id=state["merge_operation_id"], preview_token=preview["previewToken"], **selection)
@@ -802,14 +866,17 @@ class CustomerMergeAIService(BaseService):
         refs = {r["ref"]: r for r in state["snapshot"]["records"]}
         operation = state["proposals"][state["selected"]]["operations"][0]
         source, target = refs[operation["source"]], refs[operation["target"]]
-        cleanup = service.cleanup_django_source_after_merge(source_sw_id=expected["sourceId"], target_sw_id=expected["targetId"],
-            source_erp_nr=source["number"], target_erp_nr=target["number"])
-        if cleanup.get("status") not in {"deleted", "already_removed"}:
-            raise ValueError("Shopware hat zusammengeführt. Die lokale Bereinigung muss noch geprüft werden.")
+        with transaction.atomic():
+            self.ensure_merge_target(state, source, target)
+            cleanup = service.cleanup_django_source_after_merge(source_sw_id=expected["sourceId"], target_sw_id=expected["targetId"],
+                source_erp_nr=source["number"], target_erp_nr=target["number"])
+            if cleanup.get("status") not in {"deleted", "already_removed"}:
+                raise ValueError("Shopware hat zusammengeführt. Die lokale Bereinigung muss noch geprüft werden.")
+            if not state.get("completed"):
+                customer = Customer.objects.filter(erp_nr=target["number"]).first()
+                if customer:
+                    self.audit(state, customer, 0)
         if not state.get("completed"):
-            customer = Customer.objects.filter(erp_nr=target["number"]).first()
-            if customer:
-                self.audit(state, customer, 0)
             state["completed"] = [{"index": 0, "label": LABELS["merge_shopware"]}]
         state.update(status="applied", message="Die Kunden wurden zusammengeführt.")
         self.save(state)
@@ -825,7 +892,11 @@ class CustomerMergeAIService(BaseService):
     def recover_merge_result(self, state):
         from django.contrib.auth import get_user_model
         user = get_user_model().objects.get(pk=state["owner"])
-        if not user.is_active or not user.is_staff or not user.has_perms({"customer.change_customer", "customer.delete_customer"}):
+        required = {"customer.change_customer", "customer.delete_customer"}
+        operation = state["proposals"][state["selected"]]["operations"][0]
+        if self.merge_target_missing(state["snapshot"], operation["target"]):
+            required.update({"customer.add_customer", "customer.add_address"})
+        if not user.is_active or not user.is_staff or not user.has_perms(required):
             raise ValueError("Die Berechtigung für die Statusprüfung ist nicht mehr vorhanden.")
         service = ShopwareCustomerMergeService()
         result = service.status(operation_id=state["merge_operation_id"])

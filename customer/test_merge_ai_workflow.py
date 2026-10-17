@@ -15,9 +15,9 @@ ROOT=Path(__file__).resolve().parents[1]
 
 @skipUnless(shutil.which('node'),'Node is needed for controller checks')
 class MergeFirstControllerTests(SimpleTestCase):
-    def run_js(self,assertions):
+    def run_js(self,assertions,deny_target_creation=False):
         harness=r'''
-const assert=require('node:assert/strict');
+const assert=require('node:assert/strict');const denyTargetCreation=DENY_TARGET;
 const elements=new Map(),timers=[],requests=[],searches=[],rendered=[];
 const element=id=>{
  if(!elements.has(id))elements.set(id,{value:'',innerHTML:'',textContent:'',hidden:false,disabled:false,open:false,dataset:{apiUrl:'/ai'},lastChild:{textContent:''},
@@ -55,7 +55,7 @@ let fetch=async(url,options)=>{
  if(body)throw Error('Unexpected POST '+body.action);
  if(url.includes('merge_search_id='))return response(statusUnsubmitted?{status:'not_submitted'}:lastMerge);
  if(url.includes('run_id='))return response(results.get(decodeURIComponent(url.split('run_id=')[1])));
- return response({providers:[{id:3,name:'Test',model:'Test'}],can_apply:true,can_merge:true});
+ return response({providers:[{id:3,name:'Test',model:'Test'}],can_apply:true,can_merge:true,can_create_merge_target:!denyTargetCreation});
 };
 CONTROLLER
 const flush=()=>new Promise(resolve=>setImmediate(resolve));
@@ -64,7 +64,7 @@ const choose=async(id,value)=>{ui(id).value=value;await ui(id).listeners.change?
 const tick=async()=>{assert.ok(timers.length,'expected polling');await timers.shift()();await flush();};
 const source='sw:customer:'+'4'.repeat(32),target='sw:customer:'+'a'.repeat(32);
 (async()=>{await flush();ASSERTIONS})().catch(error=>{console.error(error);process.exitCode=1;});
-'''.replace('SNAPSHOT',json.dumps(multiple_snapshot(3))).replace('PLAN',json.dumps({**plan(),'changes':[],'blocked':''})).replace('CONTROLLER',(ROOT/'customer/static/customer/js/merge_ai.js').read_text()).replace('ASSERTIONS',assertions)
+'''.replace('DENY_TARGET',str(deny_target_creation).lower()).replace('SNAPSHOT',json.dumps(multiple_snapshot(3))).replace('PLAN',json.dumps({**plan(),'changes':[],'blocked':''})).replace('CONTROLLER',(ROOT/'customer/static/customer/js/merge_ai.js').read_text()).replace('ASSERTIONS',assertions)
         result=subprocess.run([shutil.which('node'),'-e',harness],capture_output=True,text=True,timeout=10)
         self.assertEqual(result.returncode,0,result.stdout+result.stderr)
 
@@ -132,4 +132,19 @@ assert.ok(ui('error').textContent.includes('erneut bestätigen'));
         self.run_js(r'''
 await click('start');await click('merge-skip');assert.equal(mergeCount,0);assert.equal(analysisCount,1);
 assert.equal(requests.find(r=>r.body?.action==='analyze').body.separate_accounts,true);
+''')
+
+    def test_missing_target_is_marked_and_requires_creation_permission(self):
+        self.run_js(r'''
+await click('start');await choose('merge-keep',source);await choose('merge-source',target);
+assert.ok(ui('merge-direction').innerHTML.includes('GC-Bridge · wird angelegt'));
+assert.equal(ui('apply').disabled,true);assert.ok(ui('merge-warning').textContent.includes('Keine Berechtigung'));
+await click('apply');assert.equal(mergeCount,0);
+''',deny_target_creation=True)
+
+    def test_missing_target_can_be_confirmed_with_creation_permission(self):
+        self.run_js(r'''
+await click('start');await choose('merge-keep',source);await choose('merge-source',target);
+assert.ok(ui('merge-direction').innerHTML.includes('GC-Bridge · wird angelegt'));
+assert.equal(ui('apply').disabled,false);await click('apply');assert.equal(mergeCount,1);
 ''')

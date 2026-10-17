@@ -18,7 +18,7 @@ class MergeAIActivityTest(SimpleTestCase):
 const assert=require('node:assert/strict');
 const elements=new Map();
 const $=id=>{if(!elements.has(id))elements.set(id,{hidden:false,dataset:{}});return elements.get(id);};
-let busy=true,connectionLost=false,run=null,selected=0,before=false,mergeGate=null,continuationFailed=false;const canAccept=()=>false;
+let busy=true,connectionLost=false,run=null,selected=0,before=false,mergeGate=null,continuationFailed=false,canCreateMergeTarget=false;const needsTargetCreation=()=>false;const canAccept=()=>false;
 ACTIVITY
 renderActivity();
 assert.equal($('spinner').hidden,false);

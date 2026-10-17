@@ -26,6 +26,14 @@ hierfür nicht erforderlich. Der Merge wird vor der Ausführung frisch geprüft 
 keinen zweiten Vorgang. Bei mehreren falschen Konten erfolgt die Auswahl
 nacheinander; die bereits bestätigte richtige AdrNr bleibt vorausgewählt.
 
+Fehlt die richtige AdrNr bisher in GC-Bridge, wird dies in der Auswahl als
+**GC-Bridge · wird angelegt** angezeigt. Nach der bestätigten Shopware-
+Zusammenführung wird der Zielkunde mit seinen geprüften Shopadressen automatisch
+übernommen. Anlage und lokale Zusammenführung bilden eine gemeinsame Transaktion;
+vorhandene Quelldaten werden erst dabei zugeordnet. Bereits belegte IDs oder
+widersprüchliche Zuordnungen verhindern weiterhin den Merge. Für die automatische
+Anlage sind zusätzlich die Rechte zum Anlegen von Kunden und Adressen erforderlich.
+
 Nach einem bestätigten Merge lädt die Ansicht die verbliebenen Kunden neu und
 startet automatisch die KI-Analyse ihrer Adresszuordnungen. Bei weiteren
 Shopkonten kommt zuerst wieder die AdrNr-Auswahl. Gehören die Konten nicht

@@ -8,7 +8,7 @@
   const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   let run=null, selected=0, before=false, busy=false, connectionLost=false;
   let mergeGate=null,continuing=false,continuationFailed=false;
-  let canApply=false, canMerge=false, providerReady=false, providerMessage='KI-Zugang wird geprüft…';
+  let canApply=false, canMerge=false, canCreateMergeTarget=false, providerReady=false, providerMessage='KI-Zugang wird geprüft…';
   let pollTimer=null,generation=0,versions=[];
   const numbers=()=>[...new Set(searchErps.map(String))].sort();
   const searchId=()=>searchProgress?.cacheId||'';
@@ -36,6 +36,10 @@
     else if(!busy)$('status').textContent='Suchdaten geladen · KI-Analyse über API';
     if(swMergePending)document.getElementById('customer-ai-manual').open=true;
   }
+  function needsTargetCreation() {
+    const target=accounts(mergeGate?.snapshot).find(r=>r.ref===mergeGate?.target);
+    return !!target&&!mergeGate.snapshot.records.some(r=>r.system==='dj'&&r.kind==='customer'&&r.number===target.number);
+  }
   function renderActivity() {
     const working=!connectionLost&&(busy||['loading','applying'].includes(run?.status));
     $('activity').dataset.working=String(working);
@@ -45,7 +49,7 @@
     $('retry').textContent=continuationFailed?'Daten neu laden':run?.phase==='execute'?'Suche aktualisieren':'Erneut analysieren';
     $('apply').textContent=mergeGate?'Merge bestätigen':'Vorschlag akzeptieren';
     $('apply').hidden=busy||working||connectionLost||(mergeGate?!!run:!['ready','preview_ready'].includes(run?.status));
-    $('apply').disabled=mergeGate?!canMerge||!mergeGate.source||!mergeGate.target||mergeGate.source===mergeGate.target:before||!canAccept(run?.proposals?.[selected]);
+    $('apply').disabled=mergeGate?!canMerge||(needsTargetCreation()&&!canCreateMergeTarget)||!mergeGate.source||!mergeGate.target||mergeGate.source===mergeGate.target:before||!canAccept(run?.proposals?.[selected]);
   }
   function setBusy(value) {
     busy=value;$('provider').disabled=value||!providerReady;
@@ -82,9 +86,9 @@
     $('merge-source').innerHTML='<option value="">Falsche AdrNr auswählen…</option>'+list.filter(r=>r.ref!==mergeGate.target).map(option).join('');
     $('merge-keep').value=mergeGate.target;$('merge-source').value=mergeGate.source;
     for(const id of ['merge-keep','merge-source','merge-skip'])$(id).disabled=busy||!!run;
-    const card=(ref,label,kind)=>{const account=list.find(r=>r.ref===ref);return `<div class="customer-ai-account ${kind}"><span>${label}</span><strong>${account?escape(account.number):'—'}</strong>${account?`<span>${escape(account.fields.email||'')}</span>`:''}</div>`;};
+    const card=(ref,label,kind)=>{const account=list.find(r=>r.ref===ref);return `<div class="customer-ai-account ${kind}"><span>${label}</span><strong>${account?escape(account.number):'—'}</strong>${account?`<span>${escape(account.fields.email||'')}</span>`:''}${kind==='customer-ai-account-target'&&needsTargetCreation()?'<span>GC-Bridge · wird angelegt</span>':''}</div>`;};
     $('merge-direction').innerHTML=card(mergeGate.source,'Falsche AdrNr','customer-ai-account-source')+'<span class="customer-ai-arrow" aria-hidden="true">→</span>'+card(mergeGate.target,'Richtige AdrNr · bleibt','customer-ai-account-target');
-    $('merge-warning').textContent=canMerge?'':'Keine Berechtigung zum Kundenmerge.';
+    $('merge-warning').textContent=!canMerge?'Keine Berechtigung zum Kundenmerge.':needsTargetCreation()&&!canCreateMergeTarget?'Keine Berechtigung zur Übernahme des Zielkunden in GC-Bridge.':'';
     $('plan-title').textContent='Ist-Zustand';$('mode').textContent=`${list.length} Konten`;$('blocked').textContent='';
     comparison(mergeGate.snapshot);
     $('footer').textContent=list.length>2?'Weitere Konten werden danach zugeordnet.':'Richtige AdrNr bleibt · falsches Shopkonto wird zusammengeführt';
@@ -95,7 +99,7 @@
   }
   async function config() {
     try {
-      const data=await request();canApply=data.can_apply;canMerge=data.can_merge;
+      const data=await request();canApply=data.can_apply;canMerge=data.can_merge;canCreateMergeTarget=!!data.can_create_merge_target;
       $('provider').replaceChildren();
       for(const provider of data.providers){const option=document.createElement('option');option.value=provider.id;option.textContent=`${provider.name} · ${provider.model}`;$('provider').append(option);}
       providerReady=data.providers.length>0;
@@ -130,7 +134,7 @@
     }catch(e){setBusy(false);progress('Die Analyse konnte nicht gestartet werden.');error(e.message);return false;}
   }
   async function confirmMerge() {
-    if(busy||!mergeGate||!canMerge||!mergeGate.source||!mergeGate.target||mergeGate.source===mergeGate.target)return;
+    if(busy||!mergeGate||!canMerge||(needsTargetCreation()&&!canCreateMergeTarget)||!mergeGate.source||!mergeGate.target||mergeGate.source===mergeGate.target)return;
     error('');setBusy(true);renderGate();progress('Die bestätigten AdrNr werden vor dem Merge geprüft…');
     try {
       run=await request({action:'merge',search_id:mergeGate.search_id,source_ref:mergeGate.source,target_ref:mergeGate.target});
