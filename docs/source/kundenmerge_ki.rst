@@ -7,7 +7,7 @@ als abgeschlossen meldet. Microtech kann über GraphQL länger benötigen. Die A
 unterscheidet gefundene Kunden, keine Treffer und Fehler. **Konten prüfen** beziehungsweise **KI-Vorschlag anzeigen**
 wird erst bei vollständig abgeschlossener Suche mit Treffern verfügbar. Bei einem
 Fehler starten Sie die Suche erneut. Die bisherige Ansicht **Kunden zusammenführen**
-bleibt über den Umschalter verfügbar.
+bleibt über das Admin-Menü verfügbar.
 
 Während der Analyse zeigt das Modal einen Spinner und den aktuellen Arbeitsschritt.
 Das Ergebnis erscheint automatisch; **Status prüfen** ist nur bei einer
