@@ -214,3 +214,18 @@ await flush();assert.equal(ui('merge-hint').hidden,false);
 assert.equal(element('sw-merge-section').classList['customer-ai-merge-needed'],true);
 assert.equal(mergeCount,0);assert.equal(analysisCount,0);
 """)
+
+    def test_older_cached_alternatives_are_not_offered_and_correct_token_is_used(self):
+        from customer.test_merge_ai import snapshot
+        self.run_js(r"""
+await flush();searchErps=['12196'];ui('start').listeners.click();await flush();
+const saved=results.get('analysis1'),valid=saved.proposals[0];
+saved.proposals=[{...valid,title:'Kundenzuordnung bestätigen',blocked:'Ungültige Zuordnung'},valid,{...valid,title:'Bestehende Adressen zuordnen'}];
+saved.approval_tokens=['wrong','approved','unused'];
+await tick();
+assert.equal(ui('start').hidden,true);assert.equal(ui('inline-choices').innerHTML,'');
+assert.deepEqual(rendered.at(-1).plan,valid);assert.equal(rendered.at(-1).before,false);
+ui('inline-apply').listeners.click();await flush();
+const confirm=requests.find(r=>r.body?.action==='execute').body;
+assert.equal(confirm.index,1);assert.equal(confirm.preview_token,'approved');assert.equal(executeCount,1);
+""",initial_snapshot=snapshot(),mapping_mode=True)

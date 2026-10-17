@@ -30,6 +30,7 @@
     const search=customerAISearchReadiness(),size=numbers().length,multiple=hasMultipleAccounts();
     $('start').lastChild.textContent=sameSearch()?'Vorschlag öffnen':multiple?'Konten prüfen':'KI-Vorschlag anzeigen';
     $('start').disabled=!search.ready||!searchId()||!size||size>8||(!multiple&&!providerReady)||(busy&&!sameSearch());
+    $('start').hidden=sameSearch()&&!!run?.mapping_only&&['ready','preview_ready'].includes(run.status);
     $('retry').disabled=busy;
     if(!search.ready)$('status').textContent=search.message;
     else if(size>8)$('status').textContent='Bitte die Suche auf höchstens acht Kunden eingrenzen.';
@@ -225,11 +226,13 @@
     renderActivity();
   }
   function renderInline() {
-    const plan=run?.proposals?.[selected];if(!plan)return;
+    if(!run?.proposals?.length)return;
     $('inline').hidden=false;
-    $('inline-choices').innerHTML='<button type="button" class="merge-button" data-inline-before aria-pressed="'+before+'">Ist-Zustand</button>'+run.proposals.map((p,index)=>`<button type="button" class="merge-button" data-inline-plan="${index}" aria-pressed="${!before&&selected===index}">${escape(index===0?'KI-Empfehlung':p.title)}</button>`).join('');
-    $('inline-choices').querySelector('[data-inline-before]').addEventListener('click',()=>{before=true;renderInline();});
-    for(const button of $('inline-choices').querySelectorAll('[data-inline-plan]'))button.addEventListener('click',()=>{selected=Number(button.dataset.inlinePlan);before=false;renderInline();});
+    // Cached runs from earlier versions can still contain several plans.
+    // Display the first valid recommendation, never an alternative chooser.
+    const preferred=run.proposals.findIndex(p=>!p.blocked&&!p.questions.length&&p.operations.length);
+    selected=preferred<0?0:preferred;before=false;
+    const plan=run.proposals[selected];
     $('inline-apply').hidden=before;
     $('inline-apply').disabled=busy||!canAccept(plan);
     $('inline-blocked').textContent=plan.blocked||plan.questions.join(' ')||(!plan.operations.length?'Zuordnungen stimmen bereits überein.':before?'':'Orange = vorgeschlagene ID · noch nicht gespeichert');

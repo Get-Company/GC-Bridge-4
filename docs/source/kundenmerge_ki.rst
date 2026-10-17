@@ -48,8 +48,8 @@ markieren ein orangefarbener Hinweis und ein Pfeil den Merge-Bereich.
 
 Nach der Analyse erscheinen Empfehlungen direkt in dieser Ansicht. Orange Pfeile
 verbinden die konkreten SW6-Adress-IDs beziehungsweise Microtech-Kennungen mit den
-vorgefüllten Feldern in der Mitte. **Ist-Zustand** zeigt die gespeicherten Werte,
-**KI-Empfehlung** den Entwurf. Vorgeschlagene Standardrollen stehen an der
+vorgefüllten Feldern in der Mitte. Es gibt genau eine Empfehlung. Die bisherigen Kennungen stehen direkt
+unter den vorgeschlagenen Werten; zusätzliche Auswahlbuttons entfallen. Vorgeschlagene Standardrollen stehen an der
 jeweiligen Microtech-Adresse. Im Entwurf sind einzelne manuelle Speicher- und
 Löschaktionen ausgeblendet; **Vorschlag übernehmen** bestätigt den gesamten Plan.
 

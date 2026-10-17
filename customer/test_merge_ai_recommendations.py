@@ -68,6 +68,7 @@ class AddressRecommendationTests(SimpleTestCase):
         schema=self.service.response_schema(self.snap,mapping_only=True)
         kinds=schema['properties']['proposals']['items']['properties']['operations']['items']['properties']['kind']['enum']
         self.assertEqual(set(kinds),set(MAPPING_KINDS))
+        self.assertEqual(schema['properties']['proposals']['maxItems'],1)
         for kind in ('import_shopware_address','export_django_address','consolidate_addresses','merge_shopware'):
             with self.subTest(kind=kind),self.assertRaisesRegex(ValueError,'nur Zuordnungen'):
                 self.service.compile_plan(plan([operation(kind,'dj:address:3','dj:address:4')]),self.snap,mapping_only=True)
@@ -82,6 +83,8 @@ class AddressRecommendationTests(SimpleTestCase):
         self.service.process(value['id']);result=self.service.get(value['id'])
         self.assertEqual(result['status'],'ready');self.assertEqual(result['proposals'][0]['blocked'],'')
         self.assertTrue(result['proposals'][0]['operations']);self.assertTrue(result['approval_tokens'])
+        self.assertEqual(len(result['proposals']),1)
+        self.assertEqual(len(result['approval_tokens']),1)
         self.assertTrue(self.service.public(result)['mapping_only'])
         fresh.assert_not_called();mt.assert_not_called()
         self.assertIn('SW6 ist maßgeblich',model.call_args.kwargs['instructions'])
