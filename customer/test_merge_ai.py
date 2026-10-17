@@ -303,3 +303,43 @@ class MergeAIViewTests(SimpleTestCase):
         response=customer_merge_ai_api(r)
         self.assertEqual(response.status_code,400)
         service.return_value.get.assert_called_once_with('c'*32,5)
+
+
+class MergeAIEvidenceSchemaTests(SimpleTestCase):
+    def test_schema_accepts_exact_evidence_but_rejects_aliases_and_wrong_records(self):
+        from jsonschema import Draft202012Validator
+        snap = snapshot()
+        schema = CustomerMergeAIService.response_schema(snap)
+        validator = Draft202012Validator(schema)
+        good = {'summary': 'Zuordnen', 'proposals': [plan()]}
+        self.assertEqual(list(validator.iter_errors(good)), [])
+        for ref, field in [
+            (f'sw:address:{SWA}', 'fields.street'),
+            (f'sw:address:{SWA}', 'Straße'),
+            ('dj:customer:1', 'street'),
+            ('dj:address:2', 'firstName'),
+            ('sw:address:invented', 'street'),
+        ]:
+            bad = copy.deepcopy(good)
+            bad['proposals'][0]['evidence'][0].update(ref=ref, field=field)
+            self.assertTrue(list(validator.iter_errors(bad)), (ref, field))
+        self.assertEqual(SCHEMA['properties']['proposals']['items']['properties']['evidence']['items']['properties']['field'], {'type': 'string'})
+
+    def test_large_snapshot_stays_within_enum_limits_and_matches_exact_refs(self):
+        from jsonschema import Draft202012Validator
+        snap = {'records': [dict(ref=f'sw:order:{i:032x}', fields={'id': f'{i:032x}', 'orderNumber': str(i)}) for i in range(1000)]}
+        schema = CustomerMergeAIService.response_schema(snap)
+        branches = schema['properties']['proposals']['items']['properties']['evidence']['items']['anyOf']
+        self.assertEqual(len(branches), 1)
+        self.assertIn('pattern', branches[0]['properties']['ref'])
+        evidence_validator = Draft202012Validator({'anyOf': branches})
+        self.assertEqual(list(evidence_validator.iter_errors({'ref': snap['records'][-1]['ref'], 'field': 'orderNumber', 'finding': 'Bestellung vorhanden'})), [])
+        self.assertTrue(list(evidence_validator.iter_errors({'ref': 'sw:order:invented', 'field': 'orderNumber', 'finding': 'Falsch'})))
+
+    def test_records_with_same_fields_share_one_schema_branch(self):
+        snap = snapshot()
+        extra = copy.deepcopy(snap['records'][1]);extra['ref'] = 'sw:address:' + 'f'*32
+        snap['records'].append(extra)
+        branches = CustomerMergeAIService.response_schema(snap)['properties']['proposals']['items']['properties']['evidence']['items']['anyOf']
+        group = next(b for b in branches if f'sw:address:{SWA}' in b['properties']['ref'].get('enum', []))
+        self.assertIn(extra['ref'], group['properties']['ref']['enum'])

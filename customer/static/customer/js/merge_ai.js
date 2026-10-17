@@ -11,7 +11,7 @@
   const captions = {sw:'SW6', dj:'GC-Bridge', mt:'Microtech'};
   const labels = {api_id:'SW6-ID',erp_ans_nr:'Microtech AnsNr',erp_asp_nr:'Microtech AnspNr',erp_ans_id:'Microtech Anschrift-ID',erp_asp_id:'Microtech Ansprechpartner-ID',erp_combined_id:'Microtech Kombi-ID',id:'ID',customerNumber:'Kundennummer',erp_nr:'AdrNr',street:'Straße',zipcode:'PLZ',zipCode:'PLZ',postal_code:'PLZ',city:'Ort',company:'Firma',name:'Name',name1:'Name 1',name2:'Name 2',name3:'Name 3',email:'E-Mail',is_invoice:'Rechnungsadresse',is_shipping:'Lieferadresse',defaultBillingAddressId:'Rechnungsadresse SW6-ID',defaultShippingAddressId:'Lieferadresse SW6-ID',addressSubNumber:'AnsNr',contactNumber:'AnspNr'};
   let run = null, selected = 0, hovering = null, before = false, busy = false;
-  let canApply = false, canMerge = false, pollTimer = null, generation = 0;
+  let canApply = false, canMerge = false, pollTimer = null, generation = 0, connectionLost = false;
   let versions = [], retainedId = '', autoReviewKey = '', providerMessage = 'KI-Zugang wird geprüft…', providerReady = false;
   try { retainedId = sessionStorage.getItem('gc-customer-ai-run') || ''; } catch (_) { /* Optional recovery pointer only. */ }
 
@@ -34,16 +34,33 @@
     $('start').lastChild.textContent = run && JSON.stringify(run.numbers) === JSON.stringify(numbers()) ? 'Vorschlag öffnen' : 'KI-Vorschlag anzeigen';
     if (swMergePending) document.getElementById('customer-ai-manual').open = true;
     $('start').disabled = !search.ready || !size || size > 8 || !providerReady || !$('provider').value || busy;
+    $('retry').disabled = $('start').disabled;
     if (!search.ready) $('status').textContent = search.message;
     else if (size > 8) $('status').textContent = 'Bitte die Suche auf höchstens acht Kunden eingrenzen, damit alle Daten vollständig analysiert werden.';
     else if (!providerReady || !$('provider').value) $('status').textContent = providerMessage;
     else if (!busy) $('status').textContent = search.message + ' Die Analyse wird über die API abgerechnet.';
+  }
+  function renderActivity() {
+    const working = !connectionLost && (busy || ['loading','applying'].includes(run?.status));
+    $('activity').dataset.working = String(working);
+    $('spinner').hidden = !working;
+    $('wait-hint').hidden = !working;
+    const merge = run?.proposals?.[selected]?.operations[0]?.kind === 'merge_shopware';
+    const prepared = run?.status === 'preview_ready' && run.selected === selected;
+    $('refresh').hidden = working || (!connectionLost && run?.status !== 'needs_review');
+    $('retry').hidden = run?.status !== 'failed' || working || connectionLost;
+    $('review').hidden = busy || working || connectionLost || !['ready','preview_ready'].includes(run?.status) || (!merge && prepared);
+    $('apply').hidden = busy || working || connectionLost || !prepared || merge;
+  }
+  function progressMessage(message) {
+    if ($('progress').textContent !== message) $('progress').textContent = message;
   }
   function setBusy(value) {
     busy = value;
     $('provider').disabled = value || !$('provider').options.length;
     ['new','revise'].forEach(id => { $(id).disabled = value; });
     updateStart();
+    renderActivity();
   }
   async function config() {
     try {
@@ -84,7 +101,7 @@
     if (revise && !objection) { error('Bitte zuerst einen Einwand formulieren.'); return; }
     const body = {action:'analyze', numbers:numbers(), provider_id:Number($('provider').value)};
     if (revise && run) Object.assign(body, {previous_id:run.id, objection});
-    error(''); open(); setBusy(true); $('progress').textContent = 'Analyse wird gestartet…';
+    connectionLost = false; error(''); open(); setBusy(true); progressMessage('Analyse wird gestartet…');
     try {
       const previous = run;
       const result = await request(body);
@@ -94,7 +111,7 @@
       $('objection').value = ''; $('revision').open = false;
       if (!revise) versions = [];
       remember(); render(); schedulePoll();
-    } catch (e) { setBusy(false); error(e.message); }
+    } catch (e) { setBusy(false); progressMessage('Die Analyse konnte nicht gestartet werden.'); error(e.message); }
   }
   function schedulePoll() {
     clearTimeout(pollTimer);
@@ -106,15 +123,20 @@
     try {
       const result = await request(null, run.id);
       if (seq !== generation) return;
-      run = result;
+      run = result; connectionLost = false;
       render();
       if (['loading','applying'].includes(run.status)) pollTimer = setTimeout(() => poll(seq), 1800);
       else { setBusy(false); render(); remember(); }
     } catch (e) {
       // Never turn a status timeout into another paid request or another write.
-      error(e.message + ' Es wird nichts automatisch erneut gesendet.');
-      $('refresh').hidden = false; setBusy(true);
+      recoverStatus(e);
     }
+  }
+  function recoverStatus(errorValue) {
+    connectionLost = true;
+    error(errorValue.message + ' Bitte den Status prüfen. Es wird nichts automatisch erneut gesendet.');
+    progressMessage('Der aktuelle Status ist nicht erreichbar.');
+    setBusy(true);
   }
   function currentPlan() { return run?.proposals?.[hovering ?? selected]; }
   function canReview(plan) {
@@ -124,17 +146,16 @@
   }
   function render() {
     if (!run) return;
-    $('progress').textContent = `${run.message} ${run.version ? '· Version ' + run.version : ''}`;
+    progressMessage(`${run.message}${run.version ? ' · Version ' + run.version : ''}`);
     $('status').textContent = run.message;
     $('content').hidden = !run.proposals;
-    $('refresh').hidden = !['loading','applying','needs_review'].includes(run.status);
     $('review').disabled = busy || !['ready','preview_ready'].includes(run.status) || !canReview(run.proposals?.[selected]);
     $('apply').hidden = run.status !== 'preview_ready' || run.selected !== selected || run.proposals?.[selected]?.operations[0]?.kind === 'merge_shopware';
     if (['failed','needs_review'].includes(run.status)) {
       error(run.message + (run.status === 'needs_review' ? ' Bereits bestätigte Einzelschritte können wirksam sein. Bitte die drei Systeme kontrollieren; den Auftrag nicht erneut ausführen.' : ''));
     }
     if (run.completed?.length) $('footer').textContent = `${run.completed.length} Schritt(e) bestätigt. ${run.current_step ? 'Zuletzt bearbeitet: ' + run.current_step.label + '.' : ''} Bitte den aktuellen Datenstand prüfen.`;
-    else $('footer').textContent = run.status === 'preview_ready' && run.selected === selected ? 'Die Vorschau wurde mit frischen Daten geprüft. Mit der Übernahme werden die aufgeführten Änderungen ausgeführt.' : 'Die Analyse ändert keine Kundendaten. Historische Bestellanschriften bleiben erhalten.';
+    else $('footer').textContent = run.status === 'failed' ? 'Die Analyse wurde nicht abgeschlossen. Erneut analysieren startet eine neue kostenpflichtige API-Anfrage.' : run.status === 'preview_ready' && run.selected === selected ? 'Die Vorschau wurde mit frischen Daten geprüft. Mit der Übernahme werden die aufgeführten Änderungen ausgeführt.' : 'Die Analyse ändert keine Kundendaten. Historische Bestellanschriften bleiben erhalten.';
     if (!run.proposals) return;
     $('summary').textContent = run.summary;
     $('revise').disabled = busy || !['ready','preview_ready'].includes(run.status);
@@ -276,19 +297,19 @@
   }
   async function review() {
     if (busy || !run || !canReview(run.proposals[selected])) return;
-    error(''); setBusy(true);
+    error(''); setBusy(true); progressMessage('Aktuelle Daten werden geprüft…');
     try {
       run=await request({action:'preview',run_id:run.id,index:selected});
       remember(); render(); schedulePoll();
-    } catch(e) { setBusy(false); error(e.message); }
+    } catch(e) { recoverStatus(e); }
   }
   async function apply() {
     if (busy || run?.status!=='preview_ready' || run.selected!==selected) return;
-    error(''); setBusy(true);
+    error(''); setBusy(true); progressMessage('Die Übernahme wird vorbereitet…');
     try {
       run=await request({action:'execute',run_id:run.id,index:selected,preview_token:run.preview_token});
       remember(); render(); schedulePoll();
-    } catch(e) { setBusy(false); error(e.message); }
+    } catch(e) { recoverStatus(e); }
   }
   async function handOffMerge() {
     if (busy || !['ready','preview_ready'].includes(run?.status) || !canReview(run.proposals[selected])) return;
@@ -310,12 +331,13 @@
     originalRender();
     const merge=run?.proposals?.[selected]?.operations[0]?.kind==='merge_shopware';
     const prepared=run?.status==='preview_ready' && run.selected===selected;
-    $('review').hidden = !merge && prepared;
     $('review').textContent=merge?'Zusammenführung prüfen':'Daten erneut prüfen';
     if (merge && ['ready','preview_ready'].includes(run.status) && canReview(run.proposals[selected])) $('review').disabled=busy;
+    renderActivity();
   };
   $('start').addEventListener('click',()=>{ if ($('start').disabled) return; if (run && JSON.stringify(run.numbers)===JSON.stringify(numbers())) { open(); render(); } else void start(); });
   $('new').addEventListener('click',()=>void start());
+  $('retry').addEventListener('click',()=>void start());
   $('revise').addEventListener('click',()=>void start(true));
   $('provider').addEventListener('change',()=>{ updateStart(); });
   $('review').addEventListener('click',()=>{
@@ -325,7 +347,7 @@
   $('apply').addEventListener('click',()=>void apply());
   $('all').addEventListener('change',renderPlan);
   $('before').addEventListener('click',()=>{before=!before;renderPlan();});
-  $('refresh').addEventListener('click',()=>{if(run){error('');void poll(++generation);}});
+  $('refresh').addEventListener('click',()=>{if(run){connectionLost=false;error('');setBusy(true);progressMessage('Der aktuelle Status wird geladen…');void poll(++generation);}});
   modal.querySelectorAll('[data-customer-ai-close]').forEach(b=>b.addEventListener('click',()=>modal.close()));
   modal.addEventListener('close',()=>{
     if (run?.status==='applied') {

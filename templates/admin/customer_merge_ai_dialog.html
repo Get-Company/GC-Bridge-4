@@ -34,6 +34,16 @@
   .customer-ai-previous { display:block; font-size:.7rem; color:#64748b; }
   .dark .customer-ai-outcome { background:#1e293b; border-color:#475569; }
   .dark .customer-ai-previous { color:#94a3b8; }
+  .customer-ai-activity { display:flex; align-items:center; gap:.85rem; margin:.65rem 0; }
+  .customer-ai-activity[data-working="true"] { padding:1rem; border:1px solid #cbd5e1; border-radius:.5rem; background:#f8fafc; }
+  .customer-ai-spinner { width:1.4rem; height:1.4rem; flex-shrink:0; border:3px solid #cbd5e1; border-top-color:#2563eb; border-radius:50%; animation:customer-ai-spin .9s linear infinite; }
+  .customer-ai-spinner[hidden] { display:none; }
+  .customer-ai-activity p { margin:0; }
+  .customer-ai-activity .customer-ai-hint { margin-top:.3rem; font-size:.75rem; color:#64748b; }
+  .dark .customer-ai-activity[data-working="true"] { background:#1e293b; border-color:#475569; }
+  .dark .customer-ai-activity .customer-ai-hint { color:#94a3b8; }
+  @keyframes customer-ai-spin { to { transform:rotate(360deg); } }
+  @media(prefers-reduced-motion:reduce) { .customer-ai-spinner { animation:none; } }
   .customer-ai-message { margin:.65rem 0; font-size:.8rem; }
   .customer-ai-warning { color:#b45309; }
   .customer-ai-error { color:#be123c; }
@@ -58,7 +68,11 @@
     <button type="button" class="merge-close" data-customer-ai-close aria-label="KI-Assistent schließen">×</button>
   </header>
   <div class="merge-dialog-body">
-    <p id="customer-ai-progress" class="customer-ai-message" role="status" aria-live="polite"></p>
+    <div id="customer-ai-activity" class="customer-ai-activity" data-working="false" role="status" aria-live="polite" aria-atomic="true">
+      <span id="customer-ai-spinner" class="customer-ai-spinner" aria-hidden="true" hidden></span>
+      <div><p id="customer-ai-progress" class="customer-ai-message"></p>
+        <p id="customer-ai-wait-hint" class="customer-ai-hint" hidden>Bitte warten. Das Ergebnis erscheint automatisch.</p></div>
+    </div>
     <div id="customer-ai-error" class="customer-ai-message customer-ai-error" role="alert"></div>
     <div id="customer-ai-content" hidden>
       <p id="customer-ai-summary" class="merge-comparison-note"></p>
@@ -92,6 +106,7 @@
     <div class="merge-dialog-actions">
       <button type="button" class="merge-button" data-customer-ai-close>Schließen</button>
       <button type="button" class="merge-button" id="customer-ai-refresh" hidden>Status prüfen</button>
+      <button type="button" class="merge-button" id="customer-ai-retry" hidden>Erneut analysieren</button>
       <button type="button" class="merge-button" id="customer-ai-review" disabled>Änderungen prüfen</button>
       <button type="button" class="merge-button merge-button-danger" id="customer-ai-apply" hidden>Diese Änderungen übernehmen</button>
     </div>

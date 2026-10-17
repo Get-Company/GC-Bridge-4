@@ -9,6 +9,11 @@ wird erst bei vollständig abgeschlossener Suche mit Treffern verfügbar. Bei ei
 Fehler starten Sie die Suche erneut. Die bisherige Ansicht **Kunden zusammenführen**
 bleibt über den Umschalter verfügbar.
 
+Während der Analyse zeigt das Modal einen Spinner und den aktuellen Arbeitsschritt.
+Das Ergebnis erscheint automatisch; **Status prüfen** ist nur bei einer
+unterbrochenen Statusverbindung nötig. Scheitert die Analyse, können Sie mit
+**Erneut analysieren** einen neuen, kostenpflichtigen Auftrag starten.
+
 Der Assistent liest die Geschäftsdaten der gefundenen Kunden aus Shopware 6,
 GC-Bridge und Microtech. Die erste Variante ist die Empfehlung. Oben sehen Sie,
 welche Rechnungs- und Lieferadresse vorgesehen ist. Darunter zeigen drei Spalten
@@ -51,3 +56,7 @@ aufbewahrt. Standardmäßig wird der bestehende Redis-Broker verwendet; optional
 kann ``CUSTOMER_MERGE_AI_REDIS_URL`` auf eine eigene Redis-Datenbank verweisen.
 Es sind keine neuen Datenbankmodelle oder Migrationen nötig. Änderungen verwenden
 die bestehenden Services und werden im Django-Admin-Protokoll erfasst.
+
+Die Antwortvorgabe für Belege wird aus dem jeweiligen Datenstand erzeugt. Sie
+erlaubt ausschließlich existierende Kombinationen aus Datensatz und Feldname;
+die serverseitige Prüfung bleibt zusätzlich bestehen.

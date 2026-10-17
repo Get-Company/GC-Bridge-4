@@ -93,6 +93,10 @@ Alternativen, keine künstlichen Alternativen. Die fachlich beste Empfehlung zue
 Schreibe kurz und verständlich mit Kundennummern und ausgeschriebenen Anschriften.
 Entscheidungsrelevante Folgen nennen; technische IDs gehören nicht in Titel oder Begründung. Unklarheit: leere operations und Fragen.
 Jede schreibende Empfehlung braucht konkrete evidence (ref und vorhandener Feldname).
+Jeder Beleg muss exakt zu EINEM Datensatz und einem direkten Schlüssel aus dessen
+fields passen. field ist nur der Originalschlüssel (z.B. first_name oder firstName),
+kein übersetzter Feldtitel, keine Liste, kein Pfad wie fields.street, kein Wert und
+kein Metadatum außerhalb von fields. Das Antwortschema gibt gültige Paare vor.
 Nur die gelieferten ref verwenden; keine IDs oder Feldwerte erfinden. Unterstützt:
 link_customer: SW-Kunde -> Django-Kunde (nur SW-ID-Zuordnung).
 link_shopware_address: SW-Adresse -> Django-Adresse.
@@ -253,7 +257,7 @@ class CustomerMergeAIService(BaseService):
                 state.update(snapshot=snapshot, fingerprint=fingerprint(snapshot), message="Die KI bewertet Kunden, Adressen und Zuordnungen.")
                 self.save(state)
                 result, usage = AIProviderService().structured_response(
-                    provider=self.provider(state["provider_id"]), instructions=INSTRUCTIONS, schema=SCHEMA,
+                    provider=self.provider(state["provider_id"]), instructions=INSTRUCTIONS, schema=self.response_schema(snapshot),
                     context={"snapshot": snapshot, "previous": state["previous"], "objection": state["objection"]},
                 )
                 state.update(self.validate_result(result, snapshot))
@@ -393,6 +397,43 @@ class CustomerMergeAIService(BaseService):
             if not rows or len(result) > total or len(result) > MAX_RECORDS:
                 raise ValueError("Shopware-Daten unvollständig oder zu umfangreich. Bitte Suche eingrenzen.")
             page += 1
+
+    @staticmethod
+    def response_schema(snapshot):
+        """Constrain evidence to exact record/field pairs before generation.
+
+        Records with identical field sets share a branch. Literal patterns keep
+        large snapshots within Structured Outputs' total enum-value limit.
+        This changes no data and never guesses aliases between source systems.
+        """
+        schema = copy.deepcopy(SCHEMA)
+        groups = {}
+        for record in snapshot["records"]:
+            fields = tuple(sorted(record["fields"]))
+            if fields:
+                groups.setdefault(fields, []).append(record["ref"])
+        if not groups:
+            raise ValueError("Die Quelldaten enthalten keine belegbaren Felder.")
+        # The fixed schema already contains certainty and operation enums.
+        remaining = 1000 - 3 - len(KINDS)
+
+        def allowed(values):
+            nonlocal remaining
+            values = sorted(set(values))
+            if len(values) <= remaining and (len(values) <= 250 or sum(map(len, values)) <= 15000):
+                remaining -= len(values)
+                return {"type": "string", "enum": values}
+            return {"type": "string", "pattern": "^(?:" + "|".join(re.escape(value) for value in values) + ")$"}
+
+        branches = []
+        for fields, refs in groups.items():
+            branches.append({
+                "type": "object", "additionalProperties": False,
+                "properties": {"ref": allowed(refs), "field": allowed(fields), "finding": {"type": "string"}},
+                "required": ["ref", "field", "finding"],
+            })
+        schema["properties"]["proposals"]["items"]["properties"]["evidence"]["items"] = {"anyOf": branches}
+        return schema
 
     def validate_result(self, result, snapshot):
         if not isinstance(result, dict) or not isinstance(result.get("summary"), str):
