@@ -1,0 +1,92 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block extrastyle %}{{ block.super }}
+<link rel="stylesheet" href="{% static 'telefon/css/function_keys.css' %}">
+{% endblock %}
+{% block extrahead %}{{ block.super }}
+<script src="{% static 'telefon/js/function_keys.js' %}" defer></script>
+{% endblock %}
+
+{% block content %}
+<div class="fk-page">
+    <header class="fk-header">
+        <div>
+            <p class="fk-eyebrow">Telefoneinstellungen</p>
+            <h1>Tastenbelegung</h1>
+            <p>Leitung oder Person auswählen und die Funktionstasten der zugeordneten Telefone verwalten.</p>
+        </div>
+        <a class="fk-button" href="{{ list_url }}{% if selected %}?extension={{ selected.number|urlencode }}{% endif %}"><span class="material-symbols-outlined" aria-hidden="true">refresh</span> Neu laden</a>
+    </header>
+    {% if api_error %}<div class="fk-error" role="alert">{{ api_error }}</div>{% endif %}
+    <div class="fk-layout">
+        <aside class="fk-panel fk-selector" aria-label="Telefonleitung auswählen">
+            <h2>Leitungen &amp; Personen <span class="fk-count">{{ extensions|length }}</span></h2>
+            <label class="fk-search-label" for="fk-search">Nach Person, Rufnummer oder Gerät suchen</label>
+            <input id="fk-search" type="search" placeholder="Name, Leitung, Telefon …" autocomplete="off" data-extension-search>
+            <nav class="fk-extensions" aria-label="Nebenstellen">
+                {% for extension in extensions %}
+                <a href="{{ list_url }}?extension={{ extension.number|urlencode }}" class="fk-extension{% if selected.number == extension.number %} is-selected{% endif %}" data-extension data-search="{{ extension.search }}" {% if selected.number == extension.number %}aria-current="page"{% endif %}>
+                    <span class="fk-extension-head"><strong>{{ extension.name }}</strong><span class="fk-line">{{ extension.number }}</span></span>
+                    {% if extension.alias %}<span class="fk-muted">{{ extension.alias }}</span>{% endif %}
+                    {% for line in extension.lines %}<span class="fk-muted">{{ line }}</span>{% endfor %}
+                    <span class="fk-device-summary">{% for device in extension.devices %}{{ device.model }}{% if not forloop.last %} · {% endif %}{% empty %}Kein Gerät zugeordnet{% endfor %}</span>
+                </a>
+                {% empty %}<p class="fk-empty">{% if api_error %}Leitungen konnten nicht geladen werden.{% else %}Keine Nebenstellen in NFON gefunden.{% endif %}</p>{% endfor %}
+            </nav>
+            <p class="fk-empty" data-search-empty hidden>Keine passende Leitung gefunden.</p>
+        </aside>
+        <main class="fk-main">
+            {% if selected %}
+            <section class="fk-panel">
+                <div class="fk-section-head">
+                    <div><p class="fk-eyebrow">Leitung {{ selected.number }}</p><h2>{{ selected.name }}</h2></div>
+                    {% if not api_error %}<span class="fk-live"><span class="material-symbols-outlined" aria-hidden="true">cloud_done</span> Live aus NFON</span>{% endif %}
+                </div>
+                <div class="fk-devices">
+                    {% for device in selected.devices %}
+                    <div class="fk-device"><span class="material-symbols-outlined" aria-hidden="true">deskphone</span><div><strong>{{ device.model }}</strong><span>{{ device.identifier }}{% if not device.active %} · Inaktiv{% endif %}</span></div></div>
+                    {% empty %}<p class="fk-muted">Dieser Nebenstelle ist aktuell kein Telefon zugeordnet.</p>{% endfor %}
+                </div>
+                <p class="fk-note">Die Belegung gilt für die Nebenstelle und ihre zugeordneten Geräte. Anzahl und Anordnung der sichtbaren Tasten hängen vom Telefonmodell ab.</p>
+            </section>
+            {% if form %}
+            <section class="fk-panel">
+                <div class="fk-section-head"><h2>Belegte Tasten <span class="fk-count">{{ keys|length }}</span></h2><a class="fk-button" href="{{ list_url }}?extension={{ selected.number|urlencode }}#key-editor"><span class="material-symbols-outlined" aria-hidden="true">add</span> Taste hinzufügen</a></div>
+                <div class="fk-table-scroll"><table class="fk-table">
+                    <thead><tr><th scope="col">Position</th><th scope="col">Beschriftung / Belegung</th><th scope="col">Ziel</th><th scope="col"><span class="fk-sr-only">Aktion</span></th></tr></thead>
+                    <tbody>{% for key in keys %}<tr{% if editing.key_number == key.key_number %} class="is-editing"{% endif %}>
+                        <td><span class="fk-position">{{ key.position }}</span></td>
+                        <td><strong>{{ key.display_name|default:"Ohne Beschriftung" }}</strong><span class="fk-muted">{{ key.type_label }}</span></td>
+                        <td>{{ key.target_name|default:"—" }}</td>
+                        <td><a class="fk-edit" href="{{ list_url }}?extension={{ selected.number|urlencode }}&amp;key={{ key.key_number }}#key-editor" aria-label="Taste {{ key.position }} bearbeiten">Bearbeiten <span class="material-symbols-outlined" aria-hidden="true">edit</span></a></td>
+                    </tr>{% empty %}<tr><td colspan="4" class="fk-empty">Noch keine Funktionstasten belegt.</td></tr>{% endfor %}</tbody>
+                </table></div>
+            </section>
+            <section class="fk-panel" id="key-editor">
+                <div class="fk-section-head"><h2>{% if editing %}Taste {{ editing.position }} bearbeiten{% else %}Neue Taste{% endif %}</h2>{% if editing %}<a class="fk-edit" href="{{ list_url }}?extension={{ selected.number|urlencode }}#key-editor">Abbrechen</a>{% endif %}</div>
+                <form method="post" data-key-form>
+                    {% csrf_token %}{{ form.fingerprint }}
+                    {% if form.non_field_errors %}<div class="fk-error" role="alert">{{ form.non_field_errors }}</div>{% endif %}
+                    <div class="fk-form-grid">
+                        {% for field in form.visible_fields %}
+                        <div class="fk-field" {% if field.name == 'phone_number' %}data-key-field="SPEEDDIAL"{% elif field.name == 'target' %}data-key-field="MONITOR INTERCOM SERVICE"{% elif field.name == 'function_code' %}data-key-field="FUNCTION_CODE"{% endif %}>
+                            <label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}
+                            {% if field.help_text %}<p class="fk-muted">{{ field.help_text }}</p>{% endif %}
+                            {% if field.errors %}<div class="fk-field-error" role="alert">{{ field.errors }}</div>{% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <p class="fk-note">Speichern überträgt die Änderung an NFON. Das Telefon übernimmt sie bei der Aktualisierung seiner Konfiguration.</p>
+                    <div class="fk-actions"><button type="submit" name="action" value="save" class="fk-button fk-primary"><span class="material-symbols-outlined" aria-hidden="true">save</span> Bei NFON speichern</button></div>
+                </form>
+                {% if editing %}<details class="fk-delete"><summary>Tastenbelegung entfernen</summary><p>Nur die Belegung von Taste {{ editing.position }} wird entfernt.</p><form method="post">{% csrf_token %}<input type="hidden" name="fingerprint" value="{{ editing.fingerprint }}"><button type="submit" name="action" value="delete" class="fk-button fk-danger">Taste {{ editing.position }} entfernen</button></form></details>{% endif %}
+            </section>
+            {% endif %}
+            {% else %}
+            <section class="fk-panel fk-welcome"><span class="material-symbols-outlined" aria-hidden="true">dialpad</span><h2>Welche Leitung möchtest du bearbeiten?</h2><p>Wähle links eine Person oder Telefonleitung. Die zugeordneten Geräte und ihre Tastenbelegung erscheinen hier.</p></section>
+            {% endif %}
+        </main>
+    </div>
+</div>
+{% endblock %}

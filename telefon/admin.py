@@ -1,6 +1,8 @@
 from django.contrib import admin
 from django.urls import path
 
+from telefon.function_key_views import FunctionKeyView
+
 from telefon.views import (
     ZeitsteuerungDetailView,
     ZeitsteuerungEditorActionView,
@@ -12,6 +14,11 @@ _default_get_urls = admin.site.get_urls
 
 def _telefon_urls():
     return [
+        path(
+            "telefon/tastenbelegung/",
+            admin.site.admin_view(FunctionKeyView.as_view(admin_site=admin.site)),
+            name="telefon_function_keys",
+        ),
         path(
             "telefon/zeitsteuerung/",
             admin.site.admin_view(ZeitsteuerungListView.as_view(admin_site=admin.site)),
