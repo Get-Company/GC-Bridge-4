@@ -35,6 +35,17 @@
       if(!source||!target)continue;
       source.changed=true;target.changed=true;
       if(change.kind.startsWith('link_'))Object.assign(target.fields,change.after);
+      if(change.kind==='consolidate_addresses') {
+        const after=change.after,deleted=new Set(after['Entfernte Bridge-Adressen']),deletedShop=new Set(after['Entfernte SW6-Adressen']);
+        const ids=new Set(output.records.filter(r=>deleted.has(r.ref)).map(r=>r.fields.id));
+        Object.assign(target.fields,after['Standardrollen'],after['Microtech-Zuordnung']);
+        for(const r of output.records) {
+          if(deleted.has(r.ref)||deletedShop.has(r.ref))r.removed=true;
+          if(r.system==='dj'&&r.kind==='order')for(const key of ['billing_address_id','shipping_address_id'])if(ids.has(r.fields[key]))r.fields[key]=target.fields.id;
+          if(r.system==='sw'&&r.kind==='customer'&&r.number===target.number)Object.assign(r.fields,after['SW6-Standardadressen']);
+          if(r.system==='sw'&&r.kind==='address'&&r.fields.id?.toLowerCase()===target.fields.api_id?.toLowerCase())r.changed=true;
+        }
+      }
       if(['set_billing','set_shipping'].includes(change.kind)) {
         const billing=change.kind==='set_billing',swKey=billing?'defaultBillingAddressId':'defaultShippingAddressId';
         for(const r of output.records.filter(r=>r.number===source.number)) {
@@ -88,6 +99,7 @@
         }
       }
     }
+    output.records=output.records.filter(r=>!r.removed);
     return output;
   }
   function render(snapshot, plan, before=false) {
@@ -153,6 +165,10 @@
         if(match)for(const key of ['shopware','django','microtech'])match[key].push(...group[key]);
         else groups.push({...group,shopware:[...group.shopware],django:[...group.django],microtech:[...group.microtech]});
       }
+      if(!before){
+        const priority=group=>SYSTEMS.some(({key})=>group[key].some(address=>rawAddress(number,key,address)?._changed))?1:0;
+        groups.sort((a,b)=>priority(b)-priority(a));
+      }
       return groups;
     };
     const cards=(number,key,addresses)=>addresses.length?uniqueAddresses(number,key,addresses).map(address=>{
@@ -163,7 +179,12 @@
     }).join(''):'<div class="comparison-address-empty">Keine zugeordnete Adresse</div>';
     const merge=plan?.operations?.find(op=>op.kind==='merge_shopware'),refs=new Map((snapshot?.records||[]).map(r=>[r.ref,r]));
     const mergeSummary=!before&&merge?`<div class="customer-ai-merge-flow"><strong>Kunde ${esc(refs.get(merge.source)?.number)} → Kunde ${esc(refs.get(merge.target)?.number)}</strong><span>${esc(plan.merge_preview?.addressesMoved??'—')} Adressen · ${esc(plan.merge_preview?.ordersMoved??'—')} Bestellungen übernehmen</span></div>`:'';
-    return mergeSummary+Object.keys(data).sort().map(number=>{
+    const consolidation=!before&&!plan?.blocked?plan?.changes?.find(c=>c.kind==='consolidate_addresses'):null;
+    const consolidationSummary=consolidation?(()=>{
+      const c=consolidation,after=c.after,roles=after.Standardrollen,count=Math.max(after['Entfernte Bridge-Adressen'].length,after['Entfernte SW6-Adressen'].length);
+      return `<div class="customer-ai-merge-flow"><strong>${count+1} Adresskopien → 1 Adresse</strong><span>${roles.is_invoice&&roles.is_shipping?'Rechnung & Lieferung':roles.is_invoice?'Rechnung':roles.is_shipping?'Lieferung':'Anschrift'}</span><span>${count} Kopien werden entfernt${after.Bestellverweise?` · ${esc(after.Bestellverweise)} Bestellverweise übernehmen`:''}</span><details class="customer-ai-records"><summary>Details der Zusammenführung</summary><div>Erhalten: ${esc(after.Adresse)}<br>Entfernt: ${[...after['Entfernte Bridge-Adressen'],...after['Entfernte SW6-Adressen']].map(esc).join(' · ')}</div></details></div>`;
+    })():'';
+    return mergeSummary+consolidationSummary+Object.keys(data).sort().map(number=>{
       const row=(label,fn)=>comparisonRow(label,SYSTEMS.map(system=>fn(system.key,normal(number,system.key),data[number]?.[system.key])));
       const role=(key,customer,billing)=>{
         const addresses=(customer?.addresses||[]).filter(a=>billing?a.isBilling:a.isShipping);

@@ -23,6 +23,7 @@ from ai.models import AIProviderConfig
 from ai.services.provider import AIProviderService
 from core.services import BaseService
 from customer.models import Address, Customer
+from customer.services.address_consolidation import AddressConsolidationRejected, AddressConsolidationService
 from customer.services.customer_merge import (
     CustomerIdUpdateService, CustomerMergeSearchService, CustomerSyncDirectionService,
     ShopwareCustomerMergeService, _safe_attrs,
@@ -34,7 +35,7 @@ TTL = 1800
 KINDS = (
     "link_customer", "link_shopware_address", "link_microtech_address",
     "set_billing", "set_shipping", "import_shopware_address",
-    "export_django_address", "merge_shopware",
+    "export_django_address", "merge_shopware", "consolidate_addresses",
 )
 LABELS = {
     "link_customer": "Shopkonto in GC-Bridge zuordnen",
@@ -45,6 +46,7 @@ LABELS = {
     "import_shopware_address": "Shopadresse nach GC-Bridge übernehmen",
     "export_django_address": "GC-Bridge-Adresse nach SW6 kopieren",
     "merge_shopware": "Shopkunden zusammenführen",
+    "consolidate_addresses": "Identische Adressen zusammenführen",
 }
 MT_FIELDS = (
     "customerNumber", "erpAddressNumber", "salutation", "firstName", "lastName",
@@ -128,7 +130,14 @@ merge_shopware: SW-Quellkunde -> SW-Zielkunde, der erhalten bleibt. Ausschließl
 als EINZIGE Operation; ausdrücklich erklären, welches Konto und welcher Zugang
 bleibt bzw. laut verbindlicher Shopware-Vorschau übernommen wird. Keine Behauptung
 über Passwörter. Danach Adressen erneut analysieren. Microtech-Kunden nie löschen
-oder mergen. Historische Bestellanschriften bleiben erhalten. Keine Adressen löschen.
+oder mergen. Historische Bestellanschriften bleiben inhaltlich erhalten.
+consolidate_addresses: eine identische SW-/Django-Adresskopie -> erhaltene Django-Adresse,
+als EINZIGE Operation. Führt die vollständige Gruppe exakter Adresskopien zusammen,
+übernimmt bestehende Rollen und kompatible Zuordnungen und entfernt nur diese Kopien.
+Wähle das sinnvollste vorhandene Ziel selbst: passende Zuordnungen und Standardrollen
+erhalten. Vollständig gleiche Adressen nicht wegen ihrer technischen IDs als getrennte
+fachliche Adressen behandeln und keine unnötige Rückfrage stellen. Nur bei echten
+Widersprüchen zurückfragen. Keine anderen Löschoperationen; Microtech bleibt unverändert.
 certainty=uncertain ODER offene questions bedeutet keine ausführbaren Operationen.
 Der Mensch bestätigt eine verbindliche Vorschau. Antworte nur im vorgegebenen Schema.
 """
@@ -334,6 +343,8 @@ class CustomerMergeAIService(BaseService):
                 state.update(status="preview_ready", preview_token=expected, preview_at=time.time())
                 self.save(state)
             else:
+                if proposal["operations"][0]["kind"] == "consolidate_addresses":
+                    state.update(workflow="address_consolidation", post_merge_numbers=state["numbers"])
                 state.update(phase="execute", status="loading", jobs=None, started=time.time(),
                              message="Die Daten werden unmittelbar vor dem Speichern geprüft.", writes_started=False)
                 if proposal["operations"][0]["kind"] == "merge_shopware":
@@ -401,6 +412,13 @@ class CustomerMergeAIService(BaseService):
                     context={"snapshot": snapshot, "previous": state["previous"], "objection": state["objection"],
                              "standard_mapping_preferences": self.standard_mapping_preferences(snapshot["records"])},
                 )
+                if not state.get("objection") and isinstance(result, dict) and isinstance(result.get("proposals"), list):
+                    suggested = AddressConsolidationService.proposals(snapshot)
+                    targets = {p["operations"][0]["target"] for p in suggested}
+                    other = [p for p in result["proposals"] if not isinstance(p, dict) or not isinstance(p.get("operations"), list) or not any(
+                        isinstance(op, dict) and op.get("kind") == "consolidate_addresses" and op.get("target") in targets
+                        for op in p.get("operations", []))]
+                    result = {**result, "proposals": (suggested + other)[:3]}
                 state.update(self.validate_result(result, snapshot, address_only=state.get("address_only", False)))
                 state.update(status="ready", usage=usage, approval_tokens=[uuid.uuid4().hex for _ in state["proposals"]],
                              message="Die Vorschläge sind bereit.")
@@ -412,6 +430,8 @@ class CustomerMergeAIService(BaseService):
                 state.update(status="preview_ready", preview_token=uuid.uuid4().hex, preview_at=time.time())
             elif state["phase"] == "recover_merge":
                 self.recover_merge_result(state)
+            elif state["phase"] == "recover_addresses":
+                self.recover_address_result(state)
             elif state["phase"] == "execute":
                 microtech = self.read_microtech(state, submit=True)
                 if microtech is None:
@@ -480,9 +500,10 @@ class CustomerMergeAIService(BaseService):
                     cid = row.get("id") or customer.get("id")
                     parent = add("sw", "customer", cid, number, {**take(customer, [*ShopwareCustomerMergeService.CUSTOMER_COMPARISON_FIELDS, "updatedAt", "group"]), "id": cid})
                     addresses = self.sw_collection(service, "/search/customer-address", "customerId", cid,
-                                                   "customer_address", (*ShopwareCustomerMergeService.ADDRESS_COMPARISON_FIELDS, "country", "salutation"),
+                                                   "customer_address", (*ShopwareCustomerMergeService.ADDRESS_COMPARISON_FIELDS, "country", "salutation", "customFields"),
                                                    associations={"country": {}, "salutation": {}})
                     for address in addresses:
+                        address["hasMergeMetadata"] = bool(address.pop("customFields", None))
                         add("sw", "address", address["id"], number, address, parent)
                     orders = self.sw_collection(service, "/search/order", "orderCustomer.customerId", cid, "order",
                         ("id", "orderNumber", "orderDateTime", "amountTotal", "billingAddressId", "billingAddress", "deliveries"),
@@ -707,7 +728,15 @@ class CustomerMergeAIService(BaseService):
             else:
                 if src["number"] != dst["number"]:
                     raise ValueError("Adresszuordnungen zwischen verschiedenen Kundennummern sind nicht zulässig.")
-                if kind == "link_customer":
+                if kind == "consolidate_addresses":
+                    if len(ops) != 1:
+                        raise ValueError("Eine Adresszusammenlegung muss ein einzelner, separat bestätigter Vorschlag sein.")
+                    spec = AddressConsolidationService.preview(snapshot, dst["ref"])
+                    if src["ref"] not in {r["ref"] for r in [*spec["local_sources"], *spec["sw_sources"]]}:
+                        raise ValueError("Die zu entfernende Adresse ist keine identische Kopie der erhaltenen Adresse.")
+                    before = {"Bridge": [r["fields"] for r in [spec["target"], *spec["local_sources"]]], "SW6": [r["fields"] for r in spec["sw_group"]]}
+                    after = AddressConsolidationService.changes(spec)
+                elif kind == "link_customer":
                     if source_type != ("sw", "customer") or target_type != ("dj", "customer"):
                         raise ValueError("Ungültige Kunden-Zuordnung.")
                     before, after = {"api_id": df.get("api_id")}, {"api_id": sf["id"]}
@@ -774,6 +803,11 @@ class CustomerMergeAIService(BaseService):
             if self.merge_target_missing(state["snapshot"], operation["target"]):
                 required.update({"customer.add_customer", "customer.add_address"})
         if "import_shopware_address" in kinds: required.update({"customer.add_address", "customer.add_customer"})
+        if "consolidate_addresses" in kinds:
+            required.add("customer.delete_address")
+            proposal = state["proposals"][state["selected"]]
+            if AddressConsolidationService.preview(state["snapshot"], proposal["operations"][0]["target"])["order_count"]:
+                required.add("orders.change_order")
         if not user.is_active or not user.is_staff or not user.has_perms(required):
             raise ValueError("Die Berechtigung für die Übernahme ist nicht mehr vorhanden.")
         acquired = []
@@ -789,6 +823,8 @@ class CustomerMergeAIService(BaseService):
             self.compile_plan(proposal, state["snapshot"])
             if proposal["operations"][0]["kind"] == "merge_shopware":
                 self.apply_merge(state)
+            elif proposal["operations"][0]["kind"] == "consolidate_addresses":
+                self.apply_address_consolidation(state)
             else:
                 state["writes_started"] = True
                 self.save(state)
@@ -952,6 +988,75 @@ class CustomerMergeAIService(BaseService):
             state.update(status="needs_review", message="Der Merge ist noch nicht bestätigt. Bitte den Status später erneut prüfen.")
             return
         self.finish_merge(state, service, result)
+
+    def apply_address_consolidation(self, state):
+        proposal = state["proposals"][state["selected"]]
+        spec = AddressConsolidationService.preview(state["snapshot"], proposal["operations"][0]["target"])
+        service = AddressConsolidationService()
+        service.preflight_local(spec)
+        state["writes_started"] = True
+        self.save(state)
+        if spec["sw_sources"]:
+            try:
+                service.execute_remote(spec)
+            except AddressConsolidationRejected:
+                state["writes_started"] = False
+                self.save(state)
+                raise
+            after = self.snapshot(state["numbers"], {}, systems=("sw",), allow_empty=True)
+            service.verify_shopware(spec, state["snapshot"], after)
+        self.finish_address_consolidation(state, spec)
+
+    def finish_address_consolidation(self, state, spec):
+        def receipt():
+            from django.contrib.admin.models import CHANGE, LogEntry
+            from django.contrib.contenttypes.models import ContentType
+            rows = LogEntry.objects.filter(user_id=state["owner"], content_type=ContentType.objects.get_for_model(Address),
+                object_id=str(spec["target"]["fields"]["id"]), action_flag=CHANGE, change_message__contains=state["id"]).values_list("change_message", flat=True)
+            for raw in rows:
+                try:
+                    entry = json.loads(raw).get("customer_merge_ai", {})
+                    if entry.get("run") == state["id"] and entry.get("kind") == "consolidate_addresses":
+                        return True
+                except (ValueError, TypeError):
+                    continue
+            return False
+        AddressConsolidationService().finish_local(spec, lambda target: self.audit(state, target, 0), receipt)
+        state.update(status="applied", completed=[{"index": 0, "label": LABELS["consolidate_addresses"]}], message="Die identischen Adressen wurden zusammengeführt.")
+        self.save(state)
+
+    def recover_addresses(self, *, owner, run_id):
+        state = self.get(run_id, owner)
+        if state.get("workflow") != "address_consolidation" or state["status"] != "needs_review" or not state.get("writes_started"):
+            raise ValueError("Für diesen Auftrag ist keine Adress-Statusprüfung erforderlich.")
+        state.update(phase="recover_addresses", status="loading", started=time.time(), message="Die ausgeführte Adresszusammenlegung wird geprüft.")
+        self.enqueue(state)
+        return self.public(state)
+
+    def recover_address_result(self, state):
+        from django.contrib.auth import get_user_model
+        user = get_user_model().objects.get(pk=state["owner"])
+        spec = AddressConsolidationService.preview(state["snapshot"], state["proposals"][state["selected"]]["operations"][0]["target"])
+        required = {"customer.change_customer", "customer.change_address", "customer.delete_address"}
+        if spec["order_count"]:
+            required.add("orders.change_order")
+        if not user.is_active or not user.is_staff or not user.has_perms(required):
+            raise ValueError("Die Berechtigung zur Adresszusammenlegung ist nicht mehr vorhanden.")
+        acquired = []
+        try:
+            for number in state["numbers"]:
+                key = "customer-write:" + number
+                if not self.cache.add(key, state["id"], 600):
+                    raise ValueError("Diese Kunden werden gerade bearbeitet. Bitte später den Status prüfen.")
+                acquired.append(key)
+            if spec["sw_sources"]:
+                after = self.snapshot(state["numbers"], {}, systems=("sw",), allow_empty=True)
+                AddressConsolidationService.verify_shopware(spec, state["snapshot"], after)
+            self.finish_address_consolidation(state, spec)
+        finally:
+            for key in acquired:
+                if self.cache.get(key) == state["id"]:
+                    self.cache.delete(key)
 
     def apply_steps(self, state):
         refs = {r["ref"]: r for r in state["snapshot"]["records"]}

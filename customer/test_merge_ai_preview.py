@@ -92,6 +92,25 @@ assert.equal((html.match(/comparison-address-card/g)||[]).length,4,'Two distinct
 assert.deepEqual(snap,original);
 """, standard_plan(), duplicate_standard_snapshot())
 
+    def test_actual_consolidation_preview_removes_copies_and_transfers_both_roles(self):
+        from customer.test_merge_ai_standard_addresses import duplicate_standard_snapshot
+        from customer.test_address_consolidation import consolidation_plan
+        snap=duplicate_standard_snapshot()
+        snap['records'].append({'ref':'dj:order:9','system':'dj','kind':'order','number':'12196','parent':'dj:customer:1',
+            'fields':{'id':9,'billing_address_id':4,'shipping_address_id':2}})
+        self.run_js("""
+const original=structuredClone(snap),after=preview.project(snap,plan),addresses=after.records.filter(r=>r.system==='dj'&&r.kind==='address');
+assert.equal(addresses.length,1);assert.equal(addresses[0].fields.id,3);
+assert.equal(addresses[0].fields.is_invoice,true);assert.equal(addresses[0].fields.is_shipping,true);
+assert.equal(after.records.filter(r=>r.system==='sw'&&r.kind==='address').length,1);
+const order=after.records.find(r=>r.ref==='dj:order:9');assert.equal(order.fields.billing_address_id,3);assert.equal(order.fields.shipping_address_id,3);
+assert.deepEqual(after.records.filter(r=>r.system==='mt'),snap.records.filter(r=>r.system==='mt'));
+assert.ok(preview.render(snap,plan).includes('3 Adresskopien → 1 Adresse'));
+assert.ok(preview.render(snap,plan).includes('2 Kopien werden entfernt'));
+assert.ok(!preview.render(snap,plan,true).includes('Kopien werden entfernt'));
+assert.deepEqual(snap,original);
+""", consolidation_plan(snap),snap)
+
     def test_different_recipients_or_hidden_business_fields_are_not_visually_combined(self):
         from customer.test_merge_ai_standard_addresses import duplicate_standard_snapshot, standard_plan
         for system, field in [('dj','last_name'),('dj','department'),('sw','additionalAddressLine1')]:

@@ -8,7 +8,7 @@
   const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   let run=null, selected=0, before=false, busy=false, connectionLost=false;
   let mergeGate=null,continuing=false,continuationFailed=false;
-  let canApply=false, canMerge=false, canCreateMergeTarget=false, providerReady=false, providerMessage='KI-Zugang wird geprüft…';
+  let canApply=false, canMerge=false, canCreateMergeTarget=false, canConsolidate=false, canChangeOrder=false, providerReady=false, providerMessage='KI-Zugang wird geprüft…';
   let pollTimer=null,generation=0,versions=[];
   const numbers=()=>[...new Set(searchErps.map(String))].sort();
   const searchId=()=>searchProgress?.cacheId||'';
@@ -20,8 +20,10 @@
   const progress=message=>{if($('progress').textContent!==message)$('progress').textContent=message;};
   const remember=()=>{try{sessionStorage.setItem('gc-customer-ai-run',run.id);}catch(_){}};
   const forget=()=>{try{sessionStorage.removeItem('gc-customer-ai-run');}catch(_){}};
+  const continuesAfterMerge=()=>['merge_first','address_consolidation'].includes(run?.workflow);
   function canAccept(plan) {
     if(!plan||plan.blocked||!plan.operations.length||plan.questions.length)return false;
+    if(plan.operations[0].kind==='consolidate_addresses')return canConsolidate&&(!(plan.changes?.[0]?.after?.Bestellverweise)||canChangeOrder);
     return plan.operations[0].kind==='merge_shopware'?canMerge:canApply||plan.operations.every(op=>op.kind==='link_customer');
   }
   function updateStart() {
@@ -54,7 +56,7 @@
     $('refresh').hidden=working||(!connectionLost&&run?.status!=='needs_review');
     $('retry').hidden=(!continuationFailed&&run?.status!=='failed')||working||connectionLost;
     $('retry').textContent=continuationFailed?'Daten neu laden':run?.phase==='execute'?'Suche aktualisieren':'Erneut analysieren';
-    $('apply').textContent=mergeGate?'Merge bestätigen':'Vorschlag akzeptieren';
+    $('apply').textContent=mergeGate?'Merge bestätigen':run?.proposals?.[selected]?.operations?.[0]?.kind==='consolidate_addresses'?'Adressen zusammenführen':'Vorschlag akzeptieren';
     $('apply').hidden=busy||working||connectionLost||(mergeGate?!!run:!['ready','preview_ready'].includes(run?.status));
     $('apply').disabled=locked||(mergeGate?!canMerge||(needsTargetCreation()&&!canCreateMergeTarget)||!mergeGate.source||!mergeGate.target||mergeGate.source===mergeGate.target:before||!canAccept(run?.proposals?.[selected]));
   }
@@ -107,6 +109,7 @@
   async function config() {
     try {
       const data=await request();canApply=data.can_apply;canMerge=data.can_merge;canCreateMergeTarget=!!data.can_create_merge_target;
+      canConsolidate=!!data.can_consolidate_addresses;canChangeOrder=!!data.can_change_order;
       $('provider').replaceChildren();
       for(const provider of data.providers){const option=document.createElement('option');option.value=provider.id;option.textContent=`${provider.name} · ${provider.model}`;$('provider').append(option);}
       providerReady=data.providers.length>0;
@@ -116,9 +119,9 @@
       let id='';try{id=sessionStorage.getItem('gc-customer-ai-run')||'';}catch(_){}
       if(id)try{
         const saved=await request(null,id);
-        if(saved.workflow==='merge_first'||['loading','applying','needs_review'].includes(saved.status)){
+        if(['merge_first','address_consolidation'].includes(saved.workflow)||['loading','applying','needs_review'].includes(saved.status)){
           run=saved;selected=run.selected??0;render();open();
-          if(run.workflow==='merge_first'&&run.status==='applied')void continueAfterMerge();
+          if(continuesAfterMerge()&&run.status==='applied')void continueAfterMerge();
           else if(['loading','applying'].includes(run.status)){setBusy(true);schedulePoll();}
         }
       }catch(_){}
@@ -152,15 +155,15 @@
     }
   }
   async function continueAfterMerge() {
-    if(continuing||run?.workflow!=='merge_first'||run.status!=='applied')return;
+    if(continuing||!continuesAfterMerge()||run.status!=='applied')return;
     continuing=true;continuationFailed=false;mergeGate=null;const merged=run;
     connectionLost=false;error('');setBusy(true);$('merge-stage').hidden=true;$('content').hidden=true;progress('Merge abgeschlossen · Kundendaten werden neu geladen…');
     try {
       await doSearch({customerNumbers:merged.post_merge_numbers});
       if(!customerAISearchReadiness().ready)throw new Error(customerAISearchReadiness().message);
       setBusy(false);
-      if(hasMultipleAccounts())showMergeGate(merged.keep_number);
-      else if(!await start())throw new Error($('error').textContent||'Die Adressanalyse konnte nicht gestartet werden.');
+      if(hasMultipleAccounts()&&merged.workflow==='merge_first')showMergeGate(merged.keep_number);
+      else if(!await start(false,!!merged.separate_accounts))throw new Error($('error').textContent||'Die Adressanalyse konnte nicht gestartet werden.');
     }catch(e){run=merged;continuationFailed=true;setBusy(false);$('content').hidden=true;progress('Merge abgeschlossen');error(e.message);renderActivity();}
     finally{continuing=false;}
   }
@@ -173,7 +176,7 @@
       if(['loading','applying'].includes(run.status))pollTimer=setTimeout(()=>poll(seq),1500);
       else{
         setBusy(false);render();remember();
-        if(run.workflow==='merge_first'&&run.status==='applied'&&modal.open)await continueAfterMerge();
+        if(continuesAfterMerge()&&run.status==='applied'&&modal.open)await continueAfterMerge();
       }
     }catch(e){recoverStatus(e);}
   }
@@ -205,6 +208,7 @@
     $('plan-title').textContent=before?'Ist-Zustand':plan.title;
     $('mode').textContent=before?'Geladene Suchdaten':`Vorschlag ${selected+1}`;
     $('blocked').textContent=plan.blocked||plan.questions.join(' ');
+    if(!plan.blocked&&plan.operations?.[0]?.kind==='consolidate_addresses'&&!canAccept(plan))$('blocked').textContent=!canConsolidate?'Keine Berechtigung zum Zusammenführen von Adressen.':'Keine Berechtigung zum Übernehmen der Bestellverweise.';
     comparison(run.snapshot,plan,before);
     const refs=new Map(run.snapshot.records.map(record=>[record.ref,record]));
     $('evidence').innerHTML=`<p>${escape(plan.reason)}</p>`+plan.evidence.map(e=>`<p><strong>${escape(e.field)}</strong> · ${escape(e.finding)}<br>${escape(refs.get(e.ref)?.fields[e.field]??'')}</p>`).join('');
@@ -219,7 +223,7 @@
       remember();render();schedulePoll();
     }catch(e){recoverStatus(e);}
   }
-  $('start').addEventListener('click',()=>{if($('start').disabled)return;if(sameSearch()){open();render();if(run.workflow==='merge_first'&&run.status==='applied')void continueAfterMerge();}else beginWorkflow();});
+  $('start').addEventListener('click',()=>{if($('start').disabled)return;if(sameSearch()){open();render();if(continuesAfterMerge()&&run.status==='applied')void continueAfterMerge();}else beginWorkflow();});
   $('merge-keep').addEventListener('change',()=>{mergeGate.target=$('merge-keep').value;if(mergeGate.source===mergeGate.target)mergeGate.source='';renderGate();});
   $('merge-source').addEventListener('change',()=>{mergeGate.source=$('merge-source').value;renderGate();});
   $('merge-skip').addEventListener('click',()=>void start(false,true));
@@ -244,13 +248,14 @@
         run=status;remember();
       }
       if(!run){setBusy(false);return;}
+      if(run.status==='needs_review'&&run.workflow==='address_consolidation'){run=await request({action:'address_merge_status',run_id:run.id});remember();}
       if(run.status==='needs_review'&&run.merge_operation_id){run=await request({action:'merge_status',run_id:run.id});remember();}
       void poll(++generation);
     }catch(e){recoverStatus(e);}
   });
   for(const button of modal.querySelectorAll('[data-customer-ai-close]'))button.addEventListener('click',()=>modal.close());
   modal.addEventListener('cancel',event=>{if(!connectionLost&&(busy||['loading','applying'].includes(run?.status)))event.preventDefault();});
-  modal.addEventListener('close',()=>{if(run?.status==='applied'&&run.workflow!=='merge_first'){run=null;forget();void doSearch();}});
+  modal.addEventListener('close',()=>{if(run?.status==='applied'&&!continuesAfterMerge()){run=null;forget();void doSearch();}});
   document.addEventListener('customer-merge-search-progress',updateStart);
   void config();
 })();

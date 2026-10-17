@@ -99,6 +99,8 @@ def customer_merge_ai_api(request):
                 "can_apply": request.user.has_perm("customer.change_address"),
                 "can_merge": request.user.has_perm("customer.delete_customer"),
                 "can_create_merge_target": request.user.has_perms(["customer.add_customer", "customer.add_address"]),
+                "can_consolidate_addresses": request.user.has_perms(["customer.change_address", "customer.delete_address"]),
+                "can_change_order": request.user.has_perm("orders.change_order"),
             })
         if len(request.body) > 16_384:
             raise ValueError("Die Anfrage ist zu groß.")
@@ -121,6 +123,10 @@ def customer_merge_ai_api(request):
             if not request.user.has_perm("customer.delete_customer"):
                 return JsonResponse({"error": "Keine Berechtigung zur Merge-Statusprüfung."}, status=403)
             result = service.recover_merge(owner=request.user.pk, run_id=body.get("run_id"))
+        elif action == "address_merge_status":
+            if not request.user.has_perms(["customer.change_address", "customer.delete_address"]):
+                return JsonResponse({"error": "Keine Berechtigung zur Adresszusammenlegung."}, status=403)
+            result = service.recover_addresses(owner=request.user.pk, run_id=body.get("run_id"))
         elif action in {"preview", "execute"}:
             state = service.get(body.get("run_id"), request.user.pk)
             index = body.get("index")
@@ -134,6 +140,12 @@ def customer_merge_ai_api(request):
                 required.append("customer.change_address")
             if "import_shopware_address" in kinds:
                 required.extend(["customer.add_address", "customer.add_customer"])
+            if "consolidate_addresses" in kinds:
+                from customer.services.address_consolidation import AddressConsolidationService
+                required.append("customer.delete_address")
+                operation = state["proposals"][index]["operations"][0]
+                if AddressConsolidationService.preview(state["snapshot"], operation["target"])["order_count"]:
+                    required.append("orders.change_order")
             if not request.user.has_perms(required):
                 return JsonResponse({"error": "Keine Berechtigung für diese Änderungen."}, status=403)
             result = service.phase(owner=request.user.pk, run_id=state["id"], index=index,

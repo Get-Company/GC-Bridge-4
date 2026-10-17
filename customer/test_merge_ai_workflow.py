@@ -15,7 +15,7 @@ ROOT=Path(__file__).resolve().parents[1]
 
 @skipUnless(shutil.which('node'),'Node is needed for controller checks')
 class MergeFirstControllerTests(SimpleTestCase):
-    def run_js(self,assertions,deny_target_creation=False):
+    def run_js(self,assertions,deny_target_creation=False,initial_snapshot=None,initial_plan=None):
         harness=r'''
 const assert=require('node:assert/strict');const denyTargetCreation=DENY_TARGET;
 const elements=new Map(),timers=[],requests=[],searches=[],rendered=[];
@@ -35,10 +35,11 @@ let searchProgress={cacheId:'search0',snapshot:SNAPSHOT};
 const CustomerMergePreview={render:(snapshot,plan,before)=>{rendered.push({snapshot,plan,before});return 'three-columns';}};
 const customerAISearchReadiness=()=>({ready:!busySearch&&!searchFailure,message:searchFailure?'Suche unvollständig':'Geladen'});
 async function doSearch(options){searches.push(options);if(searchFailure)return;searchProgress={cacheId:'search'+searches.length,snapshot:structuredClone(searchProgress.snapshot)};
+ if(!lastMerge)return;
  const source=lastMerge.merge_selection.source;searchProgress.snapshot.records=searchProgress.snapshot.records.filter(r=>r.ref!==source&&r.parent!==source);
  searchErps=lastMerge.post_merge_numbers;}
 const response=(data,ok=true)=>({ok,status:ok?200:400,json:async()=>structuredClone(data)});
-const results=new Map();let mergeCount=0,analysisCount=0,lastMerge=null,mergeStatus='applied',loseMergeResponse=false,statusUnsubmitted=false;
+const results=new Map();let mergeCount=0,analysisCount=0,lastMerge=null,mergeStatus='applied',loseMergeResponse=false,statusUnsubmitted=false,executeCount=0,addressStatus='applied',addressStatusCount=0;
 let fetch=async(url,options)=>{
  const body=options?.body?JSON.parse(options.body):null;requests.push({url,body});
  if(body?.action==='merge'){
@@ -52,10 +53,17 @@ let fetch=async(url,options)=>{
   analysisCount++;const run={id:'analysis'+analysisCount,phase:'analyze',status:'ready',search_id:body.search_id,numbers:[...searchErps],snapshot:structuredClone(searchProgress.snapshot),proposals:[PLAN],version:1,message:'Bereit',approval_tokens:['token']};
   results.set(run.id,run);return response({...run,status:'loading',proposals:null});
  }
+ if(body?.action==='execute'){
+  executeCount++;const r=results.get(body.run_id);Object.assign(r,{workflow:'address_consolidation',phase:'execute',status:addressStatus,post_merge_numbers:[...searchErps],selected:0});
+  return response({...r,status:'loading'});
+ }
+ if(body?.action==='address_merge_status'){
+  addressStatusCount++;const r=results.get(body.run_id);r.status=addressStatus;return response({...r,status:'loading'});
+ }
  if(body)throw Error('Unexpected POST '+body.action);
  if(url.includes('merge_search_id='))return response(statusUnsubmitted?{status:'not_submitted'}:lastMerge);
  if(url.includes('run_id='))return response(results.get(decodeURIComponent(url.split('run_id=')[1])));
- return response({providers:[{id:3,name:'Test',model:'Test'}],can_apply:true,can_merge:true,can_create_merge_target:!denyTargetCreation});
+ return response({providers:[{id:3,name:'Test',model:'Test'}],can_apply:true,can_merge:true,can_consolidate_addresses:true,can_change_order:true,can_create_merge_target:!denyTargetCreation});
 };
 CONTROLLER
 const flush=()=>new Promise(resolve=>setImmediate(resolve));
@@ -64,7 +72,7 @@ const choose=async(id,value)=>{ui(id).value=value;await ui(id).listeners.change?
 const tick=async()=>{assert.ok(timers.length,'expected polling');await timers.shift()();await flush();};
 const source='sw:customer:'+'4'.repeat(32),target='sw:customer:'+'a'.repeat(32);
 (async()=>{await flush();ASSERTIONS})().catch(error=>{console.error(error);process.exitCode=1;});
-'''.replace('DENY_TARGET',str(deny_target_creation).lower()).replace('SNAPSHOT',json.dumps(multiple_snapshot(3))).replace('PLAN',json.dumps({**plan(),'changes':[],'blocked':''})).replace('CONTROLLER',(ROOT/'customer/static/customer/js/merge_ai.js').read_text()).replace('ASSERTIONS',assertions)
+'''.replace('DENY_TARGET',str(deny_target_creation).lower()).replace('SNAPSHOT',json.dumps(initial_snapshot or multiple_snapshot(3))).replace('PLAN',json.dumps(initial_plan or {**plan(),'changes':[],'blocked':''})).replace('CONTROLLER',(ROOT/'customer/static/customer/js/merge_ai.js').read_text()).replace('ASSERTIONS',assertions)
         result=subprocess.run([shutil.which('node'),'-e',harness],capture_output=True,text=True,timeout=10)
         self.assertEqual(result.returncode,0,result.stdout+result.stderr)
 
@@ -160,3 +168,29 @@ await click('start');await choose('merge-keep',source);await choose('merge-sourc
 assert.ok(ui('merge-direction').innerHTML.includes('GC-Bridge · wird angelegt'));
 assert.equal(ui('apply').disabled,false);await click('apply');assert.equal(mergeCount,1);
 ''')
+
+    def address_fixture(self):
+        from customer.test_merge_ai_standard_addresses import duplicate_standard_snapshot
+        from customer.test_address_consolidation import consolidation_plan
+        from customer.services.merge_ai import CustomerMergeAIService
+        snap=duplicate_standard_snapshot();proposal=consolidation_plan(snap)
+        proposal.update(changes=CustomerMergeAIService().compile_plan(proposal,snap),blocked='')
+        return dict(initial_snapshot=snap,initial_plan=proposal)
+
+    def test_address_consolidation_is_confirmed_once_then_fresh_data_is_analyzed(self):
+        self.run_js(r'''
+searchErps=['12196'];await click('start');await tick();
+assert.equal(ui('apply').textContent,'Adressen zusammenführen');assert.equal(ui('apply').disabled,false);
+await click('apply');assert.equal(executeCount,1);assert.equal(searches.length,0);
+await tick();assert.equal(executeCount,1);assert.deepEqual(searches,[{customerNumbers:['12196']}]);
+assert.equal(analysisCount,2);assert.equal(ui('content').inert,true);
+''',**self.address_fixture())
+
+    def test_uncertain_address_merge_has_readonly_status_recovery_and_no_repeat(self):
+        self.run_js(r'''
+searchErps=['12196'];await click('start');await tick();addressStatus='needs_review';await click('apply');await tick();
+assert.equal(executeCount,1);assert.equal(searches.length,0);assert.equal(analysisCount,1);
+assert.equal(ui('refresh').hidden,false);addressStatus='applied';await click('refresh');
+assert.equal(addressStatusCount,1);assert.equal(executeCount,1);await tick();
+assert.equal(executeCount,1);assert.equal(searches.length,1);assert.equal(analysisCount,2);
+''',**self.address_fixture())
