@@ -94,11 +94,72 @@
     const projected=before?snapshot:project(snapshot,plan), data=sources(projected), original=sources(snapshot);
     const normal=(number,key)=>normalize(data[number]?.[key],key);
     const value=(value,changed=false)=>`<div class="comparison-value${changed?' customer-ai-changed':''}">${esc(value)||'<span class="comparison-empty">—</span>'}</div>`;
-    const cards=(number,key,addresses)=>addresses.length?addresses.map(address=>{
-      const raw=(data[number]?.[key]?.addresses||[]).find(a=>key==='microtech'?String(a.ans_nr)===String(address.microtechAddressNumber):String(a.id)===String(address.id));
-      const changed=!before&&raw?._changed;
+    const addressIndices=new Map(),identityCache=new WeakMap();
+    const rawAddress=(number,key,address)=>{
+      const scope=JSON.stringify([number,key]);
+      if(!addressIndices.has(scope))addressIndices.set(scope,new Map((data[number]?.[key]?.addresses||[]).map(a=>[String(key==='microtech'?a.ans_nr:a.id),a])));
+      return addressIndices.get(scope).get(String(key==='microtech'?address.microtechAddressNumber:address.id));
+    };
+    const clean=value=>String(value??'').trim().replace(/\s+/g,' ').toLocaleLowerCase('de');
+    const identity=(number,key,address)=>{
+      if(identityCache.has(address))return identityCache.get(address);
+      if(!address.street||!address.zip||!address.city||!address.label)return JSON.stringify([key,'incomplete',address.id??address.microtechAddressNumber]);
+      const raw=rawAddress(number,key,address)||{};
+      const fields=key==='shopware'?['title','salutationId','firstName','lastName','company','department','additionalAddressLine1','additionalAddressLine2','countryId','countryStateId','phoneNumber']:
+        key==='django'?['company','name1','name2','name3','department','title','first_name','last_name','phone']:['name1','name2','name3','department','phone'];
+      const result=JSON.stringify([key,...['label','contactName','street','zip','city','country','email','phone'].map(f=>clean(address[f])),...fields.map(f=>clean(raw[f]))]);
+      identityCache.set(address,result);return result;
+    };
+    const contactKey=contact=>JSON.stringify([contact.microtechContactNumber,...['title','name','email','phone'].map(f=>clean(contact[f]))]);
+    const uniqueAddresses=(number,key,addresses)=>{
+      const unique=new Map();
+      for(const address of addresses){
+        const id=identity(number,key,address),raw=rawAddress(number,key,address),current=unique.get(id);
+        if(!current){unique.set(id,{...address,contacts:[...(address.contacts||[])],members:raw?[raw]:[]});continue;}
+        current.isBilling ||= address.isBilling;current.isShipping ||= address.isShipping;
+        if(raw&&!current.members.some(r=>r._ref===raw._ref))current.members.push(raw);
+        for(const contact of address.contacts||[])if(!current.contacts.some(c=>contactKey(c)===contactKey(contact)))current.contacts.push(contact);
+      }
+      return [...unique.values()];
+    };
+    const visualGroups=number=>{
+      // Split the old renderer's bucket of all unmapped Bridge addresses first.
+      // SW6 stays beside the Bridge record only through its actual API mapping.
+      const split=addressComparisonGroups(number,data).flatMap(group=>{
+        if(group.microtech.length||new Set(group.django.map(a=>identity(number,'django',a))).size<2)return [group];
+        const parts=new Map();
+        for(const address of group.django){const id=identity(number,'django',address);if(!parts.has(id))parts.set(id,{shopware:[],django:[],microtech:[]});parts.get(id).django.push(address);}
+        const partsList=[...parts.values()];
+        for(const address of group.shopware){const part=partsList.find(p=>p.django.some(a=>String(a.apiId)===String(address.id)));if(part)part.shopware.push(address);else partsList.push({shopware:[address],django:[],microtech:[]});}
+        return partsList;
+      });
+      const groups=[];
+      for(const group of split){
+        const match=groups.find(other=>{
+          let shared=false;
+          for(const key of ['shopware','django','microtech']){
+            if(!group[key].length||!other[key].length)continue;
+            const ids=addresses=>[...new Set(addresses.map(a=>identity(number,key,a)))].sort();
+            if(JSON.stringify(ids(group[key]))!==JSON.stringify(ids(other[key])))return false;
+            if(key==='microtech'){
+              const contacts=addresses=>[...new Set(addresses.flatMap(a=>(a.contacts||[]).map(contactKey)))].sort();
+              const a=contacts(group[key]),b=contacts(other[key]);
+              if(a.length&&b.length&&JSON.stringify(a)!==JSON.stringify(b))return false;
+            }
+            shared=true;
+          }
+          return shared;
+        });
+        if(match)for(const key of ['shopware','django','microtech'])match[key].push(...group[key]);
+        else groups.push({...group,shopware:[...group.shopware],django:[...group.django],microtech:[...group.microtech]});
+      }
+      return groups;
+    };
+    const cards=(number,key,addresses)=>addresses.length?uniqueAddresses(number,key,addresses).map(address=>{
+      const changed=!before&&address.members.some(r=>r._changed);
       const contacts=(address.contacts||[]).map(c=>`<div class="customer-ai-contact"><strong>${esc(c.name)||'Ansprechpartner'}</strong><span>AnsNr ${esc(address.microtechAddressNumber)} · AnspNr ${esc(c.microtechContactNumber)}</span>${c.email?`<span>${esc(c.email)}</span>`:''}</div>`).join('');
-      return `<article class="comparison-address-card${changed?' customer-ai-changed':''}">${raw?._new?'<span class="customer-ai-change-tag">Neu</span>':''}${standardAddressBadges(address)}<strong>${esc(address.label||address.contactName)||'Anschrift'}</strong>${address.contactName&&address.contactName!==address.label?`<div>${esc(address.contactName)}</div>`:''}<div>${esc(address.street)}</div><div>${esc(address.zip)} ${esc(address.city)} ${esc(address.country)}</div>${address.email?`<div>${esc(address.email)}</div>`:''}${contacts}${changed?'<span class="customer-ai-change-tag">Vorgeschlagen</span>':''}</article>`;
+      const details=address.members.length>1?`<details class="customer-ai-records"><summary>${address.members.length} Datensätze</summary>${address.members.map(raw=>`<div>${raw.is_invoice?'Rechnung · ':''}${raw.is_shipping?'Lieferung · ':''}${!before&&raw._changed?'Änderung vorgeschlagen':''}<span>${key==='django'?`Bridge ${esc(raw.id)} · SW6 ${esc(raw.api_id)||'—'}<br>Microtech AnsNr ${esc(raw.erp_ans_nr??'—')} · AnspNr ${esc(raw.erp_asp_nr??'—')}`:key==='microtech'?`Microtech AnsNr ${esc(raw.ans_nr)}`:`SW6 ${esc(raw.id)}`}</span></div>`).join('')}</details>`:'';
+      return `<article data-address-count="${address.members.length}" class="comparison-address-card${changed?' customer-ai-changed':''}">${address.members.some(r=>r._new)?'<span class="customer-ai-change-tag">Neu</span>':''}${standardAddressBadges(address)}<strong>${esc(address.label||address.contactName)||'Anschrift'}</strong>${address.contactName&&address.contactName!==address.label?`<div>${esc(address.contactName)}</div>`:''}<div>${esc(address.street)}</div><div>${esc(address.zip)} ${esc(address.city)} ${esc(address.country)}</div>${address.email?`<div>${esc(address.email)}</div>`:''}${contacts}${changed?'<span class="customer-ai-change-tag">Vorgeschlagen</span>':''}${details}</article>`;
     }).join(''):'<div class="comparison-address-empty">Keine zugeordnete Adresse</div>';
     const merge=plan?.operations?.find(op=>op.kind==='merge_shopware'),refs=new Map((snapshot?.records||[]).map(r=>[r.ref,r]));
     const mergeSummary=!before&&merge?`<div class="customer-ai-merge-flow"><strong>Kunde ${esc(refs.get(merge.source)?.number)} → Kunde ${esc(refs.get(merge.target)?.number)}</strong><span>${esc(plan.merge_preview?.addressesMoved??'—')} Adressen · ${esc(plan.merge_preview?.ordersMoved??'—')} Bestellungen übernehmen</span></div>`:'';
@@ -106,17 +167,24 @@
       const row=(label,fn)=>comparisonRow(label,SYSTEMS.map(system=>fn(system.key,normal(number,system.key),data[number]?.[system.key])));
       const role=(key,customer,billing)=>{
         const addresses=(customer?.addresses||[]).filter(a=>billing?a.isBilling:a.isShipping);
-        return addresses.map(a=>[a.label||a.contactName,a.street,[a.zip,a.city].filter(Boolean).join(' ')].filter(Boolean).join(' · ')).join(' / ');
+        return [...new Set(addresses.map(a=>[a.label||a.contactName,a.street,[a.zip,a.city].filter(Boolean).join(' ')].filter(Boolean).join(' · ')))].join(' / ');
       };
+      const combined=SYSTEMS.every(({key})=>{
+        const customer=normal(number,key),roles=billing=>[...new Set((customer?.addresses||[]).filter(a=>billing?a.isBilling:a.isShipping).map(a=>identity(number,key,a)))].sort();
+        return JSON.stringify(roles(true))===JSON.stringify(roles(false));
+      });
       let html=`<section class="customer-ai-customer"><h4>Kunde ${esc(number)}</h4><div class="comparison-matrix"><div class="comparison-matrix-corner">${before?'Ist-Zustand':'Vorschlag'}</div>${SYSTEMS.map(system=>`<div class="comparison-system-header">${esc(system.label)}</div>`).join('')}`;
       html+=row('Kunde',(key,c,raw)=>raw?raw._mergedInto?`<span class="customer-ai-removed">Zusammenführen → ${esc(raw._mergedInto)}</span>`:value(c.customerNr):value(''));
       html+=row('Name',(key,c)=>value(c?.name));
       html+=row('E-Mail / Zugang',(key,c)=>value(c?.email,!before&&c?.email!==normalize(original[number]?.[key],key)?.email));
-      html+=row('Rechnung',(key,c)=>value(role(key,c,true),!before&&role(key,c,true)!==role(key,normalize(original[number]?.[key],key),true)));
-      html+=row('Lieferung',(key,c)=>value(role(key,c,false),!before&&role(key,c,false)!==role(key,normalize(original[number]?.[key],key),false)));
-      const groups=addressComparisonGroups(number,data);
+      if(combined)html+=row('Rechnung & Lieferung',(key,c)=>value(role(key,c,true),!before&&(role(key,c,true)!==role(key,normalize(original[number]?.[key],key),true)||role(key,c,false)!==role(key,normalize(original[number]?.[key],key),false))));
+      else{
+        html+=row('Rechnung',(key,c)=>value(role(key,c,true),!before&&role(key,c,true)!==role(key,normalize(original[number]?.[key],key),true)));
+        html+=row('Lieferung',(key,c)=>value(role(key,c,false),!before&&role(key,c,false)!==role(key,normalize(original[number]?.[key],key),false)));
+      }
+      const groups=visualGroups(number);
       html+=comparisonSection('Adresszuordnungen');
-      html+=groups.map(group=>comparisonRow(group.label,SYSTEMS.map(system=>cards(number,system.key,group[system.key])),{cellClass:'comparison-address-cell',labelClass:'comparison-address-label'})).join('');
+      html+=groups.map((group,index)=>comparisonRow(`Adresse ${index+1}`,SYSTEMS.map(system=>cards(number,system.key,group[system.key])),{cellClass:'comparison-address-cell',labelClass:'comparison-address-label'})).join('');
       return html+'</div></section>';
     }).join('');
   }

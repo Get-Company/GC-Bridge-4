@@ -25,6 +25,10 @@ def duplicate_standard_snapshot():
         shop['fields'].update(id=swid)
         snap['records'] += [address, shop]
     snap['records'][0]['fields'].update(defaultBillingAddressId='c' * 32, defaultShippingAddressId='d' * 32)
+    for r in snap['records']:
+        if r['system'] == 'sw' and r['kind'] == 'address':
+            r['fields'].update(company='Beispiel GmbH', firstName='Nina', lastName='Beispiel', zipcode='12345', city='Musterstadt')
+    snap['records'][5]['fields'].update(name1='Beispiel GmbH', zipCode='12345', city='Musterstadt')
     # The ERP uses a different physical address as its default. Mapping must
     # not silently resolve that conflict by rewriting any standard roles.
     snap['records'][5]['fields'].update(isDefaultBilling=False, isDefaultShipping=False)

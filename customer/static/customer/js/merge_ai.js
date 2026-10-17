@@ -42,6 +42,13 @@
   }
   function renderActivity() {
     const working=!connectionLost&&(busy||['loading','applying'].includes(run?.status));
+    const locked=busy||['loading','applying'].includes(run?.status);
+    modal.dataset.busy=String(locked);
+    for(const element of [$('content'),$('merge-stage'),document.getElementById('customer-ai-manual'),document.getElementById('customer-merge-search-form')]) {
+      if(!element)continue;
+      element.inert=locked;element.setAttribute('aria-busy',String(locked));
+    }
+    for(const button of modal.querySelectorAll('[data-customer-ai-close]'))button.disabled=working;
     $('activity').dataset.working=String(working);
     $('spinner').hidden=!working;$('wait-hint').hidden=!working;
     $('refresh').hidden=working||(!connectionLost&&run?.status!=='needs_review');
@@ -49,7 +56,7 @@
     $('retry').textContent=continuationFailed?'Daten neu laden':run?.phase==='execute'?'Suche aktualisieren':'Erneut analysieren';
     $('apply').textContent=mergeGate?'Merge bestätigen':'Vorschlag akzeptieren';
     $('apply').hidden=busy||working||connectionLost||(mergeGate?!!run:!['ready','preview_ready'].includes(run?.status));
-    $('apply').disabled=mergeGate?!canMerge||(needsTargetCreation()&&!canCreateMergeTarget)||!mergeGate.source||!mergeGate.target||mergeGate.source===mergeGate.target:before||!canAccept(run?.proposals?.[selected]);
+    $('apply').disabled=locked||(mergeGate?!canMerge||(needsTargetCreation()&&!canCreateMergeTarget)||!mergeGate.source||!mergeGate.target||mergeGate.source===mergeGate.target:before||!canAccept(run?.proposals?.[selected]));
   }
   function setBusy(value) {
     busy=value;$('provider').disabled=value||!providerReady;
@@ -190,7 +197,7 @@
     }else{
       $('choices').innerHTML='';$('plan-title').textContent='Ist-Zustand';$('mode').textContent='Daten geladen';$('blocked').textContent='';comparison(run.snapshot);
     }
-    $('footer').textContent=run.status==='applied'?'Vorschlag übernommen':run.status==='needs_review'?`${run.completed?.length||0} Änderungen bestätigt · Stand prüfen`:run.status==='failed'?'Auftrag fehlgeschlagen':'Blau = vorgeschlagene Änderung';
+    $('footer').textContent=['loading','applying'].includes(run.status)?'':run.status==='applied'?'Vorschlag übernommen':run.status==='needs_review'?`${run.completed?.length||0} Änderungen bestätigt · Stand prüfen`:run.status==='failed'?'Auftrag fehlgeschlagen':'Blau = vorgeschlagene Änderung';
     renderActivity();
   }
   function renderPlan() {
@@ -242,6 +249,7 @@
     }catch(e){recoverStatus(e);}
   });
   for(const button of modal.querySelectorAll('[data-customer-ai-close]'))button.addEventListener('click',()=>modal.close());
+  modal.addEventListener('cancel',event=>{if(!connectionLost&&(busy||['loading','applying'].includes(run?.status)))event.preventDefault();});
   modal.addEventListener('close',()=>{if(run?.status==='applied'&&run.workflow!=='merge_first'){run=null;forget();void doSearch();}});
   document.addEventListener('customer-merge-search-progress',updateStart);
   void config();

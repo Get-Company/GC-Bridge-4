@@ -79,6 +79,32 @@ for(const id of [3,4]) {
 assert.ok(preview.render(snap,plan).includes('Rechnungsadresse'));
 """, standard_plan(), duplicate_standard_snapshot())
 
+    def test_identical_billing_shipping_and_extra_copies_render_as_one_address(self):
+        from customer.test_merge_ai_standard_addresses import duplicate_standard_snapshot, standard_plan
+        self.run_js("""
+const original=structuredClone(snap),html=preview.render(snap,plan);
+assert.ok(html.includes('Rechnung &amp; Lieferung')||html.includes('Rechnung & Lieferung'));
+assert.equal((html.match(/data-address-count="3"/g)||[]).length,2,'One combined card in SW6 and Bridge');
+const combined=html.match(/<article data-address-count="3"[\\s\\S]*?<\\/article>/g);
+for(const card of combined){assert.ok(card.includes('Rechnungsadresse'));assert.ok(card.includes('Lieferadresse'));assert.equal((card.match(/Gartenweg 8/g)||[]).length,1);}
+for(const id of [2,3,4])assert.ok(html.includes('Bridge '+id),'All underlying mappings remain inspectable');
+assert.equal((html.match(/comparison-address-card/g)||[]).length,4,'Two distinct physical ERP addresses, one SW6 and one Bridge card');
+assert.deepEqual(snap,original);
+""", standard_plan(), duplicate_standard_snapshot())
+
+    def test_different_recipients_or_hidden_business_fields_are_not_visually_combined(self):
+        from customer.test_merge_ai_standard_addresses import duplicate_standard_snapshot, standard_plan
+        for system, field in [('dj','last_name'),('dj','department'),('sw','additionalAddressLine1')]:
+            with self.subTest(system=system, field=field):
+                snap=duplicate_standard_snapshot()
+                record=next(r for r in snap['records'] if r['system']==system and r['kind']=='address')
+                record['fields'][field]='Andere Abteilung'
+                self.run_js("""
+const html=preview.render(snap,plan);
+assert.equal((html.match(/data-address-count="3"/g)||[]).length,0,'The differing copy and its real partner must stay separate');
+assert.ok(html.includes('data-address-count="2"'),'Only the two identical standard copies combine');
+""", standard_plan(), snap)
+
     def test_merge_keeps_target_roles_and_shows_server_selected_login(self):
         import copy
         snap=snapshot();snap['records'][0]['fields'].update(defaultBillingAddressId='b'*32,defaultShippingAddressId='b'*32)

@@ -93,11 +93,11 @@ nicht verwechseln. Rechnungs-/Lieferrolle nur aus Belegen ableiten; nie erraten.
 Vorhandene Rechnungs- und Lieferadressen bei neuen Zuordnungen bevorzugen: Bei
 inhaltlich identischen GC-Bridge-Dubletten nicht die rollenfreie Zusatzadresse
 verknüpfen. standard_mapping_preferences nennt solche gleichwertigen Ziele.
-Wenn Rechnung und Lieferung getrennte, identische Datensätze sind, beide soweit
-mit den vorhandenen Microtech-Schlüsseln eindeutig möglich verknüpfen (Anschrift
-und Anschrift/Ansprechpartner sind unterschiedliche Schlüssel). Nicht erst die
-Anschrift und danach den Ansprechpartner auf dieselbe Zusatzadresse legen und
-damit die Standardadressen unzugeordnet lassen. Keine Schlüssel erfinden oder
+Inhaltlich identische Rechnungs- und Lieferadressen sind EINE fachliche Anschrift
+mit beiden Rollen, auch wenn bereits mehrere technische Datensätze existieren.
+Keine künstliche Trennung in Anschrift und Ansprechpartner vorschlagen, nur um
+mehrere Dubletten zu belegen. Zuordnungen nach ihrer fachlichen Bedeutung wählen;
+die grafische Ansicht fasst identische Kopien mit ihren Rollen zusammen. Keine Schlüssel erfinden oder
 bereits vergebene Zuordnungen überschreiben. Verschiedene Personen, Firmen oder
 Zusatzangaben sind keine gleichwertigen Dubletten. Vorhandene Standardrollen
 erhalten; abweichende Standards zwischen Systemen als Konflikt benennen und ohne

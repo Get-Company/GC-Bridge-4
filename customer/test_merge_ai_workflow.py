@@ -134,6 +134,18 @@ await click('start');await click('merge-skip');assert.equal(mergeCount,0);assert
 assert.equal(requests.find(r=>r.body?.action==='analyze').body.separate_accounts,true);
 ''')
 
+    def test_analysis_locks_addresses_and_escape_until_the_result_arrives(self):
+        self.run_js(r'''
+await click('start');await click('merge-skip');
+assert.equal(ui('content').inert,true);assert.equal(ui('merge-stage').inert,true);
+assert.equal(element('customer-ai-manual').inert,true);assert.equal(element('customer-merge-search-form').inert,true);
+let prevented=false;modal.listeners.cancel({preventDefault(){prevented=true;}});assert.equal(prevented,true);
+assert.equal(ui('apply').disabled,true);
+await tick();assert.equal(ui('content').inert,false);assert.equal(element('customer-ai-manual').inert,false);
+assert.equal(element('customer-merge-search-form').inert,false);
+prevented=false;modal.listeners.cancel({preventDefault(){prevented=true;}});assert.equal(prevented,false);
+''')
+
     def test_missing_target_is_marked_and_requires_creation_permission(self):
         self.run_js(r'''
 await click('start');await choose('merge-keep',source);await choose('merge-source',target);

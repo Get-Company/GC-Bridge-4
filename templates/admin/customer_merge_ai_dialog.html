@@ -1,5 +1,12 @@
 <style>
   .customer-ai-dialog { width:min(1600px,calc(100vw - 2rem)); }
+  #customer-ai-content[aria-busy="true"],#customer-ai-merge-stage[aria-busy="true"],
+  #customer-ai-manual[aria-busy="true"],#customer-merge-search-form[aria-busy="true"] { opacity:.4; filter:grayscale(1); pointer-events:none; user-select:none; }
+  .customer-ai-dialog button:disabled { cursor:not-allowed; opacity:.45; }
+  .customer-ai-records { margin-top:.45rem; font-size:.68rem; color:#64748b; overflow-wrap:anywhere; }
+  .customer-ai-records > div { margin-top:.35rem; padding-top:.35rem; border-top:1px solid #cbd5e1; }
+  .customer-ai-records span { display:block; }
+  .dark .customer-ai-records { color:#94a3b8; }
   .customer-ai-layout { display:grid; grid-template-columns:14rem minmax(0,1fr); gap:1.25rem; align-items:start; }
   .customer-ai-layout[data-merge="true"] { grid-template-columns:1fr; }
   .customer-ai-sidebar { position:sticky; top:0; max-height:calc(100dvh - 19rem); overflow-y:auto; padding-right:.25rem; }

@@ -17,21 +17,27 @@ class MergeAIActivityTest(SimpleTestCase):
         harness = r'''
 const assert=require('node:assert/strict');
 const elements=new Map();
-const $=id=>{if(!elements.has(id))elements.set(id,{hidden:false,dataset:{}});return elements.get(id);};
+const $=id=>{if(!elements.has(id))elements.set(id,{hidden:false,dataset:{},setAttribute(k,v){this[k]=v;}});return elements.get(id);};
+const closeButtons=[{},{}],modal={dataset:{},querySelectorAll:()=>closeButtons};
+const document={getElementById:id=>$(id)};
 let busy=true,connectionLost=false,run=null,selected=0,before=false,mergeGate=null,continuationFailed=false,canCreateMergeTarget=false;const needsTargetCreation=()=>false;const canAccept=()=>false;
 ACTIVITY
 renderActivity();
 assert.equal($('spinner').hidden,false);
 assert.equal($('wait-hint').hidden,false);
 for(const id of ['refresh','apply','retry'])assert.equal($(id).hidden,true,id);
+for(const id of ['content','merge-stage','customer-ai-manual','customer-merge-search-form'])assert.equal($(id).inert,true,id);
+assert.ok(closeButtons.every(button=>button.disabled));assert.equal($('apply').disabled,true);
 run={status:'loading'};busy=false;renderActivity();
 assert.equal($('spinner').hidden,false);
 run.status='ready';renderActivity();assert.equal($('spinner').hidden,true);
+assert.equal($('content').inert,false);assert.ok(closeButtons.every(button=>!button.disabled));
 run.status='applying';renderActivity();assert.equal($('spinner').hidden,false);
 connectionLost=true;busy=true;renderActivity();
 assert.equal($('spinner').hidden,true);
 assert.equal($('refresh').hidden,false);
 assert.equal($('apply').hidden,true);
+assert.equal($('content').inert,true);assert.ok(closeButtons.every(button=>!button.disabled));
 connectionLost=false;run.status='failed';busy=false;renderActivity();
 assert.equal($('spinner').hidden,true);
 assert.equal($('retry').hidden,false);
