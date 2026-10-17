@@ -2,7 +2,11 @@ Kundenmerge KI
 ==============
 
 Öffnen Sie **Kunden → Kundenmerge KI**, suchen Sie die gewünschten Kunden und
-wählen Sie **KI-Vorschlag anzeigen**. Die bisherige Ansicht **Kunden zusammenführen**
+warten Sie, bis die Statusanzeige die Abfragen aus SW6, GC-Bridge und Microtech
+als abgeschlossen meldet. Microtech kann über GraphQL länger benötigen. Die Anzeige
+unterscheidet gefundene Kunden, keine Treffer und Fehler. **KI-Vorschlag anzeigen**
+wird erst bei vollständig abgeschlossener Suche mit Treffern verfügbar. Bei einem
+Fehler starten Sie die Suche erneut. Die bisherige Ansicht **Kunden zusammenführen**
 bleibt über den Umschalter verfügbar.
 
 Der Assistent liest die Geschäftsdaten der gefundenen Kunden aus Shopware 6,

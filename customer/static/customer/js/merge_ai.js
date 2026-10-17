@@ -12,7 +12,7 @@
   const labels = {api_id:'SW6-ID',erp_ans_nr:'Microtech AnsNr',erp_asp_nr:'Microtech AnspNr',erp_ans_id:'Microtech Anschrift-ID',erp_asp_id:'Microtech Ansprechpartner-ID',erp_combined_id:'Microtech Kombi-ID',id:'ID',customerNumber:'Kundennummer',erp_nr:'AdrNr',street:'Straße',zipcode:'PLZ',zipCode:'PLZ',postal_code:'PLZ',city:'Ort',company:'Firma',name:'Name',name1:'Name 1',name2:'Name 2',name3:'Name 3',email:'E-Mail',is_invoice:'Rechnungsadresse',is_shipping:'Lieferadresse',defaultBillingAddressId:'Rechnungsadresse SW6-ID',defaultShippingAddressId:'Lieferadresse SW6-ID',addressSubNumber:'AnsNr',contactNumber:'AnspNr'};
   let run = null, selected = 0, hovering = null, before = false, busy = false;
   let canApply = false, canMerge = false, pollTimer = null, generation = 0;
-  let versions = [], retainedId = '', autoReviewKey = '';
+  let versions = [], retainedId = '', autoReviewKey = '', providerMessage = 'KI-Zugang wird geprüft…', providerReady = false;
   try { retainedId = sessionStorage.getItem('gc-customer-ai-run') || ''; } catch (_) { /* Optional recovery pointer only. */ }
 
   async function request(body, id) {
@@ -30,10 +30,14 @@
   function remember() { try { sessionStorage.setItem('gc-customer-ai-run', run.id); } catch (_) { /* Status remains available until page reload. */ } }
   function updateStart() {
     const size = numbers().length;
+    const search = customerAISearchReadiness();
     $('start').lastChild.textContent = run && JSON.stringify(run.numbers) === JSON.stringify(numbers()) ? 'Vorschlag öffnen' : 'KI-Vorschlag anzeigen';
     if (swMergePending) document.getElementById('customer-ai-manual').open = true;
-    $('start').disabled = !size || size > 8 || !$('provider').value || busy;
-    if (!run && size > 8) $('status').textContent = 'Bitte die Suche auf höchstens acht Kunden eingrenzen, damit alle Daten vollständig analysiert werden.';
+    $('start').disabled = !search.ready || !size || size > 8 || !providerReady || !$('provider').value || busy;
+    if (!search.ready) $('status').textContent = search.message;
+    else if (size > 8) $('status').textContent = 'Bitte die Suche auf höchstens acht Kunden eingrenzen, damit alle Daten vollständig analysiert werden.';
+    else if (!providerReady || !$('provider').value) $('status').textContent = providerMessage;
+    else if (!busy) $('status').textContent = search.message + ' Die Analyse wird über die API abgerechnet.';
   }
   function setBusy(value) {
     busy = value;
@@ -55,12 +59,13 @@
         $('provider-settings').classList.remove('hidden');
       }
       if (!result.providers.length) {
-        $('status').textContent = 'Kein aktiver OpenAI-Provider mit API-Schlüssel vorhanden. Bitte unter KI-Provider einrichten.';
+        providerMessage = 'Kein aktiver OpenAI-Provider mit API-Schlüssel vorhanden. Bitte unter KI-Provider einrichten.';
         $('provider').disabled = true;
       } else {
         $('status').textContent = 'API-Zugang vorhanden. Die Analyse wird über die API abgerechnet; übernommen wird erst nach deiner Bestätigung.';
         $('provider').disabled = false;
       }
+      providerReady = result.providers.length > 0;
       updateStart();
       if (retainedId) {
         try {
@@ -70,10 +75,11 @@
           if (['loading','applying'].includes(run.status)) { setBusy(true); schedulePoll(); }
         } catch (_) { retainedId = ''; }
       }
-    } catch (e) { $('status').textContent = e.message; }
+    } catch (e) { providerReady = false; providerMessage = e.message; updateStart(); }
   }
   async function start(revise = false) {
     if (busy) return;
+    if (!customerAISearchReadiness().ready) { error(customerAISearchReadiness().message); return; }
     const objection = $('objection').value.trim();
     if (revise && !objection) { error('Bitte zuerst einen Einwand formulieren.'); return; }
     const body = {action:'analyze', numbers:numbers(), provider_id:Number($('provider').value)};
@@ -308,7 +314,7 @@
     $('review').textContent=merge?'Zusammenführung prüfen':'Daten erneut prüfen';
     if (merge && ['ready','preview_ready'].includes(run.status) && canReview(run.proposals[selected])) $('review').disabled=busy;
   };
-  $('start').addEventListener('click',()=>{ if (run && JSON.stringify(run.numbers)===JSON.stringify(numbers())) { open(); render(); } else void start(); });
+  $('start').addEventListener('click',()=>{ if ($('start').disabled) return; if (run && JSON.stringify(run.numbers)===JSON.stringify(numbers())) { open(); render(); } else void start(); });
   $('new').addEventListener('click',()=>void start());
   $('revise').addEventListener('click',()=>void start(true));
   $('provider').addEventListener('change',()=>{ updateStart(); });
@@ -331,6 +337,7 @@
   modal.addEventListener('toggle',drawConnections);
   modal.addEventListener('click',event=>{if(event.target.tagName==='SUMMARY')requestAnimationFrame(drawConnections);});
   new ResizeObserver(()=>requestAnimationFrame(drawConnections)).observe($('diagram'));
+  document.addEventListener('customer-merge-search-progress',updateStart);
   new MutationObserver(updateStart).observe(document.getElementById('results-rows'),{childList:true,subtree:true});
   void config();
 })();
