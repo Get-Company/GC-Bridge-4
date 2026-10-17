@@ -42,22 +42,35 @@ unklaren Merge-Ergebnis erfolgt keine automatische Weiterarbeit; zuerst muss der
 Vorgangsstatus geklärt werden. Ein Fehler beim anschließenden Laden lässt sich mit
 **Daten neu laden** wiederholen, ohne den Merge erneut auszuführen.
 
-Links wählen Sie einen Vorschlag oder **Ist-Zustand**. Rechts zeigt die bekannte
-Vergleichsmatrix SW6, GC-Bridge und Microtech mit denselben Feldern in einer Zeile.
-Rechnungs- und Lieferadresse stehen oben; zugeordnete Anschriften darunter.
-Vorgeschlagene Änderungen sind blau markiert. Die Hauptansicht enthält keine
-Erklärabsätze; Begründung und Belege sind bei Bedarf aufklappbar.
+Die Hauptansicht entspricht dem klassischen Kundenmerge: SW6 links,
+GC-Bridge in der Mitte, Microtech rechts. Sind mehrere AdrNr in SW6 vorhanden,
+markieren ein orangefarbener Hinweis und ein Pfeil den Merge-Bereich.
 
-**Vorschlag akzeptieren** prüft die Daten unmittelbar vor dem Speichern erneut.
+Nach der Analyse erscheinen Empfehlungen direkt in dieser Ansicht. Orange Pfeile
+verbinden die konkreten SW6-Adress-IDs beziehungsweise Microtech-Kennungen mit den
+vorgefüllten Feldern in der Mitte. **Ist-Zustand** zeigt die gespeicherten Werte,
+**KI-Empfehlung** den Entwurf. Vorgeschlagene Standardrollen stehen an der
+jeweiligen Microtech-Adresse. Im Entwurf sind einzelne manuelle Speicher- und
+Löschaktionen ausgeblendet; **Vorschlag übernehmen** bestätigt den gesamten Plan.
+
+Shopware ist für die Rechnungs- und Lieferauswahl maßgeblich. Abweichende
+Microtech-Standards werden zur Übernahme der Shopware-Auswahl vorgeschlagen.
+Getrennte Shopware-IDs für inhaltlich exakt gleiche Rechnungs- und Lieferadressen
+bleiben erhalten und dürfen dieselbe Microtech-AnsNr/AnspNr erhalten. Es werden
+hier nur vorhandene Datensätze zugeordnet; die Analyse kopiert, löscht oder
+vereinigt keine Adressen. Historische Bestellanschriften bleiben unverändert.
+
+**Vorschlag übernehmen** prüft die Daten unmittelbar vor dem Speichern erneut.
 Hat sich seit der Suche etwas geändert, wird die Übernahme abgebrochen und eine
-neue Suche verlangt.
+neue Suche verlangt. Nach erfolgreicher Übernahme wird die klassische Ansicht
+mit aktuellen Daten neu geladen, ohne eine weitere kostenpflichtige Analyse.
 
-Offene Fragen verhindern die Übernahme. Unter **Vorschlag ändern** können Sie
-einen Einwand nachreichen. Die Überarbeitung erzeugt eine neue Version mit dem
-gleichen Suchstand. Bei unklarer Merge-Antwort liest **Status prüfen** ausschließlich
-das Ergebnis des bestehenden Vorgangs nach; der Merge wird nicht erneut gesendet.
-Nach einer Übernahme wird die Suche beim Schließen aktualisiert. Nach manuellen
-Änderungen ist vor der nächsten KI-Analyse ebenfalls eine neue Suche erforderlich.
+Offene Fragen verhindern die Übernahme. Unter **Einwand** kann die Empfehlung
+überarbeitet werden; die neue Version verwendet denselben Suchstand. Während
+Analyse und Speicherung sind die Adressen ausgegraut und nicht bedienbar.
+Bei unklarer Merge-Antwort liest **Status prüfen** das Ergebnis des bestehenden
+Vorgangs nach; der Merge wird nicht erneut gesendet. Nach manuellen Änderungen
+ist vor der nächsten KI-Analyse ebenfalls eine neue Suche erforderlich.
 
 Einrichtung und Betrieb
 ----------------------

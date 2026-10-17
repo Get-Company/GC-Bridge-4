@@ -7,7 +7,7 @@
   const $=id=>document.getElementById('customer-ai-'+id);
   const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   let run=null, selected=0, before=false, busy=false, connectionLost=false;
-  let mergeGate=null,continuing=false,continuationFailed=false;
+  let mergeGate=null,continuing=false,continuationFailed=false,appliedRefresh='';
   let canApply=false, canMerge=false, canCreateMergeTarget=false, canConsolidate=false, canChangeOrder=false, providerReady=false, providerMessage='KI-Zugang wird geprüft…';
   let pollTimer=null,generation=0,versions=[];
   const numbers=()=>[...new Set(searchErps.map(String))].sort();
@@ -36,6 +36,11 @@
     else if(multiple&&!busy)$('status').textContent=`${accounts(searchProgress?.snapshot).length} Konten · zuerst richtige und falsche AdrNr auswählen`;
     else if(!providerReady)$('status').textContent=providerMessage;
     else if(!busy)$('status').textContent='Suchdaten geladen · KI-Analyse über API';
+    const hint=$('merge-hint');
+    if(hint)hint.hidden=!search.ready||!multiple;
+    const mergeSection=document.getElementById('sw-merge-section');
+    if(mergeSection)mergeSection.classList.toggle('customer-ai-merge-needed',search.ready&&multiple);
+    if(!sameSearch()&&$('inline')){$('inline').hidden=true;const rows=document.getElementById('results-rows');if(rows)rows.dataset.aiDraft='false';}
     if(swMergePending)document.getElementById('customer-ai-manual').open=true;
   }
   function needsTargetCreation() {
@@ -46,7 +51,7 @@
     const working=!connectionLost&&(busy||['loading','applying'].includes(run?.status));
     const locked=busy||['loading','applying'].includes(run?.status);
     modal.dataset.busy=String(locked);
-    for(const element of [$('content'),$('merge-stage'),document.getElementById('customer-ai-manual'),document.getElementById('customer-merge-search-form')]) {
+    for(const element of [$('content'),$('merge-stage'),document.getElementById('customer-ai-manual'),document.getElementById('customer-merge-search-form'),$('inline'),$('merge-hint')]) {
       if(!element)continue;
       element.inert=locked;element.setAttribute('aria-busy',String(locked));
     }
@@ -132,7 +137,7 @@
     if(!customerAISearchReadiness().ready||!searchId()){error('Bitte zuerst die Kunden suchen.');return false;}
     const objection=$('objection').value.trim();
     if(revise&&!objection){error('Bitte zuerst einen Einwand eingeben.');return false;}
-    const body={action:'analyze',numbers:numbers(),provider_id:Number($('provider').value),search_id:searchId(),separate_accounts:separateAccounts};
+    const body={action:'analyze',mapping_only:true,numbers:numbers(),provider_id:Number($('provider').value),search_id:searchId(),separate_accounts:separateAccounts};
     if(revise&&run)Object.assign(body,{previous_id:run.id,objection});
     mergeGate=null;connectionLost=false;continuationFailed=false;error('');open();setBusy(true);
     $('merge-stage').hidden=true;$('content').hidden=true;progress('Die KI prüft die Adresszuordnungen…');
@@ -176,12 +181,28 @@
       if(['loading','applying'].includes(run.status))pollTimer=setTimeout(()=>poll(seq),1500);
       else{
         setBusy(false);render();remember();
-        if(continuesAfterMerge()&&run.status==='applied'&&modal.open)await continueAfterMerge();
+        if(run.mapping_only&&run.status==='applied')await refreshAppliedMappings();
+        else if(continuesAfterMerge()&&run.status==='applied'&&modal.open)await continueAfterMerge();
       }
     }catch(e){recoverStatus(e);}
   }
+  async function refreshAppliedMappings() {
+    if(appliedRefresh===run.id)return;
+    const id=run.id;appliedRefresh=id;setBusy(true);progress('Zuordnungen übernommen · Vergleich wird aktualisiert…');
+    try {
+      await doSearch();
+      if(!customerAISearchReadiness().ready)throw new Error(customerAISearchReadiness().message);
+      setBusy(false);run=null;forget();$('inline').hidden=true;modal.close();
+      $('status').textContent='Zuordnungen übernommen · aktueller Stand geladen';
+    }catch(e){appliedRefresh='';setBusy(false);error('Zuordnungen übernommen. '+e.message);$('retry').hidden=false;}
+  }
   function render() {
     if(!run)return;
+    if(run.mapping_only&&run.status==='applied'){ $('content').hidden=true;progress('Zuordnungen übernommen');renderActivity();return; }
+    if(run.mapping_only&&['ready','preview_ready'].includes(run.status)) {
+      renderInline();renderActivity();if(modal.open)modal.close();return;
+    }
+    if($('inline'))$('inline').hidden=true;
     progress(busy||['loading','applying','failed','needs_review'].includes(run.status)?run.message:'');
     if(['failed','needs_review'].includes(run.status))error(run.message);
     if(run.workflow==='merge_first'){
@@ -203,6 +224,17 @@
     $('footer').textContent=['loading','applying'].includes(run.status)?'':run.status==='applied'?'Vorschlag übernommen':run.status==='needs_review'?`${run.completed?.length||0} Änderungen bestätigt · Stand prüfen`:run.status==='failed'?'Auftrag fehlgeschlagen':'Blau = vorgeschlagene Änderung';
     renderActivity();
   }
+  function renderInline() {
+    const plan=run?.proposals?.[selected];if(!plan)return;
+    $('inline').hidden=false;
+    $('inline-choices').innerHTML='<button type="button" class="merge-button" data-inline-before aria-pressed="'+before+'">Ist-Zustand</button>'+run.proposals.map((p,index)=>`<button type="button" class="merge-button" data-inline-plan="${index}" aria-pressed="${!before&&selected===index}">${escape(index===0?'KI-Empfehlung':p.title)}</button>`).join('');
+    $('inline-choices').querySelector('[data-inline-before]').addEventListener('click',()=>{before=true;renderInline();});
+    for(const button of $('inline-choices').querySelectorAll('[data-inline-plan]'))button.addEventListener('click',()=>{selected=Number(button.dataset.inlinePlan);before=false;renderInline();});
+    $('inline-apply').hidden=before;
+    $('inline-apply').disabled=busy||!canAccept(plan);
+    $('inline-blocked').textContent=plan.blocked||plan.questions.join(' ')||(!plan.operations.length?'Zuordnungen stimmen bereits überein.':before?'':'Orange = vorgeschlagene ID · noch nicht gespeichert');
+    renderCustomerAIRecommendations(run.snapshot,plan,before);
+  }
   function renderPlan() {
     const plan=run?.proposals?.[selected];if(!plan)return;
     $('plan-title').textContent=before?'Ist-Zustand':plan.title;
@@ -216,14 +248,17 @@
   async function accept() {
     if(mergeGate){await confirmMerge();return;}
     if(busy||before||!canAccept(run?.proposals?.[selected]))return;
-    error('');setBusy(true);progress('Die Daten werden vor dem Speichern geprüft…');
+    error('');open();setBusy(true);progress('Die Daten werden vor dem Speichern geprüft…');
     try {
       if(!run.approval_tokens?.[selected])run=await request({action:'preview',run_id:run.id,index:selected});
       run=await request({action:'execute',run_id:run.id,index:selected,preview_token:run.approval_tokens?.[selected]||run.preview_token});
       remember();render();schedulePoll();
     }catch(e){recoverStatus(e);}
   }
-  $('start').addEventListener('click',()=>{if($('start').disabled)return;if(sameSearch()){open();render();if(continuesAfterMerge()&&run.status==='applied')void continueAfterMerge();}else beginWorkflow();});
+  if($('inline-apply'))$('inline-apply').addEventListener('click',()=>void accept());
+  if($('inline-revise'))$('inline-revise').addEventListener('click',()=>{$('objection').value=$('inline-objection').value;void start(true);});
+  if($('merge-open'))$('merge-open').addEventListener('click',()=>showMergeGate());
+  $('start').addEventListener('click',()=>{if($('start').disabled)return;if(sameSearch()){if(!run.mapping_only||!['ready','preview_ready'].includes(run.status))open();render();if(continuesAfterMerge()&&run.status==='applied')void continueAfterMerge();}else beginWorkflow();});
   $('merge-keep').addEventListener('change',()=>{mergeGate.target=$('merge-keep').value;if(mergeGate.source===mergeGate.target)mergeGate.source='';renderGate();});
   $('merge-source').addEventListener('change',()=>{mergeGate.source=$('merge-source').value;renderGate();});
   $('merge-skip').addEventListener('click',()=>void start(false,true));
@@ -232,6 +267,7 @@
   $('new').addEventListener('click',()=>void start(false,!!run?.separate_accounts));
   $('revise').addEventListener('click',()=>void start(true));
   $('retry').addEventListener('click',async()=>{
+    if(run?.mapping_only&&run.status==='applied'){await refreshAppliedMappings();return;}
     if(continuationFailed){await continueAfterMerge();return;}
     if(run?.phase==='execute'){
       mergeGate=null;run=null;forget();$('merge-stage').hidden=true;$('content').hidden=true;error('');setBusy(true);progress('Kundendaten werden neu geladen…');

@@ -1244,6 +1244,7 @@ class CustomerIdUpdateService(BaseService):
         address_id: int,
         ans_nr: int,
         asp_nr: int | None,
+        *, allow_identical: bool = False,
     ) -> dict[str, Any]:
         """Map an existing Bridge address to a Microtech postal address/contact pair.
 
@@ -1267,7 +1268,12 @@ class CustomerIdUpdateService(BaseService):
             else candidates.filter(erp_asp_nr__isnull=True).first()
         )
         if duplicate:
-            raise ValueError("Diese microtech-Anschrift/Ansprechpartner-Zuordnung ist bereits vergeben.")
+            from customer.services.address_recommendations import BUSINESS_FIELDS, identical_addresses
+            same = allow_identical and all(identical_addresses(
+                {k: getattr(address, k) for k in BUSINESS_FIELDS},
+                {k: getattr(other, k) for k in BUSINESS_FIELDS}) for other in candidates.filter(erp_asp_nr=asp_nr))
+            if not same:
+                raise ValueError("Diese microtech-Anschrift/Ansprechpartner-Zuordnung ist bereits vergeben.")
 
         old_mapping = {"ans_nr": address.erp_ans_nr, "asp_nr": address.erp_asp_nr}
         address.erp_ans_nr = ans_nr
@@ -1721,6 +1727,7 @@ class CustomerSyncDirectionService(BaseService):
         erp_nr: str,
         django_address_id: int,
         role: str,
+        follow_shopware: bool = False,
     ) -> dict[str, Any]:
         """Set one fully mapped address as billing or shipping in all systems.
 
@@ -1800,10 +1807,14 @@ class CustomerSyncDirectionService(BaseService):
         # Both remote writes are performed before Django changes its local
         # flags. A failed remote write therefore cannot make the comparison
         # screen claim a fully synchronized default assignment.
-        shopware_service.update_customer(
-            shopware_customer_id,
-            {shopware_field: shopware_address_id},
-        )
+        if follow_shopware:
+            if _to_str(shopware_customer.get(shopware_field)).lower() != shopware_address_id:
+                raise ValueError("Die Shopware-Standardadresse wurde geändert. Bitte erneut suchen.")
+        else:
+            shopware_service.update_customer(
+                shopware_customer_id,
+                {shopware_field: shopware_address_id},
+            )
         with microtech_connection() as microtech_client:
             microtech_client.update_customer(
                 erp_nr,
@@ -1818,7 +1829,10 @@ class CustomerSyncDirectionService(BaseService):
             locked_addresses.update(**{django_field: False})
             # One Microtech postal address can have multiple contact persons.
             # All local rows for that Anschrift mirror its shared default role.
-            locked_addresses.filter(erp_ans_nr=microtech_address_number).update(**{django_field: True})
+            if follow_shopware:
+                locked_addresses.filter(api_id__iexact=shopware_address_id).update(**{django_field: True})
+            else:
+                locked_addresses.filter(erp_ans_nr=microtech_address_number).update(**{django_field: True})
 
         logger.info(
             "Address default synchronized: customer={} role={} django_address={} shopware_address={} microtech_ans_nr={}",

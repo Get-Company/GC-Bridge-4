@@ -15,14 +15,14 @@ ROOT=Path(__file__).resolve().parents[1]
 
 @skipUnless(shutil.which('node'),'Node is needed for controller checks')
 class MergeFirstControllerTests(SimpleTestCase):
-    def run_js(self,assertions,deny_target_creation=False,initial_snapshot=None,initial_plan=None):
+    def run_js(self,assertions,deny_target_creation=False,initial_snapshot=None,initial_plan=None,mapping_mode=False):
         harness=r'''
-const assert=require('node:assert/strict');const denyTargetCreation=DENY_TARGET;
+const assert=require('node:assert/strict');const denyTargetCreation=DENY_TARGET;const mappingReply=MAPPING_MODE;
 const elements=new Map(),timers=[],requests=[],searches=[],rendered=[];
 const element=id=>{
  if(!elements.has(id))elements.set(id,{value:'',innerHTML:'',textContent:'',hidden:false,disabled:false,open:false,dataset:{apiUrl:'/ai'},lastChild:{textContent:''},
-  listeners:{},classList:{remove(){}},setAttribute(){},replaceChildren(){},append(option){this.value=String(option.value);},
-  addEventListener(name,fn){this.listeners[name]=fn;},querySelectorAll(){return [];},querySelector(){return {scrollTop:0};},
+  listeners:{},classList:{remove(){},toggle(name,value){this[name]=value;}},setAttribute(){},replaceChildren(){},append(option){this.value=String(option.value);},
+  addEventListener(name,fn){this.listeners[name]=fn;},querySelectorAll(){return [];},querySelector(){return {scrollTop:0,addEventListener(){}};},
   showModal(){this.open=true;},close(){this.open=false;this.listeners.close?.();}});
  return elements.get(id);
 };
@@ -32,6 +32,7 @@ const storage=new Map(),sessionStorage={getItem:key=>storage.get(key),setItem:(k
 const setTimeout=fn=>(timers.push(fn),timers.length),clearTimeout=()=>{};
 const CSRF='test';let swMergePending=null,searchErps=['12196','950059'],busySearch=false,searchFailure=false,remainingCount=1;
 let searchProgress={cacheId:'search0',snapshot:SNAPSHOT};
+const renderCustomerAIRecommendations=(snapshot,plan,before)=>rendered.push({snapshot,plan,before});
 const CustomerMergePreview={render:(snapshot,plan,before)=>{rendered.push({snapshot,plan,before});return 'three-columns';}};
 const customerAISearchReadiness=()=>({ready:!busySearch&&!searchFailure,message:searchFailure?'Suche unvollständig':'Geladen'});
 async function doSearch(options){searches.push(options);if(searchFailure)return;searchProgress={cacheId:'search'+searches.length,snapshot:structuredClone(searchProgress.snapshot)};
@@ -50,11 +51,11 @@ let fetch=async(url,options)=>{
   results.set(lastMerge.id,lastMerge);if(loseMergeResponse)throw Error('connection lost');return response({...lastMerge,status:'loading'});
  }
  if(body?.action==='analyze'){
-  analysisCount++;const run={id:'analysis'+analysisCount,phase:'analyze',status:'ready',search_id:body.search_id,numbers:[...searchErps],snapshot:structuredClone(searchProgress.snapshot),proposals:[PLAN],version:1,message:'Bereit',approval_tokens:['token']};
+  analysisCount++;const run={mapping_only:mappingReply,id:'analysis'+analysisCount,phase:'analyze',status:'ready',search_id:body.search_id,numbers:[...searchErps],snapshot:structuredClone(searchProgress.snapshot),proposals:[PLAN],version:1,message:'Bereit',approval_tokens:['token']};
   results.set(run.id,run);return response({...run,status:'loading',proposals:null});
  }
  if(body?.action==='execute'){
-  executeCount++;const r=results.get(body.run_id);Object.assign(r,{workflow:'address_consolidation',phase:'execute',status:addressStatus,post_merge_numbers:[...searchErps],selected:0});
+  executeCount++;const r=results.get(body.run_id);Object.assign(r,{workflow:mappingReply?'mapping':'address_consolidation',phase:'execute',status:addressStatus,post_merge_numbers:[...searchErps],selected:0});
   return response({...r,status:'loading'});
  }
  if(body?.action==='address_merge_status'){
@@ -72,7 +73,7 @@ const choose=async(id,value)=>{ui(id).value=value;await ui(id).listeners.change?
 const tick=async()=>{assert.ok(timers.length,'expected polling');await timers.shift()();await flush();};
 const source='sw:customer:'+'4'.repeat(32),target='sw:customer:'+'a'.repeat(32);
 (async()=>{await flush();ASSERTIONS})().catch(error=>{console.error(error);process.exitCode=1;});
-'''.replace('DENY_TARGET',str(deny_target_creation).lower()).replace('SNAPSHOT',json.dumps(initial_snapshot or multiple_snapshot(3))).replace('PLAN',json.dumps(initial_plan or {**plan(),'changes':[],'blocked':''})).replace('CONTROLLER',(ROOT/'customer/static/customer/js/merge_ai.js').read_text()).replace('ASSERTIONS',assertions)
+'''.replace('MAPPING_MODE',str(mapping_mode).lower()).replace('DENY_TARGET',str(deny_target_creation).lower()).replace('SNAPSHOT',json.dumps(initial_snapshot or multiple_snapshot(3))).replace('PLAN',json.dumps(initial_plan or {**plan(),'changes':[],'blocked':''})).replace('CONTROLLER',(ROOT/'customer/static/customer/js/merge_ai.js').read_text()).replace('ASSERTIONS',assertions)
         result=subprocess.run([shutil.which('node'),'-e',harness],capture_output=True,text=True,timeout=10)
         self.assertEqual(result.returncode,0,result.stdout+result.stderr)
 
@@ -194,3 +195,22 @@ assert.equal(ui('refresh').hidden,false);addressStatus='applied';await click('re
 assert.equal(addressStatusCount,1);assert.equal(executeCount,1);await tick();
 assert.equal(executeCount,1);assert.equal(searches.length,1);assert.equal(analysisCount,2);
 ''',**self.address_fixture())
+
+    def test_mapping_recommendation_is_inline_and_confirming_refreshes_without_paid_reanalysis(self):
+        from customer.test_merge_ai import snapshot
+        self.run_js(r"""
+await flush();searchErps=['12196'];ui('start').listeners.click();await flush();
+assert.equal(requests.find(r=>r.body?.action==='analyze').body.mapping_only,true);
+await tick();assert.equal(modal.open,false);assert.equal(ui('inline').hidden,false);
+assert.equal(rendered.at(-1).before,false);
+ui('inline-apply').listeners.click();await flush();assert.equal(executeCount,1);
+assert.equal(modal.open,true);await tick();
+assert.equal(searches.length,1);assert.equal(analysisCount,1);assert.equal(ui('inline').hidden,true);assert.equal(modal.open,false);
+""",initial_snapshot=snapshot(),mapping_mode=True)
+
+    def test_two_shopware_accounts_highlight_the_merge_area(self):
+        self.run_js(r"""
+await flush();assert.equal(ui('merge-hint').hidden,false);
+assert.equal(element('sw-merge-section').classList['customer-ai-merge-needed'],true);
+assert.equal(mergeCount,0);assert.equal(analysisCount,0);
+""")

@@ -26,7 +26,7 @@ renderActivity();
 assert.equal($('spinner').hidden,false);
 assert.equal($('wait-hint').hidden,false);
 for(const id of ['refresh','apply','retry'])assert.equal($(id).hidden,true,id);
-for(const id of ['content','merge-stage','customer-ai-manual','customer-merge-search-form'])assert.equal($(id).inert,true,id);
+for(const id of ['content','merge-stage','customer-ai-manual','customer-merge-search-form','inline','merge-hint'])assert.equal($(id).inert,true,id);
 assert.ok(closeButtons.every(button=>button.disabled));assert.equal($('apply').disabled,true);
 run={status:'loading'};busy=false;renderActivity();
 assert.equal($('spinner').hidden,false);

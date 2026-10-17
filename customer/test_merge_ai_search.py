@@ -33,7 +33,7 @@ const SYSTEMS=[{key:'shopware'},{key:'django'},{key:'microtech'}];
 const elements=new Map();
 const element=id=>{
  if(!elements.has(id)) elements.set(id,{value:'',innerHTML:'',textContent:'',disabled:false,
-  lastChild:{textContent:''},attributes:{},classList:{remove(){}},
+  lastChild:{textContent:''},attributes:{},dataset:{},classList:{remove(){},toggle(){}},
   setAttribute(key,value){this.attributes[key]=value;}});
  return elements.get(id);
 };

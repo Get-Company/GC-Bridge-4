@@ -453,11 +453,23 @@
     <p id="customer-ai-status" class="mt-2 text-xs text-gray-500 dark:text-gray-400" role="status" aria-live="polite">Änderungen erst nach deiner Bestätigung. Die Analyse wird über die API abgerechnet.</p>
   </section>
 
-    <details id="customer-ai-manual" class="rounded-lg border border-gray-200 p-4 dark:border-gray-700"><summary class="text-sm font-medium">Manuell vergleichen und bearbeiten</summary><div class="mt-4 space-y-4">
+    <section id="customer-ai-inline" class="customer-ai-inline" hidden aria-label="KI-Zuordnungen">
+      <div id="customer-ai-inline-choices" class="customer-ai-inline-choices"></div>
+      <button type="button" id="customer-ai-inline-apply" class="merge-button merge-button-primary">Vorschlag übernehmen</button>
+      <span id="customer-ai-inline-blocked" role="status"></span>
+      <details><summary>Einwand</summary><label for="customer-ai-inline-objection">Was soll berücksichtigt werden?</label>
+        <textarea id="customer-ai-inline-objection" rows="2" maxlength="4000"></textarea>
+        <button type="button" id="customer-ai-inline-revise" class="merge-button">Neu vorschlagen</button></details>
+    </section>
+    <section id="customer-ai-merge-hint" class="customer-ai-merge-hint" hidden>
+      <span aria-hidden="true">↓</span><strong>Beide AdrNr in SW6 · Kundenmerge prüfen</strong>
+      <button type="button" id="customer-ai-merge-open" class="merge-button">Richtige und falsche AdrNr auswählen</button>
+    </section>
+    <section id="customer-ai-manual" class="space-y-4">
     <div id="sw-merge-section"></div>
     <div id="results-rows"></div>
     <div id="merge-section"></div>
-    </div></details>
+    </section>
   </div>
 </div>
 
@@ -489,6 +501,7 @@
 <script>
 const CSRF = '{{ csrf_token }}';
 let searchData = {};
+let customerAIDraft = null;
 let searchErps = [];
 let activeSearchId = 0;
 let searchProgress = null;
@@ -893,7 +906,7 @@ function comparisonAddressCard(nr, sysKey, address, defaultActions = '', synchro
       : '';
   const microtechContactsHtml = sysKey === 'microtech' ? microtechContacts(nr, address) : '';
 
-  return `<article class="comparison-address-card flex gap-2">
+  return `<article class="comparison-address-card flex gap-2" data-system="${esc(sysKey)}" data-address-id="${esc(sysKey === 'microtech' ? address.microtechAddressNumber : address.id)}" data-erp-nr="${esc(nr)}">
     ${copyToDjango}${copyToShopware}
     ${checkbox}
     <div class="flex-1 min-w-0">
@@ -1517,7 +1530,7 @@ function renderComparisonRow(nr) {
       return customer ? comparisonValue(customer.extra.join(' · ')) : comparisonUnavailable(nr, system.key);
     }))}
     ${comparisonSection('Adressen', `SW6 ${addressCounts[0]} · GC-Bridge ${addressCounts[1]} · Microtech ${addressCounts[2]}. Jede Zeile ist eine gemeinsame Zuordnung.`)}
-    ${comparisonRow('Auswahl', SYSTEMS.map(system => comparisonAddressActions(nr, system.key, data[system.key]?.addresses || [])), {cellClass: 'comparison-address-actions'})}
+    ${customerAIDraft ? '' : comparisonRow('Auswahl', SYSTEMS.map(system => comparisonAddressActions(nr, system.key, data[system.key]?.addresses || [])), {cellClass: 'comparison-address-actions'})}
   `;
 
   if (visibleAddressGroups.length) {
@@ -1558,6 +1571,85 @@ function renderComparisonRow(nr) {
   html += `</div></div>`;
   return html;
 }
+
+function renderCustomerAIRecommendations(snapshot, plan, before = false) {
+  const original = searchData;
+  const preview = before ? snapshot : CustomerMergePreview.project(snapshot, plan);
+  try {
+    searchData = CustomerMergePreview.sources(preview);
+    customerAIDraft = before || plan?.blocked ? null : plan;
+    document.getElementById('results-rows').innerHTML = Object.keys(searchData).map(renderComparisonRow).join('');
+  } finally { searchData = original; customerAIDraft = null; }
+  document.getElementById('results-rows').dataset.aiDraft = 'false';
+  if (before || !plan || plan.blocked) return;
+  const rows = document.getElementById('results-rows');
+  // Drafts are confirmed as one server-validated plan. Per-field save buttons
+  // must not bypass that approval or save only half of a recommendation.
+  rows.dataset.aiDraft = 'true';
+  for (const button of rows.querySelectorAll('button,select,input[type="checkbox"]')) button.disabled = true;
+  for (const field of rows.querySelectorAll('input:not([type="checkbox"]),textarea')) field.readOnly = true;
+  for (const card of rows.querySelectorAll('[data-system="microtech"][data-address-id]')) {
+    const originalAddress=snapshot.records.find(r=>r.system==='mt'&&r.kind==='address'&&r.number===card.dataset.erpNr&&String(r.fields.addressSubNumber)===card.dataset.addressId);
+    const next=preview.records.find(r=>r.ref===originalAddress?.ref);
+    if(!originalAddress||!next||['isDefaultBilling','isDefaultShipping'].every(key=>Boolean(originalAddress.fields[key])===Boolean(next.fields[key])))continue;
+    const roles=fields=>[fields.isDefaultBilling?'Rechnung':'',fields.isDefaultShipping?'Lieferung':''].filter(Boolean).join(' + ')||'keine Standardrolle';
+    const tag=document.createElement('div');tag.className='customer-ai-id-proposal';tag.textContent=`KI: ${roles(next.fields)} · bisher: ${roles(originalAddress.fields)}`;(card.querySelector('.min-w-0')||card).append(tag);
+  }
+  for (const change of plan.changes || []) {
+    if (!change.kind.startsWith('link_')) continue;
+    const target = preview.records.find(r => r.ref === change.target);
+    if (!target) continue;
+    const cards = [...rows.querySelectorAll('[data-system="django"][data-address-id]')];
+    const card = cards.find(el => el.dataset.addressId === String(target.fields.id) && el.dataset.erpNr === target.number);
+    let field = change.kind === 'link_microtech_address' ? card?.querySelector('.microtech-number-field') : card?.querySelector('.shopware-id-field');
+    if (change.kind === 'link_customer') field = [...rows.querySelectorAll('textarea[data-id-key="customer_id"]')].find(el => el.dataset.idValue === String(target.fields.id))?.parentElement;
+    if (!field) continue;
+    field.classList.add('customer-ai-id-proposal');
+    const previous = change.kind === 'link_microtech_address' ? `AnsNr ${change.before.erp_ans_nr ?? '—'} / AnspNr ${change.before.erp_asp_nr ?? '—'}` : change.before.api_id || '—';
+    const label = document.createElement('span'); label.className = 'customer-ai-previous';label.textContent = `KI · bisher ${previous}`;field.append(label);
+  }
+  drawCustomerAIArrows(snapshot, preview, plan);
+
+}
+
+function drawCustomerAIArrows(snapshot, preview, plan) {
+  const rows=document.getElementById('results-rows');
+  for(const old of rows.querySelectorAll('.customer-ai-connectors'))old.remove();
+  if(rows.dataset.aiDraft!=='true')return;
+  const records=new Map(preview.records.map(record=>[record.ref,record]));
+  const links=(plan.changes||[]).filter(change=>change.kind.startsWith('link_'));
+  for(const change of plan.changes||[]) {
+    const target=records.get(change.kind.startsWith('set_')?change.source:change.target);
+    if(target?.system==='dj'&&target.kind==='address'&&target.fields.api_id&&!links.some(link=>link.kind==='link_shopware_address'&&link.target===target.ref))
+      links.push({kind:'link_shopware_address',source:'sw:address:'+target.fields.api_id,target:target.ref});
+  }
+  const ns='http://www.w3.org/2000/svg';
+  for(const number of Object.keys(preview.availability||{})) {
+    const matrix=document.getElementById('row-'+number)?.querySelector('.comparison-matrix');if(!matrix)continue;
+    const box=matrix.getBoundingClientRect(),svg=document.createElementNS(ns,'svg');
+    svg.classList.add('customer-ai-connectors');svg.setAttribute('aria-hidden','true');svg.setAttribute('width',String(matrix.scrollWidth));svg.setAttribute('height',String(matrix.scrollHeight));
+    const markerId='customer-ai-arrowhead-'+number;
+    svg.innerHTML=`<defs><marker id="${markerId}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#ea580c"/></marker></defs>`;
+    for(const link of links) {
+      const target=records.get(link.target),source=records.get(link.source);if(!target||!source||target.number!==number)continue;
+      const card=(record,system)=>[...matrix.querySelectorAll('[data-system="'+system+'"][data-address-id]')].find(element=>element.dataset.addressId===String(system==='microtech'?record.fields.addressSubNumber:record.fields.id));
+      const local=card(target,'django'),isMT=link.kind==='link_microtech_address';
+      const sourceCard=card(source,isMT?'microtech':'shopware');
+      const targetField=local?.querySelector(isMT?'.microtech-number-field':'.shopware-id-field');
+      if(!sourceCard||!targetField)continue;
+      const start=sourceCard.getBoundingClientRect(),end=targetField.getBoundingClientRect();
+      const x1=(isMT?start.left:start.right)-box.left,y1=start.top-box.top+Math.min(start.height/2,75);
+      const x2=(isMT?end.right:end.left)-box.left,y2=end.top-box.top+end.height/2;
+      const mid=(x1+x2)/2,path=document.createElementNS(ns,'path');
+      path.setAttribute('d',`M ${x1} ${y1} C ${mid} ${y1}, ${mid} ${y2}, ${x2} ${y2}`);
+      path.setAttribute('stroke','#ea580c');path.setAttribute('stroke-width','2.5');path.setAttribute('fill','none');path.setAttribute('marker-end',`url(#${markerId})`);svg.append(path);
+      targetField.classList.add('customer-ai-id-proposal');
+    }
+    matrix.append(svg);
+  }
+  rows._aiArrowLayout=()=>drawCustomerAIArrows(snapshot,preview,plan);
+}
+window.addEventListener('resize',()=>{const rows=document.getElementById('results-rows');if(rows?.dataset.aiDraft==='true')rows._aiArrowLayout?.();});
 
 function renderToggle(label, count, content, group = '') {
   const isOpen = group && openAddressGroups.has(group);

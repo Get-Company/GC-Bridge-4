@@ -1,4 +1,25 @@
 <style>
+  .customer-ai-inline { position:sticky;top:0;z-index:20;display:flex;flex-wrap:wrap;align-items:center;gap:.6rem;padding:.8rem;border:1px solid #f59e0b;border-radius:.5rem;background:#fffbeb;color:#78350f; }
+  .customer-ai-inline[hidden],.customer-ai-merge-hint[hidden] { display:none; }
+  .customer-ai-inline-choices { display:flex;flex-wrap:wrap;gap:.5rem;flex:1; }
+  .customer-ai-inline-choices button[aria-pressed="true"] { background:#fed7aa;border-color:#ea580c;color:#7c2d12; }
+  .customer-ai-inline details { flex-basis:100%;font-size:.8rem; }
+  .customer-ai-inline label,.customer-ai-inline textarea { display:block;width:100%;margin:.4rem 0; }
+  .customer-ai-inline textarea { background:white;color:#334155;border:1px solid #cbd5e1;padding:.5rem;border-radius:.4rem; }
+  .customer-ai-merge-hint,.customer-ai-merge-needed { border:2px solid #f59e0b!important;border-radius:.5rem;background:#fffbeb!important;color:#78350f;padding:1rem; }
+  .customer-ai-merge-hint { display:flex;flex-wrap:wrap;align-items:center;gap:1rem; }
+  .customer-ai-merge-hint > span { font-size:2rem;color:#ea580c; }
+  .comparison-address-card,.comparison-matrix { position:relative; }
+  #results-rows[data-ai-draft="true"] .microtech-number-field { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .customer-ai-connectors { position:absolute;inset:0;z-index:3;pointer-events:none;overflow:visible; }
+  #results-rows[data-ai-draft="true"] button,#results-rows[data-ai-draft="true"] input[type="checkbox"],#results-rows[data-ai-draft="true"] select { display:none; }
+  #results-rows[data-ai-draft="true"] input,#results-rows[data-ai-draft="true"] textarea { cursor:default; }
+
+  .customer-ai-id-proposal { border:2px solid #f59e0b!important;background:#fff7ed!important;border-radius:.4rem;padding:.4rem!important; }
+  .customer-ai-previous { grid-column:1 / -1;display:block;flex-basis:100%;font-size:.65rem;color:#9a3412;overflow-wrap:anywhere; }
+  .dark .customer-ai-inline,.dark .customer-ai-merge-hint,.dark .customer-ai-merge-needed,.dark .customer-ai-id-proposal { background:#431407!important;color:#ffedd5; }
+  .dark .customer-ai-previous { color:#fdba74; }
+
   .customer-ai-dialog { width:min(1600px,calc(100vw - 2rem)); }
   #customer-ai-content[aria-busy="true"],#customer-ai-merge-stage[aria-busy="true"],
   #customer-ai-manual[aria-busy="true"],#customer-merge-search-form[aria-busy="true"] { opacity:.4; filter:grayscale(1); pointer-events:none; user-select:none; }

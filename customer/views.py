@@ -111,7 +111,7 @@ def customer_merge_ai_api(request):
         if action == "analyze":
             result = service.start(
                 owner=request.user.pk, numbers=body.get("numbers"), provider_id=body.get("provider_id"),
-                search_id=body.get("search_id", ""), separate_accounts=body.get("separate_accounts", False), previous_id=body.get("previous_id", ""), objection=body.get("objection", ""),
+                mapping_only=body.get("mapping_only", False), search_id=body.get("search_id", ""), separate_accounts=body.get("separate_accounts", False), previous_id=body.get("previous_id", ""), objection=body.get("objection", ""),
             )
         elif action == "merge":
             if not request.user.has_perm("customer.delete_customer"):

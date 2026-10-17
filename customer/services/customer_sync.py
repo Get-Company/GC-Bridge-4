@@ -108,7 +108,7 @@ class CustomerSyncService(BaseService):
                         asp_nr=contact_data["asp_nr"],
                         defaults=address_defaults,
                     )
-                    seen_local_address_ids.append(address.pk)
+                    seen_local_address_ids.extend(address.__dict__.get("_shared_mapping_ids", [address.pk]))
                 anschrift_service.range_next()
 
         if seen_local_address_ids:
@@ -140,6 +140,16 @@ class CustomerSyncService(BaseService):
             address = qs.filter(erp_ans_nr=ans_nr, erp_asp_nr__isnull=True).first()
         if not address:
             address = Address(customer=customer)
+
+        # Separate Shopware billing/shipping IDs can represent one exact
+        # postal address and share its ERP key. Keep every Shopware row and
+        # its chosen roles; an ERP refresh must not prune the second copy.
+        if address.pk and address.api_id:
+            shared = list(qs.filter(erp_ans_nr=ans_nr, erp_asp_nr=asp_nr)
+                          .exclude(api_id__isnull=True).exclude(api_id=""))
+            if len(shared) > 1:
+                address._shared_mapping_ids = [row.pk for row in shared]
+                defaults = {key: value for key, value in defaults.items() if key.startswith("erp_")}
 
         for field_name, field_value in defaults.items():
             setattr(address, field_name, field_value)
