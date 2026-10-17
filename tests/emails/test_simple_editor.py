@@ -76,12 +76,19 @@ def test_simple_newsletter_renders_selected_preview_recipient_data():
         campaign_products=ProductRows([]),
     )
     recipient = SimpleNamespace(
-        customer=None,
+        customer=SimpleNamespace(
+            company="Muster & Partner",
+            addresses=[SimpleNamespace(
+                is_invoice=True, street="Musterweg 4", postal_code="83250",
+                city="Marquartstein", phone="08641 123",
+            )],
+        ),
         full_name="Max Mustermann",
         first_name="Max",
         last_name="Mustermann",
         email="max@example.com",
         erp_nr="10042",
+        street="Veraltete Straße", zip_code="00000", city="Altstadt",
     )
 
     with patch("emails.simple_editor._campaign_sales_channel_ids", return_value=()):
@@ -89,6 +96,29 @@ def test_simple_newsletter_renders_selected_preview_recipient_data():
 
     assert "Hallo Max Mustermann" in mjml
     assert "<strong>Kunden-Nr.: 10042</strong>" in mjml
+    assert "Stimmen Ihre Daten noch?" in mjml
+    assert "Muster &amp; Partner" in mjml
+    assert "Musterweg 4" in mjml
+    assert "83250 Marquartstein" in mjml
+    assert "08641 123" in mjml
+    assert "max@example.com" in mjml
+    assert "Veraltete Straße" not in mjml
+
+
+def test_recipient_details_use_newsletter_address_without_linked_customer():
+    campaign = SimpleNamespace(editor_content={}, campaign_products=ProductRows([]))
+    recipient = SimpleNamespace(
+        customer=None, first_name="Erika", last_name="Musterfrau", erp_nr="",
+        email="erika@example.com", street="Nebenweg 7", zip_code="80331", city="München",
+    )
+    with patch("emails.simple_editor._campaign_sales_channel_ids", return_value=()):
+        mjml = build_simple_mjml(campaign, recipient=recipient)
+
+    assert "Nebenweg 7" in mjml
+    assert "80331 München" in mjml
+    assert "erika@example.com" in mjml
+    assert "None" not in mjml
+    assert "{{ recipient_profile." not in mjml
 
 
 def test_percentage_override_takes_precedence_over_catalog_special_price():

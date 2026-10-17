@@ -86,6 +86,7 @@
         <mj-text align="center"><p style="font-size:24px">{{ content.order_text|linebreaksbr }}</p></mj-text>
         <mj-text align="right" color="#ff9933" font-size="24px" line-height="34px"><p>{{ content.order_phone|linebreaksbr }}</p></mj-text>
       </mj-column></mj-section>
+      {% include "emails/_recipient_details.mjml" %}
       {% if offers %}
       <mj-section><mj-column><mj-table>
         {% for offer in offers %}

@@ -1,0 +1,14 @@
+<mj-section css-class="editor-recipient-details">
+  <mj-column>
+    <mj-text><p style="font-weight:bold">Stimmen Ihre Daten noch? Bitte berichtigen Sie:</p></mj-text>
+    <mj-table css-class="contact_table" font-size="14px" line-height="28px" padding="0">
+      <tr><td width="20%">Vorname:</td><td width="40%" style="word-break:break-word">{{ recipient_profile.first_name }}</td><td width="40%" style="border-bottom:1px dotted #000000">&nbsp;</td></tr>
+      <tr><td>Nachname:</td><td style="word-break:break-word">{{ recipient_profile.last_name }}</td><td style="border-bottom:1px dotted #000000">&nbsp;</td></tr>
+      <tr><td>Firma:</td><td style="word-break:break-word">{{ recipient_profile.company }}</td><td style="border-bottom:1px dotted #000000">&nbsp;</td></tr>
+      <tr><td>Straße:</td><td style="word-break:break-word">{{ recipient_profile.street }}</td><td style="border-bottom:1px dotted #000000">&nbsp;</td></tr>
+      <tr><td>PLZ/Ort:</td><td style="word-break:break-word">{{ recipient_profile.postal_line }}</td><td style="border-bottom:1px dotted #000000">&nbsp;</td></tr>
+      <tr><td>Telefon:</td><td style="word-break:break-word">{{ recipient_profile.phone }}</td><td style="border-bottom:1px dotted #000000">&nbsp;</td></tr>
+      <tr><td>E-Mail:</td><td style="word-break:break-word">{{ recipient_profile.email }}</td><td style="border-bottom:1px dotted #000000">&nbsp;</td></tr>
+    </mj-table>
+  </mj-column>
+</mj-section>
