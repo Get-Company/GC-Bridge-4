@@ -4,7 +4,7 @@ Kundenmerge KI
 Öffnen Sie **Kunden → Kundenmerge KI**, suchen Sie die gewünschten Kunden und
 warten Sie, bis die Statusanzeige die Abfragen aus SW6, GC-Bridge und Microtech
 als abgeschlossen meldet. Microtech kann über GraphQL länger benötigen. Die Anzeige
-unterscheidet gefundene Kunden, keine Treffer und Fehler. **KI-Vorschlag anzeigen**
+unterscheidet gefundene Kunden, keine Treffer und Fehler. **Konten prüfen** beziehungsweise **KI-Vorschlag anzeigen**
 wird erst bei vollständig abgeschlossener Suche mit Treffern verfügbar. Bei einem
 Fehler starten Sie die Suche erneut. Die bisherige Ansicht **Kunden zusammenführen**
 bleibt über den Umschalter verfügbar.
@@ -18,18 +18,31 @@ Die Suche lädt die vollständigen Geschäftsdaten einmalig und hält sie
 benutzergebunden bereit. Die KI verwendet genau diesen Datenstand, auch bei einer
 Überarbeitung. Variantenwechsel und Ist-Vergleich laden keine Systemdaten nach.
 
+Bei zwei oder mehr Shopkonten zeigt **Konten prüfen** zuerst die Auswahl
+**Richtige AdrNr · bleibt erhalten** und **Falsche AdrNr · wird zusammengeführt**.
+Wählen Sie beide Nummern und klicken Sie **Merge bestätigen**. Eine KI-Anfrage ist
+hierfür nicht erforderlich. Der Merge wird vor der Ausführung frisch geprüft und
+über das verifizierte Shopware-Plugin ausgeführt. Doppelte Bestätigungen erzeugen
+keinen zweiten Vorgang. Bei mehreren falschen Konten erfolgt die Auswahl
+nacheinander; die bereits bestätigte richtige AdrNr bleibt vorausgewählt.
+
+Nach einem bestätigten Merge lädt die Ansicht die verbliebenen Kunden neu und
+startet automatisch die KI-Analyse ihrer Adresszuordnungen. Bei weiteren
+Shopkonten kommt zuerst wieder die AdrNr-Auswahl. Gehören die Konten nicht
+zusammen, führt **Konten getrennt lassen** direkt zur Adressanalyse. Bei einem
+unklaren Merge-Ergebnis erfolgt keine automatische Weiterarbeit; zuerst muss der
+Vorgangsstatus geklärt werden. Ein Fehler beim anschließenden Laden lässt sich mit
+**Daten neu laden** wiederholen, ohne den Merge erneut auszuführen.
+
 Links wählen Sie einen Vorschlag oder **Ist-Zustand**. Rechts zeigt die bekannte
 Vergleichsmatrix SW6, GC-Bridge und Microtech mit denselben Feldern in einer Zeile.
 Rechnungs- und Lieferadresse stehen oben; zugeordnete Anschriften darunter.
-Vorgeschlagene Änderungen sind blau markiert. Eine kurze Erklärung beschreibt
-die Wirkung; Begründung und Belege sind bei Bedarf aufklappbar.
+Vorgeschlagene Änderungen sind blau markiert. Die Hauptansicht enthält keine
+Erklärabsätze; Begründung und Belege sind bei Bedarf aufklappbar.
 
 **Vorschlag akzeptieren** prüft die Daten unmittelbar vor dem Speichern erneut.
 Hat sich seit der Suche etwas geändert, wird die Übernahme abgebrochen und eine
-neue Suche verlangt. Eine Zusammenführung verwendet die verbindliche Prüfung
-und den verifizierten Merge des Shopware-Plugins im Hintergrund. Weicht dessen
-Ergebnis vom angezeigten Vorschlag ab, wird vor dem Merge abgebrochen. Eine
-weitere Bestätigung in einem zweiten Modal ist nicht erforderlich.
+neue Suche verlangt.
 
 Offene Fragen verhindern die Übernahme. Unter **Vorschlag ändern** können Sie
 einen Einwand nachreichen. Die Überarbeitung erzeugt eine neue Version mit dem

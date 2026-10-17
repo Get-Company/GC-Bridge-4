@@ -197,7 +197,56 @@ class CustomerMergeAIService(BaseService):
             self.enqueue(state)
         return self.public(state)
 
-    def start(self, *, owner, numbers, provider_id, search_id="", previous_id="", objection=""):
+    def confirmed_merge(self, *, owner, search_id):
+        self.get(search_id, owner)
+        run_id = self.cache.get("merge-selection:" + search_id)
+        return self.public(self.get(run_id, owner)) if run_id else {"status": "not_submitted"}
+
+    def confirm_merge(self, *, owner, search_id, source_ref, target_ref):
+        """An explicit pair selection is the consent; never let a model pick it."""
+        search = self.get(search_id, owner)
+        if search.get("phase") != "search" or search["status"] != "search_ready":
+            raise ValueError("Bitte zuerst die vollständige Suche abwarten.")
+        accounts = {r["ref"]: r for r in search["snapshot"]["records"] if r["system"] == "sw" and r["kind"] == "customer"}
+        if not isinstance(source_ref, str) or not isinstance(target_ref, str) or source_ref == target_ref or source_ref not in accounts or target_ref not in accounts:
+            raise ValueError("Bitte unterschiedliche richtige und falsche AdrNr aus dieser Suche auswählen.")
+        source, target = accounts[source_ref], accounts[target_ref]
+        if source["number"] == target["number"]:
+            raise ValueError("Die AdrNr sind nicht eindeutig. Bitte manuell prüfen.")
+        lock = "merge-select-lock:" + search_id
+        if not self.cache.add(lock, True, 10):
+            raise ValueError("Die Bestätigung wird bereits verarbeitet. Bitte den Status abwarten.")
+        try:
+            existing = self.cache.get("merge-selection:" + search_id)
+            if existing:
+                state = self.get(existing, owner)
+                if state["merge_selection"] != {"source": source_ref, "target": target_ref}:
+                    raise ValueError("Für diese Suche wurde bereits eine andere Auswahl bestätigt. Bitte erneut suchen.")
+                return self.public(state)
+            proposal = {"title": "Kunden zusammenführen", "reason": "", "certainty": "clear", "questions": [],
+                        "evidence": [{"ref": ref, "field": "id", "finding": "AdrNr wurde ausdrücklich ausgewählt."} for ref in (source_ref, target_ref)],
+                        "operations": [{"kind": "merge_shopware", "source": source_ref, "target": target_ref,
+                                        "reason": "Richtige und falsche AdrNr vom Mitarbeiter bestätigt."}]}
+            snapshot = copy.deepcopy(search["snapshot"])
+            validated = self.validate_result({"summary": "", "proposals": [proposal]}, snapshot)
+            if validated["proposals"][0]["blocked"]:
+                raise ValueError(validated["proposals"][0]["blocked"])
+            state = {"id": uuid.uuid4().hex, "owner": owner, "numbers": search["numbers"], "version": 1,
+                     "workflow": "merge_first", "merge_selection": {"source": source_ref, "target": target_ref},
+                     "keep_number": target["number"], "post_merge_numbers": [n for n in search["numbers"] if n != source["number"]],
+                     "phase": "execute", "status": "loading", "selected": 0, "jobs": None,
+                     "started": time.time(), "snapshot": snapshot, "fingerprint": fingerprint(snapshot),
+                     "search_id": search_id, "loaded_at": search.get("loaded_at"), "writes_started": False,
+                     "merge_operation_id": uuid.uuid4().hex, "completed": [], **validated,
+                     "message": "Die bestätigten AdrNr werden vor dem Merge geprüft."}
+            self.save(state)
+            self.cache.set("merge-selection:" + search_id, state["id"], TTL)
+            self.enqueue(state)
+            return self.public(state)
+        finally:
+            self.cache.delete(lock)
+
+    def start(self, *, owner, numbers, provider_id, search_id="", previous_id="", objection="", separate_accounts=False):
         if not isinstance(numbers, list) or not 1 <= len(numbers) <= MAX_CUSTOMERS:
             raise ValueError(f"Bitte die Suche auf 1 bis {MAX_CUSTOMERS} Kunden begrenzen.")
         if any(not isinstance(n, str) or not re.fullmatch(r"[0-9]{1,18}", n) for n in numbers):
@@ -221,12 +270,18 @@ class CustomerMergeAIService(BaseService):
             raise ValueError("Die Suchauswahl wurde geändert. Bitte erneut suchen.")
         if not source.get("snapshot", {}).get("records"):
             raise ValueError("Es wurden keine Kunden gefunden.")
+        if type(separate_accounts) is not bool:
+            raise ValueError("Ungültige Kontenauswahl.")
+        separate_accounts = separate_accounts or bool(previous and previous.get("separate_accounts"))
         snapshot = copy.deepcopy(source["snapshot"])
+        if sum(r["system"] == "sw" and r["kind"] == "customer" for r in snapshot["records"]) > 1 and not separate_accounts:
+            raise ValueError("Bitte zuerst richtige und falsche AdrNr auswählen oder die Konten getrennt lassen.")
         state = {"id": uuid.uuid4().hex, "owner": owner, "numbers": numbers,
                  "provider_id": provider.pk, "model": provider.model_name,
                  "version": previous["version"] + 1 if previous else 1,
                  "previous": {"summary": previous.get("summary"), "proposals": previous.get("proposals")} if previous else None,
                  "objection": objection.strip(), "phase": "analyze", "status": "loading",
+                 "address_only": True, "separate_accounts": separate_accounts,
                  "snapshot": snapshot, "fingerprint": fingerprint(snapshot),
                  "search_id": previous.get("search_id", "") if previous else search_id,
                  "loaded_at": source.get("loaded_at"), "started": time.time(), "jobs": None,
@@ -326,10 +381,11 @@ class CustomerMergeAIService(BaseService):
                 if not snapshot:
                     raise ValueError("Bitte die Seite neu laden und die Kunden einmal suchen.")
                 result, usage = AIProviderService().structured_response(
-                    provider=self.provider(state["provider_id"]), instructions=INSTRUCTIONS, schema=self.response_schema(snapshot),
+                    provider=self.provider(state["provider_id"]), instructions=INSTRUCTIONS + ("\nNur Adresszuordnungen: merge_shopware ist in diesem Schritt ausgeschlossen." if state.get("address_only") else ""),
+                    schema=self.response_schema(snapshot, address_only=state.get("address_only", False)),
                     context={"snapshot": snapshot, "previous": state["previous"], "objection": state["objection"]},
                 )
-                state.update(self.validate_result(result, snapshot))
+                state.update(self.validate_result(result, snapshot, address_only=state.get("address_only", False)))
                 state.update(status="ready", usage=usage, approval_tokens=[uuid.uuid4().hex for _ in state["proposals"]],
                              message="Die Vorschläge sind bereit.")
                 state.pop("previous", None)
@@ -370,7 +426,8 @@ class CustomerMergeAIService(BaseService):
     def public(state):
         keys = ("id", "numbers", "status", "message", "summary", "proposals", "snapshot", "version", "usage",
                 "model", "selected", "preview_token", "preview_at", "completed", "current_step",
-                "phase", "search_progress", "loaded_at", "search_id", "approval_tokens", "merge_operation_id")
+                "phase", "search_progress", "loaded_at", "search_id", "approval_tokens", "merge_operation_id",
+                "workflow", "merge_selection", "keep_number", "post_merge_numbers", "separate_accounts")
         return {k: state[k] for k in keys if k in state}
 
     def snapshot(self, numbers, microtech, *, systems=("sw", "dj", "mt"), allow_empty=False):
@@ -489,7 +546,7 @@ class CustomerMergeAIService(BaseService):
             page += 1
 
     @staticmethod
-    def response_schema(snapshot):
+    def response_schema(snapshot, *, address_only=False):
         """Constrain evidence to exact record/field pairs before generation.
 
         Records with identical field sets share a branch. Literal patterns keep
@@ -497,6 +554,8 @@ class CustomerMergeAIService(BaseService):
         This changes no data and never guesses aliases between source systems.
         """
         schema = copy.deepcopy(SCHEMA)
+        if address_only:
+            schema["properties"]["proposals"]["items"]["properties"]["operations"]["items"]["properties"]["kind"]["enum"].remove("merge_shopware")
         groups = {}
         for record in snapshot["records"]:
             fields = tuple(sorted(record["fields"]))
@@ -525,7 +584,7 @@ class CustomerMergeAIService(BaseService):
         schema["properties"]["proposals"]["items"]["properties"]["evidence"]["items"] = {"anyOf": branches}
         return schema
 
-    def validate_result(self, result, snapshot):
+    def validate_result(self, result, snapshot, *, address_only=False):
         if not isinstance(result, dict) or not isinstance(result.get("summary"), str):
             raise ValueError("Ungültige KI-Zusammenfassung.")
         plans = result.get("proposals")
@@ -558,6 +617,8 @@ class CustomerMergeAIService(BaseService):
                      "set_billing": 3, "set_shipping": 4}
             plan["operations"].sort(key=lambda op: order.get(op.get("kind"), 5) if isinstance(op, dict) else 6)
             try:
+                if address_only and any(op.get("kind") == "merge_shopware" for op in plan["operations"] if isinstance(op, dict)):
+                    raise ValueError("Kundenmerges müssen zuerst mit richtiger und falscher AdrNr bestätigt werden.")
                 plan["changes"] = self.compile_plan(plan, snapshot)
                 if plan["operations"] and plan["operations"][0]["kind"] == "merge_shopware":
                     plan["merge_preview"] = self.merge_expectation(snapshot, plan["operations"][0])

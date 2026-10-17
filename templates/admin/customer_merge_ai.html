@@ -438,7 +438,7 @@
     <div class="flex flex-wrap items-end justify-between gap-3">
       <div class="flex-1">
         <h2 class="text-sm font-semibold text-gray-700 dark:text-gray-200">KI-Assistent für Kunden und Adressen</h2>
-        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Die KI prüft die gefundenen Kunden in allen drei Systemen und empfiehlt passende Adresszuordnungen oder eine Zusammenführung.</p>
+        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Konten zusammenführen · Rechnungs- und Lieferadressen zuordnen</p>
         <details class="mt-3 text-xs"><summary>KI-Einstellungen</summary><div class="mt-2 flex flex-wrap items-center gap-3">
           <label for="customer-ai-provider" class="text-xs font-medium">KI-Provider</label>
           <select id="customer-ai-provider" disabled class="rounded border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800"><option>Provider werden geladen…</option></select>
@@ -1292,7 +1292,7 @@ async function addMicrotechResults(jobIds, searchId) {
   }
 }
 
-async function doSearch() {
+async function doSearch({customerNumbers = null} = {}) {
   const criteria = {
     customer_number: document.getElementById('search-customer-number').value.trim(),
     shopware_customer_id: document.getElementById('search-shopware-customer-id').value.trim(),
@@ -1304,6 +1304,12 @@ async function doSearch() {
     postal_code: document.getElementById('search-postal-code').value.trim(),
     city: document.getElementById('search-city').value.trim(),
   };
+  if (customerNumbers) {
+    for (const key of Object.keys(criteria)) criteria[key] = '';
+    criteria.customer_number = customerNumbers.join(',');
+    document.getElementById('search-customer-number').value = criteria.customer_number;
+    for (const field of ['email','company','last-name','first-name','street','postal-code','city','shopware-customer-id']) document.getElementById('search-'+field).value = '';
+  }
   if (!Object.values(criteria).some(Boolean)) return;
   const searchId = ++activeSearchId;
   openAddressGroups.clear();
@@ -1367,6 +1373,7 @@ async function doSearch() {
 
 function presentLoadedSearch(result) {
   if (!searchProgress) return;
+  searchProgress.snapshot = result.snapshot;
   searchErps = result.numbers || [];
   searchData = CustomerMergePreview.sources(result.snapshot || {records:[],availability:{}});
   searchProgress.cellStates = {};

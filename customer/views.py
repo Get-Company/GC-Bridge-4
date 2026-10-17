@@ -87,6 +87,8 @@ def customer_merge_ai_api(request):
     try:
         service = CustomerMergeAIService()
         if request.method == "GET":
+            if request.GET.get("merge_search_id"):
+                return JsonResponse(service.confirmed_merge(owner=request.user.pk, search_id=request.GET["merge_search_id"]))
             if request.GET.get("run_id"):
                 return JsonResponse(service.public(service.get(request.GET["run_id"], request.user.pk)))
             providers = service.providers()
@@ -106,8 +108,13 @@ def customer_merge_ai_api(request):
         if action == "analyze":
             result = service.start(
                 owner=request.user.pk, numbers=body.get("numbers"), provider_id=body.get("provider_id"),
-                search_id=body.get("search_id", ""), previous_id=body.get("previous_id", ""), objection=body.get("objection", ""),
+                search_id=body.get("search_id", ""), separate_accounts=body.get("separate_accounts", False), previous_id=body.get("previous_id", ""), objection=body.get("objection", ""),
             )
+        elif action == "merge":
+            if not request.user.has_perm("customer.delete_customer"):
+                return JsonResponse({"error": "Keine Berechtigung zum Kundenmerge."}, status=403)
+            result = service.confirm_merge(owner=request.user.pk, search_id=body.get("search_id"),
+                source_ref=body.get("source_ref"), target_ref=body.get("target_ref"))
         elif action == "merge_status":
             if not request.user.has_perm("customer.delete_customer"):
                 return JsonResponse({"error": "Keine Berechtigung zur Merge-Statusprüfung."}, status=403)

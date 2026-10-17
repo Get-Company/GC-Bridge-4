@@ -1,7 +1,19 @@
 <style>
   .customer-ai-dialog { width:min(1600px,calc(100vw - 2rem)); }
   .customer-ai-layout { display:grid; grid-template-columns:14rem minmax(0,1fr); gap:1.25rem; align-items:start; }
+  .customer-ai-layout[data-merge="true"] { grid-template-columns:1fr; }
   .customer-ai-sidebar { position:sticky; top:0; max-height:calc(100dvh - 19rem); overflow-y:auto; padding-right:.25rem; }
+  .customer-ai-merge-pickers { display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin:.7rem 0; }
+  .customer-ai-merge-pickers label { display:flex; flex-direction:column; gap:.4rem; font-size:.8rem; font-weight:600; }
+  .customer-ai-merge-pickers select { width:100%; padding:.6rem; border:1px solid #94a3b8; border-radius:.4rem; background:#fff; color:#334155; }
+  .customer-ai-merge-direction { display:grid; grid-template-columns:1fr auto 1fr; gap:.8rem; align-items:center; margin:.7rem 0; }
+  .customer-ai-account { display:flex; flex-direction:column; gap:.2rem; padding:.7rem; border:1px solid #cbd5e1; border-radius:.5rem; }
+  .customer-ai-account strong { font-size:1.25rem; }.customer-ai-account span { font-size:.75rem; overflow-wrap:anywhere; }
+  .customer-ai-account-source { border-color:#fda4af; background:#fff1f2; }.customer-ai-account-target { border-color:#86efac; background:#f0fdf4; }
+  .customer-ai-arrow { font-size:1.6rem; }.customer-ai-merge-stage > h3 { font-weight:600; }
+  .customer-ai-merge-stage .merge-button { margin-bottom:.7rem; }
+  .dark .customer-ai-merge-pickers select { background:#111827; color:#e2e8f0; }
+  .dark .customer-ai-account-source { background:#4c0519; }.dark .customer-ai-account-target { background:#052e16; }
   .customer-ai-choices { display:flex; flex-direction:column; gap:.5rem; margin:.6rem 0; }
   .customer-ai-choice { display:block; width:100%; text-align:left; padding:.8rem; border:1px solid #cbd5e1; border-radius:.5rem; background:#fff; color:#334155; }
   .customer-ai-choice[aria-pressed="true"] { border-color:#2563eb; background:#eff6ff; }
@@ -62,9 +74,19 @@
       <div><p id="customer-ai-progress" class="customer-ai-message"></p><p id="customer-ai-wait-hint" class="customer-ai-hint" hidden>Bitte warten. Das Ergebnis erscheint automatisch.</p></div>
     </div>
     <div id="customer-ai-error" class="customer-ai-message customer-ai-error" role="alert"></div>
+    <section id="customer-ai-merge-stage" class="customer-ai-merge-stage" aria-label="Kundenmerge bestätigen" hidden>
+      <h3>Konten zusammenführen?</h3>
+      <div class="customer-ai-merge-pickers">
+        <label for="customer-ai-merge-source">Falsche AdrNr · wird zusammengeführt<select id="customer-ai-merge-source"></select></label>
+        <label for="customer-ai-merge-keep">Richtige AdrNr · bleibt erhalten<select id="customer-ai-merge-keep"></select></label>
+      </div>
+      <div id="customer-ai-merge-direction" class="customer-ai-merge-direction"></div>
+      <p id="customer-ai-merge-warning" class="customer-ai-message customer-ai-warning"></p>
+      <button type="button" id="customer-ai-merge-skip" class="merge-button">Konten getrennt lassen</button>
+    </section>
     <div id="customer-ai-content" hidden>
-      <div class="customer-ai-layout">
-        <aside class="customer-ai-sidebar" aria-label="Vorschläge auswählen">
+      <div id="customer-ai-layout" class="customer-ai-layout">
+        <aside id="customer-ai-sidebar" class="customer-ai-sidebar" aria-label="Vorschläge auswählen">
           <button type="button" id="customer-ai-before" class="customer-ai-choice" aria-pressed="false">Ist-Zustand</button>
           <div id="customer-ai-choices" class="customer-ai-choices"></div>
           <details class="customer-ai-revision" id="customer-ai-revision"><summary>Vorschlag ändern</summary>
@@ -80,10 +102,9 @@
         </aside>
         <section aria-label="Drei-Spalten-Vergleich">
           <div class="customer-ai-heading"><h3 id="customer-ai-plan-title"></h3><span id="customer-ai-mode" class="customer-ai-mode"></span></div>
-          <p id="customer-ai-plan-reason" class="merge-comparison-note"></p>
           <div id="customer-ai-blocked" class="customer-ai-message customer-ai-warning"></div>
           <div id="customer-ai-diagram" class="customer-ai-matrix"></div>
-          <details class="customer-ai-revision"><summary>Begründung und Belege</summary><div id="customer-ai-evidence" class="merge-comparison-note"></div></details>
+          <details id="customer-ai-explanation" class="customer-ai-revision"><summary>Begründung und Belege</summary><div id="customer-ai-evidence" class="merge-comparison-note"></div></details>
         </section>
       </div>
     </div>

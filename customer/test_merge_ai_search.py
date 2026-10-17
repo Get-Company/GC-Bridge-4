@@ -45,6 +45,7 @@ const window={location:{search:''}};
 PREVIEW_SCRIPT
 const CustomerMergePreview=window.CustomerMergePreview;
 const sameSearch=()=>false;
+const hasMultipleAccounts=()=>false;
 const searchId=()=>searchProgress?.cacheId||'';
 const esc=value=>String(value ?? '');
 const spinner=()=>'<span>lädt</span>';
