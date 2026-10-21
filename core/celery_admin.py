@@ -89,6 +89,11 @@ CELERY_ADMIN_TASKS: tuple[TaskDefinition, ...] = (
         ),
     ),
     TaskDefinition(
+        name="orders.shopware_sync_payment_states",
+        label="Zahlungsstatus aus Shopware aktualisieren",
+        description="Aktualisiert die Zahlungsdaten bereits importierter Bestellungen, auch nach Bearbeitung oder Abschluss.",
+    ),
+    TaskDefinition(
         name="orders.microtech_order_upsert",
         label="Bestellung nach Microtech",
         description="Eine Django-Bestellung per GraphQL in Microtech anlegen oder aktualisieren.",

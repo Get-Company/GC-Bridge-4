@@ -47,6 +47,30 @@ def register_order_sync_continuations() -> None:
 register_order_sync_continuations()
 
 
+@shared_task(name="orders.shopware_sync_payment_states", soft_time_limit=210, time_limit=240)
+def shopware_sync_payment_states() -> None:
+    from django.conf import settings
+    from redis import Redis
+
+    lock = Redis.from_url(settings.CELERY_BROKER_URL).lock(
+        "orders:shopware-payment-status-sync", timeout=300, blocking=False,
+    )
+    if not lock.acquire():
+        return
+    task_name = "orders.shopware_sync_payment_states"
+    run_id = _run_id()
+    try:
+        emit_run_started(task_name, run_id, "Zahlungsstatus aus Shopware aktualisieren")
+        call_command("shopware_sync_payment_states")
+    except Exception as exc:
+        emit_run_finished(task_name, run_id, f"Fehlgeschlagen: {exc}")
+        raise
+    else:
+        emit_run_finished(task_name, run_id, "Zahlungsstatus aktualisiert")
+    finally:
+        lock.release()
+
+
 @shared_task(name="orders.shopware_sync_open_orders")
 def shopware_sync_open_orders(
     *,
