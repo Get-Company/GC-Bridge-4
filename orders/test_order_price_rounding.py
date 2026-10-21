@@ -1,8 +1,38 @@
 from copy import deepcopy
+from decimal import Decimal, ROUND_DOWN, localcontext
+from types import SimpleNamespace
 
 from django.test import SimpleTestCase
 
 from orders.services.order_price import OrderPriceService
+from orders.services.order_sync import _to_decimal
+
+
+class OrderImportRoundingTest(SimpleTestCase):
+    def test_import_and_export_agree_on_subcent_tax_free_order(self):
+        detail = SimpleNamespace(api_id="line", erp_nr="204113", quantity=250)
+        order = SimpleNamespace(
+            total_price=_to_decimal("140.825"),
+            shopware_price_snapshot={
+                "version": 1, "currency": "EUR",
+                "price": {"taxStatus": "tax-free", "totalPrice": "140.825"},
+                "shipping": {"totalPrice": "9.95"},
+                "lines": [{"id": "line", "quantity": 250,
+                           "price": {"unitPrice": "0.5235", "totalPrice": "130.875"}}],
+            },
+            details=SimpleNamespace(all=lambda: [detail]),
+        )
+        detail.order = order
+        self.assertEqual(order.total_price, Decimal("140.83"))
+        OrderPriceService().validate_snapshot(order)
+
+    def test_import_rounding_is_independent_of_decimal_context(self):
+        with localcontext() as context:
+            context.rounding = ROUND_DOWN
+            for raw, expected in (("140.825", "140.83"), ("130.875", "130.88"),
+                                  ("-1.005", "-1.01"), ("9.95", "9.95")):
+                with self.subTest(raw=raw):
+                    self.assertEqual(_to_decimal(raw), Decimal(expected))
 
 
 class OrderPriceRoundingTest(SimpleTestCase):
