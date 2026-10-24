@@ -46,8 +46,15 @@
       <section class="editor-card" data-anchor="editor-logo">
         <span class="eyebrow">Kopfbereich · Medien</span>
         <h2>Logo</h2>
+        <label for="theme">Farbschema</label>
+        <select id="theme" data-field="theme">
+          <option value="orange" {% if content.theme == 'orange' %}selected{% endif %}>Orange</option>
+          <option value="green" {% if content.theme == 'green' %}selected{% endif %}>Grün</option>
+        </select>
         <label for="logo_url">Bild-URL</label>
         <input id="logo_url" data-field="logo_url" type="url" value="{{ content.logo_url }}" placeholder="https://…">
+        <label for="certs_image_url">Zertifikatsgrafik · optional</label>
+        <input id="certs_image_url" data-field="certs_image_url" type="url" value="{{ content.certs_image_url }}" placeholder="https://…">
       </section>
       <section class="editor-card" data-anchor="editor-headline">
         <span class="eyebrow">Titel</span>

@@ -899,6 +899,10 @@ class EmailCampaignAdmin(BaseAdmin):
                     content[key] = str(payload[key])[:10000]
             if not valid_media_url(content.get("logo_url", DEFAULT_CONTENT["logo_url"])):
                 raise ValueError("Die Logo-URL muss mit http oder https beginnen.")
+            if content.get("theme", "orange") not in {"orange", "green"}:
+                raise ValueError("Das Farbschema ist ungültig.")
+            if content.get("certs_image_url") and not valid_media_url(content["certs_image_url"]):
+                raise ValueError("Die Zertifikatsgrafik benötigt eine gültige http- oder https-URL.")
             if "headings" in payload:
                 raw_headings = payload["headings"]
                 if not isinstance(raw_headings, list) or len(raw_headings) > 30:
@@ -906,6 +910,8 @@ class EmailCampaignAdmin(BaseAdmin):
                 headings = normalize_headings(raw_headings)
                 if len(headings) != len(raw_headings):
                     raise ValueError("Eine Zwischenüberschrift hat eine ungültige Kennung.")
+                if any(item.get("image_url") and not valid_media_url(item["image_url"]) for item in raw_headings):
+                    raise ValueError("Bild-URLs in Zwischenblöcken müssen mit http oder https beginnen.")
                 product_ids = {
                     str(pk) for pk in campaign.campaign_products.values_list("id", flat=True)
                 }

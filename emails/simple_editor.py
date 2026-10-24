@@ -28,6 +28,8 @@ DEFAULT_CONTENT = {
     "order_text": "Einfach auf diese E-Mail antworten und die gewünschte Anzahl eingeben.",
     "order_phone": "oder schnell anrufen:\n+49 (0)8641 97 59 0",
     "logo_url": f"{settings.NEWSLETTER_ASSET_BASE_URL}/img/logos/classei_logo.png",
+    "theme": "orange",
+    "certs_image_url": "",
     "product_texts": {},
     "headings": [],
 }
@@ -55,6 +57,7 @@ def normalize_headings(value):
             "title": str(item.get("title") or "")[:255],
             "center_text": str(item.get("center_text") or "")[:2000],
             "right_text": str(item.get("right_text") or "")[:2000],
+            "image_url": str(item.get("image_url") or "")[:2000] if valid_media_url(item.get("image_url")) else "",
         })
     return headings
 
@@ -66,6 +69,10 @@ def content_for(campaign, override=None):
     if not isinstance(content.get("product_texts"), dict):
         content["product_texts"] = {}
     content["headings"] = normalize_headings(content.get("headings"))
+    if content.get("theme") not in {"orange", "green"}:
+        content["theme"] = "orange"
+    if not valid_media_url(content.get("certs_image_url")):
+        content["certs_image_url"] = ""
     logo_url = str(content.get("logo_url") or "")
     if "classei.de/index.php?option=com_joomgallery" in logo_url:
         content["logo_url"] = DEFAULT_CONTENT["logo_url"]
@@ -162,5 +169,8 @@ def build_simple_mjml(campaign, *, recipient=None, override=None):
             "recipient_name": recipient_name or "...",
             "recipient_erp_nr": profile.erp_nr,
             "shopware_storefront_url": settings.NEWSLETTER_STOREFRONT_URL,
+            "accent_color": "#4F9A11" if content["theme"] == "green" else "#ff9933",
+            "title_font": "Roboto, Arial, sans-serif" if content["theme"] == "green" else "DancingScript, cursive, Arial, sans-serif",
+            "subtitle_align": "center" if content["theme"] == "green" else "right",
         },
     )

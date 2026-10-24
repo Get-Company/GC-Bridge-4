@@ -39,10 +39,13 @@
       <label for="heading-center-${heading.id}">Text mittig · optional</label>
       <textarea id="heading-center-${heading.id}" data-heading-field="center_text" rows="2" placeholder="Einfach antworten und Anzahl eingeben"></textarea>
       <label for="heading-right-${heading.id}">Text rechts · optional</label>
-      <textarea id="heading-right-${heading.id}" data-heading-field="right_text" rows="2" placeholder="oder schnell anrufen: …"></textarea>`;
+      <textarea id="heading-right-${heading.id}" data-heading-field="right_text" rows="2" placeholder="oder schnell anrufen: …"></textarea>
+      <label for="heading-image-${heading.id}">Bild-URL · optional</label>
+      <input id="heading-image-${heading.id}" data-heading-field="image_url" type="url" placeholder="https://…">`;
     card.querySelector('[data-heading-field="title"]').value = heading.title || '';
     card.querySelector('[data-heading-field="center_text"]').value = heading.center_text || '';
     card.querySelector('[data-heading-field="right_text"]').value = heading.right_text || '';
+    card.querySelector('[data-heading-field="image_url"]').value = heading.image_url || '';
     let anchor = afterProduct
       ? Array.from(document.querySelectorAll('.product-card')).find(item => item.dataset.productId === afterProduct)
       : document.querySelector('[data-anchor="editor-products"]');

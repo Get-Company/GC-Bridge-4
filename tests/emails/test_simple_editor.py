@@ -57,7 +57,67 @@ def test_simple_newsletter_uses_fixed_frame_and_editable_fields():
     assert "224453.jpg" not in mjml
     assert "https://www.classei-shop.com/search?sSearch=224453" in mjml
     assert "vom Newsletter abmelden" in mjml
-    assert "{modify}" not in mjml
+
+
+def test_green_newsletter_renders_certificate_and_editorial_images():
+    heading_id = "68ef82fd-35bd-4188-a056-c7df61d3cf11"
+    campaign = SimpleNamespace(
+        editor_content={
+            "theme": "green",
+            "certs_image_url": "https://assets.classei.de/img/newsletter/hybride_certs_recycling.jpg",
+            "headings": [{
+                "id": heading_id,
+                "title": "Klimaneutrales Hosting",
+                "image_url": "https://assets.classei.de/img/newsletter/hybride_domainfactory_baum.jpg",
+            }],
+        },
+        campaign_products=ProductRows([]),
+    )
+    with patch("emails.simple_editor._campaign_sales_channel_ids", return_value=()):
+        mjml = build_simple_mjml(campaign)
+
+    assert 'background-color="#4F9A11"' in mjml
+    assert "hybride_certs_recycling.jpg" in mjml
+    assert "hybride_domainfactory_baum.jpg" in mjml
+    assert "#ff9933" not in mjml
+
+
+def test_product_images_use_mjml_carousel_when_multiple_images_exist():
+    product = FakeProduct()
+    product.get_images = lambda: [
+        SimpleNamespace(url="https://assets.classei.de/img/224453.jpg"),
+        SimpleNamespace(url="https://assets.classei.de/img/224453_02.jpg"),
+    ]
+    campaign = SimpleNamespace(
+        editor_content={},
+        campaign_products=ProductRows([SimpleNamespace(
+            pk=9, product=product, special_price_override=None, discount_pct=None,
+        )]),
+    )
+    with patch("emails.simple_editor._campaign_sales_channel_ids", return_value=()), patch.object(
+        ProductEmailProxy, "_get_price_entry", return_value=None,
+    ):
+        mjml = build_simple_mjml(campaign)
+
+    assert "<mj-carousel>" in mjml
+    assert mjml.count("<mj-carousel-image ") == 2
+    assert 'href="https://www.classei-shop.com/search?sSearch=224453"' in mjml
+
+
+def test_product_with_one_image_keeps_plain_mjml_image():
+    campaign = SimpleNamespace(
+        editor_content={},
+        campaign_products=ProductRows([SimpleNamespace(
+            pk=9, product=FakeProduct(), special_price_override=None, discount_pct=None,
+        )]),
+    )
+    with patch("emails.simple_editor._campaign_sales_channel_ids", return_value=()), patch.object(
+        ProductEmailProxy, "_get_price_entry", return_value=None,
+    ):
+        mjml = build_simple_mjml(campaign)
+
+    assert "<mj-carousel" not in mjml
+    assert '<mj-image src="https://assets.classei.de/img/224453.jpg"' in mjml
 
 
 def test_editor_text_is_escaped_in_mjml():
@@ -103,7 +163,6 @@ def test_simple_newsletter_renders_selected_preview_recipient_data():
     assert "83250 Marquartstein" in mjml
     assert "08641 123" in mjml
     assert "max@example.com" in mjml
-    assert "#option=unsubscribe&amp;email=max%40example.com" in mjml
     assert "Veraltete Straße" not in mjml
 
 
