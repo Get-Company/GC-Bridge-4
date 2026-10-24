@@ -254,6 +254,40 @@ services:
       redis:
         condition: service_healthy
 
+  celery-newsletter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: gc-bridge-4:${APP_IMAGE_TAG:-latest}
+    container_name: gc_bridge_4_celery_newsletter
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-false}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
+      DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:-http://localhost}
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      LOGS_ROOT: /app/tmp/logs
+      DB_BACKUP_DIR: /app/tmp/backups
+      RUN_DJANGO_CHECK: "false"
+      RUN_COLLECTSTATIC: "false"
+      RUN_MIGRATIONS: "false"
+    command: celery -A GC_Bridge_4 worker --loglevel=INFO --queues=newsletter --hostname=newsletter@%h --concurrency=1 -E
+    volumes:
+      - media:/app/media
+      - documents:/app/Dokumente
+      - applogs:/app/tmp/logs
+      - backups:/app/tmp/backups
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
   celery-beat:
     build:
       context: .

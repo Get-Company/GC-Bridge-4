@@ -390,6 +390,8 @@ CELERY_TASK_ROUTES = {
     "products.*": {"queue": "bulk"},
     "shopware.*": {"queue": "bulk"},
     "emails.sync_due_campaign_prices_to_shopware": {"queue": "bulk"},
+    "emails.queue_due_campaigns_before_send": {"queue": "bulk"},
+    "emails.send_due_campaign_queue": {"queue": "newsletter"},
     "bulk.*": {"queue": "bulk"},
 }
 CELERY_BEAT_SCHEDULE = {
@@ -412,6 +414,16 @@ CELERY_BEAT_SCHEDULE = {
         "task": "emails.sync_due_campaign_prices_to_shopware",
         "schedule": 60.0,
         "options": {"queue": "bulk"},
+    },
+    "email-campaigns-queue-every-five-minutes": {
+        "task": "emails.queue_due_campaigns_before_send",
+        "schedule": 300.0,
+        "options": {"queue": "bulk"},
+    },
+    "email-campaigns-send-every-minute": {
+        "task": "emails.send_due_campaign_queue",
+        "schedule": 60.0,
+        "options": {"queue": "newsletter"},
     },
 }
 CELERY_IMPORTS = ("core.tasks", "newsletter.tasks", "microtech.tasks", "products.tasks")

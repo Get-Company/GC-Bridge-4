@@ -141,7 +141,7 @@ class TestEmailCampaignQueueService:
     @pytest.mark.django_db
     @patch("emails.services.compile_mjml_to_html", return_value="<html>neu</html>")
     @patch("emails.services.render_campaign_mjml", return_value="<mjml>neu</mjml>")
-    def test_overwrites_existing_entry_for_same_campaign_and_recipient(
+    def test_preserves_existing_failed_entry_for_same_campaign_and_recipient(
         self,
         render_campaign_mjml,
         compile_mjml_to_html,
@@ -179,16 +179,15 @@ class TestEmailCampaignQueueService:
         assert queued_entry.pk == existing_entry.pk
         assert EmailCampaignQueueEntry.objects.filter(campaign=campaign, recipient=recipient).count() == 1
         assert queued_entry.recipient == recipient
-        assert queued_entry.email == "neu@example.com"
-        assert queued_entry.subject == "Nur heute: Sommeraktion"
-        assert queued_entry.status == EmailCampaignQueueEntry.Status.QUEUED
-        assert queued_entry.rendered_mjml == "<mjml>neu</mjml>"
-        assert queued_entry.rendered_html == "<html>neu</html>"
-        assert queued_entry.rendered_text == "neu"
-        assert queued_entry.error_message == ""
-        assert queued_entry.sent_at is None
-        render_campaign_mjml.assert_called_once_with(campaign, recipient=recipient)
-        compile_mjml_to_html.assert_called_once_with("<mjml>neu</mjml>")
+        assert queued_entry.email == "alt@example.com"
+        assert queued_entry.subject == "Alter Betreff"
+        assert queued_entry.status == EmailCampaignQueueEntry.Status.FAILED
+        assert queued_entry.rendered_mjml == "<mjml>alt</mjml>"
+        assert queued_entry.rendered_html == "<html>alt</html>"
+        assert queued_entry.error_message == "Fehler"
+        assert queued_entry.sent_at is not None
+        render_campaign_mjml.assert_not_called()
+        compile_mjml_to_html.assert_not_called()
 
     @pytest.mark.django_db
     @patch("emails.services.compile_mjml_to_html", return_value="<html>neu</html>")

@@ -321,6 +321,9 @@ class EmailCampaignQueueEntry(BaseModel):
     rendered_html = models.TextField(blank=True, default="", verbose_name=_("Gerendertes HTML"))
     rendered_text = models.TextField(blank=True, default="", verbose_name=_("Gerenderter Text"))
     error_message = models.TextField(blank=True, default="", verbose_name=_("Fehlermeldung"))
+    attempt_count = models.PositiveSmallIntegerField(default=0, verbose_name=_("Versuche"))
+    last_attempt_at = models.DateTimeField(null=True, blank=True, verbose_name=_("Letzter Versuch"))
+    next_attempt_at = models.DateTimeField(null=True, blank=True, db_index=True, verbose_name=_("Nächster Versuch"))
     queued_at = models.DateTimeField(auto_now_add=True, db_index=True, verbose_name=_("Eingereiht am"))
     sent_at = models.DateTimeField(null=True, blank=True, verbose_name=_("Gesendet am"))
 
@@ -330,6 +333,9 @@ class EmailCampaignQueueEntry(BaseModel):
         ordering = ("-queued_at",)
         indexes = [
             models.Index(fields=("status", "queued_at"), name="email_queue_status_queued_idx"),
+        ]
+        constraints = [
+            models.UniqueConstraint(fields=("campaign", "recipient"), name="email_queue_unique_campaign_recipient"),
         ]
 
     def __str__(self) -> str:

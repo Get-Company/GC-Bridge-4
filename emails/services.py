@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import calendar
 import logging
+from email.utils import formataddr
 from datetime import datetime, timedelta
 from decimal import Decimal, ROUND_UP
 
-from django.core.mail import get_connection
+from django.core.mail import EmailMultiAlternatives, get_connection
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from core.services import BaseService
@@ -316,13 +318,14 @@ class EmailCampaignQueueService(BaseService):
         window: timedelta = timedelta(hours=1),
     ) -> dict[str, int]:
         now = now or timezone.now()
+        # Keep window for task API compatibility. Repeated runs catch campaigns
+        # scheduled less than a day ahead, while get_or_create keeps one entry.
         starts_at = now + lead_time
-        ends_at = starts_at + window
         campaigns = (
             EmailCampaign.objects.filter(
                 status=EmailCampaign.Status.READY,
-                send_at__gte=starts_at,
-                send_at__lt=ends_at,
+                send_at__gte=now,
+                send_at__lte=starts_at,
             )
             .order_by("send_at", "pk")
         )
@@ -394,29 +397,195 @@ class EmailCampaignQueueService(BaseService):
         if not recipient.is_present_in_shopware:
             raise ValueError("Empfaenger ist nicht mehr in Shopware vorhanden.")
 
+        # Never reset a sent, in-flight, cancelled or ambiguous failed delivery.
+        existing = self.model.objects.filter(campaign=campaign, recipient=recipient).first()
+        if existing is not None:
+            return existing
+
         mjml = render_campaign_mjml(campaign, recipient=recipient)
         html = compile_mjml_to_html(mjml)
         text = html_to_plain_text(html)
 
+        entry, _ = self.model.objects.get_or_create(
+            campaign=campaign,
+            recipient=recipient,
+            defaults={
+                "customer": recipient.customer,
+                "email": recipient.email,
+                "subject": campaign.subject.strip() or campaign.internal_title,
+                "rendered_mjml": mjml,
+                "rendered_html": html,
+                "rendered_text": text,
+            },
+        )
+        return entry
+
+
+class EmailCampaignSendService(BaseService):
+    """Deliver a small, rate-limited batch while rechecking Shopware consent."""
+
+    model = EmailCampaignQueueEntry
+    max_attempts = 5
+
+    def send_due_entries(self, *, now=None, batch_size: int = 10) -> dict[str, int]:
+        from newsletter.services.recipient_sync import NewsletterRecipientShopwareService
+
+        now = now or timezone.now()
+        summary = {"sent": 0, "cancelled": 0, "retry": 0, "failed": 0, "disabled": 0}
+        smtp = EmailSmtpSettings.objects.filter(pk=1, is_active=True).first()
+        if smtp is None or not smtp.smtp_is_configured:
+            summary["disabled"] = 1
+            return summary
+
+        # A sliding one-minute cap also protects against delayed Beat tasks.
+        recent = self.model.objects.filter(sent_at__gte=now - timedelta(minutes=1)).count()
+        allowance = max(0, min(int(batch_size), 50) - recent)
+        shopware = NewsletterRecipientShopwareService()
+        for _ in range(allowance):
+            entry_id = self._claim_one(now)
+            if entry_id is None:
+                break
+            outcome = self._send_claimed(entry_id, smtp=smtp, shopware=shopware)
+            summary[outcome] += 1
+        return summary
+
+    @transaction.atomic
+    def _claim_one(self, now) -> int | None:
         entry = (
-            self.model.objects.select_for_update()
-            .filter(campaign=campaign, recipient=recipient)
-            .order_by("-queued_at", "-pk")
+            self.model.objects.select_for_update(skip_locked=True)
+            .filter(
+                status=self.model.Status.QUEUED,
+                campaign__status=EmailCampaign.Status.READY,
+                campaign__send_at__lte=now,
+            )
+            .filter(Q(next_attempt_at__isnull=True) | Q(next_attempt_at__lte=now))
+            .order_by("queued_at", "pk")
             .first()
         )
         if entry is None:
-            entry = self.model(campaign=campaign, recipient=recipient)
+            return None
+        entry.status = self.model.Status.SENDING
+        entry.attempt_count += 1
+        entry.last_attempt_at = now
+        entry.save(update_fields=("status", "attempt_count", "last_attempt_at", "updated_at"))
+        return entry.pk
 
-        entry.recipient = recipient
-        entry.customer = recipient.customer
-        entry.email = recipient.email
-        entry.subject = campaign.subject.strip() or campaign.internal_title
-        entry.status = self.model.Status.QUEUED
-        entry.rendered_mjml = mjml
-        entry.rendered_html = html
-        entry.rendered_text = text
-        entry.error_message = ""
-        entry.sent_at = None
-        entry.queued_at = timezone.now()
-        entry.save()
-        return entry
+    def _send_claimed(self, entry_id: int, *, smtp: EmailSmtpSettings, shopware) -> str:
+        from newsletter.models import NewsletterRecipient
+        from newsletter.services.recipient_sync import _normalize_entity
+        from newsletter.links import unsubscribe_url
+
+        entry = self.model.objects.select_related("campaign", "recipient").get(pk=entry_id)
+        recipient = entry.recipient
+        campaign = entry.campaign
+        if (
+            campaign.status != EmailCampaign.Status.READY
+            or campaign.send_at is None
+            or campaign.send_at > timezone.now()
+        ):
+            self._finish(entry_id, self.model.Status.QUEUED, "Kampagne nicht versandbereit.")
+            return "retry"
+        if (
+            not recipient.is_present_in_shopware
+            or not recipient.is_active_status
+            or recipient.selected_email_campaign_id != campaign.pk
+            or recipient.email.casefold() != entry.email.casefold()
+        ):
+            self._finish(entry_id, self.model.Status.CANCELLED, "Empfänger lokal nicht mehr aktiv oder geändert.")
+            return "cancelled"
+        if self.model.objects.filter(
+            campaign=campaign,
+            email__iexact=entry.email,
+            status__in=(self.model.Status.SENDING, self.model.Status.SENT),
+        ).exclude(pk=entry.pk).exists():
+            self._finish(entry_id, self.model.Status.CANCELLED, "E-Mail-Adresse in dieser Kampagne bereits verarbeitet.")
+            return "cancelled"
+
+        try:
+            response = shopware.request_post(
+                "/search/newsletter-recipient",
+                payload={"page": 1, "limit": 1, "filter": [
+                    {"type": "equals", "field": "id", "value": recipient.shopware_id},
+                ]},
+            )
+            rows = (response or {}).get("data") or []
+            remote = _normalize_entity(rows[0]) if rows else None
+        except Exception as exc:
+            return self._retry_before_smtp(entry, exc)
+        if remote is None or str(remote.get("id", "")) != recipient.shopware_id:
+            self._finish(entry_id, self.model.Status.CANCELLED, "Empfänger in Shopware nicht gefunden.")
+            return "cancelled"
+        if (
+            str(remote.get("status", "")) not in (NewsletterRecipient.Status.DIRECT, NewsletterRecipient.Status.OPT_IN)
+            or str(remote.get("email", "")).casefold() != entry.email.casefold()
+        ):
+            self._finish(entry_id, self.model.Status.CANCELLED, "Empfänger in Shopware abgemeldet oder geändert.")
+            return "cancelled"
+
+        # The operator can pause a campaign or disable SMTP while a batch runs.
+        current = self.model.objects.select_related("campaign", "recipient").get(pk=entry_id)
+        if (
+            current.campaign.status != EmailCampaign.Status.READY
+            or current.campaign.send_at is None
+            or current.campaign.send_at > timezone.now()
+            or not current.recipient.is_active_status
+            or not current.recipient.is_present_in_shopware
+            or current.recipient.email.casefold() != entry.email.casefold()
+        ):
+            self._finish(entry_id, self.model.Status.CANCELLED, "Empfänger oder Kampagne vor SMTP geändert.")
+            return "cancelled"
+        if not EmailSmtpSettings.objects.filter(pk=smtp.pk, is_active=True).exists():
+            self._finish(entry_id, self.model.Status.QUEUED, "SMTP wurde deaktiviert.", retry_at=timezone.now() + timedelta(minutes=1))
+            return "retry"
+
+        try:
+            connection = EmailSmtpSettingsService.build_connection(smtp)
+            connection.open()
+        except Exception as exc:
+            return self._retry_before_smtp(entry, exc)
+
+        try:
+            message = EmailMultiAlternatives(
+                subject=entry.subject,
+                body=entry.rendered_text,
+                from_email=formataddr((smtp.sender_name, smtp.sender_email)),
+                to=[entry.email],
+                reply_to=[smtp.effective_reply_to_email],
+                headers={"List-Unsubscribe": f"<{unsubscribe_url(entry.email)}>"},
+                connection=connection,
+            )
+            message.attach_alternative(entry.rendered_html, "text/html")
+            accepted = message.send(fail_silently=False)
+        except Exception as exc:
+            # An SMTP exception after DATA may mean accepted-but-unacknowledged.
+            # Such entries require inspection rather than an automatic duplicate.
+            self._finish(entry_id, self.model.Status.FAILED, f"SMTP-Ergebnis unklar: {type(exc).__name__}: {exc}")
+            return "failed"
+        finally:
+            try:
+                connection.close()
+            except Exception:
+                logger.warning("Closing SMTP connection failed", exc_info=True)
+        if accepted != 1:
+            self._finish(entry_id, self.model.Status.FAILED, "SMTP hat keine Zustellung bestätigt.")
+            return "failed"
+        self._finish(entry_id, self.model.Status.SENT, "")
+        return "sent"
+
+    def _retry_before_smtp(self, entry: EmailCampaignQueueEntry, exc: Exception) -> str:
+        if entry.attempt_count >= self.max_attempts:
+            self._finish(entry.pk, self.model.Status.FAILED, f"Vor Versand fehlgeschlagen: {type(exc).__name__}: {exc}")
+            return "failed"
+        delay = timedelta(minutes=min(2 ** entry.attempt_count, 30))
+        self._finish(entry.pk, self.model.Status.QUEUED, f"Vor Versand fehlgeschlagen: {type(exc).__name__}: {exc}", retry_at=timezone.now() + delay)
+        return "retry"
+
+    def _finish(self, entry_id: int, status: str, error: str, *, retry_at=None) -> None:
+        changes = {
+            "status": status,
+            "error_message": error[:1000],
+            "next_attempt_at": retry_at,
+        }
+        if status == self.model.Status.SENT:
+            changes["sent_at"] = timezone.now()
+        self.model.objects.filter(pk=entry_id, status=self.model.Status.SENDING).update(**changes)

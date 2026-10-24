@@ -144,3 +144,10 @@ def queue_due_campaigns_before_send(
         lead_time=timedelta(hours=lead_time_hours),
         window=timedelta(minutes=window_minutes),
     )
+
+
+@shared_task(name="emails.send_due_campaign_queue")
+def send_due_campaign_queue(batch_size: int = 10) -> dict[str, int]:
+    from emails.services import EmailCampaignSendService
+
+    return EmailCampaignSendService().send_due_entries(batch_size=batch_size)
