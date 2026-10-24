@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import calendar
 import logging
+import uuid
 from email.utils import formataddr
 from datetime import datetime, timedelta
 from decimal import Decimal, ROUND_UP
 
 from django.core.mail import EmailMultiAlternatives, get_connection
+from django.conf import settings
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
@@ -324,7 +326,9 @@ class EmailCampaignQueueService(BaseService):
         campaigns = (
             EmailCampaign.objects.filter(
                 status=EmailCampaign.Status.READY,
-                send_at__gte=now,
+                # A delayed Beat run may catch up for one hour. Older sends
+                # require an operator decision instead of a surprise mailing.
+                send_at__gte=now - timedelta(hours=1),
                 send_at__lte=starts_at,
             )
             .order_by("send_at", "pk")
@@ -398,7 +402,9 @@ class EmailCampaignQueueService(BaseService):
             raise ValueError("Empfaenger ist nicht mehr in Shopware vorhanden.")
 
         # Never reset a sent, in-flight, cancelled or ambiguous failed delivery.
-        existing = self.model.objects.filter(campaign=campaign, recipient=recipient).first()
+        existing = self.model.objects.filter(
+            campaign=campaign, recipient=recipient, test_batch__isnull=True
+        ).first()
         if existing is not None:
             return existing
 
@@ -409,6 +415,7 @@ class EmailCampaignQueueService(BaseService):
         entry, _ = self.model.objects.get_or_create(
             campaign=campaign,
             recipient=recipient,
+            test_batch=None,
             defaults={
                 "customer": recipient.customer,
                 "email": recipient.email,
@@ -421,6 +428,64 @@ class EmailCampaignQueueService(BaseService):
         return entry
 
 
+class EmailCampaignTestQueueService(BaseService):
+    """Queue one bounded test run through the ordinary newsletter worker."""
+
+    model = EmailCampaignQueueEntry
+    max_recipients = 20
+
+    def queue_group(self, *, campaign: EmailCampaign, group) -> dict[str, int]:
+        if campaign.status != EmailCampaign.Status.DRAFT:
+            raise ValueError("Testversand ist nur für Entwürfe möglich.")
+        if group.test_email_campaign_id != campaign.pk:
+            raise ValueError("Die gewählte Kampagne gehört nicht zu diesem Testempfängerkreis.")
+
+        members = list(group.members.order_by("pk")[: self.max_recipients + 1])
+        if not members:
+            raise ValueError("Der Testempfängerkreis enthält keine Empfänger.")
+        if len(members) > self.max_recipients:
+            raise ValueError(f"Ein Testempfängerkreis darf höchstens {self.max_recipients} Empfänger enthalten.")
+
+        smtp = EmailSmtpSettings.objects.filter(pk=1).first()
+        if smtp is None:
+            raise EmailSmtpSettingsError("Keine SMTP-Konfiguration vorhanden.")
+        EmailSmtpSettingsService.build_connection(smtp)
+
+        batch = uuid.uuid4()
+        summary = {"queued": 0, "skipped": 0, "failed": 0}
+        seen_emails = set()
+        for recipient in members:
+            email = recipient.email.strip()
+            key = email.casefold()
+            if (
+                not email or key in seen_emails or not recipient.is_present_in_shopware
+                or not recipient.is_active_status
+            ):
+                summary["skipped"] += 1
+                continue
+            seen_emails.add(key)
+            try:
+                mjml = render_campaign_mjml(campaign, recipient=recipient)
+                html = compile_mjml_to_html(mjml)
+                self.model.objects.create(
+                    campaign=campaign,
+                    recipient=recipient,
+                    test_group=group,
+                    test_batch=batch,
+                    customer=recipient.customer,
+                    email=email,
+                    subject=f"[Test] {campaign.subject.strip() or campaign.internal_title}",
+                    rendered_mjml=mjml,
+                    rendered_html=html,
+                    rendered_text=html_to_plain_text(html),
+                )
+                summary["queued"] += 1
+            except Exception:
+                summary["failed"] += 1
+                logger.exception("Failed to queue test campaign %s for recipient %s", campaign.pk, recipient.pk)
+        return summary
+
+
 class EmailCampaignSendService(BaseService):
     """Deliver a small, rate-limited batch while rechecking Shopware consent."""
 
@@ -431,18 +496,28 @@ class EmailCampaignSendService(BaseService):
         from newsletter.services.recipient_sync import NewsletterRecipientShopwareService
 
         now = now or timezone.now()
-        summary = {"sent": 0, "cancelled": 0, "retry": 0, "failed": 0, "disabled": 0}
-        smtp = EmailSmtpSettings.objects.filter(pk=1, is_active=True).first()
+        summary = {"sent": 0, "cancelled": 0, "retry": 0, "failed": 0, "disabled": 0, "stale_sending": 0}
+        summary["stale_sending"] = self.model.objects.filter(
+            status=self.model.Status.SENDING,
+            last_attempt_at__lt=now - timedelta(minutes=10),
+        ).count()
+        if summary["stale_sending"]:
+            logger.error("Newsletter queue has %s stale SENDING entries needing manual review", summary["stale_sending"])
+        smtp = EmailSmtpSettings.objects.filter(pk=1).first()
         if smtp is None or not smtp.smtp_is_configured:
             summary["disabled"] = 1
             return summary
+        if not self.model.objects.filter(
+            status=self.model.Status.QUEUED,
+            test_batch__isnull=False,
+        ).exists() and (not settings.NEWSLETTER_SERIES_SEND_ENABLED or not smtp.is_active):
+            summary["disabled"] = 1
+            return summary
 
-        # A sliding one-minute cap also protects against delayed Beat tasks.
-        recent = self.model.objects.filter(sent_at__gte=now - timedelta(minutes=1)).count()
-        allowance = max(0, min(int(batch_size), 50) - recent)
+        allowance = max(0, min(int(batch_size), 10))
         shopware = NewsletterRecipientShopwareService()
         for _ in range(allowance):
-            entry_id = self._claim_one(now)
+            entry_id = self._claim_one(timezone.now(), allowance)
             if entry_id is None:
                 break
             outcome = self._send_claimed(entry_id, smtp=smtp, shopware=shopware)
@@ -450,14 +525,29 @@ class EmailCampaignSendService(BaseService):
         return summary
 
     @transaction.atomic
-    def _claim_one(self, now) -> int | None:
-        entry = (
-            self.model.objects.select_for_update(skip_locked=True)
-            .filter(
-                status=self.model.Status.QUEUED,
+    def _claim_one(self, now, batch_size: int) -> int | None:
+        # Serialize slot reservations across workers/manual task invocations.
+        # Count all attempts, including uncertain SMTP outcomes, conservatively.
+        if not EmailSmtpSettings.objects.select_for_update().filter(pk=1).exists():
+            return None
+        recent_attempts = self.model.objects.filter(
+            last_attempt_at__gte=now - timedelta(minutes=1),
+        ).count()
+        if recent_attempts >= batch_size:
+            return None
+        eligible = Q(
+            test_batch__isnull=False,
+        )
+        if settings.NEWSLETTER_SERIES_SEND_ENABLED and EmailSmtpSettings.objects.filter(pk=1, is_active=True).exists():
+            eligible |= Q(
+                test_batch__isnull=True,
                 campaign__status=EmailCampaign.Status.READY,
                 campaign__send_at__lte=now,
             )
+        entry = (
+            self.model.objects.select_for_update(skip_locked=True)
+            .filter(status=self.model.Status.QUEUED)
+            .filter(eligible)
             .filter(Q(next_attempt_at__isnull=True) | Q(next_attempt_at__lte=now))
             .order_by("queued_at", "pk")
             .first()
@@ -478,25 +568,42 @@ class EmailCampaignSendService(BaseService):
         entry = self.model.objects.select_related("campaign", "recipient").get(pk=entry_id)
         recipient = entry.recipient
         campaign = entry.campaign
-        if (
-            campaign.status != EmailCampaign.Status.READY
-            or campaign.send_at is None
-            or campaign.send_at > timezone.now()
-        ):
+        is_test = entry.test_batch is not None
+        if is_test and campaign.status != EmailCampaign.Status.DRAFT:
+            self._finish(entry_id, self.model.Status.CANCELLED, "Testkampagne ist kein Entwurf mehr.")
+            return "cancelled"
+        campaign_ready = (
+            campaign.status == EmailCampaign.Status.DRAFT
+            if is_test else (
+                settings.NEWSLETTER_SERIES_SEND_ENABLED
+                and smtp.is_active
+                and campaign.status == EmailCampaign.Status.READY
+                and campaign.send_at is not None
+                and campaign.send_at <= timezone.now()
+            )
+        )
+        if not campaign_ready:
             self._finish(entry_id, self.model.Status.QUEUED, "Kampagne nicht versandbereit.")
             return "retry"
+        if is_test and (
+            entry.test_group_id is None
+            or not entry.test_group.members.filter(pk=recipient.pk).exists()
+            or entry.test_group.test_email_campaign_id != campaign.pk
+        ):
+            self._finish(entry_id, self.model.Status.CANCELLED, "Empfänger nicht mehr im Testkreis.")
+            return "cancelled"
         if (
             not recipient.is_present_in_shopware
             or not recipient.is_active_status
-            or recipient.selected_email_campaign_id != campaign.pk
+            or (not is_test and recipient.selected_email_campaign_id != campaign.pk)
             or recipient.email.casefold() != entry.email.casefold()
         ):
             self._finish(entry_id, self.model.Status.CANCELLED, "Empfänger lokal nicht mehr aktiv oder geändert.")
             return "cancelled"
         if self.model.objects.filter(
-            campaign=campaign,
+            **({"test_batch": entry.test_batch} if is_test else {"campaign": campaign, "test_batch__isnull": True}),
             email__iexact=entry.email,
-            status__in=(self.model.Status.SENDING, self.model.Status.SENT),
+            status__in=(self.model.Status.SENDING, self.model.Status.SENT, self.model.Status.FAILED),
         ).exclude(pk=entry.pk).exists():
             self._finish(entry_id, self.model.Status.CANCELLED, "E-Mail-Adresse in dieser Kampagne bereits verarbeitet.")
             return "cancelled"
@@ -525,18 +632,41 @@ class EmailCampaignSendService(BaseService):
         # The operator can pause a campaign or disable SMTP while a batch runs.
         current = self.model.objects.select_related("campaign", "recipient").get(pk=entry_id)
         if (
-            current.campaign.status != EmailCampaign.Status.READY
-            or current.campaign.send_at is None
-            or current.campaign.send_at > timezone.now()
+            (current.campaign.status != EmailCampaign.Status.DRAFT if is_test else (
+                not settings.NEWSLETTER_SERIES_SEND_ENABLED
+                or current.campaign.status != EmailCampaign.Status.READY
+                or current.campaign.send_at is None
+                or current.campaign.send_at > timezone.now()
+            ))
             or not current.recipient.is_active_status
             or not current.recipient.is_present_in_shopware
             or current.recipient.email.casefold() != entry.email.casefold()
+            or (is_test and (
+                current.test_group_id is None
+                or not current.test_group.members.filter(pk=recipient.pk).exists()
+                or current.test_group.test_email_campaign_id != campaign.pk
+            ))
         ):
             self._finish(entry_id, self.model.Status.CANCELLED, "Empfänger oder Kampagne vor SMTP geändert.")
             return "cancelled"
-        if not EmailSmtpSettings.objects.filter(pk=smtp.pk, is_active=True).exists():
+        if not is_test and not EmailSmtpSettings.objects.filter(pk=smtp.pk, is_active=True).exists():
             self._finish(entry_id, self.model.Status.QUEUED, "SMTP wurde deaktiviert.", retry_at=timezone.now() + timedelta(minutes=1))
             return "retry"
+
+        # QUEUED is a preview snapshot. Render again for the current campaign
+        # and recipient immediately before delivery, so edits made during the
+        # lead time cannot silently send stale content.
+        try:
+            entry.rendered_mjml = render_campaign_mjml(current.campaign, recipient=current.recipient)
+            entry.rendered_html = compile_mjml_to_html(entry.rendered_mjml)
+            entry.rendered_text = html_to_plain_text(entry.rendered_html)
+            entry.subject = (
+                f"[Test] {current.campaign.subject.strip() or current.campaign.internal_title}"
+                if is_test else current.campaign.subject.strip() or current.campaign.internal_title
+            )
+            entry.save(update_fields=("rendered_mjml", "rendered_html", "rendered_text", "subject", "updated_at"))
+        except Exception as exc:
+            return self._retry_before_smtp(entry, exc)
 
         try:
             connection = EmailSmtpSettingsService.build_connection(smtp)
@@ -545,22 +675,55 @@ class EmailCampaignSendService(BaseService):
             return self._retry_before_smtp(entry, exc)
 
         try:
-            message = EmailMultiAlternatives(
-                subject=entry.subject,
-                body=entry.rendered_text,
-                from_email=formataddr((smtp.sender_name, smtp.sender_email)),
-                to=[entry.email],
-                reply_to=[smtp.effective_reply_to_email],
-                headers={"List-Unsubscribe": f"<{unsubscribe_url(entry.email)}>"},
-                connection=connection,
-            )
-            message.attach_alternative(entry.rendered_html, "text/html")
-            accepted = message.send(fail_silently=False)
-        except Exception as exc:
-            # An SMTP exception after DATA may mean accepted-but-unacknowledged.
-            # Such entries require inspection rather than an automatic duplicate.
-            self._finish(entry_id, self.model.Status.FAILED, f"SMTP-Ergebnis unklar: {type(exc).__name__}: {exc}")
-            return "failed"
+            # Recheck after connection.open(), which can itself take seconds.
+            try:
+                latest_response = shopware.request_post(
+                    "/search/newsletter-recipient",
+                    payload={"page": 1, "limit": 1, "filter": [
+                        {"type": "equals", "field": "id", "value": recipient.shopware_id},
+                    ]},
+                )
+                latest_rows = (latest_response or {}).get("data") or []
+                latest_remote = _normalize_entity(latest_rows[0]) if latest_rows else None
+            except Exception as exc:
+                return self._retry_before_smtp(entry, exc)
+            if (
+                latest_remote is None
+                or str(latest_remote.get("id", "")) != recipient.shopware_id
+                or str(latest_remote.get("status", "")) not in (NewsletterRecipient.Status.DIRECT, NewsletterRecipient.Status.OPT_IN)
+                or str(latest_remote.get("email", "")).casefold() != entry.email.casefold()
+            ):
+                self._finish(entry_id, self.model.Status.CANCELLED, "Empfänger vor SMTP in Shopware abgemeldet oder geändert.")
+                return "cancelled"
+            latest_entry = self.model.objects.select_related("campaign", "recipient", "test_group").get(pk=entry_id)
+            if is_test and (
+                latest_entry.campaign.status != EmailCampaign.Status.DRAFT
+                or latest_entry.test_group_id is None
+                or latest_entry.test_group.test_email_campaign_id != campaign.pk
+                or not latest_entry.test_group.members.filter(pk=recipient.pk).exists()
+                or not latest_entry.recipient.is_active_status
+                or not latest_entry.recipient.is_present_in_shopware
+                or latest_entry.recipient.email.casefold() != entry.email.casefold()
+            ):
+                self._finish(entry_id, self.model.Status.CANCELLED, "Testkreis oder Empfänger vor SMTP geändert.")
+                return "cancelled"
+            try:
+                message = EmailMultiAlternatives(
+                    subject=entry.subject,
+                    body=entry.rendered_text,
+                    from_email=formataddr((smtp.sender_name, smtp.sender_email)),
+                    to=[entry.email],
+                    reply_to=[smtp.effective_reply_to_email],
+                    headers={"List-Unsubscribe": f"<{unsubscribe_url(entry.email)}>"},
+                    connection=connection,
+                )
+                message.attach_alternative(entry.rendered_html, "text/html")
+                accepted = message.send(fail_silently=False)
+            except Exception as exc:
+                # An SMTP exception after DATA may mean accepted-but-unacknowledged.
+                # Such entries require inspection rather than an automatic duplicate.
+                self._finish(entry_id, self.model.Status.FAILED, f"SMTP-Ergebnis unklar: {type(exc).__name__}: {exc}")
+                return "failed"
         finally:
             try:
                 connection.close()

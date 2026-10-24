@@ -105,6 +105,27 @@ class TestEmailCampaignTasks:
             "emails.sync_due_campaign_prices_to_shopware"
         ] == {"queue": "bulk"}
 
+    def test_newsletter_queue_and_sender_have_separate_schedules_and_workers(self):
+        from django.conf import settings
+
+        queue = settings.CELERY_BEAT_SCHEDULE["email-campaigns-queue-every-five-minutes"]
+        send = settings.CELERY_BEAT_SCHEDULE["email-campaigns-send-every-minute"]
+        assert queue["task"] == "emails.queue_due_campaigns_before_send"
+        assert queue["schedule"] == 300.0
+        assert queue["options"]["queue"] == "bulk"
+        assert send["task"] == "emails.send_due_campaign_queue"
+        assert send["schedule"] == 60.0
+        assert send["options"]["queue"] == "newsletter"
+        assert settings.CELERY_TASK_ROUTES[send["task"]] == {"queue": "newsletter"}
+
+    @patch("emails.services.EmailCampaignSendService")
+    def test_sender_task_delegates_to_service(self, send_service_class):
+        from emails.tasks import send_due_campaign_queue
+
+        send_service_class.return_value.send_due_entries.return_value = {"sent": 1}
+        assert send_due_campaign_queue.run(batch_size=3) == {"sent": 1}
+        send_service_class.return_value.send_due_entries.assert_called_once_with(batch_size=3)
+
     def test_expiry_uses_a_new_fingerprint_for_normal_price_restore(self):
         from emails.tasks import _shopware_activation_fingerprint
 

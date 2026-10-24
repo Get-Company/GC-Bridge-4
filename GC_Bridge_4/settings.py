@@ -95,6 +95,11 @@ def env_bool(name: str, default: bool = False) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+# Explicit release gate: test-group delivery works while the series worker is
+# disabled. Enable only in a later, approved release after the group test.
+NEWSLETTER_SERIES_SEND_ENABLED = False
+
+
 def env_list(name: str, default: str = "") -> list[str]:
     return [item.strip() for item in os.getenv(name, default).split(",") if item.strip()]
 
@@ -569,6 +574,12 @@ UNFOLD = {
                         "icon": "mark_email_read",
                         "link": reverse_lazy("admin:newsletter_newsletterrecipient_changelist"),
                         "permission": sidebar_model_view_permission("newsletter", "NewsletterRecipient"),
+                    },
+                    {
+                        "title": _("Newsletter-Empfängerkreise"),
+                        "icon": "group",
+                        "link": reverse_lazy("admin:newsletter_newsletterrecipientgroup_changelist"),
+                        "permission": sidebar_model_view_permission("newsletter", "NewsletterRecipientGroup"),
                     },
                     {
                         "title": _("SMTP-Einstellungen"),

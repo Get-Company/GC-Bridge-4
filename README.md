@@ -197,7 +197,40 @@ The admin sidebar contains `System > Celery Tasks` for superusers. It can enqueu
 `System > Celery Scheduler` uses `django-celery-beat` and stores schedules in the database.
 After migrations are applied, create `CrontabSchedule` or `IntervalSchedule` entries and attach them to `PeriodicTask` records.
 The registered Celery task dropdown includes the tasks above.
-No periodic tasks are created automatically from static settings; schedules must be managed explicitly in the database.
+Tasks in `CELERY_BEAT_SCHEDULE` are installed or updated when Beat starts.
+Additional schedules can be managed explicitly in the database.
+
+### Newsletter-Serienversand
+
+`emails.queue_due_campaigns_before_send` erstellt innerhalb von 24 Stunden vor dem
+Versandtermin gerenderte Queue-Einträge. Der Task läuft alle fünf Minuten auf
+`bulk`; verspätete Läufe holen höchstens eine Stunde nach. Vorhandene Einträge
+werden nie automatisch zurückgesetzt. `emails.send_due_campaign_queue` läuft
+minütlich auf dem eigenen `celery-newsletter`-Worker und reserviert höchstens
+zehn Versuche pro gleitender Minute. Er sendet nur, wenn die Kampagne `ready`,
+der Termin erreicht, die globale SMTP-Konfiguration aktiviert und die
+Release-Sperre `NEWSLETTER_SERIES_SEND_ENABLED` aufgehoben ist. Diese Sperre
+steht in dieser Version fest auf `False`; ein späterer freigegebener Release
+muss sie nach dem erfolgreichen Gruppentest öffnen.
+
+Vor jeder Mail prüft der Worker den Empfänger erneut in Shopware und rendert
+den aktuellen Kampagneninhalt. Abgemeldete oder geänderte Empfänger werden
+storniert. Fehler vor SMTP werden mit Wartezeit bis zu fünfmal versucht.
+Unklare SMTP-Ergebnisse bleiben `failed` und werden nicht automatisch erneut
+gesendet. `sending`-Einträge, die über zehn Minuten hängen, erscheinen als
+Fehler im Task-Log und brauchen manuelle Prüfung. Der Queue-Status ist im Admin
+schreibgeschützt, damit ein versendeter Eintrag nicht versehentlich erneut in
+die Warteschlange gestellt wird.
+
+Im Admin unter **Newsletter → Newsletter-Empfängerkreise** kann ein benannter
+Testkreis mit bis zu 20 Empfängern und einer Entwurfs-Kampagne angelegt werden.
+Die Detailaktion **Test-E-Mails des Kreises einreihen** legt erst nach
+Bestätigung die aktiven Gruppenmitglieder als eigenen Testlauf in dieselbe
+Warteschlange wie den Serienversand. Der gemeinsame Worker verarbeitet sie mit
+Statusprüfung, Drosselung und Wiederholungen. Die Aktion aktiviert weder SMTP
+für die Serie noch die Kampagne für den Serienversand. Vor einer späteren Freigabe
+des Serienversands müssen Testzustellung und Zielkreis geprüft werden; der
+SMTP-Schalter wirkt anschließend auf **alle** fälligen Kampagnen.
 
 ## KI-Uebersetzungen mit Ollama im LAN
 

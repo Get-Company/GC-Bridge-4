@@ -5,6 +5,19 @@ import pytest
 from django.utils import timezone
 
 
+@pytest.fixture(autouse=True)
+def render_before_send():
+    with patch("emails.services.render_campaign_mjml", return_value="<mjml>fresh</mjml>"), patch(
+        "emails.services.compile_mjml_to_html", return_value="<p>fresh</p>"
+    ), patch("emails.services.html_to_plain_text", return_value="fresh"):
+        yield
+
+
+@pytest.fixture(autouse=True)
+def enable_series_only_for_sender_tests(settings):
+    settings.NEWSLETTER_SERIES_SEND_ENABLED = True
+
+
 @pytest.fixture
 def delivery():
     from emails.models import EmailCampaign, EmailCampaignQueueEntry, EmailSmtpSettings
@@ -68,6 +81,8 @@ def test_sends_one_personalized_message_and_never_repeats(delivery):
     message = connection.send_messages.call_args.args[0][0]
     assert message.to == ["one@example.com"]
     assert message.subject == "Test Newsletter"
+    assert message.body == "fresh"
+    assert message.alternatives[0].content == "<p>fresh</p>"
     assert message.extra_headers["List-Unsubscribe"].startswith("<https://www.classei-shop.com/Newsletter/#")
 
 
@@ -131,6 +146,94 @@ def test_smtp_error_remains_failed_without_automatic_duplicate(delivery):
     assert second["failed"] == 0
     assert entry.status == EmailCampaignQueueEntry.Status.FAILED
     assert connection.send_messages.call_count == 1
+
+
+@pytest.mark.django_db
+def test_second_shopware_check_catches_opt_out_after_smtp_connect(delivery):
+    from emails.models import EmailCampaignQueueEntry
+    from emails.services import EmailCampaignSendService
+
+    _, _, entry = delivery
+    connection = MagicMock()
+    shopware = MagicMock()
+    shopware.request_post.side_effect = [remote_recipient(), remote_recipient(status="optOut")]
+    with patch("newsletter.services.recipient_sync.NewsletterRecipientShopwareService", return_value=shopware), patch(
+        "emails.services.EmailSmtpSettingsService.build_connection", return_value=connection
+    ):
+        summary = EmailCampaignSendService().send_due_entries()
+
+    entry.refresh_from_db()
+    assert summary["cancelled"] == 1
+    assert entry.status == EmailCampaignQueueEntry.Status.CANCELLED
+    connection.send_messages.assert_not_called()
+    connection.close.assert_called_once()
+
+
+@pytest.mark.django_db
+def test_ambiguous_failure_blocks_second_recipient_with_same_email(delivery):
+    from emails.models import EmailCampaignQueueEntry
+    from emails.services import EmailCampaignSendService
+    from newsletter.models import NewsletterRecipient
+
+    campaign, _, first = delivery
+    first.status = EmailCampaignQueueEntry.Status.FAILED
+    first.save(update_fields=("status",))
+    second = NewsletterRecipient.objects.create(
+        shopware_id="recipient-2", email="one@example.com",
+        status=NewsletterRecipient.Status.OPT_IN, selected_email_campaign=campaign,
+    )
+    second_entry = EmailCampaignQueueEntry.objects.create(
+        campaign=campaign, recipient=second, email=second.email,
+        subject=campaign.subject, rendered_html="<p>old</p>", rendered_text="old",
+    )
+    with patch("newsletter.services.recipient_sync.NewsletterRecipientShopwareService"), patch(
+        "emails.services.EmailSmtpSettingsService.build_connection"
+    ) as build_connection:
+        summary = EmailCampaignSendService().send_due_entries()
+
+    second_entry.refresh_from_db()
+    assert summary["cancelled"] == 1
+    assert second_entry.status == EmailCampaignQueueEntry.Status.CANCELLED
+    build_connection.assert_not_called()
+
+
+@pytest.mark.django_db
+def test_ten_attempts_per_sliding_minute_even_across_task_calls(delivery):
+    from emails.models import EmailCampaignQueueEntry
+    from emails.services import EmailCampaignSendService
+    from newsletter.models import NewsletterRecipient
+
+    campaign, _, _ = delivery
+    for index in range(2, 13):
+        recipient = NewsletterRecipient.objects.create(
+            shopware_id=f"recipient-{index}", email=f"{index}@example.com",
+            status=NewsletterRecipient.Status.OPT_IN, selected_email_campaign=campaign,
+        )
+        EmailCampaignQueueEntry.objects.create(
+            campaign=campaign, recipient=recipient, email=recipient.email,
+            subject=campaign.subject, rendered_html="<p>old</p>", rendered_text="old",
+        )
+    connection = MagicMock()
+    connection.send_messages.return_value = 1
+    shopware = MagicMock()
+
+    def remote_for_id(_path, *, payload):
+        recipient_id = payload["filter"][0]["value"]
+        suffix = recipient_id.removeprefix("recipient-")
+        email = "one@example.com" if suffix == "1" else f"{suffix}@example.com"
+        return {"data": [{"id": recipient_id, "status": "optIn", "email": email}]}
+
+    shopware.request_post.side_effect = remote_for_id
+    with patch("newsletter.services.recipient_sync.NewsletterRecipientShopwareService", return_value=shopware), patch(
+        "emails.services.EmailSmtpSettingsService.build_connection", return_value=connection
+    ):
+        first = EmailCampaignSendService().send_due_entries(batch_size=50)
+        second = EmailCampaignSendService().send_due_entries(batch_size=50)
+
+    assert first["sent"] == 10
+    assert second["sent"] == 0
+    assert EmailCampaignQueueEntry.objects.filter(status=EmailCampaignQueueEntry.Status.SENT).count() == 10
+    assert connection.send_messages.call_count == 10
 
 
 @pytest.mark.django_db

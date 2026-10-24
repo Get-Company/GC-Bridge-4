@@ -300,6 +300,15 @@ class EmailCampaignQueueEntry(BaseModel):
         related_name="email_queue_entries",
         verbose_name=_("Newsletter-Empfänger"),
     )
+    test_group = models.ForeignKey(
+        "newsletter.NewsletterRecipientGroup",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="test_queue_entries",
+        verbose_name=_("Testempfängerkreis"),
+    )
+    test_batch = models.UUIDField(null=True, blank=True, db_index=True, verbose_name=_("Testlauf"))
     customer = models.ForeignKey(
         "customer.Customer",
         null=True,
@@ -335,7 +344,16 @@ class EmailCampaignQueueEntry(BaseModel):
             models.Index(fields=("status", "queued_at"), name="email_queue_status_queued_idx"),
         ]
         constraints = [
-            models.UniqueConstraint(fields=("campaign", "recipient"), name="email_queue_unique_campaign_recipient"),
+            models.UniqueConstraint(
+                fields=("campaign", "recipient"),
+                condition=models.Q(test_batch__isnull=True),
+                name="email_queue_unique_series_recipient",
+            ),
+            models.UniqueConstraint(
+                fields=("test_batch", "recipient"),
+                condition=models.Q(test_batch__isnull=False),
+                name="email_queue_unique_test_recipient",
+            ),
         ]
 
     def __str__(self) -> str:

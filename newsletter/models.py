@@ -111,3 +111,32 @@ class NewsletterRecipient(BaseModel):
 
     def __str__(self) -> str:
         return f"{self.email} | {self.status or '-'}"
+
+
+class NewsletterRecipientGroup(BaseModel):
+    name = models.CharField(max_length=255, unique=True, verbose_name=_("Name"))
+    description = models.TextField(blank=True, default="", verbose_name=_("Beschreibung"))
+    test_email_campaign = models.ForeignKey(
+        "emails.EmailCampaign",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="newsletter_test_groups",
+        verbose_name=_("Kampagne fuer Test-Warteschlange"),
+        help_text=_("Erst speichern, dann das Einreihen ueber die Aktion bestaetigen."),
+    )
+    members = models.ManyToManyField(
+        NewsletterRecipient,
+        blank=True,
+        related_name="recipient_groups",
+        verbose_name=_("Empfaenger"),
+        help_text=_("Die Mitgliedschaft allein startet keinen Newsletter-Versand."),
+    )
+
+    class Meta:
+        verbose_name = _("Newsletter-Empfängerkreis")
+        verbose_name_plural = _("Newsletter-Empfängerkreise")
+        ordering = ("name",)
+
+    def __str__(self) -> str:
+        return self.name

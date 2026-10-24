@@ -1265,8 +1265,8 @@ class EmailCampaignCategoryAdmin(BaseAdmin):
 
 @admin.register(EmailCampaignQueueEntry)
 class EmailCampaignQueueEntryAdmin(BaseAdmin):
-    list_display = ("email", "campaign", "recipient", "customer", "status", "queued_at", "sent_at")
-    list_filter = ("status", "campaign", "queued_at", "sent_at")
+    list_display = ("email", "campaign", "test_group", "recipient", "customer", "status", "attempt_count", "queued_at", "sent_at")
+    list_filter = ("status", "test_group", "campaign", "queued_at", "sent_at")
     search_fields = (
         "email",
         "subject",
@@ -1282,10 +1282,18 @@ class EmailCampaignQueueEntryAdmin(BaseAdmin):
     autocomplete_fields = ("campaign", "recipient", "customer")
     readonly_fields = BaseAdmin.readonly_fields + (
         "campaign",
+        "test_group",
+        "test_batch",
         "recipient",
         "customer",
         "email",
         "subject",
+        "status",
+        "attempt_count",
+        "last_attempt_at",
+        "next_attempt_at",
+        "sent_at",
+        "error_message",
         "rendered_html_preview",
         "queued_at",
     )
@@ -1293,13 +1301,13 @@ class EmailCampaignQueueEntryAdmin(BaseAdmin):
         (
             _("Warteschlange"),
             {
-                "fields": ("campaign", "recipient", "customer", "email", "subject", "status"),
+                "fields": ("campaign", "test_group", "test_batch", "recipient", "customer", "email", "subject", "status"),
             },
         ),
         (
             _("Versand"),
             {
-                "fields": ("queued_at", "sent_at", "error_message"),
+                "fields": ("queued_at", "last_attempt_at", "next_attempt_at", "attempt_count", "sent_at", "error_message"),
             },
         ),
         (

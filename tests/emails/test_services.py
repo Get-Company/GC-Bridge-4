@@ -139,6 +139,39 @@ class TestApplyCampaignSpecialPrices:
 
 class TestEmailCampaignQueueService:
     @pytest.mark.django_db
+    @patch("emails.services.compile_mjml_to_html", return_value="<p>ready</p>")
+    @patch("emails.services.render_campaign_mjml", return_value="<mjml>ready</mjml>")
+    def test_catches_up_recently_due_campaign_but_not_old_campaigns(
+        self, render_campaign_mjml, compile_mjml_to_html,
+    ):
+        from django.utils import timezone
+        from emails.models import EmailCampaign, EmailCampaignQueueEntry
+        from emails.services import EmailCampaignQueueService
+        from newsletter.models import NewsletterRecipient
+
+        now = timezone.now()
+        recent = EmailCampaign.objects.create(
+            internal_title="Recent", status=EmailCampaign.Status.READY,
+            send_at=now - timedelta(minutes=30),
+        )
+        old = EmailCampaign.objects.create(
+            internal_title="Old", status=EmailCampaign.Status.READY,
+            send_at=now - timedelta(hours=2),
+        )
+        for campaign, suffix in ((recent, "recent"), (old, "old")):
+            NewsletterRecipient.objects.create(
+                shopware_id=suffix, email=f"{suffix}@example.com",
+                status=NewsletterRecipient.Status.OPT_IN,
+                selected_email_campaign=campaign,
+            )
+
+        summary = EmailCampaignQueueService().queue_due_campaigns_before_send(now=now)
+
+        assert summary["queued"] == 1
+        assert EmailCampaignQueueEntry.objects.filter(campaign=recent).count() == 1
+        assert EmailCampaignQueueEntry.objects.filter(campaign=old).count() == 0
+
+    @pytest.mark.django_db
     @patch("emails.services.compile_mjml_to_html", return_value="<html>neu</html>")
     @patch("emails.services.render_campaign_mjml", return_value="<mjml>neu</mjml>")
     def test_preserves_existing_failed_entry_for_same_campaign_and_recipient(
