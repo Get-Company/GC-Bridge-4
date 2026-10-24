@@ -261,7 +261,7 @@ class TestEmailCampaignQueueService:
         due_campaign = EmailCampaign.objects.create(
             internal_title="Faellige Kampagne",
             status=EmailCampaign.Status.READY,
-            send_at=now + timedelta(days=1, minutes=30),
+            send_at=now + timedelta(hours=23, minutes=30),
         )
         EmailCampaign.objects.create(
             internal_title="Entwurf",
