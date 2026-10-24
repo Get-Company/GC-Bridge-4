@@ -6,25 +6,22 @@ from django.utils import timezone
 
 from emails.models import EmailCampaign, EmailCampaignQueueEntry, EmailSmtpSettings
 from emails.services import EmailCampaignSendService, EmailCampaignTestQueueService
-from newsletter.models import NewsletterRecipient, NewsletterRecipientGroup
+from newsletter.models import NewsletterRecipient
 
 
 @pytest.fixture
-def test_group():
+def marked_contact():
     campaign = EmailCampaign.objects.create(
         internal_title="November", subject="Hybride Arbeitswelt", status=EmailCampaign.Status.DRAFT
     )
-    group = NewsletterRecipientGroup.objects.create(
-        name="Redaktion", test_email_campaign=campaign
-    )
     recipient = NewsletterRecipient.objects.create(
-        shopware_id="person-1", email="one@example.com", status=NewsletterRecipient.Status.OPT_IN
+        shopware_id="person-1", email="one@example.com", status=NewsletterRecipient.Status.OPT_IN,
+        is_test_recipient=True,
     )
-    group.members.add(recipient)
     EmailSmtpSettings.objects.create(
         is_active=False, host="smtp.example.com", sender_email="newsletter@example.com"
     )
-    return campaign, group, recipient
+    return campaign, recipient
 
 
 @pytest.fixture
@@ -35,15 +32,21 @@ def render():
         yield
 
 
+def queue_marked(campaign):
+    return EmailCampaignTestQueueService().queue_marked(
+        campaign=campaign,
+        expected_fingerprint=EmailCampaignTestQueueService.selection_fingerprint(campaign),
+    )
+
+
 @pytest.mark.django_db
-def test_test_group_uses_same_queue_and_worker_without_enabling_series(test_group, render, settings):
-    campaign, group, recipient = test_group
+def test_marked_contact_uses_same_queue_and_worker_without_enabling_series(marked_contact, render, settings):
+    campaign, recipient = marked_contact
     settings.NEWSLETTER_SERIES_SEND_ENABLED = False
-    queued = EmailCampaignTestQueueService().queue_group(campaign=campaign, group=group)
+    queued = queue_marked(campaign)
     entry = EmailCampaignQueueEntry.objects.get()
     assert queued == {"queued": 1, "skipped": 0, "failed": 0}
     assert entry.test_batch is not None
-    assert entry.test_group == group
     assert entry.status == EmailCampaignQueueEntry.Status.QUEUED
 
     connection = MagicMock()
@@ -74,11 +77,12 @@ def test_test_group_uses_same_queue_and_worker_without_enabling_series(test_grou
 
 
 @pytest.mark.django_db
-def test_removed_member_is_cancelled_before_smtp(test_group, render, settings):
-    campaign, group, recipient = test_group
+def test_unmarked_contact_is_cancelled_before_smtp(marked_contact, render, settings):
+    campaign, recipient = marked_contact
     settings.NEWSLETTER_SERIES_SEND_ENABLED = False
-    EmailCampaignTestQueueService().queue_group(campaign=campaign, group=group)
-    group.members.remove(recipient)
+    queue_marked(campaign)
+    recipient.is_test_recipient = False
+    recipient.save(update_fields=["is_test_recipient"])
     with patch("emails.services.EmailSmtpSettingsService.build_connection") as build:
         result = EmailCampaignSendService().send_due_entries()
     assert result["cancelled"] == 1
@@ -87,10 +91,10 @@ def test_removed_member_is_cancelled_before_smtp(test_group, render, settings):
 
 
 @pytest.mark.django_db
-def test_test_queue_checks_shopware_before_smtp(test_group, render, settings):
-    campaign, group, recipient = test_group
+def test_test_queue_checks_shopware_before_smtp(marked_contact, render, settings):
+    campaign, recipient = marked_contact
     settings.NEWSLETTER_SERIES_SEND_ENABLED = False
-    EmailCampaignTestQueueService().queue_group(campaign=campaign, group=group)
+    queue_marked(campaign)
     shopware = MagicMock()
     shopware.request_post.return_value = {
         "data": [{"id": recipient.shopware_id, "status": "optOut", "email": recipient.email}]
@@ -105,62 +109,64 @@ def test_test_queue_checks_shopware_before_smtp(test_group, render, settings):
 
 
 @pytest.mark.django_db
-def test_test_group_skips_inactive_and_duplicate_addresses(test_group, render):
-    campaign, group, recipient = test_group
+def test_only_marked_contacts_queue_and_duplicates_are_skipped(marked_contact, render):
+    campaign, recipient = marked_contact
     duplicate = NewsletterRecipient.objects.create(
-        shopware_id="person-2", email="ONE@example.com", status=NewsletterRecipient.Status.OPT_IN
+        shopware_id="person-2", email="ONE@example.com", status=NewsletterRecipient.Status.OPT_IN,
+        is_test_recipient=True,
     )
-    inactive = NewsletterRecipient.objects.create(
-        shopware_id="person-3", email="inactive@example.com", status=NewsletterRecipient.Status.OPT_OUT
+    NewsletterRecipient.objects.create(
+        shopware_id="person-3", email="ordinary@example.com", status=NewsletterRecipient.Status.OPT_IN,
     )
-    group.members.add(duplicate, inactive)
-    result = EmailCampaignTestQueueService().queue_group(campaign=campaign, group=group)
-    assert result == {"queued": 1, "skipped": 2, "failed": 0}
-    assert EmailCampaignQueueEntry.objects.count() == 1
+    result = queue_marked(campaign)
+    assert result == {"queued": 1, "skipped": 1, "failed": 0}
     assert EmailCampaignQueueEntry.objects.get().recipient == recipient
+    assert duplicate.is_test_recipient
 
 
 @pytest.mark.django_db
-def test_test_group_can_be_run_again_with_new_batch(test_group, render):
-    campaign, group, _ = test_group
-    service = EmailCampaignTestQueueService()
-    service.queue_group(campaign=campaign, group=group)
-    service.queue_group(campaign=campaign, group=group)
-    assert EmailCampaignQueueEntry.objects.count() == 2
-    assert EmailCampaignQueueEntry.objects.values_list("test_batch", flat=True).distinct().count() == 2
-
-
-@pytest.mark.django_db
-def test_test_queue_does_not_replace_later_series_entry(test_group, render):
-    from emails.services import EmailCampaignQueueService
-
-    campaign, group, recipient = test_group
-    EmailCampaignTestQueueService().queue_group(campaign=campaign, group=group)
-    recipient.selected_email_campaign = campaign
-    recipient.save(update_fields=["selected_email_campaign"])
-    series_entry = EmailCampaignQueueService().queue_recipient_campaign(recipient)
-    assert series_entry.test_batch is None
-    assert EmailCampaignQueueEntry.objects.filter(campaign=campaign, recipient=recipient).count() == 2
-
-
-@pytest.mark.django_db
-def test_test_group_rejects_oversize_before_queue(test_group, render):
-    campaign, group, _ = test_group
-    group.members.add(*[
-        NewsletterRecipient.objects.create(
-            shopware_id=f"person-{i}", email=f"person-{i}@example.com",
-            status=NewsletterRecipient.Status.OPT_IN,
+def test_changed_selection_requires_new_confirmation(marked_contact, render):
+    campaign, recipient = marked_contact
+    fingerprint = EmailCampaignTestQueueService.selection_fingerprint(campaign)
+    recipient.is_test_recipient = False
+    recipient.save(update_fields=["is_test_recipient"])
+    with pytest.raises(ValueError, match="geändert"):
+        EmailCampaignTestQueueService().queue_marked(
+            campaign=campaign, expected_fingerprint=fingerprint
         )
-        for i in range(2, 23)
-    ])
-    with pytest.raises(ValueError, match="höchstens 20"):
-        EmailCampaignTestQueueService().queue_group(campaign=campaign, group=group)
     assert EmailCampaignQueueEntry.objects.count() == 0
 
 
 @pytest.mark.django_db
-def test_series_entry_is_blocked_even_when_smtp_active(test_group, settings):
-    _, _, recipient = test_group
+def test_marked_contacts_can_be_tested_again_and_do_not_replace_series(marked_contact, render):
+    from emails.services import EmailCampaignQueueService
+
+    campaign, recipient = marked_contact
+    queue_marked(campaign)
+    queue_marked(campaign)
+    recipient.selected_email_campaign = campaign
+    recipient.save(update_fields=["selected_email_campaign"])
+    series_entry = EmailCampaignQueueService().queue_recipient_campaign(recipient)
+    assert series_entry.test_batch is None
+    assert EmailCampaignQueueEntry.objects.filter(campaign=campaign, recipient=recipient).count() == 3
+
+
+@pytest.mark.django_db
+def test_too_many_marked_contacts_are_rejected_before_queue(marked_contact, render):
+    campaign, _ = marked_contact
+    for i in range(2, 23):
+        NewsletterRecipient.objects.create(
+            shopware_id=f"person-{i}", email=f"person-{i}@example.com",
+            status=NewsletterRecipient.Status.OPT_IN, is_test_recipient=True,
+        )
+    with pytest.raises(ValueError, match="Höchstens 20"):
+        queue_marked(campaign)
+    assert EmailCampaignQueueEntry.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_series_entry_stays_blocked_even_when_smtp_active(marked_contact, settings):
+    _, recipient = marked_contact
     settings.NEWSLETTER_SERIES_SEND_ENABLED = False
     campaign = EmailCampaign.objects.create(
         internal_title="Serie", subject="Live", status=EmailCampaign.Status.READY,

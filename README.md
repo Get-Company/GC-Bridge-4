@@ -222,11 +222,12 @@ Fehler im Task-Log und brauchen manuelle Prüfung. Der Queue-Status ist im Admin
 schreibgeschützt, damit ein versendeter Eintrag nicht versehentlich erneut in
 die Warteschlange gestellt wird.
 
-Im Admin unter **Newsletter → Newsletter-Empfängerkreise** kann ein benannter
-Testkreis mit bis zu 20 Empfängern und einer Entwurfs-Kampagne angelegt werden.
-Die Detailaktion **Test-E-Mails des Kreises einreihen** legt erst nach
-Bestätigung die aktiven Gruppenmitglieder als eigenen Testlauf in dieselbe
-Warteschlange wie den Serienversand. Der gemeinsame Worker verarbeitet sie mit
+Im Admin unter **E-Mails → Newsletter-Empfänger** kann jeder Kontakt mit
+**Testempfänger** markiert und die Liste danach gefiltert werden. Die
+Detailaktion **Test-E-Mails an markierte Empfänger einreihen** an einer
+Entwurfs-Kampagne legt nach Bestätigung höchstens 20 markierte Kontakte als
+eigenen Testlauf in dieselbe Warteschlange wie den Serienversand. Der gemeinsame
+Worker verarbeitet sie mit
 Statusprüfung, Drosselung und Wiederholungen. Die Aktion aktiviert weder SMTP
 für die Serie noch die Kampagne für den Serienversand. Vor einer späteren Freigabe
 des Serienversands müssen Testzustellung und Zielkreis geprüft werden; der

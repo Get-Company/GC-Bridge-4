@@ -1,6 +1,7 @@
 from urllib.parse import parse_qs, urlsplit
 from types import SimpleNamespace
 from unittest.mock import MagicMock
+from uuid import uuid4
 
 import pytest
 from django.core.management import call_command
@@ -39,7 +40,10 @@ def test_subscription_changes_cancel_only_waiting_emails_and_allow_resubscriptio
     recipient, _ = service.upsert_from_shopware(payload, customer_service=lookup)
     campaign = EmailCampaign.objects.create(internal_title="Newsletter test")
     waiting = EmailCampaignQueueEntry.objects.create(campaign=campaign, recipient=recipient, email=recipient.email)
-    sent = EmailCampaignQueueEntry.objects.create(campaign=campaign, recipient=recipient, email=recipient.email, status="sent")
+    sent = EmailCampaignQueueEntry.objects.create(
+        campaign=campaign, recipient=recipient, email=recipient.email,
+        test_batch=uuid4(), status="sent",
+    )
     service.upsert_from_shopware(payload | {"status": "optOut"}, customer_service=lookup)
     recipient.refresh_from_db()
     waiting.refresh_from_db()

@@ -300,14 +300,6 @@ class EmailCampaignQueueEntry(BaseModel):
         related_name="email_queue_entries",
         verbose_name=_("Newsletter-Empfänger"),
     )
-    test_group = models.ForeignKey(
-        "newsletter.NewsletterRecipientGroup",
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="test_queue_entries",
-        verbose_name=_("Testempfängerkreis"),
-    )
     test_batch = models.UUIDField(null=True, blank=True, db_index=True, verbose_name=_("Testlauf"))
     customer = models.ForeignKey(
         "customer.Customer",

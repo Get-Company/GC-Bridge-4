@@ -52,6 +52,12 @@ class NewsletterRecipient(BaseModel):
         help_text=_("Diese Kampagne wird fuer die Queue-Action dieses Empfaengers gerendert."),
     )
     is_customer = models.BooleanField(default=False, db_index=True, verbose_name=_("Ist Kunde"))
+    is_test_recipient = models.BooleanField(
+        default=False,
+        db_index=True,
+        verbose_name=_("Testempfänger"),
+        help_text=_("Diesen Kontakt für den Newsletter-Testversand markieren."),
+    )
     email = models.EmailField(max_length=255, db_index=True, verbose_name=_("E-Mail"))
     title = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Titel"))
     salutation_id = models.CharField(max_length=36, blank=True, default="", verbose_name=_("Anrede ID"))
@@ -111,32 +117,3 @@ class NewsletterRecipient(BaseModel):
 
     def __str__(self) -> str:
         return f"{self.email} | {self.status or '-'}"
-
-
-class NewsletterRecipientGroup(BaseModel):
-    name = models.CharField(max_length=255, unique=True, verbose_name=_("Name"))
-    description = models.TextField(blank=True, default="", verbose_name=_("Beschreibung"))
-    test_email_campaign = models.ForeignKey(
-        "emails.EmailCampaign",
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="newsletter_test_groups",
-        verbose_name=_("Kampagne fuer Test-Warteschlange"),
-        help_text=_("Erst speichern, dann das Einreihen ueber die Aktion bestaetigen."),
-    )
-    members = models.ManyToManyField(
-        NewsletterRecipient,
-        blank=True,
-        related_name="recipient_groups",
-        verbose_name=_("Empfaenger"),
-        help_text=_("Die Mitgliedschaft allein startet keinen Newsletter-Versand."),
-    )
-
-    class Meta:
-        verbose_name = _("Newsletter-Empfängerkreis")
-        verbose_name_plural = _("Newsletter-Empfängerkreise")
-        ordering = ("name",)
-
-    def __str__(self) -> str:
-        return self.name

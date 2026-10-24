@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import calendar
+import hashlib
 import logging
 import uuid
 from email.utils import formataddr
@@ -429,22 +430,42 @@ class EmailCampaignQueueService(BaseService):
 
 
 class EmailCampaignTestQueueService(BaseService):
-    """Queue one bounded test run through the ordinary newsletter worker."""
+    """Queue marked contacts through the ordinary newsletter worker."""
 
     model = EmailCampaignQueueEntry
     max_recipients = 20
 
-    def queue_group(self, *, campaign: EmailCampaign, group) -> dict[str, int]:
+    @staticmethod
+    def selection_fingerprint(campaign: EmailCampaign) -> str:
+        from newsletter.models import NewsletterRecipient
+
+        rows = list(
+            NewsletterRecipient.objects.filter(is_test_recipient=True)
+            .order_by("pk")
+            .values_list("pk", "email", "status", "is_present_in_shopware")
+        )
+        selection = (
+            campaign.pk, campaign.updated_at.isoformat(), campaign.status,
+            campaign.subject, rows,
+        )
+        return hashlib.sha256(repr(selection).encode("utf-8")).hexdigest()
+
+    def queue_marked(self, *, campaign: EmailCampaign, expected_fingerprint: str) -> dict[str, int]:
+        from newsletter.models import NewsletterRecipient
+
         if campaign.status != EmailCampaign.Status.DRAFT:
             raise ValueError("Testversand ist nur für Entwürfe möglich.")
-        if group.test_email_campaign_id != campaign.pk:
-            raise ValueError("Die gewählte Kampagne gehört nicht zu diesem Testempfängerkreis.")
+        if expected_fingerprint != self.selection_fingerprint(campaign):
+            raise ValueError("Die Testempfänger oder Kampagne haben sich geändert. Bitte erneut bestätigen.")
 
-        members = list(group.members.order_by("pk")[: self.max_recipients + 1])
-        if not members:
-            raise ValueError("Der Testempfängerkreis enthält keine Empfänger.")
-        if len(members) > self.max_recipients:
-            raise ValueError(f"Ein Testempfängerkreis darf höchstens {self.max_recipients} Empfänger enthalten.")
+        recipients = list(
+            NewsletterRecipient.objects.filter(is_test_recipient=True)
+            .order_by("pk")[: self.max_recipients + 1]
+        )
+        if not recipients:
+            raise ValueError("Es sind keine Testempfänger markiert.")
+        if len(recipients) > self.max_recipients:
+            raise ValueError(f"Höchstens {self.max_recipients} Testempfänger sind erlaubt.")
 
         smtp = EmailSmtpSettings.objects.filter(pk=1).first()
         if smtp is None:
@@ -454,7 +475,7 @@ class EmailCampaignTestQueueService(BaseService):
         batch = uuid.uuid4()
         summary = {"queued": 0, "skipped": 0, "failed": 0}
         seen_emails = set()
-        for recipient in members:
+        for recipient in recipients:
             email = recipient.email.strip()
             key = email.casefold()
             if (
@@ -470,7 +491,6 @@ class EmailCampaignTestQueueService(BaseService):
                 self.model.objects.create(
                     campaign=campaign,
                     recipient=recipient,
-                    test_group=group,
                     test_batch=batch,
                     customer=recipient.customer,
                     email=email,
@@ -586,11 +606,9 @@ class EmailCampaignSendService(BaseService):
             self._finish(entry_id, self.model.Status.QUEUED, "Kampagne nicht versandbereit.")
             return "retry"
         if is_test and (
-            entry.test_group_id is None
-            or not entry.test_group.members.filter(pk=recipient.pk).exists()
-            or entry.test_group.test_email_campaign_id != campaign.pk
+            not recipient.is_test_recipient
         ):
-            self._finish(entry_id, self.model.Status.CANCELLED, "Empfänger nicht mehr im Testkreis.")
+            self._finish(entry_id, self.model.Status.CANCELLED, "Empfänger nicht mehr als Testempfänger markiert.")
             return "cancelled"
         if (
             not recipient.is_present_in_shopware
@@ -641,11 +659,7 @@ class EmailCampaignSendService(BaseService):
             or not current.recipient.is_active_status
             or not current.recipient.is_present_in_shopware
             or current.recipient.email.casefold() != entry.email.casefold()
-            or (is_test and (
-                current.test_group_id is None
-                or not current.test_group.members.filter(pk=recipient.pk).exists()
-                or current.test_group.test_email_campaign_id != campaign.pk
-            ))
+            or (is_test and not current.recipient.is_test_recipient)
         ):
             self._finish(entry_id, self.model.Status.CANCELLED, "Empfänger oder Kampagne vor SMTP geändert.")
             return "cancelled"
@@ -695,17 +709,15 @@ class EmailCampaignSendService(BaseService):
             ):
                 self._finish(entry_id, self.model.Status.CANCELLED, "Empfänger vor SMTP in Shopware abgemeldet oder geändert.")
                 return "cancelled"
-            latest_entry = self.model.objects.select_related("campaign", "recipient", "test_group").get(pk=entry_id)
+            latest_entry = self.model.objects.select_related("campaign", "recipient").get(pk=entry_id)
             if is_test and (
                 latest_entry.campaign.status != EmailCampaign.Status.DRAFT
-                or latest_entry.test_group_id is None
-                or latest_entry.test_group.test_email_campaign_id != campaign.pk
-                or not latest_entry.test_group.members.filter(pk=recipient.pk).exists()
+                or not latest_entry.recipient.is_test_recipient
                 or not latest_entry.recipient.is_active_status
                 or not latest_entry.recipient.is_present_in_shopware
                 or latest_entry.recipient.email.casefold() != entry.email.casefold()
             ):
-                self._finish(entry_id, self.model.Status.CANCELLED, "Testkreis oder Empfänger vor SMTP geändert.")
+                self._finish(entry_id, self.model.Status.CANCELLED, "Testmarkierung oder Empfänger vor SMTP geändert.")
                 return "cancelled"
             try:
                 message = EmailMultiAlternatives(

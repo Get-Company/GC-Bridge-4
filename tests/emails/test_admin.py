@@ -52,7 +52,10 @@ class TestEmailCampaignAdmin(SimpleTestCase):
         from emails.admin import EmailCampaignAdmin
 
         assert EmailCampaignAdmin.inlines == ()
-        assert EmailCampaignAdmin.actions_detail == ("open_simple_editor_detail",)
+        assert EmailCampaignAdmin.actions_detail == (
+            "open_simple_editor_detail",
+            "queue_marked_test_recipients_detail",
+        )
 
     def test_new_campaigns_default_to_simple_editor(self):
         from emails.models import EmailCampaign

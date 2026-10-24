@@ -576,12 +576,6 @@ UNFOLD = {
                         "permission": sidebar_model_view_permission("newsletter", "NewsletterRecipient"),
                     },
                     {
-                        "title": _("Newsletter-Empfängerkreise"),
-                        "icon": "group",
-                        "link": reverse_lazy("admin:newsletter_newsletterrecipientgroup_changelist"),
-                        "permission": sidebar_model_view_permission("newsletter", "NewsletterRecipientGroup"),
-                    },
-                    {
                         "title": _("SMTP-Einstellungen"),
                         "icon": "settings_ethernet",
                         "link": reverse_lazy("admin:emails_emailsmtpsettings_changelist"),

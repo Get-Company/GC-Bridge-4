@@ -19,6 +19,7 @@ from django_json_widget.widgets import JSONEditorWidget
 from jinja2 import TemplateSyntaxError
 from unfold.decorators import action
 from unfold.enums import ActionVariant
+from unfold.forms import BaseDialogForm
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,7 @@ from emails.models import (
     EmailSmtpSettings,
     MjmlComponent,
 )
-from emails.services import EmailSmtpSettingsService
+from emails.services import EmailCampaignTestQueueService, EmailSmtpSettingsError, EmailSmtpSettingsService
 from emails_v2.variable_parser import extract_variables
 
 _MONOSPACE_STYLE = "font-family: monospace; width: 100%; min-height: 300px;"
@@ -673,9 +674,44 @@ class EmailCampaignComponentInline(BaseStackedInline):
         )
 
 
+class QueueMarkedTestRecipientsForm(BaseDialogForm):
+    confirm = forms.BooleanField(label="Testversand bestätigen", required=True)
+    selection_fingerprint = forms.CharField(widget=forms.HiddenInput, required=True)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        from newsletter.models import NewsletterRecipient
+
+        self.campaign = EmailCampaign.objects.filter(pk=self.object_id).first()
+        if self.campaign is None:
+            return
+        emails = list(
+            NewsletterRecipient.objects.filter(is_test_recipient=True)
+            .order_by("pk")
+            .values_list("email", flat=True)
+        )
+        if not self.is_bound:
+            self.initial["selection_fingerprint"] = (
+                EmailCampaignTestQueueService.selection_fingerprint(self.campaign)
+            )
+        self.fields["confirm"].label = (
+            f"„{self.campaign.internal_title}“ an {len(emails)} markierte Testempfänger einreihen"
+        )
+        if len(emails) <= EmailCampaignTestQueueService.max_recipients:
+            self.fields["confirm"].help_text = ", ".join(emails) if emails else "Keine Testempfänger markiert."
+
+    def clean_selection_fingerprint(self):
+        if self.campaign is None:
+            raise forms.ValidationError("Kampagne nicht gefunden.")
+        expected = EmailCampaignTestQueueService.selection_fingerprint(self.campaign)
+        if self.cleaned_data["selection_fingerprint"] != expected:
+            raise forms.ValidationError("Die Testempfänger oder Kampagne haben sich geändert. Bitte den Dialog neu öffnen.")
+        return expected
+
+
 @admin.register(EmailCampaign)
 class EmailCampaignAdmin(BaseAdmin):
-    actions_detail = ("open_simple_editor_detail",)
+    actions_detail = ("open_simple_editor_detail", "queue_marked_test_recipients_detail")
     list_display = (
         "internal_title",
         "editor_link",
@@ -728,6 +764,66 @@ class EmailCampaignAdmin(BaseAdmin):
         return HttpResponseRedirect(
             reverse("admin:emails_emailcampaign_simple_editor", args=(object_id,))
         )
+
+    @action(
+        description="Test-E-Mails an markierte Empfänger einreihen",
+        icon="outbox",
+        variant=ActionVariant.PRIMARY,
+        permissions=("change", "queue_test"),
+        dialog={
+            "title": "Test-E-Mails an markierte Empfänger einreihen",
+            "description": (
+                "Nur die in der Empfängerliste als Testempfänger markierten Kontakte "
+                "werden über die gemeinsame Versand-Warteschlange angeschrieben "
+                "(höchstens 20). Der Serienversand bleibt gesperrt."
+            ),
+            "form_class": QueueMarkedTestRecipientsForm,
+            "form_submit_text": "Test-E-Mails einreihen",
+        },
+    )
+    def queue_marked_test_recipients_detail(
+        self, request, form: QueueMarkedTestRecipientsForm, object_id: str
+    ):
+        campaign = self.get_object(request, object_id)
+        redirect = HttpResponseRedirect(reverse("admin:emails_emailcampaign_change", args=(object_id,)))
+        if campaign is None or campaign.status != EmailCampaign.Status.DRAFT:
+            self.message_user(request, "Testversand erfordert eine Entwurfs-Kampagne.", level=messages.ERROR)
+            return redirect
+        try:
+            summary = EmailCampaignTestQueueService().queue_marked(
+                campaign=campaign,
+                expected_fingerprint=form.cleaned_data["selection_fingerprint"],
+            )
+        except (ValueError, EmailSmtpSettingsError) as exc:
+            self.message_user(request, str(exc), level=messages.ERROR)
+            return redirect
+        except Exception:
+            logger.exception("Test-Warteschlange für Kampagne %s fehlgeschlagen", campaign.pk)
+            self.message_user(request, "Test-E-Mails konnten nicht eingereiht werden.", level=messages.ERROR)
+            return redirect
+
+        queued, skipped, failed = (summary[key] for key in ("queued", "skipped", "failed"))
+        self.message_user(
+            request,
+            f"Testversand: {queued} eingereiht, {skipped} übersprungen, {failed} fehlgeschlagen.",
+            level=(messages.SUCCESS if queued > 0 and failed == 0 else messages.ERROR),
+        )
+        if queued:
+            try:
+                from emails.tasks import send_due_campaign_queue
+
+                send_due_campaign_queue.delay()
+            except Exception:
+                logger.exception("Sofortiger Start der Test-Warteschlange fehlgeschlagen")
+                self.message_user(
+                    request,
+                    "Test-E-Mails sind eingereiht; der reguläre Worker prüft sie beim nächsten Lauf.",
+                    level=messages.WARNING,
+                )
+        return redirect
+
+    def has_queue_test_permission(self, request, obj=None):
+        return request.user.has_perm("newsletter.view_newsletterrecipient")
 
     @admin.display(description=_("Editor"))
     def editor_link(self, obj):
@@ -1265,8 +1361,12 @@ class EmailCampaignCategoryAdmin(BaseAdmin):
 
 @admin.register(EmailCampaignQueueEntry)
 class EmailCampaignQueueEntryAdmin(BaseAdmin):
-    list_display = ("email", "campaign", "test_group", "recipient", "customer", "status", "attempt_count", "queued_at", "sent_at")
-    list_filter = ("status", "test_group", "campaign", "queued_at", "sent_at")
+    list_display = ("email", "campaign", "delivery_mode", "recipient", "customer", "status", "attempt_count", "queued_at", "sent_at")
+    list_filter = ("status", "campaign", "queued_at", "sent_at")
+
+    @admin.display(description="Versandart")
+    def delivery_mode(self, obj: EmailCampaignQueueEntry) -> str:
+        return "Test" if obj.test_batch else "Serie"
     search_fields = (
         "email",
         "subject",
@@ -1282,7 +1382,6 @@ class EmailCampaignQueueEntryAdmin(BaseAdmin):
     autocomplete_fields = ("campaign", "recipient", "customer")
     readonly_fields = BaseAdmin.readonly_fields + (
         "campaign",
-        "test_group",
         "test_batch",
         "recipient",
         "customer",
@@ -1301,7 +1400,7 @@ class EmailCampaignQueueEntryAdmin(BaseAdmin):
         (
             _("Warteschlange"),
             {
-                "fields": ("campaign", "test_group", "test_batch", "recipient", "customer", "email", "subject", "status"),
+                "fields": ("campaign", "test_batch", "recipient", "customer", "email", "subject", "status"),
             },
         ),
         (
