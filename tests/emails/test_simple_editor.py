@@ -55,7 +55,7 @@ def test_simple_newsletter_uses_fixed_frame_and_editable_fields():
     assert "99,95 €" in mjml
     assert "https://assets.classei.de/img/neu.jpg" in mjml
     assert "224453.jpg" not in mjml
-    assert "https://www.classei-shop.com/search?sSearch=224453" in mjml
+    assert "https://www.classei-shop.com/search?search=224453" in mjml
     assert "vom Newsletter abmelden" in mjml
 
 
@@ -101,7 +101,23 @@ def test_product_images_use_mjml_carousel_when_multiple_images_exist():
 
     assert "<mj-carousel>" in mjml
     assert mjml.count("<mj-carousel-image ") == 2
-    assert 'href="https://www.classei-shop.com/search?sSearch=224453"' in mjml
+    assert 'href="https://www.classei-shop.com/search?search=224453"' in mjml
+
+
+def test_product_link_override_is_used_for_title_button_and_images():
+    direct_url = "https://www.classei-shop.com/224453-Blaettersicht-Mappe/224453"
+    campaign = SimpleNamespace(
+        editor_content={"product_texts": {"17": {"product_url": direct_url}}},
+        campaign_products=ProductRows([SimpleNamespace(
+            pk=9, product=FakeProduct(), special_price_override=None, discount_pct=None,
+        )]),
+    )
+    with patch("emails.simple_editor._campaign_sales_channel_ids", return_value=()), patch.object(
+        ProductEmailProxy, "_get_price_entry", return_value=None,
+    ):
+        mjml = build_simple_mjml(campaign)
+
+    assert mjml.count(f'href="{direct_url}"') == 3
 
 
 def test_product_with_one_image_keeps_plain_mjml_image():

@@ -96,6 +96,8 @@
         <input id="section-{{ item.pk }}" data-product-text="section_heading" type="text" placeholder="z. B. Klarsichtmappen">
         <label for="title-{{ item.pk }}">Titel in der E-Mail</label>
         <input id="title-{{ item.pk }}" data-product-text="title" type="text" placeholder="{{ item.product.name|default:item.product.erp_nr }}">
+        <label for="product-url-{{ item.pk }}">Direkter Produktlink · optional</label>
+        <input id="product-url-{{ item.pk }}" data-product-text="product_url" type="url" placeholder="https://www.classei-shop.com/…">
         <label for="description-{{ item.pk }}">Beschreibung</label>
         <textarea id="description-{{ item.pk }}" data-product-text="description" rows="4" placeholder="Aus dem Produktkatalog"></textarea>
         <label for="media-{{ item.pk }}">Produktbilder · eine URL pro Zeile</label>

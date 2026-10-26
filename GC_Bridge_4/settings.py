@@ -95,9 +95,9 @@ def env_bool(name: str, default: bool = False) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
-# Explicit release gate: test-group delivery works while the series worker is
-# disabled. Enable only in a later, approved release after the group test.
-NEWSLETTER_SERIES_SEND_ENABLED = False
+# Series delivery requires an explicit deployment setting in addition to the
+# campaign's READY state and active SMTP configuration.
+NEWSLETTER_SERIES_SEND_ENABLED = env_bool("NEWSLETTER_SERIES_SEND_ENABLED")
 
 
 def env_list(name: str, default: str = "") -> list[str]:

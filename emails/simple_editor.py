@@ -110,15 +110,28 @@ def offer_for_product(campaign_product, content, sales_channel_ids):
     custom = content["product_texts"].get(str(product.pk), {})
     if not isinstance(custom, dict):
         custom = {}
+    product_url = str(custom.get("product_url") or "").strip()
+    parsed_product_url = urlparse(product_url)
+    if parsed_product_url.scheme != "https" or parsed_product_url.hostname not in {
+        "www.classei-shop.com", "classei-shop.com",
+    }:
+        product_url = ""
+    title = custom.get("title") or product.name or product.erp_nr
+    order_label = (
+        title
+        if title.casefold().startswith(product.erp_nr.casefold())
+        else f"{product.erp_nr} {title}"
+    )
     return {
             "id": campaign_product.pk,
             "section_heading": custom.get("section_heading", ""),
-            "title": custom.get("title") or product.name or product.erp_nr,
+            "title": title,
+            "order_label": order_label,
             "description": custom.get("description") or strip_tags(product.description_short or ""),
             "sku": product.erp_nr,
-            "url": (
+            "url": product_url or (
                 f"{settings.NEWSLETTER_STOREFRONT_URL}/search"
-                f"?sSearch={quote_plus(product.erp_nr)}"
+                f"?search={quote_plus(product.erp_nr)}"
             ),
             "images": _media_urls(product, custom),
             "list_price": _price(proxy.price),
