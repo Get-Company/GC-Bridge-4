@@ -95,11 +95,6 @@ def env_bool(name: str, default: bool = False) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
-# Series delivery requires an explicit deployment setting in addition to the
-# campaign's READY state and active SMTP configuration.
-NEWSLETTER_SERIES_SEND_ENABLED = env_bool("NEWSLETTER_SERIES_SEND_ENABLED")
-
-
 def env_list(name: str, default: str = "") -> list[str]:
     return [item.strip() for item in os.getenv(name, default).split(",") if item.strip()]
 
@@ -109,6 +104,12 @@ def env_int(name: str, default: int) -> int:
         return int(os.getenv(name, str(default)))
     except (TypeError, ValueError):
         return default
+
+
+# Both switches must be set for a single approved campaign. No campaign is
+# eligible when the ID is omitted or invalid.
+NEWSLETTER_SERIES_SEND_ENABLED = env_bool("NEWSLETTER_SERIES_SEND_ENABLED")
+NEWSLETTER_SERIES_CAMPAIGN_ID = env_int("NEWSLETTER_SERIES_CAMPAIGN_ID", 0)
 
 
 LOGS_ROOT = Path(os.getenv("LOGS_ROOT", "tmp/logs"))

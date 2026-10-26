@@ -208,10 +208,10 @@ Versandtermin gerenderte Queue-Einträge. Der Task läuft alle fünf Minuten auf
 werden nie automatisch zurückgesetzt. `emails.send_due_campaign_queue` läuft
 minütlich auf dem eigenen `celery-newsletter`-Worker und reserviert höchstens
 zehn Versuche pro gleitender Minute. Er sendet nur, wenn die Kampagne `ready`,
-der Termin erreicht, die globale SMTP-Konfiguration aktiviert und die
-Release-Sperre `NEWSLETTER_SERIES_SEND_ENABLED` aufgehoben ist. Diese Sperre
-steht in dieser Version fest auf `False`; ein späterer freigegebener Release
-muss sie nach dem erfolgreichen Gruppentest öffnen.
+der Termin erreicht, die globale SMTP-Konfiguration aktiviert und
+`NEWSLETTER_SERIES_SEND_ENABLED=1` gesetzt ist. Zusätzlich muss
+`NEWSLETTER_SERIES_CAMPAIGN_ID` genau die freigegebene Kampagnen-ID enthalten.
+Ohne beide Einstellungen sendet der Worker keine Serienkampagne.
 
 Vor jeder Mail prüft der Worker den Empfänger erneut in Shopware und rendert
 den aktuellen Kampagneninhalt. Abgemeldete oder geänderte Empfänger werden

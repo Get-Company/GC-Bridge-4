@@ -326,6 +326,7 @@ class EmailCampaignQueueService(BaseService):
         starts_at = now + lead_time
         campaigns = (
             EmailCampaign.objects.filter(
+                pk=settings.NEWSLETTER_SERIES_CAMPAIGN_ID,
                 status=EmailCampaign.Status.READY,
                 # A delayed Beat run may catch up for one hour. Older sends
                 # require an operator decision instead of a surprise mailing.
@@ -530,7 +531,11 @@ class EmailCampaignSendService(BaseService):
         if not self.model.objects.filter(
             status=self.model.Status.QUEUED,
             test_batch__isnull=False,
-        ).exists() and (not settings.NEWSLETTER_SERIES_SEND_ENABLED or not smtp.is_active):
+        ).exists() and (
+            not settings.NEWSLETTER_SERIES_SEND_ENABLED
+            or not settings.NEWSLETTER_SERIES_CAMPAIGN_ID
+            or not smtp.is_active
+        ):
             summary["disabled"] = 1
             return summary
 
@@ -558,9 +563,14 @@ class EmailCampaignSendService(BaseService):
         eligible = Q(
             test_batch__isnull=False,
         )
-        if settings.NEWSLETTER_SERIES_SEND_ENABLED and EmailSmtpSettings.objects.filter(pk=1, is_active=True).exists():
+        if (
+            settings.NEWSLETTER_SERIES_SEND_ENABLED
+            and settings.NEWSLETTER_SERIES_CAMPAIGN_ID
+            and EmailSmtpSettings.objects.filter(pk=1, is_active=True).exists()
+        ):
             eligible |= Q(
                 test_batch__isnull=True,
+                campaign_id=settings.NEWSLETTER_SERIES_CAMPAIGN_ID,
                 campaign__status=EmailCampaign.Status.READY,
                 campaign__send_at__lte=now,
             )
@@ -596,6 +606,7 @@ class EmailCampaignSendService(BaseService):
             campaign.status == EmailCampaign.Status.DRAFT
             if is_test else (
                 settings.NEWSLETTER_SERIES_SEND_ENABLED
+                and campaign.pk == settings.NEWSLETTER_SERIES_CAMPAIGN_ID
                 and smtp.is_active
                 and campaign.status == EmailCampaign.Status.READY
                 and campaign.send_at is not None
@@ -652,6 +663,7 @@ class EmailCampaignSendService(BaseService):
         if (
             (current.campaign.status != EmailCampaign.Status.DRAFT if is_test else (
                 not settings.NEWSLETTER_SERIES_SEND_ENABLED
+                or current.campaign_id != settings.NEWSLETTER_SERIES_CAMPAIGN_ID
                 or current.campaign.status != EmailCampaign.Status.READY
                 or current.campaign.send_at is None
                 or current.campaign.send_at > timezone.now()

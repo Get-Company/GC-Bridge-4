@@ -19,7 +19,7 @@ def enable_series_only_for_sender_tests(settings):
 
 
 @pytest.fixture
-def delivery():
+def delivery(settings):
     from emails.models import EmailCampaign, EmailCampaignQueueEntry, EmailSmtpSettings
     from newsletter.models import NewsletterRecipient
 
@@ -29,6 +29,7 @@ def delivery():
         status=EmailCampaign.Status.READY,
         send_at=timezone.now() - timedelta(minutes=1),
     )
+    settings.NEWSLETTER_SERIES_CAMPAIGN_ID = campaign.pk
     recipient = NewsletterRecipient.objects.create(
         shopware_id="recipient-1",
         email="one@example.com",
@@ -249,6 +250,42 @@ def test_inactive_smtp_and_future_campaign_do_not_send(delivery):
     campaign.save(update_fields=("send_at",))
     with patch("newsletter.services.recipient_sync.NewsletterRecipientShopwareService") as service:
         assert EmailCampaignSendService().send_due_entries()["sent"] == 0
+    service.return_value.request_post.assert_not_called()
+
+
+@pytest.mark.django_db
+def test_series_gate_never_claims_another_campaign(delivery):
+    from emails.models import EmailCampaign, EmailCampaignQueueEntry
+    from emails.services import EmailCampaignSendService
+    from newsletter.models import NewsletterRecipient
+
+    _, _, allowed_entry = delivery
+    allowed_entry.status = EmailCampaignQueueEntry.Status.CANCELLED
+    allowed_entry.save(update_fields=("status",))
+    other_campaign = EmailCampaign.objects.create(
+        internal_title="Another newsletter",
+        subject="Another newsletter",
+        status=EmailCampaign.Status.READY,
+        send_at=timezone.now() - timedelta(minutes=1),
+    )
+    other_recipient = NewsletterRecipient.objects.create(
+        shopware_id="recipient-2",
+        email="two@example.com",
+        status=NewsletterRecipient.Status.OPT_IN,
+        selected_email_campaign=other_campaign,
+    )
+    other_entry = EmailCampaignQueueEntry.objects.create(
+        campaign=other_campaign,
+        recipient=other_recipient,
+        email=other_recipient.email,
+        subject=other_campaign.subject,
+    )
+
+    with patch("newsletter.services.recipient_sync.NewsletterRecipientShopwareService") as service:
+        assert EmailCampaignSendService().send_due_entries()["sent"] == 0
+
+    other_entry.refresh_from_db()
+    assert other_entry.status == EmailCampaignQueueEntry.Status.QUEUED
     service.return_value.request_post.assert_not_called()
 
 
