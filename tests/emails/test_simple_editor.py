@@ -120,6 +120,23 @@ def test_product_link_override_is_used_for_title_button_and_images():
     assert mjml.count(f'href="{direct_url}"') == 3
 
 
+def test_product_description_url_is_clickable():
+    campaign = SimpleNamespace(
+        editor_content={"product_texts": {"17": {
+            "description": "Online-Druck: https://www.classei.de/de/service/media-center/classei-online-druck.html",
+        }}},
+        campaign_products=ProductRows([SimpleNamespace(
+            pk=9, product=FakeProduct(), special_price_override=None, discount_pct=None,
+        )]),
+    )
+    with patch("emails.simple_editor._campaign_sales_channel_ids", return_value=()), patch.object(
+        ProductEmailProxy, "_get_price_entry", return_value=None,
+    ):
+        mjml = build_simple_mjml(campaign)
+
+    assert 'href="https://www.classei.de/de/service/media-center/classei-online-druck.html"' in mjml
+
+
 def test_product_with_one_image_keeps_plain_mjml_image():
     campaign = SimpleNamespace(
         editor_content={},

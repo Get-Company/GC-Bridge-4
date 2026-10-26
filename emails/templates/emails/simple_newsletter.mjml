@@ -62,7 +62,7 @@
       </mj-column></mj-section>
       <mj-section>
         <mj-column width="52%">
-          <mj-text>{{ offer.description|linebreaksbr }}</mj-text>
+          <mj-text>{{ offer.description|urlize|linebreaksbr }}</mj-text>
           <mj-button href="{{ offer.url }}">Mehr Infos zum Artikel</mj-button>
           <mj-text padding-top="18px" align="center">
             {% if offer.has_special %}{% if offer.list_price %}<span style="color:#777;text-decoration:line-through">{{ offer.list_price }} €</span><br />{% endif %}
