@@ -805,6 +805,28 @@ class ProductMediaSyncServiceTest(SimpleTestCase):
         self.assertEqual(base_name, "produkt-bild")
         self.assertEqual(extension, "jpeg")
 
+    def test_product_image_payload_uses_webp_without_changing_source_url(self):
+        image = SimpleNamespace(path="details/front.png", filename="front.png", url="https://assets.example/front.png")
+        service = ProductMediaSyncService()
+
+        media_id, _entity, upload = service.get_image_media_payload(image=image)
+
+        self.assertEqual(media_id, service.build_media_id("webp:details/front.png"))
+        self.assertTrue(upload["file_name"].startswith("front-"))
+        self.assertTrue(upload["file_name"].endswith(".webp"))
+        self.assertEqual(upload["source_url"], image.url)
+
+    @patch.object(ProductService, "request_post")
+    def test_media_rows_keep_relation_and_media_ids_together(self, request_post):
+        request_post.return_value = {"data": [{"id": "relation-1", "attributes": {
+            "productId": "product-1", "mediaId": "media-1",
+        }}]}
+        service = ProductService.__new__(ProductService)
+
+        rows = service.find_product_media_rows_by_product_ids(product_ids=["product-1"])
+
+        self.assertEqual(rows, [{"id": "relation-1", "product_id": "product-1", "media_id": "media-1"}])
+
     @patch.object(ProductService, "prepare_media_upload", return_value=b"normalized-image")
     @patch.object(ProductService, "request_binary")
     def test_upload_media_from_url_uses_shopware_upload_endpoint(self, mock_request_post, prepare_upload):
@@ -823,6 +845,21 @@ class ProductMediaSyncServiceTest(SimpleTestCase):
             content=b"normalized-image",
             additional_query_params={"extension": "png", "fileName": "bild"},
         )
+
+    @patch.object(ProductService, "prepare_media_upload", return_value=b"webp-image")
+    @patch.object(ProductService, "request_binary")
+    def test_webp_upload_requests_webp_conversion(self, request_binary, prepare_upload):
+        service = ProductService.__new__(ProductService)
+        service.delete_conflicting_media_by_filename = MagicMock(return_value=0)
+
+        service.upload_media_from_url(
+            media_id="webp-media", file_name="bild.webp", source_url="https://assets.example/bild.jpg",
+        )
+
+        prepare_upload.assert_called_once_with(
+            source_url="https://assets.example/bild.jpg", output_format="webp",
+        )
+        self.assertEqual(request_binary.call_args.kwargs["additional_query_params"]["extension"], "webp")
 
     @patch.object(ProductService, "prepare_media_upload", return_value=b"normalized-image")
     @patch.object(ProductService, "request_binary")
@@ -931,7 +968,8 @@ class ProductMediaSyncHashRegressionTest(TestCase):
             [relation["productId"] for relation in media_relations],
             ["shopware-product-6003", "shopware-product-6003"],
         )
-        self.assertEqual([upload["file_name"] for upload in media_uploads], ["first.jpg", "later.jpg"])
+        self.assertTrue(all(upload["file_name"].endswith(".webp") for upload in media_uploads))
+        self.assertEqual([upload["source_url"] for upload in media_uploads], [first.url, later.url])
         self.assertEqual(len(media_entities), 2)
 
     def test_media_payload_contains_all_product_media_relations(self):
@@ -1255,7 +1293,7 @@ class ShopwareVariantSyncServiceTest(TestCase):
         self.assertTrue(all(payload["stock"] == 0 for payload in parent_payloads))
         self.assertTrue(all(payload["isCloseout"] is False for payload in parent_payloads))
         self.assertTrue(all(payload["maxPurchase"] is None for payload in parent_payloads))
-        media_id = ProductMediaSyncService.build_media_id(self.image.path)
+        media_id = ProductMediaSyncService.build_media_id(f"webp:{self.image.path}")
         expected_parent_media = [
             {
                 "id": ProductMediaSyncService.build_product_media_id(
@@ -1269,13 +1307,13 @@ class ShopwareVariantSyncServiceTest(TestCase):
         ]
         self.assertTrue(all(payload["media"] == expected_parent_media for payload in parent_payloads))
         self.assertTrue(all(payload["coverId"] == expected_parent_media[0]["id"] for payload in parent_payloads))
-        color_media_id = ProductMediaSyncService.build_media_id(self.color_image.path)
+        color_media_id = ProductMediaSyncService.build_media_id(f"webp:{self.color_image.path}")
         product_service.bulk_upsert_media.assert_called_once_with(
             [ProductMediaSyncService.build_media_entity_payload(color_media_id)]
         )
         product_service.upload_media_from_url.assert_called_once_with(
             media_id=color_media_id,
-            file_name="quick-tabs-color-white.jpg",
+            file_name=ProductMediaSyncService().get_image_media_payload(image=self.color_image)[2]["file_name"],
             source_url=self.color_image.url,
         )
         product_service.bulk_upsert.assert_any_call(
@@ -1523,6 +1561,34 @@ class ShopwareVariantSyncServiceTest(TestCase):
 
 class ForceProductImageUploadsCommandTest(TestCase):
     @patch("shopware.management.commands.shopware_force_product_image_uploads.ProductService")
+    def test_missing_source_skips_only_affected_product(self, product_service_factory):
+        service = product_service_factory.return_value
+        def prepare(*, source_url, output_format):
+            if "missing.jpg" in source_url:
+                raise ValueError("source missing")
+            return b"webp-image"
+
+        service.prepare_media_upload.side_effect = prepare
+        missing = Product.objects.create(erp_nr="A-missing", sku="sku-missing", shopware_image_sync_hash="old-missing")
+        available = Product.objects.create(erp_nr="A-valid", sku="sku-valid", shopware_image_sync_hash="old-valid")
+        ProductImage.objects.create(product=missing, image=Image.objects.create(path="missing.jpg"), order=1)
+        ProductImage.objects.create(product=available, image=Image.objects.create(path="available.jpg"), order=1)
+
+        with self.assertRaises(CommandError):
+            ForceProductImageUploadsCommand().handle(
+                all=False, limit=None, batch_size=10, erp_nrs=["A-missing", "A-valid"],
+                only_with_images=False, log_images=False,
+            )
+
+        service.upload_media_from_url.assert_called_once()
+        self.assertIn("available.jpg", service.upload_media_from_url.call_args.kwargs["source_url"])
+        self.assertEqual(service.bulk_upsert.call_args.args[0][0]["productNumber"], "A-valid")
+        missing.refresh_from_db()
+        available.refresh_from_db()
+        self.assertEqual(missing.shopware_image_sync_hash, "old-missing")
+        self.assertNotEqual(available.shopware_image_sync_hash, "old-valid")
+
+    @patch("shopware.management.commands.shopware_force_product_image_uploads.ProductService")
     def test_preparation_failure_preserves_live_images_and_sync_hash(self, product_service_factory):
         service = product_service_factory.return_value
         service.prepare_media_upload.side_effect = ValueError("Invalid ICC profile")
@@ -1543,7 +1609,6 @@ class ForceProductImageUploadsCommandTest(TestCase):
     def test_handle_processes_all_products_when_no_erp_numbers_are_given(self, product_service_factory):
         service = MagicMock()
         service.get_sku_map.return_value = {}
-        service.purge_product_media_by_product_ids.return_value = 2
         product_service_factory.return_value = service
 
         first = Product.objects.create(erp_nr="A-5001", sku="sku-5001", shopware_image_sync_hash="hash-1")
@@ -1561,11 +1626,7 @@ class ForceProductImageUploadsCommandTest(TestCase):
         cmd = ForceProductImageUploadsCommand()
         cmd.handle(all=False, limit=None, batch_size=10, erp_nrs=[], only_with_images=False, log_images=False)
 
-        service.purge_product_media_by_product_ids.assert_called_once()
-        self.assertEqual(
-            service.purge_product_media_by_product_ids.call_args.kwargs["product_ids"],
-            ["sku-5001", "sku-5002"],
-        )
+        service.purge_product_media_by_product_ids.assert_not_called()
         self.assertEqual(service.upload_media_from_url.call_count, 2)
         self.assertEqual(service.bulk_upsert.call_count, 1)
 
@@ -1578,7 +1639,6 @@ class ForceProductImageUploadsCommandTest(TestCase):
     def test_handle_processes_only_selected_erp_numbers(self, product_service_factory):
         service = MagicMock()
         service.get_sku_map.return_value = {}
-        service.purge_product_media_by_product_ids.return_value = 1
         product_service_factory.return_value = service
 
         target = Product.objects.create(erp_nr="A-5003", sku="sku-5003", shopware_image_sync_hash="hash-3")
@@ -1593,17 +1653,12 @@ class ForceProductImageUploadsCommandTest(TestCase):
         untouched.refresh_from_db()
         self.assertNotEqual(target.shopware_image_sync_hash, "hash-3")
         self.assertEqual(untouched.shopware_image_sync_hash, "hash-4")
-        service.purge_product_media_by_product_ids.assert_called_once()
-        self.assertEqual(
-            service.purge_product_media_by_product_ids.call_args.kwargs["product_ids"],
-            ["sku-5003"],
-        )
+        service.purge_product_media_by_product_ids.assert_not_called()
 
     @patch("shopware.management.commands.shopware_force_product_image_uploads.ProductService")
     def test_handle_collects_batch_errors_and_skips_assignment_after_upload_failure(self, product_service_factory):
         service = MagicMock()
         service.get_sku_map.return_value = {}
-        service.purge_product_media_by_product_ids.return_value = 1
         service.upload_media_from_url.side_effect = RuntimeError("upload failed")
         product_service_factory.return_value = service
 
@@ -1615,7 +1670,7 @@ class ForceProductImageUploadsCommandTest(TestCase):
         with self.assertRaises(CommandError):
             cmd.handle(all=False, limit=None, batch_size=10, erp_nrs=[], only_with_images=False, log_images=False)
 
-        service.purge_product_media_by_product_ids.assert_called_once()
+        service.purge_product_media_by_product_ids.assert_not_called()
         service.upload_media_from_url.assert_called_once()
         service.bulk_upsert.assert_not_called()
         product.refresh_from_db()

@@ -357,15 +357,21 @@ class ProductService(Shopware6Service):
         }
 
     def find_product_media_and_media_ids_by_product_ids(self, *, product_ids: list[str]) -> tuple[list[str], list[str]]:
+        rows = self.find_product_media_rows_by_product_ids(product_ids=product_ids)
+        return (
+            [row["id"] for row in rows if row["id"]],
+            [row["media_id"] for row in rows if row["media_id"]],
+        )
+
+    def find_product_media_rows_by_product_ids(self, *, product_ids: list[str]) -> list[dict[str, str]]:
         product_ids = [str(value).strip() for value in (product_ids or []) if str(value).strip()]
         if not product_ids:
-            return [], []
+            return []
 
         product_values = "|".join(sorted(set(product_ids)))
         page = 1
         limit = 500
-        product_media_ids: list[str] = []
-        media_ids: list[str] = []
+        media_rows: list[dict[str, str]] = []
 
         while True:
             payload = {
@@ -385,18 +391,45 @@ class ProductService(Shopware6Service):
                 break
 
             for row in rows:
-                row_id = self._entity_id(row)
-                if row_id:
-                    product_media_ids.append(row_id)
-                media_id = self._entity_field(row, "mediaId") or self._relationship_id(row, "media")
-                if media_id:
-                    media_ids.append(media_id)
+                media_rows.append({
+                    "id": self._entity_id(row),
+                    "product_id": self._entity_field(row, "productId") or self._relationship_id(row, "product"),
+                    "media_id": self._entity_field(row, "mediaId") or self._relationship_id(row, "media"),
+                })
 
             if len(rows) < limit:
                 break
             page += 1
 
-        return product_media_ids, media_ids
+        return media_rows
+
+    def find_product_media_rows_by_media_id(self, *, media_id: str) -> list[dict[str, str]]:
+        result = self.request_post(
+            self.product_media_search_path,
+            payload={"filter": [{"type": "equals", "field": "mediaId", "value": media_id}], "limit": 1},
+        )
+        return [
+            {"id": self._entity_id(row)}
+            for row in (result or {}).get("data", []) or []
+            if self._entity_id(row)
+        ]
+
+    def find_media_by_ids(self, *, media_ids: list[str]) -> dict[str, dict[str, str]]:
+        ids = sorted({str(value).strip() for value in media_ids if str(value).strip()})
+        if not ids:
+            return {}
+        result = self.request_post(
+            "/search/media",
+            payload={"filter": [{"type": "equalsAny", "field": "id", "value": "|".join(ids)}], "limit": len(ids)},
+        )
+        return {
+            media_id: {
+                "extension": self._entity_field(row, "fileExtension").lower(),
+                "folder_id": self._entity_field(row, "mediaFolderId"),
+            }
+            for row in (result or {}).get("data", []) or []
+            if (media_id := self._entity_id(row))
+        }
 
     def find_media_ids_by_filename(
         self,
@@ -453,16 +486,18 @@ class ProductService(Shopware6Service):
         ]
         return self.delete_media_by_ids(media_ids)
 
-    def prepare_media_upload(self, *, source_url: str) -> bytes:
+    def prepare_media_upload(self, *, source_url: str, output_format: str | None = None) -> bytes:
         if not hasattr(self, "_image_color_service"):
             self._image_color_service = ImageColorProfileService()
-        return self._image_color_service.prepare_upload(source_url=source_url)
+        return self._image_color_service.prepare_upload(source_url=source_url, output_format=output_format)
 
     def upload_media_from_url(
         self, *, media_id: str, file_name: str, source_url: str, prepared_content: bytes | None = None,
     ) -> Any:
         base_name, extension = ProductMediaSyncService.split_file_name(file_name)
-        content = prepared_content if prepared_content is not None else self.prepare_media_upload(source_url=source_url)
+        content = prepared_content if prepared_content is not None else self.prepare_media_upload(
+            source_url=source_url, output_format="webp" if extension == "webp" else None,
+        )
         self.delete_conflicting_media_by_filename(
             file_name=base_name,
             extension=extension,

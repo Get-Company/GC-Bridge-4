@@ -37,6 +37,21 @@ class ImageColorProfileTest(SimpleTestCase):
         content = self._image_bytes(format="JPEG")
         self.assertEqual(ImageColorProfileService().normalize(content), content)
 
+    def test_webp_conversion_preserves_png_alpha_and_changes_format(self):
+        content = self._image_bytes(mode="RGBA", color=(255, 255, 255, 63), format="PNG")
+        result = ImageColorProfileService.to_webp(content)
+        with Image.open(BytesIO(result)) as image:
+            self.assertEqual(image.format, "WEBP")
+            self.assertEqual(image.getpixel((0, 0)), (255, 255, 255, 63))
+
+    def test_webp_conversion_rejects_animated_source(self):
+        first = Image.new("RGB", (8, 8), "red")
+        second = Image.new("RGB", (8, 8), "blue")
+        output = BytesIO()
+        first.save(output, format="GIF", save_all=True, append_images=[second])
+        with self.assertRaisesRegex(ValueError, "mehreren Frames"):
+            ImageColorProfileService.to_webp(output.getvalue())
+
     def test_invalid_profile_fails_before_upload(self):
         content = self._image_bytes(profile=b"invalid ICC profile")
         with self.assertRaises((OSError, ImageCms.PyCMSError)):

@@ -728,14 +728,6 @@ class Command(MonitoredBaseCommand):
 
                 try:
                     product_price_payloads = _extract_product_price_payloads(payloads)
-                    if cleanup_media_product_ids:
-                        if log_images:
-                            logger.info(
-                                "Shopware image sync batch {} cleanup existing media relations for products={}",
-                                batch_no,
-                                cleanup_media_product_ids,
-                            )
-                        service.purge_product_media_by_product_ids(product_ids=cleanup_media_product_ids)
                     if log_images and payloads:
                         media_product_payloads = [
                             {
@@ -898,13 +890,6 @@ class Command(MonitoredBaseCommand):
                                 price_payloads=fallback_price_payloads,
                             )
                         if resolved_fallback_media_ids:
-                            if log_images:
-                                logger.info(
-                                    "Shopware image sync fallback batch {} cleanup existing media relations for products={}",
-                                    batch_no,
-                                    resolved_fallback_media_ids,
-                                )
-                            service.purge_product_media_by_product_ids(product_ids=resolved_fallback_media_ids)
                             media_sync_service.sync_media_assets(
                                 product_service=service,
                                 media_entities=list(fallback_media_entities.values()),

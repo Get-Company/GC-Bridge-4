@@ -18,7 +18,7 @@ class ImageColorProfileService(BaseService):
     supported_formats = {"JPEG", "PNG", "WEBP", "TIFF"}
 
     @lru_cache(maxsize=16)
-    def prepare_upload(self, *, source_url: str) -> bytes:
+    def prepare_upload(self, *, source_url: str, output_format: str | None = None) -> bytes:
         if urlsplit(source_url).scheme not in {"http", "https"}:
             raise ValueError("Bildquelle muss eine HTTP- oder HTTPS-URL sein.")
         with requests.get(source_url, stream=True, timeout=(10, 60)) as response:
@@ -28,7 +28,22 @@ class ImageColorProfileService(BaseService):
                 data.extend(chunk)
                 if len(data) > self.max_download_bytes:
                     raise ValueError("Bildquelle überschreitet das Download-Limit von 64 MiB.")
-        return self.normalize(bytes(data))
+        normalized = self.normalize(bytes(data))
+        return self.to_webp(normalized) if output_format == "webp" else normalized
+
+    @staticmethod
+    def to_webp(content: bytes) -> bytes:
+        with Image.open(BytesIO(content)) as image:
+            if getattr(image, "n_frames", 1) > 1:
+                raise ValueError("Bilder mit mehreren Frames koennen nicht als einzelnes WebP hochgeladen werden.")
+            has_alpha = image.mode in {"RGBA", "LA", "PA", "RGBa", "La"} or "transparency" in image.info
+            converted = image.convert("RGBA" if has_alpha else "RGB")
+            output = BytesIO()
+            options = {"lossless": True} if image.format == "PNG" else {"quality": 90, "method": 6}
+            if image.info.get("icc_profile"):
+                options["icc_profile"] = image.info["icc_profile"]
+            converted.save(output, format="WEBP", **options)
+            return output.getvalue()
 
     def normalize(self, content: bytes) -> bytes:
         # SVG and other non-raster assets retain their original bytes.

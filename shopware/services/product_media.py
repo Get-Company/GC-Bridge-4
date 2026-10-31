@@ -5,7 +5,6 @@ import os
 from typing import TYPE_CHECKING
 
 from django.conf import settings
-from lib_shopware6_api_base.conf_shopware6_api_base_classes import ShopwareAPIError
 from loguru import logger
 
 from core.services import BaseService
@@ -64,13 +63,15 @@ class ProductMediaSyncService(BaseService):
 
     def get_image_media_payload(self, *, image: "Image") -> tuple[str, dict, dict]:
         """Return the deterministic Shopware media asset payload for one Django image."""
-        media_id = self.build_media_id(image.path)
+        media_id = self.build_media_id(f"webp:{image.path}")
+        base_name, _extension = self.split_file_name(image.filename)
+        source_suffix = hashlib.sha256(image.path.encode("utf-8")).hexdigest()[:8]
         return (
             media_id,
             self.build_media_entity_payload(media_id),
             {
                 "media_id": media_id,
-                "file_name": image.filename,
+                "file_name": f"{base_name}-{source_suffix}.webp",
                 "source_url": image.url,
             },
         )
@@ -101,16 +102,6 @@ class ProductMediaSyncService(BaseService):
                     source_url=upload["source_url"],
                     **prepared,
                 )
-            except ShopwareAPIError as exc:
-                if "CONTENT__MEDIA_CANNOT_OPEN_SOURCE_STREAM_TO_READ" in str(exc):
-                    logger.warning(
-                        "Shopware image upload skipped (source not found): media_id={} file_name={} source_url={}",
-                        upload["media_id"],
-                        upload["file_name"],
-                        upload["source_url"],
-                    )
-                else:
-                    raise
             except Exception:
                 if log_uploads:
                     logger.exception(

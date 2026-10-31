@@ -70,8 +70,8 @@ def _append_media_payload(
 
 class Command(MonitoredBaseCommand):
     help = (
-        "Loescht Shopware-Produktbilder und Produkt-Media-Zuordnungen in 10er-Batches, "
-        "laedt die Bilder neu hoch und setzt die Zuordnung erneut."
+        "Laedt Produktbilder als WebP hoch und setzt die Produkt-Zuordnungen; "
+        "bestehende Bilder bleiben bis zur separaten Bereinigung erhalten."
     )
 
     def add_arguments(self, parser):
@@ -196,29 +196,46 @@ class Command(MonitoredBaseCommand):
                 logger.warning("Shopware force image batch {} skipped: no resolvable Shopware product IDs.", batch_no)
                 continue
 
-            # Validate/download every source before removing live media. A bad
-            # file or unavailable source must not leave this batch without images.
-            try:
-                for upload in media_uploads.values():
-                    upload["prepared_content"] = service.prepare_media_upload(source_url=upload["source_url"])
-            except Exception as exc:
-                self._record_error(errors=errors, batch_no=batch_no, step="prepare", products=batch_erp_nrs, exc=exc)
-                continue
+            # A missing source affects only products using that image, not the whole batch.
+            failed_uploads: dict[str, Exception] = {}
+            for upload in media_uploads.values():
+                try:
+                    upload["prepared_content"] = service.prepare_media_upload(
+                        source_url=upload["source_url"], output_format="webp",
+                    )
+                except Exception as exc:
+                    failed_uploads[upload["media_id"]] = exc
 
-            if not self._run_delete_step(
-                service=service,
-                batch_no=batch_no,
-                products=batch_erp_nrs,
-                product_ids=product_ids,
-                errors=errors,
-            ):
-                continue
+            if failed_uploads:
+                valid_payloads: list[dict] = []
+                valid_hashes: list[tuple[Product, str]] = []
+                for payload, product_and_hash in zip(payloads, media_sync_hashes, strict=True):
+                    failed_ids = {relation["mediaId"] for relation in payload["media"]} & failed_uploads.keys()
+                    if failed_ids:
+                        self._record_error(
+                            errors=errors, batch_no=batch_no, step="prepare",
+                            products=[product_and_hash[0].erp_nr], exc=failed_uploads[next(iter(failed_ids))],
+                        )
+                        continue
+                    valid_payloads.append(payload)
+                    valid_hashes.append(product_and_hash)
+                payloads = valid_payloads
+                media_sync_hashes = valid_hashes
+                used_media_ids = {
+                    relation["mediaId"] for payload in payloads for relation in payload["media"]
+                }
+                media_entities = {key: value for key, value in media_entities.items() if key in used_media_ids}
+                media_uploads = {key: value for key, value in media_uploads.items() if key in used_media_ids}
+                if not payloads:
+                    continue
+
+            processed_erp_nrs = [product.erp_nr for product, _ in media_sync_hashes]
 
             if not self._run_upload_step(
                 service=service,
                 media_sync_service=media_sync_service,
                 batch_no=batch_no,
-                products=batch_erp_nrs,
+                products=processed_erp_nrs,
                 media_entities=list(media_entities.values()),
                 media_uploads=list(media_uploads.values()),
                 log_images=log_images,
@@ -229,7 +246,7 @@ class Command(MonitoredBaseCommand):
             if not self._run_assignment_step(
                 service=service,
                 batch_no=batch_no,
-                products=batch_erp_nrs,
+                products=processed_erp_nrs,
                 payloads=payloads,
                 errors=errors,
             ):
@@ -239,35 +256,13 @@ class Command(MonitoredBaseCommand):
                 synced_product.shopware_image_sync_hash = media_sync_hash
                 synced_product.save(update_fields=["shopware_image_sync_hash", "updated_at"])
 
-            logger.info("Shopware force image batch {}/{} ok: products={}", batch_no, total_batches, batch_erp_nrs)
+            logger.info("Shopware force image batch {}/{} ok: products={}", batch_no, total_batches, processed_erp_nrs)
 
         if errors:
             logger.error("Shopware force image upload finished with errors: {}", errors)
             raise CommandError(f"Shopware Bild-Neuaufbau mit {len(errors)} Fehler(n) abgeschlossen. Details im Log.")
 
         self.stdout.write(self.style.SUCCESS("Shopware Bild-Neuaufbau abgeschlossen."))
-
-    def _run_delete_step(
-        self,
-        *,
-        service: ProductService,
-        batch_no: int,
-        products: list[str],
-        product_ids: list[str],
-        errors: list[dict[str, object]],
-    ) -> bool:
-        try:
-            deleted = service.purge_product_media_by_product_ids(product_ids=product_ids)
-            logger.info(
-                "Shopware force image batch {} delete ok: products={} product_media_deleted={}",
-                batch_no,
-                products,
-                deleted,
-            )
-            return True
-        except Exception as exc:
-            self._record_error(errors=errors, batch_no=batch_no, step="delete", products=products, exc=exc)
-            return False
 
     def _run_upload_step(
         self,
