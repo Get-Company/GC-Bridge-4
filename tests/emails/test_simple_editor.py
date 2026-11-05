@@ -56,6 +56,8 @@ def test_simple_newsletter_uses_fixed_frame_and_editable_fields():
     assert "https://assets.classei.de/img/neu.jpg" in mjml
     assert "224453.jpg" not in mjml
     assert "https://www.classei-shop.com/search?search=224453" in mjml
+    assert "Versandkostenfrei ab 100 Stück; bei kleineren Mengen zzgl. Versandkosten" in mjml
+    assert "Kostenloser Versand" not in mjml
     assert "vom Newsletter abmelden" in mjml
 
 

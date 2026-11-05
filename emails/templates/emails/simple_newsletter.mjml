@@ -71,7 +71,7 @@
             {% else %}<strong style="font-size:24px;color:{{ accent_color }}">{{ offer.current_price|default:'Preis auf Anfrage' }}{% if offer.current_price %} €{% endif %}</strong>{% endif %}
             <br />pro {{ offer.unit }}<br />
             {% if offer.min_purchase and offer.purchase_unit %}<small>Mindestmenge: {{ offer.min_purchase }} · Bestellschritt: {{ offer.purchase_unit }}</small><br />{% endif %}
-            {% if offer.shipping_free %}<small style="color:{{ accent_color }}">Kostenloser Versand</small>{% else %}<small>zzgl. Versandkosten</small>{% endif %}
+            <small{% if offer.shipping_free %} style="color:{{ accent_color }}"{% endif %}>{{ offer.shipping_notice }}</small>
             <br /><small>zzgl. MwSt.</small>
           </mj-text>
         </mj-column>

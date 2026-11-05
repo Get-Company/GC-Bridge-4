@@ -45,11 +45,7 @@
                         {{ product.unit|default("St.", true) }}
                     {% endif %}
                     <br/>
-                    {% if product.shipping_cost_is_free %}
-                        <span style="font-size:14px; color:#ff9933">- kostenloser Versand -</span>
-                    {% else %}
-                        <span style="font-size:12px">- * zuzgl. Versandkosten -</span>
-                    {% endif %}
+                    <span style="font-size:14px{% if product.shipping_cost_is_free %}; color:#ff9933{% endif %}">- {{ product.shipping_notice }} -</span>
                     <br/>
                     zuzgl. Mwst.
                 </p>

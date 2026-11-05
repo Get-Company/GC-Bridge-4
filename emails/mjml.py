@@ -206,6 +206,12 @@ class ProductEmailProxy:
         price = self.current_price
         return bool(price is not None and price >= Decimal("99.00"))
 
+    @property
+    def shipping_notice(self) -> str:
+        if getattr(self._product, "erp_nr", "") in {"204451", "224453"}:
+            return "Versandkostenfrei ab 100 Stück; bei kleineren Mengen zzgl. Versandkosten"
+        return "Kostenloser Versand" if self.shipping_cost_is_free else "zzgl. Versandkosten"
+
     def get_current_price(self, *, as_float: bool = False):
         return _decimal_as_float(self.current_price, as_float=as_float)
 

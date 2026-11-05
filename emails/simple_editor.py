@@ -142,6 +142,7 @@ def offer_for_product(campaign_product, content, sales_channel_ids):
             "min_purchase": product.min_purchase,
             "purchase_unit": product.purchase_unit,
             "shipping_free": proxy.shipping_cost_is_free,
+            "shipping_notice": proxy.shipping_notice,
             "headings_after": [],
     }
 

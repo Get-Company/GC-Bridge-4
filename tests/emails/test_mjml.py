@@ -175,6 +175,19 @@ class TestProductEmailProxy:
         proxy = ProductEmailProxy(product, special_price_override=None)
         assert proxy.shipping_cost_is_free is False
 
+    @pytest.mark.parametrize("sku", ["204451", "224453"])
+    def test_shipping_notice_for_mappen_requires_100_pieces(self, sku):
+        product = SimpleNamespace(erp_nr=sku)
+        proxy = ProductEmailProxy(product, special_price_override=Decimal("150.00"))
+        assert proxy.shipping_notice == (
+            "Versandkostenfrei ab 100 Stück; bei kleineren Mengen zzgl. Versandkosten"
+        )
+
+    def test_shipping_notice_for_other_products_keeps_existing_rule(self):
+        product = SimpleNamespace(erp_nr="204462")
+        proxy = ProductEmailProxy(product, special_price_override=Decimal("150.00"))
+        assert proxy.shipping_notice == "Kostenloser Versand"
+
     def test_price_uses_default_sales_channel_price_entry(self):
         product = SimpleNamespace(
             prices=FakePriceQuerySet([
