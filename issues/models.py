@@ -234,3 +234,37 @@ class IssueAttachment(BaseModel):
 
     def __str__(self) -> str:
         return self.caption or Path(self.file.name).name
+
+
+class IssueMessage(BaseModel):
+    issue = models.ForeignKey(
+        Issue,
+        on_delete=models.CASCADE,
+        related_name="messages",
+        verbose_name=_("Issue"),
+    )
+    author = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="issue_messages",
+        null=True,
+        verbose_name=_("Verfasser"),
+    )
+    text = models.TextField(verbose_name=_("Nachricht"))
+    quoted_message = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        related_name="quotes",
+        null=True,
+        blank=True,
+        verbose_name=_("Zitierte Nachricht"),
+    )
+    quotes_initial = models.BooleanField(default=False, verbose_name=_("Zitiert erste Nachricht"))
+
+    class Meta:
+        verbose_name = _("Issue-Nachricht")
+        verbose_name_plural = _("Issue-Nachrichten")
+        ordering = ("created_at", "id")
+
+    def __str__(self) -> str:
+        return self.text[:80]

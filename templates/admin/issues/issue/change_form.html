@@ -1,0 +1,122 @@
+{% extends "admin/change_form.html" %}
+{% load i18n %}
+
+{% block extrahead %}
+{{ block.super }}
+<style>
+  .issue-chat { margin-top: 1.5rem; overflow: hidden; border: 1px solid #d1d7db; border-radius: 1rem; background: #efeae2; color: #111b21; }
+  .issue-chat-header { padding: 1rem 1.25rem; border-bottom: 1px solid #d1d7db; background: #f0f2f5; }
+  .issue-chat-header h2 { margin: 0; font-size: 1.05rem; font-weight: 700; }
+  .issue-chat-header p { margin: .25rem 0 0; font-size: .85rem; color: #54656f; }
+  .issue-chat-history { display: flex; flex-direction: column; gap: .65rem; max-height: 38rem; min-height: 8rem; overflow-y: auto; padding: 1.25rem; }
+  .issue-chat-row { display: flex; justify-content: flex-start; }
+  .issue-chat-row.own { justify-content: flex-end; }
+  .issue-chat-bubble { width: fit-content; max-width: min(85%, 44rem); padding: .55rem .75rem .4rem; border-radius: .7rem .7rem .7rem .15rem; background: #fff; box-shadow: 0 1px 2px #0002; }
+  .issue-chat-row.own .issue-chat-bubble { border-radius: .7rem .7rem .15rem .7rem; background: #d9fdd3; }
+  .issue-chat-author { margin-bottom: .2rem; font-size: .78rem; font-weight: 700; color: #26736a; }
+  .issue-chat-text { max-height: 20rem; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: .92rem; line-height: 1.45; }
+  .issue-chat-citation { margin-bottom: .5rem; padding: .4rem .65rem; border-left: 4px solid #53bdeb; border-radius: .25rem; background: #0000000b; }
+  .issue-chat-citation strong { display: block; font-size: .78rem; color: #26736a; }
+  .issue-chat-citation span { display: block; max-height: 3rem; overflow: hidden; white-space: pre-wrap; overflow-wrap: anywhere; font-size: .8rem; color: #54656f; }
+  .issue-chat-meta { display: flex; justify-content: flex-end; align-items: center; gap: .8rem; margin-top: .3rem; font-size: .72rem; color: #667781; }
+  .issue-chat-quote-button { color: #26736a; text-decoration: underline; text-underline-offset: 2px; }
+  .issue-chat-quote-button:hover { color: #075e54; }
+  .issue-chat-empty { align-self: center; padding: .6rem .9rem; border-radius: .5rem; background: #fff9; font-size: .85rem; color: #54656f; }
+  .issue-chat-composer { padding: .8rem 1rem; border-top: 1px solid #d1d7db; background: #f0f2f5; }
+  .issue-chat-quote-preview { display: flex; justify-content: space-between; gap: 1rem; margin-bottom: .65rem; padding: .5rem .7rem; border-left: 4px solid #53bdeb; border-radius: .35rem; background: white; }
+  .issue-chat-quote-preview[hidden] { display: none; }
+  .issue-chat-quote-preview strong { display: block; font-size: .8rem; color: #26736a; }
+  .issue-chat-quote-preview span { display: block; max-height: 3rem; overflow: hidden; white-space: pre-wrap; overflow-wrap: anywhere; font-size: .8rem; }
+  .issue-chat-composer-row { display: flex; align-items: flex-end; gap: .65rem; }
+  .issue-chat-composer textarea { flex: 1; min-height: 3.5rem; max-height: 12rem; resize: vertical; border: 1px solid #d1d7db; border-radius: .7rem; background: white; padding: .65rem .8rem; color: #111b21; }
+  .issue-chat-send { min-height: 2.7rem; border-radius: .7rem; background: #008069; padding: .55rem 1.1rem; color: white; font-weight: 600; }
+  .issue-chat-send:hover { background: #006d59; }
+  .issue-chat-readonly { padding: .7rem 1rem; border-top: 1px solid #d1d7db; background: #f0f2f5; color: #54656f; font-size: .85rem; }
+  html.dark .issue-chat { border-color: #3b4a54; background: #0b141a; color: #e9edef; }
+  html.dark .issue-chat-header, html.dark .issue-chat-composer, html.dark .issue-chat-readonly { border-color: #3b4a54; background: #202c33; color: #e9edef; }
+  html.dark .issue-chat-header p, html.dark .issue-chat-meta, html.dark .issue-chat-citation span { color: #aebac1; }
+  html.dark .issue-chat-bubble { background: #202c33; }
+  html.dark .issue-chat-row.own .issue-chat-bubble { background: #005c4b; }
+  html.dark .issue-chat-author, html.dark .issue-chat-citation strong, html.dark .issue-chat-quote-button, html.dark .issue-chat-quote-preview strong { color: #53bdeb; }
+  html.dark .issue-chat-quote-preview, html.dark .issue-chat-composer textarea { background: #2a3942; color: #e9edef; border-color: #3b4a54; }
+  html.dark .issue-chat-empty { background: #202c33; color: #aebac1; }
+  @media (max-width: 640px) { .issue-chat-history { padding: .65rem; } .issue-chat-bubble { max-width: 95%; } .issue-chat-composer-row { flex-direction: column; align-items: stretch; } }
+</style>
+{% endblock %}
+
+{% block form_before %}
+{% if original %}
+<section class="issue-chat" id="issue-chat" aria-label="Nachrichtenverlauf">
+  <header class="issue-chat-header">
+    <h2>Nachrichtenverlauf</h2>
+    <p>Die erste Nachricht stammt aus dem Fehlertext des Issues. Antworten werden mit Verfasser und Zeitpunkt gespeichert.</p>
+  </header>
+  <div class="issue-chat-history" id="issue-chat-history" role="log" aria-live="polite">
+    {% for entry in chat_entries %}
+      <div class="issue-chat-row{% if entry.is_own %} own{% endif %}" id="issue-message-{{ entry.quote_key }}">
+        <div class="issue-chat-bubble">
+          <div class="issue-chat-author">{{ entry.author }}</div>
+          {% if entry.quoted_text %}
+            <div class="issue-chat-citation">
+              <strong>{{ entry.quoted_author }}</strong>
+              <span>{{ entry.quoted_text|truncatechars:250 }}</span>
+            </div>
+          {% endif %}
+          <div class="issue-chat-text">{{ entry.text }}</div>
+          <div class="issue-chat-meta">
+            <time datetime="{{ entry.created_at|date:'c' }}">{{ entry.created_at|date:"d.m.Y H:i" }}</time>
+            {% if can_reply %}<button type="button" class="issue-chat-quote-button" data-quote-key="{{ entry.quote_key }}">Zitieren</button>{% endif %}
+          </div>
+        </div>
+      </div>
+    {% empty %}
+      <p class="issue-chat-empty">Noch keine Nachricht vorhanden.</p>
+    {% endfor %}
+  </div>
+  {% if can_reply %}
+    <form class="issue-chat-composer" method="post" action="{{ reply_url }}" id="issue-chat-reply-form">
+      {% csrf_token %}
+      <input type="hidden" name="quote" id="issue-chat-quote-key">
+      <div class="issue-chat-quote-preview" id="issue-chat-quote-preview" hidden>
+        <div><strong id="issue-chat-quote-author"></strong><span id="issue-chat-quote-text"></span></div>
+        <button type="button" id="issue-chat-cancel-quote" aria-label="Zitat entfernen">✕</button>
+      </div>
+      <div class="issue-chat-composer-row">
+        <textarea name="text" id="issue-chat-text" maxlength="10000" required placeholder="Nachricht schreiben …" aria-label="Neue Nachricht"></textarea>
+        <button class="issue-chat-send" type="submit">Senden</button>
+      </div>
+    </form>
+  {% else %}
+    <p class="issue-chat-readonly">Antworten können die meldende und die zugewiesene Person schreiben.</p>
+  {% endif %}
+</section>
+{% if can_reply %}
+<script>
+  (() => {
+    const history = document.getElementById("issue-chat-history");
+    const key = document.getElementById("issue-chat-quote-key");
+    const preview = document.getElementById("issue-chat-quote-preview");
+    const author = document.getElementById("issue-chat-quote-author");
+    const text = document.getElementById("issue-chat-quote-text");
+    const composer = document.getElementById("issue-chat-text");
+    history.scrollTop = history.scrollHeight;
+    document.querySelectorAll(".issue-chat-quote-button").forEach((button) => {
+      button.addEventListener("click", () => {
+        const bubble = button.closest(".issue-chat-bubble");
+        key.value = button.dataset.quoteKey;
+        author.textContent = bubble.querySelector(".issue-chat-author").textContent;
+        text.textContent = bubble.querySelector(".issue-chat-text").textContent.slice(0, 250);
+        preview.hidden = false;
+        composer.focus();
+      });
+    });
+    document.getElementById("issue-chat-cancel-quote").addEventListener("click", () => {
+      key.value = "";
+      preview.hidden = true;
+      composer.focus();
+    });
+  })();
+</script>
+{% endif %}
+{% endif %}
+{% endblock %}

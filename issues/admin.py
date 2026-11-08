@@ -1,13 +1,16 @@
 from django import forms
 from django.contrib import admin, messages
 from django.contrib.auth import get_user_model
+from django.core.exceptions import PermissionDenied
+from django.http import HttpResponseNotAllowed, HttpResponseRedirect
+from django.urls import path, reverse
 from django.utils import timezone
 from django.utils.html import format_html
 from unfold.decorators import action
 from unfold.enums import ActionVariant
 
 from core.admin import BaseAdmin, BaseTabularInline
-from issues.models import ArchivedIssue, DEFAULT_ASSIGNED_USER_ID, Issue, IssueAttachment, IssueCategory
+from issues.models import ArchivedIssue, DEFAULT_ASSIGNED_USER_ID, Issue, IssueAttachment, IssueCategory, IssueMessage
 
 
 ARCHIVED_ISSUE_STATUSES = (Issue.Status.RESOLVED, Issue.Status.CLOSED)
@@ -22,6 +25,14 @@ class StaffIssueAccessMixin:
 
 
 class IssueAdminForm(forms.ModelForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance.pk is None and "error_text" in self.fields:
+            self.fields["error_text"].label = "Erste Nachricht / Fehlertext"
+            self.fields["error_text"].help_text = (
+                "Optional. Dieser Text erscheint nach dem Speichern als erste Nachricht im Verlauf."
+            )
+
     class Meta:
         model = Issue
         fields = "__all__"
@@ -41,6 +52,11 @@ class IssueAdminForm(forms.ModelForm):
                 }
             ),
         }
+
+
+class IssueReplyForm(forms.Form):
+    text = forms.CharField(max_length=10000, strip=True)
+    quote = forms.CharField(required=False)
 
 
 class IssueAttachmentInline(StaffIssueAccessMixin, BaseTabularInline):
@@ -88,6 +104,7 @@ class IssueCategoryAdmin(StaffIssueAccessMixin, BaseAdmin):
 @admin.register(Issue)
 class IssueAdmin(StaffIssueAccessMixin, BaseAdmin):
     form = IssueAdminForm
+    change_form_template = "admin/issues/issue/change_form.html"
     inlines = (IssueAttachmentInline,)
     list_display = (
         "title",
@@ -107,6 +124,7 @@ class IssueAdmin(StaffIssueAccessMixin, BaseAdmin):
         "description",
         "source_url",
         "error_text",
+        "messages__text",
         "reported_by__username",
         "reported_by__first_name",
         "reported_by__last_name",
@@ -137,6 +155,132 @@ class IssueAdmin(StaffIssueAccessMixin, BaseAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return request.user.is_superuser
+
+    def get_fieldsets(self, request, obj=None):
+        fieldsets = super().get_fieldsets(request, obj)
+        if obj is None:
+            return fieldsets
+        return tuple(
+            (
+                title,
+                {
+                    **options,
+                    "fields": tuple(field for field in options["fields"] if field != "error_text"),
+                },
+            )
+            for title, options in fieldsets
+        )
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                "<path:object_id>/reply/",
+                self.admin_site.admin_view(self.reply_view),
+                name=f"{self.opts.app_label}_{self.opts.model_name}_reply",
+            ),
+        ]
+        return custom_urls + urls
+
+    @staticmethod
+    def _author_name(user):
+        return (user.get_full_name() or user.get_username()) if user else "System"
+
+    def _can_reply(self, request, obj):
+        return self.has_change_permission(request, obj) and (
+            request.user.is_superuser
+            or request.user.pk in (obj.reported_by_id, obj.assigned_to_id)
+        )
+
+    def render_change_form(self, request, context, add=False, change=False, form_url="", obj=None):
+        if obj is not None:
+            entries = []
+            if obj.error_text:
+                entries.append(
+                    {
+                        "quote_key": "initial",
+                        "text": obj.error_text,
+                        "author": self._author_name(obj.reported_by),
+                        "created_at": obj.created_at,
+                        "is_own": obj.reported_by_id == request.user.pk,
+                    }
+                )
+            for message in obj.messages.select_related("author", "quoted_message__author"):
+                quoted = message.quoted_message
+                if message.quotes_initial and obj.error_text:
+                    quoted_text = obj.error_text
+                    quoted_author = self._author_name(obj.reported_by)
+                elif quoted is not None:
+                    quoted_text = quoted.text
+                    quoted_author = self._author_name(quoted.author)
+                else:
+                    quoted_text = quoted_author = None
+                entries.append(
+                    {
+                        "quote_key": str(message.pk),
+                        "text": message.text,
+                        "author": self._author_name(message.author),
+                        "created_at": message.created_at,
+                        "is_own": message.author_id == request.user.pk,
+                        "quoted_text": quoted_text,
+                        "quoted_author": quoted_author,
+                    }
+                )
+            context.update(
+                chat_entries=entries,
+                can_reply=self._can_reply(request, obj),
+                reply_url=reverse(
+                    f"admin:{self.opts.app_label}_{self.opts.model_name}_reply",
+                    args=[obj.pk],
+                ),
+            )
+        return super().render_change_form(
+            request, context, add=add, change=change, form_url=form_url, obj=obj
+        )
+
+    def reply_view(self, request, object_id):
+        if request.method != "POST":
+            return HttpResponseNotAllowed(["POST"])
+        issue = self.get_object(request, object_id)
+        if issue is None:
+            raise PermissionDenied
+        if not self._can_reply(request, issue):
+            raise PermissionDenied
+
+        redirect_url = reverse(
+            f"admin:{self.opts.app_label}_{self.opts.model_name}_change", args=[issue.pk]
+        ) + "#issue-chat"
+        form = IssueReplyForm(request.POST)
+        if not form.is_valid():
+            self.message_user(request, "Bitte eine Nachricht mit höchstens 10.000 Zeichen eingeben.", messages.ERROR)
+            return HttpResponseRedirect(redirect_url)
+
+        quote_key = form.cleaned_data["quote"]
+        quoted_message = None
+        quotes_initial = False
+        if quote_key == "initial":
+            if not issue.error_text:
+                self.message_user(request, "Die zitierte Nachricht ist nicht mehr vorhanden.", messages.ERROR)
+                return HttpResponseRedirect(redirect_url)
+            quotes_initial = True
+        elif quote_key:
+            if not quote_key.isdecimal():
+                self.message_user(request, "Die zitierte Nachricht ist ungültig.", messages.ERROR)
+                return HttpResponseRedirect(redirect_url)
+            quoted_message = issue.messages.filter(pk=quote_key).first()
+            if quoted_message is None:
+                self.message_user(request, "Die zitierte Nachricht gehört nicht zu diesem Issue.", messages.ERROR)
+                return HttpResponseRedirect(redirect_url)
+
+        IssueMessage.objects.create(
+            issue=issue,
+            author=request.user,
+            text=form.cleaned_data["text"],
+            quoted_message=quoted_message,
+            quotes_initial=quotes_initial,
+        )
+        self.message_user(request, "Nachricht gesendet.", messages.SUCCESS)
+        return HttpResponseRedirect(redirect_url)
 
     fieldsets = (
         (

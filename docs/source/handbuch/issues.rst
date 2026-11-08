@@ -92,8 +92,8 @@ Suchen und filtern
 ~~~~~~~~~~~~~~~~~~
 
 Die Suche berücksichtigt die Kurzbeschreibung, die Beschreibung, den
-Link, den Fehlertext sowie Namen und Benutzernamen der meldenden und
-zugewiesenen Person.
+Link, die erste Nachricht und spätere Antworten sowie Namen und
+Benutzernamen der meldenden und zugewiesenen Person.
 
 Die Liste kann nach folgenden Angaben gefiltert werden:
 
@@ -213,11 +213,10 @@ Abschnitt „Fehlerdetails“
 +-----------------------+---------------------------------------------+
 | Feld                  | Eingabe und Bedeutung                       |
 +=======================+=============================================+
-| **Fehlertext**        | Optional. Hier kann eine angezeigte         |
-|                       | Fehlermeldung oder ein kopierter Auszug aus |
-|                       | einem Protokoll eingefügt werden. Der Text  |
-|                       | sollte möglichst unverändert übernommen     |
-|                       | werden.                                     |
+| **Erste Nachricht /  | Optional. Der eingegebene Fehlertext wird  |
+| Fehlertext**          | nach dem Anlegen als erste Nachricht im     |
+|                       | Verlauf angezeigt. Danach bleibt er dort    |
+|                       | erhalten und wird nicht mehr bearbeitet.    |
 +-----------------------+---------------------------------------------+
 | **Fehlertext-Datei**  | Optional. Hier kann eine Fehler- oder       |
 |                       | Protokolldatei hochgeladen werden. Erlaubt  |
@@ -234,6 +233,18 @@ Abschnitt „Fehlerdetails“
 |                       | gespeichert sind. Bei einem noch nicht      |
 |                       | gespeicherten Issue steht hier 0.           |
 +-----------------------+---------------------------------------------+
+
+Nachrichtenverlauf
+~~~~~~~~~~~~~~~~~~
+
+Nach dem Speichern erscheint unter dem Issue ein Chatverlauf. Die erste
+Nachricht ist der beim Anlegen eingegebene Fehlertext. Die meldende und die
+zugewiesene Person können darunter antworten. Jede Antwort zeigt den
+Verfasser und die Uhrzeit. Mit **Zitieren** lässt sich eine vorhandene
+Nachricht in der eigenen Antwort referenzieren; das Zitat erscheint direkt
+über dem Antworttext. Auch im Issue-Archiv bleibt der Verlauf sichtbar.
+Automatisch erfasste spätere Task-Fehler erscheinen als eigene
+Systemnachrichten.
 
 Abschnitt „Abschlussdokumentation“
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

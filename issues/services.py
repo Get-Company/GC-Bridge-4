@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from loguru import logger
 
-from issues.models import Issue, IssueCategory
+from issues.models import Issue, IssueCategory, IssueMessage
 
 _TASK_CATEGORY_NAME = "Automatische Task-Fehler"
 
@@ -18,9 +18,7 @@ def create_task_issue(
     try:
         existing = Issue.objects.filter(title=title, status=Issue.Status.OPEN).first()
         if existing is not None:
-            separator = "\n\n" if existing.error_text else ""
-            existing.error_text = existing.error_text + separator + error_text
-            existing.save(update_fields=["error_text", "updated_at"])
+            IssueMessage.objects.create(issue=existing, text=error_text)
             return existing
 
         category, _ = IssueCategory.objects.get_or_create(
