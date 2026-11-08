@@ -1,0 +1,101 @@
+{% if request.user.is_authenticated and request.user.is_staff %}
+  <div id="issue-notifications" class="relative" data-url="{% url 'admin:issues_issue_notifications' %}">
+    <button type="button" data-issue-bell class="relative inline-flex items-center gap-1 rounded px-2 py-1 text-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:text-gray-300 dark:hover:bg-base-800" aria-label="Issue-Benachrichtigungen" aria-expanded="false" aria-controls="issue-notification-menu">
+      <span class="material-symbols-outlined" style="font-size:20px" aria-hidden="true">notifications</span>
+      <span data-issue-count class="hidden rounded-full bg-red-600 px-1.5 text-[10px] font-bold text-white"></span>
+    </button>
+    <div id="issue-notification-menu" data-issue-menu class="absolute right-0 top-full z-50 mt-2 hidden max-h-96 w-[min(22rem,calc(100vw-2rem))] overflow-y-auto rounded-lg border border-base-200 bg-white p-3 text-sm shadow-xl dark:border-base-700 dark:bg-base-900">
+      <h2 class="mb-2 font-semibold">Issue-Benachrichtigungen</h2>
+      <div data-issue-list><p class="text-base-500">Keine neuen Einträge.</p></div>
+    </div>
+    <form class="hidden">{% csrf_token %}</form>
+  </div>
+  <div id="issue-notification-toasts" class="fixed right-4 top-16 z-[60] flex w-[min(24rem,calc(100vw-2rem))] flex-col gap-2" aria-live="polite"></div>
+  <script>
+  (function () {
+    "use strict";
+    const root = document.getElementById("issue-notifications");
+    if (!root) return;
+    const bell = root.querySelector("[data-issue-bell]");
+    const menu = root.querySelector("[data-issue-menu]");
+    const count = root.querySelector("[data-issue-count]");
+    const list = root.querySelector("[data-issue-list]");
+    const toasts = document.getElementById("issue-notification-toasts");
+    const seenKey = "gcbridge-issue-notification-seen-{{ request.user.pk }}";
+    let seen = [];
+    try { seen = JSON.parse(sessionStorage.getItem(seenKey) || "[]"); } catch (_) { seen = []; }
+
+    function label(item) { return item.kind === "status" ? "Status geändert" : "Neue Nachricht im Chatverlauf"; }
+    function makeItem(item, toast) {
+      const article = document.createElement("article");
+      article.className = "rounded-lg border border-base-200 bg-white p-3 shadow-lg dark:border-base-700 dark:bg-base-800";
+      const heading = document.createElement("strong");
+      heading.className = "block text-sm";
+      heading.textContent = label(item);
+      const link = document.createElement("a");
+      link.href = item.url;
+      link.className = "block font-medium text-primary-700 hover:underline dark:text-primary-400";
+      link.textContent = item.title;
+      link.addEventListener("click", function (event) {
+        event.preventDefault();
+        markRead(item.id).finally(function () { window.location.assign(item.url); });
+      });
+      const detail = document.createElement("p");
+      detail.className = "mt-1 line-clamp-2 text-xs text-base-500";
+      detail.textContent = item.detail || "";
+      article.append(heading, link, detail);
+      if (toast) {
+        article.setAttribute("role", "status");
+        window.setTimeout(function () { article.remove(); }, 10000);
+      }
+      return article;
+    }
+    async function markRead(id) {
+      const form = new URLSearchParams({id: String(id)});
+      await fetch(root.dataset.url, {
+        method: "POST",
+        headers: {"X-CSRFToken": root.querySelector("[name=csrfmiddlewaretoken]").value, "Content-Type": "application/x-www-form-urlencoded"},
+        body: form.toString(),
+        credentials: "same-origin"
+      });
+    }
+    async function refresh() {
+      try {
+        const response = await fetch(root.dataset.url, {credentials: "same-origin"});
+        if (!response.ok) return;
+        const data = await response.json();
+        count.textContent = data.count > 99 ? "99+" : String(data.count);
+        count.classList.toggle("hidden", !data.count);
+        list.replaceChildren();
+        if (!data.notifications.length) {
+          const empty = document.createElement("p");
+          empty.className = "text-base-500";
+          empty.textContent = "Keine neuen Einträge.";
+          list.append(empty);
+        }
+        data.notifications.forEach(function (item) {
+          list.append(makeItem(item, false));
+          if (!seen.includes(item.id)) {
+            toasts.prepend(makeItem(item, true));
+            seen.push(item.id);
+          }
+        });
+        seen = seen.slice(-200);
+        try { sessionStorage.setItem(seenKey, JSON.stringify(seen)); } catch (_) { /* storage unavailable */ }
+      } catch (_) { /* retry on the next poll */ }
+    }
+    bell.addEventListener("click", function () {
+      const isOpen = menu.classList.toggle("hidden") === false;
+      bell.setAttribute("aria-expanded", String(isOpen));
+    });
+    document.addEventListener("click", function (event) {
+      if (!root.contains(event.target)) {
+        menu.classList.add("hidden");
+        bell.setAttribute("aria-expanded", "false");
+      }
+    });
+    refresh();
+    window.setInterval(refresh, 15000);
+  })();
+  </script>
+{% endif %}

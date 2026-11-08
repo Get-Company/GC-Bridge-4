@@ -234,3 +234,32 @@ class IssueAttachment(BaseModel):
 
     def __str__(self) -> str:
         return self.caption or Path(self.file.name).name
+
+
+class IssueMessage(BaseModel):
+    issue = models.ForeignKey(Issue, on_delete=models.CASCADE, related_name="messages", verbose_name=_("Issue"))
+    author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name="issue_messages", verbose_name=_("Verfasser"))
+    body = models.TextField(verbose_name=_("Nachricht"))
+
+    class Meta:
+        verbose_name = _("Issue-Nachricht")
+        verbose_name_plural = _("Issue-Nachrichten")
+        ordering = ("created_at", "id")
+
+
+class IssueNotification(BaseModel):
+    class Kind(models.TextChoices):
+        STATUS = "status", _("Statusänderung")
+        MESSAGE = "message", _("Neue Nachricht")
+
+    issue = models.ForeignKey(Issue, on_delete=models.CASCADE, related_name="notifications", verbose_name=_("Issue"))
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="issue_notifications", verbose_name=_("Benutzer"))
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="sent_issue_notifications", verbose_name=_("Auslöser"))
+    kind = models.CharField(max_length=20, choices=Kind.choices, verbose_name=_("Art"))
+    detail = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Details"))
+    read_at = models.DateTimeField(null=True, blank=True, db_index=True, verbose_name=_("Gelesen am"))
+
+    class Meta:
+        verbose_name = _("Issue-Benachrichtigung")
+        verbose_name_plural = _("Issue-Benachrichtigungen")
+        ordering = ("-created_at", "-id")

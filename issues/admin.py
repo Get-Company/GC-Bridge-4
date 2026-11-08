@@ -1,13 +1,17 @@
 from django import forms
 from django.contrib import admin, messages
 from django.contrib.auth import get_user_model
+from django.core.exceptions import PermissionDenied
+from django.http import HttpResponseNotAllowed, HttpResponseRedirect, JsonResponse
+from django.shortcuts import get_object_or_404
+from django.urls import path, reverse
 from django.utils import timezone
 from django.utils.html import format_html
 from unfold.decorators import action
 from unfold.enums import ActionVariant
 
 from core.admin import BaseAdmin, BaseTabularInline
-from issues.models import ArchivedIssue, DEFAULT_ASSIGNED_USER_ID, Issue, IssueAttachment, IssueCategory
+from issues.models import ArchivedIssue, DEFAULT_ASSIGNED_USER_ID, Issue, IssueAttachment, IssueCategory, IssueMessage, IssueNotification
 
 
 ARCHIVED_ISSUE_STATUSES = (Issue.Status.RESOLVED, Issue.Status.CLOSED)
@@ -88,6 +92,7 @@ class IssueCategoryAdmin(StaffIssueAccessMixin, BaseAdmin):
 @admin.register(Issue)
 class IssueAdmin(StaffIssueAccessMixin, BaseAdmin):
     form = IssueAdminForm
+    change_form_outer_after_template = "admin/issues/issue_chat.html"
     inlines = (IssueAttachmentInline,)
     list_display = (
         "title",
@@ -122,6 +127,72 @@ class IssueAdmin(StaffIssueAccessMixin, BaseAdmin):
         "resolved_by",
     )
     _archived_state = False
+
+    def get_urls(self):
+        custom_urls = [
+            path("notifications/", self.admin_site.admin_view(self.notifications_view), name=f"{self.opts.app_label}_{self.opts.model_name}_notifications"),
+            path("<path:object_id>/message/", self.admin_site.admin_view(self.message_view), name=f"{self.opts.app_label}_{self.opts.model_name}_message"),
+        ]
+        return custom_urls + super().get_urls()
+
+    def change_view(self, request, object_id, form_url="", extra_context=None):
+        issue = get_object_or_404(Issue, pk=object_id)
+        if not self.has_view_or_change_permission(request, issue):
+            raise PermissionDenied
+        if request.method == "GET":
+            IssueNotification.objects.filter(user=request.user, issue=issue, read_at__isnull=True).update(read_at=timezone.now())
+        context = {
+            "issue_chat_messages": issue.messages.select_related("author").all(),
+            "issue_message_url": reverse("admin:issues_issue_message", args=(issue.pk,)),
+        }
+        context.update(extra_context or {})
+        return super().change_view(request, object_id, form_url, context)
+
+    def message_view(self, request, object_id):
+        if request.method != "POST":
+            return HttpResponseNotAllowed(["POST"])
+        issue = get_object_or_404(Issue, pk=object_id)
+        if not self.has_change_permission(request, issue):
+            raise PermissionDenied
+        body = request.POST.get("body", "").strip()
+        if not body or len(body) > 5000:
+            self.message_user(request, "Bitte eine Nachricht mit maximal 5000 Zeichen eingeben.", level=messages.ERROR)
+        else:
+            IssueMessage.objects.create(issue=issue, author=request.user, body=body)
+        target = "admin:issues_archivedissue_change" if issue.status in ARCHIVED_ISSUE_STATUSES else "admin:issues_issue_change"
+        return HttpResponseRedirect(reverse(target, args=(issue.pk,)) + "#issue-chat")
+
+    def notifications_view(self, request):
+        if not self.has_view_permission(request):
+            raise PermissionDenied
+        if request.method == "POST":
+            notification_id = request.POST.get("id")
+            if not notification_id or not notification_id.isdecimal():
+                return JsonResponse({"error": "Ungültige Benachrichtigung."}, status=400)
+            IssueNotification.objects.filter(pk=notification_id, user=request.user, read_at__isnull=True).update(read_at=timezone.now())
+            return JsonResponse({"ok": True})
+        if request.method != "GET":
+            return HttpResponseNotAllowed(["GET", "POST"])
+        notifications = list(
+            IssueNotification.objects.filter(user=request.user, read_at__isnull=True)
+            .select_related("issue")[:20]
+        )
+        return JsonResponse({
+            "count": IssueNotification.objects.filter(user=request.user, read_at__isnull=True).count(),
+            "notifications": [
+                {
+                    "id": item.pk,
+                    "kind": item.kind,
+                    "title": item.issue.title,
+                    "detail": item.detail,
+                    "url": reverse(
+                        "admin:issues_archivedissue_change" if item.issue.status in ARCHIVED_ISSUE_STATUSES else "admin:issues_issue_change",
+                        args=(item.issue_id,),
+                    ) + "#issue-chat",
+                }
+                for item in notifications
+            ],
+        })
 
     def get_queryset(self, request):
         queryset = super().get_queryset(request)
@@ -206,6 +277,7 @@ class IssueAdmin(StaffIssueAccessMixin, BaseAdmin):
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     def save_model(self, request, obj, form, change):
+        obj._issue_notification_actor = request.user if request.user.is_authenticated else None
         if not change and obj.reported_by_id is None and request.user.is_authenticated:
             obj.reported_by = request.user
         if obj.status in ARCHIVED_ISSUE_STATUSES and obj.resolved_at is None:
@@ -248,7 +320,12 @@ class ArchivedIssueAdmin(IssueAdmin):
 
     @admin.action(description="Aus Archiv wiederherstellen")
     def restore_issues(self, request, queryset):
-        restored = queryset.update(status=Issue.Status.IN_PROGRESS, updated_at=timezone.now())
+        restored = 0
+        for issue in queryset:
+            issue.status = Issue.Status.IN_PROGRESS
+            issue._issue_notification_actor = request.user
+            issue.save(update_fields=("status", "updated_at"))
+            restored += 1
         self.message_user(request, f"{restored} Issue(s) aus dem Archiv wiederhergestellt.")
 
     @action(
@@ -261,7 +338,7 @@ class ArchivedIssueAdmin(IssueAdmin):
         if issue is None:
             self.message_user(request, "Issue nicht gefunden.", level=messages.ERROR)
             return self._redirect_to_changelist()
-        self._restore_issue(issue)
+        self._restore_issue(issue, request.user)
         return self._redirect_to_working_issue_list()
 
     @action(
@@ -274,11 +351,12 @@ class ArchivedIssueAdmin(IssueAdmin):
         if issue is None:
             self.message_user(request, "Issue nicht gefunden.", level=messages.ERROR)
             return self._redirect_to_changelist()
-        self._restore_issue(issue)
+        self._restore_issue(issue, request.user)
         return self._redirect_to_working_issue_list()
 
-    def _restore_issue(self, issue: Issue) -> None:
+    def _restore_issue(self, issue: Issue, actor=None) -> None:
         issue.status = Issue.Status.IN_PROGRESS
+        issue._issue_notification_actor = actor
         issue.save(update_fields=("status", "updated_at"))
 
     @staticmethod
