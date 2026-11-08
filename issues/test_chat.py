@@ -1,9 +1,13 @@
+from django.apps import apps
+from django.contrib.admin.sites import AdminSite
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import RequestFactory, TestCase
 from django.urls import reverse
 
+from issues.admin import IssueAdmin
 from issues.models import Issue, IssueMessage
 from issues.services import create_task_issue
+from issues.signals import backfill_initial_messages
 
 
 class IssueChatTest(TestCase):
@@ -34,6 +38,11 @@ class IssueChatTest(TestCase):
         return reverse(name, args=[(issue or self.issue).pk])
 
     def test_initial_message_is_shown_safely_and_is_no_longer_editable(self):
+        initial = IssueMessage.objects.get(issue=self.issue, is_initial=True)
+        self.assertEqual(initial.author, self.reporter)
+        self.assertEqual(initial.text, self.issue.error_text)
+        self.assertEqual(initial.created_at, self.issue.created_at)
+
         self.client.force_login(self.reporter)
         response = self.client.get(reverse("admin:issues_issue_change", args=[self.issue.pk]))
 
@@ -44,14 +53,15 @@ class IssueChatTest(TestCase):
         self.assertContains(response, "reporter")
 
     def test_participants_reply_and_quote_both_initial_and_later_messages(self):
+        initial = IssueMessage.objects.get(issue=self.issue, is_initial=True)
         self.client.force_login(self.assignee)
         response = self.client.post(
-            self.reply_url(), {"text": "Ich prüfe das.", "quote": "initial"}
+            self.reply_url(), {"text": "Ich prüfe das.", "quote": str(initial.pk)}
         )
         self.assertEqual(response.status_code, 302)
-        first = IssueMessage.objects.get(issue=self.issue)
+        first = IssueMessage.objects.get(issue=self.issue, is_initial=False)
         self.assertEqual(first.author, self.assignee)
-        self.assertTrue(first.quotes_initial)
+        self.assertEqual(first.quoted_message, initial)
 
         self.client.force_login(self.reporter)
         self.client.post(
@@ -76,7 +86,7 @@ class IssueChatTest(TestCase):
             self.reply_url(), {"text": "Falsches Zitat", "quote": str(other_message.pk)}
         )
         self.assertEqual(response.status_code, 302)
-        self.assertFalse(IssueMessage.objects.filter(issue=self.issue).exists())
+        self.assertEqual(IssueMessage.objects.filter(issue=self.issue).count(), 1)
 
     def test_archive_uses_the_same_conversation(self):
         self.issue.status = Issue.Status.RESOLVED
@@ -104,3 +114,46 @@ class IssueChatTest(TestCase):
                 issue=self.issue, author__isnull=True, text="Neuer Task-Fehler"
             ).exists()
         )
+
+    def test_admin_creation_assigns_initial_message_to_logged_in_user(self):
+        request = RequestFactory().post("/admin/issues/issue/add/")
+        request.user = self.reporter
+        issue = Issue(title="Neue Meldung", assigned_to=self.assignee, error_text="Mein Fehlertext")
+
+        IssueAdmin(Issue, AdminSite()).save_model(request, issue, form=None, change=False)
+
+        initial = IssueMessage.objects.get(issue=issue, is_initial=True)
+        self.assertEqual(initial.author, self.reporter)
+        self.assertEqual(initial.text, "Mein Fehlertext")
+
+    def test_existing_error_text_is_backfilled_once_with_original_author_and_time(self):
+        issue = Issue.objects.create(
+            title="Altes Issue", reported_by=self.reporter, assigned_to=self.assignee
+        )
+        Issue.objects.filter(pk=issue.pk).update(error_text="Alter Fehlertext")
+
+        for _ in range(2):
+            backfill_initial_messages(
+                sender=apps.get_app_config("issues"), apps=apps, using="default"
+            )
+
+        initial = IssueMessage.objects.get(issue=issue, is_initial=True)
+        self.assertEqual(initial.author, self.reporter)
+        self.assertEqual(initial.text, "Alter Fehlertext")
+        self.assertEqual(initial.created_at, issue.created_at)
+        self.assertEqual(IssueMessage.objects.filter(issue=issue, is_initial=True).count(), 1)
+
+    def test_old_quotes_of_the_initial_text_still_display_the_author(self):
+        IssueMessage.objects.create(
+            issue=self.issue,
+            author=self.assignee,
+            text="Alte Antwort",
+            quotes_initial=True,
+        )
+        self.client.force_login(self.reporter)
+
+        response = self.client.get(reverse("admin:issues_issue_change", args=[self.issue.pk]))
+
+        self.assertContains(response, "Alte Antwort")
+        self.assertContains(response, "reporter")
+        self.assertContains(response, "Erster Fehler &lt;script&gt;alert(1)&lt;/script&gt;")

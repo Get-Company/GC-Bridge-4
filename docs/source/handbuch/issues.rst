@@ -213,10 +213,9 @@ Abschnitt „Fehlerdetails“
 +-----------------------+---------------------------------------------+
 | Feld                  | Eingabe und Bedeutung                       |
 +=======================+=============================================+
-| **Erste Nachricht /  | Optional. Der eingegebene Fehlertext wird  |
-| Fehlertext**          | nach dem Anlegen als erste Nachricht im     |
-|                       | Verlauf angezeigt. Danach bleibt er dort    |
-|                       | erhalten und wird nicht mehr bearbeitet.    |
+| **Fehlertext**       | Optional. Wird beim Anlegen als erste       |
+|                       | Nachricht der meldenden Person gespeichert. |
+|                       | Danach bleibt die Nachricht unverändert.    |
 +-----------------------+---------------------------------------------+
 | **Fehlertext-Datei**  | Optional. Hier kann eine Fehler- oder       |
 |                       | Protokolldatei hochgeladen werden. Erlaubt  |
@@ -237,9 +236,10 @@ Abschnitt „Fehlerdetails“
 Nachrichtenverlauf
 ~~~~~~~~~~~~~~~~~~
 
-Nach dem Speichern erscheint unter dem Issue ein Chatverlauf. Die erste
-Nachricht ist der beim Anlegen eingegebene Fehlertext. Die meldende und die
-zugewiesene Person können darunter antworten. Jede Antwort zeigt den
+Nach dem Speichern erscheint unter dem Issue ein Chatverlauf. Bereits
+vorhandene Fehlertexte werden ebenfalls als erste Nachricht der ursprünglich
+meldenden Person mit dem ursprünglichen Erstellungszeitpunkt übernommen. Die
+meldende und die zugewiesene Person können darunter antworten. Jede Antwort zeigt den
 Verfasser und die Uhrzeit. Mit **Zitieren** lässt sich eine vorhandene
 Nachricht in der eigenen Antwort referenzieren; das Zitat erscheint direkt
 über dem Antworttext. Auch im Issue-Archiv bleibt der Verlauf sichtbar.

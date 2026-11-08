@@ -195,22 +195,15 @@ class IssueAdmin(StaffIssueAccessMixin, BaseAdmin):
     def render_change_form(self, request, context, add=False, change=False, form_url="", obj=None):
         if obj is not None:
             entries = []
-            if obj.error_text:
-                entries.append(
-                    {
-                        "quote_key": "initial",
-                        "text": obj.error_text,
-                        "author": self._author_name(obj.reported_by),
-                        "created_at": obj.created_at,
-                        "is_own": obj.reported_by_id == request.user.pk,
-                    }
-                )
-            for message in obj.messages.select_related("author", "quoted_message__author"):
-                quoted = message.quoted_message
-                if message.quotes_initial and obj.error_text:
-                    quoted_text = obj.error_text
-                    quoted_author = self._author_name(obj.reported_by)
-                elif quoted is not None:
+            all_messages = list(
+                obj.messages.select_related("author", "quoted_message__author")
+            )
+            initial_message = next(
+                (message for message in all_messages if message.is_initial), None
+            )
+            for message in all_messages:
+                quoted = initial_message if message.quotes_initial else message.quoted_message
+                if quoted is not None:
                     quoted_text = quoted.text
                     quoted_author = self._author_name(quoted.author)
                 else:
@@ -257,12 +250,11 @@ class IssueAdmin(StaffIssueAccessMixin, BaseAdmin):
 
         quote_key = form.cleaned_data["quote"]
         quoted_message = None
-        quotes_initial = False
         if quote_key == "initial":
-            if not issue.error_text:
+            quoted_message = issue.messages.filter(is_initial=True).first()
+            if quoted_message is None:
                 self.message_user(request, "Die zitierte Nachricht ist nicht mehr vorhanden.", messages.ERROR)
                 return HttpResponseRedirect(redirect_url)
-            quotes_initial = True
         elif quote_key:
             if not quote_key.isdecimal():
                 self.message_user(request, "Die zitierte Nachricht ist ungültig.", messages.ERROR)
@@ -277,7 +269,6 @@ class IssueAdmin(StaffIssueAccessMixin, BaseAdmin):
             author=request.user,
             text=form.cleaned_data["text"],
             quoted_message=quoted_message,
-            quotes_initial=quotes_initial,
         )
         self.message_user(request, "Nachricht gesendet.", messages.SUCCESS)
         return HttpResponseRedirect(redirect_url)

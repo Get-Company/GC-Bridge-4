@@ -5,7 +5,7 @@ from pathlib import Path
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import FileExtensionValidator
-from django.db import models
+from django.db import models, router, transaction
 from django.utils.text import slugify
 from django.utils.translation import gettext_lazy as _
 
@@ -158,6 +158,23 @@ class Issue(BaseModel):
     def __str__(self) -> str:
         return self.title
 
+    def save(self, *args, **kwargs):
+        if not self._state.adding or not self.error_text:
+            return super().save(*args, **kwargs)
+
+        database = kwargs.get("using") or router.db_for_write(type(self), instance=self)
+        with transaction.atomic(using=database):
+            super().save(*args, **kwargs)
+            message = IssueMessage.objects.using(database).create(
+                issue_id=self.pk,
+                author_id=self.reported_by_id,
+                text=self.error_text,
+                is_initial=True,
+            )
+            IssueMessage.objects.using(database).filter(pk=message.pk).update(
+                created_at=self.created_at
+            )
+
     def clean(self) -> None:
         super().clean()
         if self.status in {self.Status.RESOLVED, self.Status.CLOSED} and not self.resolution_note.strip():
@@ -251,6 +268,7 @@ class IssueMessage(BaseModel):
         verbose_name=_("Verfasser"),
     )
     text = models.TextField(verbose_name=_("Nachricht"))
+    is_initial = models.BooleanField(default=False, verbose_name=_("Erste Nachricht"))
     quoted_message = models.ForeignKey(
         "self",
         on_delete=models.SET_NULL,
@@ -264,7 +282,14 @@ class IssueMessage(BaseModel):
     class Meta:
         verbose_name = _("Issue-Nachricht")
         verbose_name_plural = _("Issue-Nachrichten")
-        ordering = ("created_at", "id")
+        ordering = ("-is_initial", "created_at", "id")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("issue",),
+                condition=models.Q(is_initial=True),
+                name="unique_initial_issue_message",
+            )
+        ]
 
     def __str__(self) -> str:
         return self.text[:80]
