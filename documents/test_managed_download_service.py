@@ -2,6 +2,8 @@
 
 from io import BytesIO
 from types import SimpleNamespace
+from unittest.mock import patch
+from hashlib import sha256
 
 from django.core.files.base import ContentFile
 from django.test import SimpleTestCase
@@ -51,3 +53,16 @@ class ManagedDownloadServiceTests(SimpleTestCase):
 
         self.assertEqual(extension, "pdf")
         self.assertEqual(len(PdfReader(BytesIO(output)).pages), 1)
+
+    def test_public_verification_retries_stale_shopware_bytes(self):
+        stale = BytesIO(b"stale")
+        stale.status = 200
+        current = BytesIO(b"current")
+        current.status = 200
+
+        with patch("documents.managed_download_service.urllib.request.urlopen", side_effect=[stale, current]) as open_url:
+            with patch("documents.managed_download_service.time.sleep") as sleep:
+                self.service._verify_public_file("https://example.com/file.pdf", sha256(b"current").hexdigest())
+
+        self.assertEqual(open_url.call_count, 2)
+        sleep.assert_called_once_with(2)

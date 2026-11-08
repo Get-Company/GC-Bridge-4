@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 import urllib.parse
 import urllib.request
 from io import BytesIO
@@ -175,11 +176,16 @@ class ManagedDownloadService(Shopware6Service):
         safe_url = urllib.parse.urlunsplit(
             (parts.scheme, parts.netloc, urllib.parse.quote(parts.path, safe="/%"), parts.query, parts.fragment)
         )
-        digest = hashlib.sha256()
-        with urllib.request.urlopen(safe_url, timeout=60) as response:
-            if response.status != 200:
-                raise RuntimeError(f"Shopware-Download antwortete mit HTTP {response.status}.")
-            while chunk := response.read(1024 * 1024):
-                digest.update(chunk)
-        if digest.hexdigest() != expected_hash:
-            raise RuntimeError("Der Shopware-Download stimmt nicht mit der versionierten Datei überein.")
+        for attempt in range(7):
+            digest = hashlib.sha256()
+            request = urllib.request.Request(safe_url, headers={"Cache-Control": "no-cache"})
+            with urllib.request.urlopen(request, timeout=60) as response:
+                if response.status != 200:
+                    raise RuntimeError(f"Shopware-Download antwortete mit HTTP {response.status}.")
+                while chunk := response.read(1024 * 1024):
+                    digest.update(chunk)
+            if digest.hexdigest() == expected_hash:
+                return
+            if attempt < 6:
+                time.sleep(2 * (attempt + 1))
+        raise RuntimeError("Der Shopware-Download stimmt nicht mit der versionierten Datei überein.")
