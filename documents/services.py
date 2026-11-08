@@ -58,6 +58,12 @@ class DocumentPdfService(BaseService):
         return Path(getattr(settings, "DOCUMENT_PDF_ROOT", default))
 
     def get_pdf_path(self, document: Document) -> Path | None:
+        managed_download = (
+            document.managed_downloads.select_related("active_version").first() if document.pk else None
+        )
+        if managed_download:
+            version = managed_download.active_version
+            return Path(version.output_file.path) if version and version.output_file else None
         if not document.pdf_filename:
             return None
         return self.get_output_dir() / document.pdf_filename

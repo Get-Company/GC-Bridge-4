@@ -5,7 +5,7 @@ from django.core.files.uploadedfile import UploadedFile
 from django.http import FileResponse, Http404, HttpResponse, HttpResponseRedirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
-from django.utils.html import escape, format_html
+from django.utils.html import escape, format_html, format_html_join
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
 from django_json_widget.widgets import JSONEditorWidget
@@ -304,6 +304,7 @@ class DocumentAdmin(BaseAdmin):
         "is_template",
         "slug",
         "template_source_status",
+        "managed_download_status",
         "is_active",
         "pdf_generated_at",
         "pdf_download_link",
@@ -326,6 +327,7 @@ class DocumentAdmin(BaseAdmin):
         "end_pdf_preview",
         "shopware_link_ids",
         "active_version_display",
+        "managed_download_versions",
         "context_snapshot_display",
     )
     actions = ("generate_pdf",)
@@ -363,6 +365,7 @@ class DocumentAdmin(BaseAdmin):
                     "is_active",
                     "price_list_duplicate_categories",
                     "active_version_display",
+                    "managed_download_versions",
                     "context_snapshot_display",
                 ),
                 "classes": ("tab",),
@@ -536,18 +539,68 @@ class DocumentAdmin(BaseAdmin):
             ),
         ] + super().get_urls()
 
+    @staticmethod
+    def _managed_download(obj: Document | None) -> ManagedDownload | None:
+        if not obj or not obj.pk:
+            return None
+        cache_key = "_managed_download_admin_cache"
+        if cache_key not in obj.__dict__:
+            obj.__dict__[cache_key] = (
+                obj.managed_downloads.select_related("active_version").first() or False
+            )
+        return obj.__dict__[cache_key] or None
+
     @admin.display(description="Template")
     def template_source_status(self, obj: Document | None = None):
         if not obj or not obj.pk:
             return "Nach dem Speichern verfuegbar"
+        managed = self._managed_download(obj)
+        if managed:
+            return self.managed_download_status(obj)
         if obj.template_file:
             return format_html("<code>{}</code>", obj.template_file.name)
         if obj.html_content:
             return "WYSIWYG-HTML-Feld"
         return "Keine Vorlage"
 
+    @admin.display(description="Quelle")
+    def managed_download_status(self, obj: Document | None = None):
+        managed = self._managed_download(obj)
+        if not managed:
+            return "-"
+        if managed.active_version:
+            return f"PDF-Quelle · V{managed.active_version.version_number}"
+        return "Quelldatei · nicht veröffentlicht"
+
+    @admin.display(description="Quelldateien und Versionen")
+    def managed_download_versions(self, obj: Document | None = None):
+        managed = self._managed_download(obj)
+        if not managed:
+            return "Für dieses Dokument werden HTML-Versionen unten angezeigt."
+        rows = (
+            (
+                reverse("admin:documents_manageddownloadversion_change", args=(version.pk,)),
+                f"V{version.version_number} · {version.label or version.source_file.name}",
+                " · veröffentlicht" if version.published_at else " · Quelle/Entwurf",
+            )
+            for version in managed.versions.order_by("-version_number")
+        )
+        add_url = reverse("admin:documents_manageddownloadversion_add") + f"?download={managed.pk}"
+        return format_html(
+            '<ul>{}</ul><a href="{}">Neue Quelldatei als Version anlegen</a>',
+            format_html_join("", '<li><a href="{}">{}</a>{}</li>', rows),
+            add_url,
+        )
+
     @admin.display(description="Aktive Version")
     def active_version_display(self, obj: Document | None = None):
+        managed = self._managed_download(obj)
+        if managed and managed.active_version:
+            return format_html(
+                '<a href="{}">PDF-Version {}</a>',
+                reverse("admin:documents_manageddownloadversion_change", args=(managed.active_version_id,)),
+                managed.active_version.version_number,
+            )
         if not obj or not obj.active_version_id:
             return "Noch keine Version aktiviert"
         return obj.active_version
@@ -598,7 +651,7 @@ class DocumentAdmin(BaseAdmin):
 
     @admin.display(description="PDF")
     def pdf_download_link(self, obj: Document | None = None):
-        if not obj or not obj.pk or not obj.pdf_filename:
+        if not obj or not obj.pk or (not obj.pdf_filename and not self._managed_download(obj)):
             return "-"
         pdf_path = DocumentPdfService().get_pdf_path(obj)
         if not pdf_path or not pdf_path.exists():
@@ -695,6 +748,11 @@ class DocumentAdmin(BaseAdmin):
         document = self.get_object(request, object_id)
         if not document:
             raise Http404("Dokument nicht gefunden.")
+        if self._managed_download(document):
+            pdf_path = DocumentPdfService().get_pdf_path(document)
+            if not pdf_path or not pdf_path.exists():
+                raise Http404("Für diese Quelle ist noch keine PDF veröffentlicht.")
+            return FileResponse(pdf_path.open("rb"), content_type="application/pdf")
         try:
             context = DocumentTemplateContextService().build_preview_context(document)
             html = DocumentPdfService().build_pdf_html(document, context)
@@ -789,12 +847,17 @@ class DocumentAdmin(BaseAdmin):
         service = DocumentPdfService()
         created_count = 0
         for document in queryset:
+            if self._managed_download(document):
+                pdf_path = service.get_pdf_path(document)
+                if pdf_path and pdf_path.exists():
+                    created_count += 1
+                continue
             service.generate_pdf(document)
             created_count += 1
         self.message_user(request, f"{created_count} PDF-Datei(en) im Verzeichnis Dokumente gespeichert.")
 
     @action(
-        description="Neue Version anlegen",
+        description="Neue HTML-Version anlegen",
         icon="add",
         variant=ActionVariant.PRIMARY,
     )
@@ -837,6 +900,13 @@ class DocumentAdmin(BaseAdmin):
         if not document:
             self.message_user(request, "Dokument nicht gefunden.", level=messages.ERROR)
             return HttpResponseRedirect(reverse("admin:documents_document_changelist"))
+        if self._managed_download(document):
+            pdf_path = DocumentPdfService().get_pdf_path(document)
+            if not pdf_path or not pdf_path.exists():
+                self.message_user(request, "Für diese Quelle ist noch keine PDF veröffentlicht.", level=messages.ERROR)
+            else:
+                self.message_user(request, "Die versionierte PDF ist bereits unter PDF verfügbar.")
+            return HttpResponseRedirect(reverse("admin:documents_document_change", args=(object_id,)))
         DocumentPdfService().generate_pdf(document)
         self.message_user(request, "PDF-Datei im Verzeichnis Dokumente gespeichert.")
         return HttpResponseRedirect(reverse("admin:documents_document_change", args=(object_id,)))

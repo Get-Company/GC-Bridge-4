@@ -16,7 +16,7 @@ from django.utils import timezone
 from pypdf import PdfReader
 from weasyprint import HTML as WeasyHTML
 
-from documents.models import ManagedDownload, ManagedDownloadVersion
+from documents.models import Document, ManagedDownload, ManagedDownloadVersion
 from documents.services import DocumentPdfService
 from shopware.services.shopware6 import Shopware6Service
 
@@ -38,6 +38,7 @@ class ManagedDownloadService(Shopware6Service):
         if not download.is_active:
             raise ValueError("Dieser Download ist als reine Quelle markiert und darf nicht veröffentlicht werden.")
         if version.published_at:
+            self._sync_document(download, version)
             return {"media_id": download.shopware_media_id, "url": version.shopware_url}
 
         content, extension, source_hash = self._render_source(version)
@@ -89,7 +90,20 @@ class ManagedDownloadService(Shopware6Service):
             download.shopware_url = url
             download.active_version = version
             download.save(update_fields=("shopware_media_id", "shopware_url", "active_version", "updated_at"))
+        self._sync_document(download, version)
         return {"media_id": media_id, "url": url}
+
+    @staticmethod
+    def _sync_document(download: ManagedDownload, version: ManagedDownloadVersion) -> None:
+        if not download.source_document_id or version.output_extension != "pdf":
+            return
+        Document.objects.filter(pk=download.source_document_id).update(
+            shopware_media_id=download.shopware_media_id,
+            shopware_media_folder_id=download.shopware_media_folder_id,
+            pdf_filename=f"{download.slug}.pdf",
+            pdf_generated_at=version.published_at,
+            updated_at=timezone.now(),
+        )
 
     def _render_source(self, version: ManagedDownloadVersion) -> tuple[bytes, str, str]:
         if version.source_document_version_id:

@@ -3,7 +3,8 @@ from django.db.models import Max
 from django.utils import timezone
 
 from core.services import BaseService
-from documents.models import Document, DocumentVersion
+from documents.models import Document, DocumentVersion, ManagedDownload, ManagedDownloadVersion
+from documents.managed_download_service import ManagedDownloadService
 from documents.shopware_publication_service import DocumentShopwarePublicationService
 
 
@@ -70,5 +71,23 @@ class DocumentVersionService(BaseService):
         # Do not activate a version if the document cannot be published at all
         # because its required Shopware PDF media has not been selected yet.
         DocumentShopwarePublicationService.validate_links(version.document)
+        managed_download = version.document.managed_downloads.first()
+        if managed_download:
+            if not managed_download.is_active:
+                raise ValueError("Eine reine Word-Quelle kann nicht veröffentlicht werden.")
+            self.activate(version)
+            with transaction.atomic():
+                managed_download = ManagedDownload.objects.select_for_update().get(pk=managed_download.pk)
+                download_version = managed_download.versions.filter(source_document_version=version).first()
+                if download_version is None:
+                    highest = managed_download.versions.aggregate(value=Max("version_number"))["value"] or 0
+                    download_version = ManagedDownloadVersion.objects.create(
+                        download=managed_download,
+                        version_number=highest + 1,
+                        label=version.label or f"Dokumentversion {version.version_number}",
+                        source_document_version=version,
+                    )
+            result = ManagedDownloadService().publish(download_version)
+            return {"cms_page_id": "", "cms_slot_id": "", "media_id": result["media_id"]}
         document = self.activate(version)
         return DocumentShopwarePublicationService().publish(document)

@@ -4,6 +4,7 @@ from copy import deepcopy
 from typing import Any
 
 from documents.models import Document
+from documents.managed_download_service import ManagedDownloadService
 from documents.services import DocumentPdfService
 from documents.shopware_upload_service import DocumentShopwareUploadService
 from shopware.services.shopware6 import Shopware6Service
@@ -96,6 +97,14 @@ class DocumentShopwarePublicationService(Shopware6Service):
 
     def publish(self, document: Document) -> dict[str, str]:
         """Publish the current PDF and, when linked, the document HTML to Shopware."""
+
+        managed_download = document.managed_downloads.first()
+        if managed_download:
+            version = managed_download.versions.order_by("-version_number").first()
+            if version is None:
+                raise ValueError("Für dieses Dokument wurde noch keine Quelldatei versioniert.")
+            result = ManagedDownloadService().publish(version)
+            return {"cms_page_id": "", "cms_slot_id": "", "media_id": result["media_id"]}
 
         self.validate_links(document)
         self._fetch_pdf_media(document.shopware_media_id)

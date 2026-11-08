@@ -43,6 +43,7 @@ class DocumentType(BaseModel):
 
     DEFAULT_DEFINITIONS = (
         ("price_list", _("Preisliste")),
+        ("download", _("Download")),
         ("order_form", _("Bestellschein")),
         ("terms", _("AGB")),
         ("withdrawal", _("Widerrufsbelehrung")),
@@ -81,6 +82,7 @@ class DocumentType(BaseModel):
 class Document(BaseModel):
     class DocumentType(models.TextChoices):
         PRICE_LIST = "price_list", _("Preisliste")
+        DOWNLOAD = "download", _("Download")
         ORDER_FORM = "order_form", _("Bestellschein")
         TERMS = "terms", _("AGB")
         WITHDRAWAL = "withdrawal", _("Widerrufsbelehrung")
