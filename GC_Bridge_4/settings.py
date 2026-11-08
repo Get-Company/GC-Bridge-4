@@ -707,6 +707,18 @@ UNFOLD = {
                         "permission": sidebar_model_view_permission("documents", "Document"),
                     },
                     {
+                        "title": _("Verwaltete Downloads"),
+                        "icon": "download",
+                        "link": reverse_lazy("admin:documents_manageddownload_changelist"),
+                        "permission": sidebar_model_view_permission("documents", "ManagedDownload"),
+                    },
+                    {
+                        "title": _("Downloadversionen"),
+                        "icon": "history",
+                        "link": reverse_lazy("admin:documents_manageddownloadversion_changelist"),
+                        "permission": sidebar_model_view_permission("documents", "ManagedDownloadVersion"),
+                    },
+                    {
                         "title": _("Dokumenttypen"),
                         "icon": "category",
                         "link": reverse_lazy("admin:documents_documenttype_changelist"),
