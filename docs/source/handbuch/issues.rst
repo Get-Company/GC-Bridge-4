@@ -213,9 +213,9 @@ Abschnitt „Fehlerdetails“
 +-----------------------+---------------------------------------------+
 | Feld                  | Eingabe und Bedeutung                       |
 +=======================+=============================================+
-| **Fehlertext**       | Optional. Wird beim Anlegen als erste       |
-|                       | Nachricht der meldenden Person gespeichert. |
-|                       | Danach bleibt die Nachricht unverändert.    |
+| **Fehlertext**       | Optional. Technische Fehlermeldung oder     |
+|                       | Protokollauszug. Erscheint nach der         |
+|                       | Beschreibung als eigene Chatnachricht.      |
 +-----------------------+---------------------------------------------+
 | **Fehlertext-Datei**  | Optional. Hier kann eine Fehler- oder       |
 |                       | Protokolldatei hochgeladen werden. Erlaubt  |
@@ -236,14 +236,16 @@ Abschnitt „Fehlerdetails“
 Nachrichtenverlauf
 ~~~~~~~~~~~~~~~~~~
 
-Nach dem Speichern erscheint im Issue ein Chatverlauf. Der am Issue
-gespeicherte Fehlertext steht darin immer als erste Nachricht der meldenden
-Person mit dem Erstellungszeitpunkt. Das gilt auch für bereits vorhandene
-Issues; der Fehlertext bleibt erhalten und erscheint nicht doppelt. Die
-meldende und die zugewiesene Person können darunter antworten. Jede Antwort zeigt den
-Verfasser und die Uhrzeit. Mit **Zitieren** lässt sich eine vorhandene
-Nachricht in der eigenen Antwort referenzieren; das Zitat erscheint direkt
-über dem Antworttext. Auch im Issue-Archiv bleibt der Verlauf sichtbar.
+Nach dem Speichern erscheint im Issue ein Chatverlauf. Die bestehende
+**Beschreibung** steht als erste Nachricht der meldenden Person mit dem
+Erstellungszeitpunkt darin, auch bei bereits vorhandenen Issues. Ein
+zusätzlicher technischer **Fehlertext** folgt als eigene Nachricht; ohne
+Beschreibung bildet er die erste Nachricht. Gleiche Texte erscheinen nicht
+doppelt. Die meldende und die zugewiesene Person können darunter antworten.
+Nachrichten stehen auf gegenüberliegenden Seiten in unterschiedlichen Farben.
+Der Verfasser steht klein unter dem Nachrichtentext. Mit **Zitieren** lässt
+sich eine vorhandene Nachricht in der eigenen Antwort referenzieren; das Zitat
+erscheint direkt über dem Antworttext. Auch im Issue-Archiv bleibt der Verlauf sichtbar.
 Automatisch erfasste spätere Task-Fehler erscheinen als eigene
 Systemnachrichten.
 

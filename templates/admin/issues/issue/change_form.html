@@ -13,7 +13,7 @@
   .issue-chat-row.own { justify-content: flex-end; }
   .issue-chat-bubble { width: fit-content; max-width: min(85%, 44rem); padding: .55rem .75rem .4rem; border-radius: .7rem .7rem .7rem .15rem; background: #fff; box-shadow: 0 1px 2px #0002; }
   .issue-chat-row.own .issue-chat-bubble { border-radius: .7rem .7rem .15rem .7rem; background: #d9fdd3; }
-  .issue-chat-author { margin-bottom: .2rem; font-size: .78rem; font-weight: 700; color: #26736a; }
+  .issue-chat-author { margin-top: .35rem; font-size: .72rem; font-weight: 600; color: #26736a; }
   .issue-chat-text { max-height: 20rem; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: .92rem; line-height: 1.45; }
   .issue-chat-citation { margin-bottom: .5rem; padding: .4rem .65rem; border-left: 4px solid #53bdeb; border-radius: .25rem; background: #0000000b; }
   .issue-chat-citation strong { display: block; font-size: .78rem; color: #26736a; }
@@ -49,13 +49,12 @@
 <section class="issue-chat" id="issue-chat" aria-label="Nachrichtenverlauf">
   <header class="issue-chat-header">
     <h2>Nachrichtenverlauf</h2>
-    <p>Die erste Nachricht stammt aus dem Fehlertext des Issues. Antworten werden mit Verfasser und Zeitpunkt gespeichert.</p>
+    <p>Die Fehlerbeschreibung ist die erste Nachricht. Antworten werden mit Verfasser und Zeitpunkt gespeichert.</p>
   </header>
   <div class="issue-chat-history" id="issue-chat-history" role="log" aria-live="polite">
     {% for entry in chat_entries %}
       <div class="issue-chat-row{% if entry.is_own %} own{% endif %}" id="issue-message-{{ entry.quote_key }}">
         <div class="issue-chat-bubble">
-          <div class="issue-chat-author">{{ entry.author }}</div>
           {% if entry.quoted_text %}
             <div class="issue-chat-citation">
               <strong>{{ entry.quoted_author }}</strong>
@@ -63,6 +62,7 @@
             </div>
           {% endif %}
           <div class="issue-chat-text">{{ entry.text }}</div>
+          <div class="issue-chat-author">{{ entry.author }}</div>
           <div class="issue-chat-meta">
             <time datetime="{{ entry.created_at|date:'c' }}">{{ entry.created_at|date:"d.m.Y H:i" }}</time>
             {% if can_reply %}<button type="button" class="issue-chat-quote-button" data-quote-key="{{ entry.quote_key }}">Zitieren</button>{% endif %}

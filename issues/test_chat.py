@@ -181,3 +181,36 @@ class IssueChatTest(TestCase):
         self.assertTrue(
             IssueMessage.objects.filter(issue=issue, text="Antwort", quotes_initial=True).exists()
         )
+
+    def test_existing_description_is_first_and_can_be_quoted(self):
+        issue = Issue.objects.create(
+            title="Wirtschafts-Identifikationsnummer",
+            reported_by=self.reporter,
+            assigned_to=self.assignee,
+            description=(
+                "Haben wir eine Wirtschafts-Identifikationsnummer?\n"
+                "Will ein Kunde haben der auf E-Rechnung umgestellt hat."
+            ),
+            error_text="Technischer Zusatz",
+        )
+        self.client.force_login(self.assignee)
+
+        response = self.client.get(reverse("admin:issues_issue_change", args=[issue.pk]))
+
+        entries = response.context["chat_entries"]
+        self.assertEqual(entries[0]["text"], issue.description)
+        self.assertEqual(entries[0]["author"], "reporter")
+        self.assertEqual(entries[0]["quote_key"], "description")
+        self.assertFalse(entries[0]["is_own"])
+        self.assertEqual(entries[1]["text"], "Technischer Zusatz")
+        self.assertContains(response, "issue-chat-author")
+
+        response = self.client.post(
+            self.reply_url(issue), {"text": "Ich frage nach.", "quote": "description"}
+        )
+        self.assertEqual(response.status_code, 302)
+        reply = IssueMessage.objects.get(issue=issue, text="Ich frage nach.")
+        self.assertTrue(reply.quotes_description)
+        response = self.client.get(reverse("admin:issues_issue_change", args=[issue.pk]))
+        self.assertEqual(response.context["chat_entries"][-1]["quoted_text"], issue.description)
+        self.assertTrue(response.context["chat_entries"][-1]["is_own"])

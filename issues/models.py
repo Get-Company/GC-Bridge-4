@@ -278,6 +278,7 @@ class IssueMessage(BaseModel):
         verbose_name=_("Zitierte Nachricht"),
     )
     quotes_initial = models.BooleanField(default=False, verbose_name=_("Zitiert erste Nachricht"))
+    quotes_description = models.BooleanField(default=False, verbose_name=_("Zitiert Beschreibung"))
 
     class Meta:
         verbose_name = _("Issue-Nachricht")

@@ -27,11 +27,17 @@ class StaffIssueAccessMixin:
 class IssueAdminForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        if self.instance.pk is None and "error_text" in self.fields:
-            self.fields["error_text"].label = "Erste Nachricht / Fehlertext"
-            self.fields["error_text"].help_text = (
-                "Optional. Dieser Text erscheint nach dem Speichern als erste Nachricht im Verlauf."
-            )
+        if self.instance.pk is None:
+            if "description" in self.fields:
+                self.fields["description"].label = "Fehlerbeschreibung / erste Chatnachricht"
+                self.fields["description"].help_text = (
+                    "Dieser Text erscheint nach dem Speichern als erste Nachricht im Verlauf."
+                )
+            if "error_text" in self.fields:
+                self.fields["error_text"].label = "Technischer Fehlertext"
+                self.fields["error_text"].help_text = (
+                    "Optional. Erscheint nach der Fehlerbeschreibung als eigene Nachricht."
+                )
 
     class Meta:
         model = Issue
@@ -201,19 +207,27 @@ class IssueAdmin(StaffIssueAccessMixin, BaseAdmin):
             initial_message = next(
                 (message for message in all_messages if message.is_initial), None
             )
-            initial_text = obj.error_text or (initial_message.text if initial_message else "")
-            if obj.error_text:
-                initial_author = obj.reported_by
-            else:
-                initial_author = initial_message.author if initial_message else None
-            initial_author_name = self._author_name(initial_author)
-            if initial_text:
+            description_text = obj.description.strip()
+            error_text = obj.error_text.strip() or (initial_message.text if initial_message else "")
+            reporter_name = self._author_name(obj.reported_by)
+            if description_text:
+                entries.append(
+                    {
+                        "quote_key": "description",
+                        "text": description_text,
+                        "author": reporter_name,
+                        "created_at": obj.created_at,
+                        "is_own": obj.reported_by_id == request.user.pk,
+                    }
+                )
+            if error_text and error_text != description_text:
+                initial_author = obj.reported_by if obj.error_text.strip() else initial_message.author
                 entries.append(
                     {
                         "quote_key": str(initial_message.pk) if initial_message else "initial",
-                        "text": initial_text,
-                        "author": initial_author_name,
-                        "created_at": obj.created_at if obj.error_text else initial_message.created_at,
+                        "text": error_text,
+                        "author": self._author_name(initial_author),
+                        "created_at": obj.created_at if obj.error_text.strip() else initial_message.created_at,
                         "is_own": initial_author.pk == request.user.pk if initial_author else False,
                     }
                 )
@@ -221,9 +235,12 @@ class IssueAdmin(StaffIssueAccessMixin, BaseAdmin):
                 if message.is_initial:
                     continue
                 quoted = initial_message if message.quotes_initial else message.quoted_message
-                if message.quotes_initial or (quoted is not None and quoted.is_initial):
-                    quoted_text = initial_text or None
-                    quoted_author = initial_author_name if quoted_text else None
+                if message.quotes_description:
+                    quoted_text = description_text or None
+                    quoted_author = reporter_name if quoted_text else None
+                elif message.quotes_initial or (quoted is not None and quoted.is_initial):
+                    quoted_text = error_text or None
+                    quoted_author = reporter_name if quoted_text else None
                 elif quoted is not None:
                     quoted_text = quoted.text
                     quoted_author = self._author_name(quoted.author)
@@ -272,7 +289,13 @@ class IssueAdmin(StaffIssueAccessMixin, BaseAdmin):
         quote_key = form.cleaned_data["quote"]
         quoted_message = None
         quotes_initial = False
-        if quote_key == "initial":
+        quotes_description = False
+        if quote_key == "description":
+            if not issue.description.strip():
+                self.message_user(request, "Die zitierte Nachricht ist nicht mehr vorhanden.", messages.ERROR)
+                return HttpResponseRedirect(redirect_url)
+            quotes_description = True
+        elif quote_key == "initial":
             if not issue.error_text:
                 self.message_user(request, "Die zitierte Nachricht ist nicht mehr vorhanden.", messages.ERROR)
                 return HttpResponseRedirect(redirect_url)
@@ -293,6 +316,7 @@ class IssueAdmin(StaffIssueAccessMixin, BaseAdmin):
             text=form.cleaned_data["text"],
             quoted_message=quoted_message,
             quotes_initial=quotes_initial,
+            quotes_description=quotes_description,
         )
         self.message_user(request, "Nachricht gesendet.", messages.SUCCESS)
         return HttpResponseRedirect(redirect_url)
