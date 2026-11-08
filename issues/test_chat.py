@@ -48,6 +48,10 @@ class IssueChatTest(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Erster Fehler &lt;script&gt;alert(1)&lt;/script&gt;")
+        self.assertEqual(
+            response.content.decode().count("Erster Fehler &lt;script&gt;alert(1)&lt;/script&gt;"),
+            1,
+        )
         self.assertNotContains(response, "Erster Fehler <script>alert(1)</script>", html=False)
         self.assertNotIn("error_text", response.context["adminform"].form.fields)
         self.assertContains(response, "reporter")
@@ -67,7 +71,7 @@ class IssueChatTest(TestCase):
         self.client.post(
             self.reply_url(), {"text": "Danke, hier ist ein Beispiel.", "quote": str(first.pk)}
         )
-        second = IssueMessage.objects.get(issue=self.issue, author=self.reporter)
+        second = IssueMessage.objects.get(issue=self.issue, author=self.reporter, is_initial=False)
         self.assertEqual(second.quoted_message, first)
         response = self.client.get(reverse("admin:issues_issue_change", args=[self.issue.pk]))
         self.assertContains(response, "Ich prüfe das.")
@@ -157,3 +161,23 @@ class IssueChatTest(TestCase):
         self.assertContains(response, "Alte Antwort")
         self.assertContains(response, "reporter")
         self.assertContains(response, "Erster Fehler &lt;script&gt;alert(1)&lt;/script&gt;")
+
+    def test_existing_error_text_is_first_even_without_a_backfilled_message(self):
+        issue = Issue.objects.create(
+            title="Noch nicht übernommenes Issue",
+            reported_by=self.reporter,
+            assigned_to=self.assignee,
+        )
+        Issue.objects.filter(pk=issue.pk).update(error_text="Vorhandener Fehlertext")
+        self.client.force_login(self.reporter)
+
+        response = self.client.get(reverse("admin:issues_issue_change", args=[issue.pk]))
+
+        self.assertContains(response, "Vorhandener Fehlertext")
+        self.assertEqual(response.context["chat_entries"][0]["author"], "reporter")
+        self.assertEqual(response.context["chat_entries"][0]["quote_key"], "initial")
+
+        self.client.post(self.reply_url(issue), {"text": "Antwort", "quote": "initial"})
+        self.assertTrue(
+            IssueMessage.objects.filter(issue=issue, text="Antwort", quotes_initial=True).exists()
+        )

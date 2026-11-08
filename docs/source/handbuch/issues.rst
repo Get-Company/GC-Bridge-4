@@ -236,9 +236,10 @@ Abschnitt „Fehlerdetails“
 Nachrichtenverlauf
 ~~~~~~~~~~~~~~~~~~
 
-Nach dem Speichern erscheint unter dem Issue ein Chatverlauf. Bereits
-vorhandene Fehlertexte werden ebenfalls als erste Nachricht der ursprünglich
-meldenden Person mit dem ursprünglichen Erstellungszeitpunkt übernommen. Die
+Nach dem Speichern erscheint im Issue ein Chatverlauf. Der am Issue
+gespeicherte Fehlertext steht darin immer als erste Nachricht der meldenden
+Person mit dem Erstellungszeitpunkt. Das gilt auch für bereits vorhandene
+Issues; der Fehlertext bleibt erhalten und erscheint nicht doppelt. Die
 meldende und die zugewiesene Person können darunter antworten. Jede Antwort zeigt den
 Verfasser und die Uhrzeit. Mit **Zitieren** lässt sich eine vorhandene
 Nachricht in der eigenen Antwort referenzieren; das Zitat erscheint direkt

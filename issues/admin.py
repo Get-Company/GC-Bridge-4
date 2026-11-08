@@ -201,9 +201,30 @@ class IssueAdmin(StaffIssueAccessMixin, BaseAdmin):
             initial_message = next(
                 (message for message in all_messages if message.is_initial), None
             )
+            initial_text = obj.error_text or (initial_message.text if initial_message else "")
+            if obj.error_text:
+                initial_author = obj.reported_by
+            else:
+                initial_author = initial_message.author if initial_message else None
+            initial_author_name = self._author_name(initial_author)
+            if initial_text:
+                entries.append(
+                    {
+                        "quote_key": str(initial_message.pk) if initial_message else "initial",
+                        "text": initial_text,
+                        "author": initial_author_name,
+                        "created_at": obj.created_at if obj.error_text else initial_message.created_at,
+                        "is_own": initial_author.pk == request.user.pk if initial_author else False,
+                    }
+                )
             for message in all_messages:
+                if message.is_initial:
+                    continue
                 quoted = initial_message if message.quotes_initial else message.quoted_message
-                if quoted is not None:
+                if message.quotes_initial or (quoted is not None and quoted.is_initial):
+                    quoted_text = initial_text or None
+                    quoted_author = initial_author_name if quoted_text else None
+                elif quoted is not None:
                     quoted_text = quoted.text
                     quoted_author = self._author_name(quoted.author)
                 else:
@@ -250,11 +271,13 @@ class IssueAdmin(StaffIssueAccessMixin, BaseAdmin):
 
         quote_key = form.cleaned_data["quote"]
         quoted_message = None
+        quotes_initial = False
         if quote_key == "initial":
-            quoted_message = issue.messages.filter(is_initial=True).first()
-            if quoted_message is None:
+            if not issue.error_text:
                 self.message_user(request, "Die zitierte Nachricht ist nicht mehr vorhanden.", messages.ERROR)
                 return HttpResponseRedirect(redirect_url)
+            quoted_message = issue.messages.filter(is_initial=True).first()
+            quotes_initial = quoted_message is None
         elif quote_key:
             if not quote_key.isdecimal():
                 self.message_user(request, "Die zitierte Nachricht ist ungültig.", messages.ERROR)
@@ -269,6 +292,7 @@ class IssueAdmin(StaffIssueAccessMixin, BaseAdmin):
             author=request.user,
             text=form.cleaned_data["text"],
             quoted_message=quoted_message,
+            quotes_initial=quotes_initial,
         )
         self.message_user(request, "Nachricht gesendet.", messages.SUCCESS)
         return HttpResponseRedirect(redirect_url)
