@@ -1,4 +1,5 @@
 from pathlib import Path
+from uuid import uuid4
 
 from django.conf import settings
 from django.core.validators import FileExtensionValidator, RegexValidator
@@ -361,6 +362,128 @@ class DocumentVersion(BaseModel):
     def __str__(self) -> str:
         label = f" · {self.label}" if self.label else ""
         return f"{self.document} · V{self.version_number}{label}"
+
+
+def managed_download_source_upload_to(instance: "ManagedDownloadVersion", filename: str) -> str:
+    extension = Path(filename).suffix.lower()
+    return f"documents/downloads/{instance.download.slug}/sources/{uuid4().hex}{extension}"
+
+
+def managed_download_output_upload_to(instance: "ManagedDownloadVersion", filename: str) -> str:
+    extension = Path(filename).suffix.lower()
+    return f"documents/downloads/{instance.download.slug}/published/v{instance.version_number}{extension}"
+
+
+class ManagedDownload(BaseModel):
+    """A public download whose source and Shopware publication are managed here."""
+
+    slug = models.SlugField(max_length=120, unique=True, verbose_name=_("Kennung"))
+    title = models.CharField(max_length=255, verbose_name=_("Titel"))
+    category = models.CharField(max_length=120, blank=True, default="", verbose_name=_("Kategorie"))
+    language = models.CharField(max_length=10, blank=True, default="", verbose_name=_("Sprache"))
+    joomla_download_id = models.PositiveIntegerField(
+        null=True, blank=True, unique=True, verbose_name=_("Joomla-Download-ID")
+    )
+    source_document = models.ForeignKey(
+        Document,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="managed_downloads",
+        verbose_name=_("Bearbeitbare Dokumentquelle"),
+        help_text=_("Optional: Eine aktive Dokumentversion kann als PDF-Quelle verwendet werden."),
+    )
+    shopware_media_id = models.CharField(max_length=64, blank=True, default="", verbose_name=_("Shopware Media-ID"))
+    shopware_media_folder_id = models.CharField(
+        max_length=64, blank=True, default="", verbose_name=_("Shopware Medienordner-ID")
+    )
+    shopware_url = models.URLField(max_length=2048, blank=True, default="", verbose_name=_("Shopware Download-URL"))
+    active_version = models.ForeignKey(
+        "ManagedDownloadVersion",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="active_for_downloads",
+        editable=False,
+        verbose_name=_("Veröffentlichte Version"),
+    )
+    is_active = models.BooleanField(default=True, db_index=True, verbose_name=_("Aktiv"))
+
+    class Meta:
+        verbose_name = _("Verwalteter Download")
+        verbose_name_plural = _("Verwaltete Downloads")
+        ordering = ("category", "title")
+
+    def __str__(self) -> str:
+        return self.title
+
+
+class ManagedDownloadVersion(BaseModel):
+    """Immutable source and verified output for one published download version."""
+
+    download = models.ForeignKey(
+        ManagedDownload,
+        on_delete=models.CASCADE,
+        related_name="versions",
+        verbose_name=_("Download"),
+    )
+    version_number = models.PositiveIntegerField(default=0, editable=False, verbose_name=_("Version"))
+    label = models.CharField(max_length=255, blank=True, default="", verbose_name=_("Bezeichnung"))
+    source_file = models.FileField(
+        upload_to=managed_download_source_upload_to,
+        blank=True,
+        validators=[FileExtensionValidator(["pdf", "doc", "docx", "rtf", "html", "htm"])],
+        verbose_name=_("Quelldatei"),
+        help_text=_("PDF und Word-Dateien bleiben unverändert; HTML wird als PDF gerendert."),
+    )
+    source_document_version = models.ForeignKey(
+        DocumentVersion,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="managed_download_versions",
+        verbose_name=_("Dokumentversion als Quelle"),
+    )
+    source_url = models.URLField(
+        max_length=2048, blank=True, default="", verbose_name=_("Ursprüngliche URL")
+    )
+    source_sha256 = models.CharField(max_length=64, blank=True, default="", editable=False)
+    output_file = models.FileField(
+        upload_to=managed_download_output_upload_to,
+        blank=True,
+        editable=False,
+        verbose_name=_("Veröffentlichte Datei"),
+    )
+    output_sha256 = models.CharField(max_length=64, blank=True, default="", editable=False)
+    output_extension = models.CharField(max_length=8, blank=True, default="", editable=False)
+    shopware_url = models.URLField(max_length=2048, blank=True, default="", editable=False)
+    published_at = models.DateTimeField(null=True, blank=True, editable=False, verbose_name=_("Veröffentlicht am"))
+
+    class Meta:
+        verbose_name = _("Downloadversion")
+        verbose_name_plural = _("Downloadversionen")
+        ordering = ("download", "-version_number")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("download", "version_number"),
+                name="documents_unique_managed_download_version",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.download} · V{self.version_number}"
+
+    def clean(self) -> None:
+        super().clean()
+        if bool(self.source_file) == bool(self.source_document_version_id):
+            from django.core.exceptions import ValidationError
+
+            raise ValidationError(_("Genau eine Quelldatei oder Dokumentversion auswählen."))
+        if self.source_document_version_id and self.download_id:
+            if self.download.source_document_id != self.source_document_version.document_id:
+                from django.core.exceptions import ValidationError
+
+                raise ValidationError(_("Die Dokumentversion gehört nicht zur ausgewählten Dokumentquelle."))
 
 
 class DocumentImportJob(BaseModel):

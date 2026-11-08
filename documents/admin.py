@@ -1,5 +1,6 @@
 from django import forms
 from django.contrib import admin, messages
+from django.db.models import Max
 from django.core.files.uploadedfile import UploadedFile
 from django.http import FileResponse, Http404, HttpResponse, HttpResponseRedirect
 from django.template.response import TemplateResponse
@@ -22,7 +23,10 @@ from documents.models import (
     DocumentPlaceholderValue,
     DocumentType,
     DocumentVersion,
+    ManagedDownload,
+    ManagedDownloadVersion,
 )
+from documents.managed_download_service import ManagedDownloadService
 from documents.services import DocumentPdfService, DocumentTemplateContextService
 from documents.tasks import run_document_word_import
 from documents.word_import_service import DocumentWordImportService
@@ -1142,3 +1146,126 @@ class DocumentVersionAdmin(BaseAdmin):
                 f"{publication_message}Media-ID {result['media_id']} überschrieben.",
             )
         return HttpResponseRedirect(reverse("admin:documents_documentversion_change", args=(object_id,)))
+
+
+class ManagedDownloadVersionInline(BaseTabularInline):
+    model = ManagedDownloadVersion
+    extra = 0
+    can_delete = False
+    show_change_link = True
+    fields = ("version_number", "label", "output_extension", "published_at", "shopware_url")
+    readonly_fields = fields
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(ManagedDownload)
+class ManagedDownloadAdmin(BaseAdmin):
+    inlines = (ManagedDownloadVersionInline,)
+    list_display = (
+        "title", "category", "language", "active_version", "shopware_link", "updated_at"
+    )
+    list_filter = ("category", "language", "is_active")
+    search_fields = ("title", "slug", "category", "joomla_download_id")
+    readonly_fields = BaseAdmin.readonly_fields + ("active_version", "shopware_link")
+    fieldsets = (
+        ("Download", {"fields": ("title", "slug", "category", "language", "is_active", "joomla_download_id")}),
+        (
+            "Quelle und Veröffentlichung",
+            {
+                "fields": (
+                    "source_document", "shopware_media_id", "shopware_media_folder_id",
+                    "active_version", "shopware_link",
+                ),
+                "description": (
+                    "Neue Quelldateien werden unter Downloadversionen hochgeladen. Eine PDF kann direkt "
+                    "als Quelle dienen; alternativ erzeugt eine aktive Dokumentversion die PDF. "
+                    "Beim Veröffentlichen wird die Shop-Datei anhand ihrer Prüfsumme geprüft."
+                ),
+            },
+        ),
+        ("System", {"fields": ("created_at", "updated_at")}),
+    )
+
+    @admin.display(description="Shopware")
+    def shopware_link(self, obj):
+        if not obj or not obj.shopware_url:
+            return "-"
+        return format_html('<a href="{}" target="_blank" rel="noopener">Download öffnen</a>', obj.shopware_url)
+
+
+@admin.register(ManagedDownloadVersion)
+class ManagedDownloadVersionAdmin(BaseAdmin):
+    list_display = (
+        "download", "version_number", "label", "source_file", "output_extension",
+        "published_at", "updated_at",
+    )
+    list_filter = ("published_at", "output_extension", "download__category")
+    search_fields = ("download__title", "download__slug", "label", "source_url")
+    readonly_fields = BaseAdmin.readonly_fields + (
+        "version_number", "source_sha256", "output_file", "output_sha256",
+        "output_extension", "shopware_url", "published_at",
+    )
+    actions_detail = (
+        {"title": "Veröffentlichen", "icon": "cloud_upload", "items": ["publish_detail"]},
+    )
+    fieldsets = (
+        (
+            "Version und Quelle",
+            {
+                "fields": (
+                    "download", "version_number", "label", "source_file",
+                    "source_document_version", "source_url", "source_sha256",
+                ),
+                "description": (
+                    "Eine Quelldatei oder eine aktive Dokumentversion auswählen. HTML-Quellen werden "
+                    "zu PDF umgewandelt; PDF- und Word-Dateien werden unverändert veröffentlicht."
+                ),
+            },
+        ),
+        (
+            "Geprüfte Veröffentlichung",
+            {
+                "fields": (
+                    "output_file", "output_extension", "output_sha256", "shopware_url", "published_at"
+                )
+            },
+        ),
+        ("System", {"fields": ("created_at", "updated_at")}),
+    )
+
+    def save_model(self, request, obj, form, change):
+        if not change:
+            highest = obj.download.versions.aggregate(value=Max("version_number"))["value"] or 0
+            obj.version_number = highest + 1
+        super().save_model(request, obj, form, change)
+
+    def get_readonly_fields(self, request, obj=None):
+        if obj and obj.published_at:
+            return self.readonly_fields + ("download", "label", "source_file", "source_document_version", "source_url")
+        return self.readonly_fields
+
+    def has_delete_permission(self, request, obj=None):
+        if obj and obj.published_at:
+            return False
+        return super().has_delete_permission(request, obj)
+
+    @action(
+        description="Version in Shopware veröffentlichen",
+        icon="cloud_upload",
+        variant=ActionVariant.PRIMARY,
+        permissions=("change",),
+    )
+    def publish_detail(self, request, object_id: str):
+        version = self.get_object(request, object_id)
+        if version is None:
+            self.message_user(request, "Downloadversion nicht gefunden.", level=messages.ERROR)
+            return HttpResponseRedirect(reverse("admin:documents_manageddownloadversion_changelist"))
+        try:
+            result = ManagedDownloadService().publish(version)
+        except Exception as exc:
+            self.message_user(request, f"Veröffentlichung fehlgeschlagen: {exc}", level=messages.ERROR)
+        else:
+            self.message_user(request, f"Version {version.version_number} veröffentlicht: {result['url']}")
+        return HttpResponseRedirect(reverse("admin:documents_manageddownloadversion_change", args=(object_id,)))
