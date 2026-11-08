@@ -1220,7 +1220,7 @@ class ManagedDownloadVersionAdmin(BaseAdmin):
                 ),
                 "description": (
                     "Eine Quelldatei oder eine aktive Dokumentversion auswählen. HTML-Quellen werden "
-                    "zu PDF umgewandelt; PDF- und Word-Dateien werden unverändert veröffentlicht."
+                    "zu PDF umgewandelt; PDF-Dateien werden geprüft veröffentlicht. Word-Dateien bleiben Quellen."
                 ),
             },
         ),

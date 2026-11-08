@@ -35,6 +35,8 @@ class ManagedDownloadService(Shopware6Service):
             "download", "source_document_version__document"
         ).get(pk=version.pk)
         download = version.download
+        if not download.is_active:
+            raise ValueError("Dieser Download ist als reine Quelle markiert und darf nicht veröffentlicht werden.")
         if version.published_at:
             return {"media_id": download.shopware_media_id, "url": version.shopware_url}
 
@@ -120,6 +122,10 @@ class ManagedDownloadService(Shopware6Service):
         if extension not in {"pdf", "doc", "docx", "rtf", "html", "htm"}:
             raise ValueError(f"Das Quellformat .{extension} wird nicht unterstützt.")
         source_hash = hashlib.sha256(source_bytes).hexdigest()
+        if extension in {"doc", "docx", "rtf"}:
+            raise ValueError(
+                "Word-Dateien sind nur Quellen. Für eine PDF eine geprüfte Dokumentversion auswählen."
+            )
         if extension in {"html", "htm"}:
             content = WeasyHTML(string=source_bytes.decode("utf-8"), base_url=".").write_pdf()
             self._validate_pdf(content)

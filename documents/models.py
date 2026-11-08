@@ -434,7 +434,7 @@ class ManagedDownloadVersion(BaseModel):
         blank=True,
         validators=[FileExtensionValidator(["pdf", "doc", "docx", "rtf", "html", "htm"])],
         verbose_name=_("Quelldatei"),
-        help_text=_("PDF und Word-Dateien bleiben unverändert; HTML wird als PDF gerendert."),
+        help_text=_("PDF wird geprüft veröffentlicht; Word-Dateien dienen nur als Quelle; HTML wird als PDF gerendert."),
     )
     source_document_version = models.ForeignKey(
         DocumentVersion,

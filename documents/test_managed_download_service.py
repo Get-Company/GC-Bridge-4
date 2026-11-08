@@ -39,12 +39,9 @@ class ManagedDownloadServiceTests(SimpleTestCase):
         with self.assertRaises(ValueError):
             self.service._render_source(self.source("catalog.pdf", b"not a PDF"))
 
-    def test_word_template_is_kept_in_original_format(self):
-        original = b"word-template-binary"
-
-        output, extension, _ = self.service._render_source(self.source("template.docx", original))
-
-        self.assertEqual((output, extension), (original, "docx"))
+    def test_word_template_cannot_be_published_directly(self):
+        with self.assertRaisesMessage(ValueError, "Word-Dateien sind nur Quellen"):
+            self.service._render_source(self.source("template.docx", b"word-template-binary"))
 
     def test_html_source_is_converted_to_readable_pdf(self):
         source = self.source("notice.html", b"<html><body><h1>Notice</h1></body></html>")
