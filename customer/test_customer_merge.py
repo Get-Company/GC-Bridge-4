@@ -596,6 +596,18 @@ class SearchTermParsingTest(SimpleTestCase):
         self.assertIn("addresses.city", rendered)
 
     @patch("shopware.services.CustomerService")
+    def test_shopware_multi_value_and_company_filters_use_valid_or_operator(self, customer_service):
+        customer_service.return_value.request_post.return_value = _sw_customer("a" * 32, "10001")
+
+        numbers = CustomerMergeSearchService().resolve_shopware_erp_numbers(
+            customer_number="10001,10002", company="Musterfirma"
+        )
+
+        self.assertEqual(numbers, ["10001"])
+        criteria = customer_service.return_value.request_post.call_args.kwargs["payload"]
+        self.assertEqual([filter_.operator for filter_ in criteria.filter], ["or", "or"])
+
+    @patch("shopware.services.CustomerService")
     def test_shopware_customer_id_resolves_customer_number(self, customer_service):
         customer_id = "a" * 32
         customer_service.return_value.get_by_id.return_value = _sw_customer(customer_id, "950009")

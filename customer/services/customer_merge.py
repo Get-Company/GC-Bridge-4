@@ -199,7 +199,7 @@ class CustomerMergeSearchService(BaseService):
             elif numbers:
                 criteria.filter.append(
                     MultiFilter(
-                        operator="OR",
+                        operator="or",
                         queries=[EqualsFilter(field="customerNumber", value=n) for n in numbers],
                     )
                 )
@@ -219,7 +219,7 @@ class CustomerMergeSearchService(BaseService):
             for segment in _wildcard_segments(company):
                 criteria.filter.append(
                     MultiFilter(
-                        operator="OR",
+                        operator="or",
                         queries=[
                             ContainsFilter(field="company", value=segment),
                             ContainsFilter(field="addresses.company", value=segment),
