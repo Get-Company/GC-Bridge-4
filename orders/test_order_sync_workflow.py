@@ -117,6 +117,48 @@ class NextStepResolverTest(TestCase):
         self.assertIsNone(OrderSyncWorkflowService().next_step(wf))
 
 
+class NewCustomerAddressMappingTest(TestCase):
+    def test_shared_address_snapshot_uses_one_current_mapping(self):
+        order = make_order()
+        order.billing_address = order.shipping_address
+        order.save(update_fields=("billing_address", "updated_at"))
+        order = Order.objects.get(pk=order.pk)
+        shipping = order.shipping_address
+        billing = order.billing_address
+        self.assertIsNot(shipping, billing)
+
+        shipping.erp_ans_nr = 0
+        shipping.save(update_fields=("erp_ans_nr", "updated_at"))
+        self.assertIsNone(billing.erp_ans_nr)  # Cached before the write.
+
+        workflow = MicrotechOrderSyncWorkflow.objects.create(
+            order=order, state={"shipping_ans_nr": 0, "billing_ans_nr": 0},
+        )
+        service = OrderSyncWorkflowService()
+        mappings = service._address_mappings(workflow)
+        self.assertEqual(mappings["shipping"], mappings["billing"])
+        self.assertEqual(mappings["shipping"]["ans_nr"], 0)
+        service._assert_address_mappings_current(
+            workflow, job=MicrotechGraphQLJob(context={"address_mappings": mappings}),
+        )
+
+    def test_reuses_sole_implicit_contact_with_different_email(self):
+        address = make_order().shipping_address
+        address.first_name = "Max"
+        address.last_name = "Mustermann"
+        address.email = "order@example.test"
+        address.phone = "12345"
+        customer = {"addresses": [{"addressSubNumber": 0, "contacts": [{
+            "contactNumber": 0, "firstName": "Max", "lastName": "Mustermann",
+            "email": "other@example.test", "phone": "12345", "isDefault": True,
+        }]}]}
+        self.assertEqual(
+            OrderSyncWorkflowService._matching_remote_contact_number(
+                customer=customer, address_sub_number=0, address=address,
+            ), 0,
+        )
+
+
 class WorkflowModelTest(TestCase):
     def test_defaults(self):
         order = make_order()

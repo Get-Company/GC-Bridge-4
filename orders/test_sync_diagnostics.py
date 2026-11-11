@@ -131,6 +131,8 @@ class CorrectedAddressMappingTest(TestCase):
         self.shipping.name1 = "Frau"
         self.billing.first_name = "Enno"
         self.billing.name1 = "Firma"
+        self.shipping.save()
+        self.billing.save()
         self.workflow.state = {}
         with self.assertRaisesRegex(ValueError, "dieselbe Microtech-Anschrift"):
             OrderSyncWorkflowService()._assert_address_mappings_current(self.workflow)
@@ -139,5 +141,6 @@ class CorrectedAddressMappingTest(TestCase):
         self.shipping.erp_ans_nr = 2
         self.shipping.erp_asp_nr = 1
         self.shipping.first_name = "Edith"
+        self.shipping.save()
         self.workflow.state = {}
         OrderSyncWorkflowService()._assert_address_mappings_current(self.workflow)

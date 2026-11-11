@@ -116,9 +116,14 @@ class OrderSyncWorkflowService(BaseService):
 
     def _address_mappings(self, workflow: MicrotechOrderSyncWorkflow) -> dict[str, dict]:
         shipping, billing = self._resolve_addresses(workflow.order)
+        # Both order FKs may point to the same Address while Django keeps two
+        # separate, differently aged relation objects in its cache. Read the
+        # mapping once from the database so the job snapshot is consistent.
+        addresses = Address.objects.in_bulk((shipping.pk, billing.pk))
         return {
-            role: {"address_id": address.pk, "ans_nr": _to_int(address.erp_ans_nr),
-                   "asp_nr": _to_int(address.erp_asp_nr)}
+            role: {"address_id": address.pk,
+                   "ans_nr": _to_int(addresses[address.pk].erp_ans_nr),
+                   "asp_nr": _to_int(addresses[address.pk].erp_asp_nr)}
             for role, address in (("shipping", shipping), ("billing", billing))
         }
 
@@ -373,6 +378,20 @@ class OrderSyncWorkflowService(BaseService):
                 for field, value in expected_values.items()
             ):
                 return contact_number
+        # A newly allocated customer can have exactly one contact created by
+        # upsertCustomer. Microtech may give that contact a different email or
+        # salutation than the order address. Reuse it when the person's name
+        # and, when present, phone agree; the contact step updates its fields.
+        if len(candidates) == 1:
+            contact = candidates[0]
+            number = _to_int(contact.get("contactNumber"))
+            names = ("firstName", "lastName")
+            if number is not None and all(
+                expected_values.get(field)
+                and normalize(field, contact.get(field)) == expected_values[field]
+                for field in names
+            ) and (not expected_values.get("phone") or normalize("phone", contact.get("phone")) == expected_values["phone"]):
+                return number
         return None
 
     @staticmethod
