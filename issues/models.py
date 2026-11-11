@@ -294,3 +294,29 @@ class IssueMessage(BaseModel):
 
     def __str__(self) -> str:
         return self.text[:80]
+
+
+class IssueReadState(BaseModel):
+    issue = models.ForeignKey(
+        Issue,
+        on_delete=models.CASCADE,
+        related_name="read_states",
+        verbose_name=_("Issue"),
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="issue_read_states",
+        verbose_name=_("Nutzer"),
+    )
+    last_seen_message_id = models.PositiveBigIntegerField(
+        default=0,
+        verbose_name=_("Zuletzt gelesene Nachricht"),
+    )
+
+    class Meta:
+        verbose_name = _("Issue-Lesestand")
+        verbose_name_plural = _("Issue-Lesestände")
+        constraints = [
+            models.UniqueConstraint(fields=("issue", "user"), name="unique_issue_read_state")
+        ]

@@ -61,16 +61,17 @@ Spalten der Liste
 +----------------------+----------------------------------------------+
 | Spalte               | Bedeutung                                    |
 +======================+==============================================+
-| **Kurzbeschreibung** | Der Titel des Issues. Ein Klick öffnet den   |
-|                      | Vorgang.                                     |
+| **Issue**            | Der Titel des Issues. Ein Klick öffnet den   |
+|                      | Vorgang. Nach einer ungelesenen Antwort      |
+|                      | erscheint er fett.                           |
++----------------------+----------------------------------------------+
+| **Letzte Antwort**   | Einzeilige Vorschau der neuesten Antwort    |
+|                      | im Chat. Auch sie ist bei einer ungelesenen  |
+|                      | Antwort fett.                                |
 +----------------------+----------------------------------------------+
 | **Kategorie**        | Das Thema, zu dem der Vorgang gehört.        |
 +----------------------+----------------------------------------------+
 | **Status**           | Der aktuelle Bearbeitungsstand.              |
-+----------------------+----------------------------------------------+
-| **Priorität**        | Zeigt, wie dringend der Vorgang ist. Die     |
-|                      | Priorität kann direkt in der Liste geändert  |
-|                      | werden.                                      |
 +----------------------+----------------------------------------------+
 | **Gemeldet von**     | Der Mitarbeiter, der das Issue angelegt hat. |
 +----------------------+----------------------------------------------+
@@ -78,15 +79,14 @@ Spalten der Liste
 |                      | Zuweisung kann direkt in der Liste geändert  |
 |                      | werden.                                      |
 +----------------------+----------------------------------------------+
-| **Link**             | Zeigt **Öffnen**, wenn im Issue eine Adresse |
-|                      | hinterlegt wurde. Der Link öffnet sich in    |
-|                      | einem neuen Fenster oder Tab. Ohne           |
-|                      | hinterlegte Adresse steht hier ein Strich.   |
-+----------------------+----------------------------------------------+
-| **Anhänge**          | Anzahl der am Issue gespeicherten Dateien.   |
-+----------------------+----------------------------------------------+
 | **Angelegt am**      | Zeitpunkt, zu dem das Issue erstellt wurde.  |
 +----------------------+----------------------------------------------+
+
+Neue Antworten anderer Personen werden für jeden Mitarbeiter getrennt als
+ungelesen markiert. Beim Öffnen des Issues verschwindet die Fettschrift.
+Eigene Antworten markieren den Vorgang nicht als ungelesen. Priorität, Link
+und Anhänge bleiben in der Detailansicht verfügbar; die Priorität bleibt
+außerdem als Listenfilter erhalten.
 
 Suchen und filtern
 ~~~~~~~~~~~~~~~~~~

@@ -3,6 +3,7 @@ from django.contrib import admin, messages
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied
 from django.http import HttpResponseNotAllowed, HttpResponseRedirect
+from django.db.models import OuterRef, Subquery
 from django.urls import path, reverse
 from django.utils import timezone
 from django.utils.html import format_html
@@ -10,7 +11,7 @@ from unfold.decorators import action
 from unfold.enums import ActionVariant
 
 from core.admin import BaseAdmin, BaseTabularInline
-from issues.models import ArchivedIssue, DEFAULT_ASSIGNED_USER_ID, Issue, IssueAttachment, IssueCategory, IssueMessage
+from issues.models import ArchivedIssue, DEFAULT_ASSIGNED_USER_ID, Issue, IssueAttachment, IssueCategory, IssueMessage, IssueReadState
 
 
 ARCHIVED_ISSUE_STATUSES = (Issue.Status.RESOLVED, Issue.Status.CLOSED)
@@ -113,17 +114,15 @@ class IssueAdmin(StaffIssueAccessMixin, BaseAdmin):
     change_form_template = "admin/issues/issue/change_form.html"
     inlines = (IssueAttachmentInline,)
     list_display = (
-        "title",
+        "issue_title",
+        "last_reply_preview",
         "category",
         "status",
-        "priority",
         "reported_by",
         "assigned_to",
-        "source_link",
-        "attachment_count",
         "created_at",
     )
-    list_editable = ("priority", "assigned_to")
+    list_editable = ("assigned_to",)
     list_filter = ("status", "priority", "category", "assigned_to", "created_at")
     search_fields = (
         "title",
@@ -150,8 +149,65 @@ class IssueAdmin(StaffIssueAccessMixin, BaseAdmin):
     def get_queryset(self, request):
         queryset = super().get_queryset(request)
         if self._archived_state:
-            return queryset.filter(status__in=ARCHIVED_ISSUE_STATUSES)
-        return queryset.exclude(status__in=ARCHIVED_ISSUE_STATUSES)
+            queryset = queryset.filter(status__in=ARCHIVED_ISSUE_STATUSES)
+        else:
+            queryset = queryset.exclude(status__in=ARCHIVED_ISSUE_STATUSES)
+        replies = IssueMessage.objects.filter(
+            issue_id=OuterRef("pk"), is_initial=False, author__isnull=False
+        ).order_by("-pk")
+        foreign_replies = replies.exclude(author_id=request.user.pk)
+        read_states = IssueReadState.objects.filter(
+            issue_id=OuterRef("pk"), user_id=request.user.pk
+        )
+        return queryset.annotate(
+            latest_reply_text=Subquery(replies.values("text")[:1]),
+            latest_foreign_reply_id=Subquery(foreign_replies.values("pk")[:1]),
+            last_seen_message_id=Subquery(read_states.values("last_seen_message_id")[:1]),
+        )
+
+    @staticmethod
+    def _has_unread_reply(obj):
+        latest_id = obj.latest_foreign_reply_id
+        return latest_id is not None and latest_id > (obj.last_seen_message_id or 0)
+
+    @admin.display(description="Issue", ordering="title")
+    def issue_title(self, obj):
+        if self._has_unread_reply(obj):
+            return format_html('<strong title="Neue Antwort">{}</strong>', obj.title)
+        return obj.title
+
+    @admin.display(description="Letzte Antwort")
+    def last_reply_preview(self, obj):
+        preview = " ".join((obj.latest_reply_text or "").split())
+        if not preview:
+            return "–"
+        style = "display:block;max-width:36rem;overflow:hidden;white-space:nowrap;text-overflow:ellipsis"
+        if self._has_unread_reply(obj):
+            return format_html('<strong style="{}" title="{}">{}</strong>', style, preview, preview)
+        return format_html('<span style="{}" title="{}">{}</span>', style, preview, preview)
+
+    def change_view(self, request, object_id, form_url="", extra_context=None):
+        issue = self.get_object(request, object_id) if request.method == "GET" else None
+        seen_id = 0
+        if issue is not None:
+            seen_id = (
+                issue.messages.filter(is_initial=False)
+                .order_by("-pk")
+                .values_list("pk", flat=True)
+                .first()
+                or 0
+            )
+        response = super().change_view(request, object_id, form_url, extra_context)
+        if issue is not None and response.status_code == 200:
+            state, _ = IssueReadState.objects.get_or_create(
+                issue=issue,
+                user=request.user,
+                defaults={"last_seen_message_id": seen_id},
+            )
+            IssueReadState.objects.filter(
+                pk=state.pk, last_seen_message_id__lt=seen_id
+            ).update(last_seen_message_id=seen_id)
+        return response
 
     def has_add_permission(self, request):
         return request.user.is_active and request.user.is_staff
@@ -415,7 +471,7 @@ class ArchivedIssueAdmin(IssueAdmin):
     """Dedicated archive for issues with a terminal status."""
 
     _archived_state = True
-    list_editable = ("priority", "assigned_to")
+    list_editable = ("assigned_to",)
     actions = ("restore_issues",)
     actions_row = ("restore_issue_row",)
     actions_detail = (
