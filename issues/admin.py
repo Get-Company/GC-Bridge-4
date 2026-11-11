@@ -173,8 +173,22 @@ class IssueAdmin(StaffIssueAccessMixin, BaseAdmin):
     @admin.display(description="Issue", ordering="title")
     def issue_title(self, obj):
         if self._has_unread_reply(obj):
-            return format_html('<strong title="Neue Antwort">{}</strong>', obj.title)
-        return obj.title
+            return format_html(
+                '<span style="display:inline-flex;align-items:center;gap:.4rem">'
+                '<span role="img" aria-label="Ungelesene Antwort" '
+                'class="material-symbols-outlined" '
+                'style="font-size:18px;line-height:1;color:#2563eb">mail</span>'
+                '<strong>{}</strong></span>',
+                obj.title,
+            )
+        return format_html(
+            '<span style="display:inline-flex;align-items:center;gap:.4rem">'
+            '<span role="img" aria-label="Keine ungelesene Antwort" '
+            'class="material-symbols-outlined" '
+            'style="font-size:18px;line-height:1;color:#94a3b8">drafts</span>'
+            '<span>{}</span></span>',
+            obj.title,
+        )
 
     @admin.display(description="Letzte Antwort")
     def last_reply_preview(self, obj):

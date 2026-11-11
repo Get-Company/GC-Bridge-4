@@ -44,6 +44,7 @@ class IssueListUnreadTest(TestCase):
         admin, issue = self.list_issue_for(self.reporter)
         self.assertTrue(admin._has_unread_reply(issue))
         self.assertIn("<strong", admin.issue_title(issue))
+        self.assertIn(">mail</span>", admin.issue_title(issue))
         preview = str(admin.last_reply_preview(issue))
         self.assertIn("Ich prüfe die Nummer &lt;heute&gt;.", preview)
         self.assertNotIn("\n", preview)
@@ -58,6 +59,7 @@ class IssueListUnreadTest(TestCase):
         admin, issue = self.list_issue_for(self.reporter)
         self.assertFalse(admin._has_unread_reply(issue))
         self.assertNotIn("<strong", str(admin.issue_title(issue)))
+        self.assertIn(">drafts</span>", admin.issue_title(issue))
 
         IssueMessage.objects.create(issue=self.issue, author=self.reporter, text="Danke.")
         admin, issue = self.list_issue_for(self.reporter)

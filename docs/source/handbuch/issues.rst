@@ -63,7 +63,8 @@ Spalten der Liste
 +======================+==============================================+
 | **Issue**            | Der Titel des Issues. Ein Klick öffnet den   |
 |                      | Vorgang. Nach einer ungelesenen Antwort      |
-|                      | erscheint er fett.                           |
+|                      | erscheint er fett mit geschlossenem          |
+|                      | Briefumschlag. Sonst ist der Umschlag offen. |
 +----------------------+----------------------------------------------+
 | **Letzte Antwort**   | Einzeilige Vorschau der neuesten Antwort    |
 |                      | im Chat. Auch sie ist bei einer ungelesenen  |
