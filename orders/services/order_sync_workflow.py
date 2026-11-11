@@ -59,6 +59,18 @@ class OrderSyncWorkflowService(BaseService):
     def _is_step_applicable(self, workflow: MicrotechOrderSyncWorkflow, step: str) -> bool:
         """Prüft anhand des Workflow-Zustands, ob ein Step ausgeführt werden soll."""
         state = workflow.state or {}
+        if step in (
+            "shipping_contact", "billing_contact",
+            "clear_default_shipping_contact", "clear_default_billing_contact",
+        ):
+            role = "shipping" if "shipping" in step else "billing"
+            shipping, billing = self._resolve_addresses(workflow.order)
+            address = shipping if role == "shipping" else billing
+            if (address.erp_ans_nr is not None and address.erp_asp_nr is None
+                    and not address.first_name and not address.last_name):
+                # A mapped postal address without a Shopware person carries no
+                # instruction to replace the existing microtech contact.
+                return False
         if step == "billing_address":
             return not bool(state.get("billing_same_as_shipping"))
         if step in ("billing_contact", "clear_default_billing_contact"):

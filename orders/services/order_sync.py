@@ -315,23 +315,31 @@ class OrderSyncService(BaseService):
         customer.save()
 
         billing_data = _normalize_entity(order_data.get("billingAddress") or {})
-        billing_address = self._upsert_address(
+        billing_address = self._mapped_customer_address_for_order(
+            customer=customer, order_address=billing_data,
+            customer_payload=customer_payload, role="billing",
+        ) if billing_data else None
+        billing_address = billing_address or (self._upsert_address(
             customer=customer,
             address_data=billing_data,
             fallback_email=customer.email,
             is_invoice=True,
             is_shipping=False,
-        ) if billing_data else None
+        ) if billing_data else None)
 
         deliveries = _normalize_entity(order_data.get("deliveries") or [])
         shipping_data = _normalize_entity((deliveries[0] or {}).get("shippingOrderAddress")) if deliveries else None
-        shipping_address = self._upsert_address(
+        shipping_address = self._mapped_customer_address_for_order(
+            customer=customer, order_address=shipping_data,
+            customer_payload=customer_payload, role="shipping",
+        ) if shipping_data else None
+        shipping_address = shipping_address or (self._upsert_address(
             customer=customer,
             address_data=shipping_data or {},
             fallback_email=customer.email,
             is_invoice=False,
             is_shipping=True,
-        ) if shipping_data else None
+        ) if shipping_data else None)
 
         (
             default_billing_address,
@@ -479,6 +487,54 @@ class OrderSyncService(BaseService):
         normalized = _normalize_entity(addresses)
         return [item for item in normalized if isinstance(item, dict)]
 
+    def _mapped_customer_address_for_order(
+        self, *, customer: Customer, order_address: dict[str, Any],
+        customer_payload: dict[str, Any], role: str,
+    ) -> Address | None:
+        """Use Bridge edits when an order snapshot identifies a mapped SW address."""
+        if not order_address:
+            return None
+        explicit_id = _to_str(
+            order_address.get("customerAddressId") or order_address.get("originalAddressId")
+        )
+        if explicit_id:
+            match = Address.objects.filter(
+                customer=customer, api_id__iexact=explicit_id,
+                erp_ans_nr__isnull=False,
+            ).first()
+            if match:
+                return match
+        source_addresses = self._extract_customer_addresses(customer_payload)
+        if not source_addresses:
+            return None
+
+        def signature(data: dict[str, Any]) -> tuple[str, ...]:
+            return tuple(
+                _to_str(data.get(field)).casefold()
+                for field in ("street", "zipcode", "city", "company", "firstName", "lastName")
+            )
+
+        wanted = signature(order_address)
+        if not all(wanted[:3]):
+            return None
+        source_ids = [
+            _to_str(source.get("id")) for source in source_addresses
+            if signature(source) == wanted and _to_str(source.get("id"))
+        ]
+        if not source_ids:
+            return None
+        default_id = _to_str(customer_payload.get(
+            "defaultShippingAddressId" if role == "shipping" else "defaultBillingAddressId"
+        ))
+        if default_id in source_ids:
+            source_ids = [default_id]
+        if len(source_ids) != 1:
+            return None
+        return Address.objects.filter(
+            customer=customer, api_id__iexact=source_ids[0],
+            erp_ans_nr__isnull=False,
+        ).first()
+
     def _upsert_address(
         self,
         *,
@@ -501,6 +557,15 @@ class OrderSyncService(BaseService):
 
         if api_id and address.api_id != api_id:
             address.api_id = api_id
+
+        if getattr(address, "pk", None) and address.erp_ans_nr is not None:
+            # Mapped Bridge addresses may have operator edits. An order import
+            # can update their role, but never restore stale Shopware fields.
+            address.erp_nr = _to_int(customer.erp_nr) or None
+            address.is_invoice = is_invoice
+            address.is_shipping = is_shipping
+            address.save(update_fields=["erp_nr", "is_invoice", "is_shipping", "updated_at"])
+            return address
 
         country = address_data.get("country") or {}
         salutation = address_data.get("salutation") or {}
@@ -539,6 +604,7 @@ class OrderSyncService(BaseService):
 
         candidates = Address.objects.filter(
             customer=customer,
+            erp_ans_nr__isnull=True,
             street=street,
             postal_code=postal_code,
             city=city,

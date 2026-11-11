@@ -124,6 +124,80 @@ class ManualCustomerMappingTests(SimpleTestCase):
         self.assertEqual(client.request_customer.call_count, 2)
         upsert.assert_called_once()
 
+    def test_extra_contact_on_same_postal_address_stays_non_default(self):
+        sw_id, first_id, extra_id = "a" * 32, "b" * 32, "c" * 32
+        customer = SimpleNamespace(pk=1, erp_nr="123", api_id=sw_id, addresses=MagicMock())
+        first = Address(id=11, api_id=first_id, erp_ans_nr=4, erp_asp_nr=2,
+                        street="Hauptstr. 1", postal_code="12345", city="Berlin",
+                        first_name="Max", last_name="Muster")
+        extra = Address(id=12, api_id=extra_id, erp_ans_nr=4, erp_asp_nr=3,
+                        street="Hauptstr. 1", postal_code="12345", city="Berlin",
+                        first_name="Mia", last_name="Muster")
+        customer.addresses.exclude.return_value.filter.return_value = [first, extra]
+        remote = {"customerNumber": "123", "defaultShippingAddressNumber": 4,
+                  "defaultBillingAddressNumber": 4, "addresses": [{
+                      "addressSubNumber": 4, "isDefaultShipping": True,
+                      "isDefaultBilling": True, "street": "Hauptstr. 1",
+                      "zipCode": "12345", "city": "Berlin", "contacts": [
+                          {"contactNumber": 2, "isDefault": True,
+                           "firstName": "Max", "lastName": "Muster"},
+                          {"contactNumber": 3, "isDefault": False,
+                           "firstName": "Mia", "lastName": "Muster"},
+                      ],
+                  }]}
+        client = MagicMock()
+        client.request_customer.side_effect = [{"customer": remote}, {"customer": remote}]
+        connection = MagicMock()
+        connection.__enter__.return_value = client
+        with patch("customer.services.customer_mapping.Customer.objects.prefetch_related") as lookup, \
+             patch("customer.services.customer_mapping.Customer.objects.filter"), \
+             patch("customer.services.customer_mapping.LogEntry.objects.log_actions"), \
+             patch("microtech.services.microtech_connection", return_value=connection), \
+             patch.object(CustomerMappingService, "_shopware_customer", return_value={
+                 "defaultShippingAddressId": first_id,
+                 "defaultBillingAddressId": first_id,
+                 "addresses": [{"id": first_id}, {"id": extra_id}],
+             }), \
+             patch("customer.services.customer_mapping.CustomerUpsertMicrotechService.upsert_customer"), \
+             patch("customer.services.customer_mapping.CustomerUpsertMicrotechService._build_contact_person_input",
+                   return_value={"firstName": "Mia", "isDefault": True}):
+            lookup.return_value.filter.return_value.first.return_value = customer
+            result = CustomerMappingService().sync_customer(customer_id=1, user_id=1)
+        self.assertEqual(result["addresses_checked"], 2)
+        client.update_contact_person.assert_called_once_with(123, 4, 3, {"firstName": "Mia"})
+
+    def test_person_requires_explicit_contact_assignment_before_transfer(self):
+        sw_id, address_id = "a" * 32, "b" * 32
+        customer = SimpleNamespace(pk=1, erp_nr="123", api_id=sw_id, addresses=MagicMock())
+        customer.addresses.exclude.return_value.filter.return_value = [
+            Address(api_id=address_id, erp_ans_nr=4, first_name="Mia")
+        ]
+        with patch("customer.services.customer_mapping.Customer.objects.prefetch_related") as lookup, \
+             patch.object(CustomerMappingService, "_shopware_customer", return_value={}):
+            lookup.return_value.filter.return_value.first.return_value = customer
+            with self.assertRaisesRegex(ValueError, "Ansprechpartner-Zuordnung"):
+                CustomerMappingService().sync_customer(customer_id=1, user_id=1)
+
+    def test_editing_shared_postal_field_updates_bridge_siblings(self):
+        selected = Address(id=11, api_id="a" * 32, erp_ans_nr=4, street="Alt 1")
+        sibling = Address(id=12, api_id="b" * 32, erp_ans_nr=4, street="Alt 1")
+        with patch("customer.services.customer_mapping.transaction.atomic"), \
+             patch("customer.services.customer_mapping.Address.objects.select_for_update") as locked, \
+             patch("customer.services.customer_mapping.Address.objects.filter"), \
+             patch("customer.services.customer_mapping.LogEntry.objects.log_actions"), \
+             patch.object(selected, "save") as selected_save, \
+             patch.object(sibling, "save") as sibling_save:
+            locked.return_value.filter.return_value.first.return_value = selected
+            locked.return_value.filter.return_value.exclude.return_value = [sibling]
+            result = CustomerMappingService().edit_address(
+                customer_id=1, shopware_address_id=selected.api_id,
+                fields={"street": "Neu 8"}, user_id=1,
+            )
+        self.assertEqual(result["bridge"]["street"], "Neu 8")
+        self.assertEqual(sibling.street, "Neu 8")
+        selected_save.assert_called_once()
+        sibling_save.assert_called_once()
+
     def test_conflicting_contact_defaults_fail_before_remote_write(self):
         customer = Customer(erp_nr="123", name="Firma")
         shipping = Address(customer=customer, erp_ans_nr=4, erp_asp_nr=2, is_shipping=True)

@@ -25,10 +25,54 @@ from orders.services.order_upsert_microtech import (
     OrderUpsertMicrotechService,
 )
 from orders.services.order_sync import OrderSyncService
+from orders.services.order_sync_workflow import OrderSyncWorkflowService
 from products.models import Product
 
 
 class OrderGraphQLPayloadTest(SimpleTestCase):
+    def test_order_uses_mapped_bridge_address_after_shopware_edit(self):
+        bridge = Address(api_id="sw-address", erp_ans_nr=4, erp_asp_nr=2,
+                         street="Neue Straße 8", postal_code="12345", city="Berlin")
+        customer = Customer(erp_nr="123")
+        source = {"id": "sw-address", "street": "Alte Straße 1", "zipcode": "12345",
+                  "city": "Berlin", "firstName": "Max", "lastName": "Muster"}
+        snapshot = {"street": "Alte Straße 1", "zipcode": "12345", "city": "Berlin",
+                    "firstName": "Max", "lastName": "Muster"}
+        with patch("orders.services.order_sync.Address.objects.filter") as lookup:
+            lookup.return_value.first.return_value = bridge
+            selected = OrderSyncService()._mapped_customer_address_for_order(
+                customer=customer, order_address=snapshot,
+                customer_payload={"addresses": [source], "defaultShippingAddressId": "sw-address"},
+                role="shipping",
+            )
+        self.assertIs(selected, bridge)
+        self.assertEqual(selected.street, "Neue Straße 8")
+        self.assertEqual(selected.erp_asp_nr, 2)
+
+    def test_order_import_keeps_bridge_fields_on_mapped_address(self):
+        bridge = Address(id=9, api_id="sw-address", erp_ans_nr=4,
+                         street="Neue Straße 8", postal_code="12345", city="Berlin")
+        with patch("orders.services.order_sync.Address.objects.filter") as lookup, \
+             patch.object(bridge, "save") as save:
+            lookup.return_value.filter.return_value.first.return_value = bridge
+            result = OrderSyncService()._upsert_address(
+                customer=Customer(erp_nr="123"),
+                address_data={"id": "sw-address", "street": "Alte Straße 1", "zipcode": "12345"},
+                fallback_email="", is_invoice=True, is_shipping=False,
+            )
+        self.assertIs(result, bridge)
+        self.assertEqual(bridge.street, "Neue Straße 8")
+        save.assert_called_once()
+
+    def test_no_shopware_person_preserves_existing_microtech_default(self):
+        address = Address(erp_ans_nr=4, erp_asp_nr=None, first_name="", last_name="")
+        order = SimpleNamespace(shipping_address=address, billing_address=address)
+        workflow = SimpleNamespace(order=order, state={})
+        service = OrderSyncWorkflowService()
+        for step in ("shipping_contact", "billing_contact",
+                     "clear_default_shipping_contact", "clear_default_billing_contact"):
+            self.assertFalse(service._is_step_applicable(workflow, step), step)
+
     def test_reexport_rejects_a_remote_document_with_another_vorgangsart(self):
         order = Order(api_id="order-guard", order_number="SW-20001")
         service = OrderUpsertMicrotechService()

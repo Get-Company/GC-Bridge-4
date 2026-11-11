@@ -106,6 +106,7 @@ class CustomerUpsertMicrotechService(BaseService):
         na1_static_value: str = "",
         input_overrides: Mapping[str, Any] | None = None,
         erp: Any | None = None,
+        preserve_unmapped_contacts: bool = False,
     ) -> UpsertResult:
         if not isinstance(customer, Customer):
             raise TypeError("customer must be an instance of Customer.")
@@ -135,6 +136,7 @@ class CustomerUpsertMicrotechService(BaseService):
                     na1_static_value=na1_static_value,
                     input_overrides=input_overrides,
                     erp=erp_connection,
+                    preserve_unmapped_contacts=preserve_unmapped_contacts,
                 )
 
         if not isinstance(erp, MicrotechGraphQLClientService):
@@ -147,6 +149,7 @@ class CustomerUpsertMicrotechService(BaseService):
             na1_static_value=na1_static_value,
             input_overrides=input_overrides,
             client=erp,
+            preserve_unmapped_contacts=preserve_unmapped_contacts,
         )
 
     def _upsert_customer_graphql(
@@ -159,6 +162,7 @@ class CustomerUpsertMicrotechService(BaseService):
         na1_static_value: str,
         input_overrides: Mapping[str, Any] | None,
         client: MicrotechGraphQLClientService,
+        preserve_unmapped_contacts: bool = False,
     ) -> UpsertResult:
         erp_nr = _to_str(customer.erp_nr)
         if not erp_nr:
@@ -267,6 +271,8 @@ class CustomerUpsertMicrotechService(BaseService):
             (billing_ans_nr, _to_int(billing.erp_asp_nr)),
         }
         for address_sub_number, selected_contact_number in synced_contact_pairs:
+            if preserve_unmapped_contacts and selected_contact_number is None:
+                continue
             self._clear_existing_default_contact_flags(
                 client=client,
                 address_number=address_number,

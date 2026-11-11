@@ -69,20 +69,24 @@ def customer_mapping_view(request):
 
 
 def customer_mapping_api(request):
-    if request.method != "POST":
-        return JsonResponse({"error": "POST erforderlich."}, status=405)
-    if not request.user.has_perm("customer.change_customer"):
+    if request.method not in {"GET", "POST"}:
+        return JsonResponse({"error": "GET oder POST erforderlich."}, status=405)
+    if request.method == "GET" and not request.user.has_perm("customer.view_customer"):
+        return JsonResponse({"error": "Keine Berechtigung zur Kundenansicht."}, status=403)
+    if request.method == "POST" and not request.user.has_perm("customer.change_customer"):
         return JsonResponse({"error": "Keine Berechtigung zur Kundenbearbeitung."}, status=403)
     try:
         from customer.services.customer_mapping import CustomerMappingService
 
+        service = CustomerMappingService()
+        if request.method == "GET":
+            return JsonResponse(service.mappings(int(request.GET.get("customer_id"))))
         if len(request.body) > 4096:
             raise ValueError("Die Anfrage ist zu groß.")
         body = json.loads(request.body)
         if not isinstance(body, dict):
             raise ValueError("Ein JSON-Objekt ist erforderlich.")
         action = body.get("action")
-        service = CustomerMappingService()
         if action == "customer":
             if not request.user.has_perm("customer.add_customer"):
                 return JsonResponse({"error": "Keine Berechtigung zum Anlegen von Kunden."}, status=403)
@@ -94,13 +98,36 @@ def customer_mapping_api(request):
             if not request.user.has_perms(["customer.change_address", "customer.add_address"]):
                 return JsonResponse({"error": "Keine Berechtigung zur Adresszuordnung."}, status=403)
             ans_nr = body.get("ans_nr")
-            asp_nr = body.get("asp_nr")
             result = service.link_address(
                 customer_id=int(body.get("customer_id")),
                 shopware_address_id=body.get("shopware_address_id"),
                 ans_nr=int(ans_nr),
-                asp_nr=None if asp_nr in (None, "") else int(asp_nr),
                 job_id=int(body.get("job_id")), user_id=request.user.pk,
+            )
+        elif action == "contact":
+            if not request.user.has_perm("customer.change_address"):
+                return JsonResponse({"error": "Keine Berechtigung zur Ansprechpartner-Zuordnung."}, status=403)
+            result = service.link_contact(
+                customer_id=int(body.get("customer_id")),
+                shopware_address_id=body.get("shopware_address_id"),
+                asp_nr=int(body.get("asp_nr")),
+                job_id=int(body.get("job_id")), user_id=request.user.pk,
+            )
+        elif action == "create_contact":
+            if not request.user.has_perm("customer.change_address"):
+                return JsonResponse({"error": "Keine Berechtigung zum Anlegen von Ansprechpartnern."}, status=403)
+            result = service.create_contact(
+                customer_id=int(body.get("customer_id")),
+                shopware_address_id=body.get("shopware_address_id"),
+                user_id=request.user.pk,
+            )
+        elif action == "edit_address":
+            if not request.user.has_perm("customer.change_address"):
+                return JsonResponse({"error": "Keine Berechtigung zur Adressbearbeitung."}, status=403)
+            result = service.edit_address(
+                customer_id=int(body.get("customer_id")),
+                shopware_address_id=body.get("shopware_address_id"),
+                fields=body.get("fields"), user_id=request.user.pk,
             )
         elif action == "sync":
             if not request.user.has_perm("customer.change_address"):

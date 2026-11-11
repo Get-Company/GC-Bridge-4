@@ -9,15 +9,28 @@ Kundennummern. Ziehen Sie das Shopware-Konto von links und das passende
 microtech-Konto von rechts in die Mitte. Sobald beide Cards dort liegen,
 speichert die Bridge die Shopware-ID und die microtech-AdrNr als Paar.
 
-Danach ordnen Sie jede Shopware-Adresse einer microtech-Anschrift zu. Wählen
-Sie an der microtech-Anschrift bei Bedarf den passenden Ansprechpartner,
-bevor Sie die Card in die Mitte ziehen. **Nur Anschrift** bedeutet, dass
-kein Ansprechpartner zugeordnet wird. Die Bridge speichert die Shopware-
-Adress-ID zusammen mit AnsNr und gegebenenfalls AnspNr.
+Danach ordnen Sie im Schritt **Adressen** jede Shopware-Adresse einer
+microtech-Anschrift zu. Mehrere Shopware-Adressen dürfen dieselbe AnsNr nutzen,
+wenn ihre Anschrift übereinstimmt. Zugeordnete Cards werden ausgegraut und
+können bei Bedarf erneut zugeordnet werden. Über **Bridge-Daten bearbeiten**
+ändern Sie die gespeicherte Adresse in der Bridge. Shopware bleibt unverändert;
+die Bridge-Werte werden für passende spätere Bestellungen verwendet. Gemeinsam
+genutzte Anschriftfelder werden bei allen Bridge-Adressen derselben AnsNr
+aktualisiert.
+
+Im Schritt **Ansprechpartner** erscheinen Personen aus Shopware-Adressen als
+eigene virtuelle Cards. Ordnen Sie jede Person einem microtech-Ansprechpartner
+unter der bereits gewählten AnsNr zu. Fehlt dieser, legen Sie ihn mit
+**Fehlt in microtech? Anlegen** ausdrücklich an. Ein microtech-Ansprechpartner
+ohne Gegenstück in Shopware bleibt sichtbar und unzugeordnet. Die Schritte
+lassen sich jederzeit umschalten; alle Datensätze bleiben in den Seitenspalten
+sichtbar.
 
 Mit **Zuordnungen nach microtech übertragen und prüfen** schreiben Sie die
 zugeordneten Daten nach microtech. Dafür müssen die Shopware-Standardadressen
-für Rechnung und Lieferung zugeordnet sein. Vor dem Schreiben prüft die Bridge,
+für Rechnung und Lieferung zugeordnet sein. Personen auf zugeordneten
+Shopware-Adressen müssen vorher ebenfalls zugeordnet oder ausdrücklich angelegt
+sein. Vor dem Schreiben prüft die Bridge,
 ob alle ausgewählten Anschriften und Ansprechpartner in microtech noch unter
 der gewählten AdrNr existieren. Anschließend liest sie den Kunden erneut und
 prüft Anschrift, Ansprechpartner und Standardrollen. Wenn dieselbe Anschrift
