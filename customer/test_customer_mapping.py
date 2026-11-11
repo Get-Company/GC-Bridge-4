@@ -88,6 +88,42 @@ class ManualCustomerMappingTests(SimpleTestCase):
                 with self.assertRaisesRegex(ValueError, "verschiedenen Ansprechpartnern"):
                     CustomerMappingService().sync_customer(customer_id=1, user_id=1)
 
+    def test_transfer_checks_the_selected_contact_after_microtech_write(self):
+        sw_id = "a" * 32
+        address_id = "b" * 32
+        customer = SimpleNamespace(pk=1, erp_nr="123", api_id=sw_id, addresses=MagicMock())
+        address = Address(id=11, api_id=address_id, erp_ans_nr=4, erp_asp_nr=2,
+                          street="Hauptstr. 1", postal_code="12345", city="Berlin",
+                          first_name="Max", last_name="Muster")
+        customer.addresses.exclude.return_value.filter.return_value = [address]
+        remote = {"customerNumber": "123", "defaultShippingAddressNumber": 4,
+                  "defaultBillingAddressNumber": 4, "addresses": [{
+                      "addressSubNumber": 4, "isDefaultShipping": True,
+                      "isDefaultBilling": True, "street": "Hauptstr. 1",
+                      "zipCode": "12345", "city": "Berlin",
+                      "contacts": [{"contactNumber": 2, "isDefault": True,
+                                    "firstName": "Max", "lastName": "Muster"}],
+                  }]}
+        client = MagicMock()
+        client.request_customer.side_effect = [{"customer": remote}, {"customer": remote}]
+        connection = MagicMock()
+        connection.__enter__.return_value = client
+        with patch("customer.services.customer_mapping.Customer.objects.prefetch_related") as lookup, \
+             patch("customer.services.customer_mapping.Customer.objects.filter"), \
+             patch("customer.services.customer_mapping.LogEntry.objects.log_actions"), \
+             patch("microtech.services.microtech_connection", return_value=connection), \
+             patch.object(CustomerMappingService, "_shopware_customer", return_value={
+                 "defaultShippingAddressId": address_id,
+                 "defaultBillingAddressId": address_id,
+                 "addresses": [{"id": address_id}],
+             }), \
+             patch("customer.services.customer_mapping.CustomerUpsertMicrotechService.upsert_customer") as upsert:
+            lookup.return_value.filter.return_value.first.return_value = customer
+            result = CustomerMappingService().sync_customer(customer_id=1, user_id=1)
+        self.assertEqual(result["addresses_checked"], 1)
+        self.assertEqual(client.request_customer.call_count, 2)
+        upsert.assert_called_once()
+
     def test_conflicting_contact_defaults_fail_before_remote_write(self):
         customer = Customer(erp_nr="123", name="Firma")
         shipping = Address(customer=customer, erp_ans_nr=4, erp_asp_nr=2, is_shipping=True)
