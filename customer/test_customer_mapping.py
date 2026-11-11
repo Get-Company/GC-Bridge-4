@@ -178,6 +178,33 @@ class ManualCustomerMappingTests(SimpleTestCase):
             with self.assertRaisesRegex(ValueError, "Ansprechpartner-Zuordnung"):
                 CustomerMappingService().sync_customer(customer_id=1, user_id=1)
 
+    def test_reselecting_same_postal_address_keeps_contact_assignment(self):
+        customer = Customer(id=680, erp_nr="13736", api_id="a" * 32)
+        address = Address(id=11, customer=customer, api_id="b" * 32,
+                          erp_ans_nr=4, erp_asp_nr=2, erp_ans_id=8, erp_asp_id=9)
+        with patch("customer.services.customer_mapping.Customer.objects.filter") as customers, \
+             patch("customer.services.customer_mapping.Address.objects.filter") as addresses, \
+             patch("customer.services.customer_mapping.Address.objects.select_for_update") as locked, \
+             patch("customer.services.customer_mapping.transaction.atomic"), \
+             patch("customer.services.customer_mapping.LogEntry.objects.log_actions"), \
+             patch.object(CustomerMappingService, "_microtech_customer", return_value={
+                 "addresses": [{"ans_nr": 4}],
+             }), \
+             patch.object(CustomerMappingService, "_shopware_customer", return_value={
+                 "addresses": [{"id": address.api_id}],
+             }), \
+             patch.object(address, "save") as save:
+            customers.return_value.first.return_value = customer
+            addresses.return_value.exclude.return_value.exists.return_value = False
+            locked.return_value.filter.return_value.first.return_value = address
+            result = CustomerMappingService().link_address(
+                customer_id=680, shopware_address_id=address.api_id,
+                ans_nr=4, job_id=1, user_id=1,
+            )
+        self.assertEqual(result["asp_nr"], 2)
+        self.assertEqual((address.erp_ans_id, address.erp_asp_id), (8, 9))
+        save.assert_called_once()
+
     def test_editing_shared_postal_field_updates_bridge_siblings(self):
         selected = Address(id=11, api_id="a" * 32, erp_ans_nr=4, street="Alt 1")
         sibling = Address(id=12, api_id="b" * 32, erp_ans_nr=4, street="Alt 1")

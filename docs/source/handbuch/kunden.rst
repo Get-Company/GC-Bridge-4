@@ -12,7 +12,9 @@ speichert die Bridge die Shopware-ID und die microtech-AdrNr als Paar.
 Danach ordnen Sie im Schritt **Adressen** jede Shopware-Adresse einer
 microtech-Anschrift zu. Mehrere Shopware-Adressen dürfen dieselbe AnsNr nutzen,
 wenn ihre Anschrift übereinstimmt. Zugeordnete Cards werden ausgegraut und
-können bei Bedarf erneut zugeordnet werden. Über **Bridge-Daten bearbeiten**
+können bei Bedarf erneut in die Mitte gezogen werden. Wenn dieselbe AnsNr
+erneut gewählt wird, bleibt die bestehende Ansprechpartner-Zuordnung erhalten.
+Über **Bridge-Daten bearbeiten**
 ändern Sie die gespeicherte Adresse in der Bridge. Shopware bleibt unverändert;
 die Bridge-Werte werden für passende spätere Bestellungen verwendet. Gemeinsam
 genutzte Anschriftfelder werden bei allen Bridge-Adressen derselben AnsNr

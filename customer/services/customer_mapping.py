@@ -147,12 +147,14 @@ class CustomerMappingService(BaseService):
                     for field in self.POSTAL_FIELDS
                 ):
                     raise ValueError("Diese microtech-AnsNr ist bereits einer anderen Anschrift zugeordnet.")
+            same_postal_assignment = address.erp_ans_nr == ans_nr
             address.erp_nr = int(customer.erp_nr) if customer.erp_nr.isdigit() else None
             address.erp_ans_nr = ans_nr
-            address.erp_asp_nr = None
-            address.erp_ans_id = None
-            address.erp_asp_id = None
-            address.erp_combined_id = None
+            if not same_postal_assignment:
+                address.erp_asp_nr = None
+                address.erp_ans_id = None
+                address.erp_asp_id = None
+                address.erp_combined_id = None
             address.save()
             LogEntry.objects.log_actions(
                 user_id=user_id, queryset=Address.objects.filter(pk=address.pk),
@@ -161,7 +163,7 @@ class CustomerMappingService(BaseService):
                                 f"microtech AnsNr {ans_nr}"),
             )
         return {"address_id": address.pk, "shopware_address_id": shopware_address_id,
-                "ans_nr": ans_nr, "asp_nr": None}
+                "ans_nr": ans_nr, "asp_nr": address.erp_asp_nr}
 
     def link_contact(
         self, *, customer_id: int, shopware_address_id: str, asp_nr: int,

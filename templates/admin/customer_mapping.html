@@ -42,7 +42,7 @@
       </div>
       <div class="mapping-pair" data-panel="address" hidden>
         <h3>Adressen</h3>
-        <p class="mapping-hint">Ordne jede Shopware-Adresse der richtigen microtech-Anschrift zu. Ansprechpartner folgen im nächsten Schritt.</p>
+        <p class="mapping-hint">Ordne jede Shopware-Adresse der richtigen microtech-Anschrift zu. Bereits zugeordnete, ausgegraute Karten kannst du für eine Änderung erneut in die Mitte ziehen. Ansprechpartner folgen im nächsten Schritt.</p>
         <div class="mapping-slots">
           <div id="mapping-sw-address-slot" class="mapping-slot" data-kind="address" data-side="sw">Shopware-Adresse hier ablegen</div>
           <div id="mapping-mt-address-slot" class="mapping-slot" data-kind="address" data-side="mt">microtech-Anschrift hier ablegen</div>
@@ -95,7 +95,7 @@
   .mapping-side h2,.mapping-center h2{font-size:1.15rem;font-weight:700;margin:0 0 .8rem}.mapping-side h3,.mapping-pair h3{font-size:.84rem;font-weight:700;margin:1.3rem 0 .65rem}
   .mapping-list{display:grid;gap:.65rem}.mapping-card{border:1px solid var(--line);border-radius:.6rem;padding:.8rem;background:var(--soft);cursor:grab;overflow-wrap:anywhere}
   .mapping-card strong{display:block;font-size:.9rem;margin-bottom:.25rem}.mapping-card .mapping-meta{display:block;color:var(--muted);font-size:.76rem;line-height:1.5}
-  .mapping-card button{font-size:.72rem;margin-top:.6rem;padding:.4rem .6rem}.mapping-card.mapped{opacity:.55;cursor:default}.mapping-card.mapped button{opacity:1;cursor:pointer}.mapping-card .mapping-flag{display:block;margin-top:.5rem;font-size:.7rem;font-weight:700;color:#15803d}
+  .mapping-card button{font-size:.72rem;margin-top:.6rem;padding:.4rem .6rem}.mapping-card.mapped{opacity:.55;cursor:default}.mapping-card.mapped[draggable="true"]{cursor:grab}.mapping-card.mapped button{opacity:1;cursor:pointer}.mapping-card .mapping-flag{display:block;margin-top:.5rem;font-size:.7rem;font-weight:700;color:#15803d}
   .mapping-steps{display:flex;gap:.4rem;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:.75rem}.mapping-step{border:1px solid var(--line);border-radius:.5rem;padding:.55rem .7rem;background:var(--soft);color:var(--ink);font-weight:650;cursor:pointer}.mapping-step.active{background:#2563eb;color:#fff;border-color:#2563eb}.mapping-step span{font-size:.72rem;opacity:.8}
   .mapping-pair[hidden]{display:none}
   .mapping-edit{border:1px solid var(--line);border-radius:.65rem;padding:1rem;margin-top:1rem;background:var(--soft)}.mapping-edit[hidden]{display:none}.mapping-edit h4{font-weight:700;margin:0 0 .35rem}.mapping-edit p{color:var(--muted);font-size:.78rem}.mapping-edit-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.7rem}.mapping-edit-fields label{display:grid;gap:.2rem;font-size:.75rem;font-weight:650}.mapping-edit-fields input{min-width:0;border:1px solid var(--line);border-radius:.35rem;padding:.45rem;background:var(--bg);color:var(--ink)}.mapping-edit-actions{display:flex;gap:.5rem;margin-top:.9rem}.mapping-edit-actions button{border:0;border-radius:.4rem;padding:.55rem .7rem;background:#2563eb;color:#fff;cursor:pointer}.mapping-edit-actions button:last-child{background:var(--line);color:var(--ink)}

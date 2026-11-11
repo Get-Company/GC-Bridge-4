@@ -109,11 +109,15 @@
       line(node, item.countryIso || item.country_code);
       if (side === 'sw') {
         line(node, [item.is_invoice && 'Rechnung', item.is_shipping && 'Lieferung'].filter(Boolean).join(' · '));
-        const bridge = state.mappings.get(item.id)?.bridge;
+        const mapping = state.mappings.get(item.id);
+        if (mapping) line(node, 'Zugeordnet zu AnsNr ' + mapping.ans_nr);
+        const bridge = mapping?.bridge;
         if (bridge) line(node, 'Bridge: ' + [bridge.street, bridge.postal_code, bridge.city].filter(Boolean).join(', '));
       }
     } else {
       line(node, side === 'sw' ? 'Aus SW6-Adresse ' + item.addressId : 'AnsNr ' + item.ans_nr + ' · AnspNr ' + item.asp_nr);
+      if (side === 'sw' && state.mappings.get(item.addressId)?.asp_nr != null)
+        line(node, 'Zugeordnet zu AnspNr ' + state.mappings.get(item.addressId).asp_nr);
       line(node, item.email);
       line(node, item.phone);
       if (side === 'mt' && item.is_default) line(node, 'Bisher Standard');
@@ -124,7 +128,7 @@
       const canChange = allowed && already && side === 'sw' && kind !== 'customer';
       const canReuse = allowed && already && side === 'mt';
       const canPick = allowed && !already;
-      if (canPick) {
+      if (canPick || canChange || canReuse) {
         node.draggable = true;
         node.addEventListener('dragstart', event => {
           event.dataTransfer.setData('text/plain', JSON.stringify({
@@ -243,7 +247,8 @@
       state.customerId = data.customer_id;
       await loadMappings();
       result('customer', 'Gespeichert: SW6-ID ↔ AdrNr ' + data.erp_nr + '.');
-      message('Konto zugeordnet. Jetzt alle Adressen paarweise zuordnen.');
+      message('Konto zugeordnet. ' + state.mappings.size +
+        ' Adresse(n) bereits zugeordnet. Auch ausgegraute Karten können erneut in die Mitte gezogen werden.');
       setStep('address');
     } catch (error) { result('customer', error.message, true); message(error.message, true); }
     finally { state.busy = false; render(); }
@@ -405,7 +410,7 @@
           kind === 'address' ? (side === 'sw' ? swAddresses() : mtAddresses()) :
             (side === 'sw' ? swContacts() : mtContacts());
         const item = list.find(row => identity(kind, side, row) === id);
-        if (item) select(kind, side, item);
+        if (item) select(kind, side, item, true);
       } catch (_) { /* Ignore unrelated drag data. */ }
     });
   }
