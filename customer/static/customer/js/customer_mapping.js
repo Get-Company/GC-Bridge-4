@@ -7,7 +7,8 @@
     step: 'customer', pair: { customer: { sw: null, mt: null },
       address: { sw: null, mt: null }, contact: { sw: null, mt: null } },
     mappings: new Map(), editingAddress: '', editingContact: '',
-    busy: false, run: 0, editTarget: null,
+    busy: false, searching: false, searchController: null,
+    run: 0, editTarget: null,
   };
   const editFields = [
     ['company', 'Firma'], ['name1', 'Name 1'], ['name2', 'Name 2'],
@@ -33,6 +34,12 @@
     const node = $('mapping-' + kind + '-result');
     node.textContent = value;
     node.classList.toggle('error', error);
+  }
+  function searchControls() {
+    $('mapping-search-button').disabled = state.searching;
+    $('mapping-search-button').textContent = state.searching ? 'Suche läuft …' : 'Suchen';
+    $('mapping-search-cancel').hidden = !state.searching;
+    $('mapping-search').setAttribute('aria-busy', String(state.searching));
   }
   function swAddresses() {
     return state.sw.flatMap(customer => (customer.addresses || []).map(address => ({
@@ -73,7 +80,7 @@
       String(row.asp_nr) === String(item.asp_nr) && state.mtCustomer?.erp_nr === item.customerErpNr);
   }
   function eligible(kind, side, item) {
-    if (state.step !== kind || state.busy) return false;
+    if (state.step !== kind || state.busy || state.searching) return false;
     if (kind === 'customer') return !state.customerId;
     if (!state.customerId) return false;
     if (side === 'sw' && item.customerId !== state.swCustomer?.id) return false;
@@ -86,9 +93,12 @@
     return true;
   }
   function card(kind, side, item, inSlot = false) {
-    const node = el('article', 'mapping-card');
+    const node = el('article', 'mapping-card mapping-card--' + kind);
     const already = mapped(kind, side, item);
     if (already) node.classList.add('mapped');
+    if (state.pair[kind][side] &&
+        identity(kind, side, state.pair[kind][side]) === identity(kind, side, item))
+      node.classList.add('selected');
     const name = kind === 'customer'
       ? (side === 'sw' ? item.company || [item.firstName, item.lastName].filter(Boolean).join(' ') : item.name) || 'Kunde'
       : kind === 'contact'
@@ -122,7 +132,7 @@
       line(node, item.phone);
       if (side === 'mt' && item.is_default) line(node, 'Bisher Standard');
     }
-    if (already) node.append(el('span', 'mapping-flag', 'Zugeordnet'));
+    if (already) node.append(el('span', 'mapping-flag', '✓ Zugeordnet'));
     if (!inSlot) {
       const allowed = eligible(kind, side, item);
       const canChange = allowed && already && side === 'sw' && kind !== 'customer';
@@ -167,7 +177,8 @@
     const target = $(id);
     target.replaceChildren();
     for (const item of items) target.append(card(kind, side, item));
-    if (!items.length) target.append(el('p', 'mapping-meta', 'Keine Einträge vorhanden.'));
+    if (!items.length) target.append(el('p', 'mapping-meta',
+      state.searching ? 'Suche läuft …' : 'Keine Einträge vorhanden.'));
   }
   function renderSlots() {
     const slots = [
@@ -192,6 +203,12 @@
     renderList('mapping-sw-contacts', swContacts(), 'contact', 'sw');
     renderList('mapping-mt-contacts', mtContacts(), 'contact', 'mt');
     renderSlots();
+    document.querySelectorAll('[data-group]').forEach(group =>
+      group.classList.toggle('active', group.dataset.group === state.step));
+    $('mapping-current-account').textContent = state.customerId
+      ? 'Aktuelles Konto: Shopware ' + (state.swCustomer?.customerNumber || '–') +
+        ' ↔ microtech AdrNr ' + (state.mtCustomer?.erp_nr || '–')
+      : 'Noch kein Konto zugeordnet.';
     const selectedAddresses = state.swCustomer?.addresses || [];
     const selectedContacts = selectedAddresses.filter(a => a.firstName || a.lastName);
     const mappedAddresses = selectedAddresses.filter(a => state.mappings.has(a.id)).length;
@@ -200,12 +217,21 @@
       contact.customerErpNr === state.mtCustomer?.erp_nr && !mapped('contact', 'mt', contact)).length;
     $('mapping-address-count').textContent = '(' + mappedAddresses + '/' + selectedAddresses.length + ')';
     $('mapping-contact-count').textContent = '(' + mappedContacts + '/' + selectedContacts.length + ')';
+    document.querySelectorAll('.mapping-step').forEach(button => {
+      const done = button.dataset.step === 'customer' ? Boolean(state.customerId) :
+        button.dataset.step === 'address' ? Boolean(selectedAddresses.length) &&
+          mappedAddresses === selectedAddresses.length :
+          Boolean(selectedContacts.length) && mappedContacts === selectedContacts.length;
+      button.classList.toggle('complete', done);
+      button.setAttribute('aria-current', button.dataset.step === state.step ? 'step' : 'false');
+    });
     $('mapping-missing-contacts').textContent = selectedContacts.length
       ? (selectedContacts.length - mappedContacts) + ' Shopware-Ansprechpartner noch offen; ' +
         unmatchedMtContacts + ' microtech-Ansprechpartner ohne Shopware-Zuordnung. Fehlende microtech-Ansprechpartner können einzeln angelegt werden.'
       : 'Diese Shopware-Adressen enthalten keinen Ansprechpartner. ' +
         unmatchedMtContacts + ' microtech-Ansprechpartner bleiben ohne Shopware-Zuordnung sichtbar.';
     $('mapping-sync').disabled = !state.customerId || state.busy;
+    searchControls();
   }
   function setStep(step) {
     state.step = step;
@@ -248,7 +274,7 @@
       await loadMappings();
       result('customer', 'Gespeichert: SW6-ID ↔ AdrNr ' + data.erp_nr + '.');
       message('Konto zugeordnet. ' + state.mappings.size +
-        ' Adresse(n) bereits zugeordnet. Auch ausgegraute Karten können erneut in die Mitte gezogen werden.');
+        ' Adresse(n) bereits zugeordnet. Grün markierte Adressen können erneut in die Mitte gezogen werden.');
       setStep('address');
     } catch (error) { result('customer', error.message, true); message(error.message, true); }
     finally { state.busy = false; render(); }
@@ -303,6 +329,10 @@
     if (kind === 'address' && side === 'sw') state.editingAddress = item.id;
     if (kind === 'contact' && side === 'sw') state.editingContact = item.addressId;
     render();
+    if (!state.pair[kind].sw || !state.pair[kind].mt) {
+      const missing = state.pair[kind].sw ? 'microtech' : 'Shopware';
+      message('Auswahl in der Mitte sichtbar. Wähle jetzt die passende Karte von ' + missing + '.');
+    }
     if (kind === 'customer') mapCustomer();
     if (kind === 'address') mapAddress();
     if (kind === 'contact') mapContact();
@@ -344,20 +374,24 @@
     } catch (error) { result('contact', error.message, true); message(error.message, true); }
     finally { state.busy = false; render(); }
   }
-  async function searchCell(number, system) {
+  async function searchCell(number, system, signal) {
     const url = new URL(root.dataset.searchUrl, location.origin);
     url.searchParams.set('erp_nr', number); url.searchParams.set('system', system);
-    const response = await fetch(url, { credentials: 'same-origin' });
+    const response = await fetch(url, { credentials: 'same-origin', signal });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'Suche fehlgeschlagen.');
-    if (system === 'shopware') return data.data && !data.data.error ? data.data : null;
+    if (system === 'shopware') {
+      if (data.data?.error) throw new Error(data.data.error);
+      return data.data || null;
+    }
     if (data.data && data.data.error) throw new Error(data.data.error);
     if (!data.microtech_job_id) return null;
     const statusUrl = new URL(root.dataset.statusUrl, location.origin);
     statusUrl.searchParams.set('job_ids', data.microtech_job_id);
     for (let attempt = 0; attempt < 40; attempt++) {
       await new Promise(resolve => setTimeout(resolve, 1500));
-      const response = await fetch(statusUrl, { credentials: 'same-origin' });
+      if (signal.aborted) throw new DOMException('Suche abgebrochen.', 'AbortError');
+      const response = await fetch(statusUrl, { credentials: 'same-origin', signal });
       const body = await response.json();
       const job = body.jobs && body.jobs[0];
       if (job && job.state === 'succeeded') return job.data
@@ -367,9 +401,16 @@
     throw new Error('microtech antwortet noch nicht. Bitte die Suche erneut starten.');
   }
   $('mapping-search').addEventListener('submit', async event => {
-    event.preventDefault(); const run = ++state.run;
+    event.preventDefault();
+    if (state.searching) return;
     const numbers = [...new Set($('mapping-numbers').value.split(',')
-      .map(value => value.trim()).filter(Boolean))].slice(0, 8);
+      .map(value => value.trim()).filter(Boolean))];
+    if (!numbers.length) { message('Bitte mindestens eine Kundennummer eingeben.', true); return; }
+    if (numbers.length > 8) { message('Bitte höchstens acht Kundennummern gleichzeitig suchen.', true); return; }
+    const run = ++state.run;
+    const controller = new AbortController();
+    state.searchController = controller;
+    state.searching = true;
     state.sw = []; state.mt = []; state.swCustomer = null; state.mtCustomer = null;
     state.customerId = null; state.mappings.clear();
     state.pair = { customer: { sw: null, mt: null }, address: { sw: null, mt: null },
@@ -377,23 +418,48 @@
     $('mapping-address-edit').hidden = true;
     setStep('customer');
     result('customer', ''); result('address', ''); result('contact', ''); result('sync', '');
-    message('Shopware und microtech werden durchsucht …');
-    const tasks = numbers.flatMap(number => ['shopware', 'microtech'].map(system =>
-      searchCell(number, system).then(item => ({ item, system }))));
-    const responses = await Promise.allSettled(tasks);
-    if (run !== state.run) return;
     const errors = [];
-    for (const response of responses) {
-      if (response.status === 'rejected') { errors.push(response.reason.message); continue; }
-      const { item, system } = response.value;
-      if (item) {
-        if (system === 'shopware' && !state.sw.some(row => row.id === item.id)) state.sw.push(item);
-        if (system === 'microtech' && !state.mt.some(row => row.erp_nr === item.erp_nr)) state.mt.push(item);
+    let completed = 0;
+    const total = numbers.length * 2;
+    message('Suche gestartet: 0 von ' + total + ' Anfragen abgeschlossen.');
+    try {
+      const tasks = numbers.flatMap(number => ['shopware', 'microtech'].map(system =>
+        searchCell(number, system, controller.signal).then(item => {
+          if (run === state.run && item) {
+            if (system === 'shopware' && !state.sw.some(row => row.id === item.id)) state.sw.push(item);
+            if (system === 'microtech' && !state.mt.some(row => row.erp_nr === item.erp_nr)) state.mt.push(item);
+          }
+        }).catch(error => {
+          if (run === state.run && error.name !== 'AbortError') errors.push(error.message);
+        }).finally(() => {
+          if (run !== state.run) return;
+          completed++;
+          render();
+          if (completed < total) message(completed + ' von ' + total +
+            ' Anfragen abgeschlossen. Ergebnisse erscheinen bereits in den Seitenspalten.');
+        })));
+      await Promise.all(tasks);
+      if (run !== state.run) return;
+      const found = state.sw.length + state.mt.length;
+      message(errors.length ? 'Suche abgeschlossen: ' + [...new Set(errors)].join(' ') :
+        found ? 'Suche abgeschlossen. Wähle links und rechts das passende Konto.' :
+          'Keine Konten gefunden. Bitte die Kundennummer prüfen.', Boolean(errors.length || !found));
+    } finally {
+      if (run === state.run) {
+        state.searching = false;
+        state.searchController = null;
+        render();
       }
     }
+  });
+  $('mapping-search-cancel').addEventListener('click', () => {
+    if (!state.searching) return;
+    state.run++;
+    state.searchController?.abort();
+    state.searchController = null;
+    state.searching = false;
     render();
-    message(errors.length ? 'Suche abgeschlossen. ' + errors.join(' ') :
-      'Suche abgeschlossen. Konto-Paar in die Mitte ziehen.', !!errors.length);
+    message('Suche abgebrochen. Gib eine neue Kundennummer ein und starte erneut.');
   });
   for (const button of document.querySelectorAll('.mapping-step')) {
     button.addEventListener('click', () => setStep(button.dataset.step));

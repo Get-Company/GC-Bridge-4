@@ -7,31 +7,30 @@
      data-save-url="{% url 'admin:customer_mapping_api' %}">
   <header class="mapping-heading">
     <h1>Kunden zuordnen</h1>
-    <p>Alle Datensätze bleiben sichtbar. Wähle in der Mitte den Schritt und ziehe jeweils die passenden Cards zusammen.</p>
+    <p>Suche die Kundennummer, ordne zuerst das Konto und danach Adressen und Ansprechpartner zu. Alle Treffer bleiben sichtbar.</p>
   </header>
-  <form id="mapping-search" class="mapping-search">
+  <form id="mapping-search" class="mapping-search" data-admin-loader="off">
     {% csrf_token %}
     <label for="mapping-numbers">Kundennummern suchen <span>Mehrere Nummern mit Komma trennen</span></label>
-    <div><input id="mapping-numbers" autocomplete="off" placeholder="z. B. 12196, 13247" required><button type="submit">Suchen</button></div>
+    <div><input id="mapping-numbers" type="search" autocomplete="off" placeholder="z. B. 13736" required><button id="mapping-search-button" type="submit" data-admin-loader="off">Suchen</button><button id="mapping-search-cancel" type="button" hidden>Abbrechen</button></div>
   </form>
   <p id="mapping-message" class="mapping-message" role="status" aria-live="polite">Suche nach Kundennummern, um die Zuordnung zu beginnen.</p>
   <div class="mapping-grid">
     <section class="mapping-side" aria-labelledby="mapping-sw-title">
       <h2 id="mapping-sw-title">Shopware 6</h2>
-      <div id="mapping-sw-customers" class="mapping-list"></div>
-      <h3>Adressen</h3>
-      <div id="mapping-sw-addresses" class="mapping-list"></div>
-      <h3>Ansprechpartner aus Shopware-Adressen</h3>
-      <div id="mapping-sw-contacts" class="mapping-list"></div>
+      <div class="mapping-group" data-group="customer"><h3>Kundenkonten</h3><div id="mapping-sw-customers" class="mapping-list"></div></div>
+      <div class="mapping-group" data-group="address"><h3>Adressen</h3><div id="mapping-sw-addresses" class="mapping-list"></div></div>
+      <div class="mapping-group" data-group="contact"><h3>Ansprechpartner aus Shopware-Adressen</h3><div id="mapping-sw-contacts" class="mapping-list"></div></div>
     </section>
     <main class="mapping-center">
       <h2>Zuordnung</h2>
-      <p class="mapping-hint">Cards können auch mit „In die Mitte“ gewählt werden.</p>
+      <p class="mapping-hint">Wähle den aktuellen Schritt. Ziehe die passenden Karten in die Mitte oder nutze ihren Auswahlknopf.</p>
       <nav class="mapping-steps" aria-label="Zuordnungsschritte">
         <button type="button" class="mapping-step active" data-step="customer">1 · Konto</button>
         <button type="button" class="mapping-step" data-step="address">2 · Adressen <span id="mapping-address-count"></span></button>
         <button type="button" class="mapping-step" data-step="contact">3 · Ansprechpartner <span id="mapping-contact-count"></span></button>
       </nav>
+      <p id="mapping-current-account" class="mapping-current-account"></p>
       <div class="mapping-pair" data-panel="customer">
         <h3>Kundenkonto</h3>
         <div class="mapping-slots">
@@ -42,7 +41,7 @@
       </div>
       <div class="mapping-pair" data-panel="address" hidden>
         <h3>Adressen</h3>
-        <p class="mapping-hint">Ordne jede Shopware-Adresse der richtigen microtech-Anschrift zu. Bereits zugeordnete, ausgegraute Karten kannst du für eine Änderung erneut in die Mitte ziehen. Ansprechpartner folgen im nächsten Schritt.</p>
+        <p class="mapping-hint">Ordne jede Shopware-Adresse der richtigen microtech-Anschrift zu. Grün markierte Karten sind bereits zugeordnet und können erneut in die Mitte gezogen oder über „Zuordnung ändern“ gewählt werden. Ansprechpartner folgen im nächsten Schritt.</p>
         <div class="mapping-slots">
           <div id="mapping-sw-address-slot" class="mapping-slot" data-kind="address" data-side="sw">Shopware-Adresse hier ablegen</div>
           <div id="mapping-mt-address-slot" class="mapping-slot" data-kind="address" data-side="mt">microtech-Anschrift hier ablegen</div>
@@ -52,7 +51,7 @@
           <h4>Bridge-Adresse bearbeiten</h4>
           <p>Diese Werte bleiben in der Bridge und werden für passende neue microtech-Bestellungen verwendet. Shopware wird nicht geändert.</p>
           <div id="mapping-edit-fields" class="mapping-edit-fields"></div>
-          <div class="mapping-edit-actions"><button type="submit">In der Bridge speichern</button><button type="button" id="mapping-edit-cancel">Abbrechen</button></div>
+          <div class="mapping-edit-actions"><button type="submit" data-admin-loader="off">In der Bridge speichern</button><button type="button" id="mapping-edit-cancel">Abbrechen</button></div>
         </form>
       </div>
       <div class="mapping-pair" data-panel="contact" hidden>
@@ -72,11 +71,9 @@
     </main>
     <section class="mapping-side" aria-labelledby="mapping-mt-title">
       <h2 id="mapping-mt-title">microtech</h2>
-      <div id="mapping-mt-customers" class="mapping-list"></div>
-      <h3>Anschriften</h3>
-      <div id="mapping-mt-addresses" class="mapping-list"></div>
-      <h3>Ansprechpartner</h3>
-      <div id="mapping-mt-contacts" class="mapping-list"></div>
+      <div class="mapping-group" data-group="customer"><h3>Kundenkonten</h3><div id="mapping-mt-customers" class="mapping-list"></div></div>
+      <div class="mapping-group" data-group="address"><h3>Anschriften</h3><div id="mapping-mt-addresses" class="mapping-list"></div></div>
+      <div class="mapping-group" data-group="contact"><h3>Ansprechpartner</h3><div id="mapping-mt-contacts" class="mapping-list"></div></div>
     </section>
   </div>
 </div>
@@ -86,17 +83,19 @@
   .mapping-heading h1{font-size:1.6rem;font-weight:700;margin:0 0 .3rem}.mapping-heading p,.mapping-hint{color:var(--muted);margin:.2rem 0 1.1rem}
   .mapping-search{background:var(--soft);border:1px solid var(--line);border-radius:.8rem;padding:1rem;margin:1.2rem 0}
   .mapping-search label{display:block;font-weight:700;margin-bottom:.55rem}.mapping-search label span{font-size:.75rem;font-weight:400;color:var(--muted);margin-left:.4rem}
-  .mapping-search>div{display:flex;gap:.6rem}.mapping-search input{min-width:0;flex:1;border:1px solid var(--line);border-radius:.45rem;padding:.65rem .8rem;background:var(--bg);color:var(--ink)}
-  .mapping-search button,.mapping-card button{border:0;border-radius:.45rem;padding:.55rem .8rem;background:#2563eb;color:#fff;font-weight:650;cursor:pointer}
+  .mapping-search>div{display:flex;gap:.6rem;flex-wrap:wrap}.mapping-search input{min-width:12rem;flex:1;border:1px solid var(--line);border-radius:.45rem;padding:.65rem .8rem;background:var(--bg);color:var(--ink)}
+  .mapping-search button,.mapping-card button{border:0;border-radius:.45rem;padding:.55rem .8rem;background:#2563eb;color:#fff;font-weight:650;cursor:pointer}.mapping-search #mapping-search-cancel{background:var(--line);color:var(--ink)}.mapping-search #mapping-search-cancel[hidden]{display:none}
   .mapping-search button:disabled,.mapping-card button:disabled{opacity:.55;cursor:wait}
   .mapping-message{min-height:2rem;padding:.55rem .8rem;background:#eaf2ff;color:#1d4ed8;border-radius:.4rem}.mapping-message.error{background:#fef2f2;color:#b91c1c}
   .mapping-grid{display:grid;grid-template-columns:minmax(230px,1fr) minmax(350px,1.45fr) minmax(230px,1fr);gap:1rem;align-items:start}
   .mapping-side,.mapping-center{background:var(--bg);border:1px solid var(--line);border-radius:.8rem;padding:1rem;min-width:0}
   .mapping-side h2,.mapping-center h2{font-size:1.15rem;font-weight:700;margin:0 0 .8rem}.mapping-side h3,.mapping-pair h3{font-size:.84rem;font-weight:700;margin:1.3rem 0 .65rem}
-  .mapping-list{display:grid;gap:.65rem}.mapping-card{border:1px solid var(--line);border-radius:.6rem;padding:.8rem;background:var(--soft);cursor:grab;overflow-wrap:anywhere}
+  .mapping-group{border:1px solid transparent;border-radius:.65rem;padding:.25rem .5rem .65rem;margin:.45rem -.5rem}.mapping-group.active{border-color:#93c5fd;background:#eff6ff}.dark .mapping-group.active{border-color:#3b82f6;background:#152b46}.mapping-group h3{margin:.55rem 0 .65rem}
+  .mapping-list{display:grid;gap:.65rem}.mapping-card{border:1px solid var(--line);border-radius:.6rem;padding:.8rem;background:var(--soft);cursor:default;overflow-wrap:anywhere}.mapping-card[draggable="true"]{cursor:grab}.mapping-card[draggable="true"]:hover{border-color:#2563eb}.mapping-card.selected{outline:2px solid #2563eb;outline-offset:2px}
   .mapping-card strong{display:block;font-size:.9rem;margin-bottom:.25rem}.mapping-card .mapping-meta{display:block;color:var(--muted);font-size:.76rem;line-height:1.5}
-  .mapping-card button{font-size:.72rem;margin-top:.6rem;padding:.4rem .6rem}.mapping-card.mapped{opacity:.55;cursor:default}.mapping-card.mapped[draggable="true"]{cursor:grab}.mapping-card.mapped button{opacity:1;cursor:pointer}.mapping-card .mapping-flag{display:block;margin-top:.5rem;font-size:.7rem;font-weight:700;color:#15803d}
-  .mapping-steps{display:flex;gap:.4rem;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:.75rem}.mapping-step{border:1px solid var(--line);border-radius:.5rem;padding:.55rem .7rem;background:var(--soft);color:var(--ink);font-weight:650;cursor:pointer}.mapping-step.active{background:#2563eb;color:#fff;border-color:#2563eb}.mapping-step span{font-size:.72rem;opacity:.8}
+  .mapping-card button{font-size:.72rem;margin-top:.6rem;padding:.4rem .6rem}.mapping-card.mapped{border-left:4px solid #16a34a;background:var(--bg)}.mapping-card--customer.mapped{opacity:.55;border-left:1px solid var(--line);background:var(--soft);cursor:default}.mapping-card.mapped[draggable="true"]{cursor:grab}.mapping-card.mapped button{opacity:1;cursor:pointer}.mapping-card .mapping-flag{display:inline-block;margin-top:.5rem;border-radius:999px;padding:.15rem .45rem;background:#dcfce7;color:#166534;font-size:.7rem;font-weight:700}.dark .mapping-card .mapping-flag{background:#173d2c;color:#b8f4ca}
+  .mapping-steps{display:flex;gap:.4rem;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:.75rem}.mapping-step{border:1px solid var(--line);border-radius:.5rem;padding:.55rem .7rem;background:var(--soft);color:var(--ink);font-weight:650;cursor:pointer}.mapping-step.complete:not(.active){border-color:#16a34a;color:#166534}.dark .mapping-step.complete:not(.active){color:#86efac}.mapping-step.active{background:#2563eb;color:#fff;border-color:#2563eb}.mapping-step span{font-size:.72rem;opacity:.8}
+  .mapping-current-account{font-size:.8rem;font-weight:650;color:var(--ink);margin:.7rem 0 0}
   .mapping-pair[hidden]{display:none}
   .mapping-edit{border:1px solid var(--line);border-radius:.65rem;padding:1rem;margin-top:1rem;background:var(--soft)}.mapping-edit[hidden]{display:none}.mapping-edit h4{font-weight:700;margin:0 0 .35rem}.mapping-edit p{color:var(--muted);font-size:.78rem}.mapping-edit-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.7rem}.mapping-edit-fields label{display:grid;gap:.2rem;font-size:.75rem;font-weight:650}.mapping-edit-fields input{min-width:0;border:1px solid var(--line);border-radius:.35rem;padding:.45rem;background:var(--bg);color:var(--ink)}.mapping-edit-actions{display:flex;gap:.5rem;margin-top:.9rem}.mapping-edit-actions button{border:0;border-radius:.4rem;padding:.55rem .7rem;background:#2563eb;color:#fff;cursor:pointer}.mapping-edit-actions button:last-child{background:var(--line);color:var(--ink)}
   .mapping-pair{margin-top:1rem}.mapping-slots{display:grid;grid-template-columns:1fr 1fr;gap:.6rem}.mapping-slot{min-height:9rem;border:2px dashed var(--line);border-radius:.65rem;display:flex;align-items:center;justify-content:center;text-align:center;padding:.8rem;color:var(--muted);font-size:.8rem}

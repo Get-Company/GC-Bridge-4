@@ -8,11 +8,16 @@ Kunden und Adressen zuordnen
 Kundennummern. Ziehen Sie das Shopware-Konto von links und das passende
 microtech-Konto von rechts in die Mitte. Sobald beide Cards dort liegen,
 speichert die Bridge die Shopware-ID und die microtech-AdrNr als Paar.
+Die Suche zeigt Treffer schon während microtech noch lädt. Der Fortschritt
+steht unter dem Suchfeld; mit **Abbrechen** können Sie eine laufende Suche
+beenden. Der Suchbutton ist nach Abschluss wieder verfügbar.
 
 Danach ordnen Sie im Schritt **Adressen** jede Shopware-Adresse einer
 microtech-Anschrift zu. Mehrere Shopware-Adressen dürfen dieselbe AnsNr nutzen,
-wenn ihre Anschrift übereinstimmt. Zugeordnete Cards werden ausgegraut und
-können bei Bedarf erneut in die Mitte gezogen werden. Wenn dieselbe AnsNr
+wenn ihre Anschrift übereinstimmt. Zugeordnete Adressen und Ansprechpartner
+werden grün markiert und können bei Bedarf erneut in die Mitte gezogen werden.
+Das zugeordnete Konto wird als abgeschlossener Schritt gedämpft dargestellt.
+Wenn dieselbe AnsNr
 erneut gewählt wird, bleibt die bestehende Ansprechpartner-Zuordnung erhalten.
 Über **Bridge-Daten bearbeiten**
 ändern Sie die gespeicherte Adresse in der Bridge. Shopware bleibt unverändert;
