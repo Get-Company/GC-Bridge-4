@@ -359,16 +359,8 @@ NEWSLETTER_MANAGEMENT_URL = os.getenv(
 
 CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
 CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/1")
-# Shared, short-lived reconciliation state across web and Celery processes.
-# The default cache remains unchanged; no customer snapshots go into task args.
 CACHES = {
     "default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"},
-    "customer_merge_ai": {
-        "BACKEND": "django.core.cache.backends.redis.RedisCache",
-        "LOCATION": os.getenv("CUSTOMER_MERGE_AI_REDIS_URL", CELERY_BROKER_URL),
-        "KEY_PREFIX": "customer-merge-ai",
-        "TIMEOUT": 1800,
-    },
 }
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
@@ -377,7 +369,6 @@ CELERY_TIMEZONE = TIME_ZONE
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 CELERY_TASK_DEFAULT_QUEUE = "microtech"
 CELERY_TASK_ROUTES = {
-    "customer.merge_ai_process": {"queue": "bulk"},
     # HTTP submission, remote polling and long-lived maintenance calls have
     # isolated workers. A stalled wrapper therefore cannot consume the order
     # or catalogue queues, nor can a maintenance call block polling.
@@ -633,9 +624,9 @@ UNFOLD = {
                         "permission": sidebar_model_view_permission("customer", "Customer"),
                     },
                     {
-                        "title": _("Kundenmerge KI"),
-                        "icon": "auto_awesome",
-                        "link": reverse_lazy("admin:customer_merge_ai"),
+                        "title": _("Kunden zuordnen"),
+                        "icon": "drag_indicator",
+                        "link": reverse_lazy("admin:customer_mapping"),
                         "permission": sidebar_model_view_permission("customer", "Customer"),
                     },
                 ],

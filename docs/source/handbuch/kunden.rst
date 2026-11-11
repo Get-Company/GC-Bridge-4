@@ -1,6 +1,29 @@
 Kunden
 ======
 
+Kunden und Adressen zuordnen
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Öffnen Sie **Kunden → Kunden zuordnen**. Suchen Sie nach einer oder mehreren
+Kundennummern. Ziehen Sie das Shopware-Konto von links und das passende
+microtech-Konto von rechts in die Mitte. Sobald beide Cards dort liegen,
+speichert die Bridge die Shopware-ID und die microtech-AdrNr als Paar.
+
+Danach ordnen Sie jede Shopware-Adresse einer microtech-Anschrift zu. Wählen
+Sie an der microtech-Anschrift bei Bedarf den passenden Ansprechpartner,
+bevor Sie die Card in die Mitte ziehen. **Nur Anschrift** bedeutet, dass
+kein Ansprechpartner zugeordnet wird. Die Bridge speichert die Shopware-
+Adress-ID zusammen mit AnsNr und gegebenenfalls AnspNr.
+
+Mit **Zuordnungen nach microtech übertragen und prüfen** schreiben Sie die
+zugeordneten Daten nach microtech. Dafür müssen die Shopware-Standardadressen
+für Rechnung und Lieferung zugeordnet sein. Vor dem Schreiben prüft die Bridge,
+ob alle ausgewählten Anschriften und Ansprechpartner in microtech noch unter
+der gewählten AdrNr existieren. Anschließend liest sie den Kunden erneut und
+prüft Anschrift, Ansprechpartner und Standardrollen. Wenn dieselbe Anschrift
+zwei verschiedene Standard-Ansprechpartner erhalten würde, stoppt die
+Übertragung vor dem ersten Schreibzugriff.
+
 .. _kunden-merge-ablauf:
 
 Kunden zusammenführen

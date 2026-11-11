@@ -179,6 +179,17 @@ class CustomerUpsertMicrotechService(BaseService):
             billing_address=billing,
             same_address=self._same_address(shipping, billing),
         )
+        shipping_sub_number = _to_int(shipping.erp_ans_nr)
+        billing_sub_number = _to_int(billing.erp_ans_nr)
+        shared_postal_record = self._same_address(shipping, billing)
+        shipping_contact_number = _to_int(shipping.erp_asp_nr)
+        billing_contact_number = _to_int(billing.erp_asp_nr)
+        if shared_postal_record and shipping is not billing and shipping_contact_number != billing_contact_number:
+            raise ValueError(
+                "Liefer- und Rechnungsadresse zeigen auf dieselbe microtech-Anschrift, "
+                "aber auf unterschiedliche Ansprechpartner. microtech kann dort nur einen "
+                "Standard-Ansprechpartner führen. Bitte die Zuordnung prüfen."
+            )
 
         input_data = self._build_customer_input(
             customer=customer,
@@ -209,11 +220,6 @@ class CustomerUpsertMicrotechService(BaseService):
 
         known_address_sub_numbers = (
             set() if is_new_customer else self._address_sub_numbers_from_customer(existing_customer)
-        )
-        shipping_sub_number = _to_int(shipping.erp_ans_nr)
-        billing_sub_number = _to_int(billing.erp_ans_nr)
-        shared_postal_record = self._same_address(shipping, billing) or (
-            shipping_sub_number is not None and shipping_sub_number == billing_sub_number
         )
         shipping_ans_nr = self._upsert_postal_address_graphql(
             client=client,
@@ -261,8 +267,6 @@ class CustomerUpsertMicrotechService(BaseService):
             (billing_ans_nr, _to_int(billing.erp_asp_nr)),
         }
         for address_sub_number, selected_contact_number in synced_contact_pairs:
-            if selected_contact_number is None:
-                continue
             self._clear_existing_default_contact_flags(
                 client=client,
                 address_number=address_number,
@@ -331,11 +335,13 @@ class CustomerUpsertMicrotechService(BaseService):
             target_scope=target_scope,
         )
         address_sub_number = _to_int(address.erp_ans_nr)
+        created_postal_record = False
         if address_sub_number is not None and (
             known_address_sub_numbers is None or address_sub_number in known_address_sub_numbers
         ):
             result = client.update_postal_address(address_number, address_sub_number, input_data)
         else:
+            created_postal_record = True
             if address_sub_number is not None:
                 logger.warning(
                     "Lokale AnsNr {} der Adresse {} ist nicht mehr in Microtech vorhanden; "
@@ -373,6 +379,7 @@ class CustomerUpsertMicrotechService(BaseService):
                 "shipping_contact" if target_scope == "shipping_address"
                 else "billing_contact" if target_scope == "billing_address" else ""
             ),
+            create_if_unmapped=created_postal_record,
         )
         return resolved_sub_number
 
@@ -387,7 +394,14 @@ class CustomerUpsertMicrotechService(BaseService):
         shipping_address: Address | None = None,
         billing_address: Address | None = None,
         target_scope: str = "",
+        is_default: bool = True,
+        create_if_unmapped: bool = False,
     ) -> None:
+        # An explicitly mapped existing postal address without a selected
+        # contact means "postal address only". Do not manufacture a person
+        # from the Shopware address or replace a remote default contact.
+        if address.erp_ans_nr is not None and address.erp_asp_nr is None and not create_if_unmapped:
+            return
         input_data = self._build_contact_person_input(
             address=address,
             customer=customer,
@@ -395,6 +409,7 @@ class CustomerUpsertMicrotechService(BaseService):
             billing_address=billing_address,
             target_scope=target_scope,
         )
+        input_data["isDefault"] = is_default
         contact_number = _to_int(address.erp_asp_nr)
         if contact_number is not None:
             result = client.update_contact_person(address_number, address_sub_number, contact_number, input_data)
@@ -667,6 +682,12 @@ class CustomerUpsertMicrotechService(BaseService):
         """Keep one Microtech Anschrift for semantically identical addresses."""
         if shipping is billing or (shipping.pk and shipping.pk == billing.pk):
             return True
+        # Explicit manual assignments are authoritative, even when two
+        # Shopware address cards contain exactly the same postal text.
+        shipping_number = _to_int(shipping.erp_ans_nr)
+        billing_number = _to_int(billing.erp_ans_nr)
+        if shipping_number is not None and billing_number is not None:
+            return shipping_number == billing_number
         fields = (
             "name1",
             "name2",

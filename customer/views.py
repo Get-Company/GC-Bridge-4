@@ -60,105 +60,62 @@ def customer_merge_view(request):
     return TemplateResponse(request, "admin/customer_merge.html", context)
 
 
-def customer_merge_ai_view(request):
-    """Separate API-backed workspace; the existing merge screen stays available."""
-    if not (
-        request.user.has_perm("customer.view_customer")
-        or request.user.has_perm("customer.change_customer")
-    ):
+def customer_mapping_view(request):
+    if not request.user.has_perm("customer.view_customer"):
         raise PermissionDenied
-    context = {
-        **admin.site.each_context(request),
-        "title": "Kundenmerge KI",
-        "customer_merge_ai": True,
-    }
-    return TemplateResponse(request, "admin/customer_merge_ai.html", context)
+    return TemplateResponse(request, "admin/customer_mapping.html", {
+        **admin.site.each_context(request), "title": "Kunden zuordnen",
+    })
 
 
-def customer_merge_ai_api(request):
-    """Create user-owned analysis/review jobs; never accept client-side plans."""
-    from django.urls import reverse
-    from customer.services.merge_ai import CustomerMergeAIService
-
+def customer_mapping_api(request):
+    if request.method != "POST":
+        return JsonResponse({"error": "POST erforderlich."}, status=405)
     if not request.user.has_perm("customer.change_customer"):
         return JsonResponse({"error": "Keine Berechtigung zur Kundenbearbeitung."}, status=403)
-    if request.method not in {"GET", "POST"}:
-        return JsonResponse({"error": "GET oder POST erforderlich."}, status=405)
     try:
-        service = CustomerMergeAIService()
-        if request.method == "GET":
-            if request.GET.get("merge_search_id"):
-                return JsonResponse(service.confirmed_merge(owner=request.user.pk, search_id=request.GET["merge_search_id"]))
-            if request.GET.get("run_id"):
-                return JsonResponse(service.public(service.get(request.GET["run_id"], request.user.pk)))
-            providers = service.providers()
-            return JsonResponse({
-                "providers": [{"id": p.pk, "name": p.name, "model": p.model_name} for p in providers],
-                "provider_admin_url": reverse("admin:ai_aiproviderconfig_changelist")
-                    if request.user.has_perm("ai.change_aiproviderconfig") else "",
-                "can_apply": request.user.has_perm("customer.change_address"),
-                "can_merge": request.user.has_perm("customer.delete_customer"),
-                "can_create_merge_target": request.user.has_perms(["customer.add_customer", "customer.add_address"]),
-                "can_consolidate_addresses": request.user.has_perms(["customer.change_address", "customer.delete_address"]),
-                "can_change_order": request.user.has_perm("orders.change_order"),
-            })
-        if len(request.body) > 16_384:
+        from customer.services.customer_mapping import CustomerMappingService
+
+        if len(request.body) > 4096:
             raise ValueError("Die Anfrage ist zu groß.")
         body = json.loads(request.body)
         if not isinstance(body, dict):
             raise ValueError("Ein JSON-Objekt ist erforderlich.")
         action = body.get("action")
-        if action == "analyze":
-            result = service.start(
-                owner=request.user.pk, numbers=body.get("numbers"), provider_id=body.get("provider_id"),
-                mapping_only=body.get("mapping_only", False), search_id=body.get("search_id", ""), separate_accounts=body.get("separate_accounts", False), previous_id=body.get("previous_id", ""), objection=body.get("objection", ""),
+        service = CustomerMappingService()
+        if action == "customer":
+            if not request.user.has_perm("customer.add_customer"):
+                return JsonResponse({"error": "Keine Berechtigung zum Anlegen von Kunden."}, status=403)
+            result = service.link_customer(
+                shopware_id=body.get("shopware_id"), erp_nr=body.get("erp_nr"),
+                job_id=int(body.get("job_id")), user_id=request.user.pk,
             )
-        elif action == "merge":
-            if not request.user.has_perm("customer.delete_customer"):
-                return JsonResponse({"error": "Keine Berechtigung zum Kundenmerge."}, status=403)
-            result = service.confirm_merge(owner=request.user.pk, search_id=body.get("search_id"),
-                source_ref=body.get("source_ref"), target_ref=body.get("target_ref"),
-                allow_create_target=request.user.has_perms(["customer.add_customer", "customer.add_address"]))
-        elif action == "merge_status":
-            if not request.user.has_perm("customer.delete_customer"):
-                return JsonResponse({"error": "Keine Berechtigung zur Merge-Statusprüfung."}, status=403)
-            result = service.recover_merge(owner=request.user.pk, run_id=body.get("run_id"))
-        elif action == "address_merge_status":
-            if not request.user.has_perms(["customer.change_address", "customer.delete_address"]):
-                return JsonResponse({"error": "Keine Berechtigung zur Adresszusammenlegung."}, status=403)
-            result = service.recover_addresses(owner=request.user.pk, run_id=body.get("run_id"))
-        elif action in {"preview", "execute"}:
-            state = service.get(body.get("run_id"), request.user.pk)
-            index = body.get("index")
-            if type(index) is not int or not 0 <= index < len(state.get("proposals", [])):
-                raise ValueError("Ungültiger Vorschlag.")
-            kinds = {op.get("kind") for op in state["proposals"][index]["operations"]}
-            required = ["customer.change_customer"]
-            if "merge_shopware" in kinds:
-                required.append("customer.delete_customer")
-            if kinds - {"merge_shopware", "link_customer"}:
-                required.append("customer.change_address")
-            if "import_shopware_address" in kinds:
-                required.extend(["customer.add_address", "customer.add_customer"])
-            if "consolidate_addresses" in kinds:
-                from customer.services.address_consolidation import AddressConsolidationService
-                required.append("customer.delete_address")
-                operation = state["proposals"][index]["operations"][0]
-                if AddressConsolidationService.preview(state["snapshot"], operation["target"])["order_count"]:
-                    required.append("orders.change_order")
-            if not request.user.has_perms(required):
-                return JsonResponse({"error": "Keine Berechtigung für diese Änderungen."}, status=403)
-            result = service.phase(owner=request.user.pk, run_id=state["id"], index=index,
-                                   execute=action == "execute", token=body.get("preview_token", ""))
+        elif action == "address":
+            if not request.user.has_perms(["customer.change_address", "customer.add_address"]):
+                return JsonResponse({"error": "Keine Berechtigung zur Adresszuordnung."}, status=403)
+            ans_nr = body.get("ans_nr")
+            asp_nr = body.get("asp_nr")
+            result = service.link_address(
+                customer_id=int(body.get("customer_id")),
+                shopware_address_id=body.get("shopware_address_id"),
+                ans_nr=int(ans_nr),
+                asp_nr=None if asp_nr in (None, "") else int(asp_nr),
+                job_id=int(body.get("job_id")), user_id=request.user.pk,
+            )
+        elif action == "sync":
+            if not request.user.has_perm("customer.change_address"):
+                return JsonResponse({"error": "Keine Berechtigung zur Adressübertragung."}, status=403)
+            result = service.sync_customer(
+                customer_id=int(body.get("customer_id")), user_id=request.user.pk,
+            )
         else:
-            raise ValueError("Unbekannte Aktion.")
-        return JsonResponse(result, status=202)
-    except (ValueError, TypeError) as exc:
-        # Validation messages are locally authored. JSON parsing errors need no raw body.
-        message = str(exc) if type(exc) is ValueError else "Die Anfrage ist ungültig."
-        return JsonResponse({"error": message}, status=400)
+            raise ValueError("Unbekannte Zuordnungsaktion.")
+        return JsonResponse({"success": True, **result})
+    except (TypeError, ValueError) as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
     except Exception:
-        return JsonResponse({"error": "Der KI-Auftrag konnte nicht verarbeitet werden. Bitte Warteschlange und Provider prüfen."}, status=503)
+        logger.exception("Manuelle Kundenzuordnung oder microtech-Übertragung fehlgeschlagen")
+        return JsonResponse({"error": "Die Zuordnung oder Übertragung konnte nicht bestätigt werden. Bitte Daten neu laden und prüfen."}, status=503)
 
 
 def customer_merge_resolve_api(request):
@@ -237,15 +194,6 @@ def customer_merge_resolve_api(request):
                 "microtech_search_started": bool(microtech_jobs),
             },
         }
-        if request.GET.get("ai_search") == "1":
-            if not (request.user.has_perm("customer.view_customer") or request.user.has_perm("customer.change_customer")):
-                return JsonResponse({"error": "Keine Berechtigung zur Kundensuche."}, status=403)
-            from customer.services.merge_ai import CustomerMergeAIService
-            try:
-                payload["ai_search"] = CustomerMergeAIService().begin_search(
-                    owner=request.user.pk, numbers=erp_nrs, microtech_jobs=microtech_jobs)
-            except ValueError as exc:
-                return JsonResponse({"error": str(exc)}, status=400)
         return JsonResponse(payload)
 
     # Compatibility for callers of the former free-text endpoint.

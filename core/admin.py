@@ -55,8 +55,8 @@ from microtech.views.connection import microtech_connection_admin_view
 from hr.views import hr_calendar_api, hr_calendar_view
 from customer.views import (
     customer_merge_view,
-    customer_merge_ai_view,
-    customer_merge_ai_api,
+    customer_mapping_view,
+    customer_mapping_api,
     customer_merge_resolve_api,
     customer_merge_search_cell_api,
     customer_merge_microtech_search_status_api,
@@ -470,8 +470,8 @@ def _admin_get_urls():
         path("system/", admin.site.admin_view(system_status_view), name="core_system_status"),
         path("system/api/", admin.site.admin_view(system_status_api), name="core_system_status_api"),
         path("customer-merge/", admin.site.admin_view(customer_merge_view), name="customer_merge"),
-        path("customer-merge-ai/", admin.site.admin_view(customer_merge_ai_view), name="customer_merge_ai"),
-        path("customer-merge-ai/api/", admin.site.admin_view(customer_merge_ai_api), name="customer_merge_ai_api"),
+        path("customer-mapping/", admin.site.admin_view(customer_mapping_view), name="customer_mapping"),
+        path("customer-mapping/api/", admin.site.admin_view(customer_mapping_api), name="customer_mapping_api"),
         path("customer-merge/api/resolve/", admin.site.admin_view(customer_merge_resolve_api), name="customer_merge_resolve"),
         path("customer-merge/api/search-cell/", admin.site.admin_view(customer_merge_search_cell_api), name="customer_merge_search_cell"),
         path("customer-merge/api/microtech-search-status/", admin.site.admin_view(customer_merge_microtech_search_status_api), name="customer_merge_microtech_search_status"),

@@ -764,11 +764,13 @@ class CustomerMergeSearchService(BaseService):
                     "firstName": a.get("firstName", ""),
                     "lastName": a.get("lastName", ""),
                     "company": a.get("company", ""),
+                    "department": a.get("department", ""),
                     "street": a.get("street", ""),
                     "zipcode": a.get("zipcode", ""),
                     "city": a.get("city", ""),
                     "countryIso": country_a.get("iso", ""),
                     "email": a.get("email") or attrs.get("email", ""),
+                    "phone": a.get("phoneNumber", ""),
                     "is_shipping": address_id == default_shipping_id,
                     "is_invoice": address_id == default_billing_id,
                 })

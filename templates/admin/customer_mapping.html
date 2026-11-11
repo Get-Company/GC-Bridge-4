@@ -1,0 +1,81 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+{% block content %}
+<div id="customer-mapping" class="mapping-board"
+     data-search-url="{% url 'admin:customer_merge_search_cell' %}"
+     data-status-url="{% url 'admin:customer_merge_microtech_search_status' %}"
+     data-save-url="{% url 'admin:customer_mapping_api' %}">
+  <header class="mapping-heading">
+    <h1>Kunden zuordnen</h1>
+    <p>Ziehe je eine passende Card aus Shopware und microtech in die Mitte. Sobald beide dort liegen, wird die Zuordnung gespeichert.</p>
+  </header>
+  <form id="mapping-search" class="mapping-search">
+    {% csrf_token %}
+    <label for="mapping-numbers">Kundennummern suchen <span>Mehrere Nummern mit Komma trennen</span></label>
+    <div><input id="mapping-numbers" autocomplete="off" placeholder="z. B. 12196, 13247" required><button type="submit">Suchen</button></div>
+  </form>
+  <p id="mapping-message" class="mapping-message" role="status" aria-live="polite">Suche nach Kundennummern, um die Zuordnung zu beginnen.</p>
+  <div class="mapping-grid">
+    <section class="mapping-side" aria-labelledby="mapping-sw-title">
+      <h2 id="mapping-sw-title">Shopware 6</h2>
+      <div id="mapping-sw-customers" class="mapping-list"></div>
+      <h3>Adressen</h3>
+      <div id="mapping-sw-addresses" class="mapping-list"></div>
+    </section>
+    <main class="mapping-center">
+      <h2>Zuordnung</h2>
+      <p class="mapping-hint">Cards können auch mit „In die Mitte“ gewählt werden.</p>
+      <div class="mapping-pair">
+        <h3>Kundenkonto</h3>
+        <div class="mapping-slots">
+          <div id="mapping-sw-customer-slot" class="mapping-slot" data-kind="customer" data-side="sw">Shopware-Konto hier ablegen</div>
+          <div id="mapping-mt-customer-slot" class="mapping-slot" data-kind="customer" data-side="mt">microtech-Konto hier ablegen</div>
+        </div>
+        <p id="mapping-customer-result" class="mapping-result"></p>
+      </div>
+      <div class="mapping-pair">
+        <h3>Adresse und Ansprechpartner</h3>
+        <div class="mapping-slots">
+          <div id="mapping-sw-address-slot" class="mapping-slot" data-kind="address" data-side="sw">Shopware-Adresse hier ablegen</div>
+          <div id="mapping-mt-address-slot" class="mapping-slot" data-kind="address" data-side="mt">microtech-Anschrift hier ablegen</div>
+        </div>
+        <p id="mapping-address-result" class="mapping-result"></p>
+      </div>
+      <div class="mapping-transfer">
+        <button id="mapping-sync" type="button" disabled>Zuordnungen nach microtech übertragen und prüfen</button>
+        <p id="mapping-sync-result" class="mapping-result"></p>
+      </div>
+    </main>
+    <section class="mapping-side" aria-labelledby="mapping-mt-title">
+      <h2 id="mapping-mt-title">microtech</h2>
+      <div id="mapping-mt-customers" class="mapping-list"></div>
+      <h3>Anschriften und Ansprechpartner</h3>
+      <div id="mapping-mt-addresses" class="mapping-list"></div>
+    </section>
+  </div>
+</div>
+<style>
+  .mapping-board{--line:#dbe3ed;--bg:#fff;--soft:#f7f9fc;--ink:#17253a;--muted:#607189;color:var(--ink);max-width:1600px;margin:auto}
+  .dark .mapping-board{--line:#34445b;--bg:#182334;--soft:#101b2c;--ink:#e7edf5;--muted:#a2afbf}
+  .mapping-heading h1{font-size:1.6rem;font-weight:700;margin:0 0 .3rem}.mapping-heading p,.mapping-hint{color:var(--muted);margin:.2rem 0 1.1rem}
+  .mapping-search{background:var(--soft);border:1px solid var(--line);border-radius:.8rem;padding:1rem;margin:1.2rem 0}
+  .mapping-search label{display:block;font-weight:700;margin-bottom:.55rem}.mapping-search label span{font-size:.75rem;font-weight:400;color:var(--muted);margin-left:.4rem}
+  .mapping-search>div{display:flex;gap:.6rem}.mapping-search input{min-width:0;flex:1;border:1px solid var(--line);border-radius:.45rem;padding:.65rem .8rem;background:var(--bg);color:var(--ink)}
+  .mapping-search button,.mapping-card button{border:0;border-radius:.45rem;padding:.55rem .8rem;background:#2563eb;color:#fff;font-weight:650;cursor:pointer}
+  .mapping-search button:disabled,.mapping-card button:disabled{opacity:.55;cursor:wait}
+  .mapping-message{min-height:2rem;padding:.55rem .8rem;background:#eaf2ff;color:#1d4ed8;border-radius:.4rem}.mapping-message.error{background:#fef2f2;color:#b91c1c}
+  .mapping-grid{display:grid;grid-template-columns:minmax(230px,1fr) minmax(350px,1.45fr) minmax(230px,1fr);gap:1rem;align-items:start}
+  .mapping-side,.mapping-center{background:var(--bg);border:1px solid var(--line);border-radius:.8rem;padding:1rem;min-width:0}
+  .mapping-side h2,.mapping-center h2{font-size:1.15rem;font-weight:700;margin:0 0 .8rem}.mapping-side h3,.mapping-pair h3{font-size:.84rem;font-weight:700;margin:1.3rem 0 .65rem}
+  .mapping-list{display:grid;gap:.65rem}.mapping-card{border:1px solid var(--line);border-radius:.6rem;padding:.8rem;background:var(--soft);cursor:grab;overflow-wrap:anywhere}
+  .mapping-card strong{display:block;font-size:.9rem;margin-bottom:.25rem}.mapping-card .mapping-meta{display:block;color:var(--muted);font-size:.76rem;line-height:1.5}
+  .mapping-card button{font-size:.72rem;margin-top:.6rem;padding:.4rem .6rem}.mapping-card.mapped{border-color:#86cda7;background:#ecfdf4}.dark .mapping-card.mapped{background:#123326}
+  .mapping-pair{margin-top:1rem}.mapping-slots{display:grid;grid-template-columns:1fr 1fr;gap:.6rem}.mapping-slot{min-height:9rem;border:2px dashed var(--line);border-radius:.65rem;display:flex;align-items:center;justify-content:center;text-align:center;padding:.8rem;color:var(--muted);font-size:.8rem}
+  .mapping-slot.over{border-color:#2563eb;background:#eff6ff}.mapping-slot .mapping-card{text-align:left;width:100%;cursor:default}
+  .mapping-result{font-size:.78rem;min-height:1.2rem;margin:.45rem 0;color:#15803d}.mapping-result.error{color:#b91c1c}
+  .mapping-transfer{border-top:1px solid var(--line);margin-top:1.4rem;padding-top:1rem}.mapping-transfer button{border:0;border-radius:.45rem;padding:.65rem .85rem;background:#15803d;color:#fff;font-weight:700;cursor:pointer}.mapping-transfer button:disabled{opacity:.45;cursor:default}
+  .mapping-contact-choice{display:block;font-size:.75rem;margin-top:.55rem;color:var(--ink)}.mapping-contact-choice select{width:100%;margin-top:.25rem;padding:.4rem;border:1px solid var(--line);border-radius:.35rem;background:var(--bg);color:var(--ink)}
+  @media(max-width:950px){.mapping-grid{grid-template-columns:1fr}.mapping-center{grid-row:2}}
+</style>
+<script src="{% static 'customer/js/customer_mapping.js' %}" defer></script>
+{% endblock %}
