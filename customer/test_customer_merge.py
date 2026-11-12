@@ -11,6 +11,7 @@ from django.test import RequestFactory, SimpleTestCase
 from customer.services.customer_merge import (
     CustomerDeleteService,
     CustomerIdUpdateService,
+    CustomerMergeService,
     CustomerMergeSearchService,
     CustomerSyncDirectionService,
     ShopwareCustomerAddressService,
@@ -191,6 +192,20 @@ class CustomerIdUpdateServiceTest(SimpleTestCase):
 
 
 class CustomerDeleteServiceTest(SimpleTestCase):
+    @patch("customer.services.customer_merge.Order.objects.filter")
+    @patch("customer.services.customer_merge.Customer.objects.filter")
+    def test_delete_django_keeps_addresses_referenced_by_another_customer_order(self, customers, orders):
+        customer = MagicMock(pk=1, erp_nr="950111", name="Raiffeisenbank")
+        customer.orders.count.return_value = 0
+        customer.addresses.count.return_value = 1
+        customers.return_value.first.return_value = customer
+        orders.return_value.exists.return_value = True
+
+        with self.assertRaisesRegex(ValueError, "von Bestellungen verwendet"):
+            CustomerDeleteService().delete_django("950111")
+
+        customer.delete.assert_not_called()
+
     @patch("microtech.services.microtech_connection")
     def test_microtech_customer_delete_requires_confirmed_wrapper_result(self, connection):
         client = MagicMock()
@@ -201,6 +216,45 @@ class CustomerDeleteServiceTest(SimpleTestCase):
 
         self.assertEqual(result, {"deleted_erp_nr": "10001"})
         client.delete_customer.assert_called_once_with("10001")
+
+
+class CustomerMergeAddressRetentionTest(SimpleTestCase):
+    @patch("customer.services.customer_merge.Order.objects.filter")
+    @patch("customer.services.customer_merge.Customer.objects.filter")
+    def test_merge_rejects_discarding_an_address_used_by_an_order(self, customers, orders):
+        target = MagicMock(pk=2)
+        source = MagicMock(pk=1)
+        customers.return_value.first.side_effect = [target, source]
+        orders.return_value.values_list.side_effect = [[11], []]
+
+        with self.assertRaisesRegex(ValueError, "Quellanschrift ist noch an einer Bestellung"):
+            CustomerMergeService().merge_customers(
+                target_erp_nr="66206", source_erp_nr="950111", address_mapping={"11": None},
+            )
+
+        orders.return_value.update.assert_not_called()
+        source.delete.assert_not_called()
+
+    @patch("customer.services.customer_merge.Order.objects.filter")
+    @patch("customer.services.customer_merge.Address.objects.get")
+    def test_merge_repoints_order_addresses_before_source_address_is_deleted(self, get_address, orders):
+        source = MagicMock(pk=1)
+        target = MagicMock(pk=2)
+        source_address = MagicMock(pk=11, street="Hauptplatz 12", postal_code="9100", city="Völkermarkt")
+        target_address = MagicMock(pk=22)
+        get_address.side_effect = [source_address, target_address]
+
+        moved = CustomerMergeService()._merge_addresses(
+            target=target, source=source, address_mapping={"11": "22"},
+        )
+
+        self.assertEqual(moved, 1)
+        self.assertEqual(orders.call_args_list[0].kwargs, {"billing_address": source_address})
+        self.assertEqual(orders.call_args_list[1].kwargs, {"shipping_address": source_address})
+        self.assertEqual(orders.return_value.update.call_count, 2)
+        orders.return_value.update.assert_any_call(billing_address=target_address)
+        orders.return_value.update.assert_any_call(shipping_address=target_address)
+        source_address.delete.assert_called_once()
 
 
 class CustomerIdUpdateViewTest(SimpleTestCase):

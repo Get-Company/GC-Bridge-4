@@ -810,6 +810,27 @@ class CustomerMergeService(BaseService):
         if target.pk == source.pk:
             raise ValueError("Ziel- und Quell-Kunde sind identisch.")
 
+        # An order can already belong to the target while its address still
+        # belongs to the source. Deleting that address would silently SET_NULL
+        # the order's billing/shipping FK and block the Microtech export.
+        referenced_address_ids = set(
+            Order.objects.filter(billing_address__customer=source)
+            .values_list("billing_address_id", flat=True)
+        ) | set(
+            Order.objects.filter(shipping_address__customer=source)
+            .values_list("shipping_address_id", flat=True)
+        )
+        mapped_address_ids = {
+            str(address_id) for address_id, action in address_mapping.items() if action not in (None, "")
+        }
+        missing_mapping = sorted({str(address_id) for address_id in referenced_address_ids} - mapped_address_ids)
+        if missing_mapping:
+            raise ValueError(
+                "Quellanschrift ist noch an einer Bestellung verknüpft. "
+                "Bitte diese Anschrift beim Merge zuordnen oder als neue Adresse übernehmen: "
+                + ", ".join(missing_mapping)
+            )
+
         log = []
         def _log(msg: str) -> None:
             logger.info("MERGE| {}", msg)
@@ -964,6 +985,8 @@ class CustomerMergeService(BaseService):
                     ):
                         setattr(tgt_addr, field, getattr(src_addr, field))
                     tgt_addr.save()
+                    Order.objects.filter(billing_address=src_addr).update(billing_address=tgt_addr)
+                    Order.objects.filter(shipping_address=src_addr).update(shipping_address=tgt_addr)
                     src_addr.delete()
                     moved += 1
                     _log(f"  -> target_addr aktualisiert, src_addr geloescht")
@@ -1043,6 +1066,15 @@ class CustomerDeleteService(BaseService):
             raise ValueError(
                 f"Kunde {erp_nr} hat noch {order_count} Bestellungen in Django. "
                 f"Bitte zuerst Bestellungen verschieben (Merge)."
+            )
+
+        if Order.objects.filter(
+            models.Q(billing_address__customer=customer)
+            | models.Q(shipping_address__customer=customer)
+        ).exists():
+            raise ValueError(
+                f"Kunde {erp_nr} hat noch Anschriften, die von Bestellungen verwendet werden. "
+                "Bitte zuerst die Rechnungs- und Lieferanschriften der Bestellungen umstellen."
             )
 
         label = f"{customer.erp_nr} ({customer.name})"

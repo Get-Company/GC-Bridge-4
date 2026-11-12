@@ -8,7 +8,7 @@ from django.test import SimpleTestCase, TestCase
 
 from core.admin import BaseAdmin
 from customer.models import Address, Customer
-from orders.admin import DateTimeDateRangeFilter, OrderAdmin, PayPalOrderAdmin, _render_state_dropdown
+from orders.admin import DateTimeDateRangeFilter, OrderAdmin, OrderAdminForm, PayPalOrderAdmin, _render_state_dropdown
 from orders.models import MicrotechOrderSyncWorkflow, Order, PayPalOrder
 from orders.test_order_sync_workflow import make_order
 
@@ -151,8 +151,9 @@ class OrderAdminListDisplayTest(SimpleTestCase):
         self.model_admin = OrderAdmin(Order, django_admin.site)
 
     def _order(self, *, country_code: str, company: str = "", customer_name: str = "Erika") -> Order:
-        customer = Customer(erp_nr="100123", name=customer_name)
+        customer = Customer(id=1, erp_nr="100123", name=customer_name)
         billing_address = Address(
+            id=1,
             customer=customer,
             name1=company or "Frau",
             name2="Erika Musterfrau",
@@ -258,6 +259,39 @@ class OrderAdminListDisplayTest(SimpleTestCase):
         self.assertIn("Zugeordnet", rendered)
         self.assertIn("Eindeutig verknüpft", rendered)
 
+    def test_connection_column_warns_when_order_address_is_missing(self):
+        order = self._order(country_code="AT")
+        order.shipping_address = None
+        order.billing_address.api_id = "a" * 32
+        order.billing_address.erp_ans_nr = 0
+        order.billing_address.erp_asp_nr = 0
+        self._set_customer_defaults(order)
+
+        rendered = str(self.model_admin.connection_status(order))
+
+        self.assertIn("Auftragsadresse fehlt", rendered)
+        self.assertIn("Lieferanschrift fehlt am Auftrag", rendered)
+        self.assertNotIn("Eindeutig verknüpft", rendered)
+
+    def test_order_form_rejects_missing_and_foreign_addresses(self):
+        customer = Customer(id=7, erp_nr="66206")
+        valid = Address(id=11, customer=customer)
+        foreign = Address(id=12, customer=Customer(id=8, erp_nr="950111"))
+        form = OrderAdminForm(instance=Order(id=1, customer=customer))
+        form.cleaned_data = {"billing_address": None, "shipping_address": foreign}
+
+        with patch.object(form, "add_error") as add_error:
+            form.clean()
+
+        self.assertEqual(add_error.call_count, 2)
+        self.assertIn("fehlt", add_error.call_args_list[0].args[1])
+        self.assertIn("gehört nicht", add_error.call_args_list[1].args[1])
+
+        form.cleaned_data = {"billing_address": valid, "shipping_address": valid}
+        with patch.object(form, "add_error") as add_error:
+            form.clean()
+        add_error.assert_not_called()
+
     def test_paypal_customer_number_returns_adrnr(self):
         order = self._order(country_code="DE")
         model_admin = PayPalOrderAdmin(PayPalOrder, django_admin.site)
@@ -343,6 +377,22 @@ class OrderAdminListDisplayTest(SimpleTestCase):
 
         self.assertIn("Zugeordnet", reconciliation)
         self.assertIn("Eindeutig verknüpft", system_link)
+
+
+class OrderAdminTriggerNoDbTest(SimpleTestCase):
+    @patch("orders.admin.OrderSyncWorkflowService.start_or_resume_for_order")
+    def test_run_upsert_shows_missing_billing_address_reason(self, mock_trigger):
+        order = Order(id=1, api_id="sw-order", microtech_export_enabled=True)
+        mock_trigger.side_effect = ValueError("Order hat keine Rechnungsadresse zum Synchronisieren.")
+        model_admin = OrderAdmin(Order, django_admin.site)
+        request = RequestFactory().post("/")
+        with (
+            patch.object(model_admin, "get_object", return_value=order),
+            patch.object(model_admin, "message_user") as message,
+        ):
+            model_admin._run_microtech_upsert(request, str(order.pk))
+
+        self.assertIn("Rechnungsadresse", message.call_args.args[1])
 
 
 class AdminTriggerTest(TestCase):

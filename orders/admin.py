@@ -176,6 +176,29 @@ class OrderCustomerChangeForm(BaseDialogForm):
             raise forms.ValidationError(str(exc)) from exc
 
 
+class OrderAdminForm(forms.ModelForm):
+    class Meta:
+        model = Order
+        fields = "__all__"
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if not self.instance.pk:
+            return cleaned_data
+
+        customer = self.instance.customer
+        for field_name, label in (
+            ("billing_address", "Rechnungsanschrift"),
+            ("shipping_address", "Lieferanschrift"),
+        ):
+            address = cleaned_data.get(field_name)
+            if address is None:
+                self.add_error(field_name, f"{label} fehlt. Bitte die passende Adresse des Kunden auswählen.")
+            elif customer is not None and address.customer_id != customer.pk:
+                self.add_error(field_name, f"{label} gehört nicht zum Kunden dieser Bestellung.")
+        return cleaned_data
+
+
 @admin.register(MicrotechOrderSyncWorkflow)
 class MicrotechOrderSyncWorkflowAdmin(BaseAdmin):
     list_display = ("id", "order", "status", "current_step", "current_job", "updated_at")
@@ -205,6 +228,7 @@ class MicrotechOrderSyncWorkflowAdmin(BaseAdmin):
 
 @admin.register(Order)
 class OrderAdmin(BaseAdmin):
+    form = OrderAdminForm
     list_display = (
         "order_number",
         "customer_display",
@@ -467,7 +491,18 @@ class OrderAdmin(BaseAdmin):
 
     @admin.display(description="Verknüpfung")
     def connection_status(self, obj: Order):
-        """Stack address reconciliation and system-link badges in one compact column."""
+        """Show order export readiness alongside the customer's merge mappings."""
+        if obj.billing_address_id is None or obj.shipping_address_id is None:
+            missing = []
+            if obj.billing_address_id is None:
+                missing.append("Rechnungsanschrift")
+            if obj.shipping_address_id is None:
+                missing.append("Lieferanschrift")
+            return format_html(
+                '<span title="{}" style="border:1px solid #fca5a5;border-radius:999px;padding:1px 6px;font-size:11px;line-height:16px;color:#b91c1c;background:#fef2f2;white-space:nowrap;">{}</span>',
+                ", ".join(missing) + " fehlt am Auftrag",
+                "Auftragsadresse fehlt",
+            )
         return format_html(
             '<div style="display:flex;flex-direction:column;align-items:flex-start;gap:4px;">{}{}</div>',
             self.address_reconciliation_status(obj),
@@ -509,6 +544,9 @@ class OrderAdmin(BaseAdmin):
 
         try:
             workflow = OrderSyncWorkflowService().start_or_resume_for_order(order)
+        except ValueError as exc:
+            self.message_user(request, str(exc), level=messages.ERROR)
+            return
         except Exception:
             self.message_user(
                 request,
