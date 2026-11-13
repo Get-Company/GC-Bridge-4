@@ -293,6 +293,7 @@ class OrderAdmin(BaseAdmin):
                 "request_customer_change_detail",
                 "rule_tester_detail",
                 "upsert_to_microtech_detail",
+                "restart_microtech_sync_detail",
                 "export_swiss_customs_csv_detail",
             ),
         },

@@ -160,13 +160,17 @@ class OrderSyncWorkflowService(BaseService):
         ship, bill = mappings["shipping"], mappings["billing"]
         if (
             ship["address_id"] != bill["address_id"]
-            and ship["ans_nr"] is not None and ship["asp_nr"] is not None
-            and (ship["ans_nr"], ship["asp_nr"]) == (bill["ans_nr"], bill["asp_nr"])
-            and not self._same_address(shipping, billing)
+            and ship["ans_nr"] is not None
+            and ship["ans_nr"] == bill["ans_nr"]
+            and any(
+                str(getattr(shipping, field, "") or "").strip().casefold()
+                != str(getattr(billing, field, "") or "").strip().casefold()
+                for field in ("street", "postal_code", "city", "country_code")
+            )
         ):
             raise ValueError(
                 "Unterschiedliche Liefer- und Rechnungsanschriften verweisen auf dieselbe "
-                "Microtech-Anschrift und denselben Ansprechpartner. Bitte zuerst die Zuordnung korrigieren."
+                "Microtech-Anschrift. Bitte zuerst die Zuordnung korrigieren."
             )
 
     @staticmethod

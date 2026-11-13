@@ -36,7 +36,7 @@ class OrderAdminSearchTest(SimpleTestCase):
         self.assertNotIn("address_reconciliation_row", model_admin.actions_row)
         self.assertNotIn("resume_microtech_sync_detail", detail_action_dropdown["items"])
         self.assertNotIn("abort_microtech_sync_detail", detail_action_dropdown["items"])
-        self.assertNotIn("restart_microtech_sync_detail", detail_action_dropdown["items"])
+        self.assertIn("restart_microtech_sync_detail", detail_action_dropdown["items"])
         self.assertIn("customer", model_admin.readonly_fields)
         self.assertIsNotNone(model_admin.request_customer_change_detail.dialog)
         self.assertIsNotNone(model_admin.abort_microtech_sync_detail.dialog)

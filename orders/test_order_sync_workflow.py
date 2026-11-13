@@ -1,7 +1,7 @@
 from decimal import Decimal
 
 from django.db import IntegrityError
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 from unittest.mock import MagicMock, patch
 
 from customer.models import Address, Customer
@@ -34,6 +34,25 @@ def make_order() -> Order:
 
 
 from orders.services.order_sync_workflow import OrderSyncWorkflowService  # noqa: E402
+
+
+class AddressMappingGuardTest(SimpleTestCase):
+    def test_different_streets_cannot_share_microtech_address_with_different_contacts(self):
+        shipping = Address(pk=970, street="Ernst-Tellering-Str. 24c", postal_code="40764", city="Langenfeld", country_code="DE")
+        billing = Address(pk=973, street="Herzogstr. 8", postal_code="40764", city="Langenfeld", country_code="DE")
+        workflow = MagicMock(state={})
+        service = OrderSyncWorkflowService()
+
+        with patch.object(service, "_resolve_addresses", return_value=(shipping, billing)), patch.object(
+            service,
+            "_address_mappings",
+            return_value={
+                "shipping": {"address_id": 970, "ans_nr": 1, "asp_nr": 1},
+                "billing": {"address_id": 973, "ans_nr": 1, "asp_nr": 0},
+            },
+        ):
+            with self.assertRaisesMessage(ValueError, "dieselbe Microtech-Anschrift"):
+                service._assert_address_mappings_current(workflow)
 
 
 class NextStepResolverTest(TestCase):
