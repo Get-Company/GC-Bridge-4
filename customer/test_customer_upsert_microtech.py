@@ -33,14 +33,30 @@ class _FakeMicrotechClient:
 
     def update_customer(self, customer_number, input_data):
         self.update_customer_calls.append((customer_number, input_data))
+        for field in ("defaultShippingAddressNumber", "defaultBillingAddressNumber"):
+            if field in input_data:
+                self.customer[field] = input_data[field]
         return {"customer": {"customerNumber": customer_number}}
 
     def update_postal_address(self, address_number, address_sub_number, input_data):
         self.update_postal_calls.append((address_number, address_sub_number, input_data))
+        for address in self.customer.get("addresses") or []:
+            if address.get("addressSubNumber") != address_sub_number:
+                continue
+            for field in ("isDefaultShipping", "isDefaultBilling"):
+                if field in input_data:
+                    address[field] = input_data[field]
+                    if input_data[field]:
+                        number_field = (
+                            "defaultShippingAddressNumber" if field == "isDefaultShipping"
+                            else "defaultBillingAddressNumber"
+                        )
+                        self.customer[number_field] = address_sub_number
         return {"postalAddress": {"addressNumber": address_number, "addressSubNumber": address_sub_number}}
 
     def create_postal_address(self, address_number, input_data):
         self.create_postal_calls.append((address_number, input_data))
+        self.customer.setdefault("addresses", []).append({"addressSubNumber": 3})
         return {"postalAddress": {"addressNumber": address_number, "addressSubNumber": 3}}
 
     def create_contact_person(self, address_number, address_sub_number, _input_data):

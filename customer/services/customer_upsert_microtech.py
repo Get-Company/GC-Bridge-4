@@ -296,6 +296,23 @@ class CustomerUpsertMicrotechService(BaseService):
         if "taxCategory" in input_data:
             default_address_input["taxCategory"] = input_data["taxCategory"]
         client.update_customer(erp_nr, default_address_input)
+        if shipping_ans_nr != billing_ans_nr:
+            # The wrapper can collapse both CustomerInput default numbers onto
+            # the shipping address. Assign the billing flag on the postal
+            # records themselves, then verify the persisted remote state.
+            client.update_postal_address(address_number, shipping_ans_nr, {"isDefaultBilling": False})
+            client.update_postal_address(address_number, billing_ans_nr, {"isDefaultBilling": True})
+        remote_customer = self._customer_from_result(client.request_customer(erp_nr))
+        actual_defaults = (
+            _to_int(remote_customer.get("defaultShippingAddressNumber")),
+            _to_int(remote_customer.get("defaultBillingAddressNumber")),
+        )
+        expected_defaults = (shipping_ans_nr, billing_ans_nr)
+        if actual_defaults != expected_defaults:
+            raise ValueError(
+                "microtech hat die Standardanschriften nicht wie zugeordnet gespeichert: "
+                f"Lieferung/Rechnung {actual_defaults}, erwartet {expected_defaults}."
+            )
 
         shopware_updated = False
         if is_new_customer:

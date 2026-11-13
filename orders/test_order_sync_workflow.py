@@ -55,6 +55,35 @@ class AddressMappingGuardTest(SimpleTestCase):
                 service._assert_address_mappings_current(workflow)
 
 
+class DefaultAddressVerificationTest(SimpleTestCase):
+    def test_distinct_addresses_need_postal_billing_correction(self):
+        workflow = MagicMock(state={"shipping_ans_nr": 3, "billing_ans_nr": 1})
+        service = OrderSyncWorkflowService()
+        self.assertTrue(service._is_step_applicable(workflow, "clear_shipping_billing_default"))
+        self.assertTrue(service._is_step_applicable(workflow, "set_billing_postal_default"))
+
+    def test_same_address_skips_postal_billing_correction(self):
+        workflow = MagicMock(state={"shipping_ans_nr": 3, "billing_ans_nr": 3})
+        service = OrderSyncWorkflowService()
+        self.assertFalse(service._is_step_applicable(workflow, "clear_shipping_billing_default"))
+        self.assertFalse(service._is_step_applicable(workflow, "set_billing_postal_default"))
+
+    def test_remote_defaults_must_match_order_mapping(self):
+        workflow = MagicMock(state={"shipping_ans_nr": 3, "billing_ans_nr": 1})
+        service = OrderSyncWorkflowService()
+        with self.assertRaisesMessage(ValueError, "nicht wie zugeordnet"):
+            service._apply_result(
+                workflow,
+                "verify_default_addresses",
+                {"customer": {"defaultShippingAddressNumber": 3, "defaultBillingAddressNumber": 3}},
+            )
+        service._apply_result(
+            workflow,
+            "verify_default_addresses",
+            {"customer": {"defaultShippingAddressNumber": 3, "defaultBillingAddressNumber": 1}},
+        )
+
+
 class NextStepResolverTest(TestCase):
     def _wf(self, *, state=None, completed=None):
         order = make_order()

@@ -43,6 +43,9 @@ class OrderSyncWorkflowService(BaseService):
         "clear_default_shipping_address",
         "clear_default_billing_address",
         "set_default_addresses",
+        "clear_shipping_billing_default",
+        "set_billing_postal_default",
+        "verify_default_addresses",
         "probe_vorgang",
         "write_vorgang",
         "verify_vorgang_prices",
@@ -98,6 +101,9 @@ class OrderSyncWorkflowService(BaseService):
             return bool(self._pending_default_clear_nrs(workflow, role="shipping"))
         if step == "clear_default_billing_address":
             return bool(self._pending_default_clear_nrs(workflow, role="billing"))
+        if step in ("clear_shipping_billing_default", "set_billing_postal_default"):
+            shipping_ans_nr, billing_ans_nr = self._target_default_ans_nrs(workflow)
+            return shipping_ans_nr is not None and billing_ans_nr is not None and shipping_ans_nr != billing_ans_nr
         return True
 
     @staticmethod
@@ -1029,6 +1035,18 @@ class OrderSyncWorkflowService(BaseService):
                 for number in self._pending_default_clear_nrs(workflow, role=role)
                 if number != submitted_sub_number
             ]
+        elif step == "verify_default_addresses":
+            customer = (result or {}).get("customer") or {}
+            expected = self._target_default_ans_nrs(workflow)
+            actual = (
+                _to_int(customer.get("defaultShippingAddressNumber")),
+                _to_int(customer.get("defaultBillingAddressNumber")),
+            )
+            if actual != expected:
+                raise ValueError(
+                    "microtech hat die Standardanschriften nicht wie zugeordnet gespeichert: "
+                    f"Lieferung/Rechnung {actual}, erwartet {expected}."
+                )
         elif step in ("clear_default_shipping_contact", "clear_default_billing_contact"):
             if job is None:
                 raise ValueError(f"{step} ohne zugehörigen Microtech-Job.")
@@ -1179,6 +1197,11 @@ class OrderSyncWorkflowService(BaseService):
 
         kind = MicrotechGraphQLJob.Kind.CUSTOMER_UPSERT
         if step == "probe_customer":
+            kind = MicrotechGraphQLJob.Kind.CUSTOMER_READ
+            operation = "requestCustomer"
+            submit = lambda: client.submit_request_customer(state["erp_nr"])
+            payload = {"customerNumber": state["erp_nr"]}
+        elif step == "verify_default_addresses":
             kind = MicrotechGraphQLJob.Kind.CUSTOMER_READ
             operation = "requestCustomer"
             submit = lambda: client.submit_request_customer(state["erp_nr"])
@@ -1362,6 +1385,15 @@ class OrderSyncWorkflowService(BaseService):
                 )
             submit = lambda: client.submit_update_customer(state["erp_nr"], input_data)
             payload = {"customerNumber": state["erp_nr"], "input": input_data}
+        elif step in ("clear_shipping_billing_default", "set_billing_postal_default"):
+            operation = "updatePostalAddress"
+            shipping_ans_nr, billing_ans_nr = self._target_default_ans_nrs(workflow)
+            if shipping_ans_nr is None or billing_ans_nr is None or shipping_ans_nr == billing_ans_nr:
+                raise ValueError(f"{step} benötigt zwei verschiedene zugeordnete Anschriften.")
+            sub_number = shipping_ans_nr if step == "clear_shipping_billing_default" else billing_ans_nr
+            input_data = {"isDefaultBilling": step == "set_billing_postal_default"}
+            submit = lambda: client.submit_update_postal_address(address_number, sub_number, input_data)
+            payload = {"addressNumber": address_number, "addressSubNumber": sub_number, "input": input_data}
         else:
             return self._submit_order_step(workflow, step)
 
