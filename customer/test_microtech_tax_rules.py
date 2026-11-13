@@ -1,4 +1,5 @@
 from django.test import SimpleTestCase
+from unittest.mock import patch
 
 from customer.models import Address, Customer
 from customer.services.customer_upsert_microtech import CustomerUpsertMicrotechService
@@ -6,6 +7,53 @@ from customer.services.webshop_mapping import CustomerWebshopMappingService
 
 
 class MicrotechCustomerTaxRuleTest(SimpleTestCase):
+    def test_partial_mapping_keeps_unmapped_postal_and_contact_fields(self):
+        customer = Customer(erp_nr="13138", email="invoice@example.test")
+        address = Address(
+            customer=customer,
+            name1="Heras GmbH",
+            first_name="Daniel",
+            last_name="Schicht",
+            street="Ernst-Tellering-Str. 24c",
+            postal_code="40764",
+            city="Langenfeld",
+            country_code="DE",
+            email="old@example.test",
+        )
+        service = CustomerUpsertMicrotechService()
+
+        with patch("microtech.rule_engine.mapping_resolver.resolve_customer_mapping_fields", return_value={"email": "invoice@example.test"}), patch(
+            "microtech.rule_engine.dispatch.resolve_postal_address_with_mode", return_value={}
+        ), patch("microtech.rule_engine.dispatch.resolve_customer_postal_address_with_mode", return_value={}), patch(
+            "microtech.rule_engine.dispatch.resolve_customer_contact_person_with_mode", return_value={}
+        ):
+            postal = service._build_postal_address_input(
+                address=address,
+                is_shipping=False,
+                is_invoice=False,
+                na1_mode="auto",
+                na1_static_value="",
+                include_email=True,
+                customer=customer,
+                shipping_address=address,
+                billing_address=address,
+                target_scope="shipping_address",
+            )
+            contact = service._build_contact_person_input(
+                address=address,
+                customer=customer,
+                shipping_address=address,
+                billing_address=address,
+                target_scope="shipping_contact",
+            )
+
+        self.assertEqual(postal["email"], "invoice@example.test")
+        self.assertEqual(postal["name2"], "Heras GmbH")
+        self.assertEqual(postal["street"], "Ernst-Tellering-Str. 24c")
+        self.assertEqual(contact["email"], "invoice@example.test")
+        self.assertEqual(contact["firstName"], "Daniel")
+        self.assertEqual(contact["lastName"], "Schicht")
+
     def test_tax_category_uses_the_confirmed_country_group_and_vat_rules(self):
         resolve = CustomerUpsertMicrotechService._resolve_ustkat
 

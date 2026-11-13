@@ -492,7 +492,7 @@ class CustomerUpsertMicrotechService(BaseService):
             code_values=customer_input,
         )
         if mapped_input:
-            customer_input = mapped_input
+            customer_input.update(mapped_input)
         customer_input["webshopDefaults"] = webshop_defaults
         # Conditional business rules overlay the standard mapping only in live
         # mode; off/shadow retain the standard values assembled above.
@@ -578,7 +578,7 @@ class CustomerUpsertMicrotechService(BaseService):
                 code_values=postal_input,
             )
             if mapped_input:
-                postal_input = mapped_input
+                postal_input.update(mapped_input)
 
             from microtech.rule_engine.dispatch import resolve_customer_postal_address_with_mode
 
@@ -637,7 +637,7 @@ class CustomerUpsertMicrotechService(BaseService):
                 code_values=contact_input,
             )
             if mapped_input:
-                contact_input = mapped_input
+                contact_input.update(mapped_input)
 
             from microtech.rule_engine.dispatch import resolve_customer_contact_person_with_mode
 
