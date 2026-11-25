@@ -25,6 +25,7 @@ from orders.services.constants import (
     DEFAULT_UNIT,
 )
 from microtech.rule_engine.dispatch import resolve_order_rule_with_mode
+from microtech.services.graphql_client import GraphQLMicrotechError
 from orders.services.order_rule_resolver import (
     ResolvedDatasetAction,
     ResolvedOrderRule,
@@ -96,7 +97,9 @@ class OrderUpsertMicrotechService(BaseService):
                 return self.refresh_erp_order_id(order, erp=erp_connection)
 
         if isinstance(erp, MicrotechGraphQLClientService):
-            return self._refresh_erp_order_id_graphql(order=order, client=erp)
+            return self._refresh_erp_order_id_graphql(
+                order=order, client=erp, lookup_by_order_number_first=True,
+            )
 
         vorgang_service = MicrotechVorgangService(erp=erp)
         existing_beleg_nr = (order.erp_order_id or "").strip()
@@ -264,10 +267,33 @@ class OrderUpsertMicrotechService(BaseService):
             rule_debug=rule_debug,
         )
 
-    def _refresh_erp_order_id_graphql(self, *, order: Order, client: MicrotechGraphQLClientService) -> str:
+    def _refresh_erp_order_id_graphql(
+        self,
+        *,
+        order: Order,
+        client: MicrotechGraphQLClientService,
+        lookup_by_order_number_first: bool = False,
+    ) -> str:
+        order_number = (order.order_number or "").strip()
+        if lookup_by_order_number_first and order_number:
+            found = self._find_vorgang_by_auftr_nr_graphql(order=order, client=client)
+            if found:
+                beleg_nr, vorgang_id = found
+                self._persist_erp_order_id(order=order, erp_order_id=beleg_nr)
+                self._persist_erp_vorgang_id(order=order, erp_vorgang_id=vorgang_id)
+                return beleg_nr
+
         existing_beleg_nr = (order.erp_order_id or "").strip()
         if existing_beleg_nr:
-            job = client.request_vorgang(existing_beleg_nr)
+            try:
+                job = client.request_vorgang(existing_beleg_nr)
+            except GraphQLMicrotechError as exc:
+                if not any(
+                    fragment in str(exc).casefold()
+                    for fragment in ("nicht gefunden", "not found", "kein vorgang")
+                ):
+                    raise
+                job = {}
             vorgang = job.get("vorgang") or {}
             beleg_nr = str(vorgang.get("belegNr") or "").strip()
             if beleg_nr:
@@ -279,9 +305,25 @@ class OrderUpsertMicrotechService(BaseService):
                 return beleg_nr
             self._clear_erp_order_id(order=order)
 
-        order_number = (order.order_number or "").strip()
         if not order_number:
             return ""
+
+        if not lookup_by_order_number_first:
+            found = self._find_vorgang_by_auftr_nr_graphql(order=order, client=client)
+            if found:
+                beleg_nr, vorgang_id = found
+                self._persist_erp_order_id(order=order, erp_order_id=beleg_nr)
+                self._persist_erp_vorgang_id(order=order, erp_vorgang_id=vorgang_id)
+                return beleg_nr
+        return ""
+
+    @staticmethod
+    def _find_vorgang_by_auftr_nr_graphql(
+        *, order: Order, client: MicrotechGraphQLClientService,
+    ) -> tuple[str, str] | None:
+        order_number = (order.order_number or "").strip()
+        if not order_number:
+            return None
 
         quoted_order_number = order_number.replace("'", "''")
         result = client.poll_dataset_records(
@@ -296,24 +338,32 @@ class OrderUpsertMicrotechService(BaseService):
             timeout=180,
         )
         customer_erp_nr = (order.customer.erp_nr or "").strip() if order.customer else ""
-        first_beleg_nr = ""
-        first_vorgang_id = ""
-        for record in result.get("records") or []:
-            beleg_nr = str((record or {}).get("BelegNr") or "").strip()
-            adr_nr = str((record or {}).get("AdrNr") or "").strip()
-            vorgang_id = str((record or {}).get("Bez") or "").strip()
-            if beleg_nr and not first_beleg_nr:
-                first_beleg_nr = beleg_nr
-                first_vorgang_id = vorgang_id
-            if beleg_nr and customer_erp_nr and adr_nr == customer_erp_nr:
-                self._persist_erp_order_id(order=order, erp_order_id=beleg_nr)
-                self._persist_erp_vorgang_id(order=order, erp_vorgang_id=vorgang_id)
-                return beleg_nr
-        if first_beleg_nr:
-            self._persist_erp_order_id(order=order, erp_order_id=first_beleg_nr)
-            self._persist_erp_vorgang_id(order=order, erp_vorgang_id=first_vorgang_id)
-            return first_beleg_nr
-        return ""
+        records = result.get("records") or result.get("vorgaenge") or []
+        candidates = [
+            record for record in records
+            if isinstance(record, dict)
+            and str(record.get("AuftrNr") or "").strip() == order_number
+            and str(record.get("BelegNr") or "").strip()
+        ]
+        if customer_erp_nr:
+            customer_matches = [
+                record for record in candidates
+                if str(record.get("AdrNr") or "").strip() == customer_erp_nr
+            ]
+            if customer_matches:
+                candidates = customer_matches
+        by_beleg_nr = {
+            str(record["BelegNr"]).strip(): str(record.get("Bez") or "").strip()
+            for record in candidates
+        }
+        if len(by_beleg_nr) > 1 or (by_beleg_nr and result.get("hasMore")):
+            raise ValueError(
+                f"Mehrere Microtech-Vorgänge zur Auftragsnummer {order_number} gefunden. "
+                "Der Zoll-CSV-Export benötigt eine eindeutige Zuordnung."
+            )
+        if by_beleg_nr:
+            return next(iter(by_beleg_nr.items()))
+        return None
 
     def _upsert_order_graphql(self, *, order: Order, client: MicrotechGraphQLClientService) -> OrderUpsertResult:
         from orders.services.order_price import OrderPriceService
