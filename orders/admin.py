@@ -13,7 +13,7 @@ from django.http import HttpResponse
 from django.http import JsonResponse
 from django.template.loader import render_to_string
 from django.template.response import TemplateResponse
-from django.urls import reverse
+from django.urls import path, reverse
 from django.utils.html import format_html, format_html_join
 
 from unfold.contrib.filters.admin import (
@@ -176,6 +176,17 @@ class OrderCustomerChangeForm(BaseDialogForm):
             raise forms.ValidationError(str(exc)) from exc
 
 
+class MicrotechCustomsCsvForm(BaseDialogForm):
+    auftr_nr = forms.CharField(
+        label="Auftragsnummer in microtech",
+        max_length=255,
+        widget=forms.TextInput(attrs={"autocomplete": "off", "autofocus": True}),
+    )
+
+    def clean_auftr_nr(self):
+        return self.cleaned_data["auftr_nr"].strip()
+
+
 class OrderAdminForm(forms.ModelForm):
     class Meta:
         model = Order
@@ -277,7 +288,7 @@ class OrderAdmin(BaseAdmin):
         ("created_at", RangeDateTimeFilter),
     ]
     inlines = (OrderDetailInline,)
-    actions_list = ("sync_open_orders_from_shopware_list",)
+    actions_list = ("sync_open_orders_from_shopware_list", "export_microtech_customs_csv_list")
     actions = ("sync_open_orders_from_shopware",)
     actions_row = (
         "customer_merge_row",
@@ -300,6 +311,15 @@ class OrderAdmin(BaseAdmin):
     )
     list_fullwidth = True
     readonly_fields = ("customer", "customer_change_status", "microtech_sync_status")
+
+    def get_urls(self):
+        return [
+            path(
+                "microtech-customs-download/",
+                self.admin_site.admin_view(self.download_microtech_customs_csv),
+                name=f"{self.model._meta.app_label}_{self.model._meta.model_name}_microtech_customs_download",
+            ),
+        ] + super().get_urls()
 
     def get_queryset(self, request):
         return (
@@ -627,6 +647,10 @@ class OrderAdmin(BaseAdmin):
             )
             return None
 
+        return self._customs_csv_response(export)
+
+    @staticmethod
+    def _customs_csv_response(export) -> HttpResponse:
         response = HttpResponse(export.content.encode("utf-8-sig"), content_type="text/csv; charset=utf-8")
         response["Content-Disposition"] = f'attachment; filename="{export.filename}"'
         return response
@@ -1064,6 +1088,47 @@ class OrderAdmin(BaseAdmin):
     def sync_open_orders_from_shopware_list(self, request):
         self._run_open_order_sync(request)
         return self._redirect_to_changelist()
+
+    @action(
+        description="Zoll-CSV aus microtech",
+        icon="download",
+        variant=ActionVariant.PRIMARY,
+        permissions=("view",),
+        dialog={
+            "title": "Zoll-CSV aus microtech herunterladen",
+            "description": "Geben Sie die Auftragsnummer des microtech-Vorgangs ein.",
+            "form_class": MicrotechCustomsCsvForm,
+            "form_submit_text": "CSV herunterladen",
+        },
+    )
+    def export_microtech_customs_csv_list(self, request, form: MicrotechCustomsCsvForm):
+        url = reverse(
+            f"admin:{self.model._meta.app_label}_{self.model._meta.model_name}_microtech_customs_download"
+        )
+        url = f"{url}?{urlencode({'auftr_nr': form.cleaned_data['auftr_nr']})}"
+        response = HttpResponse()
+        response["HX-Redirect"] = url
+        return response
+
+    def download_microtech_customs_csv(self, request):
+        if not self.has_view_permission(request):
+            raise PermissionDenied
+        form = MicrotechCustomsCsvForm(
+            data={"auftr_nr": request.GET.get("auftr_nr", ""), "_form_submitted": "1"},
+            request=request,
+        )
+        if not form.is_valid():
+            self.message_user(request, "Bitte eine Auftragsnummer eingeben.", level=messages.ERROR)
+            return self._redirect_to_changelist()
+        try:
+            with microtech_connection() as client:
+                export = SwissCustomsCsvExportService().export_microtech_order(
+                    form.cleaned_data["auftr_nr"], client=client,
+                )
+        except Exception as exc:
+            self.message_user(request, f"Zoll-CSV Export fehlgeschlagen: {exc}", level=messages.ERROR)
+            return self._redirect_to_changelist()
+        return self._customs_csv_response(export)
 
     @action(
         description="Offene Bestellungen von Shopware synchronisieren",

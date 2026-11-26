@@ -324,7 +324,21 @@ class OrderUpsertMicrotechService(BaseService):
         order_number = (order.order_number or "").strip()
         if not order_number:
             return None
+        customer_erp_nr = (order.customer.erp_nr or "").strip() if order.customer else ""
+        record = OrderUpsertMicrotechService.find_vorgang_by_auftr_nr_graphql(
+            order_number=order_number, client=client, customer_erp_nr=customer_erp_nr,
+        )
+        if record is None:
+            return None
+        return str(record["BelegNr"]).strip(), str(record.get("Bez") or "").strip()
 
+    @staticmethod
+    def find_vorgang_by_auftr_nr_graphql(
+        *, order_number: str, client: MicrotechGraphQLClientService, customer_erp_nr: str = "",
+    ) -> dict[str, Any] | None:
+        order_number = order_number.strip()
+        if not order_number:
+            raise ValueError("Auftragsnummer fehlt.")
         quoted_order_number = order_number.replace("'", "''")
         result = client.poll_dataset_records(
             {
@@ -337,7 +351,6 @@ class OrderUpsertMicrotechService(BaseService):
             },
             timeout=180,
         )
-        customer_erp_nr = (order.customer.erp_nr or "").strip() if order.customer else ""
         records = result.get("records") or result.get("vorgaenge") or []
         candidates = [
             record for record in records
@@ -352,17 +365,14 @@ class OrderUpsertMicrotechService(BaseService):
             ]
             if customer_matches:
                 candidates = customer_matches
-        by_beleg_nr = {
-            str(record["BelegNr"]).strip(): str(record.get("Bez") or "").strip()
-            for record in candidates
-        }
+        by_beleg_nr = {str(record["BelegNr"]).strip(): record for record in candidates}
         if len(by_beleg_nr) > 1 or (by_beleg_nr and result.get("hasMore")):
             raise ValueError(
                 f"Mehrere Microtech-Vorgänge zur Auftragsnummer {order_number} gefunden. "
                 "Der Zoll-CSV-Export benötigt eine eindeutige Zuordnung."
             )
         if by_beleg_nr:
-            return next(iter(by_beleg_nr.items()))
+            return next(iter(by_beleg_nr.values()))
         return None
 
     def _upsert_order_graphql(self, *, order: Order, client: MicrotechGraphQLClientService) -> OrderUpsertResult:
