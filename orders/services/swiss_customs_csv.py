@@ -203,6 +203,10 @@ class SwissCustomsCsvExportService(BaseService):
                     weight_gross=_to_decimal(product.get("weightGrossKg")),
                     weight_net=_to_decimal(product.get("weightNetKg")),
                 )
+        for detail in details:
+            product = product_map.get(detail.erp_nr)
+            if product and product.name:
+                detail.name = product.name
 
         document_date = self._parse_microtech_date(vorgang.get("date") or header.get("Dat"))
         customer_number = _to_str(header.get("AdrNr")) or _to_str(vorgang.get("erpAddressNumber"))

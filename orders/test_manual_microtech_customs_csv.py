@@ -24,7 +24,7 @@ class ManualMicrotechCustomsCsvTest(SimpleTestCase):
                 "orderNumber": "10387",
                 "date": "2026-11-25",
                 "positions": [
-                    {"erpNumber": "ART-1", "name": "Ordner", "quantity": 2, "unit": "Stk", "unitPrice": 10, "totalPrice": 20},
+                    {"erpNumber": "ART-1", "name": "Ordner\r\nbrutto: 3 kg", "quantity": 2, "unit": "Stk", "unitPrice": 10, "totalPrice": 20},
                     {"erpNumber": "V", "name": "Versand", "quantity": 1, "unit": "Stk", "unitPrice": 5, "totalPrice": 5},
                 ],
             },
@@ -71,6 +71,7 @@ class ManualMicrotechCustomsCsvTest(SimpleTestCase):
         self.assertEqual(rows[0]["importer.taxId"], "CHE-123.456.789")
         self.assertEqual(rows[0]["importer.address.countryCode"], "CH")
         self.assertEqual(rows[0]["lineItem.commodityCode"], "1234.56")
+        self.assertEqual(rows[0]["lineItem.goodsDescription"], "Ordner")
         self.assertEqual(rows[0]["lineItem.valueInInvoiceCurrency"], "20")
         self.assertEqual(rows[0]["invoice.totalGoodsValue.amount"], "20")
         self.assertEqual(rows[0]["totalGrossWeightInKg"], "3")
