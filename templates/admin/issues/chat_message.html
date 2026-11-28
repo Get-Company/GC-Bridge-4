@@ -1,0 +1,12 @@
+<article class="issue-chat-message">
+    <div class="issue-chat-meta">
+        <strong>{% if chat_message.author %}{{ chat_message.author.get_full_name|default:chat_message.author.username }}{% else %}Ehemaliger Mitarbeiter{% endif %}</strong>
+        <time datetime="{{ chat_message.created_at|date:'c' }}">{{ chat_message.created_at|date:'d.m.Y H:i' }}</time>
+    </div>
+    {% if chat_message.body %}<p class="issue-chat-body">{{ chat_message.body|linebreaksbr }}</p>{% endif %}
+    {% for attachment in chat_message.attachments.all %}
+        <a class="issue-chat-image-link" href="{{ attachment.file.url }}" target="_blank" rel="noopener" aria-label="Screenshot {{ forloop.counter }} öffnen">
+            <img src="{{ attachment.file.url }}" alt="Screenshot zur Nachricht" loading="lazy">
+        </a>
+    {% endfor %}
+</article>

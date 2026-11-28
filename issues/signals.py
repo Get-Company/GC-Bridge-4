@@ -60,5 +60,5 @@ def notify_new_message(sender, instance, created, **kwargs):
             instance.issue,
             IssueNotification.Kind.MESSAGE,
             actor=instance.author,
-            detail=instance.body[:255],
+            detail=instance.body[:255] or "Screenshot",
         )

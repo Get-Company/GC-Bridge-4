@@ -211,6 +211,14 @@ class IssueAttachment(BaseModel):
         related_name="attachments",
         verbose_name=_("Issue"),
     )
+    message = models.ForeignKey(
+        "IssueMessage",
+        on_delete=models.SET_NULL,
+        related_name="attachments",
+        null=True,
+        blank=True,
+        verbose_name=_("Chat-Nachricht"),
+    )
     attachment_type = models.CharField(
         max_length=20,
         choices=AttachmentType.choices,
@@ -239,7 +247,7 @@ class IssueAttachment(BaseModel):
 class IssueMessage(BaseModel):
     issue = models.ForeignKey(Issue, on_delete=models.CASCADE, related_name="messages", verbose_name=_("Issue"))
     author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name="issue_messages", verbose_name=_("Verfasser"))
-    body = models.TextField(verbose_name=_("Nachricht"))
+    body = models.TextField(blank=True, default="", verbose_name=_("Nachricht"))
 
     class Meta:
         verbose_name = _("Issue-Nachricht")

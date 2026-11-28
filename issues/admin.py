@@ -2,8 +2,10 @@ from django import forms
 from django.contrib import admin, messages
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied
+from django.db import transaction
 from django.http import HttpResponseNotAllowed, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404
+from django.template.loader import render_to_string
 from django.urls import path, reverse
 from django.utils import timezone
 from django.utils.html import format_html
@@ -11,6 +13,7 @@ from unfold.decorators import action
 from unfold.enums import ActionVariant
 
 from core.admin import BaseAdmin, BaseTabularInline
+from issues.forms import IssueChatForm
 from issues.models import ArchivedIssue, DEFAULT_ASSIGNED_USER_ID, Issue, IssueAttachment, IssueCategory, IssueMessage, IssueNotification
 
 
@@ -142,7 +145,7 @@ class IssueAdmin(StaffIssueAccessMixin, BaseAdmin):
         if request.method == "GET":
             IssueNotification.objects.filter(user=request.user, issue=issue, read_at__isnull=True).update(read_at=timezone.now())
         context = {
-            "issue_chat_messages": issue.messages.select_related("author").all(),
+            "issue_chat_messages": issue.messages.select_related("author").prefetch_related("attachments"),
             "issue_message_url": reverse("admin:issues_issue_message", args=(issue.pk,)),
         }
         context.update(extra_context or {})
@@ -154,11 +157,29 @@ class IssueAdmin(StaffIssueAccessMixin, BaseAdmin):
         issue = get_object_or_404(Issue, pk=object_id)
         if not self.has_change_permission(request, issue):
             raise PermissionDenied
-        body = request.POST.get("body", "").strip()
-        if not body or len(body) > 5000:
-            self.message_user(request, "Bitte eine Nachricht mit maximal 5000 Zeichen eingeben.", level=messages.ERROR)
+        form = IssueChatForm(request.POST, uploads=request.FILES.getlist("images"))
+        is_ajax = request.headers.get("X-Requested-With") == "XMLHttpRequest"
+        if not form.is_valid():
+            error = " ".join(str(item) for errors in form.errors.values() for item in errors)
+            if is_ajax:
+                return JsonResponse({"error": error}, status=400)
+            self.message_user(request, error, level=messages.ERROR)
         else:
-            IssueMessage.objects.create(issue=issue, author=request.user, body=body)
+            with transaction.atomic():
+                message = IssueMessage.objects.create(
+                    issue=issue, author=request.user, body=form.cleaned_data["body"]
+                )
+                for upload in form.uploads:
+                    IssueAttachment.objects.create(
+                        issue=issue,
+                        message=message,
+                        attachment_type=IssueAttachment.AttachmentType.SCREENSHOT,
+                        file=upload,
+                    )
+            if is_ajax:
+                message = IssueMessage.objects.select_related("author").prefetch_related("attachments").get(pk=message.pk)
+                html = render_to_string("admin/issues/chat_message.html", {"chat_message": message}, request)
+                return JsonResponse({"html": html})
         target = "admin:issues_archivedissue_change" if issue.status in ARCHIVED_ISSUE_STATUSES else "admin:issues_issue_change"
         return HttpResponseRedirect(reverse(target, args=(issue.pk,)) + "#issue-chat")
 

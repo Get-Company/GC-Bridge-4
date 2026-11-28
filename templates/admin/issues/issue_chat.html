@@ -1,26 +1,158 @@
-{% if original %}
-  <section id="issue-chat" class="mt-6 rounded-lg border border-base-200 bg-white p-5 dark:border-base-700 dark:bg-base-900">
-    <h2 class="mb-4 text-lg font-semibold">Chatverlauf</h2>
-    <div class="mb-5 flex max-h-96 flex-col gap-3 overflow-y-auto" aria-live="polite">
-      {% for entry in issue_chat_messages %}
-        <article class="rounded-lg bg-base-50 p-3 dark:bg-base-800">
-          <div class="mb-1 flex flex-wrap items-center justify-between gap-2 text-xs text-base-500">
-            <strong>{{ entry.author.get_full_name|default:entry.author.username|default:"Gelöschter Benutzer" }}</strong>
-            <time datetime="{{ entry.created_at|date:'c' }}">{{ entry.created_at|date:"d.m.Y H:i" }}</time>
-          </div>
-          <p class="whitespace-pre-wrap break-words">{{ entry.body }}</p>
-        </article>
-      {% empty %}
-        <p class="text-sm text-base-500">Noch keine Nachrichten.</p>
-      {% endfor %}
-    </div>
-    {% if has_change_permission %}
-      <form action="{{ issue_message_url }}" method="post" class="flex flex-col gap-3">
-        {% csrf_token %}
-        <label for="issue-message-body" class="font-medium">Neue Nachricht</label>
-        <textarea id="issue-message-body" name="body" rows="3" maxlength="5000" required class="w-full rounded-lg border border-base-200 bg-white p-3 dark:border-base-700 dark:bg-base-800" placeholder="Nachricht schreiben …"></textarea>
-        <button type="submit" class="self-start rounded-lg bg-primary-600 px-4 py-2 font-medium text-white hover:bg-primary-700">Nachricht senden</button>
-      </form>
+    {% if original %}
+        <section id="issue-chat" class="issue-chat" aria-labelledby="issue-chat-title">
+            <h2 id="issue-chat-title">Chatverlauf</h2>
+            <div class="issue-chat-history" id="issue-chat-history" aria-live="polite">
+                {% for chat_message in issue_chat_messages %}
+                    {% include "admin/issues/chat_message.html" %}
+                {% empty %}
+                    <p class="issue-chat-empty" id="issue-chat-empty">Noch keine Nachrichten. Schreibe etwas oder füge einen Screenshot ein.</p>
+                {% endfor %}
+            </div>
+            {% if has_change_permission %}
+            <form id="issue-chat-form" action="{{ issue_message_url }}" method="post" enctype="multipart/form-data">
+                {% csrf_token %}
+                <div class="issue-chat-composer">
+                    <label class="issue-chat-file-button" for="issue-chat-images" title="Screenshot auswählen">
+                        <span class="material-symbols-outlined" aria-hidden="true">add_photo_alternate</span>
+                        <span class="sr-only">Screenshot auswählen</span>
+                    </label>
+                    <input id="issue-chat-images" name="images" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden>
+                    <label class="sr-only" for="issue-chat-body">Nachricht</label>
+                    <textarea id="issue-chat-body" name="body" rows="2" maxlength="5000" placeholder="Nachricht schreiben oder Screenshot mit Strg+V einfügen"></textarea>
+                    <button class="issue-chat-send" type="submit" aria-label="Nachricht senden" title="Nachricht senden">
+                        <span class="material-symbols-outlined" aria-hidden="true">send</span>
+                    </button>
+                </div>
+                <div class="issue-chat-previews" id="issue-chat-previews" aria-live="polite"></div>
+                <p class="issue-chat-error" id="issue-chat-error" role="alert" hidden></p>
+                <p class="issue-chat-hint">Bis zu 5 Bilder pro Nachricht, jeweils maximal 10 MB.</p>
+            </form>
+            {% endif %}
+        </section>
     {% endif %}
-  </section>
-{% endif %}
+    <style>
+        .issue-chat{max-width:72rem;margin:2rem auto 0;padding:1.25rem;border:1px solid #d1d5db;border-radius:.75rem;background:#fff;color:#111827}
+        .dark .issue-chat{border-color:#374151;background:#111827;color:#f9fafb}
+        .issue-chat h2{font-size:1.125rem;font-weight:600;margin:0 0 1rem}
+        .issue-chat-history{display:flex;flex-direction:column;gap:.75rem;max-height:32rem;overflow-y:auto;padding:.25rem .25rem 1rem}
+        .issue-chat-message{align-self:flex-start;max-width:min(100%,44rem);padding:.75rem 1rem;border-radius:.75rem;background:#f3f4f6;overflow-wrap:anywhere}
+        .dark .issue-chat-message{background:#1f2937}
+        .issue-chat-meta{display:flex;flex-wrap:wrap;gap:.5rem;align-items:baseline;font-size:.75rem;color:#6b7280}
+        .dark .issue-chat-meta{color:#9ca3af}
+        .issue-chat-meta strong{font-weight:600;color:#374151}
+        .dark .issue-chat-meta strong{color:#e5e7eb}
+        .issue-chat-body{margin:.35rem 0 0;white-space:normal}
+        .issue-chat-image-link{display:inline-block;margin:.65rem .5rem 0 0;vertical-align:top}
+        .issue-chat-image-link img{display:block;max-width:16rem;max-height:16rem;object-fit:contain;border-radius:.4rem}
+        .issue-chat-empty,.issue-chat-hint{font-size:.8rem;color:#6b7280}
+        .dark .issue-chat-empty,.dark .issue-chat-hint{color:#9ca3af}
+        .issue-chat-composer{display:flex;align-items:center;gap:.5rem;padding:.4rem;border:1px solid #d1d5db;border-radius:.75rem}
+        .dark .issue-chat-composer{border-color:#4b5563}
+        .issue-chat-composer:focus-within{outline:2px solid #6366f1;outline-offset:1px}
+        .issue-chat-file-button,.issue-chat-send{display:flex;align-items:center;justify-content:center;flex:none;width:2.5rem;height:2.5rem;border:0;border-radius:.5rem;cursor:pointer;color:#4f46e5;background:transparent}
+        .issue-chat-file-button:hover,.issue-chat-send:hover{background:#eef2ff}
+        .dark .issue-chat-file-button:hover,.dark .issue-chat-send:hover{background:#312e81}
+        .issue-chat-send:disabled{opacity:.5;cursor:wait}
+        .issue-chat-composer textarea{flex:1;min-width:0;resize:vertical;border:0;outline:0;background:transparent;color:inherit;padding:.5rem;font:inherit}
+        .issue-chat-previews{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.6rem}
+        .issue-chat-preview{position:relative}
+        .issue-chat-preview img{width:5rem;height:5rem;object-fit:cover;border-radius:.4rem}
+        .issue-chat-preview button{position:absolute;top:0;right:0;border:0;border-radius:50%;background:#111827;color:white;cursor:pointer}
+        .issue-chat-error{margin:.5rem 0;color:#b91c1c}
+        .issue-chat-hint{margin:.5rem 0 0}
+    </style>
+    <script>
+    (() => {
+        const form = document.getElementById('issue-chat-form');
+        if (!form) return;
+        const input = document.getElementById('issue-chat-images');
+        const body = document.getElementById('issue-chat-body');
+        const previews = document.getElementById('issue-chat-previews');
+        const error = document.getElementById('issue-chat-error');
+        const history = document.getElementById('issue-chat-history');
+        const send = form.querySelector('.issue-chat-send');
+        let pending = [];
+        const showError = message => { error.textContent = message; error.hidden = !message; };
+        const refreshFiles = () => {
+            const transfer = new DataTransfer();
+            pending.forEach(file => transfer.items.add(file));
+            input.files = transfer.files;
+            previews.replaceChildren();
+            pending.forEach((file, index) => {
+                const card = document.createElement('div');
+                card.className = 'issue-chat-preview';
+                const image = document.createElement('img');
+                image.alt = file.name;
+                const url = URL.createObjectURL(file);
+                image.src = url;
+                image.onload = () => URL.revokeObjectURL(url);
+                const remove = document.createElement('button');
+                remove.type = 'button';
+                remove.textContent = '×';
+                remove.title = 'Screenshot entfernen';
+                remove.setAttribute('aria-label', file.name + ' entfernen');
+                remove.addEventListener('click', () => { pending.splice(index, 1); refreshFiles(); });
+                card.append(image, remove);
+                previews.append(card);
+            });
+        };
+        const addFiles = files => {
+            if (send.disabled) return;
+            const images = Array.from(files).filter(file => file.type.startsWith('image/'));
+            if (!images.length) { refreshFiles(); return showError('Bitte eine Bilddatei auswählen.'); }
+            if (pending.length + images.length > 5) { refreshFiles(); return showError('Pro Nachricht sind höchstens 5 Bilder erlaubt.'); }
+            if (images.some(file => file.size > 10 * 1024 * 1024)) { refreshFiles(); return showError('Ein Screenshot darf höchstens 10 MB groß sein.'); }
+            pending.push(...images);
+            refreshFiles();
+            showError('');
+        };
+        input.addEventListener('change', () => addFiles(input.files));
+        form.addEventListener('paste', event => {
+            const images = Array.from(event.clipboardData?.items || [])
+                .filter(item => item.kind === 'file' && item.type.startsWith('image/'))
+                .map(item => item.getAsFile()).filter(Boolean);
+            if (!images.length) return;
+            event.preventDefault();
+            const stamped = images.map((file, index) => new File([file], `screenshot-${Date.now()}-${index + 1}.${file.type === 'image/jpeg' ? 'jpg' : file.type.split('/')[1]}`, {type: file.type}));
+            addFiles(stamped);
+        });
+        body.addEventListener('keydown', event => {
+            if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+                event.preventDefault();
+                form.requestSubmit();
+            }
+        });
+        form.addEventListener('submit', async event => {
+            event.preventDefault();
+            if (send.disabled) return;
+            if (!body.value.trim() && !pending.length) return showError('Bitte eine Nachricht schreiben oder einen Screenshot auswählen.');
+            const payload = new FormData(form);
+            send.disabled = true;
+            body.readOnly = true;
+            input.disabled = true;
+            showError('');
+            try {
+                const response = await fetch(form.action, {
+                    method: 'POST',
+                    body: payload,
+                    headers: {'X-Requested-With': 'XMLHttpRequest'},
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.error || 'Senden fehlgeschlagen.');
+                document.getElementById('issue-chat-empty')?.remove();
+                history.insertAdjacentHTML('beforeend', result.html);
+                history.scrollTop = history.scrollHeight;
+                body.value = '';
+                pending = [];
+                refreshFiles();
+            } catch (failure) {
+                showError(failure.message || 'Senden fehlgeschlagen.');
+            } finally {
+                send.disabled = false;
+                body.readOnly = false;
+                input.disabled = false;
+            }
+        });
+        history.scrollTop = history.scrollHeight;
+    })();
+    </script>

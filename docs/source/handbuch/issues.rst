@@ -307,6 +307,25 @@ Tipp: Bei einem Screenshot im Feld **Hinweis** kurz den sichtbaren
 Fehler und die wichtige Stelle benennen. So muss der Bearbeiter nicht
 raten, worauf er achten soll.
 
+Issue-Chat und Screenshots
+--------------------------
+
+Nach dem ersten Speichern eines Issues erscheint unter dem Formular der
+**Issue-Chat**. Dort können Mitarbeiter Nachrichten schreiben und Bilder
+direkt an eine Nachricht anhängen. Die Bilder erscheinen in der Nachricht
+und zugleich als Anhänge des Issues.
+
+Das Bildsymbol neben der Eingabe öffnet die Dateiauswahl des Computers.
+Ein kopiertes Bild lässt sich auch mit **Strg+V** in die Chat-Eingabe
+einfügen. Vor dem Senden können ausgewählte Bilder in der Vorschau wieder
+entfernt werden. Eine Nachricht darf auch nur aus Bildern bestehen. Pro
+Nachricht sind höchstens fünf PNG-, JPEG-, WebP- oder GIF-Bilder mit
+jeweils maximal 10 MB erlaubt. **Enter** sendet die Nachricht;
+**Umschalt+Enter** fügt einen Zeilenumbruch ein.
+
+Der Chat bleibt auch im Issue-Archiv sichtbar und kann dort ergänzt
+werden.
+
 Ein Issue abschließen
 ---------------------
 
