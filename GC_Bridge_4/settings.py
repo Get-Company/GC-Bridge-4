@@ -623,12 +623,6 @@ UNFOLD = {
                         "link": reverse_lazy("admin:customer_merge"),
                         "permission": sidebar_model_view_permission("customer", "Customer"),
                     },
-                    {
-                        "title": _("Kunden zuordnen"),
-                        "icon": "drag_indicator",
-                        "link": reverse_lazy("admin:customer_mapping"),
-                        "permission": sidebar_model_view_permission("customer", "Customer"),
-                    },
                 ],
             },
             {
