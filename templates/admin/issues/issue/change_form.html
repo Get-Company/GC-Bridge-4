@@ -15,6 +15,9 @@
   .issue-chat-row.own .issue-chat-bubble { border-radius: .7rem .7rem .15rem .7rem; background: #d9fdd3; }
   .issue-chat-author { margin-top: .35rem; font-size: .72rem; font-weight: 600; color: #26736a; }
   .issue-chat-text { max-height: 20rem; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: .92rem; line-height: 1.45; }
+  .issue-chat-images { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .5rem; }
+  .issue-chat-images a { display: inline-block; }
+  .issue-chat-images img { display: block; max-width: 16rem; max-height: 16rem; object-fit: contain; border-radius: .4rem; }
   .issue-chat-citation { margin-bottom: .5rem; padding: .4rem .65rem; border-left: 4px solid #53bdeb; border-radius: .25rem; background: #0000000b; }
   .issue-chat-citation strong { display: block; font-size: .78rem; color: #26736a; }
   .issue-chat-citation span { display: block; max-height: 3rem; overflow: hidden; white-space: pre-wrap; overflow-wrap: anywhere; font-size: .8rem; color: #54656f; }
@@ -29,6 +32,14 @@
   .issue-chat-quote-preview span { display: block; max-height: 3rem; overflow: hidden; white-space: pre-wrap; overflow-wrap: anywhere; font-size: .8rem; }
   .issue-chat-composer-row { display: flex; align-items: flex-end; gap: .65rem; }
   .issue-chat-composer textarea { flex: 1; min-height: 3.5rem; max-height: 12rem; resize: vertical; border: 1px solid #d1d7db; border-radius: .7rem; background: white; padding: .65rem .8rem; color: #111b21; }
+  .issue-chat-file-button { display: inline-flex; align-items: center; justify-content: center; min-height: 2.7rem; border-radius: .7rem; border: 1px solid #d1d7db; background: white; padding: .55rem .8rem; cursor: pointer; }
+  .issue-chat-file-button:hover { background: #e6f5f1; }
+  .issue-chat-previews { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .5rem; }
+  .issue-chat-preview { position: relative; }
+  .issue-chat-preview img { display: block; width: 5rem; height: 5rem; object-fit: cover; border-radius: .4rem; }
+  .issue-chat-preview button { position: absolute; top: 0; right: 0; border-radius: 50%; background: #111b21; color: white; }
+  .issue-chat-upload-hint, .issue-chat-upload-error { margin: .5rem 0 0; font-size: .8rem; }
+  .issue-chat-upload-error { color: #b91c1c; }
   .issue-chat-send { min-height: 2.7rem; border-radius: .7rem; background: #008069; padding: .55rem 1.1rem; color: white; font-weight: 600; }
   .issue-chat-send:hover { background: #006d59; }
   .issue-chat-readonly { padding: .7rem 1rem; border-top: 1px solid #d1d7db; background: #f0f2f5; color: #54656f; font-size: .85rem; }
@@ -39,6 +50,7 @@
   html.dark .issue-chat-row.own .issue-chat-bubble { background: #005c4b; }
   html.dark .issue-chat-author, html.dark .issue-chat-citation strong, html.dark .issue-chat-quote-button, html.dark .issue-chat-quote-preview strong { color: #53bdeb; }
   html.dark .issue-chat-quote-preview, html.dark .issue-chat-composer textarea { background: #2a3942; color: #e9edef; border-color: #3b4a54; }
+  html.dark .issue-chat-file-button { background: #2a3942; color: #e9edef; border-color: #3b4a54; }
   html.dark .issue-chat-empty { background: #202c33; color: #aebac1; }
   @media (max-width: 640px) { .issue-chat-history { padding: .65rem; } .issue-chat-bubble { max-width: 95%; } .issue-chat-composer-row { flex-direction: column; align-items: stretch; } }
 </style>
@@ -61,7 +73,16 @@
               <span>{{ entry.quoted_text|truncatechars:250 }}</span>
             </div>
           {% endif %}
-          <div class="issue-chat-text">{{ entry.text }}</div>
+          {% if entry.text %}<div class="issue-chat-text">{{ entry.text }}</div>{% endif %}
+          {% if entry.attachments %}
+            <div class="issue-chat-images">
+              {% for attachment in entry.attachments %}
+                <a href="{{ attachment.file.url }}" target="_blank" rel="noopener" aria-label="Screenshot {{ forloop.counter }} öffnen">
+                  <img src="{{ attachment.file.url }}" alt="Screenshot zur Nachricht" loading="lazy">
+                </a>
+              {% endfor %}
+            </div>
+          {% endif %}
           <div class="issue-chat-author">{{ entry.author }}</div>
           <div class="issue-chat-meta">
             <time datetime="{{ entry.created_at|date:'c' }}">{{ entry.created_at|date:"d.m.Y H:i" }}</time>
@@ -74,7 +95,7 @@
     {% endfor %}
   </div>
   {% if can_reply %}
-    <form class="issue-chat-composer" method="post" action="{{ reply_url }}" id="issue-chat-reply-form">
+    <form class="issue-chat-composer" method="post" action="{{ reply_url }}" enctype="multipart/form-data" id="issue-chat-reply-form">
       {% csrf_token %}
       <input type="hidden" name="quote" id="issue-chat-quote-key">
       <div class="issue-chat-quote-preview" id="issue-chat-quote-preview" hidden>
@@ -82,9 +103,14 @@
         <button type="button" id="issue-chat-cancel-quote" aria-label="Zitat entfernen">✕</button>
       </div>
       <div class="issue-chat-composer-row">
-        <textarea name="text" id="issue-chat-text" maxlength="10000" required placeholder="Nachricht schreiben …" aria-label="Neue Nachricht"></textarea>
+        <label class="issue-chat-file-button" for="issue-chat-images" title="Screenshot auswählen">Bild</label>
+        <input type="file" name="images" id="issue-chat-images" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden>
+        <textarea name="text" id="issue-chat-text" maxlength="10000" placeholder="Nachricht schreiben oder Screenshot mit Strg+V einfügen …" aria-label="Neue Nachricht"></textarea>
         <button class="issue-chat-send" type="submit">Senden</button>
       </div>
+      <div class="issue-chat-previews" id="issue-chat-previews" aria-live="polite"></div>
+      <p class="issue-chat-upload-error" id="issue-chat-upload-error" role="alert" hidden></p>
+      <p class="issue-chat-upload-hint">Bis zu 5 Bilder pro Nachricht, jeweils maximal 10 MB.</p>
     </form>
   {% else %}
     <p class="issue-chat-readonly">Antworten können die meldende und die zugewiesene Person schreiben.</p>
@@ -99,13 +125,78 @@
     const author = document.getElementById("issue-chat-quote-author");
     const text = document.getElementById("issue-chat-quote-text");
     const composer = document.getElementById("issue-chat-text");
+    const form = document.getElementById("issue-chat-reply-form");
+    const images = document.getElementById("issue-chat-images");
+    const imagePreviews = document.getElementById("issue-chat-previews");
+    const uploadError = document.getElementById("issue-chat-upload-error");
+    let pendingImages = [];
+    const showUploadError = (message) => {
+      uploadError.textContent = message;
+      uploadError.hidden = !message;
+    };
+    const refreshImages = () => {
+      const transfer = new DataTransfer();
+      pendingImages.forEach((file) => transfer.items.add(file));
+      images.files = transfer.files;
+      imagePreviews.replaceChildren();
+      pendingImages.forEach((file, index) => {
+        const preview = document.createElement("div");
+        preview.className = "issue-chat-preview";
+        const image = document.createElement("img");
+        image.alt = file.name;
+        const url = URL.createObjectURL(file);
+        image.src = url;
+        image.onload = () => URL.revokeObjectURL(url);
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.textContent = "×";
+        remove.setAttribute("aria-label", file.name + " entfernen");
+        remove.addEventListener("click", () => {
+          pendingImages.splice(index, 1);
+          refreshImages();
+        });
+        preview.append(image, remove);
+        imagePreviews.append(preview);
+      });
+    };
+    const addImages = (files) => {
+      const added = Array.from(files);
+      let error = "";
+      if (added.some((file) => !file.type.startsWith("image/"))) error = "Bitte Bilddateien auswählen.";
+      else if (pendingImages.length + added.length > 5) error = "Pro Nachricht sind höchstens 5 Bilder erlaubt.";
+      else if (added.some((file) => file.size > 10 * 1024 * 1024)) error = "Ein Screenshot darf höchstens 10 MB groß sein.";
+      if (error) {
+        refreshImages();
+        return showUploadError(error);
+      }
+      pendingImages.push(...added);
+      refreshImages();
+      showUploadError("");
+    };
     history.scrollTop = history.scrollHeight;
+    images.addEventListener("change", () => addImages(images.files));
+    form.addEventListener("paste", (event) => {
+      const pasted = Array.from(event.clipboardData?.items || [])
+        .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+        .map((item) => item.getAsFile()).filter(Boolean);
+      if (!pasted.length) return;
+      event.preventDefault();
+      addImages(pasted.map((file, index) => new File(
+        [file], `screenshot-${Date.now()}-${index + 1}.${file.type === "image/jpeg" ? "jpg" : file.type.split("/")[1]}`,
+        {type: file.type}
+      )));
+    });
+    form.addEventListener("submit", (event) => {
+      if (composer.value.trim() || pendingImages.length) return;
+      event.preventDefault();
+      showUploadError("Bitte eine Nachricht schreiben oder einen Screenshot auswählen.");
+    });
     document.querySelectorAll(".issue-chat-quote-button").forEach((button) => {
       button.addEventListener("click", () => {
         const bubble = button.closest(".issue-chat-bubble");
         key.value = button.dataset.quoteKey;
         author.textContent = bubble.querySelector(".issue-chat-author").textContent;
-        text.textContent = bubble.querySelector(".issue-chat-text").textContent.slice(0, 250);
+        text.textContent = (bubble.querySelector(".issue-chat-text")?.textContent || "[Screenshot]").slice(0, 250);
         preview.hidden = false;
         composer.focus();
       });

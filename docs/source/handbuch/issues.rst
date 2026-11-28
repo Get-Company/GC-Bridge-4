@@ -250,6 +250,12 @@ erscheint direkt über dem Antworttext. Auch im Issue-Archiv bleibt der Verlauf 
 Automatisch erfasste spätere Task-Fehler erscheinen als eigene
 Systemnachrichten.
 
+Beim Antworten können die Beteiligten über **Bild** bis zu fünf Screenshots
+auswählen oder ein Bild mit ``Strg+V`` einfügen. Jeder Screenshot darf höchstens
+10 MB groß sein; PNG, JPEG, WebP und GIF sind erlaubt. Die Bilder erscheinen
+direkt bei der zugehörigen Nachricht. Eine Nachricht darf auch nur aus Bildern
+bestehen. Zitate und der Verlauf im Issue-Archiv bleiben erhalten.
+
 Abschnitt „Abschlussdokumentation“
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

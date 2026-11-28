@@ -228,6 +228,14 @@ class IssueAttachment(BaseModel):
         related_name="attachments",
         verbose_name=_("Issue"),
     )
+    message = models.ForeignKey(
+        "IssueMessage",
+        on_delete=models.SET_NULL,
+        related_name="attachments",
+        null=True,
+        blank=True,
+        verbose_name=_("Chat-Nachricht"),
+    )
     attachment_type = models.CharField(
         max_length=20,
         choices=AttachmentType.choices,

@@ -2,6 +2,7 @@ from django import forms
 from django.contrib import admin, messages
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied
+from django.db import transaction
 from django.http import HttpResponseNotAllowed, HttpResponseRedirect
 from django.db.models import OuterRef, Subquery
 from django.urls import path, reverse
@@ -9,6 +10,7 @@ from django.utils import timezone
 from django.utils.html import format_html
 from unfold.decorators import action
 from unfold.enums import ActionVariant
+from PIL import Image, UnidentifiedImageError
 
 from core.admin import BaseAdmin, BaseTabularInline
 from issues.models import ArchivedIssue, DEFAULT_ASSIGNED_USER_ID, Issue, IssueAttachment, IssueCategory, IssueMessage, IssueReadState
@@ -62,8 +64,34 @@ class IssueAdminForm(forms.ModelForm):
 
 
 class IssueReplyForm(forms.Form):
-    text = forms.CharField(max_length=10000, strip=True)
+    text = forms.CharField(max_length=10000, strip=True, required=False)
     quote = forms.CharField(required=False)
+
+    def __init__(self, *args, uploads=(), **kwargs):
+        super().__init__(*args, **kwargs)
+        self.uploads = list(uploads)
+
+    def clean(self):
+        cleaned = super().clean()
+        if not cleaned.get("text") and not self.uploads:
+            raise forms.ValidationError("Bitte eine Nachricht schreiben oder einen Screenshot auswählen.")
+        if len(self.uploads) > 5:
+            raise forms.ValidationError("Pro Nachricht sind höchstens 5 Bilder erlaubt.")
+        for upload in self.uploads:
+            if upload.size > 10 * 1024 * 1024:
+                raise forms.ValidationError("Ein Screenshot darf höchstens 10 MB groß sein.")
+            if not upload.name.lower().endswith((".png", ".jpg", ".jpeg", ".webp", ".gif")):
+                raise forms.ValidationError("Erlaubt sind PNG-, JPEG-, WebP- und GIF-Bilder.")
+            try:
+                with Image.open(upload) as image:
+                    if image.format not in {"PNG", "JPEG", "WEBP", "GIF"}:
+                        raise forms.ValidationError("Die Datei ist kein unterstütztes Bild.")
+                    image.verify()
+            except (UnidentifiedImageError, OSError, ValueError) as exc:
+                raise forms.ValidationError("Die Datei ist kein gültiges Bild.") from exc
+            finally:
+                upload.seek(0)
+        return cleaned
 
 
 class IssueAttachmentInline(StaffIssueAccessMixin, BaseTabularInline):
@@ -161,6 +189,7 @@ class IssueAdmin(StaffIssueAccessMixin, BaseAdmin):
         )
         return queryset.annotate(
             latest_reply_text=Subquery(replies.values("text")[:1]),
+            latest_reply_id=Subquery(replies.values("pk")[:1]),
             latest_foreign_reply_id=Subquery(foreign_replies.values("pk")[:1]),
             last_seen_message_id=Subquery(read_states.values("last_seen_message_id")[:1]),
         )
@@ -193,6 +222,8 @@ class IssueAdmin(StaffIssueAccessMixin, BaseAdmin):
     @admin.display(description="Letzte Antwort")
     def last_reply_preview(self, obj):
         preview = " ".join((obj.latest_reply_text or "").split())
+        if not preview and obj.latest_reply_id is not None:
+            preview = "Screenshot"
         if not preview:
             return "–"
         style = "display:block;max-width:36rem;overflow:hidden;white-space:nowrap;text-overflow:ellipsis"
@@ -273,6 +304,7 @@ class IssueAdmin(StaffIssueAccessMixin, BaseAdmin):
             entries = []
             all_messages = list(
                 obj.messages.select_related("author", "quoted_message__author")
+                .prefetch_related("attachments")
             )
             initial_message = next(
                 (message for message in all_messages if message.is_initial), None
@@ -325,6 +357,7 @@ class IssueAdmin(StaffIssueAccessMixin, BaseAdmin):
                         "is_own": message.author_id == request.user.pk,
                         "quoted_text": quoted_text,
                         "quoted_author": quoted_author,
+                        "attachments": message.attachments.all(),
                     }
                 )
             context.update(
@@ -351,9 +384,11 @@ class IssueAdmin(StaffIssueAccessMixin, BaseAdmin):
         redirect_url = reverse(
             f"admin:{self.opts.app_label}_{self.opts.model_name}_change", args=[issue.pk]
         ) + "#issue-chat"
-        form = IssueReplyForm(request.POST)
+        uploads = request.FILES.getlist("images")
+        form = IssueReplyForm(request.POST, uploads=uploads)
         if not form.is_valid():
-            self.message_user(request, "Bitte eine Nachricht mit höchstens 10.000 Zeichen eingeben.", messages.ERROR)
+            error = "; ".join(form.non_field_errors()) or "Bitte eine Nachricht mit höchstens 10.000 Zeichen eingeben."
+            self.message_user(request, error, messages.ERROR)
             return HttpResponseRedirect(redirect_url)
 
         quote_key = form.cleaned_data["quote"]
@@ -380,14 +415,22 @@ class IssueAdmin(StaffIssueAccessMixin, BaseAdmin):
                 self.message_user(request, "Die zitierte Nachricht gehört nicht zu diesem Issue.", messages.ERROR)
                 return HttpResponseRedirect(redirect_url)
 
-        IssueMessage.objects.create(
-            issue=issue,
-            author=request.user,
-            text=form.cleaned_data["text"],
-            quoted_message=quoted_message,
-            quotes_initial=quotes_initial,
-            quotes_description=quotes_description,
-        )
+        with transaction.atomic():
+            message = IssueMessage.objects.create(
+                issue=issue,
+                author=request.user,
+                text=form.cleaned_data["text"],
+                quoted_message=quoted_message,
+                quotes_initial=quotes_initial,
+                quotes_description=quotes_description,
+            )
+            for upload in uploads:
+                IssueAttachment.objects.create(
+                    issue=issue,
+                    message=message,
+                    attachment_type=IssueAttachment.AttachmentType.SCREENSHOT,
+                    file=upload,
+                )
         self.message_user(request, "Nachricht gesendet.", messages.SUCCESS)
         return HttpResponseRedirect(redirect_url)
 
