@@ -27,9 +27,10 @@ DEFAULT_SWISS_CUSTOMS_FIELD_DEFINITIONS: tuple[SwissCustomsFieldDefinition, ...]
     SwissCustomsFieldDefinition(
         portal_field="parcelNumbers",
         section="shipment",
-        source_type="static",
-        static_value="18309142057",
-        help_text="Altprojekt: feste Paketnummer. Im neuen Projekt spaeter durch Trackingdaten ersetzbar.",
+        source_type="computed",
+        source_path="shipment_parcel_numbers",
+        is_required=True,
+        help_text="Paketnummer aus dem Microtech-Versanddatensatz zum aktuellen Vorgang.",
     ),
     SwissCustomsFieldDefinition(
         portal_field="isExportDeclarationRequested",

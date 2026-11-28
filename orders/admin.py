@@ -633,12 +633,12 @@ class OrderAdmin(BaseAdmin):
         try:
             with microtech_connection() as erp:
                 refreshed_erp_order_id = OrderUpsertMicrotechService().refresh_erp_order_id(order, erp=erp)
-            if not refreshed_erp_order_id:
-                raise ValueError(
-                    "Keine aktuelle Microtech-Belegnummer gefunden. Suche erfolgt ueber BelegNr "
-                    "und als Fallback ueber AuftrNr = order_number."
-                )
-            export = SwissCustomsCsvExportService().export_order(order)
+                if not refreshed_erp_order_id:
+                    raise ValueError(
+                        "Keine aktuelle Microtech-Belegnummer gefunden. Suche erfolgt ueber BelegNr "
+                        "und als Fallback ueber AuftrNr = order_number."
+                    )
+                export = SwissCustomsCsvExportService().export_order(order, client=erp)
         except Exception as exc:
             self.message_user(
                 request,

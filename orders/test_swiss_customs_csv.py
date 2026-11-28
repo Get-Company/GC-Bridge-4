@@ -1,6 +1,7 @@
 import csv
 import io
 from decimal import Decimal
+from unittest.mock import Mock
 
 from django.test import TestCase
 
@@ -48,7 +49,7 @@ class SwissCustomsCsvExportServiceTest(TestCase):
         order = Order.objects.create(
             api_id="order-1",
             order_number="SW-10001",
-            erp_order_id="",
+            erp_order_id="26/1792",
             total_price=Decimal("23.00"),
             shipping_costs=Decimal("3.00"),
             customer=customer,
@@ -73,7 +74,11 @@ class SwissCustomsCsvExportServiceTest(TestCase):
             weight_net=Decimal("1.2000"),
         )
 
-        export = SwissCustomsCsvExportService().export_order(order)
+        client = Mock()
+        client.poll_dataset_records.return_value = {
+            "records": [{"BelegNr": "26/1792", "PktNr": "TRACK-10387"}],
+        }
+        export = SwissCustomsCsvExportService().export_order(order, client=client)
 
         self.assertEqual(export.filename, "SW-10001_Max_Mustermann.csv")
         rows = list(csv.DictReader(io.StringIO(export.content)))
@@ -81,7 +86,7 @@ class SwissCustomsCsvExportServiceTest(TestCase):
 
         row = rows[0]
         self.assertEqual(row["customerReference"], "1000")
-        self.assertEqual(row["invoice.invoiceNumber"], "SW-10001")
+        self.assertEqual(row["invoice.invoiceNumber"], "26/1792")
         self.assertEqual(row["importer.address.name1"], "ACME GmbH")
         self.assertEqual(row["importer.address.name2"], "Max Mustermann")
         self.assertEqual(row["importer.address.street1"], "Musterstrasse")
@@ -95,3 +100,4 @@ class SwissCustomsCsvExportServiceTest(TestCase):
         self.assertEqual(row["lineItem.grossWeightInKg"], "3")
         self.assertEqual(row["lineItem.netWeightInKg"], "2.4")
         self.assertEqual(row["totalGrossWeightInKg"], "3")
+        self.assertEqual(row["parcelNumbers"], "TRACK-10387")

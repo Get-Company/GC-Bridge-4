@@ -129,16 +129,20 @@ class _ExportContext:
     billing_address: Any
     details: list[Any]
     product_map: dict[str, Any]
+    parcel_numbers: str = ""
 
 
 class SwissCustomsCsvExportService(BaseService):
     model = Order
 
-    def export_order(self, order: Order) -> SwissCustomsCsvExport:
+    def export_order(self, order: Order, *, client: Any) -> SwissCustomsCsvExport:
         if not isinstance(order, Order):
             raise TypeError("order must be an instance of Order.")
-
-        return self._export_context(self._build_context(order))
+        context = self._build_context(order)
+        context.parcel_numbers = self._read_microtech_parcel_numbers(
+            client=client, beleg_nr=_to_str(order.erp_order_id),
+        )
+        return self._export_context(context)
 
     def export_microtech_order(self, order_number: str, *, client: Any) -> SwissCustomsCsvExport:
         """Export a Microtech document without creating a Bridge order."""
@@ -230,8 +234,50 @@ class SwissCustomsCsvExportService(BaseService):
             billing_address=billing_address,
             details=details,
             product_map=product_map,
+            parcel_numbers=self._read_microtech_parcel_numbers(client=client, beleg_nr=beleg_nr),
         )
         return self._export_context(context)
+
+    @staticmethod
+    def _read_microtech_parcel_numbers(*, client: Any, beleg_nr: str) -> str:
+        if not beleg_nr:
+            raise ValueError("Keine aktuelle Microtech-Belegnummer für die Versandsuche vorhanden.")
+
+        fields = ["BelegNr", "UrsBelegNr", "AbschBelegNr", "AbsBelegNr", "PktNr"]
+        for index_field, record_field in (
+            ("BelegNr", "BelegNr"),
+            ("UrsBelegNr", "UrsBelegNr"),
+            ("AbschlBelegNr", "AbschBelegNr"),
+        ):
+            quoted_beleg_nr = beleg_nr.replace("'", "''")
+            result = client.poll_dataset_records(
+                {
+                    "dataset": "Versand",
+                    "indexField": index_field,
+                    "range": {"fromValues": [beleg_nr], "toValues": [beleg_nr]},
+                    "filter": f"{record_field} = '{quoted_beleg_nr}'",
+                    "fields": fields,
+                    "limit": 100,
+                },
+                timeout=180,
+            )
+            records = [
+                record for record in (result.get("records") or result.get("versand") or [])
+                if isinstance(record, dict) and _to_str(record.get(record_field)) == beleg_nr
+            ]
+            if result.get("hasMore"):
+                raise ValueError(f"Zu viele Versanddatensätze zum Microtech-Beleg {beleg_nr} gefunden.")
+            parcel_numbers = list(dict.fromkeys(
+                _to_str(record.get("PktNr")) for record in records if _to_str(record.get("PktNr"))
+            ))
+            if parcel_numbers:
+                if len(parcel_numbers) > 99:
+                    raise ValueError("Mehr als 99 Paketnummern können nicht in eine Zollsendung übernommen werden.")
+                return ",".join(parcel_numbers)
+        raise ValueError(
+            f"Kein Versanddatensatz mit Paketnummer zum Microtech-Beleg {beleg_nr} gefunden. "
+            "Der Lieferschein muss gedruckt und der Versand angelegt sein."
+        )
 
     @staticmethod
     def _read_microtech_header(*, client: Any, beleg_nr: str) -> dict[str, Any]:
@@ -401,6 +447,10 @@ class SwissCustomsCsvExportService(BaseService):
         source_type = mapping.source_type
         source_path = _to_str(mapping.source_path)
 
+        # Existing installations may still have the former static mapping in the database.
+        if mapping.portal_field == "parcelNumbers":
+            return context.parcel_numbers
+
         if source_type == MicrotechSwissCustomsFieldMapping.SourceType.STATIC:
             return strip_tags(mapping.static_value or "").strip()
         if source_type == MicrotechSwissCustomsFieldMapping.SourceType.ORDER:
@@ -434,6 +484,9 @@ class SwissCustomsCsvExportService(BaseService):
     ) -> object:
         shipping_address = context.shipping_address
         customer = context.customer
+
+        if key == "shipment_parcel_numbers":
+            return context.parcel_numbers
 
         if key == "shipping_name1":
             if _address_looks_like_company(shipping_address):
