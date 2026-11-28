@@ -16,6 +16,10 @@ from orders.services.swiss_customs_csv import SwissCustomsCsvExport, SwissCustom
 
 class ManualMicrotechCustomsCsvTest(SimpleTestCase):
     def setUp(self):
+        product_filter = patch("orders.services.swiss_customs_csv.Product.objects.filter")
+        self.bridge_product_filter = product_filter.start()
+        self.addCleanup(product_filter.stop)
+        self.bridge_product_filter.return_value.values_list.return_value = [("ART-1", "1234.56")]
         self.client = Mock()
         self.client.poll_dataset_records.side_effect = self._dataset_read
         self.client.request_vorgang.return_value = {
@@ -33,7 +37,7 @@ class ManualMicrotechCustomsCsvTest(SimpleTestCase):
             "product": {
                 "name": "Ordner",
                 "unit": "Stk",
-                "customsTariffNumber": "1234.56",
+                "customsTariffNumber": "WRONG-MICROTECH-VALUE",
                 "weightGrossKg": "1.5",
                 "weightNetKg": "1.2",
             },
@@ -71,11 +75,19 @@ class ManualMicrotechCustomsCsvTest(SimpleTestCase):
         self.assertEqual(rows[0]["importer.taxId"], "CHE-123.456.789")
         self.assertEqual(rows[0]["importer.address.countryCode"], "CH")
         self.assertEqual(rows[0]["lineItem.commodityCode"], "1234.56")
+        self.assertEqual(rows[0]["parcelNumbers"], "18309142057")
         self.assertEqual(rows[0]["lineItem.goodsDescription"], "Ordner")
         self.assertEqual(rows[0]["lineItem.valueInInvoiceCurrency"], "20")
         self.assertEqual(rows[0]["invoice.totalGoodsValue.amount"], "20")
         self.assertEqual(rows[0]["totalGrossWeightInKg"], "3")
         self.client.request_product.assert_called_once_with("ART-1")
+        self.bridge_product_filter.assert_called_once_with(erp_nr__in={"ART-1"})
+
+    def test_missing_bridge_customs_tariff_number_is_reported(self):
+        self.bridge_product_filter.return_value.values_list.return_value = []
+        with self.assertRaisesRegex(ValueError, "Bridge fehlt die Zollwarennummer für Artikel: ART-1"):
+            SwissCustomsCsvExportService().export_microtech_order("10387", client=self.client)
+        self.client.request_product.assert_not_called()
 
     def test_missing_microtech_order_fails_without_creating_bridge_order(self):
         self.client.poll_dataset_records.return_value = {"records": []}

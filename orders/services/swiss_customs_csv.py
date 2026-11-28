@@ -192,17 +192,33 @@ class SwissCustomsCsvExportService(BaseService):
             and _to_str(position.get("erpNumber")).upper() not in {"V", "F"}
             and (_to_decimal(position.get("quantity")) or Decimal("0")) > 0
         ]
+        erp_nrs = {_to_str(detail.erp_nr) for detail in details}
+        bridge_tariff_numbers = {
+            _to_str(erp_nr): _to_str(tariff_number)
+            for erp_nr, tariff_number in (
+                Product.objects.filter(erp_nr__in=erp_nrs)
+                .values_list("erp_nr", "customs_tariff_number")
+            )
+        }
+        missing_tariff_numbers = sorted(
+            erp_nr for erp_nr in erp_nrs if not bridge_tariff_numbers.get(erp_nr)
+        )
+        if missing_tariff_numbers:
+            raise ValueError(
+                "In der Bridge fehlt die Zollwarennummer für Artikel: "
+                + ", ".join(missing_tariff_numbers)
+            )
+
         product_map: dict[str, Any] = {}
-        for erp_nr in {_to_str(detail.erp_nr) for detail in details}:
+        for erp_nr in erp_nrs:
             product = (client.request_product(erp_nr) or {}).get("product") or {}
-            if product:
-                product_map[erp_nr] = SimpleNamespace(
-                    name=_to_str(product.get("name")),
-                    unit=_to_str(product.get("unit")),
-                    customs_tariff_number=_to_str(product.get("customsTariffNumber")),
-                    weight_gross=_to_decimal(product.get("weightGrossKg")),
-                    weight_net=_to_decimal(product.get("weightNetKg")),
-                )
+            product_map[erp_nr] = SimpleNamespace(
+                name=_to_str(product.get("name")),
+                unit=_to_str(product.get("unit")),
+                customs_tariff_number=bridge_tariff_numbers[erp_nr],
+                weight_gross=_to_decimal(product.get("weightGrossKg")),
+                weight_net=_to_decimal(product.get("weightNetKg")),
+            )
         for detail in details:
             product = product_map.get(detail.erp_nr)
             if product and product.name:
