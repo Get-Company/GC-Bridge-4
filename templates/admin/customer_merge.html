@@ -1642,6 +1642,7 @@ async function updateShopwareMapping(button, action) {
     else raw.api_id = data.new_api_id || value;
     renderRowCells(erpNr);
     renderMergeSection();
+    showOrderAddressBackfillWarning(data);
   } catch (error) {
     alert('Fehler: ' + error.message);
     renderRowCells(erpNr);
@@ -1697,6 +1698,20 @@ async function saveMicrotechMapping(addressId, ansNr, aspNr) {
   return data;
 }
 
+function showOrderAddressBackfillWarning(data) {
+  const backfill = data?.order_address_backfill;
+  if (!backfill) return;
+  if (backfill.error) {
+    alert('Adresse gespeichert. Bestelladressen konnten nicht automatisch abgeglichen werden. Bitte die Bestellliste prüfen.');
+    return;
+  }
+  const pending = [...new Set([...(backfill.errors || []), ...(backfill.unresolved || [])])];
+  if (pending.length) {
+    alert('Adresse gespeichert. Die Bestelladressen für ' + pending.join(', ') +
+      ' konnten nicht eindeutig abgeglichen werden. Bitte diese Bestellungen prüfen.');
+  }
+}
+
 function applyMicrotechMapping(erpNr, addressId, data) {
   const local = searchData[erpNr]?.django?.addresses?.find(address => String(address.id) === String(addressId));
   if (!local) return;
@@ -1731,6 +1746,7 @@ async function updateMicrotechAddressMapping(button) {
     const data = await saveMicrotechMapping(addressId, ansNr, aspNr);
     applyMicrotechMapping(erpNr, addressId, data);
     renderRowCells(erpNr);
+    showOrderAddressBackfillWarning(data);
   } catch (error) {
     alert('Fehler: ' + error.message);
     renderRowCells(erpNr);
@@ -1757,6 +1773,7 @@ async function assignMicrotechMapping(select) {
     const data = await saveMicrotechMapping(addressId, ansNr, aspNr);
     applyMicrotechMapping(erpNr, addressId, data);
     renderRowCells(erpNr);
+    showOrderAddressBackfillWarning(data);
   } catch (error) {
     alert('Fehler: ' + error.message);
     renderRowCells(erpNr);

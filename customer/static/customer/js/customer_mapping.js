@@ -291,7 +291,14 @@
       state.pair.address = { sw: null, mt: null };
       state.editingAddress = '';
       result('address', 'Gespeichert: SW6-Adresse ↔ AnsNr ' + data.ans_nr + '.');
-      message('Adresse zugeordnet. Weitere Adressen können genauso zugeordnet werden.');
+      const backfill = data.order_address_backfill;
+      if (backfill?.error || backfill?.errors?.length || backfill?.unresolved?.length) {
+        message('Adresse zugeordnet. Einige bestehende Bestellungen konnten nicht eindeutig abgeglichen werden. Bitte die Bestellliste prüfen.', true);
+      } else {
+        const linked = backfill?.orders_linked || 0;
+        message('Adresse zugeordnet. ' + (linked ? linked + ' bestehende Bestellung(en) nachgetragen. ' : '') +
+          'Weitere Adressen können genauso zugeordnet werden.');
+      }
       const allDone = (state.swCustomer.addresses || []).every(a => state.mappings.has(a.id));
       if (allDone) setStep('contact'); else render();
     } catch (error) { result('address', error.message, true); message(error.message, true); }

@@ -137,6 +137,20 @@ class OrderService(Shopware6Service):
         criteria.filter.append(EqualsFilter(field="id", value=order_id))
         return self.request_post(self.search_path, payload=criteria)
 
+    def get_with_addresses_by_id(self, order_id: str) -> dict[str, Any]:
+        """Load an order's address snapshots for a safe Bridge address repair."""
+        order_id = _to_str(order_id)
+        if not order_id:
+            raise ValueError("order_id is required.")
+
+        criteria = Criteria(limit=1)
+        criteria.associations["orderCustomer"] = Criteria()
+        criteria.associations["billingAddress"] = Criteria()
+        criteria.associations["deliveries"] = Criteria()
+        criteria.associations["deliveries"].associations["shippingOrderAddress"] = Criteria()
+        criteria.filter.append(EqualsFilter(field="id", value=order_id))
+        return self.request_post(self.search_path, payload=criteria)
+
     def update_microtech_order_id(self, *, order_id: str, erp_order_id: str) -> Any:
         order_id = _to_str(order_id)
         erp_order_id = _to_str(erp_order_id)

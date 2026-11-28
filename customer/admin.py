@@ -1,4 +1,5 @@
 from django.contrib import admin, messages
+from django.db import transaction
 from django.http import HttpResponseRedirect
 from django.urls import reverse
 
@@ -171,3 +172,24 @@ class AddressAdmin(BaseAdmin):
         ("country_code", FieldTextFilter),
         ("created_at", RangeDateTimeFilter),
     ]
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        if not obj.api_id or obj.erp_ans_nr is None:
+            return
+        if change and not {"api_id", "erp_ans_nr", "erp_asp_nr"}.intersection(form.changed_data):
+            return
+
+        def reconcile() -> None:
+            from customer.views import _backfill_orders_after_mapping
+
+            result = _backfill_orders_after_mapping(obj.pk)
+            if result.get("error") or result.get("errors") or result.get("unresolved"):
+                self.message_user(
+                    request,
+                    "Adresse gespeichert. Einige Bestelladressen konnten nicht eindeutig abgeglichen werden. "
+                    "Bitte die Bestellliste prüfen.",
+                    level=messages.WARNING,
+                )
+
+        transaction.on_commit(reconcile)

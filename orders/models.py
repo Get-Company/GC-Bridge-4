@@ -132,7 +132,7 @@ class Order(BaseModel):
     billing_address = models.ForeignKey(
         Address,
         related_name="billing_orders",
-        on_delete=models.SET_NULL,
+        on_delete=models.RESTRICT,
         null=True,
         blank=True,
         verbose_name=_("Rechnungsanschrift"),
@@ -140,7 +140,7 @@ class Order(BaseModel):
     shipping_address = models.ForeignKey(
         Address,
         related_name="shipping_orders",
-        on_delete=models.SET_NULL,
+        on_delete=models.RESTRICT,
         null=True,
         blank=True,
         verbose_name=_("Lieferanschrift"),

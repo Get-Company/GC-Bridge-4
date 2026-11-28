@@ -112,11 +112,32 @@ class CustomerSyncService(BaseService):
                 anschrift_service.range_next()
 
         if seen_local_address_ids:
-            customer.addresses.exclude(pk__in=seen_local_address_ids).delete()
+            self._delete_stale_addresses(customer, seen_local_address_ids)
         else:
             logger.warning("Kunde {} hat keine Anschriften in Microtech.", customer_erp_nr)
 
         return customer
+
+    @staticmethod
+    def _delete_stale_addresses(customer: Customer, seen_local_address_ids: list[int]) -> int:
+        # Deleting an address used by an order silently SET_NULLs its
+        # billing/shipping foreign key and blocks a later export.
+        from orders.models import Order
+
+        referenced_ids = set(
+            Order.objects.filter(billing_address__customer=customer)
+            .values_list("billing_address_id", flat=True)
+        ) | set(
+            Order.objects.filter(shipping_address__customer=customer)
+            .values_list("shipping_address_id", flat=True)
+        )
+        stale = customer.addresses.exclude(
+            pk__in=set(seen_local_address_ids) | referenced_ids
+        )
+        deleted = stale.count()
+        if deleted:
+            stale.delete()
+        return deleted
 
     def _upsert_local_address(
         self,

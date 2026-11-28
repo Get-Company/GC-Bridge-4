@@ -277,10 +277,12 @@ class CustomerIdUpdateViewTest(SimpleTestCase):
     @patch("django.contrib.admin.models.LogEntry.objects.log_actions")
     @patch("customer.models.Address.objects.filter")
     @patch("customer.views.transaction.atomic", return_value=nullcontext())
+    @patch("customer.views._backfill_orders_after_mapping")
     @patch("customer.views.CustomerIdUpdateService")
-    def test_microtech_address_mapping_is_dispatched(self, service_class, atomic, addresses, log_actions):
+    def test_microtech_address_mapping_is_dispatched(self, service_class, backfill, atomic, addresses, log_actions):
         from customer.views import customer_update_ids_api
 
+        backfill.return_value = {"orders_linked": 0, "addresses_linked": 0, "unresolved": [], "errors": []}
         service_class.return_value.update_microtech_address_mapping.return_value = {
             "ans_nr": 7,
             "asp_nr": 3,
@@ -305,6 +307,7 @@ class CustomerIdUpdateViewTest(SimpleTestCase):
         self.assertEqual(response.status_code, 200)
         service_class.return_value.update_microtech_address_mapping.assert_called_once_with(81, 7, 3)
         self.assertEqual(log_actions.call_args.kwargs["user_id"], 12)
+        backfill.assert_called_once_with(81)
 
 
 class CustomerDeleteAddressesViewTest(SimpleTestCase):

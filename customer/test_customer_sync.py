@@ -1,8 +1,28 @@
 from __future__ import annotations
 
+from unittest.mock import MagicMock, patch
+
 from django.test import SimpleTestCase
 
 from customer.services.customer_sync import CustomerSyncService
+
+
+class OrderAddressRetentionTest(SimpleTestCase):
+    @patch("orders.models.Order.objects.filter")
+    def test_microtech_refresh_keeps_addresses_used_by_orders(self, orders):
+        customer = MagicMock()
+        billing = MagicMock()
+        shipping = MagicMock()
+        billing.values_list.return_value = [1035]
+        shipping.values_list.return_value = [1032]
+        orders.side_effect = [billing, shipping]
+        customer.addresses.exclude.return_value.count.return_value = 1
+
+        deleted = CustomerSyncService._delete_stale_addresses(customer, [1040])
+
+        self.assertEqual(deleted, 1)
+        customer.addresses.exclude.assert_called_once_with(pk__in={1032, 1035, 1040})
+        customer.addresses.exclude.return_value.delete.assert_called_once_with()
 
 
 class _FakeContactDataset:

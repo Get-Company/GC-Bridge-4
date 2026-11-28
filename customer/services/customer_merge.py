@@ -1967,10 +1967,10 @@ class CustomerSyncDirectionService(BaseService):
 
         # Remove Django addresses that no longer exist in Shopware
         if seen_addr_ids:
-            orphans = Address.objects.filter(customer=customer).exclude(id__in=seen_addr_ids)
-            orphan_count = orphans.count()
+            from customer.services.customer_sync import CustomerSyncService
+
+            orphan_count = CustomerSyncService._delete_stale_addresses(customer, list(seen_addr_ids))
             if orphan_count:
-                orphans.delete()
                 logger.info("Shopware->Django: {} removed {} orphan addresses", erp_nr, orphan_count)
 
         logger.info("Shopware->Django: {} synced ({} addresses)", erp_nr, addr_count)

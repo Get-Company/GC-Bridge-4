@@ -24,6 +24,21 @@ from customer.services.customer_merge import (
 )
 
 
+def _backfill_orders_after_mapping(address_id: int) -> dict:
+    """Repair only missing order links that match this Shopware address."""
+    from customer.models import Address
+    from orders.services.order_address_backfill import OrderAddressBackfillService
+
+    try:
+        customer_id = Address.objects.only("customer_id").get(pk=address_id).customer_id
+        return OrderAddressBackfillService().reconcile_customer(
+            customer_id=customer_id, address_id=address_id,
+        )
+    except Exception as exc:
+        logger.exception("Bestelladressen nach Adresszuordnung nicht abgeglichen: {}", exc)
+        return {"error": "Bestelladressen konnten nicht automatisch abgeglichen werden."}
+
+
 def _with_django_source_cleanup(
     service: ShopwareCustomerMergeService, result: dict,
 ) -> dict:
@@ -104,6 +119,7 @@ def customer_mapping_api(request):
                 ans_nr=int(ans_nr),
                 job_id=int(body.get("job_id")), user_id=request.user.pk,
             )
+            result["order_address_backfill"] = _backfill_orders_after_mapping(result["address_id"])
         elif action == "contact":
             if not request.user.has_perm("customer.change_address"):
                 return JsonResponse({"error": "Keine Berechtigung zur Ansprechpartner-Zuordnung."}, status=403)
@@ -420,6 +436,8 @@ def customer_update_ids_api(request):
             if not address_id:
                 return JsonResponse({"error": "address_id erforderlich."}, status=400)
             result = service.update_shopware_address_id(int(address_id), value)
+            if value:
+                result["order_address_backfill"] = _backfill_orders_after_mapping(int(address_id))
         elif action == "update_microtech_address_mapping":
             if not address_id:
                 return JsonResponse({"error": "address_id erforderlich."}, status=400)
@@ -447,6 +465,7 @@ def customer_update_ids_api(request):
                         },
                     }, ensure_ascii=False),
                 )
+            result["order_address_backfill"] = _backfill_orders_after_mapping(int(address_id))
         else:
             return JsonResponse({"error": f"Unbekannte Aktion: {action}"}, status=400)
 
