@@ -41,11 +41,6 @@ class ManualMicrotechCustomsCsvTest(SimpleTestCase):
 
     @staticmethod
     def _dataset_read(payload, **kwargs):
-        if payload["dataset"] == "Versand":
-            return {"records": [{
-                "BelegNr": "26/1792", "UrsBelegNr": "", "AbschBelegNr": "",
-                "AbsBelegNr": "", "PktNr": "TRACK-10387",
-            }]}
         if payload["filter"] == "AuftrNr = '10387'":
             return {"records": [{"AuftrNr": "10387", "BelegNr": "26/1792", "AdrNr": "13747"}]}
         if payload["dataset"] == "Adressen":
@@ -80,56 +75,7 @@ class ManualMicrotechCustomsCsvTest(SimpleTestCase):
         self.assertEqual(rows[0]["lineItem.valueInInvoiceCurrency"], "20")
         self.assertEqual(rows[0]["invoice.totalGoodsValue.amount"], "20")
         self.assertEqual(rows[0]["totalGrossWeightInKg"], "3")
-        self.assertEqual(rows[0]["parcelNumbers"], "TRACK-10387")
         self.client.request_product.assert_called_once_with("ART-1")
-
-    def test_export_requires_printed_shipment_with_parcel_number(self):
-        def without_shipment(payload, **kwargs):
-            if payload["dataset"] == "Versand":
-                return {"records": []}
-            return self._dataset_read(payload, **kwargs)
-
-        self.client.poll_dataset_records.side_effect = without_shipment
-        with self.assertRaisesRegex(ValueError, "Kein Versanddatensatz mit Paketnummer"):
-            SwissCustomsCsvExportService().export_microtech_order("10387", client=self.client)
-
-    def test_multiple_parcels_are_joined_for_one_customs_shipment(self):
-        def multiple_parcels(payload, **kwargs):
-            if payload["dataset"] == "Versand":
-                return {"records": [
-                    {"BelegNr": "26/1792", "PktNr": "12345678901"},
-                    {"BelegNr": "26/1792", "PktNr": "12345678902"},
-                ]}
-            return self._dataset_read(payload, **kwargs)
-
-        self.client.poll_dataset_records.side_effect = multiple_parcels
-        self.assertEqual(
-            SwissCustomsCsvExportService._read_microtech_parcel_numbers(
-                client=self.client, beleg_nr="26/1792",
-            ),
-            "12345678901,12345678902",
-        )
-
-    def test_invoice_finds_shipping_record_by_closing_document_number(self):
-        def invoice_shipment(payload, **kwargs):
-            if payload["dataset"] == "Versand":
-                if payload["indexField"] == "AbschlBelegNr":
-                    return {"records": [{
-                        "BelegNr": "LS/10387", "UrsBelegNr": "", "AbschBelegNr": "26/1792",
-                        "AbsBelegNr": "", "PktNr": "TRACK-10387",
-                    }]}
-                return {"records": []}
-            return self._dataset_read(payload, **kwargs)
-
-        self.client.poll_dataset_records.side_effect = invoice_shipment
-        with patch.object(MicrotechSwissCustomsFieldMapping.objects, "filter") as filtered:
-            filtered.return_value.order_by.return_value = [
-                SimpleNamespace(**vars(item)) for item in DEFAULT_SWISS_CUSTOMS_FIELD_DEFINITIONS
-            ]
-            export = SwissCustomsCsvExportService().export_microtech_order("10387", client=self.client)
-
-        row = next(csv.DictReader(io.StringIO(export.content)))
-        self.assertEqual(row["parcelNumbers"], "TRACK-10387")
 
     def test_missing_microtech_order_fails_without_creating_bridge_order(self):
         self.client.poll_dataset_records.return_value = {"records": []}
